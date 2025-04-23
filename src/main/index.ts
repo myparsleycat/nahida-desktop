@@ -7,6 +7,11 @@ import icon from '../../resources/puhaha.png?asset'
 import { db } from '../core/db'
 import { auth } from '../core/services'
 import { registerServices } from '../core/ipc-channels'
+import { autoUpdater } from 'electron-updater';
+import ProgressBar from 'electron-progressbar';
+
+let mainWindow: BrowserWindow;
+let progressBar: ProgressBar;
 
 // 딥링크
 if (process.defaultApp) {
@@ -44,7 +49,7 @@ async function oneTimeInit() {
 }
 
 function createWindow(): void {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1000,
     height: 670,
     minWidth: 800,
@@ -128,6 +133,71 @@ app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
+
+// 자동으로 업데이트가 되는 것 방지
+autoUpdater.autoDownload = false;
+
+autoUpdater.on("checking-for-update", () => {
+  console.log("업데이트 확인 중");
+});
+
+autoUpdater.on("update-available", () => {
+  console.log("업데이트 버전 확인");
+
+  dialog
+    .showMessageBox({
+      type: "info",
+      title: "Update",
+      message:
+        "새로운 버전이 확인되었습니다. 설치 파일을 다운로드 하시겠습니까?",
+      buttons: ["지금 설치", "나중에 설치"]
+    })
+    .then(result => {
+      const { response } = result;
+
+      if (response === 0) autoUpdater.downloadUpdate();
+    });
+});
+
+autoUpdater.on("update-not-available", () => {
+  console.log("업데이트 불가");
+});
+
+autoUpdater.once("download-progress", () => {
+  console.log("설치 중");
+
+  progressBar = new ProgressBar({
+    text: "Download 합니다."
+  });
+
+  progressBar
+    .on("completed", () => {
+      console.log("설치 완료");
+    })
+    .on("aborted", () => {
+      console.log("aborted");
+    });
+});
+
+autoUpdater.on("update-downloaded", () => {
+  console.log("업데이트 완료");
+
+  progressBar.setCompleted();
+
+  dialog
+    .showMessageBox({
+      type: "info",
+      title: "Update",
+      message: "새로운 버전이 다운로드 되었습니다. 다시 시작하시겠습니까?",
+      buttons: ["예", "아니오"]
+    })
+    .then(result => {
+      const { response } = result;
+
+      if (response === 0) autoUpdater.quitAndInstall(false, true);
+    });
+});
+출처: https://codiving.kr/125 [코드에 빠지다:티스토리]
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
