@@ -28,6 +28,7 @@
   let mods = $state<DirectChildren[] | null>(null);
   let layout = $state<"grid" | "list">("grid");
   let searchQuery = $state("");
+  let modsContainerElement = $state<HTMLDivElement>();
 
   const sortedMods = $derived(
     mods
@@ -76,6 +77,12 @@
   $effect(() => {
     if ($currentCharPath) {
       getMods($currentCharPath);
+      if (modsContainerElement) {
+        modsContainerElement.scrollTo({
+          top: 0,
+          behavior: "smooth",
+        });
+      }
     }
   });
 
@@ -84,8 +91,8 @@
   };
 </script>
 
-<div class="h-full overflow-y-auto">
-  <div class="flex items-center p-1 sticky top-0 z-50 dark:bg-[#111115] w-full">
+<div class="h-full w-full flex flex-col">
+  <div class="flex items-center p-1 dark:bg-[#111115] w-full h-12">
     <div class="flex-1 min-w-0"></div>
 
     <div class="flex gap-1 ml-4 flex-shrink-0">
@@ -123,102 +130,107 @@
   </div>
 
   {#if filteredMods}
-    <div class="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3 p-2">
-      {#each filteredMods as mod (mod.path)}
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          in:fade={{ duration: 200 }}
-          animate:flip={{ duration: 200, easing: sineOut }}
-          class={cn(
-            "border-2 rounded shadow hover:shadow-lg duration-200 transition-all",
-            mod.name.toLowerCase().startsWith("disabled")
-              ? "border-neutral-300 dark:border-neutral-500"
-              : "border-green-700 dark:border-green-800",
-            mod.name.toLowerCase().startsWith("disabled")
-              ? "bg-neutral-300 dark:bg-neutral-500"
-              : "bg-green-700 dark:bg-green-800",
-          )}
-          onclick={() => {
-            Mods.mod.toggle(mod.path).then(() => {
-              getMods($currentCharPath).catch((e: any) => {
-                toast.error("모드 토글중 오류가 발생했어요", {
-                  description: e.message,
+    <div class="pl-3 pb-3 pt-1 pr-1.5 flex flex-col flex-1 overflow-auto">
+      <div
+        bind:this={modsContainerElement}
+        class="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3 h-full overflow-y-auto pr-1.5"
+      >
+        {#each filteredMods as mod (mod.path)}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            in:fade={{ duration: 200 }}
+            animate:flip={{ duration: 200, easing: sineOut }}
+            class={cn(
+              "border-2 rounded shadow hover:shadow-lg duration-200 transition-all h-min",
+              mod.name.toLowerCase().startsWith("disabled")
+                ? "border-neutral-300 dark:border-neutral-500"
+                : "border-green-700 dark:border-green-800",
+              mod.name.toLowerCase().startsWith("disabled")
+                ? "bg-neutral-300 dark:bg-neutral-500"
+                : "bg-green-700 dark:bg-green-800",
+            )}
+            onclick={() => {
+              Mods.mod.toggle(mod.path).then(() => {
+                getMods($currentCharPath).catch((e: any) => {
+                  toast.error("모드 토글중 오류가 발생했어요", {
+                    description: e.message,
+                  });
                 });
               });
-            });
-          }}
-        >
-          <div class="flex items-center justify-between p-1">
-            <p class="font-semibold text-sm">
-              {processModName(mod.name)}
-            </p>
-            <div class="buttons flex items-center space-x-1">
-              <AlertDialog.Root>
-                <AlertDialog.Trigger
-                  class="rounded-lg p-0.5 hover:bg-muted/50 duration-200"
+            }}
+          >
+            <div class="flex items-center justify-between p-1">
+              <p class="font-semibold text-sm">
+                {processModName(mod.name)}
+              </p>
+              <div class="buttons flex items-center space-x-1">
+                <AlertDialog.Root>
+                  <AlertDialog.Trigger
+                    class="rounded-lg p-0.5 hover:bg-muted/50 duration-200"
+                    onclick={(e) => {
+                      e.stopPropagation();
+                    }}
+                  >
+                    <Trash2Icon size={20} class="text-destructive" />
+                  </AlertDialog.Trigger>
+                  <AlertDialog.Content>
+                    <AlertDialog.Header>
+                      <AlertDialog.Title>모드 삭제</AlertDialog.Title>
+                      <AlertDialog.Description>
+                        정말 이 모드를 삭제할까요?
+                      </AlertDialog.Description>
+                    </AlertDialog.Header>
+                    <AlertDialog.Footer>
+                      <AlertDialog.Cancel>취소</AlertDialog.Cancel>
+                      <AlertDialog.Action
+                        class={buttonVariants({ variant: "destructive" })}
+                        onclick={() => {
+                          FSH.deletePath(mod.path)
+                            .then(() => {
+                              toast(`${mod.name} 모드가 삭제되었습니다`);
+                              getMods($currentCharPath);
+                            })
+                            .catch((e: any) => {
+                              toast.error("모드 삭제중 오류 발생", {
+                                description: e.message,
+                              });
+                            });
+                        }}>계속</AlertDialog.Action
+                      >
+                    </AlertDialog.Footer>
+                  </AlertDialog.Content>
+                </AlertDialog.Root>
+                <button
+                  class="rounded-lg p-1 hover:bg-muted/50 duration-200"
                   onclick={(e) => {
                     e.stopPropagation();
+                    FSH.openPath(mod.path);
                   }}
                 >
-                  <Trash2Icon size={20} class="text-destructive" />
-                </AlertDialog.Trigger>
-                <AlertDialog.Content>
-                  <AlertDialog.Header>
-                    <AlertDialog.Title>모드 삭제</AlertDialog.Title>
-                    <AlertDialog.Description>
-                      정말 이 모드를 삭제할까요?
-                    </AlertDialog.Description>
-                  </AlertDialog.Header>
-                  <AlertDialog.Footer>
-                    <AlertDialog.Cancel>취소</AlertDialog.Cancel>
-                    <AlertDialog.Action
-                      class={buttonVariants({ variant: "destructive" })}
-                      onclick={() => {
-                        FSH.deletePath(mod.path)
-                          .then(() => {
-                            toast(`${mod.name} 모드가 삭제되었습니다`);
-                            getMods($currentCharPath);
-                          })
-                          .catch((e: any) => {
-                            toast.error("모드 삭제중 오류 발생", {
-                              description: e.message,
-                            });
-                          });
-                      }}>계속</AlertDialog.Action
-                    >
-                  </AlertDialog.Footer>
-                </AlertDialog.Content>
-              </AlertDialog.Root>
-              <button
-                class="rounded-lg p-1 hover:bg-muted/50 duration-200"
-                onclick={(e) => {
-                  e.stopPropagation();
-                  FSH.openPath(mod.path);
-                }}
-              >
-                <FolderOpenIcon size={20} />
-              </button>
+                  <FolderOpenIcon size={20} />
+                </button>
+              </div>
+            </div>
+            <div
+              class={cn(
+                "relative flex justify-center items-center aspect-square duration-200 transition-all",
+              )}
+            >
+              {#if mod.previewB64}
+                <img
+                  class="relative object-contain w-full h-full"
+                  src={mod.previewB64}
+                  alt={mod.name}
+                  loading="lazy"
+                />
+              {:else}
+                <ImageOffIcon size={50} />
+              {/if}
             </div>
           </div>
-          <div
-            class={cn(
-              "relative flex justify-center items-center aspect-square duration-200 transition-all",
-            )}
-          >
-            {#if mod.previewB64}
-              <img
-                class="relative object-contain w-full h-full"
-                src={mod.previewB64}
-                alt={mod.name}
-                loading="lazy"
-              />
-            {:else}
-              <ImageOffIcon size={50} />
-            {/if}
-          </div>
-        </div>
-      {/each}
+        {/each}
+      </div>
     </div>
   {/if}
 </div>
