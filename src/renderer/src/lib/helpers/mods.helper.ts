@@ -27,6 +27,10 @@ class ModsHelper {
     }
   }
 
+  mod = {
+    toggle: async (path: string) => await window.api.mods.mod.toggle(path)
+  }
+
   async getDirectChildren(path: string, options: getDirectChildrenOptions = {}): Promise<DirectChildren[]> {
     const { dirOnly = true } = options;
 

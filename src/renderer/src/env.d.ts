@@ -45,6 +45,9 @@ declare global {
           dir: {
             read: (path: string, options?: ReadDirectoryOptions) => Promise<FileInfo[]>
           }
+        },
+        mod: {
+          toggle: (path: string) => Promise<boolean>
         }
       }
 

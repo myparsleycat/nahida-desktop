@@ -46,17 +46,24 @@
       class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
     >
       {#each sortedMods as mod}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class={cn(
-            "border-2 rounded shadow hover:shadow-lg duration-200",
+            "border-2 rounded shadow hover:shadow-lg duration-200 transition-all",
             mod.name.toLowerCase().startsWith("disabled")
               ? "border-neutral-500"
               : "border-green-700",
           )}
+          onclick={() => {
+            Mods.mod.toggle(mod.path).then(() => {
+              getMods($currentCharPath);
+            });
+          }}
         >
           <div
             class={cn(
-              "relative flex justify-center items-center aspect-square",
+              "relative flex justify-center items-center aspect-square duration-200 transition-all",
               mod.name.toLowerCase().startsWith("disabled")
                 ? "bg-neutral-500"
                 : "bg-green-700",

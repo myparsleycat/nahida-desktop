@@ -158,7 +158,9 @@ export class ServiceRegistry {
     modsFolderGroup.addChannel('getAll', () => mods.folder.getAll());
     modsFolderGroup.addChannel('create', (name: string, path: string) => mods.folder.create(path, name));
     const modsFolderDirGroup = modsFolderGroup.addGroup('dir');
-    modsFolderDirGroup.addChannel('read', (path: string, options?: ReadDirectoryOptions) => mods.folder.dir.read(path, options))
+    const modGroup = modsGroup.addGroup('mod');
+    modGroup.addChannel('toggle', (path: string) => mods.mod.toggle(path));
+    modsFolderDirGroup.addChannel('read', (path: string, options?: ReadDirectoryOptions) => mods.folder.dir.read(path, options));
     // modsPathGroup.addChannel('delete', () => {});
 
     // DRIVE

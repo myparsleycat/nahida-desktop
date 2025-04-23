@@ -107,6 +107,10 @@ class FileSystemService {
     extractFiles(entries);
     return results;
   }
+
+  async rename(path: string, newPath: string) {
+    await fs.promises.rename(path, newPath);
+  }
 }
 
 const fss = new FileSystemService();
