@@ -51,7 +51,8 @@
     "download_failed": "Download failed",
     "system": "System",
     "dark": "Dark",
-    "light": "Light"
+    "light": "Light",
+    "search": "Search"
   },
   "layout": {
     "dock": {

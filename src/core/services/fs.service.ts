@@ -31,6 +31,10 @@ class FileSystemService {
     }
   }
 
+  async getStat(path: string) {
+    return await fs.promises.stat(path);
+  }
+
   async openPath(path: string) {
     shell.openPath(path);
   }
@@ -110,6 +114,16 @@ class FileSystemService {
 
   async rename(path: string, newPath: string) {
     await fs.promises.rename(path, newPath);
+  }
+
+  async deletePath(path: string) {
+    const stat = await this.getStat(path);
+
+    if (stat.isDirectory()) {
+      await fs.promises.rm(path, { recursive: true, force: true });
+    } else {
+      await fs.promises.unlink(path);
+    }
   }
 }
 

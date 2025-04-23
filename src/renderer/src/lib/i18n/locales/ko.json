@@ -51,7 +51,8 @@
     "download_failed": "다운로드 실패",
     "system": "시스템",
     "dark": "다크 모드",
-    "light": "라이트 모드"
+    "light": "라이트 모드",
+    "search": "검색"
   },
   "layout": {
     "dock": {

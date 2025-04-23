@@ -34,7 +34,7 @@ class ModsHelper {
   async getDirectChildren(path: string, options: getDirectChildrenOptions = {}): Promise<DirectChildren[]> {
     const { dirOnly = true } = options;
 
-    const children = await window.api.fs.readDir(path, { recursive: 1 });
+    const children = await window.api.fss.readDir(path, { recursive: 1 });
 
     const filteredChildren = dirOnly
       ? children.filter(child => child.isDirectory)
@@ -56,7 +56,7 @@ class ModsHelper {
 
       let previewB64: string | null = null;
       if (previewPath) {
-        previewB64 = await window.api.fs.getImgBase64(previewPath);
+        previewB64 = await window.api.fss.getImgBase64(previewPath);
       }
 
       return {

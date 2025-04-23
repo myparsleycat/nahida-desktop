@@ -139,13 +139,15 @@ export class ServiceRegistry {
     authGroup.addChannel('authStateChanged', undefined, true, 'auth-state-changed');
 
     // FS
-    const fsGroup = this.rootGroup.addGroup('fs');
-    fsGroup.addChannel('readDir', (path: string, options: ReadDirectoryOptions) => fss.readDirectory(path, options))
-    fsGroup.addChannel('readFile', (path: string) => fss.readFile(path, "arrbuf"))
-    fsGroup.addChannel('openPath', (path: string) => fss.openPath(path))
-    fsGroup.addChannel('getImgBase64', (path: string) => fss.getImgBase64(path))
-    const fsDirGroup = fsGroup.addGroup('dir');
-    fsGroup.addChannel('select', (opt: Electron.OpenDialogOptions) => fss.select(opt));
+    const fssGroup = this.rootGroup.addGroup('fss');
+    fssGroup.addChannel('readDir', (path: string, options: ReadDirectoryOptions) => fss.readDirectory(path, options))
+    fssGroup.addChannel('readFile', (path: string) => fss.readFile(path, "arrbuf"))
+    fssGroup.addChannel('getStat', (path: string) => fss.getStat(path))
+    fssGroup.addChannel('openPath', (path: string) => fss.openPath(path))
+    fssGroup.addChannel('deletePath', (path: string) => fss.deletePath(path))
+    fssGroup.addChannel('getImgBase64', (path: string) => fss.getImgBase64(path))
+    const fsDirGroup = fssGroup.addGroup('dir');
+    fssGroup.addChannel('select', (opt: Electron.OpenDialogOptions) => fss.select(opt));
     fsDirGroup.addChannel('read', (path: string) => fss.readDirectory(path))
 
     // mods

@@ -2,15 +2,23 @@ import type { ReadDirectoryOptions } from "../../../../types/fs.types";
 
 class FileSystemHelper {
   async readDir(path: string, options: ReadDirectoryOptions) {
-    return window.api.fs.readDir(path, options);
+    return window.api.fss.readDir(path, options);
   }
 
   async readFile(path: string) {
-    return window.api.fs.readFile(path);
+    return window.api.fss.readFile(path);
+  }
+
+  async getStat(path: string) {
+    return window.api.fss.getStat(path);
   }
 
   async openPath(path: string) {
-    return window.api.fs.openPath(path);
+    return window.api.fss.openPath(path);
+  }
+
+  async deletePath(path: string) {
+    return window.api.fss.deletePath(path);
   }
 }
 
