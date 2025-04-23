@@ -1,0 +1,40 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
+  "include": [
+    "electron.vite.config.*",
+    "src/main/**/*",
+    "src/preload/**/*",
+    "src/core/**/*",
+    "src/renderer/**/*.d.ts",
+    "src/types/*.ts"
+  ],
+  "compilerOptions": {
+    "allowJs": true,
+		"checkJs": true,
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"resolveJsonModule": true,
+		"skipLibCheck": true,
+		"sourceMap": true,
+    "noImplicitReturns": false,
+    "noUnusedLocals": false,
+    "composite": true,
+    "strict": true,
+    "types": [
+      "electron-vite/node",
+      "svelte"
+    ],
+    "moduleResolution": "bundler",
+    "paths": {
+      "@/*": [
+        "./src/renderer/src/*"
+      ],
+      "$lib": [
+        "./src/renderer/src/lib"
+      ],
+      "$lib/*": [
+        "./src/renderer/src/lib/*"
+      ]
+    }
+  }
+}

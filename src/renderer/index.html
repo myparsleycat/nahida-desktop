@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>NahidaDesktop</title>
+  <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src *;
+    connect-src *;
+    script-src * 'unsafe-inline';
+    style-src * 'unsafe-inline';
+    img-src * data: blob:;
+  ">
+</head>
+
+<body class="h-full m-0 p-0 flex flex-col overflow-hidden">
+  <div class="titlebar bg-background flex justify-between items-center">
+    <div class="flex justify-center items-center pl-2">
+      <p class="text-xs text-current">NahidaDesktop</p>
+    </div>
+    <div class="buttons flex h-6">
+      <button id="minimizeBtn" class="flex justify-center items-center px-3 hover:bg-muted duration-150">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+          class="lucide lucide-minus-icon lucide-minus">
+          <path d="M5 12h14" />
+        </svg>
+      </button>
+
+      <button id="maximizeBtn" class="flex justify-center items-center px-3 hover:bg-muted duration-150 max">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+          class="lucide lucide-maximize-icon lucide-maximize">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+          <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+          <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+          <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+        </svg>
+      </button>
+
+      <button id="closeBtn" class="flex justify-center items-center px-3 hover:bg-red-500 duration-150 close">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+          class="lucide lucide-x-icon lucide-x">
+          <path d="M18 6 6 18" />
+          <path d="m6 6 12 12" />
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div id="app" class="flex-1 overflow-auto"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>
+
+<style>
+  .titlebar {
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 99;
+    height: 1.5rem;
+    -webkit-app-region: drag;
+  }
+
+  .buttons {
+    -webkit-app-region: no-drag;
+  }
+
+  body {
+    margin: 0;
+  }
+</style>

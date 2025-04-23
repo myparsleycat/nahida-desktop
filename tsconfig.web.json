@@ -1,0 +1,41 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
+  "include": [
+    "src/renderer/src/*.d.ts",
+    "src/renderer/src/**/*",
+    "src/renderer/src/**/*.svelte",
+    "src/preload/*.d.ts",
+    "src/types/*.ts"
+  ],
+  "compilerOptions": {
+    "allowJs": true,
+		"checkJs": true,
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"resolveJsonModule": true,
+		"skipLibCheck": true,
+		"sourceMap": true,
+    "noImplicitReturns": false,
+    "composite": true,
+    "noUnusedLocals": false,
+    "verbatimModuleSyntax": true,
+    "useDefineForClassFields": true,
+    "strict": true,
+    "lib": [
+      "ESNext",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "paths": {
+      "@/*": [
+        "./src/renderer/src/*"
+      ],
+      "$lib": [
+        "./src/renderer/src/lib"
+      ],
+      "$lib/*": [
+        "./src/renderer/src/lib/*"
+      ]
+    }
+  }
+}

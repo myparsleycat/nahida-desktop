@@ -1,0 +1,34 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    },
+    {
+      "path": "./tsconfig.web.json"
+    }
+  ],
+  "compilerOptions": {
+    "allowJs": true,
+		"checkJs": true,
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"resolveJsonModule": true,
+		"skipLibCheck": true,
+		"sourceMap": true,
+    "noImplicitReturns": false,
+    "noUnusedLocals": false,
+    "strict": true,
+    "paths": {
+      "@/*": [
+        "./src/renderer/src/*"
+      ],
+      "$lib": [
+        "./src/renderer/src/lib"
+      ],
+      "$lib/*": [
+        "./src/renderer/src/lib/*"
+      ]
+    }
+  }
+}

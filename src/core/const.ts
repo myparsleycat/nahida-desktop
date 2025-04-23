@@ -1,0 +1,7 @@
+export const BaseUrl = "https://nahida.live/api"
+export const GetSessionURL = BaseUrl + "/auth/get-session"
+export const OAuthSigninURL = BaseUrl + "/auth/sign-in/oauth2"
+export const OAuthCallbackUrl = BaseUrl + "/auth/oauth2/callback"
+export const SignOutUrl = BaseUrl + "/auth/sign-out"
+export const GetContentsUrl = BaseUrl + "/akasha/content/"
+export const RenameUrl = BaseUrl + "akasha/rename/"
