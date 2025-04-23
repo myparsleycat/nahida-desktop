@@ -142,16 +142,16 @@ autoUpdater.on("checking-for-update", () => {
   console.log("업데이트 확인 중");
 });
 
-autoUpdater.on("update-available", () => {
-  console.log("업데이트 버전 확인");
+autoUpdater.on("update-available", (au) => {
+  console.log("Update version detected");
 
   dialog
     .showMessageBox({
       type: "info",
-      title: "Update",
+      title: `New Update Available: v${au.version}`,
       message:
-        "새로운 버전이 확인되었습니다. 설치 파일을 다운로드 하시겠습니까?",
-      buttons: ["지금 설치", "나중에 설치"]
+        "새로운 버전으로 업데이트 할 수 있습니다. 지금 진행할까요?",
+      buttons: ["확인", "나중에 진행"]
     })
     .then(result => {
       const { response } = result;
@@ -164,38 +164,44 @@ autoUpdater.on("update-not-available", () => {
   console.log("업데이트 불가");
 });
 
-autoUpdater.once("download-progress", () => {
-  console.log("설치 중");
-
+autoUpdater.on("download-progress", (pg) => {
   progressBar = new ProgressBar({
-    text: "Download 합니다."
+    detail: 'Wait...',
+    text: "Download Files...",
+    initialValue: 0,
+    maxValue: 100
   });
 
   progressBar
     .on("completed", () => {
-      console.log("설치 완료");
+      console.info(`completed...`);
+      progressBar.detail = 'Update completed. Closing...';
     })
     .on("aborted", () => {
       console.log("aborted");
-    });
+    })
+    .on("progress", function (percent: number) {
+      progressBar.text = `Download Files... ${percent}%`;
+    })
+
+  const percent = Math.floor(pg.percent);
+  progressBar.value = percent;
+  progressBar.text = `Download Files... ${percent}%`;
 });
 
 autoUpdater.on("update-downloaded", () => {
-  console.log("업데이트 완료");
-
   progressBar.setCompleted();
 
   dialog
     .showMessageBox({
       type: "info",
       title: "Update",
-      message: "새로운 버전이 다운로드 되었습니다. 다시 시작하시겠습니까?",
-      buttons: ["예", "아니오"]
+      message: "새로운 버전이 다운로드 되었습니다. 다시 시작할까요?",
+      buttons: ["Yes", "No"]
     })
     .then(result => {
       const { response } = result;
-
-      if (response === 0) autoUpdater.quitAndInstall(false, true);
+      if (response === 0) autoUpdater.quitAndInstall(true, true);
     });
 });
 
