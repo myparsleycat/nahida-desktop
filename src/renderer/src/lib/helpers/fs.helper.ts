@@ -8,6 +8,10 @@ class FileSystemHelper {
   async readFile(path: string) {
     return window.api.fs.readFile(path);
   }
+
+  async openPath(path: string) {
+    return window.api.fs.openPath(path);
+  }
 }
 
 const FSH = new FileSystemHelper();

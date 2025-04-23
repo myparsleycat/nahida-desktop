@@ -142,6 +142,7 @@ export class ServiceRegistry {
     const fsGroup = this.rootGroup.addGroup('fs');
     fsGroup.addChannel('readDir', (path: string, options: ReadDirectoryOptions) => fss.readDirectory(path, options))
     fsGroup.addChannel('readFile', (path: string) => fss.readFile(path, "arrbuf"))
+    fsGroup.addChannel('openPath', (path: string) => fss.openPath(path))
     fsGroup.addChannel('getImgBase64', (path: string) => fss.getImgBase64(path))
     const fsDirGroup = fsGroup.addGroup('dir');
     fsGroup.addChannel('select', (opt: Electron.OpenDialogOptions) => fss.select(opt));

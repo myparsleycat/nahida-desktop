@@ -28,6 +28,7 @@ declare global {
         select: (opt: ElectronAPI.OpenDialogOptions) => Promise<string | null>
         readDir: (path: string, options: ReadDirectoryOptions) => Promise<FileInfo[]>
         readFile: (path: string) => Promise<ArrayBufferLike>
+        openPath: (path: string) => Promise<void>
         getImgBase64: (path: string) => Promise<string>
       }
 

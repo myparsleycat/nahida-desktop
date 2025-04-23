@@ -1,4 +1,4 @@
-import { dialog } from "electron";
+import { dialog, shell } from "electron";
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ReadDirectoryOptions, FileInfo } from "../../types/fs.types";
@@ -29,6 +29,10 @@ class FileSystemService {
       default:
         throw new Error("invalid respType");
     }
+  }
+
+  async openPath(path: string) {
+    shell.openPath(path);
   }
 
   async getImgBase64(path: string) {
