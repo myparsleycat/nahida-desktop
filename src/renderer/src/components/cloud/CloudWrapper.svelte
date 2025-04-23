@@ -6,6 +6,7 @@
   import { LoaderIcon } from "lucide-svelte";
   import Login from "@/components/Login.svelte";
   import { onDestroy } from "svelte";
+  import Layout from "./Layout.svelte";
 
   let page = Main.page;
   let { checkingSession, loggedIn } = Auth;
@@ -39,5 +40,7 @@
 {:else if !$loggedIn}
   <Login></Login>
 {:else}
-  <Cloud></Cloud>
+  <Layout>
+    <Cloud></Cloud>
+  </Layout>
 {/if}
