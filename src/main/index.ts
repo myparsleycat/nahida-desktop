@@ -66,6 +66,7 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', async () => {
     mainWindow.show();
+    autoUpdater.checkForUpdates();
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -197,7 +198,6 @@ autoUpdater.on("update-downloaded", () => {
       if (response === 0) autoUpdater.quitAndInstall(false, true);
     });
 });
-출처: https://codiving.kr/125 [코드에 빠지다:티스토리]
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
