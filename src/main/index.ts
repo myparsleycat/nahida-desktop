@@ -1,7 +1,8 @@
 // src/main/index.ts
 
-import { app, shell, BrowserWindow, ipcMain, session, dialog } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, session, dialog, protocol } from 'electron'
 import path from 'node:path'
+import fs from 'node:fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/puhaha.png?asset'
 import { db } from '../core/db'
@@ -9,6 +10,7 @@ import { auth } from '../core/services'
 import { registerServices } from '../core/ipc-channels'
 import { autoUpdater } from 'electron-updater';
 import ProgressBar from 'electron-progressbar';
+import { NahidaProtocolHandler } from '../core/nahida.protocol'
 
 let mainWindow: BrowserWindow;
 let progressBar: ProgressBar;
@@ -30,8 +32,9 @@ if (process.platform === 'win32') {
   } else {
     app.on('second-instance', (_event, commandLine, _workingDirectory) => {
       const deepLinkUrl = commandLine.find((arg) => arg.startsWith('nahida://'));
+      if (!deepLinkUrl) return;
 
-      if (deepLinkUrl) {
+      if (deepLinkUrl.startsWith("nahida://auth")) {
         auth.handleOAuth2Callback(deepLinkUrl);
       }
 
@@ -46,6 +49,10 @@ if (process.platform === 'win32') {
 
 async function oneTimeInit() {
   await db.init();
+}
+
+function registerCustomProtocol() {
+  protocol.handle('nahida', async (req) => await NahidaProtocolHandler(req))
 }
 
 function createWindow(): void {
@@ -92,12 +99,10 @@ function createWindow(): void {
     }
   });
 
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
+    mainWindow.loadURL('nahida://')
   }
 }
 
@@ -106,6 +111,8 @@ function createWindow(): void {
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
   await oneTimeInit();
+
+  registerCustomProtocol();
 
   app.on('open-url', (_, url) => {
     // dialog.showErrorBox('Welcome Back', `You arrived from: ${url}`)
