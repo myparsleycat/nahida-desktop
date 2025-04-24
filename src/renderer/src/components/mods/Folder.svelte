@@ -249,7 +249,7 @@
                   alt={mod.name}
                   loading="lazy"
                 />
-                <div class="absolute left-1 top-1 z-10">
+                <div class="absolute left-1 top-1 z-20">
                   <PreviewModal
                     src={`nahida://external-image?path=${encodeURIComponent(`${mod.preview.path}`)}`}
                     alt={`${mod.name} Modal`}

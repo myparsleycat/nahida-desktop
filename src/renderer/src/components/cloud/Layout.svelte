@@ -10,7 +10,7 @@
 
 <div class="flex flex-row w-full">
   <div
-    class="flex flex-col overflow-y-auto overflow-x-hidden dragselect-start-allowed p-2 border-r"
+    class="flex flex-col overflow-y-auto overflow-x-hidden dragselect-start-allowed px-1 py-2 border-r flex-shrink-0"
   >
     <div class="space-y-2">
       <div class="flex">
@@ -63,7 +63,7 @@
     </div>
   </div>
 
-  <div class="w-full">
+  <div class="flex w-full">
     {@render children()}
   </div>
 </div>
