@@ -160,6 +160,19 @@
                 <ContextMenu.Separator />
                 <ContextMenu.Item
                   class="flex items-center gap-2 cursor-pointer"
+                  onclick={() => {
+                    Mods.folder
+                      .delete(folder.path)
+                      .then(() => {
+                        toast.success("리스트에서 삭제되었습니다");
+                        getFolders();
+                      })
+                      .catch((e: any) => {
+                        toast.error("오류가 발생했습니다", {
+                          description: e.message,
+                        });
+                      });
+                  }}
                 >
                   <Trash2Icon size={18} class="text-destructive" />
                   목록에서 삭제
@@ -171,7 +184,7 @@
               class="flex flex-col gap-1 ml-4"
               use:autoAnimate={{ easing: "ease-in-out" }}
             >
-              {#if folder.path.includes($currentFolderPath)}
+              {#if folder.path === $currentFolderPath}
                 {#each $data.data! as char}
                   <button
                     class="flex w-full items-center min-h-8"

@@ -22,8 +22,9 @@ class ModsService {
     getAll: async () => {
       return await db.query(`SELECT * from ModFolders`) as ModFolders[];
     },
-    create: async (path: string, name: string) => {
-      await db.insert("ModFolders", nanoid(), { path, name });
+    create: async (path: string, name: string) => await db.insert("ModFolders", nanoid(), { path, name }),
+    delete: async (path: string) => {
+      return await db.exec(`DELETE FROM ModFolders WHERE path = '${path}'`);
     },
 
     dir: {

@@ -45,6 +45,7 @@ declare global {
         folder: {
           getAll: () => Promise<ModFolders[]>
           create: (name: string, path: string) => Promise<void>
+          delete: (path: string) => Promise<void>
           dir: {
             read: (path: string, options?: ReadDirectoryOptions) => Promise<FileInfo[]>
           }

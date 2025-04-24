@@ -12,6 +12,7 @@ class ModsHelper {
   folder = {
     getAll: async () => await window.api.mods.folder.getAll(),
     create: async (name: string, path: string) => await window.api.mods.folder.create(name, path),
+    delete: async (path: string) => await window.api.mods.folder.delete(path),
     dir: {
       read: async (path: string, options?: ReadDirectoryOptions) => await window.api.mods.folder.dir.read(path, options)
     }
