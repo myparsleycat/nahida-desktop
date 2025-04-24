@@ -1,7 +1,8 @@
 <script lang="ts">
   import { cn } from "@/lib/utils";
-  import Preview from "./preview/Preview.svelte";
+  import Cloud from "./cloud/Cloud.svelte";
   import {
+    CloudIcon,
     HardDriveIcon,
     ImageIcon,
     Loader2Icon,
@@ -17,7 +18,7 @@
 
   let { checkingSession, loggedIn } = Auth;
 
-  type type = "general" | "mods" | "preview";
+  type type = "general" | "mods" | "cloud";
   let page = $state<type>("general");
 
   $effect(() => {
@@ -71,12 +72,12 @@
     <button
       class={cn(
         "flex gap-2 p-2 rounded-lg w-full hover:bg-muted duration-200",
-        page === "preview" && "bg-muted",
+        page === "cloud" && "bg-muted",
       )}
-      onclick={() => (page = "preview")}
+      onclick={() => (page = "cloud")}
     >
-      <ImageIcon size={22} />
-      프리뷰
+      <CloudIcon size={22} />
+      클라우드
     </button>
 
     <button
@@ -113,8 +114,8 @@
         <General />
       {:else if page === "mods"}
         <Mods />
-      {:else if page === "preview"}
-        <Preview />
+      {:else if page === "cloud"}
+        <Cloud />
       {/if}
     </div>
   </div>

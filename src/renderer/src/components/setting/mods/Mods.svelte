@@ -17,7 +17,7 @@
         </p>
       </div>
       <div class="flex flex-row items-center gap-4">
-        <Switch {checked} />
+        <Switch disabled />
       </div>
     </div>
 

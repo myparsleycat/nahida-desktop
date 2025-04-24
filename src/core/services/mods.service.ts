@@ -2,6 +2,7 @@ import { db } from "../db";
 import { fss } from "./fs.service";
 import type { FileInfo, ModFolders, ReadDirectoryOptions } from "../../types/fs.types";
 import { nanoid } from 'nanoid';
+import { basename, dirname, join } from "node:path";
 
 class ModsService {
   ui = {
@@ -21,13 +22,31 @@ class ModsService {
     getAll: async () => {
       return await db.query(`SELECT * from ModFolders`) as ModFolders[];
     },
-    create: async (path: string, name: string) => {
-      await db.insert("ModFolders", nanoid(), { path, name });
+    create: async (path: string, name: string) => await db.insert("ModFolders", nanoid(), { path, name }),
+    delete: async (path: string) => {
+      return await db.exec(`DELETE FROM ModFolders WHERE path = '${path}'`);
     },
 
     dir: {
       read: async (path: string, options?: ReadDirectoryOptions) => {
         return await fss.readDirectory(path, options) as FileInfo[];
+      }
+    },
+  }
+
+  mod = {
+    toggle: async (path: string) => {
+      const dirName = basename(path);
+      const parentDir = dirname(path);
+
+      if (dirName.toLowerCase().startsWith("disabled")) {
+        const newName = dirName.replace(/^disabled\s+/i, "");
+        await fss.rename(path, join(parentDir, newName));
+        return true;
+      } else {
+        const newName = "DISABLED " + dirName;
+        await fss.rename(path, join(parentDir, newName));
+        return true;
       }
     }
   }

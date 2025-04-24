@@ -3,7 +3,10 @@ export interface DirectChildren {
   path: string;
   name: string;
   hasIni: boolean;
-  previewB64: string | null;
+  preview: {
+    path: string;
+    base64: string | null;
+  } | null
 }
 
 export interface getDirectChildrenOptions {

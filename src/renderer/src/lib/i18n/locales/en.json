@@ -51,7 +51,8 @@
     "download_failed": "Download failed",
     "system": "System",
     "dark": "Dark",
-    "light": "Light"
+    "light": "Light",
+    "search": "Search"
   },
   "layout": {
     "dock": {
@@ -211,7 +212,8 @@
         }
       },
       "my_mods": "My Mods",
-      "share": "Share"
+      "share": "Share",
+      "cloud_drive": "Cloud Drive"
     },
     "toast": {
       "copied_to_clipboard": "Copied to clipboard"

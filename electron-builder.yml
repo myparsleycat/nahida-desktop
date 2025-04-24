@@ -43,5 +43,6 @@ appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
 publish:
-  provider: generic
-  url: https://nahida.live
+  provider: github
+  owner: myparsleycat
+  repo: nahida-desktop

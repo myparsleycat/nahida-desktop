@@ -6,6 +6,7 @@ import { ElectronAPI } from "@electron-toolkit/preload";
 import { GetContentsResp } from "../../types/drive.types";
 import type { FileInfo, ReadDirectoryOptions } from "../../types/fs.types";
 import type { ModFolders } from "../../types/fs.types";
+import type { Stats } from "node:fs";
 
 interface WindowControls {
   minimize: () => void
@@ -24,10 +25,13 @@ declare global {
         logout: () => Promise<void>
       }
 
-      fs: {
+      fss: {
         select: (opt: ElectronAPI.OpenDialogOptions) => Promise<string | null>
         readDir: (path: string, options: ReadDirectoryOptions) => Promise<FileInfo[]>
         readFile: (path: string) => Promise<ArrayBufferLike>
+        getStat: (path: string) => Promise<Stats>
+        openPath: (path: string) => Promise<void>
+        deletePath: (path: string) => Promise<void>
         getImgBase64: (path: string) => Promise<string>
       }
 
@@ -41,9 +45,13 @@ declare global {
         folder: {
           getAll: () => Promise<ModFolders[]>
           create: (name: string, path: string) => Promise<void>
+          delete: (path: string) => Promise<void>
           dir: {
             read: (path: string, options?: ReadDirectoryOptions) => Promise<FileInfo[]>
           }
+        },
+        mod: {
+          toggle: (path: string) => Promise<boolean>
         }
       }
 

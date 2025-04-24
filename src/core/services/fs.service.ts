@@ -1,4 +1,4 @@
-import { dialog } from "electron";
+import { dialog, shell } from "electron";
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ReadDirectoryOptions, FileInfo } from "../../types/fs.types";
@@ -31,6 +31,14 @@ class FileSystemService {
     }
   }
 
+  async getStat(path: string) {
+    return await fs.promises.stat(path);
+  }
+
+  async openPath(path: string) {
+    shell.openPath(path);
+  }
+
   async getImgBase64(path: string) {
     const buf = await this.readFile(path, "buf");
     const [filetype, base64] = await Promise.all([
@@ -41,41 +49,52 @@ class FileSystemService {
   }
 
   async readDirectory(dirPath: string, options: ReadDirectoryOptions = {}, currentDepth: number = 0): Promise<FileInfo[]> {
+    if (!dirPath) throw new Error("dirPath 는 비어있을 수 없음");
+
     const { recursive = false, fileFilter } = options;
 
     try {
       const stats = await fs.promises.stat(dirPath);
       if (!stats.isDirectory()) {
-        throw new Error(`${dirPath}는 폴더가 아닙니다.`);
+        throw new Error(`${dirPath}는 폴더가 아님`);
       }
 
-      const fileNames = await fs.promises.readdir(dirPath);
+      const dirents = await fs.promises.readdir(dirPath, { withFileTypes: true });
       const result: FileInfo[] = [];
 
       const shouldRecurse = typeof recursive === 'boolean'
         ? recursive
         : (currentDepth < recursive);
 
-      for (const fileName of fileNames) {
-        if (fileFilter && !fileFilter(fileName)) {
+      const recursivePromises: Promise<void>[] = [];
+
+      for (const dirent of dirents) {
+        if (fileFilter && !fileFilter(dirent.name)) {
           continue;
         }
 
-        const filePath = path.join(dirPath, fileName);
-        const fileStats = await fs.promises.stat(filePath);
-        const isDirectory = fileStats.isDirectory();
+        const filePath = path.join(dirPath, dirent.name);
+        const isDirectory = dirent.isDirectory();
 
         const fileInfo: FileInfo = {
           path: filePath,
-          name: fileName,
+          name: dirent.name,
           isDirectory
         };
 
-        if (shouldRecurse && isDirectory) {
-          fileInfo.children = await this.readDirectory(filePath, options, currentDepth + 1);
-        }
-
         result.push(fileInfo);
+
+        if (shouldRecurse && isDirectory) {
+          recursivePromises.push(
+            (async () => {
+              fileInfo.children = await this.readDirectory(filePath, options, currentDepth + 1);
+            })()
+          );
+        }
+      }
+
+      if (recursivePromises.length > 0) {
+        await Promise.all(recursivePromises);
       }
 
       return result;
@@ -84,7 +103,6 @@ class FileSystemService {
       throw error;
     }
   }
-
   async listAllFiles(dirPath: string, options: ReadDirectoryOptions = {}): Promise<string[]> {
     const results: string[] = [];
     const entries = await this.readDirectory(dirPath, options);
@@ -102,6 +120,20 @@ class FileSystemService {
 
     extractFiles(entries);
     return results;
+  }
+
+  async rename(path: string, newPath: string) {
+    await fs.promises.rename(path, newPath);
+  }
+
+  async deletePath(path: string) {
+    const stat = await this.getStat(path);
+
+    if (stat.isDirectory()) {
+      await fs.promises.rm(path, { recursive: true, force: true });
+    } else {
+      await fs.promises.unlink(path);
+    }
   }
 }
 

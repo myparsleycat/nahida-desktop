@@ -610,7 +610,7 @@
 <div class="w-full h-full flex flex-col select-none">
   <!-- Breadcrumb 영역: 고정 높이 -->
   <div class="h-11 flex items-center p-4 border-b w-full">
-    <div class="flex-1 min-w-0">
+    <div class="flex-1 w-0">
       <Breadcrumb.Root>
         <Breadcrumb.List
           class="flex flex-nowrap overflow-hidden whitespace-nowrap"

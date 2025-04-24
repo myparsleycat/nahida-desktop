@@ -17,6 +17,7 @@
   import autoAnimate from "@formkit/auto-animate";
   import CloudWrapper from "./cloud/CloudWrapper.svelte";
   import ModsWrapper from "./mods/ModsWrapper.svelte";
+  import Separator from "@/lib/components/ui/separator/separator.svelte";
 
   let page = Main.page;
 </script>
@@ -38,6 +39,8 @@
               </Tooltip.Content>
             </Tooltip.Root>
           </div>
+
+          <Separator />
 
           <div class="flex">
             <Tooltip.Root openDelay={50} closeDelay={50}>
@@ -90,55 +93,7 @@
                 </button>
               </Tooltip.Trigger>
               <Tooltip.Content side="right">
-                <p>{$_("drive.ui.my_drive")}</p>
-              </Tooltip.Content>
-            </Tooltip.Root>
-          </div>
-
-          <div class="flex">
-            <Tooltip.Root openDelay={50} closeDelay={50}>
-              <Tooltip.Trigger>
-                <button
-                  class={cn(
-                    "flex flex-row gap-2.5 w-full p-2 rounded-md transition-all items-center hover:bg-secondary text-primary cursor-pointer active",
-                  )}
-                >
-                  <div class="flex flex-row gap-2 items-center">
-                    <div>
-                      <Share2Icon />
-                    </div>
-                  </div>
-                </button>
-              </Tooltip.Trigger>
-              <Tooltip.Content side="right">
-                <p>{$_("drive.ui.share")}</p>
-              </Tooltip.Content>
-            </Tooltip.Root>
-          </div>
-
-          <div class="flex">
-            <Tooltip.Root openDelay={50} closeDelay={50}>
-              <Tooltip.Trigger>
-                <ContextMenu.Root>
-                  <ContextMenu.Trigger>
-                    <button
-                      class={cn(
-                        "flex flex-row gap-2.5 w-full p-2 rounded-md transition-all items-center hover:bg-secondary text-primary cursor-pointer bg-transparent",
-                      )}
-                    >
-                      <Trash2Icon />
-                    </button>
-                  </ContextMenu.Trigger>
-                  <ContextMenu.Content>
-                    <ContextMenu.Item class="gap-x-2 cursor-pointer">
-                      <Trash2Icon size={20} />
-                      {$_("drive.ui.empty_trash")}
-                    </ContextMenu.Item>
-                  </ContextMenu.Content>
-                </ContextMenu.Root>
-              </Tooltip.Trigger>
-              <Tooltip.Content side="right">
-                <p>{$_("drive.ui.trash")}</p>
+                <p>{$_("drive.ui.cloud_drive")}</p>
               </Tooltip.Content>
             </Tooltip.Root>
           </div>
