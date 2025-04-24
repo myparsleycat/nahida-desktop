@@ -4,7 +4,7 @@ import { app, shell, BrowserWindow, ipcMain, session, dialog, protocol } from 'e
 import path from 'node:path'
 import fs from 'node:fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/puhaha.png?asset'
+import icon from '../../resources/d9dcf263a2a539d395740f74ae747390_5623118858442815874_waifu2x_art_noise0_scale.png?asset'
 import { db } from '../core/db'
 import { auth } from '../core/services'
 import { registerServices } from '../core/ipc-channels'

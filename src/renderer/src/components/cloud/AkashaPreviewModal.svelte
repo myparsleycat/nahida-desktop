@@ -38,7 +38,7 @@
   function imgErrorHandle(e: Event) {
     if (e.currentTarget) {
       // @ts-ignore
-      e.currentTarget.src = "https://nahida.live/puhaha.jpg";
+      e.currentTarget.src = "https://nahida.live/d9dcf263a2a539d395740f74ae747390_5623118858442815874_waifu2x_art_noise0_scale.png";
     }
   }
 
