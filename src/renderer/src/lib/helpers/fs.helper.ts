@@ -1,3 +1,5 @@
+// src/renderer/src/lib/helpers/fs.helper.ts
+
 import type { ReadDirectoryOptions } from "../../../../types/fs.types";
 
 class FileSystemHelper {

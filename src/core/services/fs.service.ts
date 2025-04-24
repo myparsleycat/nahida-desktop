@@ -1,9 +1,12 @@
+// src/core/services/fs.service.ts
+
 import { dialog, shell } from "electron";
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ReadDirectoryOptions, FileInfo } from "../../types/fs.types";
 import { bufferToArrayBuffer, bufferToBase64 } from "../utils";
 import { fileTypeFromBuffer } from "file-type";
+import Watcher from 'watcher';
 
 class FileSystemService {
   async select(opt: Electron.OpenDialogOptions) {

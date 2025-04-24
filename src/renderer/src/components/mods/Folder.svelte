@@ -1,10 +1,9 @@
 <script lang="ts">
   import { Mods } from "@/lib/helpers";
   import { FSH } from "@/lib/helpers/fs.helper";
-  import type { FileInfo } from "../../../../types/fs.types";
-  import type { DirectChildren } from "../../../../types/mods.types";
   import { cn, getSearchScore } from "@/lib/utils";
   import {
+    ExpandIcon,
     FolderOpenIcon,
     ImageOffIcon,
     LayoutGridIcon,
@@ -22,17 +21,19 @@
   import { sineOut } from "svelte/easing";
   import { toast } from "svelte-sonner";
   import * as AlertDialog from "@/lib/components/ui/alert-dialog";
+  import PreviewModal from "./PreviewModal.svelte";
+  import type Watcher from "watcher";
 
   let currentFolderPath = Mods.currentFolderPath;
   let currentCharPath = Mods.currentCharPath;
-  let mods = $state<DirectChildren[] | null>(null);
+  let mods = Mods.mods;
   let layout = $state<"grid" | "list">("grid");
   let searchQuery = $state("");
   let modsContainerElement = $state<HTMLDivElement>();
 
   const sortedMods = $derived(
     mods
-      ? [...mods].sort((a, b) => {
+      ? [...$mods].sort((a, b) => {
           const aDisabled = a.name.toLowerCase().startsWith("disabled");
           const bDisabled = b.name.toLowerCase().startsWith("disabled");
 
@@ -70,13 +71,18 @@
 
   const getMods = async (path: string) => {
     Mods.getDirectChildren(path).then((resp) => {
-      mods = resp;
+      mods.set(resp);
     });
   };
 
+  let watcher: Watcher | null = null;
+
   $effect(() => {
     if ($currentCharPath) {
-      getMods($currentCharPath);
+      getMods($currentCharPath).then(() => {
+
+      });
+
       if (modsContainerElement) {
         modsContainerElement.scrollTo({
           top: 0,
@@ -92,16 +98,16 @@
 </script>
 
 <div class="h-full w-full flex flex-col">
-  <div class="flex items-center p-1 dark:bg-[#111115] w-full h-12">
+  <div class="flex items-center p-1 px-4 dark:bg-[#111115] w-full h-12">
     <div class="flex-1 min-w-0"></div>
 
     <div class="flex gap-1 ml-4 flex-shrink-0">
       <div class="w-full relative flex items-center">
         <SearchIcon
-          class="w-5 h-5 absolute left-2.5 top-2.5 text-gray-500 dark:text-gray-400"
+          class="w-5 h-5 absolute left-2 top-2 text-gray-500 dark:text-gray-400"
         />
         <Input
-          class="pl-8 w-[200px] border-none h-8"
+          class="pl-8 w-[200px] h-8"
           placeholder={$_("g.search")}
           bind:value={searchQuery}
         />
@@ -109,6 +115,7 @@
 
       <div>
         <Button
+          class="border size-8 p-0.5"
           variant="ghost"
           size="icon"
           onclick={() => {
@@ -139,7 +146,6 @@
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
-            in:fade={{ duration: 200 }}
             animate:flip={{ duration: 200, easing: sineOut }}
             class={cn(
               "border-2 rounded shadow hover:shadow-lg duration-200 transition-all h-min",
@@ -161,10 +167,22 @@
             }}
           >
             <div class="flex items-center justify-between p-1">
-              <p class="font-semibold text-sm">
+              <p
+                class="font-semibold text-sm truncate overflow-hidden max-w-[70%]"
+              >
                 {processModName(mod.name)}
               </p>
-              <div class="buttons flex items-center space-x-1">
+              <div class="buttons flex items-center space-x-1 shrink-0">
+                <button
+                  class="rounded-lg p-1 hover:bg-muted/50 duration-200"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    FSH.openPath(mod.path);
+                  }}
+                >
+                  <FolderOpenIcon size={20} />
+                </button>
+
                 <AlertDialog.Root>
                   <AlertDialog.Trigger
                     class="rounded-lg p-0.5 hover:bg-muted/50 duration-200"
@@ -201,29 +219,36 @@
                     </AlertDialog.Footer>
                   </AlertDialog.Content>
                 </AlertDialog.Root>
-                <button
-                  class="rounded-lg p-1 hover:bg-muted/50 duration-200"
-                  onclick={(e) => {
-                    e.stopPropagation();
-                    FSH.openPath(mod.path);
-                  }}
-                >
-                  <FolderOpenIcon size={20} />
-                </button>
               </div>
             </div>
+
             <div
               class={cn(
-                "relative flex justify-center items-center aspect-square duration-200 transition-all",
+                "relative flex justify-center items-center aspect-square duration-200 transition-all overflow-hidden",
               )}
             >
-              {#if mod.previewB64}
+              {#if mod.preview}
+                <div class="absolute inset-0 w-full h-full">
+                  <img
+                    class="w-full h-full object-cover blur scale-110"
+                    src={`nahida://external-image?path=${encodeURIComponent(`${mod.preview.path}`)}`}
+                    alt={mod.name}
+                    loading="lazy"
+                  />
+                </div>
                 <img
-                  class="relative object-contain w-full h-full"
-                  src={mod.previewB64}
+                  class="relative object-contain w-full h-full z-10"
+                  src={`nahida://external-image?path=${encodeURIComponent(`${mod.preview.path}`)}`}
                   alt={mod.name}
                   loading="lazy"
                 />
+                <div class="absolute left-1 top-1 z-10">
+                  <PreviewModal
+                    src={`nahida://external-image?path=${encodeURIComponent(`${mod.preview.path}`)}`}
+                    alt={`${mod.name} Modal`}
+                    onOpenChange={() => {}}
+                  />
+                </div>
               {:else}
                 <ImageOffIcon size={50} />
               {/if}
