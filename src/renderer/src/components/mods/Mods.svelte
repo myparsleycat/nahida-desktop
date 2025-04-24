@@ -8,6 +8,7 @@
   import { Label } from "@/lib/components/ui/label";
   import {
     ArrowUpFromLineIcon,
+    ChevronRightIcon,
     ChevronsDownUpIcon,
     DotIcon,
     EditIcon,
@@ -195,7 +196,7 @@
                   >
                     {#if char.path === $currentCharPath}
                       <div class="flex-shrink-0">
-                        <DotIcon size={30} color="green" />
+                        <ChevronRightIcon color="green" />
                       </div>
                     {/if}
                     <p class="truncate overflow-hidden whitespace-nowrap">

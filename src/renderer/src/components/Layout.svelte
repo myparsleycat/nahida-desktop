@@ -93,7 +93,7 @@
                 </button>
               </Tooltip.Trigger>
               <Tooltip.Content side="right">
-                <p>{$_("drive.ui.my_drive")}</p>
+                <p>{$_("drive.ui.cloud_drive")}</p>
               </Tooltip.Content>
             </Tooltip.Root>
           </div>

@@ -204,7 +204,8 @@
         }
       },
       "my_mods": "내 모드",
-      "share": "공유"
+      "share": "공유",
+      "cloud_drive": "클라우드 드라이브"
     },
     "toast": {
       "copied_to_clipboard": "클립보드에 복사되었습니다"

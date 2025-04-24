@@ -212,7 +212,8 @@
         }
       },
       "my_mods": "My Mods",
-      "share": "Share"
+      "share": "Share",
+      "cloud_drive": "Cloud Drive"
     },
     "toast": {
       "copied_to_clipboard": "Copied to clipboard"
