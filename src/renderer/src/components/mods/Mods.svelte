@@ -25,13 +25,13 @@
   import { _ } from "svelte-i18n";
   import Separator from "@/lib/components/ui/separator/separator.svelte";
   import type { ModFolders } from "../../../../types/fs.types";
+  import { createQuery } from "@tanstack/svelte-query";
 
   let size = Mods.resizableSize;
   let currentFolderPath = Mods.currentFolderPath;
   let folders = Mods.folders;
-  let folderChildren = Mods.folderChildren;
+  // let folderChildren = Mods.folderChildren;
   let currentCharPath = Mods.currentCharPath;
-  let mods = Mods.mods;
 
   let open = $state(false);
   let temp_name = $state<string | null>(null);
@@ -47,11 +47,11 @@
     size.set(await Mods.ui.resizable.get());
   };
 
-  const getFolderChildren = async () => {
-    Mods.getDirectChildren($currentFolderPath).then((res) => {
-      const filteredRes = res.filter((item) => item.hasIni === false);
-      folderChildren.set(filteredRes);
-    });
+  const getFolderChildren = async (path: string) => {
+    const resp = await Mods.getDirectChildren(path);
+    const filteredResp = resp.filter((item) => item.hasIni === false);
+    return filteredResp;
+    // folderChildren.set(filteredRes);
   };
 
   const getFolders = async () => {
@@ -68,17 +68,28 @@
     }
   };
 
+  const data = $derived(
+    createQuery({
+      queryKey: ["mods", $currentFolderPath],
+      queryFn: async () => {
+        if ($currentFolderPath) {
+          return await getFolderChildren($currentFolderPath);
+        } else return [];
+      },
+      refetchOnWindowFocus: "always",
+      refetchIntervalInBackground: true,
+      refetchInterval: () => {
+        if (typeof document !== "undefined" && document.hidden) {
+          return 60000 * 1; // 1분 (백그라운드)
+        }
+        return 10000; // 10초 (포그라운드)
+      },
+    }),
+  );
+
   $effect(() => {
     getResizableSize();
     getFolders();
-  });
-
-  $effect(() => {
-    if ($currentFolderPath) {
-      getFolderChildren();
-    } else {
-      folderChildren.set([]);
-    }
   });
 </script>
 
@@ -161,7 +172,7 @@
               use:autoAnimate={{ easing: "ease-in-out" }}
             >
               {#if folder.path.includes($currentFolderPath)}
-                {#each $folderChildren as char}
+                {#each $data.data! as char}
                   <button
                     class="flex w-full items-center min-h-8"
                     onclick={() => {

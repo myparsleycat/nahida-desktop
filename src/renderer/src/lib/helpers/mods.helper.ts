@@ -8,7 +8,6 @@ class ModsHelper {
   folders = writable<ModFolders[]>();
   folderChildren = writable<DirectChildren[]>([]);
   currentCharPath = writable("");
-  mods = writable<DirectChildren[]>([]);
 
   folder = {
     getAll: async () => await window.api.mods.folder.getAll(),

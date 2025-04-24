@@ -1,12 +1,9 @@
-// src/core/services/fs.service.ts
-
 import { dialog, shell } from "electron";
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ReadDirectoryOptions, FileInfo } from "../../types/fs.types";
 import { bufferToArrayBuffer, bufferToBase64 } from "../utils";
 import { fileTypeFromBuffer } from "file-type";
-import Watcher from 'watcher';
 
 class FileSystemService {
   async select(opt: Electron.OpenDialogOptions) {
@@ -52,6 +49,8 @@ class FileSystemService {
   }
 
   async readDirectory(dirPath: string, options: ReadDirectoryOptions = {}, currentDepth: number = 0): Promise<FileInfo[]> {
+    if (!dirPath) throw new Error("dirPath 는 비어있을 수 없음");
+
     const { recursive = false, fileFilter } = options;
 
     try {

@@ -22,18 +22,39 @@
   import { toast } from "svelte-sonner";
   import * as AlertDialog from "@/lib/components/ui/alert-dialog";
   import PreviewModal from "./PreviewModal.svelte";
-  import type Watcher from "watcher";
+  import { createQuery, createMutation } from "@tanstack/svelte-query";
 
-  let currentFolderPath = Mods.currentFolderPath;
   let currentCharPath = Mods.currentCharPath;
-  let mods = Mods.mods;
   let layout = $state<"grid" | "list">("grid");
   let searchQuery = $state("");
   let modsContainerElement = $state<HTMLDivElement>();
 
+  const getMods = async (path: string) => {
+    return await Mods.getDirectChildren(path);
+  };
+
+  const data = $derived(
+    createQuery({
+      queryKey: ["mods", $currentCharPath],
+      queryFn: async () => {
+        if ($currentCharPath) {
+          return await getMods($currentCharPath);
+        } else return [];
+      },
+      refetchOnWindowFocus: "always",
+      refetchIntervalInBackground: true,
+      refetchInterval: () => {
+        if (typeof document !== "undefined" && document.hidden) {
+          return 60000 * 1; // 1분 (백그라운드)
+        }
+        return 10000; // 10초 (포그라운드)
+      },
+    }),
+  );
+
   const sortedMods = $derived(
-    mods
-      ? [...$mods].sort((a, b) => {
+    $data.data
+      ? [...$data.data].sort((a, b) => {
           const aDisabled = a.name.toLowerCase().startsWith("disabled");
           const bDisabled = b.name.toLowerCase().startsWith("disabled");
 
@@ -69,26 +90,12 @@
       : sortedMods,
   );
 
-  const getMods = async (path: string) => {
-    Mods.getDirectChildren(path).then((resp) => {
-      mods.set(resp);
-    });
-  };
-
-  let watcher: Watcher | null = null;
-
   $effect(() => {
-    if ($currentCharPath) {
-      getMods($currentCharPath).then(() => {
-
+    if ($currentCharPath && modsContainerElement) {
+      modsContainerElement.scrollTo({
+        top: 0,
+        behavior: "smooth",
       });
-
-      if (modsContainerElement) {
-        modsContainerElement.scrollTo({
-          top: 0,
-          behavior: "smooth",
-        });
-      }
     }
   });
 
@@ -158,7 +165,7 @@
             )}
             onclick={() => {
               Mods.mod.toggle(mod.path).then(() => {
-                getMods($currentCharPath).catch((e: any) => {
+                $data.refetch().catch((e: any) => {
                   toast.error("모드 토글중 오류가 발생했어요", {
                     description: e.message,
                   });
@@ -207,7 +214,7 @@
                           FSH.deletePath(mod.path)
                             .then(() => {
                               toast(`${mod.name} 모드가 삭제되었습니다`);
-                              getMods($currentCharPath);
+                              $data.refetch();
                             })
                             .catch((e: any) => {
                               toast.error("모드 삭제중 오류 발생", {
