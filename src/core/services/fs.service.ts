@@ -54,36 +54,45 @@ class FileSystemService {
     try {
       const stats = await fs.promises.stat(dirPath);
       if (!stats.isDirectory()) {
-        throw new Error(`${dirPath}는 폴더가 아닙니다.`);
+        throw new Error(`${dirPath}는 폴더가 아님`);
       }
 
-      const fileNames = await fs.promises.readdir(dirPath);
+      const dirents = await fs.promises.readdir(dirPath, { withFileTypes: true });
       const result: FileInfo[] = [];
 
       const shouldRecurse = typeof recursive === 'boolean'
         ? recursive
         : (currentDepth < recursive);
 
-      for (const fileName of fileNames) {
-        if (fileFilter && !fileFilter(fileName)) {
+      const recursivePromises: Promise<void>[] = [];
+
+      for (const dirent of dirents) {
+        if (fileFilter && !fileFilter(dirent.name)) {
           continue;
         }
 
-        const filePath = path.join(dirPath, fileName);
-        const fileStats = await fs.promises.stat(filePath);
-        const isDirectory = fileStats.isDirectory();
+        const filePath = path.join(dirPath, dirent.name);
+        const isDirectory = dirent.isDirectory();
 
         const fileInfo: FileInfo = {
           path: filePath,
-          name: fileName,
+          name: dirent.name,
           isDirectory
         };
 
-        if (shouldRecurse && isDirectory) {
-          fileInfo.children = await this.readDirectory(filePath, options, currentDepth + 1);
-        }
-
         result.push(fileInfo);
+
+        if (shouldRecurse && isDirectory) {
+          recursivePromises.push(
+            (async () => {
+              fileInfo.children = await this.readDirectory(filePath, options, currentDepth + 1);
+            })()
+          );
+        }
+      }
+
+      if (recursivePromises.length > 0) {
+        await Promise.all(recursivePromises);
       }
 
       return result;
@@ -92,7 +101,6 @@ class FileSystemService {
       throw error;
     }
   }
-
   async listAllFiles(dirPath: string, options: ReadDirectoryOptions = {}): Promise<string[]> {
     const results: string[] = [];
     const entries = await this.readDirectory(dirPath, options);
