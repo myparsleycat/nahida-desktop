@@ -12,6 +12,7 @@ import { autoUpdater } from 'electron-updater';
 import ProgressBar from 'electron-progressbar';
 import { NahidaProtocolHandler } from '../core/nahida.protocol'
 import { CrashReportUrl } from '../core/const';
+import server from '../core/server'
 
 let mainWindow: BrowserWindow;
 let progressBar: ProgressBar | null = null;
@@ -54,6 +55,9 @@ if (process.platform === 'win32') {
 async function oneTimeInit() {
   if (initialized) return;
   await db.init();
+  server.listen(14327, ({ hostname, port }) => {
+    console.log(`server is running at ${hostname}:${port}`)
+  })
   initialized = true;
 }
 
