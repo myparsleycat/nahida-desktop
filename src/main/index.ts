@@ -4,7 +4,7 @@ import { app, shell, BrowserWindow, ipcMain, session, dialog, protocol } from 'e
 import path from 'node:path'
 import fs from 'node:fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/d9dcf263a2a539d395740f74ae747390_5623118858442815874_waifu2x_art_noise0_scale.png?asset'
+import icon from '../../resources/nahida.png?asset'
 import { db } from '../core/db'
 import { auth } from '../core/services'
 import { registerServices } from '../core/ipc-channels'
@@ -101,8 +101,9 @@ function createWindow(): void {
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadURL('nahida://')
+    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
 }
 
@@ -111,8 +112,6 @@ function createWindow(): void {
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
   await oneTimeInit();
-
-  registerCustomProtocol();
 
   app.on('open-url', (_, url) => {
     // dialog.showErrorBox('Welcome Back', `You arrived from: ${url}`)
@@ -133,13 +132,14 @@ app.whenReady().then(async () => {
   ipcMain.on('ping', () => console.log('pong'))
   registerServices(ipcMain);
 
+  registerCustomProtocol();
   createWindow()
 
-  app.on('activate', function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
+  // app.on('activate', function () {
+  //   // On macOS it's common to re-create a window in the app when the
+  //   // dock icon is clicked and there are no other windows open.
+  //   if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  // })
 })
 
 // 자동으로 업데이트가 되는 것 방지

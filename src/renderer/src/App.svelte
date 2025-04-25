@@ -1,5 +1,3 @@
-<!-- src/routes/akasha/drive/[uuid]/+layout.svelte -->
-
 <script lang="ts">
   import { _ } from "svelte-i18n";
   import { Toaster } from "svelte-sonner";
