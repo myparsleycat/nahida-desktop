@@ -13,9 +13,9 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: ${productName}
+  executableName: NahidaDesktop
 nsis:
-  artifactName: ${productName} Setup ${version}.${ext}
+  artifactName: NahidaDesktop Setup ${version}.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always

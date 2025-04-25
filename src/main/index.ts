@@ -14,6 +14,7 @@ import { NahidaProtocolHandler } from '../core/nahida.protocol'
 
 let mainWindow: BrowserWindow;
 let progressBar: ProgressBar;
+let initialized = false;
 
 // 딥링크
 if (process.defaultApp) {
@@ -48,7 +49,9 @@ if (process.platform === 'win32') {
 }
 
 async function oneTimeInit() {
+  if (initialized) return;
   await db.init();
+  initialized = true;
 }
 
 function registerCustomProtocol() {
