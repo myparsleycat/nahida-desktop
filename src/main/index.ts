@@ -1,6 +1,6 @@
 // src/main/index.ts
 
-import { app, shell, BrowserWindow, ipcMain, session, dialog, protocol } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, session, dialog, protocol, crashReporter } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -11,10 +11,13 @@ import { registerServices } from '../core/ipc-channels'
 import { autoUpdater } from 'electron-updater';
 import ProgressBar from 'electron-progressbar';
 import { NahidaProtocolHandler } from '../core/nahida.protocol'
+import { CrashReportUrl } from '../core/const';
 
 let mainWindow: BrowserWindow;
 let progressBar: ProgressBar | null = null;
 let initialized = false;
+
+crashReporter.start({ submitURL: CrashReportUrl });
 
 // 딥링크
 if (process.defaultApp) {
