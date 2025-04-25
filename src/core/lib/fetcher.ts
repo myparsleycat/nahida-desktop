@@ -1,5 +1,5 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
-import { auth } from "../services/auth.service";
+import { auth } from "../services";
 
 interface FetcherOptions {
   method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
