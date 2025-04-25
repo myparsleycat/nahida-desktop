@@ -13,7 +13,7 @@ import ProgressBar from 'electron-progressbar';
 import { NahidaProtocolHandler } from '../core/nahida.protocol'
 
 let mainWindow: BrowserWindow;
-let progressBar: ProgressBar;
+let progressBar: ProgressBar | null = null;
 let initialized = false;
 
 // 딥링크
@@ -138,14 +138,13 @@ app.whenReady().then(async () => {
   registerCustomProtocol();
   createWindow()
 
-  // app.on('activate', function () {
-  //   // On macOS it's common to re-create a window in the app when the
-  //   // dock icon is clicked and there are no other windows open.
-  //   if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  // })
+  app.on('activate', function () {
+    // On macOS it's common to re-create a window in the app when the
+    // dock icon is clicked and there are no other windows open.
+    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
 })
 
-// 자동으로 업데이트가 되는 것 방지
 autoUpdater.autoDownload = false;
 
 autoUpdater.on("checking-for-update", () => {
@@ -166,7 +165,28 @@ autoUpdater.on("update-available", (au) => {
     .then(result => {
       const { response } = result;
 
-      if (response === 0) autoUpdater.downloadUpdate();
+      if (response === 0) {
+        progressBar = new ProgressBar({
+          detail: 'Wait...',
+          text: "Download Files...",
+          initialValue: 0,
+          maxValue: 100
+        });
+
+        progressBar
+          .on("completed", () => {
+            console.info(`completed...`);
+            if (progressBar) progressBar.detail = 'Update completed. Closing...';
+          })
+          .on("aborted", () => {
+            console.log("aborted");
+          })
+          .on("progress", function (percent: number) {
+            if (progressBar) progressBar.text = `Download Files... ${percent}%`;
+          });
+
+        autoUpdater.downloadUpdate();
+      }
     });
 });
 
@@ -175,24 +195,7 @@ autoUpdater.on("update-not-available", () => {
 });
 
 autoUpdater.on("download-progress", (pg) => {
-  progressBar = new ProgressBar({
-    detail: 'Wait...',
-    text: "Download Files...",
-    initialValue: 0,
-    maxValue: 100
-  });
-
-  progressBar
-    .on("completed", () => {
-      console.info(`completed...`);
-      progressBar.detail = 'Update completed. Closing...';
-    })
-    .on("aborted", () => {
-      console.log("aborted");
-    })
-    .on("progress", function (percent: number) {
-      progressBar.text = `Download Files... ${percent}%`;
-    })
+  if (!progressBar) return; // progressBar가 없으면 무시
 
   const percent = Math.floor(pg.percent);
   progressBar.value = percent;
@@ -200,7 +203,9 @@ autoUpdater.on("download-progress", (pg) => {
 });
 
 autoUpdater.on("update-downloaded", () => {
-  progressBar.setCompleted();
+  if (progressBar) {
+    progressBar.setCompleted();
+  }
 
   dialog
     .showMessageBox({
