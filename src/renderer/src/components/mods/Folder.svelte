@@ -6,6 +6,7 @@
     ExpandIcon,
     FolderOpenIcon,
     ImageOffIcon,
+    KeyboardIcon,
     LayoutGridIcon,
     ListIcon,
     SearchIcon,
@@ -23,6 +24,8 @@
   import * as AlertDialog from "@/lib/components/ui/alert-dialog";
   import PreviewModal from "./PreviewModal.svelte";
   import { createQuery, createMutation } from "@tanstack/svelte-query";
+  import * as Dialog from "$lib/components/ui/dialog";
+  import * as Table from "$lib/components/ui/table";
 
   let currentCharPath = Mods.currentCharPath;
   let layout = $state<"grid" | "list">("grid");
@@ -30,7 +33,7 @@
   let modsContainerElement = $state<HTMLDivElement>();
 
   const getMods = async (path: string) => {
-    return await Mods.getDirectChildren(path);
+    return await Mods.getDirectChildren(path, { recursive: 2 });
   };
 
   const data = $derived(
@@ -164,13 +167,16 @@
                 : "bg-green-700 dark:bg-green-800",
             )}
             onclick={() => {
-              Mods.mod.toggle(mod.path).then(() => {
-                $data.refetch().catch((e: any) => {
+              Mods.mod
+                .toggle(mod.path)
+                .then(() => {
+                  $data.refetch();
+                })
+                .catch((e: any) => {
                   toast.error("모드 토글중 오류가 발생했어요", {
                     description: e.message,
                   });
                 });
-              });
             }}
           >
             <div class="flex items-center justify-between p-1">
@@ -180,6 +186,77 @@
                 {processModName(mod.name)}
               </p>
               <div class="buttons flex items-center space-x-1 shrink-0">
+                {#if mod.ini && mod.ini.data.length > 0}
+                  <Dialog.Root>
+                    <Dialog.Trigger
+                      class="rounded-lg p-1 hover:bg-muted/50 duration-200"
+                      onclick={(e) => e.stopPropagation()}
+                    >
+                      <KeyboardIcon size={20} />
+                    </Dialog.Trigger>
+                    <Dialog.Content autofocus={false}>
+                      <Dialog.Header>
+                        <Dialog.Title class="mb-4"
+                          >{mod.name} 토글 수정</Dialog.Title
+                        >
+                        <Dialog.Description>
+                          <Table.Root>
+                            <Table.Header>
+                              <Table.Row>
+                                <Table.Head class="w-[100px]"
+                                  >section</Table.Head
+                                >
+                                <Table.Head>var</Table.Head>
+                                <Table.Head class="whitespace-nowrap"
+                                  >cycle</Table.Head
+                                >
+                                <Table.Head>key</Table.Head>
+                              </Table.Row>
+                            </Table.Header>
+                            <Table.Body>
+                              {#each mod.ini.data as ini}
+                                <Table.Row>
+                                  <Table.Cell class="font-medium"
+                                    >{ini.sectionName}</Table.Cell
+                                  >
+                                  <Table.Cell>{ini.varName}</Table.Cell>
+                                  <Table.Cell>{ini.cycle}</Table.Cell>
+                                  <Table.Cell>
+                                    <Input
+                                      defaultValue={ini.key}
+                                      autofocus={false}
+                                      onchange={(e) => {
+                                        Mods.ini
+                                          .update(
+                                            mod.ini!.path,
+                                            ini.sectionName,
+                                            "key",
+                                            e.currentTarget.value,
+                                          )
+                                          .then(() => {
+                                            $data.refetch();
+                                          })
+                                          .catch((e: any) => {
+                                            toast.error(
+                                              "토글 수정중 오류 발생",
+                                              {
+                                                description: e.message,
+                                              },
+                                            );
+                                          });
+                                      }}
+                                    />
+                                  </Table.Cell>
+                                </Table.Row>
+                              {/each}
+                            </Table.Body>
+                          </Table.Root>
+                        </Dialog.Description>
+                      </Dialog.Header>
+                    </Dialog.Content>
+                  </Dialog.Root>
+                {/if}
+
                 <button
                   class="rounded-lg p-1 hover:bg-muted/50 duration-200"
                   onclick={(e) => {

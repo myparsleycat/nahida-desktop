@@ -1,11 +1,16 @@
-import { dialog, shell } from "electron";
+import { BrowserWindow, dialog, shell } from "electron";
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ReadDirectoryOptions, FileInfo } from "../../types/fs.types";
 import { bufferToArrayBuffer, bufferToBase64 } from "../utils";
 import { fileTypeFromBuffer } from "file-type";
+import _Watcher from 'watcher';
+// @ts-ignore
+const Watcher = _Watcher.default;
 
 class FileSystemService {
+  private folderWatchers: Map<string, _Watcher> = new Map();
+
   async select(opt: Electron.OpenDialogOptions) {
     const result = await dialog.showOpenDialog(opt);
 
@@ -16,16 +21,23 @@ class FileSystemService {
     return result.filePaths[0];
   }
 
-  async readFile<T extends "buf" | "arrbuf">(
+  async readFile<T extends "buf" | "arrbuf" | "utf8">(
     path: string,
     respType: T
-  ): Promise<T extends "buf" ? Buffer : ArrayBuffer> {
+  ): Promise<
+    T extends "buf" ? Buffer :
+    T extends "arrbuf" ? ArrayBuffer :
+    T extends "utf8" ? string :
+    never
+  > {
     const buf = await fs.promises.readFile(path);
     switch (respType) {
       case "buf":
         return buf as any;
       case "arrbuf":
         return bufferToArrayBuffer(buf) as any;
+      case "utf8":
+        return buf.toString('utf8') as any;
       default:
         throw new Error("invalid respType");
     }
@@ -134,6 +146,103 @@ class FileSystemService {
     } else {
       await fs.promises.unlink(path);
     }
+  }
+  // 폴더 변경 감지 시작
+  watchFolderChanges(folderPath: string, options: {
+    recursive?: boolean,
+    depth?: number
+  } = {}): boolean {
+    try {
+      // 이미 감시 중인 폴더인지 확인
+      if (this.folderWatchers.has(folderPath)) {
+        return false;
+      }
+
+      // 폴더가 존재하는지 확인
+      if (!fs.existsSync(folderPath)) {
+        throw new Error(`폴더가 존재하지 않음: ${folderPath}`);
+      }
+
+      const watcherOptions = {
+        recursive: options.recursive ?? true,
+        renameDetection: true,
+        ignoreInitial: true,
+        depth: options.depth ?? 20,
+      };
+
+      const watcher = new Watcher(folderPath, watcherOptions) as _Watcher;
+
+      // 폴더 추가 감지
+      watcher.on('addDir', (dirPath: string) => {
+        const windows = BrowserWindow.getAllWindows();
+        for (const window of windows) {
+          if (!window.isDestroyed()) {
+            window.webContents.send('fss-folder-event', {
+              type: 'added',
+              path: dirPath
+            });
+          }
+        }
+      });
+
+      // 폴더 이름 변경 감지
+      watcher.on('renameDir', (oldPath: string, newPath: string) => {
+        const windows = BrowserWindow.getAllWindows();
+        for (const window of windows) {
+          if (!window.isDestroyed()) {
+            window.webContents.send('fss-folder-event', {
+              type: 'renamed',
+              oldPath: oldPath,
+              newPath: newPath
+            });
+          }
+        }
+      });
+
+      // 폴더 삭제 감지
+      watcher.on('unlinkDir', (dirPath: string) => {
+        const windows = BrowserWindow.getAllWindows();
+        for (const window of windows) {
+          if (!window.isDestroyed()) {
+            window.webContents.send('fss-folder-event', {
+              type: 'removed',
+              path: dirPath
+            });
+          }
+        }
+      });
+
+      // 감시 인스턴스 저장
+      this.folderWatchers.set(folderPath, watcher);
+      return true;
+    } catch (error) {
+      console.error('폴더 감시 설정 오류:', error);
+      return false;
+    }
+  }
+
+  // 폴더 감시 중지
+  unwatchFolder(folderPath: string): boolean {
+    const watcher = this.folderWatchers.get(folderPath);
+    if (watcher) {
+      watcher.close();
+      this.folderWatchers.delete(folderPath);
+      return true;
+    }
+    return false;
+  }
+
+  // 모든 폴더 감시 중지
+  unwatchAllFolders(): void {
+    for (const [path, watcher] of this.folderWatchers.entries()) {
+      watcher.close();
+      this.folderWatchers.delete(path);
+    }
+  }
+
+  // 감시 중인 모든 폴더 경로 반환
+  getWatchedFolders(): string[] {
+    return Array.from(this.folderWatchers.keys());
   }
 }
 

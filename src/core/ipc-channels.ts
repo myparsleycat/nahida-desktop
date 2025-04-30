@@ -146,6 +146,12 @@ export class ServiceRegistry {
     fssGroup.addChannel('openPath', (path: string) => fss.openPath(path))
     fssGroup.addChannel('deletePath', (path: string) => fss.deletePath(path))
     fssGroup.addChannel('getImgBase64', (path: string) => fss.getImgBase64(path))
+
+    fssGroup.addChannel('watchFolder', (path: string, options: any) => fss.watchFolderChanges(path, options))
+    fssGroup.addChannel('unwatchFolder', (path: string) => fss.unwatchFolder(path))
+    fssGroup.addChannel('getWatchedFolders', () => fss.getWatchedFolders())
+    fssGroup.addChannel('folderEvent', undefined, true, 'fss-folder-event')
+
     const fsDirGroup = fssGroup.addGroup('dir');
     fssGroup.addChannel('select', (opt: Electron.OpenDialogOptions) => fss.select(opt));
     fsDirGroup.addChannel('read', (path: string) => fss.readDirectory(path))
@@ -165,6 +171,9 @@ export class ServiceRegistry {
     modGroup.addChannel('toggle', (path: string) => mods.mod.toggle(path));
     modsFolderDirGroup.addChannel('read', (path: string, options?: ReadDirectoryOptions) => mods.folder.dir.read(path, options));
     // modsPathGroup.addChannel('delete', () => {});
+    const iniGroup = modsGroup.addGroup('ini');
+    iniGroup.addChannel('parse', (path: string) => mods.ini.parse(path));
+    iniGroup.addChannel('update', (path: string, section: string, key: 'key', value: string) => mods.ini.update(path, section, key, value));
 
     // DRIVE
     const driveGroup = this.rootGroup.addGroup('drive');
