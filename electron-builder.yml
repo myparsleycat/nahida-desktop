@@ -17,7 +17,7 @@ win:
 nsis:
   artifactName: NahidaDesktop Setup ${version}.${ext}
   shortcutName: ${productName}
-  uninstallDisplayName: ${productName}
+  uninstallDisplayName: Uninstall ${productName}
   createDesktopShortcut: always
   oneClick: false
   allowToChangeInstallationDirectory: true
