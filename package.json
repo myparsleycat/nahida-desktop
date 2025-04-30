@@ -24,7 +24,7 @@
     "@electron-toolkit/utils": "^4.0.0",
     "@elysiajs/node": "^1.2.6",
     "@formkit/auto-animate": "^0.8.2",
-    "@tanstack/svelte-query": "^5.74.4",
+    "@tanstack/svelte-query": "^5.74.9",
     "@types/better-sqlite3": "^7.6.13",
     "@types/electron-progressbar": "^1.2.7",
     "@types/node-fetch": "^2.6.12",
@@ -34,9 +34,9 @@
     "electron-log": "^5.3.4",
     "electron-updater": "^6.6.2",
     "elysia": "^1.2.25",
-    "file-type": "^20.4.1",
+    "file-type": "^20.5.0",
     "lucide-svelte": "^0.503.0",
-    "mode-watcher": "^1.0.2",
+    "mode-watcher": "^1.0.3",
     "nanoid": "^5.1.5",
     "paneforge": "^0.0.6",
     "svelte-i18n": "^4.0.1",
@@ -47,7 +47,7 @@
     "@electron-toolkit/tsconfig": "^1.0.1",
     "@internationalized/date": "^3.8.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
-    "@types/node": "^22.15.1",
+    "@types/node": "^22.15.3",
     "autoprefixer": "^10.4.21",
     "bits-ui": "0.22.0",
     "clsx": "^2.1.1",
@@ -65,6 +65,6 @@
     "tailwindcss": "3.4.17",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.8.3",
-    "vite": "^6.3.3"
+    "vite": "^6.3.4"
   }
 }
