@@ -1,8 +1,12 @@
+import type { IniParseResult } from "../core/lib/InIUtil";
 
 export interface DirectChildren {
   path: string;
   name: string;
-  hasIni: boolean;
+  ini: {
+    path: string;
+    data: IniParseResult[]
+  } | null;
   preview: {
     path: string;
     base64: string | null;
@@ -10,5 +14,6 @@ export interface DirectChildren {
 }
 
 export interface getDirectChildrenOptions {
+  recursive?: number;
   dirOnly?: boolean;
 }

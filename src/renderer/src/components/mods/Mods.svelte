@@ -49,8 +49,8 @@
   };
 
   const getFolderChildren = async (path: string) => {
-    const resp = await Mods.getDirectChildren(path);
-    const filteredResp = resp.filter((item) => item.hasIni === false);
+    const resp = await Mods.getDirectChildren(path, { recursive: 1 });
+    const filteredResp = resp.filter((item) => !item.ini);
     return filteredResp;
     // folderChildren.set(filteredRes);
   };

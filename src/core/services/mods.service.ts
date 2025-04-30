@@ -3,6 +3,8 @@ import { fss } from "./fs.service";
 import type { FileInfo, ModFolders, ReadDirectoryOptions } from "../../types/fs.types";
 import { nanoid } from 'nanoid';
 import { basename, dirname, join } from "node:path";
+import { iniutil as ini } from "../lib/InIUtil";
+import fs from 'node:fs';
 
 class ModsService {
   ui = {
@@ -47,6 +49,30 @@ class ModsService {
         const newName = "DISABLED " + dirName;
         await fss.rename(path, join(parentDir, newName));
         return true;
+      }
+    }
+  }
+
+  ini = {
+    parse: async (path: string) => {
+      try {
+        const content = await fss.readFile(path, "utf8");
+        return ini.parse(content);
+      } catch (err: any) {
+        console.error(`Error parsing INI file: ${err.message}`);
+        return null;
+      }
+    },
+
+    update: async (path: string, section: string, key: 'key', value: string) => {
+      try {
+        const content = await fss.readFile(path, "utf8");
+        const updatedContent = ini.update(content, section, key, value);
+        await fs.promises.writeFile(path, updatedContent, { encoding: 'utf8' });
+        return true;
+      } catch (err: any) {
+        console.error(`Error updating INI file: ${err.message}`);
+        throw err;
       }
     }
   }

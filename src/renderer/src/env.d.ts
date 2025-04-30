@@ -7,6 +7,7 @@ import { GetContentsResp } from "../../types/drive.types";
 import type { FileInfo, ReadDirectoryOptions } from "../../types/fs.types";
 import type { ModFolders } from "../../types/fs.types";
 import type { Stats } from "node:fs";
+import type { IniParseResult } from "../../core/lib/iniParser";
 
 interface WindowControls {
   minimize: () => void
@@ -33,6 +34,10 @@ declare global {
         openPath: (path: string) => Promise<void>
         deletePath: (path: string) => Promise<void>
         getImgBase64: (path: string) => Promise<string>
+        watchFolder: (path: string, options?: { recursive?: boolean, depth?: number }) => Promise<boolean>
+        unwatchFolder: (path: string) => Promise<boolean>
+        getWatchedFolders: () => Promise<string[]>
+        folderEvent: (callback: (data: FolderEventData) => void) => () => void
       }
 
       mods: {
@@ -52,6 +57,10 @@ declare global {
         },
         mod: {
           toggle: (path: string) => Promise<boolean>
+        },
+        ini: {
+          parse: (path: string) => Promise<IniParseResult[]>
+          update: (path: string, section: string, key: 'key', value: string) => Promise<boolean>
         }
       }
 
