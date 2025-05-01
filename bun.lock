@@ -20,7 +20,7 @@
         "elysia": "^1.2.25",
         "file-type": "^20.5.0",
         "lucide-svelte": "^0.503.0",
-        "mode-watcher": "^1.0.3",
+        "mode-watcher": "^1.0.4",
         "nanoid": "^5.1.5",
         "paneforge": "^0.0.6",
         "svelte-i18n": "^4.0.1",
@@ -874,7 +874,7 @@
 
     "mkdirp-classic": ["mkdirp-classic@0.5.3", "", {}, "sha512-gKLcREMhtuZRwRAfqP3RFW+TK4JqApVBtOIftVgjuABpAtpxhPGaDcfvbhNvD0B8iD1oUr/txX35NjcaY6Ns/A=="],
 
-    "mode-watcher": ["mode-watcher@1.0.3", "", { "dependencies": { "runed": "^0.25.0", "svelte-toolbelt": "^0.7.1" }, "peerDependencies": { "svelte": "^5.27.0" } }, "sha512-AZgu9CTxJOq1o/iycZZ5LeKj+TwTAVlZUd4YnAw8egWSzKg6a/czikaoHGlehurPK08ecNyZphVmaOXd/XL4Gg=="],
+    "mode-watcher": ["mode-watcher@1.0.4", "", { "dependencies": { "runed": "^0.25.0", "svelte-toolbelt": "^0.7.1" }, "peerDependencies": { "svelte": "^5.27.0" } }, "sha512-Jrz6/fXtJur5GAvJHSZ2cRPgBAIJ044sldEazydp+jc00qNXLc/BIGOSCNAu28JY1yxvZXeM6ye9iFqS8te9qQ=="],
 
     "mri": ["mri@1.2.0", "", {}, "sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA=="],
 
