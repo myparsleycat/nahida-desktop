@@ -8,7 +8,15 @@ interface StorageKeyValues {
   language: string;
   img_cache_on: boolean;
   mods_resizable_default: number;
+  bounds: {
+    x: number | null;
+    y: number | null;
+    width: number;
+    height: number;
+  }
 }
+
+// type ObjectStorageKeys = 'bounds';
 
 interface ImageCacheItem {
   id: string;
@@ -46,7 +54,13 @@ const defaultValues: StorageKeyValues = {
   sess: null,
   language: "en",
   img_cache_on: true,
-  mods_resizable_default: 25
+  mods_resizable_default: 25,
+  bounds: {
+    x: null,
+    y: null,
+    width: 1000,
+    height: 670
+  }
 };
 
 const tableSchemas: TableSchema[] = [
@@ -88,6 +102,10 @@ const tableSchemas: TableSchema[] = [
     `
   }
 ];
+
+// function isObjectKey(key: LocalStorageKey): key is ObjectStorageKeys {
+//   return ['bounds'].includes(key as string);
+// }
 
 interface TableHandler<K, V> {
   get(key: K): Promise<V | null>;
@@ -276,11 +294,10 @@ class DbHandler {
         try {
           const value = JSON.parse(row.value);
           return value as T;
-        } catch (e) {
+        } catch {
           return row.value as T;
         }
       } else {
-        // ImageCache나 ModFolders 테이블의 경우 row 객체 자체를 반환
         return row as T;
       }
     } catch (err) {
