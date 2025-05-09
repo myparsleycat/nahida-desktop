@@ -234,6 +234,9 @@
                                             e.currentTarget.value,
                                           )
                                           .then(() => {
+                                            toast.success(
+                                              `토글 키가 변경되었습니다`,
+                                            );
                                             $data.refetch();
                                           })
                                           .catch((e: any) => {
