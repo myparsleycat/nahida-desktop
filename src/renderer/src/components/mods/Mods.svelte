@@ -27,6 +27,7 @@
   import Separator from "@/lib/components/ui/separator/separator.svelte";
   import type { ModFolders } from "../../../../types/fs.types";
   import { createQuery } from "@tanstack/svelte-query";
+  import { FSH } from "@/lib/helpers/fs.helper";
 
   let size = Mods.resizableSize;
   let currentFolderPath = Mods.currentFolderPath;
@@ -241,7 +242,7 @@
                       variant="outline"
                       size="default"
                       onclick={async () => {
-                        temp_path = await window.api.fss.select({
+                        temp_path = await FSH.select({
                           properties: ["openDirectory"],
                         });
                       }}

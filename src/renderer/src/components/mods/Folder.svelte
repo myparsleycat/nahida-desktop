@@ -31,6 +31,12 @@
   let layout = $state<"grid" | "list">("grid");
   let searchQuery = $state("");
   let modsContainerElement = $state<HTMLDivElement>();
+  let dragStates = $state(new Map<string, boolean>());
+  let timestamp = $state(Date.now());
+
+  let showOverwriteDialog = $state(false);
+  let fileToOverwrite = $state<ArrayBuffer | null>(null);
+  let previewPathToOverwrite = $state<string | null>(null);
 
   const getMods = async (path: string) => {
     return await Mods.getDirectChildren(path, { recursive: 2 });
@@ -104,6 +110,55 @@
 
   const processModName = (name: string) => {
     return name.replace(/^disabled /i, "");
+  };
+
+  const setDragState = (modPath: string, isDragging: boolean) => {
+    dragStates.set(modPath, isDragging);
+    dragStates = new Map(dragStates);
+  };
+
+  const savePreviewImage = async (path: string, _data: ArrayBuffer) => {
+    try {
+      await FSH.saveFile(path, _data);
+      toast.success("프리뷰 이미지가 저장되었습니다");
+      timestamp = Date.now();
+      $data.refetch();
+    } catch (e: any) {
+      toast.error("이미지 저장 중 오류 발생", {
+        description: e.message,
+      });
+    }
+  };
+
+  const getImageFromClipboard = async (): Promise<File | null> => {
+    try {
+      // 클립보드에서 데이터 가져오기
+      const clipboardItems = await navigator.clipboard.read();
+
+      for (const clipboardItem of clipboardItems) {
+        // 이미지 타입 확인
+        const imageTypes = clipboardItem.types.filter((type) =>
+          type.startsWith("image/"),
+        );
+
+        if (imageTypes.length > 0) {
+          // 이미지 데이터 추출
+          const blob = await clipboardItem.getType(imageTypes[0]);
+          // Blob에서 File로 변환
+          return new File(
+            [blob],
+            `clipboard-image.${imageTypes[0].split("/")[1]}`,
+            { type: imageTypes[0] },
+          );
+        }
+      }
+
+      // 이미지가 없는 경우
+      return null;
+    } catch (err) {
+      console.error("클립보드에서 이미지를 가져오는 중 오류 발생:", err);
+      throw err;
+    }
   };
 </script>
 
@@ -234,6 +289,9 @@
                                             e.currentTarget.value,
                                           )
                                           .then(() => {
+                                            toast.success(
+                                              `토글 키가 변경되었습니다`,
+                                            );
                                             $data.refetch();
                                           })
                                           .catch((e: any) => {
@@ -310,31 +368,138 @@
               class={cn(
                 "relative flex justify-center items-center aspect-square duration-200 transition-all overflow-hidden",
               )}
+              ondragover={(e) => {
+                e.preventDefault();
+                setDragState(mod.path, true);
+              }}
+              ondragleave={(e) => {
+                e.preventDefault();
+                setDragState(mod.path, false);
+              }}
+              ondrop={async (e) => {
+                e.preventDefault();
+                setDragState(mod.path, false);
+
+                const files = e.dataTransfer?.files;
+                console.log(e.dataTransfer);
+                if (!files || files.length < 1) {
+                  toast.warning("선택된 파일이 없습니다");
+                  return;
+                } else if (files?.length > 1) {
+                  toast.warning("한개의 파일만 드랍할 수 있습니다");
+                  return;
+                }
+
+                const file = files[0];
+
+                if (!file.type.startsWith("image/")) {
+                  toast.warning("이미지 파일만 드랍할 수 있습니다");
+                  return;
+                }
+
+                const fileData = await file.arrayBuffer();
+
+                if (
+                  mod.preview &&
+                  mod.preview.path
+                    .split("\\")
+                    .pop()
+                    ?.toLowerCase()
+                    .startsWith("preview")
+                ) {
+                  fileToOverwrite = fileData;
+                  previewPathToOverwrite = mod.preview.path;
+                  showOverwriteDialog = true;
+                } else {
+                  const ext = file.name.split(".").pop();
+                  const path = `${mod.path}/preview.${ext}`;
+                  await savePreviewImage(path, fileData);
+                }
+              }}
             >
               {#if mod.preview}
                 <div class="absolute inset-0 w-full h-full">
                   <img
                     class="w-full h-full object-cover blur scale-110"
-                    src={`nahida://external-image?path=${encodeURIComponent(`${mod.preview.path}`)}`}
+                    src={`nahida://external-image?path=${encodeURIComponent(`${mod.preview.path}`)}&t=${timestamp}`}
                     alt={mod.name}
                     loading="lazy"
                   />
                 </div>
                 <img
                   class="relative object-contain w-full h-full z-10"
-                  src={`nahida://external-image?path=${encodeURIComponent(`${mod.preview.path}`)}`}
+                  src={`nahida://external-image?path=${encodeURIComponent(`${mod.preview.path}`)}&t=${timestamp}`}
                   alt={mod.name}
                   loading="lazy"
                 />
                 <div class="absolute left-1 top-1 z-20">
                   <PreviewModal
-                    src={`nahida://external-image?path=${encodeURIComponent(`${mod.preview.path}`)}`}
+                    src={`nahida://external-image?path=${encodeURIComponent(`${mod.preview.path}`)}&t=${timestamp}`}
                     alt={`${mod.name} Modal`}
                     onOpenChange={() => {}}
                   />
                 </div>
+
+                <div
+                  class={cn(
+                    "absolute inset-0 bg-black/60 z-30 flex items-center justify-center pointer-events-none duration-200",
+                    dragStates.get(mod.path) ? "opacity-100" : "opacity-0",
+                  )}
+                >
+                  <div class="text-white text-center">
+                    <span class="text-2xl">📁</span>
+                    <p class="font-medium mt-2">파일을 여기에 드롭하세요</p>
+                  </div>
+                </div>
               {:else}
-                <ImageOffIcon size={50} />
+                <div class="flex flex-col justify-center items-center gap-2">
+                  <ImageOffIcon size={50} />
+                  <button
+                    class={cn(
+                      "border border-black dark:border-white bg-transparent py-0.5 px-1.5 rounded-lg duration-200 hover:bg-white/10",
+                    )}
+                    onclick={async (e: MouseEvent) => {
+                      e.stopPropagation();
+
+                      const file = await getImageFromClipboard();
+                      if (!file) {
+                        toast.warning("클립보드에 이미지가 없습니다");
+                        return;
+                      }
+
+                      const arrbuf = await file.arrayBuffer();
+
+                      if (
+                        mod.preview &&
+                        mod.preview.path
+                          .split("\\")
+                          .pop()
+                          ?.toLowerCase()
+                          .startsWith("preview")
+                      ) {
+                        fileToOverwrite = arrbuf;
+                        previewPathToOverwrite = mod.preview.path;
+                        showOverwriteDialog = true;
+                      } else {
+                        const ext = file.name.split(".").pop();
+                        const path = `${mod.path}/preview.${ext}`;
+                        await savePreviewImage(path, arrbuf);
+                      }
+                    }}>Paste</button
+                  >
+                </div>
+
+                <div
+                  class={cn(
+                    "absolute inset-0 bg-black/60 z-30 flex items-center justify-center pointer-events-none duration-200",
+                    dragStates.get(mod.path) ? "opacity-100" : "opacity-0",
+                  )}
+                >
+                  <div class="text-white text-center">
+                    <span class="text-2xl">📁</span>
+                    <p class="font-medium mt-2">파일을 여기에 드롭하세요</p>
+                  </div>
+                </div>
               {/if}
             </div>
           </div>
@@ -343,3 +508,33 @@
     </div>
   {/if}
 </div>
+
+<AlertDialog.Root open={showOverwriteDialog}>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>계속 진행</AlertDialog.Title>
+      <AlertDialog.Description>
+        모드 폴더에 이미 프리뷰 이미지가 있습니다. 이미지를 덮어쓸까요?
+      </AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer>
+      <AlertDialog.Cancel
+        onclick={() => {
+          showOverwriteDialog = false;
+          fileToOverwrite = null;
+          previewPathToOverwrite = null;
+        }}>취소</AlertDialog.Cancel
+      >
+      <AlertDialog.Action
+        onclick={async () => {
+          if (fileToOverwrite && previewPathToOverwrite) {
+            await savePreviewImage(previewPathToOverwrite, fileToOverwrite);
+            showOverwriteDialog = false;
+            fileToOverwrite = null;
+            previewPathToOverwrite = null;
+          }
+        }}>계속</AlertDialog.Action
+      >
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>

@@ -86,7 +86,7 @@ class ModsHelper {
       let previewPath: string | null = null;
       const previewImage = child.children?.find(item => item.name === 'preview');
       const firstImage = child.children?.find(item => !item.isDirectory &&
-        ['jpg', 'jpeg', 'png', 'gif', 'avif', 'avifs'].includes(item.name.split('.').pop()!.toLowerCase()));
+        ['jpg', 'jpeg', 'png', 'gif', 'avif', 'avifs', 'webp'].includes(item.name.split('.').pop()!.toLowerCase()));
 
       if (previewImage) {
         previewPath = previewImage.path;

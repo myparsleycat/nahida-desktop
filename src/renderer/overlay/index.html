@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>overlay</title>
+  <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src *;
+    connect-src *;
+    script-src * 'unsafe-inline';
+    style-src * 'unsafe-inline';
+    img-src * data: blob: nahida: nahida-app:;
+  ">
+</head>
+
+<body>
+  <div id="overlay"></div>
+  <script type="module" src="./src/main.ts"></script>
+</body>
+
+<style>
+  body,
+  html {
+    margin: 0;
+    padding: 0;
+    background: rgba(0, 0, 0, 0);
+  }
+</style>
+
+</html>

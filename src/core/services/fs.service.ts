@@ -43,6 +43,11 @@ class FileSystemService {
     }
   }
 
+  async saveFile(path: string, data: ArrayBuffer) {
+    const buffer = Buffer.from(data);
+    await fs.promises.writeFile(path, buffer);
+  }
+
   async getStat(path: string) {
     return await fs.promises.stat(path);
   }

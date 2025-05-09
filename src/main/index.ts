@@ -12,7 +12,8 @@ import { autoUpdater } from 'electron-updater';
 import ProgressBar from 'electron-progressbar';
 import { NahidaProtocolHandler } from '../core/nahida.protocol'
 import { CrashReportUrl } from '../core/const';
-import server from '../core/server'
+import server from '../core/server';
+import { createOverlayWindow } from '../core/overlay';
 
 let mainWindow: BrowserWindow;
 let progressBar: ProgressBar | null = null;
@@ -23,17 +24,17 @@ crashReporter.start({ submitURL: CrashReportUrl });
 // 딥링크
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient('nahida', process.execPath, [path.resolve(process.argv[1])])
+    app.setAsDefaultProtocolClient('nahida', process.execPath, [path.resolve(process.argv[1])]);
   }
 } else {
-  app.setAsDefaultProtocolClient('nahida')
+  app.setAsDefaultProtocolClient('nahida');
 }
 
 if (process.platform === 'win32') {
-  const gotTheLock = app.requestSingleInstanceLock()
+  const gotTheLock = app.requestSingleInstanceLock();
 
   if (!gotTheLock) {
-    app.quit()
+    app.quit();
   } else {
     app.on('second-instance', (_event, commandLine, _workingDirectory) => {
       const deepLinkUrl = commandLine.find((arg) => arg.startsWith('nahida://'));
@@ -48,7 +49,7 @@ if (process.platform === 'win32') {
         if (windows[0].isMinimized()) windows[0].restore();
         windows[0].focus();
       }
-    })
+    });
   }
 }
 
@@ -57,7 +58,7 @@ async function oneTimeInit() {
   await db.init();
   server.listen(14327, ({ hostname, port }) => {
     console.log(`server is running at ${hostname}:${port}`)
-  })
+  });
   initialized = true;
 }
 
@@ -65,10 +66,13 @@ function registerCustomProtocol() {
   protocol.handle('nahida', async (req) => await NahidaProtocolHandler(req))
 }
 
-function createWindow(): void {
+async function createWindow() {
+  const bounds = await db.get('LocalStorage', 'bounds');
   mainWindow = new BrowserWindow({
-    width: 1000,
-    height: 670,
+    x: bounds?.x || undefined,
+    y: bounds?.y || undefined,
+    width: bounds?.width || 1000,
+    height: bounds?.height || 670,
     minWidth: 800,
     minHeight: 550,
     show: false,
@@ -79,17 +83,22 @@ function createWindow(): void {
       preload: path.join(__dirname, '../preload/index.js'),
       sandbox: false
     }
-  })
+  });
 
   mainWindow.on('ready-to-show', async () => {
     mainWindow.show();
     autoUpdater.checkForUpdates();
-  })
+  });
+
+  mainWindow.on('close', async () => {
+    const bounds = mainWindow.getBounds();
+    await db.update('LocalStorage', 'bounds', bounds);
+  });
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
-  })
+  });
 
   ipcMain.on('window-control', (_, command) => {
     switch (command) {
@@ -110,10 +119,10 @@ function createWindow(): void {
   });
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-    mainWindow.webContents.openDevTools();
+    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
+    // mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
+    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
 }
 
@@ -126,30 +135,33 @@ app.whenReady().then(async () => {
   app.on('open-url', (_, url) => {
     // dialog.showErrorBox('Welcome Back', `You arrived from: ${url}`)
     auth.handleOAuth2Callback(url);
-  })
+  });
 
   // Set app user model id for windows
-  electronApp.setAppUserModelId('com.nahida')
+  electronApp.setAppUserModelId('com.nahida');
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
   // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
   app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
-  })
+    optimizer.watchWindowShortcuts(window);
+  });
 
   // ipc
-  ipcMain.on('ping', () => console.log('pong'))
+  ipcMain.on('ping', () => console.log('pong'));
   registerServices(ipcMain);
 
   registerCustomProtocol();
-  createWindow()
+  createWindow();
+
+  // 오버레이
+  // createOverlayWindow('Zenless');
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
 })
 
 autoUpdater.autoDownload = false;
