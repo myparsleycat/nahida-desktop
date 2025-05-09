@@ -1,20 +1,3 @@
-// src/renderer/src/env.d.ts
-
-/// <reference types="svelte" />
-/// <reference types="vite/client" />
-import { ElectronAPI } from "@electron-toolkit/preload";
-import { GetContentsResp } from "../../types/drive.types";
-import type { FileInfo, ReadDirectoryOptions } from "../../types/fs.types";
-import type { ModFolders } from "../../types/fs.types";
-import type { Stats } from "node:fs";
-import type { IniParseResult } from "../../core/lib/iniParser";
-
-interface WindowControls {
-  minimize: () => void
-  maximize: () => void
-  close: () => void
-}
-
 declare global {
   interface Window {
     electron: ElectronAPI;
@@ -81,6 +64,25 @@ declare global {
             change: (v) => Promise<void>
           }
         }
+      }
+
+      overlay: {
+        activate: () => Promise<void>
+        focusTarget: () => Promise<void>
+        screenshot: (width: number, height: number) => Promise<Buffer>
+        overlayEvent: (callback: (event: {
+          type: 'attach' | 'detach' | 'focus' | 'blur' | 'moveresize';
+          data?: {
+            bounds?: {
+              x: number;
+              y: number;
+              width: number;
+              height: number;
+            };
+            hasAccess?: boolean;
+            isFullscreen?: boolean;
+          };
+        }) => void) => () => void
       }
 
       window: WindowControls

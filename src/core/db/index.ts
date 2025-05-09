@@ -185,7 +185,7 @@ class DbHandler {
       console.log("Connected to the SQLite database");
       log.info("Connected to the SQLite database");
 
-      await this.createTables(tableSchemas);
+      this.createTables(tableSchemas);
       await this.initializeDefaultValues();
 
       return this.db;
@@ -216,7 +216,7 @@ class DbHandler {
     throw new Error(`Unsupported table: ${tableName}`);
   }
 
-  private async createTables(schemas: TableSchema[]): Promise<void> {
+  private createTables(schemas: TableSchema[]) {
     for (const schema of schemas) {
       this.createTable(schema);
       console.log(`${schema.name} table ready`);
@@ -227,11 +227,11 @@ class DbHandler {
     this.db!.exec(schema.createStatement);
   }
 
-  private async initializeDefaultValues(): Promise<void> {
+  private async initializeDefaultValues() {
     const keys = Object.keys(defaultValues) as (keyof StorageKeyValues)[];
 
     for (const key of keys) {
-      const existingRow = await this.checkIfKeyExists(key);
+      const existingRow = this.checkIfKeyExists(key);
 
       if (!existingRow) {
         const value = defaultValues[key];
@@ -241,12 +241,12 @@ class DbHandler {
     }
   }
 
-  private checkIfKeyExists<K extends LocalStorageKey>(key: K): Promise<boolean> {
+  private checkIfKeyExists<K extends LocalStorageKey>(key: K) {
     try {
       const row = this.db!.prepare("SELECT 1 FROM LocalStorage WHERE key = ?").get(key);
-      return Promise.resolve(!!row);
+      return !!row;
     } catch (err) {
-      return Promise.reject(err);
+      throw err;
     }
   }
 

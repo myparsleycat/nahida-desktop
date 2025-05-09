@@ -5,7 +5,10 @@
     "src/renderer/src/**/*",
     "src/renderer/src/**/*.svelte",
     "src/preload/*.d.ts",
-    "src/types/*.ts"
+    "src/types/*.ts",
+    "src/core/overlay/**/*",
+    "src/renderer/overlay/**/*",
+    "src/renderer/overlay/**/*.svelte"
   ],
   "compilerOptions": {
     "allowJs": true,
@@ -28,13 +31,16 @@
     ],
     "paths": {
       "@/*": [
-        "./src/renderer/src/*"
+        "./src/renderer/src/*",
+        "./src/renderer/overlay/*"
       ],
       "$lib": [
-        "./src/renderer/src/lib"
+        "./src/renderer/src/lib",
+        "./src/renderer/overlay"
       ],
       "$lib/*": [
-        "./src/renderer/src/lib/*"
+        "./src/renderer/src/lib/*",
+        "./src/renderer/overlay/*"
       ]
     }
   }

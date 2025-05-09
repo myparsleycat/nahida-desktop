@@ -24,17 +24,6 @@
       "electron-vite/node",
       "svelte"
     ],
-    "moduleResolution": "bundler",
-    "paths": {
-      "@/*": [
-        "./src/renderer/src/*"
-      ],
-      "$lib": [
-        "./src/renderer/src/lib"
-      ],
-      "$lib/*": [
-        "./src/renderer/src/lib/*"
-      ]
-    }
+    "moduleResolution": "bundler"
   }
 }

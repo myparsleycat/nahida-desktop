@@ -12,7 +12,8 @@ import { autoUpdater } from 'electron-updater';
 import ProgressBar from 'electron-progressbar';
 import { NahidaProtocolHandler } from '../core/nahida.protocol'
 import { CrashReportUrl } from '../core/const';
-import server from '../core/server'
+import server from '../core/server';
+import { createOverlayWindow } from '../core/overlay';
 
 let mainWindow: BrowserWindow;
 let progressBar: ProgressBar | null = null;
@@ -91,7 +92,7 @@ async function createWindow() {
 
   mainWindow.on('close', async () => {
     const bounds = mainWindow.getBounds();
-    await db.set('LocalStorage', 'bounds', bounds);
+    await db.update('LocalStorage', 'bounds', bounds);
   });
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -119,7 +120,7 @@ async function createWindow() {
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
-    mainWindow.webContents.openDevTools();
+    // mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
@@ -151,7 +152,10 @@ app.whenReady().then(async () => {
   registerServices(ipcMain);
 
   registerCustomProtocol();
-  createWindow()
+  createWindow();
+
+  // 오버레이
+  // createOverlayWindow('Zenless');
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the

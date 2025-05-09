@@ -18,17 +18,6 @@
 		"sourceMap": true,
     "noImplicitReturns": false,
     "noUnusedLocals": false,
-    "strict": true,
-    "paths": {
-      "@/*": [
-        "./src/renderer/src/*"
-      ],
-      "$lib": [
-        "./src/renderer/src/lib"
-      ],
-      "$lib/*": [
-        "./src/renderer/src/lib/*"
-      ]
-    }
+    "strict": true
   }
 }

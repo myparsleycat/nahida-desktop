@@ -142,6 +142,7 @@ export class ServiceRegistry {
     const fssGroup = this.rootGroup.addGroup('fss');
     fssGroup.addChannel('readDir', (path: string, options: ReadDirectoryOptions) => fss.readDirectory(path, options))
     fssGroup.addChannel('readFile', (path: string) => fss.readFile(path, "arrbuf"))
+    fssGroup.addChannel('saveFile', (path: string, data: ArrayBuffer) => fss.saveFile(path, data))
     fssGroup.addChannel('getStat', (path: string) => fss.getStat(path))
     fssGroup.addChannel('openPath', (path: string) => fss.openPath(path))
     fssGroup.addChannel('deletePath', (path: string) => fss.deletePath(path))
