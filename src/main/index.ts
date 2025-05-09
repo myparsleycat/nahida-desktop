@@ -13,7 +13,6 @@ import ProgressBar from 'electron-progressbar';
 import { NahidaProtocolHandler } from '../core/nahida.protocol'
 import { CrashReportUrl } from '../core/const';
 import server from '../core/server';
-import { createOverlayWindow } from '../core/overlay';
 
 let mainWindow: BrowserWindow;
 let progressBar: ProgressBar | null = null;
@@ -82,7 +81,8 @@ async function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       sandbox: false
-    }
+    },
+    icon
   });
 
   mainWindow.on('ready-to-show', async () => {
