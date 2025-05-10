@@ -1,10 +1,8 @@
 // src/main/index.ts
 
-import { app, shell, BrowserWindow, ipcMain, session, dialog, protocol, crashReporter } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, protocol, crashReporter } from 'electron'
 import path from 'node:path'
-import fs from 'node:fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/nahida.png?asset'
 import { db } from '../core/db'
 import { auth } from '../core/services'
 import { registerServices } from '../core/ipc-channels'
@@ -13,9 +11,10 @@ import ProgressBar from 'electron-progressbar';
 import { NahidaProtocolHandler } from '../core/nahida.protocol'
 import { CrashReportUrl } from '../core/const';
 import server from '../core/server';
+import { createTray } from './tray'
+import { createMainWindow } from './window'
 // import { createOverlayWindow } from '../core/overlay';
 
-let mainWindow: BrowserWindow;
 let progressBar: ProgressBar | null = null;
 let initialized = false;
 
@@ -66,72 +65,12 @@ function registerCustomProtocol() {
   protocol.handle('nahida', async (req) => await NahidaProtocolHandler(req))
 }
 
-async function createWindow() {
-  const bounds = await db.get('LocalStorage', 'bounds');
-  mainWindow = new BrowserWindow({
-    x: bounds?.x || undefined,
-    y: bounds?.y || undefined,
-    width: bounds?.width || 1000,
-    height: bounds?.height || 670,
-    minWidth: 800,
-    minHeight: 550,
-    show: false,
-    frame: false,
-    autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
-    webPreferences: {
-      preload: path.join(__dirname, '../preload/index.js'),
-      sandbox: false
-    },
-    icon
-  });
-
-  mainWindow.on('ready-to-show', async () => {
-    mainWindow.show();
-    autoUpdater.checkForUpdates();
-  });
-
-  mainWindow.on('close', async () => {
-    const bounds = mainWindow.getBounds();
-    await db.update('LocalStorage', 'bounds', bounds);
-  });
-
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  });
-
-  ipcMain.on('window-control', (_, command) => {
-    switch (command) {
-      case 'minimize':
-        mainWindow.minimize();
-        break;
-      case 'maximize':
-        if (mainWindow.isMaximized()) {
-          mainWindow.unmaximize();
-        } else {
-          mainWindow.maximize();
-        }
-        break;
-      case 'close':
-        mainWindow.close();
-        break;
-    }
-  });
-
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
-    // mainWindow.webContents.openDevTools();
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
-  }
-}
-
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
   await oneTimeInit();
+  createTray();
 
   app.on('open-url', (_, url) => {
     // dialog.showErrorBox('Welcome Back', `You arrived from: ${url}`)
@@ -153,7 +92,10 @@ app.whenReady().then(async () => {
   registerServices(ipcMain);
 
   registerCustomProtocol();
-  createWindow();
+  const mainWindow = await createMainWindow();
+  mainWindow.on('ready-to-show', async () => {
+    await autoUpdater.checkForUpdates();
+  })
 
   // 오버레이
   // createOverlayWindow('Zenless');
@@ -161,7 +103,7 @@ app.whenReady().then(async () => {
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
 })
 
