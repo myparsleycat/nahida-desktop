@@ -3,7 +3,6 @@
   import { sineOut } from "svelte/easing";
   import { ExpandIcon, LoaderIcon } from "lucide-svelte";
   import { cn } from "@/lib/utils";
-  import { Cloud } from "@/lib/helpers";
 
   let {
     className,

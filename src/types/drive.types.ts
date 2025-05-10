@@ -63,3 +63,15 @@ export interface RenameResp extends BaseResponse {
     after: string;
   }
 }
+
+export interface DirCreateManyResp extends BaseResponse {
+  parent: {
+    uuid: string;
+    name: string;
+  } | null;
+  directories: {
+    uuid: string;
+    path: string;
+    name: string;
+  }[]
+}

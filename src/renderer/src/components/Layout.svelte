@@ -12,7 +12,7 @@
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import { QueryClientProvider } from "@tanstack/svelte-query";
   import { queryClient } from "../queryClient";
-  import { Cloud, Main } from "@/lib/helpers";
+  import { NDH, Main } from "@/lib/helpers";
   import SettingComponent from "./setting/Setting.svelte";
   import autoAnimate from "@formkit/auto-animate";
   import CloudWrapper from "./cloud/CloudWrapper.svelte";
@@ -54,7 +54,7 @@
                     if ($page !== "mods") {
                       page.set("mods");
                     }
-                    Cloud.nav.move("mods");
+                    NDH.nav.move("mods");
                   }}
                 >
                   <div class="flex flex-row gap-2 items-center">
@@ -82,7 +82,7 @@
                     if ($page !== "cloud") {
                       page.set("cloud");
                     }
-                    Cloud.nav.move("root");
+                    NDH.nav.move("root");
                   }}
                 >
                   <div class="flex flex-row gap-2 items-center">

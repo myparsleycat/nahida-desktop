@@ -13,6 +13,7 @@ import ProgressBar from 'electron-progressbar';
 import { NahidaProtocolHandler } from '../core/nahida.protocol'
 import { CrashReportUrl } from '../core/const';
 import server from '../core/server';
+// import { createOverlayWindow } from '../core/overlay';
 
 let mainWindow: BrowserWindow;
 let progressBar: ProgressBar | null = null;

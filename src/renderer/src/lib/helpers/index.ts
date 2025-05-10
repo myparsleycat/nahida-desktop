@@ -1,6 +1,6 @@
 import { writable } from "svelte/store";
 import { Auth } from "./auth.helper";
-import { Cloud } from "./cloud.helper";
+import { NDH } from "./drive.helper";
 import { Mods } from "./mods.helper";
 
 type Pages = "mods" | "cloud" | "setting"
@@ -19,5 +19,5 @@ export {
   Main,
   Mods,
   Auth,
-  Cloud
+  NDH
 }

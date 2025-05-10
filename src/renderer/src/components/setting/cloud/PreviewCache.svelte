@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Button } from "@/lib/components/ui/button";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import { Cloud } from "@/lib/helpers";
+  import { NDH } from "@/lib/helpers";
   import { formatSize } from "@/lib/utils";
   import { toast } from "svelte-sonner";
   import { _ } from "svelte-i18n";
@@ -15,7 +15,7 @@
   let _state = $state(true);
 
   const getState = async () => {
-    Cloud.util.imageCache
+    NDH.util.imageCache
       .getStates()
       .then((res) => {
         _state = res.state;
@@ -27,7 +27,7 @@
   };
 
   const handleDeleteImageButtonClick = async () => {
-    const clearPromise = Cloud.util.imageCache.clear();
+    const clearPromise = NDH.util.imageCache.clear();
     toast.promise(clearPromise, {
       loading: `${$_("drive.ui.settings_page.preview_cache.toast.loading")}`,
       success: () => {
@@ -58,7 +58,7 @@
       <Switch
         checked={_state}
         onCheckedChange={async (v) => {
-          await Cloud.util.imageCache.change(v).then(() => {
+          await NDH.util.imageCache.change(v).then(() => {
             getState();
           });
         }}

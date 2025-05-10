@@ -180,6 +180,7 @@ export class ServiceRegistry {
     const driveGroup = this.rootGroup.addGroup('drive');
     const driveItemGroup = driveGroup.addGroup('item');
     driveItemGroup.addChannel('get', (id: string) => drive.item.get(id));
+    driveItemGroup.addChannel('create_dirs', (parentId: string, dirs: { name: string; path: string; }[]) => drive.item.create_dirs(parentId, dirs))
     driveItemGroup.addChannel('rename', (id: string, rename: string) => drive.item.rename(id, rename));
 
     const driveItemDownloadGroup = driveItemGroup.addGroup('download');

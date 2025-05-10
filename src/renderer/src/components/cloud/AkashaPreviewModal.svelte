@@ -4,7 +4,7 @@
   import { LoaderIcon } from "lucide-svelte";
   import type { LayoutType } from "$lib/types";
   import { cn } from "@/lib/utils";
-  import { Cloud } from "@/lib/helpers";
+  import { NDH } from "@/lib/helpers";
 
   let {
     className,
@@ -44,7 +44,7 @@
 
   $effect(() => {
     if (showModal) {
-      Cloud.util.imageCache.get(img.default).then((res) => {
+      NDH.util.imageCache.get(img.default).then((res) => {
         hihi = res;
       });
     }

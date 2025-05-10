@@ -1,8 +1,8 @@
 // src/core/services/drive.service.ts
 
-import { GetContentsUrl, RenameUrl } from "../const";
+import { DirCreateManyUrl, GetContentsUrl, RenameUrl } from "../const";
 import { fetcher } from "../lib/fetcher";
-import { GetContentsResp, RenameResp } from "../../types/drive.types";
+import { DirCreateManyResp, GetContentsResp, RenameResp } from "../../types/drive.types";
 import { imageCache } from "../lib/imageCache";
 import { fss } from "./fs.service";
 
@@ -14,8 +14,22 @@ class DriveService {
       if (!resp.data.success) {
         throw new Error(`item.get error: ${resp.data.error?.message}`);
       }
-
       return resp.data;
+    },
+
+    create_dirs: async (parentId: string, dirs: { name: string; path: string; }[]) => {
+      const resp = await fetcher<DirCreateManyResp>(DirCreateManyUrl, {
+        method: 'POST',
+        body: {
+          current: parentId,
+          parentId,
+          dirs
+        }
+      });
+      if (!resp.data.success) {
+        throw new Error(`item.create_dir error: ${resp.data.error?.message}`);
+      }
+      return resp.data
     },
 
     rename: async (id: string, rename: string) => {
@@ -24,7 +38,6 @@ class DriveService {
         method: 'POST',
         body: { rename }
       });
-
       if (!resp.data.success) {
         throw new Error(`item.rename error: ${resp.data.error?.message}`);
       }

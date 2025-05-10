@@ -1,7 +1,7 @@
 import { writable, get, derived } from 'svelte/store';
 import { _ } from 'svelte-i18n';
 
-class CloudHelper {
+class NahidaDriveHelper {
   currentId = writable("root");
 
   nav = {
@@ -11,6 +11,7 @@ class CloudHelper {
 
   item = {
     get: async (id: string) => await window.api.drive.item.get(id),
+    create_dirs: async (parentId: string, dirs: { name: string; path: string; }[]) => await window.api.drive.item.create_dirs(parentId, dirs),
     rename: async (id: string, name: string) => await window.api.drive.item.rename(id, name),
     download: {
       enqueue: async (id: string) => window.api.drive.item.download.enqueue(id),
@@ -28,5 +29,5 @@ class CloudHelper {
   }
 }
 
-const Cloud = new CloudHelper;
-export { Cloud };
+const NDH = new NahidaDriveHelper;
+export { NDH };

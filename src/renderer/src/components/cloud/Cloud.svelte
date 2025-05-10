@@ -48,10 +48,11 @@
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index";
   import * as AlertDialog from "@/lib/components/ui/alert-dialog";
   import { createQuery, createMutation } from "@tanstack/svelte-query";
-  import { Cloud } from "@/lib/helpers";
+  import { NDH } from "@/lib/helpers";
   import AkashaPreviewModal from "@/components/cloud/AkashaPreviewModal.svelte";
+  import { ValidateName } from "@/lib/utils/cloud.utils";
 
-  let currentId = Cloud.currentId;
+  let currentId = NDH.currentId;
   let uploadDragging = $state(false);
   let contentDragging = $state(false);
   let isDoubleClickAllowed = $state(true);
@@ -84,7 +85,7 @@
     createQuery({
       queryKey: ["contents", $currentId],
       queryFn: async () => {
-        const data = await Cloud.item.get($currentId);
+        const data = await NDH.item.get($currentId);
 
         // if (!data || error) {
         //   // @ts-ignore
@@ -596,6 +597,42 @@
       currentDragOver = null;
     }
   };
+
+  const CreateDirMutation = createMutation({
+    mutationFn: async ({
+      name,
+      parent,
+      refetcher,
+    }: {
+      name: string;
+      parent: string;
+      refetcher: () => Promise<any>;
+    }) => {
+      console.log('CreateDirMutation 시작')
+      const resp = await NDH.item.create_dirs(parent, [{ name, path: name }]);
+
+      if (resp.error) {
+        toast.warning(resp.error.message);
+
+        // @ts-ignore
+        throw new Error(error.value.error.message);
+      }
+
+      return { name, parent, refetcher };
+    },
+    onMutate: () => {
+      LoadingStateStore.setLoading("createDirLoading", true);
+    },
+    onSettled: () => {
+      LoadingStateStore.setLoading("createDirLoading", false);
+    },
+    onSuccess: (data) => {
+      data.refetcher();
+      DialogStateStore.setOpen("createDirDialog", false);
+      toast.success(get(_)("#.CreateDir.toast-promise.success"));
+    },
+    onError: (_) => {},
+  });
 </script>
 
 <svelte:window
@@ -1068,7 +1105,7 @@
             <ContextMenu.Item
               class="cursor-pointer gap-x-2"
               onclick={() => {
-                Cloud.item.download
+                NDH.item.download
                   .enqueue(selectedItems[0].id)
                   .catch((e: any) => {
                     toast.error(e.message);
@@ -1230,14 +1267,14 @@
         const formData = new FormData(form);
         const name = formData.get("name") as string;
 
-        // const validate_result = ValidateName(name);
-        // if (validate_result) {
-        //   return toast.warning(get(_)("#.CreateDir.0"), {
-        //     description: validate_result,
-        //   });
-        // }
+        const validate_result = ValidateName(name);
+        if (validate_result) {
+          return toast.warning(get(_)("#.CreateDir.0"), {
+            description: validate_result,
+          });
+        }
 
-        // $CreateDirMutation.mutate({ name, parent: currentId, refetcher });
+        $CreateDirMutation.mutate({ name, parent: $currentId, refetcher });
       }}
     >
       <Input name="name" placeholder="이름" maxlength={255} required />

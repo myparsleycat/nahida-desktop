@@ -1,4 +1,5 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
+import type { DirCreateManyResp } from '../types/drive.types';
 
 declare global {
   interface Window {
@@ -53,6 +54,7 @@ declare global {
       drive: {
         item: {
           get: (id: string) => Promise<GetContentsResp>
+          create_dirs: (parentId: string, dirs: { name: string; path: string; }[]) => Promise<DirCreateManyResp>
           rename: (id: string, name: string) => Promise<void>
           download: {
             enqueue: (id: string) => Promise<void>
