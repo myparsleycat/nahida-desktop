@@ -19,6 +19,8 @@ interface FetcherResponse<T = any> {
 async function fetcher<T = any>(url: string, options?: FetcherOptions): Promise<FetcherResponse<T>> {
   const { method = "GET", headers = {}, body, sessionToken, maxRedirects } = options || {};
 
+  console.log('fether handled', url);
+
   const defaultHeaders: Record<string, string> = {
     'User-Agent': 'Nahida Desktop/0.0.1',
     'Content-Type': 'application/json',
@@ -74,10 +76,16 @@ async function fetcher<T = any>(url: string, options?: FetcherOptions): Promise<
       ok: response.status >= 200 && response.status < 300
     };
   } catch (error) {
-    if (axios.isAxiosError(error) && error.response) {
-      throw new Error(`HTTP error! Status: ${error.response.status}`);
+    if (axios.isAxiosError(error)) {
+      return {
+        data: error.response?.data,
+        status: error.response!.status,
+        headers: error.response?.headers as Record<string, string>,
+        ok: false
+      }
+    } else {
+      throw error;
     }
-    throw error;
   }
 }
 

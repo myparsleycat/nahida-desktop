@@ -1,5 +1,5 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
-import type { DirCreateManyResp } from '../types/drive.types';
+import type { DirCreateManyResp, TrashManyResp } from '../types/drive.types';
 
 declare global {
   interface Window {
@@ -58,7 +58,8 @@ declare global {
           rename: (id: string, name: string) => Promise<void>
           download: {
             enqueue: (id: string) => Promise<void>
-          }
+          },
+          trash_many: (ids: string[]) => Promise<TrashManyResp>
         },
         util: {
           imageCache: {

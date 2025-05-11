@@ -182,6 +182,7 @@ export class ServiceRegistry {
     driveItemGroup.addChannel('get', (id: string) => drive.item.get(id));
     driveItemGroup.addChannel('create_dirs', (parentId: string, dirs: { name: string; path: string; }[]) => drive.item.create_dirs(parentId, dirs))
     driveItemGroup.addChannel('rename', (id: string, rename: string) => drive.item.rename(id, rename));
+    driveItemGroup.addChannel('trash_many', (ids: string[]) => drive.item.trash_many(ids));
 
     const driveItemDownloadGroup = driveItemGroup.addGroup('download');
     driveItemDownloadGroup.addChannel('enqueue', (id: string) => drive.item.download.enqueue(id));

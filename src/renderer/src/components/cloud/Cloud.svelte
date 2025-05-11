@@ -598,6 +598,28 @@
     }
   };
 
+  const TrashMutation = createMutation({
+    mutationFn: async (items: Content[]) => {
+      const uuids = items.map((item) => item.id);
+      const resp = await NDH.item.trash_many(uuids);
+
+      // @ts-ignore
+      if (!resp.success) {
+        // @ts-ignore
+        throw new Error(resp.error.message);
+      }
+
+      return { data: resp.trash_many };
+    },
+    onSuccess: (data) => {
+      toast.success(
+        `${data.data.length}개의 파일 및 디렉토리가 휴지통으로 이동되었습니다`,
+      );
+      refetcher();
+    },
+    onError: (_) => {},
+  });
+
   const CreateDirMutation = createMutation({
     mutationFn: async ({
       name,
@@ -608,10 +630,9 @@
       parent: string;
       refetcher: () => Promise<any>;
     }) => {
-      console.log('CreateDirMutation 시작')
       const resp = await NDH.item.create_dirs(parent, [{ name, path: name }]);
 
-      if (resp.error) {
+      if (!resp.success) {
         toast.warning(resp.error.message);
 
         // @ts-ignore
@@ -1155,7 +1176,10 @@
               RG
             </ContextMenu.Item>
           {/if}
-          <ContextMenu.Item class="cursor-pointer gap-x-2 text-red-500">
+          <ContextMenu.Item
+            class="cursor-pointer gap-x-2 text-red-500"
+            onclick={() => $TrashMutation.mutate(selectedItems)}
+          >
             <Trash2Icon size={18} />
             {$_("drive.ui.trash")}
           </ContextMenu.Item>
@@ -1195,7 +1219,41 @@
     <Dialog.Header>
       <Dialog.Title>{$_("drive.ui.rename")}</Dialog.Title>
     </Dialog.Header>
-    <form class="flex flex-col space-y-4" autocomplete="off">
+    <form
+      class="flex flex-col space-y-4"
+      autocomplete="off"
+      onsubmit={(e) => {
+        e.preventDefault();
+        const form = e.target as HTMLFormElement;
+        const formData = new FormData(form);
+        const name = formData.get("name") as string;
+        if (!name || typeof name !== "string" || name.trim() === "") {
+          toast.warning(get(_)("#.RenameItem.0"));
+          return;
+        }
+
+        const ext = (formData.get("ext") as string) || "";
+
+        const rename = name + ext;
+
+        const validate_result = ValidateName(rename);
+        if (validate_result) {
+          return toast.warning(get(_)("#.RenameItem.1"), {
+            description: validate_result,
+          });
+        }
+
+        toast.promise(NDH.item.rename(selectedItems[0].id, rename), {
+          loading: get(_)("#.RenameItem.toast-promise.loading"),
+          success: () => {
+            refetcher();
+            DialogStateStore.setOpen("renameDialog", false);
+            return get(_)("#.RenameItem.toast-promise.success");
+          },
+          error: (e: any) => e.message,
+        });
+      }}
+    >
       <div class="flex flex-row gap-x-4">
         <input
           class={cn(

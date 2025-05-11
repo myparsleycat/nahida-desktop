@@ -16,6 +16,7 @@ class NahidaDriveHelper {
     download: {
       enqueue: async (id: string) => window.api.drive.item.download.enqueue(id),
     },
+    trash_many: async (ids: string[]) => await window.api.drive.item.trash_many(ids)
   }
 
   util = {

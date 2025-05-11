@@ -1,8 +1,8 @@
 // src/core/services/drive.service.ts
 
-import { DirCreateManyUrl, GetContentsUrl, RenameUrl } from "../const";
+import { DirCreateManyUrl, GetContentsUrl, RenameUrl, TrashManyUrl } from "../const";
 import { fetcher } from "../lib/fetcher";
-import { DirCreateManyResp, GetContentsResp, RenameResp } from "../../types/drive.types";
+import { DirCreateManyResp, GetContentsResp, RenameResp, TrashManyResp } from "../../types/drive.types";
 import { imageCache } from "../lib/imageCache";
 import { fss } from "./fs.service";
 
@@ -12,7 +12,7 @@ class DriveService {
       const url = GetContentsUrl + id;
       const resp = await fetcher<GetContentsResp>(url)
       if (!resp.data.success) {
-        throw new Error(`item.get error: ${resp.data.error?.message}`);
+        throw new Error(`item.get error: ${resp.data.error.message}`);
       }
       return resp.data;
     },
@@ -27,7 +27,7 @@ class DriveService {
         }
       });
       if (!resp.data.success) {
-        throw new Error(`item.create_dir error: ${resp.data.error?.message}`);
+        throw new Error(`item.create_dir error: ${resp.data.error.message}`);
       }
       return resp.data
     },
@@ -39,8 +39,9 @@ class DriveService {
         body: { rename }
       });
       if (!resp.data.success) {
-        throw new Error(`item.rename error: ${resp.data.error?.message}`);
+        throw new Error(resp.data.error.message);
       }
+      return resp.data;
     },
 
     download: {
@@ -55,6 +56,17 @@ class DriveService {
 
         return;
       }
+    },
+
+    async trash_many(ids: string[]) {
+      const resp = await fetcher<TrashManyResp>(TrashManyUrl, {
+        method: 'POST',
+        body: { uuids: ids }
+      });
+      if (!resp.data.success) {
+        throw new Error(`item.trash_many error: ${resp.data.error.message}`);
+      }
+      return resp.data;
     }
   }
 
