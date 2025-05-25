@@ -353,16 +353,18 @@
         // moveItems 호출 전에 초기화
         copy_or_cut_items = { action: null, items: [] };
 
-        // moveItems(itemsToMove, currentId)
-        //   .then(async () => {
-        //     await refetcher();
-        //   })
-        //   .catch((err: any) => {
-        //     console.error("붙여넣기 실패:", err);
-        //     toast.error("붙여넣기 중 오류가 발생했습니다.", {
-        //       description: err.message,
-        //     });
-        //   });
+        const ids = itemsToMove.map((item) => item.id);
+        NDH.item
+          .move($currentId, ids, $currentId)
+          .then(async () => {
+            await refetcher();
+          })
+          .catch((err: any) => {
+            console.error("붙여넣기 실패:", err);
+            toast.error("붙여넣기 중 오류가 발생했습니다.", {
+              description: err.message,
+            });
+          });
       }
     }
 
@@ -581,21 +583,31 @@
   };
 
   const handleDrop = (e: DragEvent, targetItem: Content) => {
-    try {
-      e.preventDefault();
-      const draggedId = e.dataTransfer?.getData("text/plain");
-      if (!draggedId || !draggedItem) return;
+    e.preventDefault();
+    const draggedId = e.dataTransfer?.getData("text/plain");
+    if (!draggedId || !draggedItem) return;
 
-      if (!targetItem.isDir)
-        return toast.warning("폴더에만 드롭할 수 있습니다.");
+    if (!targetItem.isDir) return toast.warning("폴더에만 드롭할 수 있습니다.");
 
-      if (draggedItem.id === targetItem.id)
-        return toast.warning("자기 자신에게는 드롭할 수 없습니다.");
+    if (draggedItem.id === targetItem.id)
+      return toast.warning("자기 자신에게는 드롭할 수 없습니다.");
 
-      // moveItems([draggedItem], targetItem.id);
-    } finally {
-      currentDragOver = null;
-    }
+    const ids = selectedItems.map((item) => item.id);
+
+    NDH.item
+      .move($currentId, ids.length > 0 ? ids : [draggedItem.id], targetItem.id)
+      .then(async () => {
+        await refetcher();
+      })
+      .catch((err: any) => {
+        console.error("붙여넣기 실패:", err);
+        toast.error("붙여넣기 중 오류가 발생했습니다.", {
+          description: err.message,
+        });
+      })
+      .finally(() => {
+        currentDragOver = null;
+      });
   };
 
   const TrashMutation = createMutation({
@@ -630,7 +642,7 @@
       parent: string;
       refetcher: () => Promise<any>;
     }) => {
-      const resp = await NDH.item.create_dirs(parent, [{ name, path: name }]);
+      const resp = await NDH.item.dir.create(parent, [{ name, path: name }]);
 
       if (!resp.success) {
         toast.warning(resp.error.message);
@@ -1127,7 +1139,7 @@
               class="cursor-pointer gap-x-2"
               onclick={() => {
                 NDH.item.download
-                  .enqueue(selectedItems[0].id)
+                  .enqueue(selectedItems[0].id, selectedItems[0].name)
                   .catch((e: any) => {
                     toast.error(e.message);
                   });

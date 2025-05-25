@@ -4,6 +4,7 @@ export interface ModFolders {
   name: string;
   parentId: string | null;
   createdAt: string;
+  seq: number;
 }
 
 export interface ReadDirectoryOptions {

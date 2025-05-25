@@ -213,7 +213,8 @@
       },
       "my_mods": "My Mods",
       "share": "Share",
-      "cloud_drive": "Cloud Drive"
+      "cloud_drive": "Cloud Drive",
+      "nahidalive": "Nahida Live"
     },
     "toast": {
       "copied_to_clipboard": "Copied to clipboard"

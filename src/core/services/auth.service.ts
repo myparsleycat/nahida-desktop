@@ -1,9 +1,9 @@
 // src/core/services/auth.service.ts
 
 import { BrowserWindow, safeStorage, shell } from "electron";
-import { GetSessionURL, OAuthCallbackUrl, OAuthSigninURL, SignOutUrl } from "../const";
-import { fetcher } from "../lib/fetcher";
-import { db } from "../db";
+import { GetSessionURL, OAuthCallbackUrl, OAuthSigninURL, SignOutUrl } from "@core/const";
+import { fetcher } from "@core/lib/fetcher";
+import { db } from "@core/db";
 
 interface session {
   id: string;

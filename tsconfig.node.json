@@ -6,16 +6,16 @@
     "src/preload/**/*",
     "src/core/**/*",
     "src/renderer/**/*.d.ts",
-    "src/types/*.ts"
+    "src/shared/**/*"
   ],
   "compilerOptions": {
     "allowJs": true,
-		"checkJs": true,
-		"esModuleInterop": true,
-		"forceConsistentCasingInFileNames": true,
-		"resolveJsonModule": true,
-		"skipLibCheck": true,
-		"sourceMap": true,
+    "checkJs": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
     "noImplicitReturns": false,
     "noUnusedLocals": false,
     "composite": true,
@@ -24,6 +24,29 @@
       "electron-vite/node",
       "svelte"
     ],
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    "baseUrl": "./src",
+    "paths": {
+      "@shared/*": [
+        "shared/*"
+      ],
+      "@renderer/*": [
+        "renderer/*"
+      ],
+      "@main/*": [
+        "main/*"
+      ],
+      "@core/*": [
+        "core/*"
+      ],
+      "$lib": [
+        "renderer/src/lib",
+        "renderer/overlay"
+      ],
+      "$lib/*": [
+        "renderer/src/lib/*",
+        "renderer/overlay/*"
+      ]
+    }
   }
 }

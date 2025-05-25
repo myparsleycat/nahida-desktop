@@ -11,10 +11,13 @@ class NahidaDriveHelper {
 
   item = {
     get: async (id: string) => await window.api.drive.item.get(id),
-    create_dirs: async (parentId: string, dirs: { name: string; path: string; }[]) => await window.api.drive.item.create_dirs(parentId, dirs),
+    move: async (current: string, ids: string[], newParentId: string) => await window.api.drive.item.move(current, ids, newParentId),
+    dir: {
+      create: async (parentId: string, dirs: { name: string; path: string; }[]) => await window.api.drive.item.dir.create(parentId, dirs),
+    },
     rename: async (id: string, name: string) => await window.api.drive.item.rename(id, name),
     download: {
-      enqueue: async (id: string) => window.api.drive.item.download.enqueue(id),
+      enqueue: async (id: string, name: string) => window.api.drive.item.download.enqueue(id, name),
     },
     trash_many: async (ids: string[]) => await window.api.drive.item.trash_many(ids)
   }

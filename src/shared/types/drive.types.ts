@@ -1,15 +1,6 @@
 // src/types/drive.types.ts
-export type SuccessResponse = {
-  success: true;
-};
 
-export type ErrorResponse = {
-  success: false;
-  error: {
-    code: string;
-    message: string;
-  };
-};
+import { ErrorResponse, SuccessResponse } from "./fetcher.types";
 
 export type BaseResponse = SuccessResponse | ErrorResponse;
 
@@ -55,18 +46,13 @@ export type ChildType = ContentType & {
   };
 };
 
-// 성공 시 응답
 export type GetContentsSuccessResp = SuccessResponse & {
   content: ContentType | null;
   parent: ParentType | null;
   ancestors: AncestorType[];
   children: ChildType[];
 };
-
-// 실패 시 응답
 export type GetContentsErrorResp = ErrorResponse;
-
-// 통합 응답 타입
 export type GetContentsResp = GetContentsSuccessResp | GetContentsErrorResp;
 
 // 이름 변경 응답
@@ -76,9 +62,7 @@ export type RenameSuccessResp = SuccessResponse & {
     after: string;
   };
 };
-
 export type RenameErrorResp = ErrorResponse;
-
 export type RenameResp = RenameSuccessResp | RenameErrorResp;
 
 // 디렉토리 생성 응답
@@ -93,16 +77,35 @@ export type DirCreateManySuccessResp = SuccessResponse & {
     name: string;
   }[];
 };
-
 export type DirCreateManyErrorResp = ErrorResponse;
-
 export type DirCreateManyResp = DirCreateManySuccessResp | DirCreateManyErrorResp;
 
 // 휴지통 응답
 export type TrashManySuccessResp = SuccessResponse & {
   trash_many: string[];
 };
-
 export type TrashManyErrorResp = ErrorResponse;
-
 export type TrashManyResp = TrashManySuccessResp | TrashManyErrorResp;
+
+// 아이템 이동
+export type MoveManySuccessResp = SuccessResponse & {
+  move_many: {
+    successItems: {
+      id: string;
+      name: string;
+      parentId: string | null;
+    }[];
+    duplicatedItems: {
+      id: string;
+      name: string;
+      existingItemId: string;
+    }[];
+    errorItems: {
+      id: string;
+      name?: string;
+      error: string;
+    }[];
+  }
+};
+export type MoveManyErrorResp = ErrorResponse;
+export type MoveManyResp = MoveManySuccessResp | MoveManyErrorResp;

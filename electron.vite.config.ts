@@ -1,14 +1,26 @@
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import path from 'path'
-// import process from 'process'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()]
+    plugins: [externalizeDepsPlugin()],
+    resolve: {
+      alias: {
+        '@shared': path.resolve('./src/shared'),
+        '@core': path.resolve('./src/core'),
+        '@main': path.resolve('./src/main')
+      }
+    }
   },
   preload: {
-    plugins: [externalizeDepsPlugin()]
+    plugins: [externalizeDepsPlugin()],
+    resolve: {
+      alias: {
+        '@shared': path.resolve('./src/shared'),
+        '@core': path.resolve('./src/core')
+      }
+    }
   },
   renderer: {
     plugins: [
@@ -18,6 +30,7 @@ export default defineConfig({
       alias: {
         $lib: path.resolve("./src/renderer/src/lib"),
         '@': path.resolve('./src/renderer/src'),
+        '@shared': path.resolve('./src/shared'),
       }
     },
     root: path.resolve(process.cwd(), 'src/renderer'),

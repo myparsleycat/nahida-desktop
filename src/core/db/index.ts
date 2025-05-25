@@ -13,7 +13,8 @@ interface StorageKeyValues {
     y: number | null;
     width: number;
     height: number;
-  }
+  };
+  mods_layout: 'grid' | 'list';
 }
 
 // type ObjectStorageKeys = 'bounds';
@@ -27,12 +28,13 @@ interface ImageCacheItem {
   lastUsedAt: string;
 }
 
-interface ModFolders {
+export interface ModFolders {
   id: string;
   path: string;
   name: string;
   parentId: string | null;
   createdAt: string;
+  seq: number;
 }
 
 type TableName = "LocalStorage" | "ImageCache" | "ModFolders";
@@ -48,6 +50,7 @@ type ModFoldersValue = Omit<ModFolders, "id">;
 interface TableSchema {
   name: string;
   createStatement: string;
+  triggers?: string[];
 }
 
 const defaultValues: StorageKeyValues = {
@@ -60,7 +63,8 @@ const defaultValues: StorageKeyValues = {
     y: null,
     width: 1000,
     height: 670
-  }
+  },
+  mods_layout: 'grid'
 };
 
 const tableSchemas: TableSchema[] = [
@@ -92,9 +96,10 @@ const tableSchemas: TableSchema[] = [
       CREATE TABLE IF NOT EXISTS ModFolders (
         id TEXT PRIMARY KEY,
         path TEXT UNIQUE,
-        name TEXT,
+        name TEXT UNIQUE,
         parentId TEXT NULL,
         createdAt TEXT NOT NULL,
+        seq INTEGER NOT NULL DEFAULT 1,
         FOREIGN KEY (parentId) REFERENCES ModFolders(id) 
           ON DELETE SET NULL 
           ON UPDATE CASCADE
@@ -168,6 +173,29 @@ class ModFoldersTableHandler implements TableHandler<ModFoldersKey, ModFolders |
   async del(key: ModFoldersKey): Promise<boolean> {
     return this.dbHandler.del("ModFolders", key);
   }
+
+  async getAll(): Promise<ModFolders[]> {
+    return this.dbHandler.query<ModFolders>("SELECT * FROM ModFolders ORDER BY seq ASC");
+  }
+
+  async getChildren(parentId: string | null): Promise<ModFolders[]> {
+    if (parentId === null) {
+      return this.dbHandler.query<ModFolders>("SELECT * FROM ModFolders WHERE parentId IS NULL ORDER BY seq ASC");
+    } else {
+      return this.dbHandler.query<ModFolders>("SELECT * FROM ModFolders WHERE parentId = ? ORDER BY seq ASC", [parentId]);
+    }
+  }
+
+  async reseqFolders(): Promise<void> {
+    const folders = await this.getAll();
+    const db = await this.dbHandler.getDb();
+
+    const updateStmt = db.prepare("UPDATE ModFolders SET seq = ? WHERE id = ?");
+
+    folders.forEach((folder, index) => {
+      updateStmt.run(index + 1, folder.id);
+    });
+  }
 }
 
 class DbHandler {
@@ -225,6 +253,12 @@ class DbHandler {
 
   private createTable(schema: TableSchema): void {
     this.db!.exec(schema.createStatement);
+    if (schema.triggers) {
+      for (const trigger of schema.triggers) {
+        this.db!.exec(trigger);
+        console.log(`Trigger created for ${schema.name} table`);
+      }
+    }
   }
 
   private async initializeDefaultValues() {
@@ -270,7 +304,7 @@ class DbHandler {
       } else if (table === "ImageCache") {
         query = "SELECT id, image, size, mimeType, createdAt, lastUsedAt FROM ImageCache WHERE id = ?";
       } else if (table === "ModFolders") {
-        query = "SELECT id, path, name, parentId, createdAt FROM ModFolders WHERE id = ?";
+        query = "SELECT id, path, name, parentId, createdAt, seq FROM ModFolders WHERE path = ?";
       } else {
         throw new Error(`Unsupported table: ${table}`);
       }
@@ -312,8 +346,6 @@ class DbHandler {
   async insert(table: TableName = "LocalStorage", key: string, value: any): Promise<void> {
     try {
       const db = await this.getDb();
-      let query: string;
-      let params: any[];
 
       const exists = await this.keyExists(table, key);
       if (exists) {
@@ -351,13 +383,15 @@ class DbHandler {
         }
       } else if (table === "ModFolders") {
         const now = new Date().toISOString();
-        const insertStmt = db.prepare("INSERT INTO ModFolders (id, path, name, parentId, createdAt) VALUES (?, ?, ?, ?, ?)");
+        const seqValue = ('seq' in value && typeof value.seq === 'number') ? value.seq : 1;
+        const insertStmt = db.prepare("INSERT INTO ModFolders (id, path, name, parentId, createdAt, seq) VALUES (?, ?, ?, ?, ?, ?)");
         insertStmt.run(
           key,
           value.path || '',
           value.name || '',
           value.parentId || null,
-          value.createdAt || now
+          value.createdAt || now,
+          seqValue
         );
       } else {
         throw new Error(`Unsupported table: ${table}`);
@@ -470,6 +504,11 @@ class DbHandler {
         if ('createdAt' in value) {
           setClauses.push("createdAt = ?");
           params.push(value.createdAt);
+        }
+
+        if ('seq' in value) {
+          setClauses.push("seq = ?");
+          params.push(value.seq);
         }
 
         if (setClauses.length === 0) {

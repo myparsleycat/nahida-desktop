@@ -1,4 +1,4 @@
-import type { IniParseResult } from "../core/lib/InIUtil";
+import type { IniParseResult } from '@core/lib/InIUtil';
 
 export interface DirectChildren {
   path: string;

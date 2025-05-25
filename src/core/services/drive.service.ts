@@ -1,12 +1,25 @@
 // src/core/services/drive.service.ts
 
-import { DirCreateManyUrl, GetContentsUrl, RenameUrl, TrashManyUrl } from "../const";
-import { fetcher } from "../lib/fetcher";
-import { DirCreateManyResp, GetContentsResp, RenameResp, TrashManyResp } from "../../types/drive.types";
-import { imageCache } from "../lib/imageCache";
+import {
+  DirCreateManyUrl,
+  GetContentsUrl,
+  MoveManyUrl,
+  RenameUrl,
+  TrashManyUrl
+} from "../const";
+import {
+  DirCreateManyResp,
+  GetContentsResp,
+  MoveManyResp,
+  RenameResp,
+  TrashManyResp
+} from "@shared/types/drive.types";
+import { api, fetcher } from "@core/lib/fetcher";
+import { imageCache } from "@core/lib/imageCache";
 import { fss } from "./fs.service";
+import { TFS } from "./akasha.transfer.service";
 
-class DriveService {
+class AkashaDriveService {
   item = {
     get: async (id: string) => {
       const url = GetContentsUrl + id;
@@ -17,26 +30,14 @@ class DriveService {
       return resp.data;
     },
 
-    create_dirs: async (parentId: string, dirs: { name: string; path: string; }[]) => {
-      const resp = await fetcher<DirCreateManyResp>(DirCreateManyUrl, {
+    move: async (current: string, ids: string[], newParentId: string) => {
+      const resp = await fetcher<MoveManyResp>(MoveManyUrl, {
         method: 'POST',
         body: {
-          current: parentId,
-          parentId,
-          dirs
+          current,
+          uuids: ids,
+          target: newParentId
         }
-      });
-      if (!resp.data.success) {
-        throw new Error(`item.create_dir error: ${resp.data.error.message}`);
-      }
-      return resp.data
-    },
-
-    rename: async (id: string, rename: string) => {
-      const url = RenameUrl + id;
-      const resp = await fetcher<RenameResp>(url, {
-        method: 'POST',
-        body: { rename }
       });
       if (!resp.data.success) {
         throw new Error(resp.data.error.message);
@@ -44,24 +45,44 @@ class DriveService {
       return resp.data;
     },
 
-    download: {
-      enqueue: async (id: string) => {
-        const [save_path] = await Promise.all([
-          fss.select({ properties: ['openDirectory'] })
-        ])
+    dir: {
+      create: async (parentId: string, dirs: { name: string; path: string; }[]) => {
+        const resp = await fetcher<DirCreateManyResp>(DirCreateManyUrl, {
+          method: 'POST',
+          body: {
+            current: parentId,
+            parentId,
+            dirs
+          }
+        });
+        if (!resp.data.success) {
+          throw new Error(`item.create_dir error: ${resp.data.error.message}`);
+        }
+        return resp.data
+      },
+    },
 
-        if (!save_path) return;
-
-        console.log(id);
-
-        return;
+    rename: async (id: string, rename: string) => {
+      const url = RenameUrl + id;
+      const resp = await api.post<RenameResp>(url, {
+        rename
+      })
+      if (!resp.data.success) {
+        throw new Error(resp.data.error.message);
       }
+      return resp.data;
+    },
+
+    download: async (id: string) => {
+      const save_path = await fss.select({ properties: ['openDirectory'] });
+      if (!save_path) return;
+
+      await TFS.akasha.download.enqueue(id, save_path);
     },
 
     async trash_many(ids: string[]) {
-      const resp = await fetcher<TrashManyResp>(TrashManyUrl, {
-        method: 'POST',
-        body: { uuids: ids }
+      const resp = await api.post<TrashManyResp>(TrashManyUrl, {
+        uuids: ids
       });
       if (!resp.data.success) {
         throw new Error(`item.trash_many error: ${resp.data.error.message}`);
@@ -81,5 +102,5 @@ class DriveService {
   }
 }
 
-const drive = new DriveService;
-export { drive };
+const ADS = new AkashaDriveService;
+export { ADS };

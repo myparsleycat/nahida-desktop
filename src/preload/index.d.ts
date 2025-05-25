@@ -1,9 +1,14 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
-import type { DirCreateManyResp, TrashManyResp } from '../types/drive.types';
+import type { DirCreateManyResp, MoveManyResp, TrashManyResp } from '@shared/types/drive.types';
+import type { DirectChildren } from '@shared/types/mods.types';
+import type { HelloModsRespSuccessResp } from '@shared/types/nahida.types';
 
 declare global {
   interface Window {
     electron: ElectronAPI;
+    webUtils: {
+      getPathForFile: (file: File) => string;
+    }
     api: {
       auth: {
         onAuthStateChanged: (callback: (value: boolean) => void) => () => void
@@ -28,36 +33,62 @@ declare global {
       }
 
       mods: {
+        clearPath: () => void
         ui: {
           resizable: {
             get: () => Promise<number>
             set: (size: number) => Promise<void>
           }
-        },
+          layout: {
+            get: () => Promise<'grid' | 'list'>
+            set: (layout: 'grid' | 'list') => Promise<void>
+          }
+        }
         folder: {
           getAll: () => Promise<ModFolders[]>
-          create: (name: string, path: string) => Promise<void>
+          create: (name: string, path: string) => Promise<boolean>
           delete: (path: string) => Promise<void>
+          changeSeq: (path: string, newSeq: number) => Promise<boolean>
           dir: {
             read: (path: string, options?: ReadDirectoryOptions) => Promise<FileInfo[]>
+            disableAll: (path: string) => Promise<boolean>
+            enableAll: (path: string) => Promise<boolean>
           }
+          read: (path: string) => Promise<DirectChildren[]>
         },
         mod: {
+          read: (path: string) => Promise<DirectChildren[]>
           toggle: (path: string) => Promise<boolean>
         },
         ini: {
           parse: (path: string) => Promise<IniParseResult[]>
-          update: (path: string, section: string, key: 'key', value: string) => Promise<boolean>
+          update: (path: string, section: string, key: 'key' | 'back', value: string) => Promise<boolean>
+        }
+        intx: {
+          drop: (data: string[]) => Promise<boolean>
+        }
+        msg: {
+          currentCharPathChanged: (callback: (path: string) => void) => () => void
+          currentFolderPathChanged: (callback: (path: string) => void) => () => void
+        }
+      }
+
+      nahida: {
+        get: {
+          mods: (params: NahidaIPCHelloModsParams) => Promise<HelloModsRespSuccessResp>
         }
       }
 
       drive: {
         item: {
           get: (id: string) => Promise<GetContentsResp>
-          create_dirs: (parentId: string, dirs: { name: string; path: string; }[]) => Promise<DirCreateManyResp>
+          move: (current: string, ids: string[], newParentId: string) => Promise<MoveManyResp>
+          dir: {
+            create: (parentId: string, dirs: { name: string; path: string; }[]) => Promise<DirCreateManyResp>
+          },
           rename: (id: string, name: string) => Promise<void>
           download: {
-            enqueue: (id: string) => Promise<void>
+            enqueue: (id: string, name: string) => Promise<void>
           },
           trash_many: (ids: string[]) => Promise<TrashManyResp>
         },
@@ -89,6 +120,10 @@ declare global {
             isFullscreen?: boolean;
           };
         }) => void) => () => void
+      }
+
+      toast: {
+        toastShow: (callback: (params: any) => void) => () => void
       }
 
       window: WindowControls
