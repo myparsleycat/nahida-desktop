@@ -97,10 +97,10 @@ if (!gotTheLock) {
     // 오버레이
     // createOverlayWindow('Zenless');
 
-    app.on('activate', function () {
+    app.on('activate', async () => {
       // On macOS it's common to re-create a window in the app when the
       // dock icon is clicked and there are no other windows open.
-      if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+      if (BrowserWindow.getAllWindows().length === 0) await createMainWindow();
     });
   })
 
