@@ -17,8 +17,6 @@ interface StorageKeyValues {
   mods_layout: 'grid' | 'list';
 }
 
-// type ObjectStorageKeys = 'bounds';
-
 interface ImageCacheItem {
   id: string;
   image: Buffer;
@@ -47,9 +45,17 @@ type LocalStorageValue<K extends LocalStorageKey> = StorageKeyValues[K];
 type ImageCacheValue = Omit<ImageCacheItem, "id">;
 type ModFoldersValue = Omit<ModFolders, "id">;
 
+interface ColumnDefinition {
+  name: string;
+  type: string;
+  constraints?: string;
+}
+
 interface TableSchema {
   name: string;
+  version: number;
   createStatement: string;
+  columns: ColumnDefinition[];
   triggers?: string[];
 }
 
@@ -70,15 +76,21 @@ const defaultValues: StorageKeyValues = {
 const tableSchemas: TableSchema[] = [
   {
     name: "LocalStorage",
+    version: 1,
     createStatement: `
       CREATE TABLE IF NOT EXISTS LocalStorage (
         key TEXT PRIMARY KEY,
         value TEXT
       )
-    `
+    `,
+    columns: [
+      { name: "key", type: "TEXT", constraints: "PRIMARY KEY" },
+      { name: "value", type: "TEXT" }
+    ]
   },
   {
     name: "ImageCache",
+    version: 1,
     createStatement: `
       CREATE TABLE IF NOT EXISTS ImageCache (
         id TEXT PRIMARY KEY,
@@ -88,10 +100,19 @@ const tableSchemas: TableSchema[] = [
         createdAt TEXT,
         lastUsedAt TEXT
       )
-    `
+    `,
+    columns: [
+      { name: "id", type: "TEXT", constraints: "PRIMARY KEY" },
+      { name: "image", type: "BLOB" },
+      { name: "size", type: "INTEGER" },
+      { name: "mimeType", type: "TEXT" },
+      { name: "createdAt", type: "TEXT" },
+      { name: "lastUsedAt", type: "TEXT" }
+    ]
   },
   {
     name: "ModFolders",
+    version: 1,
     createStatement: `
       CREATE TABLE IF NOT EXISTS ModFolders (
         id TEXT PRIMARY KEY,
@@ -104,13 +125,24 @@ const tableSchemas: TableSchema[] = [
           ON DELETE SET NULL 
           ON UPDATE CASCADE
       )
-    `
+    `,
+    columns: [
+      { name: "id", type: "TEXT", constraints: "PRIMARY KEY" },
+      { name: "path", type: "TEXT", constraints: "UNIQUE" },
+      { name: "name", type: "TEXT", constraints: "UNIQUE" },
+      { name: "parentId", type: "TEXT" },
+      { name: "createdAt", type: "TEXT", constraints: "NOT NULL" },
+      { name: "seq", type: "INTEGER", constraints: "NOT NULL DEFAULT 1" }
+    ]
   }
 ];
 
-// function isObjectKey(key: LocalStorageKey): key is ObjectStorageKeys {
-//   return ['bounds'].includes(key as string);
-// }
+const META_TABLE_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS _schema_meta (
+    table_name TEXT PRIMARY KEY,
+    version INTEGER NOT NULL DEFAULT 1
+  )
+`;
 
 interface TableHandler<K, V> {
   get(key: K): Promise<V | null>;
@@ -213,7 +245,9 @@ class DbHandler {
       console.log("Connected to the SQLite database");
       log.info("Connected to the SQLite database");
 
-      this.createTables(tableSchemas);
+      this.db.exec(META_TABLE_SCHEMA);
+      
+      await this.createAndUpdateTables(tableSchemas);
       await this.initializeDefaultValues();
 
       return this.db;
@@ -244,10 +278,27 @@ class DbHandler {
     throw new Error(`Unsupported table: ${tableName}`);
   }
 
-  private createTables(schemas: TableSchema[]) {
+  private async createAndUpdateTables(schemas: TableSchema[]) {
     for (const schema of schemas) {
-      this.createTable(schema);
+      await this.createOrUpdateTable(schema);
       console.log(`${schema.name} table ready`);
+    }
+  }
+
+  private async createOrUpdateTable(schema: TableSchema): Promise<void> {
+    const tableExists = this.tableExists(schema.name);
+    
+    if (!tableExists) {
+      this.createTable(schema);
+      this.setSchemaVersion(schema.name, schema.version);
+    } else {
+      const currentVersion = this.getSchemaVersion(schema.name);
+      
+      if (currentVersion < schema.version) {
+        await this.updateTableSchema(schema);
+        this.setSchemaVersion(schema.name, schema.version);
+        console.log(`Updated ${schema.name} table from version ${currentVersion} to ${schema.version}`);
+      }
     }
   }
 
@@ -257,6 +308,114 @@ class DbHandler {
       for (const trigger of schema.triggers) {
         this.db!.exec(trigger);
         console.log(`Trigger created for ${schema.name} table`);
+      }
+    }
+  }
+
+  private tableExists(tableName: string): boolean {
+    try {
+      const query = "SELECT name FROM sqlite_master WHERE type='table' AND name=?";
+      const result = this.db!.prepare(query).get(tableName);
+      return !!result;
+    } catch (err) {
+      log.error(`Error checking table existence for ${tableName}:`, err);
+      return false;
+    }
+  }
+
+  private getSchemaVersion(tableName: string): number {
+    try {
+      const query = "SELECT version FROM _schema_meta WHERE table_name = ?";
+      const result = this.db!.prepare(query).get(tableName) as { version: number } | undefined;
+      return result?.version || 1;
+    } catch (err) {
+      log.error(`Error getting schema version for ${tableName}:`, err);
+      return 1;
+    }
+  }
+
+  private setSchemaVersion(tableName: string, version: number): void {
+    try {
+      const query = `
+        INSERT OR REPLACE INTO _schema_meta (table_name, version) 
+        VALUES (?, ?)
+      `;
+      this.db!.prepare(query).run(tableName, version);
+    } catch (err) {
+      log.error(`Error setting schema version for ${tableName}:`, err);
+    }
+  }
+
+  private async getExistingColumns(tableName: string): Promise<string[]> {
+    try {
+      const query = `PRAGMA table_info(${tableName})`;
+      const columns = this.db!.prepare(query).all() as Array<{
+        cid: number;
+        name: string;
+        type: string;
+        notnull: number;
+        dflt_value: any;
+        pk: number;
+      }>;
+      
+      return columns.map(col => col.name);
+    } catch (err) {
+      log.error(`Error getting existing columns for ${tableName}:`, err);
+      return [];
+    }
+  }
+
+  private async updateTableSchema(schema: TableSchema): Promise<void> {
+    try {
+      const existingColumns = await this.getExistingColumns(schema.name);
+      const requiredColumns = schema.columns.map(col => col.name);
+      
+      const missingColumns = requiredColumns.filter(colName => 
+        !existingColumns.includes(colName)
+      );
+
+      for (const missingColumnName of missingColumns) {
+        const columnDef = schema.columns.find(col => col.name === missingColumnName);
+        if (columnDef) {
+          await this.addColumn(schema.name, columnDef);
+        }
+      }
+
+      if (schema.triggers) {
+        for (const trigger of schema.triggers) {
+          try {
+            this.db!.exec(trigger);
+          } catch (err) {
+            console.log(`Trigger may already exist for ${schema.name} table`);
+          }
+        }
+      }
+    } catch (err) {
+      log.error(`Error updating table schema for ${schema.name}:`, err);
+      throw err;
+    }
+  }
+
+  private async addColumn(tableName: string, columnDef: ColumnDefinition): Promise<void> {
+    try {
+      let alterStatement = `ALTER TABLE ${tableName} ADD COLUMN ${columnDef.name} ${columnDef.type}`;
+      
+      // PRIMARY KEY와 UNIQUE 제약조건은 ALTER TABLE ADD COLUMN에서 지원되지 않음
+      if (columnDef.constraints && 
+          !columnDef.constraints.includes('PRIMARY KEY') && 
+          !columnDef.constraints.includes('UNIQUE')) {
+        alterStatement += ` ${columnDef.constraints}`;
+      }
+
+      this.db!.exec(alterStatement);
+      console.log(`Added column ${columnDef.name} to ${tableName} table`);
+      
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('duplicate column name')) {
+        console.log(`Column ${columnDef.name} already exists in ${tableName} table`);
+      } else {
+        log.error(`Error adding column ${columnDef.name} to ${tableName}:`, err);
+        throw err;
       }
     }
   }
