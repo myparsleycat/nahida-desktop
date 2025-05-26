@@ -2,6 +2,7 @@ import { fileTypeFromBuffer } from "file-type";
 import Database from "better-sqlite3";
 import log from 'electron-log';
 import type BetterSqlite3 from 'better-sqlite3';
+import { tableSchemas } from "./schema";
 
 interface StorageKeyValues {
   sess: string | null;
@@ -51,7 +52,7 @@ interface ColumnDefinition {
   constraints?: string;
 }
 
-interface TableSchema {
+export interface TableSchema {
   name: string;
   version: number;
   createStatement: string;
@@ -59,7 +60,7 @@ interface TableSchema {
   triggers?: string[];
 }
 
-const defaultValues: StorageKeyValues = {
+const LocalStorageValues: StorageKeyValues = {
   sess: null,
   language: "en",
   img_cache_on: true,
@@ -73,69 +74,6 @@ const defaultValues: StorageKeyValues = {
   mods_layout: 'grid'
 };
 
-const tableSchemas: TableSchema[] = [
-  {
-    name: "LocalStorage",
-    version: 1,
-    createStatement: `
-      CREATE TABLE IF NOT EXISTS LocalStorage (
-        key TEXT PRIMARY KEY,
-        value TEXT
-      )
-    `,
-    columns: [
-      { name: "key", type: "TEXT", constraints: "PRIMARY KEY" },
-      { name: "value", type: "TEXT" }
-    ]
-  },
-  {
-    name: "ImageCache",
-    version: 1,
-    createStatement: `
-      CREATE TABLE IF NOT EXISTS ImageCache (
-        id TEXT PRIMARY KEY,
-        image BLOB,
-        size INTEGER,
-        mimeType TEXT,
-        createdAt TEXT,
-        lastUsedAt TEXT
-      )
-    `,
-    columns: [
-      { name: "id", type: "TEXT", constraints: "PRIMARY KEY" },
-      { name: "image", type: "BLOB" },
-      { name: "size", type: "INTEGER" },
-      { name: "mimeType", type: "TEXT" },
-      { name: "createdAt", type: "TEXT" },
-      { name: "lastUsedAt", type: "TEXT" }
-    ]
-  },
-  {
-    name: "ModFolders",
-    version: 1,
-    createStatement: `
-      CREATE TABLE IF NOT EXISTS ModFolders (
-        id TEXT PRIMARY KEY,
-        path TEXT UNIQUE,
-        name TEXT UNIQUE,
-        parentId TEXT NULL,
-        createdAt TEXT NOT NULL,
-        seq INTEGER NOT NULL DEFAULT 1,
-        FOREIGN KEY (parentId) REFERENCES ModFolders(id) 
-          ON DELETE SET NULL 
-          ON UPDATE CASCADE
-      )
-    `,
-    columns: [
-      { name: "id", type: "TEXT", constraints: "PRIMARY KEY" },
-      { name: "path", type: "TEXT", constraints: "UNIQUE" },
-      { name: "name", type: "TEXT", constraints: "UNIQUE" },
-      { name: "parentId", type: "TEXT" },
-      { name: "createdAt", type: "TEXT", constraints: "NOT NULL" },
-      { name: "seq", type: "INTEGER", constraints: "NOT NULL DEFAULT 1" }
-    ]
-  }
-];
 
 const META_TABLE_SCHEMA = `
   CREATE TABLE IF NOT EXISTS _schema_meta (
@@ -246,9 +184,9 @@ class DbHandler {
       log.info("Connected to the SQLite database");
 
       this.db.exec(META_TABLE_SCHEMA);
-      
+
       await this.createAndUpdateTables(tableSchemas);
-      await this.initializeDefaultValues();
+      await this.initializeLocalStorage();
 
       return this.db;
     } catch (err) {
@@ -287,13 +225,13 @@ class DbHandler {
 
   private async createOrUpdateTable(schema: TableSchema): Promise<void> {
     const tableExists = this.tableExists(schema.name);
-    
+
     if (!tableExists) {
       this.createTable(schema);
       this.setSchemaVersion(schema.name, schema.version);
     } else {
       const currentVersion = this.getSchemaVersion(schema.name);
-      
+
       if (currentVersion < schema.version) {
         await this.updateTableSchema(schema);
         this.setSchemaVersion(schema.name, schema.version);
@@ -357,7 +295,7 @@ class DbHandler {
         dflt_value: any;
         pk: number;
       }>;
-      
+
       return columns.map(col => col.name);
     } catch (err) {
       log.error(`Error getting existing columns for ${tableName}:`, err);
@@ -369,8 +307,8 @@ class DbHandler {
     try {
       const existingColumns = await this.getExistingColumns(schema.name);
       const requiredColumns = schema.columns.map(col => col.name);
-      
-      const missingColumns = requiredColumns.filter(colName => 
+
+      const missingColumns = requiredColumns.filter(colName =>
         !existingColumns.includes(colName)
       );
 
@@ -399,17 +337,17 @@ class DbHandler {
   private async addColumn(tableName: string, columnDef: ColumnDefinition): Promise<void> {
     try {
       let alterStatement = `ALTER TABLE ${tableName} ADD COLUMN ${columnDef.name} ${columnDef.type}`;
-      
+
       // PRIMARY KEY와 UNIQUE 제약조건은 ALTER TABLE ADD COLUMN에서 지원되지 않음
-      if (columnDef.constraints && 
-          !columnDef.constraints.includes('PRIMARY KEY') && 
-          !columnDef.constraints.includes('UNIQUE')) {
+      if (columnDef.constraints &&
+        !columnDef.constraints.includes('PRIMARY KEY') &&
+        !columnDef.constraints.includes('UNIQUE')) {
         alterStatement += ` ${columnDef.constraints}`;
       }
 
       this.db!.exec(alterStatement);
       console.log(`Added column ${columnDef.name} to ${tableName} table`);
-      
+
     } catch (err) {
       if (err instanceof Error && err.message.includes('duplicate column name')) {
         console.log(`Column ${columnDef.name} already exists in ${tableName} table`);
@@ -420,14 +358,14 @@ class DbHandler {
     }
   }
 
-  private async initializeDefaultValues() {
-    const keys = Object.keys(defaultValues) as (keyof StorageKeyValues)[];
+  private async initializeLocalStorage() {
+    const keys = Object.keys(LocalStorageValues) as (keyof StorageKeyValues)[];
 
     for (const key of keys) {
       const existingRow = this.checkIfKeyExists(key);
 
       if (!existingRow) {
-        const value = defaultValues[key];
+        const value = LocalStorageValues[key];
         await this.insert("LocalStorage", key, value);
         console.log(`Initialized key '${key}' with default value:`, value);
       }
@@ -472,8 +410,8 @@ class DbHandler {
       const row: any = stmt.get(key);
 
       if (!row) {
-        if (table === "LocalStorage" && key in defaultValues) {
-          return (defaultValues as any)[key] as T;
+        if (table === "LocalStorage" && key in LocalStorageValues) {
+          return (LocalStorageValues as any)[key] as T;
         } else {
           return null;
         }
