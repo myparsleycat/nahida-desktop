@@ -120,7 +120,7 @@ class ModsService {
             const dirName = basename(folder.path);
             const parentDir = dirname(folder.path);
             if (!dirName.toLowerCase().startsWith('disabled')) {
-              const newName = `disabled ${dirName}`;
+              const newName = `DISABLED ${dirName}`;
               await fss.rename(folder.path, join(parentDir, newName));
             }
           }
