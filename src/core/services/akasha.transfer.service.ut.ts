@@ -2,24 +2,93 @@ import { gunzipAsync, zstdDecompress } from "@core/utils";
 import { fss } from "./fs.service";
 import { DirInfo, FileInfo } from "./fs.service.ut";
 
+// 진행상황 콜백 타입 정의
+export interface DownloadProgressCallback {
+  (progress: {
+    downloadedBytes: number;
+    totalBytes: number;
+    downloadedFiles: number;
+    totalFiles: number;
+    currentFile: string;
+    downloadSpeed: number; // bytes per second
+    phase: 'downloading' | 'decompressing';
+    decompressedFiles?: number;
+  }): void;
+}
+
+// AbortSignal 지원을 위한 옵션
+export interface DownloadOptions {
+  progressCallback?: DownloadProgressCallback;
+  abortSignal?: AbortSignal;
+  concurrencyLimit?: number;
+  retryAttempts?: number;
+  timeout?: number;
+}
+
 export async function downloadFiles(
   files: FileInfo[],
   dirPaths: Record<string, string>,
   _dirMap: Record<string, DirInfo>,
-  rootId: string
+  rootId: string,
+  options: DownloadOptions = {}
 ): Promise<void> {
+  const {
+    progressCallback,
+    abortSignal,
+    concurrencyLimit = 80,
+    retryAttempts = 3,
+    timeout = 30000
+  } = options;
+
   let downloadedCount = 0;
   let failedCount = 0;
+  let downloadedBytes = 0;
+  let decompressedCount = 0;
   const totalFiles = files.length;
+  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
   const failedFiles: { file: FileInfo, error: string }[] = [];
-  const concurrencyLimit = 80;
   const downloadedFiles: { file: FileInfo, compressedPath: string, destPath: string }[] = [];
+
+  // 속도 계산을 위한 변수들
+  let startTime = Date.now();
+  let lastProgressTime = Date.now();
+  let lastDownloadedBytes = 0;
 
   const queue = [...files];
   const activePromises = new Map();
 
+  // 진행상황 업데이트 함수
+  const updateProgress = (currentFileName: string = '', phase: 'downloading' | 'decompressing' = 'downloading') => {
+    if (!progressCallback) return;
+    
+    const now = Date.now();
+    const timeDiff = (now - lastProgressTime) / 1000; // seconds
+    const bytesDiff = downloadedBytes - lastDownloadedBytes;
+    const downloadSpeed = timeDiff > 0 ? bytesDiff / timeDiff : 0;
+    
+    progressCallback({
+      downloadedBytes,
+      totalBytes,
+      downloadedFiles: downloadedCount,
+      totalFiles,
+      currentFile: currentFileName,
+      downloadSpeed,
+      phase,
+      decompressedFiles: decompressedCount
+    });
+    
+    lastProgressTime = now;
+    lastDownloadedBytes = downloadedBytes;
+  };
+
   try {
+    // 다운로드 단계
     while (queue.length > 0 || activePromises.size > 0) {
+      // Abort 체크
+      if (abortSignal?.aborted) {
+        throw new Error('Download aborted by user');
+      }
+
       while (activePromises.size < concurrencyLimit && queue.length > 0) {
         const file = queue.shift()!;
 
@@ -38,9 +107,20 @@ export async function downloadFiles(
 
         const downloadPromise = (async () => {
           try {
-            await downloadCompressedFile(file, compressedPath);
+            updateProgress(file.name, 'downloading');
+            
+            await downloadCompressedFile(file, compressedPath, {
+              abortSignal,
+              timeout,
+              retryAttempts
+            });
+            
             downloadedCount++;
+            downloadedBytes += file.size;
             downloadedFiles.push({ file, compressedPath, destPath: filePath });
+            
+            updateProgress(file.name, 'downloading');
+            
             return { success: true, file };
           } catch (error: any) {
             console.error(`파일 다운로드 실패: ${file.name}`, error);
@@ -61,11 +141,24 @@ export async function downloadFiles(
     }
 
     console.log(`모든 파일 다운로드 완료 - 총 파일: ${totalFiles}, 성공: ${downloadedCount}, 실패: ${failedCount}`);
-    console.log('압축 해제 시작...');
-    await decompressAllFiles(downloadedFiles);
+    
+    // 압축 해제 단계
+    if (downloadedFiles.length > 0) {
+      console.log('압축 해제 시작...');
+      updateProgress('', 'decompressing');
+      
+      await decompressAllFiles(downloadedFiles, {
+        progressCallback: (current, _total) => {
+          decompressedCount = current;
+          updateProgress('', 'decompressing');
+        },
+        abortSignal
+      });
+    }
 
   } catch (error) {
     console.error("전체 다운로드 프로세스 오류:", error);
+    throw error; // p-queue에서 에러 처리할 수 있도록 다시 throw
   }
 
   console.log(`전체 작업 완료 - 총 파일: ${totalFiles}, 성공: ${downloadedCount}, 실패: ${failedCount}`);
@@ -77,15 +170,36 @@ export async function downloadFiles(
   }
 }
 
-async function downloadCompressedFile(file: FileInfo, compressedPath: string): Promise<void> {
+interface DownloadFileOptions {
+  abortSignal?: AbortSignal;
+  timeout?: number;
+  retryAttempts?: number;
+}
+
+async function downloadCompressedFile(
+  file: FileInfo, 
+  compressedPath: string,
+  options: DownloadFileOptions = {}
+): Promise<void> {
+  const { abortSignal, timeout = 30000, retryAttempts = 3 } = options;
+  
   let retries = 0;
-  const maxRetries = 3;
   let lastError: Error | null = null;
 
-  while (retries <= maxRetries) {
+  while (retries <= retryAttempts) {
+    // Abort 체크
+    if (abortSignal?.aborted) {
+      throw new Error('Download aborted by user');
+    }
+
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      // 기존 abortSignal과 새로운 timeout controller 연결
+      if (abortSignal) {
+        abortSignal.addEventListener('abort', () => controller.abort());
+      }
 
       try {
         const resp = await fetch(file.url, {
@@ -111,10 +225,11 @@ async function downloadCompressedFile(file: FileInfo, compressedPath: string): P
       lastError = error as Error;
       retries++;
 
-      if (retries > maxRetries) {
+      if (retries > retryAttempts) {
         break;
       }
 
+      // Exponential backoff
       const delay = Math.pow(2, retries - 1) * 100;
       await new Promise(resolve => setTimeout(resolve, delay));
     }
@@ -123,20 +238,34 @@ async function downloadCompressedFile(file: FileInfo, compressedPath: string): P
   throw new Error(`최대 재시도 횟수 초과: ${lastError?.message || '알 수 없는 오류'}`);
 }
 
+interface DecompressOptions {
+  progressCallback?: (current: number, total: number) => void;
+  abortSignal?: AbortSignal;
+  batchSize?: number;
+}
+
 async function decompressAllFiles(
-  files: { file: FileInfo, compressedPath: string, destPath: string }[]
+  files: { file: FileInfo, compressedPath: string, destPath: string }[],
+  options: DecompressOptions = {}
 ): Promise<void> {
+  const { progressCallback, abortSignal, batchSize = 100 } = options;
+  
   let decompressedCount = 0;
   let failedCount = 0;
   const totalFiles = files.length;
-  const batchSize = 100;
 
   for (let i = 0; i < files.length; i += batchSize) {
+    // Abort 체크
+    if (abortSignal?.aborted) {
+      throw new Error('Decompression aborted by user');
+    }
+
     const batch = files.slice(i, i + batchSize);
     const promises = batch.map(async ({ file, compressedPath, destPath }) => {
       try {
         await decompressFile(file, compressedPath, destPath);
         decompressedCount++;
+        progressCallback?.(decompressedCount, totalFiles);
         return { success: true, file };
       } catch (error: any) {
         console.error(`파일 압축 해제 실패: ${file.name}`, error);

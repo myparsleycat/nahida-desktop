@@ -4,13 +4,10 @@ import { db } from "../db";
 import { fss } from "./fs.service";
 import type { FileInfo, ModFolders, ReadDirectoryOptions } from "@shared/types/fs.types";
 import { nanoid } from 'nanoid';
-import path, { basename, dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { iniutil as ini, IniParseResult } from "@core/lib/InIUtil";
 import { Toast } from "./toast.service";
 import Validator from "@shared/utils/Validator";
-import fse from 'fs-extra';
-import { pipeline } from 'stream/promises';
-import { NTS } from "./nahida.transfer.service";
 
 class ModsService {
   currentFolderPath: string | null = null;

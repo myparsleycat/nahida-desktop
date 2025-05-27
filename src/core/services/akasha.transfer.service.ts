@@ -1,4 +1,5 @@
 import { nanoid } from "nanoid";
+import PQueue from "p-queue";
 import { ADS } from "./drive.service";
 import { GetDirDownloadWithStream } from "./drive.service.ut";
 import { fss } from "./fs.service";
@@ -90,7 +91,7 @@ export interface CompleteProcess {
 }
 
 type DownloadCurrentStatus = 'pending' | 'downloading' | 'completed';
-type GamebananaCurrentStatus = 'pending' | 'pulling' | 'completed';
+
 interface dlinf {
   totalBytes: number;
   files: {
@@ -109,6 +110,32 @@ interface dlinf {
   }[];
 }
 
+interface DownloadTask {
+  PID: string;
+  id: string;
+  name: string;
+  save_path: string;
+  linkId?: string;
+  password?: string;
+  priority?: number;
+}
+
+interface DownloadProgress {
+  PID: string;
+  id: string;
+  status: 'pending' | 'downloading' | 'completed' | 'failed';
+  name: string;
+  downloadedSize: number;
+  totalSize: number;
+  currentFile: number;
+  totalFiles: number;
+  progress: number;
+  downloadBytesPerSec: number;
+  abortController: AbortController;
+  currentFileName?: string; // 현재 다운로드 중인 파일명
+  phase?: 'downloading' | 'decompressing';
+}
+
 interface TransferStore {
   upload: {
     current: CurrentProcess | null;
@@ -117,34 +144,8 @@ interface TransferStore {
     isProcessing: boolean;
   },
   download: {
-    current: {
-      PID: string;
-      id: string;
-      status: DownloadCurrentStatus
-      name: string;
-      downloadedSize: number
-      totalSize: number;
-      currentFile: number;
-      totalFiles: number;
-      progress: number;
-      downloadBytesPerSec: number;
-      download: dlinf;
-      abortController: AbortController;
-    } | null;
-    queue: {
-      PID: string;
-      id: string;
-      name: string;
-      save_path: string;
-      linkId?: string;
-      password?: string;
-    }[];
-    completed: {
-      pid: string;
-      name: string;
-      size: number;
-    }[];
-    isProcessing: boolean;
+    active: Map<string, DownloadProgress>;
+    completed: CompleteProcess[];
   }
 }
 
@@ -157,105 +158,170 @@ class TransferService {
       isProcessing: false
     },
     download: {
-      current: null,
-      queue: [],
-      completed: [],
-      isProcessing: false
+      active: new Map(),
+      completed: []
     }
+  }
+
+  // 다운로드 큐 설정
+  private downloadQueue = new PQueue({
+    concurrency: 3, // 동시에 3개까지 다운로드
+    interval: 1000,  // Rate limiting
+    intervalCap: 5   // 1초에 5개 작업까지
+  });
+
+  // 큐 상태 추적용
+  private queueStats = {
+    running: 0,
+    pending: 0,
+    completed: 0
+  };
+
+  constructor() {
+    // 큐 이벤트 리스너
+    this.downloadQueue.on('active', () => {
+      this.queueStats.running++;
+      this.queueStats.pending = Math.max(0, this.queueStats.pending - 1);
+      console.log(`큐 활성: ${this.queueStats.pending} 대기, ${this.queueStats.running} 실행중`);
+    });
+
+    this.downloadQueue.on('completed', () => {
+      this.queueStats.running = Math.max(0, this.queueStats.running - 1);
+      this.queueStats.completed++;
+    });
+
+    this.downloadQueue.on('add', () => {
+      this.queueStats.pending++;
+    });
+
+    this.downloadQueue.on('idle', () => {
+      console.log('모든 다운로드 완료');
+      this.queueStats.running = 0;
+      this.queueStats.pending = 0;
+    });
+
+    this.downloadQueue.on('error', (error) => {
+      console.error('다운로드 큐 에러:', error);
+    });
   }
 
   akasha = {
     download: {
-      enqueue: async (id: string, save_path: string) => {
+      // 다운로드 큐에 추가
+      enqueue: async (id: string, save_path: string, options?: {
+        linkId?: string;
+        password?: string;
+        priority?: number;
+      }) => {
         const item = await ADS.item.get(id);
         if (!item.content) {
           throw new Error('아이템 정보를 가져올 수 없음');
         }
 
         const PID = nanoid();
-        this.transfers.download.queue.push({ PID, id, name: item.content.name, save_path });
+        const task: DownloadTask = {
+          PID,
+          id,
+          name: item.content.name,
+          save_path,
+          linkId: options?.linkId,
+          password: options?.password,
+          priority: options?.priority || 0
+        };
 
-        if (!this.transfers.download.current) {
-          await this.akasha.download.processNextDownloadInQueue();
-        }
+        // p-queue에 작업 추가
+        return this.downloadQueue.add(
+          () => this.akasha.download.processDownload(task),
+          {
+            priority: options?.priority || 0
+          }
+        );
       },
 
-      processNextDownloadInQueue: async () => {
-        const nextDownload = this.transfers.download.queue.shift();
-        if (this.transfers.download.isProcessing || !nextDownload) {
-          return;
-        }
+      // 개별 다운로드 처리
+      processDownload: async (task: DownloadTask) => {
+        const { PID, id, name, save_path, linkId, password } = task;
 
-        const { PID, id, name, save_path, linkId, password } = nextDownload;
+        try {
+          const abortController = new AbortController();
 
-        const abortController = new AbortController();
-        const data = await GetDirDownloadWithStream({
-          id,
-          linkId,
-          password
-        });
-
-        this.transfers.download = {
-          ...this.transfers.download,
-          isProcessing: true,
-          current: {
+          // 진행상황 추적 시작
+          const progress: DownloadProgress = {
             PID,
             id,
             name,
             status: 'downloading',
             downloadedSize: 0,
-            totalSize: data.totalBytes,
+            totalSize: 0,
             currentFile: 0,
             totalFiles: 0,
             progress: 0,
             downloadBytesPerSec: 0,
-            download: data,
             abortController
+          };
+
+          this.transfers.download.active.set(PID, progress);
+
+          // 다운로드 정보 가져오기
+          const data = await GetDirDownloadWithStream({
+            id,
+            linkId,
+            password
+          });
+
+          // 진행상황 업데이트
+          progress.totalSize = data.totalBytes;
+          progress.totalFiles = data.files.length;
+
+          // 실제 다운로드 시작
+          await this.akasha.download.startDownload({
+            id,
+            name,
+            save_path,
+            linkId,
+            password,
+            download: data,
+            abortSignal: abortController.signal,
+            progress
+          });
+
+          // 완료 처리
+          progress.status = 'completed';
+          progress.progress = 100;
+
+          this.transfers.download.completed.push({
+            pid: PID,
+            name,
+            size: data.totalBytes
+          });
+
+          this.transfers.download.active.delete(PID);
+
+        } catch (error) {
+          // 에러 처리
+          const progress = this.transfers.download.active.get(PID);
+          if (progress) {
+            progress.status = 'failed';
+            this.transfers.download.active.delete(PID);
           }
-        }
 
-        await this.akasha.download.startDownload({
-          id,
-          name,
-          save_path,
-          linkId,
-          password,
-          download: data,
-          abortSignal: abortController.signal
-        });
-      },
-
-      completeCurrentDownload: async () => {
-        this.transfers.download = {
-          ...this.transfers.download,
-          isProcessing: false,
-          current: null
-        }
-
-        if (this.transfers.download.queue.length > 0) {
-          await this.akasha.download.processNextDownloadInQueue();
+          console.error(`다운로드 실패 [${name}]:`, error);
+          throw error;
         }
       },
 
+      // 실제 다운로드 로직
       startDownload: async (params: {
         id: string;
         name: string;
         save_path: string;
         linkId?: string;
         password?: string;
-        download: dlinf;
+        download: any;
         abortSignal: AbortSignal;
+        progress: DownloadProgress;
       }) => {
-        const { id, name, save_path, linkId, password, abortSignal } = params;
-        let { download } = params;
-
-        if (!download) {
-          download = await GetDirDownloadWithStream({
-            id,
-            linkId,
-            password
-          });
-        }
+        const { id, name, save_path, download, progress, abortSignal } = params;
 
         const rootDirPath = `${save_path}/${name}`;
         await fss.mkdir(rootDirPath, { recursive: true });
@@ -264,15 +330,66 @@ class TransferService {
         const dirMap = createDirMap(uniqueDirs);
         const dirPaths = await createDirectoryStructure(rootDirPath, dirMap, id);
 
-        downloadFiles(download.files, dirPaths, dirMap, id)
-          .then(async () => {
-            await this.akasha.download.completeCurrentDownload();
-          })
-          .catch((e: any) => {
-            throw e;
-          })
-      }
-    },
+        // 파일 다운로드 (진행상황 콜백과 함께)
+        await downloadFiles(
+          download.files,
+          dirPaths,
+          dirMap,
+          id,
+          {
+            progressCallback: (progressData) => {
+              progress.downloadedSize = progressData.downloadedBytes;
+              progress.downloadBytesPerSec = progressData.downloadSpeed;
+              progress.currentFile = progressData.downloadedFiles;
+              progress.totalFiles = progressData.totalFiles;
+              progress.progress = (progressData.downloadedBytes / progress.totalSize) * 100;
+
+              // 현재 다운로드 중인 파일명도 추가 정보로 저장
+              if (progressData.currentFile) {
+                progress.currentFileName = progressData.currentFile;
+              }
+            },
+            abortSignal,
+            concurrencyLimit: 50, // 다운로드 큐와 별도로 제어
+            retryAttempts: 3,
+            timeout: 30000
+          }
+        );
+      },
+
+      // 큐 관리 메소드들
+      pause: () => {
+        this.downloadQueue.pause();
+      },
+
+      resume: () => {
+        this.downloadQueue.start();
+      },
+
+      clear: () => {
+        this.downloadQueue.clear();
+        // 상태 초기화
+        this.queueStats.pending = 0;
+        this.queueStats.running = 0;
+      },
+
+      // 특정 다운로드 취소
+      cancel: (PID: string) => {
+        const progress = this.transfers.download.active.get(PID);
+        if (progress) {
+          progress.abortController.abort();
+          progress.status = 'failed';
+          this.transfers.download.active.delete(PID);
+        }
+      },
+
+      // 현재 상태 조회
+      getStatus: () => ({
+        active: Array.from(this.transfers.download.active.values()),
+        pending: this.downloadQueue.pending,
+        completed: this.transfers.download.completed
+      })
+    }
   }
 }
 
