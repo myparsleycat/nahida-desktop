@@ -5,6 +5,7 @@
   "main": "./out/main/index.js",
   "author": "nahida.live",
   "homepage": "https://nahida.live",
+  "type": "module",
   "scripts": {
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "svelte-check": "svelte-check --tsconfig ./tsconfig.json",
@@ -31,6 +32,7 @@
     "@types/electron-progressbar": "^1.2.7",
     "@types/node-7z": "^2.1.10",
     "@types/node-fetch": "^2.6.12",
+    "@types/validator": "^13.15.1",
     "adm-zip": "^0.5.16",
     "animejs": "^4.0.2",
     "axios": "^1.9.0",
@@ -51,10 +53,12 @@
     "node-7z": "^3.0.0",
     "node-gyp": "^11.2.0",
     "node-unrar-js": "^2.0.2",
+    "p-queue": "^8.1.0",
     "paneforge": "^0.0.6",
     "svelte-i18n": "^4.0.1",
     "svelte-inview": "^4.0.4",
     "svelte-sonner": "^1.0.3",
+    "validator": "^13.15.0",
     "vite-plugin-wasm": "^3.4.1",
     "watcher": "^2.3.1"
   },

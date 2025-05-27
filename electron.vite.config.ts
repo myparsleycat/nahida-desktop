@@ -14,6 +14,14 @@ export default defineConfig({
     }
   },
   preload: {
+    build: {
+      rollupOptions: {
+        external: ['electron'],
+        output: {
+          format: 'es'
+        }
+      }
+    },
     plugins: [externalizeDepsPlugin()],
     resolve: {
       alias: {

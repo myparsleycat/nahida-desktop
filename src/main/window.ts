@@ -1,8 +1,9 @@
 import { BrowserWindow, ipcMain, shell } from "electron";
-import { db } from "../core/db";
+import { db } from "@core/db";
 import path from "node:path";
 import icon from '../../resources/nahida.png?asset'
 import { is } from "@electron-toolkit/utils";
+import { fileURLToPath } from "node:url";
 
 export let mainWindow: BrowserWindow;
 
@@ -20,7 +21,7 @@ export async function createMainWindow() {
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
-      preload: path.join(__dirname, '../preload/index.js'),
+      preload: fileURLToPath(new URL('../preload/index.mjs', import.meta.url)),
       sandbox: false
     },
     icon
