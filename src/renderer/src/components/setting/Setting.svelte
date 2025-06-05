@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { cn } from "@/lib/utils";
+  import { cn } from "$lib/utils";
   import Cloud from "./cloud/Cloud.svelte";
   import {
     CloudIcon,
@@ -9,8 +9,8 @@
     LogIn,
     LogOutIcon,
     SettingsIcon,
-  } from "lucide-svelte";
-  import { Auth, Main } from "@/lib/helpers";
+  } from "@lucide/svelte";
+  import { Auth, Main } from "$lib/helpers";
   import General from "./general/General.svelte";
   import { toast } from "svelte-sonner";
   import autoAnimate from "@formkit/auto-animate";

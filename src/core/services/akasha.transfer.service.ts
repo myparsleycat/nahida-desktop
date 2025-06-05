@@ -164,11 +164,7 @@ class TransferService {
   }
 
   // 다운로드 큐 설정
-  private downloadQueue = new PQueue({
-    concurrency: 3, // 동시에 3개까지 다운로드
-    interval: 1000,  // Rate limiting
-    intervalCap: 5   // 1초에 5개 작업까지
-  });
+  private downloadQueue = new PQueue({ concurrency: 1 });
 
   // 큐 상태 추적용
   private queueStats = {

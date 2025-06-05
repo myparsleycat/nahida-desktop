@@ -1,203 +1,210 @@
-import { type ClassValue, clsx } from "clsx";
+import { clsx, type ClassValue } from "clsx";
 import { cubicOut } from "svelte/easing";
 import type { TransitionConfig } from "svelte/transition";
 import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+	return twMerge(clsx(inputs));
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type WithoutChild<T> = T extends { child?: any } ? Omit<T, "child"> : T;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type WithoutChildren<T> = T extends { children?: any } ? Omit<T, "children"> : T;
+export type WithoutChildrenOrChild<T> = WithoutChildren<WithoutChild<T>>;
+export type WithElementRef<T, U extends HTMLElement = HTMLElement> = T & { ref?: U | null };
+
 type FlyAndScaleParams = {
-  y?: number;
-  x?: number;
-  start?: number;
-  duration?: number;
+	y?: number;
+	x?: number;
+	start?: number;
+	duration?: number;
 };
 
 export const flyAndScale = (
-  node: Element,
-  params: FlyAndScaleParams = { y: -8, x: 0, start: 0.95, duration: 150 }
+	node: Element,
+	params: FlyAndScaleParams = { y: -8, x: 0, start: 0.95, duration: 150 }
 ): TransitionConfig => {
-  const style = getComputedStyle(node);
-  const transform = style.transform === "none" ? "" : style.transform;
+	const style = getComputedStyle(node);
+	const transform = style.transform === "none" ? "" : style.transform;
 
-  const scaleConversion = (
-    valueA: number,
-    scaleA: [number, number],
-    scaleB: [number, number]
-  ) => {
-    const [minA, maxA] = scaleA;
-    const [minB, maxB] = scaleB;
+	const scaleConversion = (
+		valueA: number,
+		scaleA: [number, number],
+		scaleB: [number, number]
+	) => {
+		const [minA, maxA] = scaleA;
+		const [minB, maxB] = scaleB;
 
-    const percentage = (valueA - minA) / (maxA - minA);
-    const valueB = percentage * (maxB - minB) + minB;
+		const percentage = (valueA - minA) / (maxA - minA);
+		const valueB = percentage * (maxB - minB) + minB;
 
-    return valueB;
-  };
+		return valueB;
+	};
 
-  const styleToString = (
-    style: Record<string, number | string | undefined>
-  ): string => {
-    return Object.keys(style).reduce((str, key) => {
-      if (style[key] === undefined) return str;
-      return str + `${key}:${style[key]};`;
-    }, "");
-  };
+	const styleToString = (
+		style: Record<string, number | string | undefined>
+	): string => {
+		return Object.keys(style).reduce((str, key) => {
+			if (style[key] === undefined) return str;
+			return str + `${key}:${style[key]};`;
+		}, "");
+	};
 
-  return {
-    duration: params.duration ?? 200,
-    delay: 0,
-    css: (t) => {
-      const y = scaleConversion(t, [0, 1], [params.y ?? 5, 0]);
-      const x = scaleConversion(t, [0, 1], [params.x ?? 0, 0]);
-      const scale = scaleConversion(t, [0, 1], [params.start ?? 0.95, 1]);
+	return {
+		duration: params.duration ?? 200,
+		delay: 0,
+		css: (t) => {
+			const y = scaleConversion(t, [0, 1], [params.y ?? 5, 0]);
+			const x = scaleConversion(t, [0, 1], [params.x ?? 0, 0]);
+			const scale = scaleConversion(t, [0, 1], [params.start ?? 0.95, 1]);
 
-      return styleToString({
-        transform: `${transform} translate3d(${x}px, ${y}px, 0) scale(${scale})`,
-        opacity: t
-      });
-    },
-    easing: cubicOut
-  };
+			return styleToString({
+				transform: `${transform} translate3d(${x}px, ${y}px, 0) scale(${scale})`,
+				opacity: t
+			});
+		},
+		easing: cubicOut
+	};
 };
 
 export const preventEvent = (e: DragEvent) => {
-  e.preventDefault();
-  e.stopPropagation();
+	e.preventDefault();
+	e.stopPropagation();
 };
 
 export const formatSize = (size: number | null): string => {
-  if (size === null) return `0 Bytes`;
+	if (size === null) return `0 Bytes`;
 
-  if (size < 1024) {
-    return `${size} Bytes`;
-  }
-  if (size < 1024 * 1024) {
-    const kbSize = size / 1024;
-    return kbSize < 1000 ? `${kbSize.toFixed(2)} KB` : `${(kbSize / 1024).toFixed(2)} MB`;
-  }
-  if (size < 1024 * 1024 * 1024) {
-    const mbSize = size / (1024 * 1024);
-    return mbSize < 1000 ? `${mbSize.toFixed(2)} MB` : `${(mbSize / 1024).toFixed(2)} GB`;
-  }
-  if (size < 1024 * 1024 * 1024 * 1024) {
-    const gbSize = size / (1024 * 1024 * 1024);
-    return gbSize < 1000 ? `${gbSize.toFixed(2)} GB` : `${(gbSize / 1024).toFixed(2)} TB`;
-  }
+	if (size < 1024) {
+		return `${size} Bytes`;
+	}
+	if (size < 1024 * 1024) {
+		const kbSize = size / 1024;
+		return kbSize < 1000 ? `${kbSize.toFixed(2)} KB` : `${(kbSize / 1024).toFixed(2)} MB`;
+	}
+	if (size < 1024 * 1024 * 1024) {
+		const mbSize = size / (1024 * 1024);
+		return mbSize < 1000 ? `${mbSize.toFixed(2)} MB` : `${(mbSize / 1024).toFixed(2)} GB`;
+	}
+	if (size < 1024 * 1024 * 1024 * 1024) {
+		const gbSize = size / (1024 * 1024 * 1024);
+		return gbSize < 1000 ? `${gbSize.toFixed(2)} GB` : `${(gbSize / 1024).toFixed(2)} TB`;
+	}
 
-  return `${(size / (1024 * 1024 * 1024 * 1024)).toFixed(2)} TB`;
+	return `${(size / (1024 * 1024 * 1024 * 1024)).toFixed(2)} TB`;
 };
 
 export function isNameConflict(childs: { name: string }[], name: string) {
-  return childs.some(child => child.name === name);
+	return childs.some(child => child.name === name);
 }
 
 // 초성 추출 함수
 export const getChosung = (str: string): string => {
-  const cho = ["ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ", "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"];
-  let result = "";
+	const cho = ["ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ", "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"];
+	let result = "";
 
-  for (let i = 0; i < str.length; i++) {
-    const code = str.charCodeAt(i);
-    if (code >= 44032 && code <= 55203) {
-      result += cho[Math.floor((code - 44032) / 588)];
-    } else {
-      result += str[i];
-    }
-  }
-  return result;
+	for (let i = 0; i < str.length; i++) {
+		const code = str.charCodeAt(i);
+		if (code >= 44032 && code <= 55203) {
+			result += cho[Math.floor((code - 44032) / 588)];
+		} else {
+			result += str[i];
+		}
+	}
+	return result;
 };
 
 // 한글 자모 분리 함수
 const decomposeHangul = (str: string): string[] => {
-  const CHOSUNG = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ";
-  const JUNGSUNG = "ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ";
-  const JONGSUNG = " ㄱㄲㄳㄴㄵㄶㄷㄹㄺㄻㄼㄽㄾㄿㅀㅁㅂㅄㅅㅆㅇㅈㅊㅋㅌㅍㅎ";
+	const CHOSUNG = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ";
+	const JUNGSUNG = "ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ";
+	const JONGSUNG = " ㄱㄲㄳㄴㄵㄶㄷㄹㄺㄻㄼㄽㄾㄿㅀㅁㅂㅄㅅㅆㅇㅈㅊㅋㅌㅍㅎ";
 
-  const result: string[] = [];
+	const result: string[] = [];
 
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charAt(i);
-    const code = char.charCodeAt(0);
+	for (let i = 0; i < str.length; i++) {
+		const char = str.charAt(i);
+		const code = char.charCodeAt(0);
 
-    if (code >= 44032 && code <= 55203) {
-      const charCode = code - 44032;
-      const cho = Math.floor(charCode / 588);
-      const jung = Math.floor((charCode % 588) / 28);
-      const jong = charCode % 28;
+		if (code >= 44032 && code <= 55203) {
+			const charCode = code - 44032;
+			const cho = Math.floor(charCode / 588);
+			const jung = Math.floor((charCode % 588) / 28);
+			const jong = charCode % 28;
 
-      result.push(CHOSUNG[cho]);
-      result.push(JUNGSUNG[jung]);
-      if (jong !== 0) result.push(JONGSUNG[jong]);
-    } else {
-      result.push(char);
-    }
-  }
+			result.push(CHOSUNG[cho]);
+			result.push(JUNGSUNG[jung]);
+			if (jong !== 0) result.push(JONGSUNG[jong]);
+		} else {
+			result.push(char);
+		}
+	}
 
-  return result;
+	return result;
 };
 
 // 유사 발음 매핑
 const similarSoundMap = new Map([
-  ['ㄱ', ['ㄲ', 'ㅋ']],
-  ['ㄷ', ['ㄸ', 'ㅌ']],
-  ['ㅂ', ['ㅃ', 'ㅍ']],
-  ['ㅅ', ['ㅆ']],
-  ['ㅈ', ['ㅉ', 'ㅊ']],
-  ['ㅐ', ['ㅔ']],
-  ['ㅔ', ['ㅐ']],
+	['ㄱ', ['ㄲ', 'ㅋ']],
+	['ㄷ', ['ㄸ', 'ㅌ']],
+	['ㅂ', ['ㅃ', 'ㅍ']],
+	['ㅅ', ['ㅆ']],
+	['ㅈ', ['ㅉ', 'ㅊ']],
+	['ㅐ', ['ㅔ']],
+	['ㅔ', ['ㅐ']],
 ]);
 
 // 유사 발음 패턴 생성
 const getSimilarPatterns = (str: string): string[] => {
-  const patterns: string[] = [str];
+	const patterns: string[] = [str];
 
-  for (let i = 0; i < str.length; i++) {
-    const char = str[i];
-    const similarChars = similarSoundMap.get(char);
+	for (let i = 0; i < str.length; i++) {
+		const char = str[i];
+		const similarChars = similarSoundMap.get(char);
 
-    if (similarChars) {
-      similarChars.forEach(similarChar => {
-        patterns.push(str.slice(0, i) + similarChar + str.slice(i + 1));
-      });
-    }
-  }
+		if (similarChars) {
+			similarChars.forEach(similarChar => {
+				patterns.push(str.slice(0, i) + similarChar + str.slice(i + 1));
+			});
+		}
+	}
 
-  return patterns;
+	return patterns;
 };
 
 // 부분 일치 검사 함수
 const isPartialMatch = (target: string, query: string): boolean => {
-  const decomposedTarget = decomposeHangul(target.toLowerCase());
-  const decomposedQuery = decomposeHangul(query.toLowerCase());
+	const decomposedTarget = decomposeHangul(target.toLowerCase());
+	const decomposedQuery = decomposeHangul(query.toLowerCase());
 
-  const targetJamo = decomposedTarget.join('');
-  const queryJamo = decomposedQuery.join('');
+	const targetJamo = decomposedTarget.join('');
+	const queryJamo = decomposedQuery.join('');
 
-  // 자모 단위 부분 일치 검사
-  return targetJamo.includes(queryJamo);
+	// 자모 단위 부분 일치 검사
+	return targetJamo.includes(queryJamo);
 };
 
 // 검색 점수 계산 함수
 export const getSearchScore = (itemName: string, query: string): number => {
-  const lowerItemName = itemName.toLowerCase();
-  const lowerQuery = query.toLowerCase();
+	const lowerItemName = itemName.toLowerCase();
+	const lowerQuery = query.toLowerCase();
 
-  // 정확한 매칭
-  if (lowerItemName === lowerQuery) return 100;
+	// 정확한 매칭
+	if (lowerItemName === lowerQuery) return 100;
 
-  // 시작 부분 매칭
-  if (lowerItemName.startsWith(lowerQuery)) return 90;
+	// 시작 부분 매칭
+	if (lowerItemName.startsWith(lowerQuery)) return 90;
 
-  // 단어 중간 정확한 매칭
-  if (lowerItemName.includes(lowerQuery)) return 80;
+	// 단어 중간 정확한 매칭
+	if (lowerItemName.includes(lowerQuery)) return 80;
 
-  // 자모 분리 후 부분 매칭
-  if (isPartialMatch(itemName, query)) return 70;
+	// 자모 분리 후 부분 매칭
+	if (isPartialMatch(itemName, query)) return 70;
 
-  // 유사 발음 매칭
-  const similarPatterns = getSimilarPatterns(lowerQuery);
-  if (similarPatterns.some(pattern => lowerItemName.includes(pattern))) return 60;
+	// 유사 발음 매칭
+	const similarPatterns = getSimilarPatterns(lowerQuery);
+	if (similarPatterns.some(pattern => lowerItemName.includes(pattern))) return 60;
 
-  return 0;
+	return 0;
 };

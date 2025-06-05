@@ -1,7 +1,7 @@
 <script lang="ts">
   import { fade, scale } from "svelte/transition";
   import { sineOut } from "svelte/easing";
-  import { ExpandIcon } from "lucide-svelte";
+  import { ExpandIcon } from "@lucide/svelte";
   import { cn } from "@/lib/utils";
   import { writable } from "svelte/store";
   import { PreviewModalClass } from "@/lib/stores/global.store";

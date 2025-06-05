@@ -11,7 +11,7 @@
     PlayIcon,
     Play,
     DownloadIcon,
-  } from "lucide-svelte";
+  } from "@lucide/svelte";
   import {
     isTransferSheetOpen,
     openChangeTransferSheet,

@@ -1,13 +1,14 @@
 <script lang="ts">
-  import { NahidaHelper } from "@/lib/helpers/nahida.helper";
+  import { NahidaHelper } from "$lib/helpers/nahida.helper";
   import { createInfiniteQuery } from "@tanstack/svelte-query";
   import { inview } from "svelte-inview";
   import PreviewModalButton from "../mods/PreviewModalEntry.svelte";
-  import { cn } from "@/lib/utils";
-  import { Badge } from "@/lib/components/ui/badge";
+  import { cn } from "$lib/utils";
+  import { Badge } from "$lib/components/ui/badge";
   import { onDestroy } from "svelte";
   import { queryClient } from "@/queryClient";
   import { Skeleton } from "$lib/components/ui/skeleton";
+  import { Loader2Icon } from "@lucide/svelte";
 
   let timestamp = $state(Date.now());
 
@@ -47,6 +48,7 @@
                   src={`nahida://external-image?url=${encodeURIComponent(`${mod.preview_url}`)}&t=${timestamp}`}
                   alt={mod.title}
                   loading="lazy"
+                  decoding="async"
                 />
               </div>
               <img
@@ -54,6 +56,7 @@
                 src={`nahida://external-image?url=${encodeURIComponent(`${mod.preview_url}`)}&t=${timestamp}`}
                 alt={mod.title}
                 loading="lazy"
+                decoding="async"
               />
               <div
                 class="absolute right-1 top-1 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
@@ -131,12 +134,15 @@
       ></div>
     </div>
   {:else if $query.isLoading}
-    <div
-      class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 h-full overflow-y-auto pr-1.5"
+    <div class="flex justify-center items-center h-full">
+      <Loader2Icon class="animate-spin-1.5" size={100} />
+    </div>
+    <!-- <div
+      class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 h-full overflow-y-auto pr-1.5 py-2.5 px-1"
     >
       {#each Array(12) as _, idx}
         <Skeleton class="size-full rounded-lg" />
       {/each}
-    </div>
+    </div> -->
   {/if}
 </div>

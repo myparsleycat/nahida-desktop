@@ -1,34 +1,15 @@
 <script lang="ts">
-  import { Button, buttonVariants } from "$lib/components/ui/button";
-  import * as Resizable from "$lib/components/ui/resizable";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { ModsHelper } from "@/lib/helpers";
-  import { cn } from "@/lib/utils";
-  import { Input } from "@/lib/components/ui/input";
-  import { Label } from "@/lib/components/ui/label";
-  import {
-    ArrowUpFromLineIcon,
-    ChevronRightIcon,
-    ChevronsDownUpIcon,
-    DotIcon,
-    EditIcon,
-    FolderOpenIcon,
-    FolderPenIcon,
-    FolderPlusIcon,
-    FolderSyncIcon,
-    SearchIcon,
-    Trash2Icon,
-    WrenchIcon,
-  } from "lucide-svelte";
-  import { toast } from "svelte-sonner";
-  import * as ContextMenu from "$lib/components/ui/context-menu";
+  import { Button } from "$lib/components/ui/button";
+  import { ModsHelper } from "$lib/helpers";
+  import { cn } from "$lib/utils";
+  import { ChevronRightIcon, FolderOpenIcon } from "@lucide/svelte";
   import autoAnimate from "@formkit/auto-animate";
   import { _ } from "svelte-i18n";
-  import Separator from "@/lib/components/ui/separator/separator.svelte";
+  import { Separator } from "$lib/components/ui/separator";
   import type { ModFolders } from "@shared/types/fs.types";
   import { createQuery } from "@tanstack/svelte-query";
-  import { FSH } from "@/lib/helpers/fs.helper";
-  import { CharPathSelectorClass } from "@/lib/stores/global.store";
+  import { FSH } from "$lib/helpers/fs.helper";
+  import { CharPathSelectorClass } from "$lib/stores/global.store";
   import { fade } from "svelte/transition";
 
   let CharPathSelectorStore = CharPathSelectorClass.store;

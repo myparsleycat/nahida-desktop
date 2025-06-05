@@ -1,10 +1,10 @@
 <script lang="ts">
   import { fade, scale } from "svelte/transition";
   import { sineOut } from "svelte/easing";
-  import { LoaderIcon } from "lucide-svelte";
+  import { LoaderIcon } from "@lucide/svelte";
   import type { LayoutType } from "$lib/types";
-  import { cn } from "@/lib/utils";
-  import { NDH } from "@/lib/helpers";
+  import { cn } from "$lib/utils";
+  import { NDH } from "$lib/helpers";
 
   let {
     className,

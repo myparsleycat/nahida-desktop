@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { ModsHelper } from "@/lib/helpers";
-  import { FSH } from "@/lib/helpers/fs.helper";
-  import { cn, getSearchScore } from "@/lib/utils";
+  import { ModsHelper } from "$lib/helpers";
+  import { FSH } from "$lib/helpers/fs.helper";
+  import { cn, getSearchScore } from "$lib/utils";
   import {
     EllipsisIcon,
     FolderOpenIcon,
@@ -11,25 +11,25 @@
     ListIcon,
     SearchIcon,
     Trash2Icon,
-  } from "lucide-svelte";
-  import { Input } from "@/lib/components/ui/input";
-  import * as DropdownMenu from "@/lib/components/ui/dropdown-menu";
-  import { Button, buttonVariants } from "@/lib/components/ui/button";
+  } from "@lucide/svelte";
+  import { Input } from "$lib/components/ui/input";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import { Button, buttonVariants } from "$lib/components/ui/button";
   import { _ } from "svelte-i18n";
-  import { getChosung } from "@/lib/utils";
+  import { getChosung } from "$lib/utils";
   import { flip } from "svelte/animate";
   import { fade } from "svelte/transition";
   import { sineOut } from "svelte/easing";
   import { toast } from "svelte-sonner";
-  import * as AlertDialog from "@/lib/components/ui/alert-dialog";
+  import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import PreviewModal from "./PreviewModalEntry.svelte";
   import { createQuery, createMutation } from "@tanstack/svelte-query";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import * as Table from "$lib/components/ui/table";
+  import * as Dialog from "$lib/components/ui/dialog/index";
+  import * as Table from "$lib/components/ui/table/index";
   import { onMount } from "svelte";
   import type { DirectChildren } from "@shared/types/mods.types";
   import Validator from "@shared/utils/Validator";
-  import { clickWithoutDrag } from "@/lib/utils/global.utils";
+  import { clickWithoutDrag } from "$lib/utils/global.utils";
 
   let currentCharPath = ModsHelper.currentCharPath;
   let layout = $state<"grid" | "list">("grid");
@@ -183,7 +183,7 @@
     <div class="flex gap-1 ml-4 flex-shrink-0">
       <div class="w-full relative flex items-center">
         <SearchIcon
-          class="w-5 h-5 absolute left-2 top-2 text-gray-500 dark:text-gray-400"
+          class="w-5 h-5 absolute left-2 top-1.5 text-gray-500 dark:text-gray-400"
         />
         <Input
           class="pl-8 w-[200px] h-8"
@@ -194,8 +194,8 @@
 
       <div>
         <Button
-          class="border size-8 p-0.5"
-          variant="ghost"
+          class="border size-8"
+          variant="outline"
           size="icon"
           onclick={async () => {
             if (layout === "grid") {
@@ -215,10 +215,13 @@
       </div>
 
       <DropdownMenu.Root>
-        <DropdownMenu.Trigger>
-          <Button class="border size-8 p-0.5" variant="ghost" size="icon">
-            <EllipsisIcon />
-          </Button>
+        <DropdownMenu.Trigger
+          class={cn(
+            buttonVariants({ variant: "outline", size: "icon" }),
+            "size-8",
+          )}
+        >
+          <EllipsisIcon />
         </DropdownMenu.Trigger>
         <DropdownMenu.Content>
           <DropdownMenu.Group>

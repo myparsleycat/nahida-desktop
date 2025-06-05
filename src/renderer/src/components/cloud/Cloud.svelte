@@ -21,13 +21,13 @@
     FileTextIcon,
     RotateCcwIcon,
     Share2Icon,
-  } from "lucide-svelte";
+  } from "@lucide/svelte";
   import { cn } from "$lib/utils";
   import { writable, derived as storeDerived, get } from "svelte/store";
   import { format } from "date-fns";
   import { ko, enUS, zhCN } from "date-fns/locale";
-  import * as ContextMenu from "$lib/components/ui/context-menu";
-  import * as Breadcrumb from "$lib/components/ui/breadcrumb";
+  import * as ContextMenu from "$lib/components/ui/context-menu/index";
+  import * as Breadcrumb from "$lib/components/ui/breadcrumb/index";
   import { toast } from "svelte-sonner";
   import {
     formatSize,
@@ -39,18 +39,18 @@
   import {
     DialogStateStore,
     LoadingStateStore,
-  } from "@/lib/stores/akasha.store";
-  import type { Content, LayoutType, SortType } from "../../lib/types";
+  } from "$lib/stores/akasha.store";
+  import type { Content, LayoutType, SortType } from "$lib/types";
   import * as Dialog from "$lib/components/ui/dialog/index";
   import { Input } from "$lib/components/ui/input";
-  import { Button, buttonVariants } from "@/lib/components/ui/button";
+  import { Button, buttonVariants } from "$lib/components/ui/button";
   import { _ } from "svelte-i18n";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index";
-  import * as AlertDialog from "@/lib/components/ui/alert-dialog";
+  import * as AlertDialog from "$lib/components/ui/alert-dialog/index";
   import { createQuery, createMutation } from "@tanstack/svelte-query";
-  import { NDH } from "@/lib/helpers";
+  import { NDH } from "$lib/helpers";
   import AkashaPreviewModal from "@/components/cloud/AkashaPreviewModal.svelte";
-  import { ValidateName } from "@/lib/utils/cloud.utils";
+  import { ValidateName } from "$lib/utils/cloud.utils";
 
   let currentId = NDH.currentId;
   let uploadDragging = $state(false);

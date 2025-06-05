@@ -1,11 +1,11 @@
 <script lang="ts">
   import { Button, buttonVariants } from "$lib/components/ui/button";
-  import * as Resizable from "$lib/components/ui/resizable";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { ModsHelper } from "@/lib/helpers";
-  import { cn } from "@/lib/utils";
-  import { Input } from "@/lib/components/ui/input";
-  import { Label } from "@/lib/components/ui/label";
+  import * as Resizable from "$lib/components/ui/resizable/index";
+  import * as Dialog from "$lib/components/ui/dialog/index";
+  import { ModsHelper } from "$lib/helpers";
+  import { cn } from "$lib/utils";
+  import { Input } from "$lib/components/ui/input";
+  import { Label } from "$lib/components/ui/label";
   import {
     ArrowUpFromLineIcon,
     ChevronRightIcon,
@@ -19,16 +19,16 @@
     SearchIcon,
     Trash2Icon,
     WrenchIcon,
-  } from "lucide-svelte";
+  } from "@lucide/svelte";
   import { toast } from "svelte-sonner";
   import Folder from "./Folder.svelte";
-  import * as ContextMenu from "$lib/components/ui/context-menu";
+  import * as ContextMenu from "$lib/components/ui/context-menu/index";
   import autoAnimate from "@formkit/auto-animate";
   import { _ } from "svelte-i18n";
-  import Separator from "@/lib/components/ui/separator/separator.svelte";
+  import Separator from "$lib/components/ui/separator/separator.svelte";
   import type { ModFolders } from "@shared/types/fs.types";
   import { createQuery } from "@tanstack/svelte-query";
-  import { FSH } from "@/lib/helpers/fs.helper";
+  import { FSH } from "$lib/helpers/fs.helper";
 
   let size = ModsHelper.resizableSize;
   let currentFolderPath = ModsHelper.currentFolderPath;
@@ -224,6 +224,7 @@
                       .delete(folder.path)
                       .then(() => {
                         toast.success("리스트에서 삭제되었습니다");
+                        ModsHelper.clearPath();
                         getFolders();
                       })
                       .catch((e: any) => {

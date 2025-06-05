@@ -66,8 +66,14 @@ class AuthService {
     }
 
     const res = await fetcher<GetSessionRes>(GetSessionURL, { sessionToken: sessKey });
-    if (!res.data.session) {
+
+    if (!res.data?.session) {
+      if (sessKey) {
+        await db.update('LocalStorage', 'sess', null);
+      }
+
       mainWindow.webContents.send('auth.CheckSessionState', false);
+      mainWindow.webContents.send('auth-state-changed', false)
       return false;
     }
 

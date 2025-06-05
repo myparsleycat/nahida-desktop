@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { Button } from "@/lib/components/ui/button";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import { NDH } from "@/lib/helpers";
-  import { formatSize } from "@/lib/utils";
+  import { Button, buttonVariants } from "$lib/components/ui/button";
+  import * as AlertDialog from "$lib/components/ui/alert-dialog/index";
+  import { NDH } from "$lib/helpers";
+  import { formatSize } from "$lib/utils";
   import { toast } from "svelte-sonner";
   import { _ } from "svelte-i18n";
-  import { Loader2Icon } from "lucide-svelte";
+  import { Loader2Icon } from "@lucide/svelte";
   import { Switch } from "$lib/components/ui/switch";
-  import { Label } from "@/lib/components/ui/label";
-  import Separator from "@/lib/components/ui/separator/separator.svelte";
+  import { Label } from "$lib/components/ui/label";
+  import Separator from "$lib/components/ui/separator/separator.svelte";
 
   let getStates = $state(true);
   let sizes = $state(0);
@@ -84,10 +84,8 @@
         <p class="text-muted-foreground">{formatSize(sizes)}</p>
       {/if}
       <AlertDialog.Root>
-        <AlertDialog.Trigger asChild let:builder>
-          <Button builders={[builder]} variant="destructive">
-            {$_("drive.ui.settings_page.preview_cache.ui.action")}
-          </Button>
+        <AlertDialog.Trigger class={buttonVariants({ variant: "destructive" })}>
+          {$_("drive.ui.settings_page.preview_cache.ui.action")}
         </AlertDialog.Trigger>
         <AlertDialog.Content>
           <AlertDialog.Header>
@@ -100,14 +98,11 @@
           </AlertDialog.Header>
           <AlertDialog.Footer>
             <AlertDialog.Cancel>{$_("g.cancel")}</AlertDialog.Cancel>
-            <AlertDialog.Action asChild let:builder>
-              <Button
-                builders={[builder]}
-                variant="destructive"
-                onclick={handleDeleteImageButtonClick}
-              >
-                {$_("drive.ui.settings_page.preview_cache.ui.action")}
-              </Button>
+            <AlertDialog.Action
+              class={buttonVariants({ variant: "destructive" })}
+              onclick={handleDeleteImageButtonClick}
+            >
+              {$_("drive.ui.settings_page.preview_cache.ui.action")}
             </AlertDialog.Action>
           </AlertDialog.Footer>
         </AlertDialog.Content>
