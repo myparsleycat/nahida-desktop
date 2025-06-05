@@ -1,9 +1,12 @@
+// src/renderer/src/lib/helpers/index.ts
+
 import { writable } from "svelte/store";
 import { Auth } from "./auth.helper";
-import { Cloud } from "./cloud.helper";
-import { Mods } from "./mods.helper";
+import { NDH } from "./drive.helper";
+import { ModsHelper } from "./mods.helper";
+import { toast as svsonner, type ExternalToast } from "svelte-sonner";
 
-type Pages = "mods" | "cloud" | "setting"
+type Pages = "mods" | "nahida" | "cloud" | "setting"
 
 class MainHelper {
   page = writable<Pages>("mods");
@@ -17,7 +20,7 @@ const Main = new MainHelper();
 
 export {
   Main,
-  Mods,
+  ModsHelper,
   Auth,
-  Cloud
+  NDH
 }

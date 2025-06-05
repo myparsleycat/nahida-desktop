@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import { Auth } from "@/lib/helpers";
-  import { LoaderCircleIcon } from "lucide-svelte";
+  import { Auth } from "$lib/helpers";
+  import { LoaderCircleIcon } from "@lucide/svelte";
 
   let processing = $state(false);
 </script>

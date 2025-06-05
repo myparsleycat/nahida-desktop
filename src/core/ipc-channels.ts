@@ -1,20 +1,27 @@
 // src/core/ipc-channels.ts
 
-import { ipcRenderer, ipcMain } from 'electron'
-import { auth, fss } from '../core/services'
-import { drive } from '../core/services'
-import { mods } from './services/mods.service';
-import { ReadDirectoryOptions } from '../types/fs.types';
+import { ipcRenderer, ipcMain } from 'electron';
+import { Toast, ToastMessage } from './services/toast.service';
+import { ReadDirectoryOptions } from '@shared/types/fs.types';
+import type { ExternalToast } from "svelte-sonner";
+import { NahidaIPCHelloModsParams } from '@shared/types/nahida.types';
 
 type ServiceHandler = (...args: any[]) => Promise<any> | any;
 type EventCallback = (state: any) => boolean | void;
-type EventEmitter = (channel: string, ...args: any[]) => void;
 
 interface ChannelDefinition {
   name: string;
   handler?: ServiceHandler;
   isEvent?: boolean;
-  eventName?: string; // 이벤트 채널 이름 (실제 사용되는 이름이 다를 경우)
+  eventName?: string;
+}
+
+interface Services {
+  auth?: any;
+  fss?: any;
+  ADS?: any;
+  mods?: any;
+  NahidaService?: any;
 }
 
 class ChannelGroup {
@@ -98,7 +105,6 @@ class ChannelGroup {
     const constants: Record<string, any> = {};
 
     this.channels.forEach((definition, name) => {
-      // 이벤트 채널인 경우 eventName을 사용 (있는 경우)
       if (definition.isEvent && definition.eventName) {
         constants[definition.eventName.replace(/-/g, '_').toUpperCase()] = definition.eventName;
       } else {
@@ -120,6 +126,24 @@ class ChannelGroup {
 
     return constants;
   }
+
+  clearChannels(): void {
+    this.channels.clear();
+    this.subGroups.clear();
+  }
+
+  getSubGroup(name: string): ChannelGroup | undefined {
+    return this.subGroups.get(name);
+  }
+
+  setChannelHandler(channelName: string, handler: ServiceHandler): void {
+    const channel = this.channels.get(channelName);
+    if (channel) {
+      channel.handler = handler;
+    } else {
+      console.warn(`Channel not found: ${channelName}`);
+    }
+  }
 }
 
 export class ServiceRegistry {
@@ -127,83 +151,244 @@ export class ServiceRegistry {
 
   constructor() {
     this.rootGroup = new ChannelGroup('root');
-    this.defineChannels();
+    this.defineChannelStructure();
   }
 
-  private defineChannels(): void {
+  private defineChannelStructure(): void {
     // AUTH
     const authGroup = this.rootGroup.addGroup('auth');
-    authGroup.addChannel('startOAuth2Login', () => auth.StartOAuth2Login());
-    authGroup.addChannel('checkSessionState', () => auth.CheckSessionState());
-    authGroup.addChannel('logout', () => auth.Logout());
+    authGroup.addChannel('startOAuth2Login');
+    authGroup.addChannel('checkSessionState');
+    authGroup.addChannel('logout');
     authGroup.addChannel('authStateChanged', undefined, true, 'auth-state-changed');
 
     // FS
     const fssGroup = this.rootGroup.addGroup('fss');
-    fssGroup.addChannel('readDir', (path: string, options: ReadDirectoryOptions) => fss.readDirectory(path, options))
-    fssGroup.addChannel('readFile', (path: string) => fss.readFile(path, "arrbuf"))
-    fssGroup.addChannel('saveFile', (path: string, data: ArrayBuffer) => fss.saveFile(path, data))
-    fssGroup.addChannel('getStat', (path: string) => fss.getStat(path))
-    fssGroup.addChannel('openPath', (path: string) => fss.openPath(path))
-    fssGroup.addChannel('deletePath', (path: string) => fss.deletePath(path))
-    fssGroup.addChannel('getImgBase64', (path: string) => fss.getImgBase64(path))
-
-    fssGroup.addChannel('watchFolder', (path: string, options: any) => fss.watchFolderChanges(path, options))
-    fssGroup.addChannel('unwatchFolder', (path: string) => fss.unwatchFolder(path))
-    fssGroup.addChannel('getWatchedFolders', () => fss.getWatchedFolders())
-    fssGroup.addChannel('folderEvent', undefined, true, 'fss-folder-event')
+    fssGroup.addChannel('readDir');
+    fssGroup.addChannel('readFile');
+    fssGroup.addChannel('saveFile');
+    fssGroup.addChannel('getStat');
+    fssGroup.addChannel('openPath');
+    fssGroup.addChannel('deletePath');
+    fssGroup.addChannel('getImgBase64');
+    fssGroup.addChannel('watchFolder');
+    fssGroup.addChannel('unwatchFolder');
+    fssGroup.addChannel('getWatchedFolders');
+    fssGroup.addChannel('folderEvent', undefined, true, 'fss-folder-event');
+    fssGroup.addChannel('select');
 
     const fsDirGroup = fssGroup.addGroup('dir');
-    fssGroup.addChannel('select', (opt: Electron.OpenDialogOptions) => fss.select(opt));
-    fsDirGroup.addChannel('read', (path: string) => fss.readDirectory(path))
+    fsDirGroup.addChannel('read');
 
-    // mods
+    // MODS
     const modsGroup = this.rootGroup.addGroup('mods');
+    modsGroup.addChannel('clearPath');
+    
     const modsUiGroup = modsGroup.addGroup('ui');
     const modsUiResizableGroup = modsUiGroup.addGroup('resizable');
-    modsUiResizableGroup.addChannel('get', () => mods.ui.resizable.get());
-    modsUiResizableGroup.addChannel('set', (size: number) => mods.ui.resizable.set(size));
+    const modsUiLayoutGroup = modsUiGroup.addGroup('layout');
+    modsUiResizableGroup.addChannel('get');
+    modsUiResizableGroup.addChannel('set');
+    modsUiLayoutGroup.addChannel('get');
+    modsUiLayoutGroup.addChannel('set');
+    
     const modsFolderGroup = modsGroup.addGroup('folder');
-    modsFolderGroup.addChannel('getAll', () => mods.folder.getAll());
-    modsFolderGroup.addChannel('create', (name: string, path: string) => mods.folder.create(path, name));
-    modsFolderGroup.addChannel('delete', (path: string) => mods.folder.delete(path))
+    modsFolderGroup.addChannel('getAll');
+    modsFolderGroup.addChannel('create');
+    modsFolderGroup.addChannel('delete');
+    modsFolderGroup.addChannel('changeSeq');
+    modsFolderGroup.addChannel('read');
+    
     const modsFolderDirGroup = modsFolderGroup.addGroup('dir');
+    modsFolderDirGroup.addChannel('read');
+    modsFolderDirGroup.addChannel('disableAll');
+    modsFolderDirGroup.addChannel('enableAll');
+    
     const modGroup = modsGroup.addGroup('mod');
-    modGroup.addChannel('toggle', (path: string) => mods.mod.toggle(path));
-    modsFolderDirGroup.addChannel('read', (path: string, options?: ReadDirectoryOptions) => mods.folder.dir.read(path, options));
-    // modsPathGroup.addChannel('delete', () => {});
+    modGroup.addChannel('read');
+    modGroup.addChannel('toggle');
+    
     const iniGroup = modsGroup.addGroup('ini');
-    iniGroup.addChannel('parse', (path: string) => mods.ini.parse(path));
-    iniGroup.addChannel('update', (path: string, section: string, key: 'key', value: string) => mods.ini.update(path, section, key, value));
+    iniGroup.addChannel('parse');
+    iniGroup.addChannel('update');
+    
+    const intxGroup = modsGroup.addGroup('intx');
+    intxGroup.addChannel('drop');
+    
+    const modsMsgGroup = modsGroup.addGroup('msg');
+    modsMsgGroup.addChannel('currentCharPathChanged', undefined, true, 'current-char-path-changed');
+    modsMsgGroup.addChannel('currentFolderPathChanged', undefined, true, 'current-folder-path-changed');
+
+    // NAHIDA
+    const nahidaGroup = this.rootGroup.addGroup('nahida');
+    const nahidaGetGroup = nahidaGroup.addGroup('get');
+    nahidaGetGroup.addChannel('mods');
 
     // DRIVE
     const driveGroup = this.rootGroup.addGroup('drive');
     const driveItemGroup = driveGroup.addGroup('item');
-    driveItemGroup.addChannel('get', (id: string) => drive.item.get(id));
-    driveItemGroup.addChannel('rename', (id: string, rename: string) => drive.item.rename(id, rename));
-
+    driveItemGroup.addChannel('get');
+    driveItemGroup.addChannel('move');
+    driveItemGroup.addChannel('rename');
+    driveItemGroup.addChannel('trash_many');
+    
+    const driveItemDirGroup = driveItemGroup.addGroup('dir');
+    driveItemDirGroup.addChannel('create');
+    
     const driveItemDownloadGroup = driveItemGroup.addGroup('download');
-    driveItemDownloadGroup.addChannel('enqueue', (id: string) => drive.item.download.enqueue(id));
+    driveItemDownloadGroup.addChannel('enqueue');
 
     const driveUtilGroup = driveGroup.addGroup('util');
     const driveUtilImageCacheGroup = driveUtilGroup.addGroup('imageCache');
-    driveUtilImageCacheGroup.addChannel('get', (url: string) => drive.util.imageCache.get(url));
-    driveUtilImageCacheGroup.addChannel('sizes', () => drive.util.imageCache.sizes());
-    driveUtilImageCacheGroup.addChannel('clear', () => drive.util.imageCache.clear());
-    driveUtilImageCacheGroup.addChannel('getStates', () => drive.util.imageCache.getStates());
-    driveUtilImageCacheGroup.addChannel('change', (v: boolean) => drive.util.imageCache.change(v));
+    driveUtilImageCacheGroup.addChannel('get');
+    driveUtilImageCacheGroup.addChannel('sizes');
+    driveUtilImageCacheGroup.addChannel('clear');
+    driveUtilImageCacheGroup.addChannel('getStates');
+    driveUtilImageCacheGroup.addChannel('change');
+
+    // TOAST
+    const toastGroup = this.rootGroup.addGroup('toast');
+    toastGroup.addChannel('show');
+    toastGroup.addChannel('success');
+    toastGroup.addChannel('error');
+    toastGroup.addChannel('warning');
+    toastGroup.addChannel('info');
+    toastGroup.addChannel('toastShow', undefined, true, 'toast-show');
 
     // WINDOW
     const windowGroup = this.rootGroup.addGroup('window');
     windowGroup.addChannel('windowControl', undefined, true, 'window-control');
   }
 
+  injectServiceHandlers(services: Services): void {
+    const { auth, fss, ADS, mods, NahidaService } = services;
+
+    this.injectHandlers('auth', {
+      startOAuth2Login: () => auth.StartOAuth2Login(),
+      checkSessionState: () => auth.CheckSessionState(),
+      logout: () => auth.Logout()
+    });
+
+    this.injectHandlers('fss', {
+      readDir: (path: string, options: ReadDirectoryOptions) => fss.readDirectory(path, options),
+      readFile: (path: string) => fss.readFile(path, "arrbuf"),
+      saveFile: (path: string, data: ArrayBuffer) => fss.writeFile(path, Buffer.from(data)),
+      getStat: (path: string) => fss.getStat(path),
+      openPath: (path: string) => fss.openPath(path),
+      deletePath: (path: string) => fss.deletePath(path),
+      getImgBase64: (path: string) => fss.getImgBase64(path),
+      watchFolder: (path: string, options: any) => fss.watchFolderChanges(path, options),
+      unwatchFolder: (path: string) => fss.unwatchFolder(path),
+      getWatchedFolders: () => fss.getWatchedFolders(),
+      select: (opt: Electron.OpenDialogOptions) => fss.select(opt)
+    });
+
+    this.injectHandlers('fss.dir', {
+      read: (path: string) => fss.readDirectory(path)
+    });
+
+    this.injectHandlers('mods', {
+      clearPath: () => mods.clearPath()
+    });
+
+    this.injectHandlers('mods.ui.resizable', {
+      get: () => mods.ui.resizable.get(),
+      set: (size: number) => mods.ui.resizable.set(size)
+    });
+
+    this.injectHandlers('mods.ui.layout', {
+      get: () => mods.ui.layout.get(),
+      set: (layout: 'grid' | 'list') => mods.ui.layout.set(layout)
+    });
+
+    this.injectHandlers('mods.folder', {
+      getAll: () => mods.folder.getAll(),
+      create: (name: string, path: string) => mods.folder.create(path, name),
+      delete: (path: string) => mods.folder.delete(path),
+      changeSeq: (path: string, newSeq: number) => mods.folder.changeSeq(path, newSeq),
+      read: (path: string) => mods.folder.read(path)
+    });
+
+    this.injectHandlers('mods.folder.dir', {
+      read: (path: string, options?: ReadDirectoryOptions) => mods.folder.dir.read(path, options),
+      disableAll: (path: string) => mods.folder.dir.disableAll(path),
+      enableAll: (path: string) => mods.folder.dir.enableAll(path)
+    });
+
+    this.injectHandlers('mods.mod', {
+      read: (path: string) => mods.mod.read(path),
+      toggle: (path: string) => mods.mod.toggle(path)
+    });
+
+    this.injectHandlers('mods.ini', {
+      parse: (path: string) => mods.ini.parse(path),
+      update: (path: string, section: string, key: 'key', value: string) => mods.ini.update(path, section, key, value)
+    });
+
+    this.injectHandlers('mods.intx', {
+      drop: (data: string[]) => mods.intx.drop(data)
+    });
+
+    this.injectHandlers('nahida.get', {
+      mods: (params: NahidaIPCHelloModsParams) => NahidaService.get.mods(params)
+    });
+
+    this.injectHandlers('drive.item', {
+      get: (id: string) => ADS.item.get(id),
+      move: (current: string, ids: string[], newParentId: string) => ADS.item.move(current, ids, newParentId),
+      rename: (id: string, rename: string) => ADS.item.rename(id, rename),
+      trash_many: (ids: string[]) => ADS.item.trash_many(ids)
+    });
+
+    this.injectHandlers('drive.item.dir', {
+      create: (parentId: string, dirs: { name: string; path: string; }[]) => ADS.item.dir.create(parentId, dirs)
+    });
+
+    this.injectHandlers('drive.item.download', {
+      enqueue: (id: string, _name: string) => ADS.item.download(id)
+    });
+
+    this.injectHandlers('drive.util.imageCache', {
+      get: (url: string) => ADS.util.imageCache.get(url),
+      sizes: () => ADS.util.imageCache.sizes(),
+      clear: () => ADS.util.imageCache.clear(),
+      getStates: () => ADS.util.imageCache.getStates(),
+      change: (v: boolean) => ADS.util.imageCache.change(v)
+    });
+
+    this.injectHandlers('toast', {
+      show: (message: string, type?: ToastMessage['type'], data?: ExternalToast) => Toast.show(message, type, data),
+      success: (message: string, data?: ExternalToast) => Toast.success(message, data),
+      error: (message: string, data?: ExternalToast) => Toast.error(message, data),
+      warning: (message: string, data?: ExternalToast) => Toast.warning(message, data),
+      info: (message: string, data?: ExternalToast) => Toast.info(message, data)
+    });
+  }
+
+  private injectHandlers(groupPath: string, handlers: Record<string, ServiceHandler>): void {
+    const pathParts = groupPath.split('.');
+    let currentGroup = this.rootGroup;
+
+    for (const part of pathParts) {
+      const subGroup = currentGroup.getSubGroup(part);
+      if (subGroup) {
+        currentGroup = subGroup;
+      } else {
+        console.warn(`Group not found: ${groupPath}`);
+        return;
+      }
+    }
+
+    Object.entries(handlers).forEach(([channelName, handler]) => {
+      currentGroup.setChannelHandler(channelName, handler);
+    });
+  }
+
   registerServices(ipcMainInstance: typeof ipcMain): void {
     this.rootGroup.registerAllChannels(ipcMainInstance);
 
     ipcMainInstance.on('window-control', (_event, _command) => {
-      // window-control 이벤트는 main 프로세스에서 처리됨
-      // 여기서는 이벤트가 등록되어 있음을 확인하는 용도
+      // window-control 이벤트 처리
     });
   }
 
@@ -228,7 +413,12 @@ export const serviceRegistry = new ServiceRegistry();
 export const IPC_CHANNELS = serviceRegistry.getChannelConstants();
 
 // main.ts
-export const registerServices = (ipcMainInstance: typeof ipcMain) => {
+export const registerServices = async (ipcMainInstance: typeof ipcMain) => {
+  const { auth, fss, ADS } = await import('@core/services');
+  const { mods } = await import('./services/mods.service');
+  const { NahidaService } = await import('./services/nahida.service');
+
+  serviceRegistry.injectServiceHandlers({ auth, fss, ADS, mods, NahidaService });
   serviceRegistry.registerServices(ipcMainInstance);
 };
 

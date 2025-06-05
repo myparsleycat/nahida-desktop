@@ -5,19 +5,21 @@
     "src/renderer/src/**/*",
     "src/renderer/src/**/*.svelte",
     "src/preload/*.d.ts",
-    "src/types/*.ts",
+    "src/shared/types/*.ts",
     "src/core/overlay/**/*",
     "src/renderer/overlay/**/*",
-    "src/renderer/overlay/**/*.svelte"
+    "src/renderer/overlay/**/*.svelte",
+    "src/shared/**/*",
+    "src/core/**/*"
   ],
   "compilerOptions": {
     "allowJs": true,
-		"checkJs": true,
-		"esModuleInterop": true,
-		"forceConsistentCasingInFileNames": true,
-		"resolveJsonModule": true,
-		"skipLibCheck": true,
-		"sourceMap": true,
+    "checkJs": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
     "noImplicitReturns": false,
     "composite": true,
     "noUnusedLocals": false,
@@ -29,18 +31,25 @@
       "DOM",
       "DOM.Iterable"
     ],
+    "baseUrl": "./src",
     "paths": {
       "@/*": [
-        "./src/renderer/src/*",
-        "./src/renderer/overlay/*"
+        "renderer/src/*",
+        "renderer/overlay/*"
+      ],
+      "@shared/*": [
+        "shared/*"
+      ],
+      "@core/*": [
+        "core/*"
       ],
       "$lib": [
-        "./src/renderer/src/lib",
-        "./src/renderer/overlay"
+        "renderer/src/lib",
+        "renderer/overlay"
       ],
       "$lib/*": [
-        "./src/renderer/src/lib/*",
-        "./src/renderer/overlay/*"
+        "renderer/src/lib/*",
+        "renderer/overlay/*"
       ]
     }
   }

@@ -21,13 +21,13 @@
     FileTextIcon,
     RotateCcwIcon,
     Share2Icon,
-  } from "lucide-svelte";
+  } from "@lucide/svelte";
   import { cn } from "$lib/utils";
   import { writable, derived as storeDerived, get } from "svelte/store";
   import { format } from "date-fns";
   import { ko, enUS, zhCN } from "date-fns/locale";
-  import * as ContextMenu from "$lib/components/ui/context-menu";
-  import * as Breadcrumb from "$lib/components/ui/breadcrumb";
+  import * as ContextMenu from "$lib/components/ui/context-menu/index";
+  import * as Breadcrumb from "$lib/components/ui/breadcrumb/index";
   import { toast } from "svelte-sonner";
   import {
     formatSize,
@@ -39,19 +39,20 @@
   import {
     DialogStateStore,
     LoadingStateStore,
-  } from "@/lib/stores/akasha.store";
-  import type { Content, LayoutType, SortType } from "../../lib/types";
+  } from "$lib/stores/akasha.store";
+  import type { Content, LayoutType, SortType } from "$lib/types";
   import * as Dialog from "$lib/components/ui/dialog/index";
   import { Input } from "$lib/components/ui/input";
-  import { Button, buttonVariants } from "@/lib/components/ui/button";
+  import { Button, buttonVariants } from "$lib/components/ui/button";
   import { _ } from "svelte-i18n";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index";
-  import * as AlertDialog from "@/lib/components/ui/alert-dialog";
+  import * as AlertDialog from "$lib/components/ui/alert-dialog/index";
   import { createQuery, createMutation } from "@tanstack/svelte-query";
-  import { Cloud } from "@/lib/helpers";
+  import { NDH } from "$lib/helpers";
   import AkashaPreviewModal from "@/components/cloud/AkashaPreviewModal.svelte";
+  import { ValidateName } from "$lib/utils/cloud.utils";
 
-  let currentId = Cloud.currentId;
+  let currentId = NDH.currentId;
   let uploadDragging = $state(false);
   let contentDragging = $state(false);
   let isDoubleClickAllowed = $state(true);
@@ -84,7 +85,7 @@
     createQuery({
       queryKey: ["contents", $currentId],
       queryFn: async () => {
-        const data = await Cloud.item.get($currentId);
+        const data = await NDH.item.get($currentId);
 
         // if (!data || error) {
         //   // @ts-ignore
@@ -352,16 +353,18 @@
         // moveItems 호출 전에 초기화
         copy_or_cut_items = { action: null, items: [] };
 
-        // moveItems(itemsToMove, currentId)
-        //   .then(async () => {
-        //     await refetcher();
-        //   })
-        //   .catch((err: any) => {
-        //     console.error("붙여넣기 실패:", err);
-        //     toast.error("붙여넣기 중 오류가 발생했습니다.", {
-        //       description: err.message,
-        //     });
-        //   });
+        const ids = itemsToMove.map((item) => item.id);
+        NDH.item
+          .move($currentId, ids, $currentId)
+          .then(async () => {
+            await refetcher();
+          })
+          .catch((err: any) => {
+            console.error("붙여넣기 실패:", err);
+            toast.error("붙여넣기 중 오류가 발생했습니다.", {
+              description: err.message,
+            });
+          });
       }
     }
 
@@ -580,22 +583,89 @@
   };
 
   const handleDrop = (e: DragEvent, targetItem: Content) => {
-    try {
-      e.preventDefault();
-      const draggedId = e.dataTransfer?.getData("text/plain");
-      if (!draggedId || !draggedItem) return;
+    e.preventDefault();
+    const draggedId = e.dataTransfer?.getData("text/plain");
+    if (!draggedId || !draggedItem) return;
 
-      if (!targetItem.isDir)
-        return toast.warning("폴더에만 드롭할 수 있습니다.");
+    if (!targetItem.isDir) return toast.warning("폴더에만 드롭할 수 있습니다.");
 
-      if (draggedItem.id === targetItem.id)
-        return toast.warning("자기 자신에게는 드롭할 수 없습니다.");
+    if (draggedItem.id === targetItem.id)
+      return toast.warning("자기 자신에게는 드롭할 수 없습니다.");
 
-      // moveItems([draggedItem], targetItem.id);
-    } finally {
-      currentDragOver = null;
-    }
+    const ids = selectedItems.map((item) => item.id);
+
+    NDH.item
+      .move($currentId, ids.length > 0 ? ids : [draggedItem.id], targetItem.id)
+      .then(async () => {
+        await refetcher();
+      })
+      .catch((err: any) => {
+        console.error("붙여넣기 실패:", err);
+        toast.error("붙여넣기 중 오류가 발생했습니다.", {
+          description: err.message,
+        });
+      })
+      .finally(() => {
+        currentDragOver = null;
+      });
   };
+
+  const TrashMutation = createMutation({
+    mutationFn: async (items: Content[]) => {
+      const uuids = items.map((item) => item.id);
+      const resp = await NDH.item.trash_many(uuids);
+
+      // @ts-ignore
+      if (!resp.success) {
+        // @ts-ignore
+        throw new Error(resp.error.message);
+      }
+
+      return { data: resp.trash_many };
+    },
+    onSuccess: (data) => {
+      toast.success(
+        `${data.data.length}개의 파일 및 디렉토리가 휴지통으로 이동되었습니다`,
+      );
+      refetcher();
+    },
+    onError: (_) => {},
+  });
+
+  const CreateDirMutation = createMutation({
+    mutationFn: async ({
+      name,
+      parent,
+      refetcher,
+    }: {
+      name: string;
+      parent: string;
+      refetcher: () => Promise<any>;
+    }) => {
+      const resp = await NDH.item.dir.create(parent, [{ name, path: name }]);
+
+      if (!resp.success) {
+        toast.warning(resp.error.message);
+
+        // @ts-ignore
+        throw new Error(error.value.error.message);
+      }
+
+      return { name, parent, refetcher };
+    },
+    onMutate: () => {
+      LoadingStateStore.setLoading("createDirLoading", true);
+    },
+    onSettled: () => {
+      LoadingStateStore.setLoading("createDirLoading", false);
+    },
+    onSuccess: (data) => {
+      data.refetcher();
+      DialogStateStore.setOpen("createDirDialog", false);
+      toast.success(get(_)("#.CreateDir.toast-promise.success"));
+    },
+    onError: (_) => {},
+  });
 </script>
 
 <svelte:window
@@ -1068,8 +1138,8 @@
             <ContextMenu.Item
               class="cursor-pointer gap-x-2"
               onclick={() => {
-                Cloud.item.download
-                  .enqueue(selectedItems[0].id)
+                NDH.item.download
+                  .enqueue(selectedItems[0].id, selectedItems[0].name)
                   .catch((e: any) => {
                     toast.error(e.message);
                   });
@@ -1118,7 +1188,10 @@
               RG
             </ContextMenu.Item>
           {/if}
-          <ContextMenu.Item class="cursor-pointer gap-x-2 text-red-500">
+          <ContextMenu.Item
+            class="cursor-pointer gap-x-2 text-red-500"
+            onclick={() => $TrashMutation.mutate(selectedItems)}
+          >
             <Trash2Icon size={18} />
             {$_("drive.ui.trash")}
           </ContextMenu.Item>
@@ -1158,7 +1231,41 @@
     <Dialog.Header>
       <Dialog.Title>{$_("drive.ui.rename")}</Dialog.Title>
     </Dialog.Header>
-    <form class="flex flex-col space-y-4" autocomplete="off">
+    <form
+      class="flex flex-col space-y-4"
+      autocomplete="off"
+      onsubmit={(e) => {
+        e.preventDefault();
+        const form = e.target as HTMLFormElement;
+        const formData = new FormData(form);
+        const name = formData.get("name") as string;
+        if (!name || typeof name !== "string" || name.trim() === "") {
+          toast.warning(get(_)("#.RenameItem.0"));
+          return;
+        }
+
+        const ext = (formData.get("ext") as string) || "";
+
+        const rename = name + ext;
+
+        const validate_result = ValidateName(rename);
+        if (validate_result) {
+          return toast.warning(get(_)("#.RenameItem.1"), {
+            description: validate_result,
+          });
+        }
+
+        toast.promise(NDH.item.rename(selectedItems[0].id, rename), {
+          loading: get(_)("#.RenameItem.toast-promise.loading"),
+          success: () => {
+            refetcher();
+            DialogStateStore.setOpen("renameDialog", false);
+            return get(_)("#.RenameItem.toast-promise.success");
+          },
+          error: (e: any) => e.message,
+        });
+      }}
+    >
       <div class="flex flex-row gap-x-4">
         <input
           class={cn(
@@ -1230,14 +1337,14 @@
         const formData = new FormData(form);
         const name = formData.get("name") as string;
 
-        // const validate_result = ValidateName(name);
-        // if (validate_result) {
-        //   return toast.warning(get(_)("#.CreateDir.0"), {
-        //     description: validate_result,
-        //   });
-        // }
+        const validate_result = ValidateName(name);
+        if (validate_result) {
+          return toast.warning(get(_)("#.CreateDir.0"), {
+            description: validate_result,
+          });
+        }
 
-        // $CreateDirMutation.mutate({ name, parent: currentId, refetcher });
+        $CreateDirMutation.mutate({ name, parent: $currentId, refetcher });
       }}
     >
       <Input name="name" placeholder="이름" maxlength={255} required />

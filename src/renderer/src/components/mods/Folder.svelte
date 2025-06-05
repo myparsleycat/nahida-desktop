@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { Mods } from "@/lib/helpers";
-  import { FSH } from "@/lib/helpers/fs.helper";
-  import { cn, getSearchScore } from "@/lib/utils";
+  import { ModsHelper } from "$lib/helpers";
+  import { FSH } from "$lib/helpers/fs.helper";
+  import { cn, getSearchScore } from "$lib/utils";
   import {
-    ExpandIcon,
+    EllipsisIcon,
     FolderOpenIcon,
     ImageOffIcon,
     KeyboardIcon,
@@ -11,35 +11,49 @@
     ListIcon,
     SearchIcon,
     Trash2Icon,
-  } from "lucide-svelte";
-  import { Input } from "@/lib/components/ui/input";
-  import * as DropdownMenu from "@/lib/components/ui/dropdown-menu";
-  import { Button, buttonVariants } from "@/lib/components/ui/button";
+  } from "@lucide/svelte";
+  import { Input } from "$lib/components/ui/input";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import { Button, buttonVariants } from "$lib/components/ui/button";
   import { _ } from "svelte-i18n";
-  import { getChosung } from "@/lib/utils";
+  import { getChosung } from "$lib/utils";
   import { flip } from "svelte/animate";
   import { fade } from "svelte/transition";
   import { sineOut } from "svelte/easing";
   import { toast } from "svelte-sonner";
-  import * as AlertDialog from "@/lib/components/ui/alert-dialog";
-  import PreviewModal from "./PreviewModal.svelte";
+  import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import PreviewModal from "./PreviewModalEntry.svelte";
   import { createQuery, createMutation } from "@tanstack/svelte-query";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import * as Table from "$lib/components/ui/table";
+  import * as Dialog from "$lib/components/ui/dialog/index";
+  import * as Table from "$lib/components/ui/table/index";
+  import { onMount } from "svelte";
+  import type { DirectChildren } from "@shared/types/mods.types";
+  import Validator from "@shared/utils/Validator";
+  import { clickWithoutDrag } from "$lib/utils/global.utils";
 
-  let currentCharPath = Mods.currentCharPath;
+  let currentCharPath = ModsHelper.currentCharPath;
   let layout = $state<"grid" | "list">("grid");
   let searchQuery = $state("");
   let modsContainerElement = $state<HTMLDivElement>();
-  let dragStates = $state(new Map<string, boolean>());
+  let previewDragState = $state(new Map<string, boolean>());
+  let modDragState = $state(false);
   let timestamp = $state(Date.now());
 
+  let deleteDialog = $state<{ open: boolean; mod: DirectChildren | null }>({
+    open: false,
+    mod: null,
+  });
+  const deleteDialogClear = () => (deleteDialog = { open: false, mod: null });
   let showOverwriteDialog = $state(false);
   let fileToOverwrite = $state<ArrayBuffer | null>(null);
   let previewPathToOverwrite = $state<string | null>(null);
 
+  onMount(async () => {
+    layout = await ModsHelper.ui.layout.get();
+  });
+
   const getMods = async (path: string) => {
-    return await Mods.getDirectChildren(path, { recursive: 2 });
+    return ModsHelper.mod.read(path);
   };
 
   const data = $derived(
@@ -54,9 +68,9 @@
       refetchIntervalInBackground: true,
       refetchInterval: () => {
         if (typeof document !== "undefined" && document.hidden) {
-          return 60000 * 1; // 1분 (백그라운드)
+          return 5000; //
         }
-        return 10000; // 10초 (포그라운드)
+        return 2500; //
       },
     }),
   );
@@ -113,8 +127,8 @@
   };
 
   const setDragState = (modPath: string, isDragging: boolean) => {
-    dragStates.set(modPath, isDragging);
-    dragStates = new Map(dragStates);
+    previewDragState.set(modPath, isDragging);
+    previewDragState = new Map(previewDragState);
   };
 
   const savePreviewImage = async (path: string, _data: ArrayBuffer) => {
@@ -169,7 +183,7 @@
     <div class="flex gap-1 ml-4 flex-shrink-0">
       <div class="w-full relative flex items-center">
         <SearchIcon
-          class="w-5 h-5 absolute left-2 top-2 text-gray-500 dark:text-gray-400"
+          class="w-5 h-5 absolute left-2 top-1.5 text-gray-500 dark:text-gray-400"
         />
         <Input
           class="pl-8 w-[200px] h-8"
@@ -180,15 +194,16 @@
 
       <div>
         <Button
-          class="border size-8 p-0.5"
-          variant="ghost"
+          class="border size-8"
+          variant="outline"
           size="icon"
-          onclick={() => {
+          onclick={async () => {
             if (layout === "grid") {
               layout = "list";
             } else {
               layout = "grid";
             }
+            await ModsHelper.ui.layout.set(layout);
           }}
         >
           {#if layout === "grid"}
@@ -198,15 +213,112 @@
           {/if}
         </Button>
       </div>
+
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger
+          class={cn(
+            buttonVariants({ variant: "outline", size: "icon" }),
+            "size-8",
+          )}
+        >
+          <EllipsisIcon />
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content>
+          <DropdownMenu.Group>
+            <DropdownMenu.Item
+              class="cursor-pointer"
+              onclick={() => {
+                if (!$currentCharPath) {
+                  toast.warning("작업할 대상 폴더를 선택해주세요");
+                  return;
+                }
+
+                ModsHelper.folder.dir
+                  .enableAll($currentCharPath)
+                  .then((resp) => {
+                    if (resp) $data.refetch();
+                  });
+              }}>전체 활성화</DropdownMenu.Item
+            >
+            <DropdownMenu.Item
+              class="cursor-pointer"
+              onclick={() => {
+                if (!$currentCharPath) {
+                  toast.warning("작업할 대상 폴더를 선택해주세요");
+                  return;
+                }
+
+                ModsHelper.folder.dir
+                  .disableAll($currentCharPath)
+                  .then((resp) => {
+                    if (resp) $data.refetch();
+                  });
+              }}>전체 비활성화</DropdownMenu.Item
+            >
+          </DropdownMenu.Group>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
     </div>
   </div>
 
-  {#if filteredMods}
-    <div class="pl-3 pb-3 pt-1 pr-1.5 flex flex-col flex-1 overflow-auto">
-      <div
-        bind:this={modsContainerElement}
-        class="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3 h-full overflow-y-auto pr-1.5"
-      >
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="pl-3 pb-3 pt-1 pr-1.5 flex flex-col flex-1 overflow-auto relative"
+    ondragover={(e) => {
+      e.preventDefault();
+      modDragState = true;
+    }}
+    ondragleave={(e) => {
+      e.preventDefault();
+      modDragState = false;
+    }}
+    ondrop={async (e) => {
+      e.preventDefault();
+      if (!e?.dataTransfer) return;
+
+      try {
+        const dropItems: string[] = [];
+
+        const urlCandidate =
+          e.dataTransfer.getData("text/uri-list") ||
+          e.dataTransfer.getData("text/plain");
+        if (Validator.url(urlCandidate)) {
+          dropItems.push(urlCandidate);
+        }
+
+        dropItems.push(
+          ...Array.from(e.dataTransfer.files).map((file) =>
+            window.webUtils.getPathForFile(file),
+          ),
+        );
+
+        if (dropItems.length > 0) {
+          ModsHelper.intx.drop(dropItems).then((resp) => {
+            if (resp) $data.refetch();
+          });
+        }
+      } finally {
+        modDragState = false;
+      }
+    }}
+  >
+    <div
+      class={cn(
+        "absolute inset-0 bg-black/30 z-30 flex items-center justify-center pointer-events-none duration-200 outline-dotted rounded-lg m-2",
+        modDragState ? "opacity-100" : "opacity-0",
+      )}
+    >
+      <div class="text-white text-center">
+        <span class="text-2xl">📁</span>
+        <p class="font-medium mt-2">여기에 드롭하세요</p>
+      </div>
+    </div>
+
+    <div
+      bind:this={modsContainerElement}
+      class="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 h-full overflow-y-auto pr-1.5"
+    >
+      {#if filteredMods}
         {#each filteredMods as mod (mod.path)}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -222,12 +334,12 @@
                 : "bg-green-700 dark:bg-green-800",
             )}
             onclick={() => {
-              Mods.mod
+              ModsHelper.mod
                 .toggle(mod.path)
                 .then(() => {
                   $data.refetch();
                 })
-                .catch((e: any) => {
+                .catch((e) => {
                   toast.error("모드 토글중 오류가 발생했어요", {
                     description: e.message,
                   });
@@ -236,10 +348,11 @@
           >
             <div class="flex items-center justify-between p-1">
               <p
-                class="font-semibold text-sm truncate overflow-hidden max-w-[70%]"
+                class="font-semibold text-sm truncate overflow-hidden max-w-[70%] select-text"
               >
                 {processModName(mod.name)}
               </p>
+
               <div class="buttons flex items-center space-x-1 shrink-0">
                 {#if mod.ini && mod.ini.data.length > 0}
                   <Dialog.Root>
@@ -249,58 +362,78 @@
                     >
                       <KeyboardIcon size={20} />
                     </Dialog.Trigger>
-                    <Dialog.Content autofocus={false}>
+
+                    <Dialog.Content
+                      autofocus={false}
+                      class="max-h-[80vh] flex flex-col min-w-max"
+                    >
                       <Dialog.Header>
                         <Dialog.Title class="mb-4"
                           >{mod.name} 토글 수정</Dialog.Title
                         >
-                        <Dialog.Description>
+                      </Dialog.Header>
+
+                      <Dialog.Description
+                        class="flex-1 overflow-hidden flex flex-col"
+                      >
+                        <Table.Root>
+                          <Table.Header>
+                            <Table.Row>
+                              <Table.Head class="w-[100px]">section</Table.Head>
+                              <Table.Head>var</Table.Head>
+                              <Table.Head class="whitespace-nowrap"
+                                >cycle</Table.Head
+                              >
+                              <Table.Head>key</Table.Head>
+                              <Table.Head>back</Table.Head>
+                            </Table.Row>
+                          </Table.Header>
+                        </Table.Root>
+
+                        <div class="flex-1 overflow-y-auto max-h-[40vh]">
                           <Table.Root>
-                            <Table.Header>
-                              <Table.Row>
-                                <Table.Head class="w-[100px]"
-                                  >section</Table.Head
-                                >
-                                <Table.Head>var</Table.Head>
-                                <Table.Head class="whitespace-nowrap"
-                                  >cycle</Table.Head
-                                >
-                                <Table.Head>key</Table.Head>
-                              </Table.Row>
-                            </Table.Header>
                             <Table.Body>
                               {#each mod.ini.data as ini}
                                 <Table.Row>
-                                  <Table.Cell class="font-medium"
+                                  <Table.Cell class="font-medium w-[100px]"
                                     >{ini.sectionName}</Table.Cell
                                   >
                                   <Table.Cell>{ini.varName}</Table.Cell>
-                                  <Table.Cell>{ini.cycle}</Table.Cell>
+                                  <Table.Cell class="whitespace-nowrap"
+                                    >{ini.cycle}</Table.Cell
+                                  >
                                   <Table.Cell>
                                     <Input
                                       defaultValue={ini.key}
                                       autofocus={false}
                                       onchange={(e) => {
-                                        Mods.ini
+                                        ModsHelper.ini
                                           .update(
                                             mod.ini!.path,
                                             ini.sectionName,
                                             "key",
                                             e.currentTarget.value,
                                           )
-                                          .then(() => {
-                                            toast.success(
-                                              `토글 키가 변경되었습니다`,
-                                            );
-                                            $data.refetch();
-                                          })
-                                          .catch((e: any) => {
-                                            toast.error(
-                                              "토글 수정중 오류 발생",
-                                              {
-                                                description: e.message,
-                                              },
-                                            );
+                                          .then((resp) => {
+                                            if (resp) $data.refetch();
+                                          });
+                                      }}
+                                    />
+                                  </Table.Cell>
+                                  <Table.Cell>
+                                    <Input
+                                      defaultValue={ini.back}
+                                      autofocus={false}
+                                      onchange={(e) => {
+                                        ModsHelper.ini
+                                          .update(
+                                            mod.ini!.path,
+                                            ini.sectionName,
+                                            "back",
+                                            e.currentTarget.value,
+                                          )
+                                          .then((resp) => {
+                                            if (resp) $data.refetch();
                                           });
                                       }}
                                     />
@@ -309,8 +442,8 @@
                               {/each}
                             </Table.Body>
                           </Table.Root>
-                        </Dialog.Description>
-                      </Dialog.Header>
+                        </div>
+                      </Dialog.Description>
                     </Dialog.Content>
                   </Dialog.Root>
                 {/if}
@@ -325,59 +458,35 @@
                   <FolderOpenIcon size={20} />
                 </button>
 
-                <AlertDialog.Root>
-                  <AlertDialog.Trigger
-                    class="rounded-lg p-0.5 hover:bg-muted/50 duration-200"
-                    onclick={(e) => {
-                      e.stopPropagation();
-                    }}
-                  >
-                    <Trash2Icon size={20} class="text-destructive" />
-                  </AlertDialog.Trigger>
-                  <AlertDialog.Content>
-                    <AlertDialog.Header>
-                      <AlertDialog.Title>모드 삭제</AlertDialog.Title>
-                      <AlertDialog.Description>
-                        정말 이 모드를 삭제할까요?
-                      </AlertDialog.Description>
-                    </AlertDialog.Header>
-                    <AlertDialog.Footer>
-                      <AlertDialog.Cancel>취소</AlertDialog.Cancel>
-                      <AlertDialog.Action
-                        class={buttonVariants({ variant: "destructive" })}
-                        onclick={() => {
-                          FSH.deletePath(mod.path)
-                            .then(() => {
-                              toast(`${mod.name} 모드가 삭제되었습니다`);
-                              $data.refetch();
-                            })
-                            .catch((e: any) => {
-                              toast.error("모드 삭제중 오류 발생", {
-                                description: e.message,
-                              });
-                            });
-                        }}>계속</AlertDialog.Action
-                      >
-                    </AlertDialog.Footer>
-                  </AlertDialog.Content>
-                </AlertDialog.Root>
+                <button
+                  class="rounded-lg p-0.5 hover:bg-muted/50 duration-200"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    deleteDialog = { open: true, mod };
+                  }}
+                >
+                  <Trash2Icon size={20} class="text-destructive" />
+                </button>
               </div>
             </div>
 
             <div
               class={cn(
-                "relative flex justify-center items-center aspect-square duration-200 transition-all overflow-hidden",
+                "relative flex justify-center items-center aspect-square duration-200 transition-all overflow-hidden group",
               )}
               ondragover={(e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 setDragState(mod.path, true);
               }}
               ondragleave={(e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 setDragState(mod.path, false);
               }}
               ondrop={async (e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 setDragState(mod.path, false);
 
                 const files = e.dataTransfer?.files;
@@ -432,18 +541,21 @@
                   alt={mod.name}
                   loading="lazy"
                 />
-                <div class="absolute left-1 top-1 z-20">
+                <div
+                  class="absolute left-1 top-1 z-20 opacity-0 group-hover:opacity-100 duration-200"
+                >
                   <PreviewModal
                     src={`nahida://external-image?path=${encodeURIComponent(`${mod.preview.path}`)}&t=${timestamp}`}
                     alt={`${mod.name} Modal`}
-                    onOpenChange={() => {}}
                   />
                 </div>
 
                 <div
                   class={cn(
                     "absolute inset-0 bg-black/60 z-30 flex items-center justify-center pointer-events-none duration-200",
-                    dragStates.get(mod.path) ? "opacity-100" : "opacity-0",
+                    previewDragState.get(mod.path)
+                      ? "opacity-100"
+                      : "opacity-0",
                   )}
                 >
                   <div class="text-white text-center">
@@ -492,7 +604,9 @@
                 <div
                   class={cn(
                     "absolute inset-0 bg-black/60 z-30 flex items-center justify-center pointer-events-none duration-200",
-                    dragStates.get(mod.path) ? "opacity-100" : "opacity-0",
+                    previewDragState.get(mod.path)
+                      ? "opacity-100"
+                      : "opacity-0",
                   )}
                 >
                   <div class="text-white text-center">
@@ -504,10 +618,47 @@
             </div>
           </div>
         {/each}
-      </div>
+      {/if}
     </div>
-  {/if}
+  </div>
 </div>
+
+<AlertDialog.Root bind:open={deleteDialog.open}>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>모드 삭제</AlertDialog.Title>
+      <AlertDialog.Description>
+        정말 이 모드를 삭제할까요?
+      </AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer>
+      <AlertDialog.Cancel>취소</AlertDialog.Cancel>
+      <AlertDialog.Action
+        class={buttonVariants({ variant: "destructive" })}
+        onclick={() => {
+          if (!deleteDialog.mod) {
+            toast.warning("삭제할 모드를 찾을 수 없습니다");
+            return;
+          }
+
+          FSH.deletePath(deleteDialog.mod.path)
+            .then(() => {
+              toast(`${deleteDialog.mod!.name} 모드가 삭제되었습니다`);
+              $data.refetch();
+            })
+            .catch((e: any) => {
+              toast.error("모드 삭제중 오류 발생", {
+                description: e.message,
+              });
+            })
+            .finally(() => {
+              deleteDialogClear();
+            });
+        }}>계속</AlertDialog.Action
+      >
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>
 
 <AlertDialog.Root open={showOverwriteDialog}>
   <AlertDialog.Content>

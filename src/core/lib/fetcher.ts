@@ -1,57 +1,37 @@
-import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { auth } from "../services";
+import packageJson from "../../../package.json";
 
-interface FetcherOptions {
-  method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
-  headers?: Record<string, string>;
-  body?: any;
-  sessionToken?: string;
-  maxRedirects?: number;
-}
-
-interface FetcherResponse<T = any> {
+interface CustomResponse<T = any> {
   data: T;
   status: number;
   headers: Record<string, string>;
   ok: boolean;
 }
 
-async function fetcher<T = any>(url: string, options?: FetcherOptions): Promise<FetcherResponse<T>> {
-  const { method = "GET", headers = {}, body, sessionToken, maxRedirects } = options || {};
-
-  const defaultHeaders: Record<string, string> = {
-    'User-Agent': 'Nahida Desktop/0.0.1',
-    'Content-Type': 'application/json',
-  };
-
-  let token: string | null = sessionToken || null;
-  if (!token) {
-    token = await auth.session.get();
-  }
-
-  if (token) {
-    defaultHeaders['Cookie'] = `__Secure-nahida.session_token=${token}`;
-  }
-
-  const mergedHeaders = { ...defaultHeaders, ...headers };
-
-  const config: AxiosRequestConfig = {
-    method,
-    headers: mergedHeaders,
-    data: body,
+export function createApiClient(baseConfig: AxiosRequestConfig = {}) {
+  const instance: AxiosInstance = axios.create({
+    ...baseConfig,
     withCredentials: true,
-    validateStatus: (status) => {
-      return status >= 200 && status < 400;
-    },
-  };
+    validateStatus: (status) => status >= 200 && status < 400,
+  });
 
-  if (maxRedirects !== undefined) {
-    config.maxRedirects = maxRedirects;
-  }
+  instance.interceptors.request.use(async (config) => {
+    config.headers = config.headers || {};
+    config.headers['User-Agent'] = `Nahida Desktop/${packageJson.version}`;
+    config.headers['Content-Type'] = 'application/json';
 
-  try {
-    const response: AxiosResponse<T> = await axios(url, config);
+    if (!config.headers['Cookie'] || !config.headers['Cookie'].includes('__Secure-nahida.session_token')) {
+      const token = await auth.session.get();
+      if (token) {
+        config.headers['Cookie'] = `__Secure-nahida.session_token=${token}`;
+      }
+    }
 
+    return config;
+  });
+
+  instance.interceptors.response.use(async (response) => {
     const setCookieHeader = response.headers['set-cookie'];
     if (setCookieHeader) {
       const cookieArray = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
@@ -66,19 +46,92 @@ async function fetcher<T = any>(url: string, options?: FetcherOptions): Promise<
         }
       }
     }
+    return response;
+  });
 
-    return {
-      data: response.data,
-      status: response.status,
-      headers: response.headers as Record<string, string>,
-      ok: response.status >= 200 && response.status < 300
-    };
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.response) {
-      throw new Error(`HTTP error! Status: ${error.response.status}`);
+  async function request<T = any>(
+    url: string,
+    config: AxiosRequestConfig = {}
+  ): Promise<CustomResponse<T>> {
+    try {
+      const response: AxiosResponse<T> = await instance(url, config);
+
+      return {
+        data: response.data,
+        status: response.status,
+        headers: response.headers as Record<string, string>,
+        ok: response.status >= 200 && response.status < 300,
+      };
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        return {
+          data: error.response.data as T,
+          status: error.response.status,
+          headers: error.response.headers as Record<string, string>,
+          ok: false,
+        };
+      }
+
+      throw error;
     }
-    throw error;
   }
+
+  const get = <T = any>(url: string, config?: AxiosRequestConfig) =>
+    request<T>(url, { ...config, method: 'GET' });
+
+  const post = <T = any>(url: string, data?: any, config?: AxiosRequestConfig) =>
+    request<T>(url, { ...config, method: 'POST', data });
+
+  const put = <T = any>(url: string, data?: any, config?: AxiosRequestConfig) =>
+    request<T>(url, { ...config, method: 'PUT', data });
+
+  const del = <T = any>(url: string, config?: AxiosRequestConfig) =>
+    request<T>(url, { ...config, method: 'DELETE' });
+
+  const patch = <T = any>(url: string, data?: any, config?: AxiosRequestConfig) =>
+    request<T>(url, { ...config, method: 'PATCH', data });
+
+  return {
+    instance,
+    request,
+    get,
+    post,
+    put,
+    delete: del,
+    patch,
+  };
 }
 
-export { fetcher };
+export const apiClient = createApiClient();
+export const api = apiClient.instance;
+
+export async function fetcher<T = any>(url: string, options?: {
+  method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+  headers?: Record<string, string>;
+  body?: any;
+  sessionToken?: string;
+  maxRedirects?: number;
+}): Promise<CustomResponse<T>> {
+  const { method = "GET", headers = {}, body, sessionToken, maxRedirects } = options || {};
+
+  console.log('fetcher handled', url);
+
+  const config: AxiosRequestConfig = {
+    method,
+    headers,
+    data: body,
+  };
+
+  if (sessionToken) {
+    config.headers = {
+      ...config.headers,
+      Cookie: `__Secure-nahida.session_token=${sessionToken}`
+    };
+  }
+
+  if (maxRedirects !== undefined) {
+    config.maxRedirects = maxRedirects;
+  }
+
+  return apiClient.request<T>(url, config);
+}

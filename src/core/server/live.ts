@@ -1,11 +1,22 @@
 import { BrowserWindow } from "electron";
 import { Elysia, t } from "elysia";
+import { mainWindow } from "../../main/window";
 
 const live = (app: Elysia) =>
   app
-    .get('/download', async () => {
-      const win = new BrowserWindow({ width: 800, height: 600 })
-      win.loadURL('https://github.com');
+    .post('/download', async ({ body }) => {
+      const { url, name } = body;
+
+      mainWindow.show();
+      mainWindow.moveTop();
+      mainWindow.focus();
+
+      console.log(url, name);
+    }, {
+      body: t.Object({
+        url: t.String(),
+        name: t.String()
+      })
     })
 
 export default live;

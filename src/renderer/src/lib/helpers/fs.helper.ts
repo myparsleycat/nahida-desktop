@@ -1,7 +1,7 @@
 // src/renderer/src/lib/helpers/fs.helper.ts
 
 import type { OpenDialogOptions } from "electron";
-import type { ReadDirectoryOptions } from "../../../../types/fs.types";
+import type { ReadDirectoryOptions } from "@shared/types/fs.types";
 
 interface FolderEventData {
   type: 'added' | 'renamed' | 'removed';

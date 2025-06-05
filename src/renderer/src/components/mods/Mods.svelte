@@ -1,44 +1,48 @@
 <script lang="ts">
   import { Button, buttonVariants } from "$lib/components/ui/button";
-  import * as Resizable from "$lib/components/ui/resizable";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Mods } from "@/lib/helpers";
-  import { cn } from "@/lib/utils";
-  import { Input } from "@/lib/components/ui/input";
-  import { Label } from "@/lib/components/ui/label";
+  import * as Resizable from "$lib/components/ui/resizable/index";
+  import * as Dialog from "$lib/components/ui/dialog/index";
+  import { ModsHelper } from "$lib/helpers";
+  import { cn } from "$lib/utils";
+  import { Input } from "$lib/components/ui/input";
+  import { Label } from "$lib/components/ui/label";
   import {
     ArrowUpFromLineIcon,
     ChevronRightIcon,
     ChevronsDownUpIcon,
     DotIcon,
     EditIcon,
+    FolderOpenIcon,
     FolderPenIcon,
     FolderPlusIcon,
     FolderSyncIcon,
     SearchIcon,
     Trash2Icon,
     WrenchIcon,
-  } from "lucide-svelte";
+  } from "@lucide/svelte";
   import { toast } from "svelte-sonner";
   import Folder from "./Folder.svelte";
-  import * as ContextMenu from "$lib/components/ui/context-menu";
+  import * as ContextMenu from "$lib/components/ui/context-menu/index";
   import autoAnimate from "@formkit/auto-animate";
   import { _ } from "svelte-i18n";
-  import Separator from "@/lib/components/ui/separator/separator.svelte";
-  import type { ModFolders } from "../../../../types/fs.types";
+  import Separator from "$lib/components/ui/separator/separator.svelte";
+  import type { ModFolders } from "@shared/types/fs.types";
   import { createQuery } from "@tanstack/svelte-query";
-  import { FSH } from "@/lib/helpers/fs.helper";
+  import { FSH } from "$lib/helpers/fs.helper";
 
-  let size = Mods.resizableSize;
-  let currentFolderPath = Mods.currentFolderPath;
-  let folders = Mods.folders;
-  // let folderChildren = Mods.folderChildren;
-  let currentCharPath = Mods.currentCharPath;
+  let size = ModsHelper.resizableSize;
+  let currentFolderPath = ModsHelper.currentFolderPath;
+  let folders = ModsHelper.folders;
+  // let folderChildren = ModsHelper.folderChildren;
+  let currentCharPath = ModsHelper.currentCharPath;
 
   let open = $state(false);
   let temp_name = $state<string | null>(null);
   let temp_path = $state<string | null>(null);
   let searchQuery = $state("");
+
+  let draggedIdx = $state<number | null>(null);
+  let dropTargetIdx = $state<number | null>(null);
 
   const clear_temp = () => {
     temp_name = null;
@@ -46,45 +50,45 @@
   };
 
   const getResizableSize = async () => {
-    size.set(await Mods.ui.resizable.get());
+    size.set(await ModsHelper.ui.resizable.get());
   };
 
   const getFolderChildren = async (path: string) => {
-    const resp = await Mods.getDirectChildren(path, { recursive: 1 });
+    const resp = await ModsHelper.folder.read(path);
     const filteredResp = resp.filter((item) => !item.ini);
     return filteredResp;
     // folderChildren.set(filteredRes);
   };
 
   const getFolders = async () => {
-    folders.set(await Mods.folder.getAll());
+    folders.set(await ModsHelper.folder.getAll());
   };
 
   const routing = async (folder: ModFolders) => {
-    currentCharPath.set(folder.path);
-
-    if ($currentCharPath === $currentFolderPath) {
-      currentFolderPath.set("");
-    } else if ($currentFolderPath !== folder.path) {
-      currentFolderPath.set(folder.path);
+    if ($currentFolderPath === folder.path) {
+      ModsHelper.clearPath();
+      return;
     }
+
+    currentCharPath.set(folder.path);
+    currentFolderPath.set(folder.path);
   };
 
   const data = $derived(
     createQuery({
-      queryKey: ["mods", $currentFolderPath],
+      queryKey: ["folders", $currentFolderPath],
       queryFn: async () => {
         if ($currentFolderPath) {
-          return await getFolderChildren($currentFolderPath);
+          return getFolderChildren($currentFolderPath);
         } else return [];
       },
       refetchOnWindowFocus: "always",
       refetchIntervalInBackground: true,
       refetchInterval: () => {
         if (typeof document !== "undefined" && document.hidden) {
-          return 60000 * 1; // 1분 (백그라운드)
+          return 5000; //
         }
-        return 10000; // 10초 (포그라운드)
+        return 2500; //
       },
     }),
   );
@@ -102,7 +106,7 @@
       minSize={20}
       maxSize={35}
       onResize={async (size) => {
-        Mods.ui.resizable.set(size);
+        ModsHelper.ui.resizable.set(size);
       }}
     >
       <div class="h-full w-full flex flex-col pt-2 pb-2 pl-2 pr-1 space-y-2">
@@ -123,20 +127,73 @@
         <div
           class="flex-col justify-center duration-200 space-y-1 select-none h-full overflow-y-auto overflow-x-hidden pr-1"
         >
-          {#each $folders as folder}
+          {#each $folders as folder, idx}
             <ContextMenu.Root>
               <ContextMenu.Trigger>
                 <button
-                  draggable="true"
+                  draggable={true}
                   class={cn(
-                    "flex gap-2 p-2 rounded-lg w-full hover:bg-muted duration-200 justify-between",
+                    "flex gap-2 p-2 rounded-lg w-full hover:bg-muted duration-200 justify-between transition-all group",
                     $currentFolderPath === folder.path && "bg-muted",
+                    draggedIdx === idx && "opacity-50",
+                    dropTargetIdx === idx && "border-t-2 border-blue-500",
                   )}
                   onclick={() => routing(folder)}
+                  ondragstart={(e) => {
+                    draggedIdx = idx;
+                    if (e.dataTransfer) {
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData("text/html", "");
+                    }
+                  }}
+                  ondragend={() => {
+                    draggedIdx = null;
+                    dropTargetIdx = null;
+                  }}
+                  ondragover={(e) => {
+                    e.preventDefault();
+                    if (e.dataTransfer) {
+                      e.dataTransfer.dropEffect = "move";
+                    }
+                  }}
+                  ondrop={(e) => {
+                    e.preventDefault();
+
+                    if (draggedIdx === null || draggedIdx === idx) {
+                      return;
+                    }
+
+                    const draggedFolder = $folders[draggedIdx];
+
+                    // 새로운 순서 계산 (0부터 시작하는 인덱스를 1부터 시작하는 순서로 변환)
+                    const newSequence = idx + 1;
+
+                    ModsHelper.folder
+                      .changeSeq(draggedFolder.path, newSequence)
+                      .then((resp) => {
+                        if (resp) getFolders();
+                      });
+
+                    draggedIdx = null;
+                    dropTargetIdx = null;
+                  }}
+                  tabindex="0"
                 >
                   <p>
                     {folder.name}
                   </p>
+
+                  <!-- svelte-ignore a11y_click_events_have_key_events -->
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <div
+                    class="rounded-lg duration-200 opacity-0 group-hover:opacity-100"
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      FSH.openPath(folder.path);
+                    }}
+                  >
+                    <FolderOpenIcon size={20} />
+                  </div>
                 </button>
               </ContextMenu.Trigger>
               <ContextMenu.Content>
@@ -163,10 +220,11 @@
                 <ContextMenu.Item
                   class="flex items-center gap-2 cursor-pointer"
                   onclick={() => {
-                    Mods.folder
+                    ModsHelper.folder
                       .delete(folder.path)
                       .then(() => {
                         toast.success("리스트에서 삭제되었습니다");
+                        ModsHelper.clearPath();
                         getFolders();
                       })
                       .catch((e: any) => {
@@ -189,7 +247,7 @@
               {#if folder.path === $currentFolderPath}
                 {#each $data.data! as char}
                   <button
-                    class="flex w-full items-center min-h-8"
+                    class="flex w-full items-center min-h-8 group pr-2"
                     onclick={() => {
                       currentCharPath.set(char.path);
                     }}
@@ -200,9 +258,22 @@
                         <ChevronRightIcon color="green" />
                       </div>
                     {/if}
-                    <p class="truncate overflow-hidden whitespace-nowrap">
+
+                    <p class="truncate">
                       {char.name}
                     </p>
+
+                    <!-- svelte-ignore a11y_click_events_have_key_events -->
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    <div
+                      class="absolute right-2 rounded-lg duration-200 opacity-0 group-hover:opacity-100"
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        FSH.openPath(char.path);
+                      }}
+                    >
+                      <FolderOpenIcon size={20} />
+                    </div>
                   </button>
                 {/each}
               {/if}
@@ -263,19 +334,15 @@
                       return;
                     }
 
-                    Mods.folder
+                    ModsHelper.folder
                       .create(temp_name, temp_path)
-                      .then(() => {
-                        getFolders().then(() => {
+                      .then((resp) => {
+                        if (resp) {
                           toast.success("생성되었습니다");
                           clear_temp();
                           open = false;
-                        });
-                      })
-                      .catch((e: any) => {
-                        toast.error("항목 생성중 오류 발생", {
-                          description: e.message,
-                        });
+                          getFolders();
+                        }
                       });
                   }}>생성</Button
                 >

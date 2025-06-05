@@ -3,7 +3,7 @@
 <script lang="ts">
   import { Auth, Main } from "$lib/helpers";
   import Cloud from "./Cloud.svelte";
-  import { LoaderIcon } from "lucide-svelte";
+  import { LoaderIcon } from "@lucide/svelte";
   import Login from "@/components/Login.svelte";
   import { onDestroy } from "svelte";
   import Layout from "./Layout.svelte";

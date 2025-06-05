@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { Switch } from "@/lib/components/ui/switch";
+  import { Switch } from "$lib/components/ui/switch";
   import { toast } from "svelte-sonner";
 
   let checked = $state(true);
 </script>
 
 <div
-  class="flex flex-col gap-3 border rounded-xl p-4 shadow hover:shadow-lg duration-200 dark:bg-zinc-950"
+  class="flex flex-col gap-3 border rounded-xl p-4 shadow hover:dark:shadow-none hover:shadow-lg duration-200 dark:bg-zinc-950"
 >
   <div class="space-y-6">
     <div class="flex flex-row justify-between items-center gap-14 min-h-10">

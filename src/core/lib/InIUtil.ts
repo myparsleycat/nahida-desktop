@@ -2,6 +2,7 @@
 
 export interface KeySwapConfig {
   key: string;
+  back?: string;
   cycle: number;
   values?: string[];
   type?: string;
@@ -10,13 +11,14 @@ export interface KeySwapConfig {
 export interface IniParseResult {
   sectionName: string;
   key: string;
+  back?: string;
   cycle: number;
   type: string;
   values: string[];
   varName: string;
 }
 
-class InIUtil {
+class InIUtilClass {
   isKeySection(sectionName: string) {
     return sectionName.startsWith('Key') && sectionName !== 'Key';
   }
@@ -58,6 +60,8 @@ class InIUtil {
 
         if (key === 'key') {
           tempResult[currentSection].key = value;
+        } else if (key === 'back') {
+          tempResult[currentSection].back = value;
         } else if (key === 'type' && value === 'cycle') {
           tempResult[currentSection].type = value;
         } else if (key.startsWith('$')) {
@@ -92,6 +96,10 @@ class InIUtil {
         type: section.type
       };
 
+      if (section.back !== undefined) {
+        result.back = section.back;
+      }
+
       if (section.values) {
         result.values = section.values;
         result.varName = section.varName;
@@ -103,7 +111,7 @@ class InIUtil {
     return resultArray;
   }
 
-  update(content: string, section: string, key: "key", newValue: string) {
+  update(content: string, section: string, key: "key" | "back", newValue: string) {
     const lines = content.split(/\r?\n/);
     let currentSection = '';
     let inTargetSection = false;
@@ -121,7 +129,7 @@ class InIUtil {
 
       if (inTargetSection) {
         const keyValueMatch = line.match(/^([^=]+)=(.*)$/);
-        if (keyValueMatch && keyValueMatch[1].trim() === key) {
+        if (keyValueMatch && keyValueMatch[1].trim().toLowerCase() === key.toLowerCase()) {
           const indent = originalLine.match(/^(\s*)/)?.[1] || '';
           lines[i] = `${indent}${key} = ${newValue}`;
           break;
@@ -151,9 +159,14 @@ class InIUtil {
 
     const newSection = [
       `[${sectionName}]`,
-      `key = ${config.key}`,
-      `type = cycle`
+      `key = ${config.key}`
     ];
+
+    if (config.back !== undefined) {
+      newSection.push(`back = ${config.back}`);
+    }
+
+    newSection.push(`type = cycle`);
 
     if (config.values && config.values.length > 0) {
       const varName = `$swapvar${config.key.toLowerCase()}`;
@@ -213,6 +226,5 @@ class InIUtil {
   }
 }
 
-
-const iniutil = new InIUtil();
+const iniutil = new InIUtilClass();
 export { iniutil };

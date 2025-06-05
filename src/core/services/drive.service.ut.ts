@@ -1,10 +1,15 @@
+import { api } from '@core/lib/fetcher';
+import { DirDownloadUrl } from '@core/const';
+import { fss } from './fs.service';
+import fse from 'fs-extra';
+import { gunzipAsync, zstdDecompress } from '@core/utils';
+
 export const GetDirDownloadWithStream = async (params: {
-  uuid: string;
+  id: string;
   linkId?: string;
   password?: string;
-  abortSignal: AbortSignal;
 }) => {
-  const { uuid, linkId, password, abortSignal } = params;
+  const { id, linkId, password } = params;
 
   const downloadData = {
     totalBytes: 0,
@@ -24,7 +29,7 @@ export const GetDirDownloadWithStream = async (params: {
     }>
   };
 
-  const queryParams = new URLSearchParams({ uuid });
+  const queryParams = new URLSearchParams({ uuid: id });
   if (linkId) queryParams.append('linkId', linkId);
   if (password) queryParams.append('password', password);
 
@@ -44,82 +49,93 @@ export const GetDirDownloadWithStream = async (params: {
       parentId: string | null;
       name: string;
     }>;
-  }>((resolve, reject) => {
-    const eventSource = new EventSource(`/api/akasha/dir/download?${queryParams.toString()}`);
+  }>(async (resolve, reject) => {
+    const url = DirDownloadUrl + `?${queryParams.toString()}`;
 
-    const onAbort = () => {
-      eventSource.close();
-      reject(new Error("Download aborted"));
-    };
+    let buffer = '';
 
-    if (abortSignal.aborted) {
-      onAbort();
-      return;
-    }
+    try {
+      const response = await api.get(url, {
+        headers: { 'Accept': 'text/event-stream' },
+        responseType: 'stream'
+      });
 
-    abortSignal.addEventListener('abort', onAbort);
+      response.data.on('data', (chunk: Buffer) => {
+        const chunkString = chunk.toString();
+        buffer += chunkString;
 
-    // eventSource.addEventListener('status', (event: MessageEvent) => {
-    //   try {
-    //     const data = JSON.parse(event.data);
-    //     console.log('Status:', data.message);
-    //   } catch (err) {
-    //     console.error('파싱 오류:', err);
-    //   }
-    // });
+        const events = buffer.split('\n\n');
+        // 마지막 조각은 불완전할 수 있으므로 버퍼에 보관
+        buffer = events.pop() || '';
 
-    eventSource.addEventListener('dirs', (event: MessageEvent) => {
-      try {
-        const dirs = JSON.parse(event.data);
-        downloadData.dirs = dirs;
-      } catch (err) {
-        console.error('디렉토리 정보 파싱 오류:', err);
-      }
-    });
+        for (const event of events) {
+          if (!event.trim()) continue;
 
-    eventSource.addEventListener('files', (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data);
-        downloadData.files = downloadData.files.concat(data.chunk);
-      } catch (err) {
-        console.error('파일 정보 파싱 오류:', err);
-      }
-    });
+          const lines = event.split('\n');
+          const eventType = lines[0].substring(7); // 'event: ' 제거
+          const dataLine = lines.find(line => line.startsWith('data: '));
 
-    eventSource.addEventListener('metadata', (event: MessageEvent) => {
-      try {
-        const metadata = JSON.parse(event.data);
-        downloadData.totalBytes = metadata.totalBytes;
-      } catch (err) {
-        console.error('메타데이터 파싱 오류:', err);
-      }
-    });
+          if (!dataLine) continue;
 
-    eventSource.addEventListener('complete', () => {
-      eventSource.close();
-      abortSignal.removeEventListener('abort', onAbort);
-      resolve(downloadData);
-    });
+          const dataString = dataLine.substring(6); // 'data: ' 제거
 
-    eventSource.addEventListener('error', (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data);
-        eventSource.close();
-        abortSignal.removeEventListener('abort', onAbort);
-        reject(new Error(data.message));
-      } catch (err) {
-        console.error('오류 이벤트 파싱 오류:', err);
-        eventSource.close();
-        abortSignal.removeEventListener('abort', onAbort);
+          try {
+            const data = JSON.parse(dataString);
+
+            switch (eventType) {
+              case 'dirs':
+                downloadData.dirs = data.map((dir: any) => ({
+                  uuid: dir.uuid,
+                  parentId: dir.parentId || null,
+                  name: dir.name
+                }));
+                break;
+
+              case 'files':
+                if (data.chunk && Array.isArray(data.chunk)) {
+                  downloadData.files.push(...data.chunk.map((file: any) => ({
+                    uuid: file.uuid,
+                    fileId: file.fileId,
+                    parentId: file.parentId || null,
+                    name: file.name,
+                    size: file.size,
+                    compAlg: file.compAlg,
+                    url: file.url
+                  })));
+                }
+                break;
+
+              case 'metadata':
+                downloadData.totalBytes = data.totalBytes || 0;
+                break;
+
+              case 'complete':
+                if (data.success) {
+                  resolve(downloadData);
+                } else {
+                  reject(new Error("Download failed"));
+                }
+                break;
+            }
+          } catch (e) {
+            console.error('Error parsing event data:', e);
+          }
+        }
+      });
+
+      response.data.on('error', (err: Error) => {
         reject(err);
-      }
-    });
+      });
 
-    eventSource.onerror = (error) => {
-      console.error('SSE 연결 오류:', error);
-      eventSource.close();
-      abortSignal.removeEventListener('abort', onAbort);
-      reject(new Error('서버 연결 오류가 발생했습니다'));
-    };
+      response.data.on('end', () => {
+        if (downloadData.files.length > 0 || downloadData.dirs.length > 0) {
+          resolve(downloadData);
+        } else {
+          reject(new Error("Download ended without complete event"));
+        }
+      });
+    } catch (err) {
+      reject(err);
+    }
   });
 };
