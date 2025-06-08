@@ -644,7 +644,9 @@
           FSH.deletePath(deleteDialog.mod.path)
             .then((resp) => {
               if (resp) {
-                toast(`${deleteDialog.mod!.name} 모드가 삭제되었습니다`);
+                toast.success(
+                  `${deleteDialog.mod!.name} 모드가 삭제되었습니다`,
+                );
                 $data.refetch();
               }
             })

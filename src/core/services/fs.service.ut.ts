@@ -1,4 +1,4 @@
-import { fss } from "./fs.service";
+import { FSService } from "./fs.service";
 
 export interface DirInfo {
   uuid: string;
@@ -60,7 +60,7 @@ export async function createDirectoryStructure(
 
   for (const uuid in dirPaths) {
     if (uuid === rootId) continue; // 루트 디렉토리는 이미 생성됨
-    await fss.mkdir(dirPaths[uuid], { recursive: true });
+    await FSService.mkdir(dirPaths[uuid], { recursive: true });
     console.log("디렉토리 생성:", dirPaths[uuid]);
   }
 

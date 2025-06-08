@@ -4,6 +4,7 @@ import Seven from 'node-7z';
 import AdmZip from 'adm-zip';
 import unrar from 'node-unrar-js';
 import iconv from 'iconv-lite';
+import { FSService } from '@core/services';
 
 export async function extractFile({
   filePath, outputPath, delAfter
@@ -19,7 +20,10 @@ export async function extractFile({
     const fileName = path.basename(filePath, fileExt);
 
     if (!outputPath) {
-      outputPath = path.join(path.dirname(filePath), fileName);
+      const baseDir = path.dirname(filePath);
+      outputPath = await FSService.generateUniqueFileName(baseDir, fileName);
+    } else {
+      outputPath = await FSService.generateUniqueFileName(path.dirname(outputPath), path.basename(outputPath));
     }
 
     fs.ensureDirSync(outputPath);
@@ -64,7 +68,7 @@ async function processNestedArchives(dirPath: string): Promise<void> {
         const fileExt = path.extname(file).toLowerCase();
         if (['.zip', '.rar', '.7z'].includes(fileExt)) {
           const extractDirName = file.slice(0, file.lastIndexOf('.'));
-          const extractDirPath = path.join(dirPath, extractDirName);
+          const extractDirPath = await FSService.generateUniqueFileName(dirPath, extractDirName);
 
           fs.ensureDirSync(extractDirPath);
 
@@ -125,7 +129,14 @@ async function handleSingleRootFolder(
     for (const file of files) {
       const srcPath = path.join(rootFolderPath, file);
       const destPath = path.join(outputPath, file);
-      fs.moveSync(srcPath, destPath, { overwrite: true });
+
+      let uniqueDestPath = destPath;
+      try {
+        await fs.access(destPath);
+        uniqueDestPath = await FSService.generateUniqueFileName(outputPath, file);
+      } catch { }
+
+      fs.moveSync(srcPath, uniqueDestPath, { overwrite: false });
     }
   }
 

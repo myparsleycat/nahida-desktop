@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
-import { auth } from "../services";
+import { AuthService } from "../services";
 import packageJson from "../../../package.json";
 import { is } from '@electron-toolkit/utils';
 
@@ -23,7 +23,7 @@ export function createApiClient(baseConfig: AxiosRequestConfig = {}) {
     config.headers['Content-Type'] = 'application/json';
 
     if (!config.headers['Cookie'] || !config.headers['Cookie'].includes('__Secure-nahida.session_token')) {
-      const token = await auth.session.get();
+      const token = await AuthService.session.get();
       if (token) {
         config.headers['Cookie'] = `__Secure-nahida.session_token=${token}`;
       }
@@ -41,7 +41,7 @@ export function createApiClient(baseConfig: AxiosRequestConfig = {}) {
         if (cookie.includes('__Secure-nahida.session_token=')) {
           const tokenMatch = cookie.match(/__Secure-nahida\.session_token=([^;]+)/);
           if (tokenMatch && tokenMatch[1]) {
-            await auth.session.set(tokenMatch[1]);
+            await AuthService.session.set(tokenMatch[1]);
             break;
           }
         }

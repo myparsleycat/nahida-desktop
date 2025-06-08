@@ -1,5 +1,5 @@
 appId: com.nahida.app
-productName: NahidaDesktop
+productName: Nahida Desktop
 directories:
   buildResources: build
 files:
@@ -13,14 +13,15 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: NahidaDesktop
+  executableName: Nahida Desktop
 nsis:
-  artifactName: NahidaDesktop Setup ${version}.${ext}
+  artifactName: Nahida Desktop Setup ${version}.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: Uninstall ${productName}
   createDesktopShortcut: always
   oneClick: false
   allowToChangeInstallationDirectory: true
+  include: build/installer.nsh
 
 mac:
   entitlementsInherit: build/entitlements.mac.plist

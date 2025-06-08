@@ -1,4 +1,5 @@
 // src/core/ipc/index.ts
+
 import { ipcRenderer, ipcMain } from 'electron';
 import { ServiceRegistry } from './registry';
 import {
@@ -8,7 +9,8 @@ import {
     defineNahidaChannels, injectNahidaHandlers,
     defineDriveChannels, injectDriveHandlers,
     defineToastChannels, injectToastHandlers,
-    defineWindowChannels
+    defineWindowChannels, defineRendererChannels,
+    injectRendererHandlers,
 } from './channels';
 import type { Services } from './types';
 
@@ -30,20 +32,22 @@ export class IPCManager {
         defineDriveChannels(rootGroup);
         defineToastChannels(rootGroup);
         defineWindowChannels(rootGroup);
+        defineRendererChannels(rootGroup);
     }
 
     injectServiceHandlers(services: Services): void {
-        const { auth, fss, ADS, mods, NahidaService } = services;
+        const { AuthService, FSService, DriveService, ModsService, NahidaService } = services;
 
-        injectAuthHandlers(this.registry, auth);
-        injectFsHandlers(this.registry, fss);
-        injectModsHandlers(this.registry, mods);
+        injectAuthHandlers(this.registry, AuthService);
+        injectFsHandlers(this.registry, FSService);
+        injectModsHandlers(this.registry, ModsService);
         injectNahidaHandlers(this.registry, NahidaService);
-        injectDriveHandlers(this.registry, ADS);
+        injectDriveHandlers(this.registry, DriveService);
         injectToastHandlers(this.registry);
     }
 
     registerServices(ipcMainInstance: typeof ipcMain): void {
+        injectRendererHandlers(this.registry);
         this.registry.registerServices(ipcMainInstance);
     }
 
@@ -56,22 +60,32 @@ export class IPCManager {
     }
 }
 
-// 싱글톤 인스턴스
 const ipcManager = new IPCManager();
 export { ipcManager };
 export const IPC_CHANNELS = ipcManager.getChannelConstants();
+export { RendererCallManager } from './channels/renderer';
 
-// main.ts에서 사용
+// main.ts 에서 사용
 export const registerServices = async (ipcMainInstance: typeof ipcMain) => {
-    const { auth, fss, ADS } = await import('@core/services');
-    const { mods } = await import('@core/services/mods.service');
-    const { NahidaService } = await import('@core/services/nahida.service');
+    const {
+        AuthService,
+        FSService,
+        DriveService,
+        ModsService,
+        NahidaService
+    } = await import('@core/services');
 
-    ipcManager.injectServiceHandlers({ auth, fss, ADS, mods, NahidaService });
+    ipcManager.injectServiceHandlers({
+        AuthService,
+        FSService,
+        DriveService,
+        ModsService,
+        NahidaService
+    });
     ipcManager.registerServices(ipcMainInstance);
 };
 
-// preload.ts에서 사용
+// preload.ts 에서 사용
 export const createApiInterface = () => {
     return ipcManager.createApiInterface(ipcRenderer);
 };

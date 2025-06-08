@@ -8,6 +8,7 @@
   import { ModsHelper } from "./lib/helpers";
   import { QueryClientProvider } from "@tanstack/svelte-query";
   import { queryClient } from "./queryClient";
+  import { CharPathSelector } from "./lib/stores/global.store";
 
   let listeners: (() => void)[] = [];
 
@@ -53,7 +54,26 @@
       },
     );
     listeners.push(toastListener);
+
+    const charPathRequestListener = window.api.renderer.requestCharPath(
+      async (data: any) => {
+        const { requestId } = data;
+        const result = await CharPathSelector.open();
+
+        window.api.renderer.charPathResponse(requestId, {
+          success: true,
+          data: result,
+        });
+      },
+    );
+    listeners.push(charPathRequestListener);
   });
+
+  const closeCharPathSelectorListener =
+    window.api.renderer.closeCharPathSelector(async () => {
+      CharPathSelector.close();
+    });
+  listeners.push(closeCharPathSelectorListener);
 
   const clearListeners = () => {
     listeners.forEach((removeListener) => {

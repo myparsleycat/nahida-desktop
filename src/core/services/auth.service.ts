@@ -34,7 +34,7 @@ export interface GetSessionRes {
   user: user
 }
 
-class AuthService {
+class AuthServiceClass {
   session = {
     get: async () => {
       const encStr = await db.get("LocalStorage", "sess");
@@ -222,6 +222,6 @@ class AuthService {
 }
 
 
-const auth = new AuthService();
+const AuthService = new AuthServiceClass();
 
-export { auth };
+export { AuthService };
