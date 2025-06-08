@@ -9,7 +9,7 @@ export interface ToastMessage {
   duration?: number;
 }
 
-class ToastService {
+class ToastServiceClass {
   private mainWindow?: BrowserWindow;
 
   setMainWindow(window: BrowserWindow) {
@@ -43,4 +43,4 @@ class ToastService {
   }
 }
 
-export const Toast = new ToastService();
+export const ToastService = new ToastServiceClass();

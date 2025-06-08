@@ -1,7 +1,7 @@
 import path from "node:path";
 import crypto from 'node:crypto';
 import { nanoid } from 'nanoid';
-import { fss } from "@core/services";
+import { FSService } from "@core/services";
 
 interface ModProfileResponse {
   _idRow: number;
@@ -117,10 +117,10 @@ class GameBananaClass {
             throw new Error(`GamebananaHelpers: Failed to fetch ${file.url}, status: ${response.status}`);
           }
           const data = await response.arrayBuffer();
-          await fss.writeFile(filePath, Buffer.from(data));
+          await FSService.writeFile(filePath, Buffer.from(data));
 
           while (checksumAttempts < retryCount) {
-            const filebuf = await fss.readFile(filePath, 'buf');
+            const filebuf = await FSService.readFile(filePath, 'buf');
             const hash = crypto.createHash('md5').update(filebuf).digest('hex');
 
             if (hash === file.md5) {

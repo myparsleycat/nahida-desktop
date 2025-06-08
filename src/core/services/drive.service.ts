@@ -16,10 +16,10 @@ import {
 } from "@shared/types/drive.types";
 import { api, fetcher } from "@core/lib/fetcher";
 import { imageCache } from "@core/lib/imageCache";
-import { fss } from "./fs.service";
+import { FSService } from "./fs.service";
 import { TFS } from "./akasha.transfer.service";
 
-class AkashaDriveService {
+class DriveServiceClass {
   item = {
     get: async (id: string) => {
       const url = GetContentsUrl + id;
@@ -74,7 +74,7 @@ class AkashaDriveService {
     },
 
     download: async (id: string) => {
-      const save_path = await fss.select({ properties: ['openDirectory'] });
+      const save_path = await FSService.select({ properties: ['openDirectory'] });
       if (!save_path) return;
 
       await TFS.akasha.download.enqueue(id, save_path);
@@ -102,5 +102,4 @@ class AkashaDriveService {
   }
 }
 
-const ADS = new AkashaDriveService;
-export { ADS };
+export const DriveService = new DriveServiceClass;

@@ -1,9 +1,9 @@
 import { nanoid } from "nanoid";
-import { Toast } from "./toast.service";
+import { ToastService } from "./toast.service";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import fse from 'fs-extra';
-import { fss } from "./fs.service";
+import { FSService } from "./fs.service";
 import { ProxyUrl } from "@core/const";
 
 type DownloadStatus = 'pending' | 'downloading';
@@ -87,7 +87,7 @@ class NahidaTransferService {
 
         return true;
       } catch (err: any) {
-        Toast.error('대기열 등록 중 오류 발생', {
+        ToastService.error('대기열 등록 중 오류 발생', {
           description: err.message
         });
         return false;
@@ -205,8 +205,8 @@ class NahidaTransferService {
         await pipeline(readableStream, writeStream);
       } catch (e: any) {
         try {
-          if (await fss.exists(path)) {
-            await fss.deletePath(path);
+          if (await FSService.exists(path)) {
+            await FSService.deletePath(path);
           }
         } catch (cleanupError: any) {
           console.error('파일 정리 실패:', cleanupError.message);

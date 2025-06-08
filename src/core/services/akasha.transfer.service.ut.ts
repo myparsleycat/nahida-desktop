@@ -1,5 +1,5 @@
 import { gunzipAsync, zstdDecompress } from "@core/utils";
-import { fss } from "./fs.service";
+import { FSService } from "./fs.service";
 import { DirInfo, FileInfo } from "./fs.service.ut";
 
 export interface DownloadProgressCallback {
@@ -208,7 +208,7 @@ async function downloadCompressedFile(
         const respBuf = await resp.arrayBuffer();
         const buffer = Buffer.from(respBuf);
 
-        await fss.writeFile(compressedPath, buffer);
+        await FSService.writeFile(compressedPath, buffer);
         return;
       } catch (e) {
         clearTimeout(timeoutId);
@@ -265,7 +265,7 @@ async function decompressAllFiles(
         return { success: false, file, error };
       } finally {
         try {
-          await fss.deletePath(compressedPath);
+          await FSService.deletePath(compressedPath);
         } catch (error) {
           console.warn(`임시 파일 삭제 실패: ${compressedPath}`, error);
         }
@@ -281,7 +281,7 @@ async function decompressAllFiles(
 
 async function decompressFile(file: FileInfo, compressedPath: string, destPath: string): Promise<void> {
   try {
-    const compressedData = await fss.readFile(compressedPath, "buf");
+    const compressedData = await FSService.readFile(compressedPath, "buf");
     let buffer: Buffer;
 
     switch (file.compAlg) {
@@ -296,7 +296,7 @@ async function decompressFile(file: FileInfo, compressedPath: string, destPath: 
         buffer = compressedData;
     }
 
-    await fss.writeFile(destPath, buffer);
+    await FSService.writeFile(destPath, buffer);
   } catch (error) {
     throw new Error(`압축 해제 실패: ${error}`);
   }
