@@ -11,6 +11,11 @@
 
   let listeners: (() => void)[] = [];
 
+  const getSelectedCharPath = (): string => {
+    console.log("Renderer: getSelectedCharPath called");
+    return "test path";
+  };
+
   onMount(() => {
     const folderPathListener = window.api.mods.msg.currentFolderPathChanged(
       (resp) => {
@@ -53,6 +58,19 @@
       },
     );
     listeners.push(toastListener);
+
+    const charPathRequestListener = window.api.renderer.requestCharPath(
+      (data: any) => {
+        const { requestId } = data;
+        const result = getSelectedCharPath();
+
+        window.api.renderer.charPathResponse(requestId, {
+          success: true,
+          data: result,
+        });
+      },
+    );
+    listeners.push(charPathRequestListener);
   });
 
   const clearListeners = () => {

@@ -1,5 +1,8 @@
+// src/core/server/live.ts
+
 import { Elysia, t } from "elysia";
 import { mainWindow } from "@main/window";
+import { RendererCallManager } from "@core/ipc";
 
 const live = (app: Elysia) =>
   app
@@ -10,7 +13,9 @@ const live = (app: Elysia) =>
       mainWindow.moveTop();
       mainWindow.focus();
 
-      console.log(url, name);
+      const selectedCharPath = await RendererCallManager.getSelectedCharPath();
+      console.log('Selected character path:', selectedCharPath);
+
     }, {
       body: t.Object({
         url: t.String(),

@@ -1,4 +1,5 @@
 // src/core/ipc/index.ts
+
 import { ipcRenderer, ipcMain } from 'electron';
 import { ServiceRegistry } from './registry';
 import {
@@ -8,7 +9,8 @@ import {
     defineNahidaChannels, injectNahidaHandlers,
     defineDriveChannels, injectDriveHandlers,
     defineToastChannels, injectToastHandlers,
-    defineWindowChannels
+    defineWindowChannels, defineRendererChannels,
+    injectRendererHandlers,
 } from './channels';
 import type { Services } from './types';
 
@@ -30,6 +32,7 @@ export class IPCManager {
         defineDriveChannels(rootGroup);
         defineToastChannels(rootGroup);
         defineWindowChannels(rootGroup);
+        defineRendererChannels(rootGroup);
     }
 
     injectServiceHandlers(services: Services): void {
@@ -44,6 +47,7 @@ export class IPCManager {
     }
 
     registerServices(ipcMainInstance: typeof ipcMain): void {
+        injectRendererHandlers(this.registry);
         this.registry.registerServices(ipcMainInstance);
     }
 
@@ -59,8 +63,9 @@ export class IPCManager {
 const ipcManager = new IPCManager();
 export { ipcManager };
 export const IPC_CHANNELS = ipcManager.getChannelConstants();
+export { RendererCallManager } from './channels/renderer';
 
-// main.ts
+// main.ts 에서 사용
 export const registerServices = async (ipcMainInstance: typeof ipcMain) => {
     const {
         AuthService,
@@ -80,7 +85,7 @@ export const registerServices = async (ipcMainInstance: typeof ipcMain) => {
     ipcManager.registerServices(ipcMainInstance);
 };
 
-// preload.ts
+// preload.ts 에서 사용
 export const createApiInterface = () => {
     return ipcManager.createApiInterface(ipcRenderer);
 };
