@@ -3,12 +3,13 @@
   import { createInfiniteQuery } from "@tanstack/svelte-query";
   import { inview } from "svelte-inview";
   import PreviewModalButton from "../mods/PreviewModalEntry.svelte";
-  import { cn } from "$lib/utils";
+  import { cn, formatDate } from "$lib/utils";
   import { Badge } from "$lib/components/ui/badge";
   import { onDestroy } from "svelte";
   import { queryClient } from "@/queryClient";
   import { Skeleton } from "$lib/components/ui/skeleton";
-  import { Loader2Icon } from "@lucide/svelte";
+  import { DownloadIcon, Loader2Icon } from "@lucide/svelte";
+  import Button from "@/lib/components/ui/button/button.svelte";
 
   let timestamp = $state(Date.now());
 
@@ -59,8 +60,17 @@
                 decoding="async"
               />
               <div
-                class="absolute right-1 top-1 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                class="absolute right-1 top-1 z-[1] opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex space-x-1"
               >
+                <!-- <button
+                  class="p-1 hover:bg-black/50 rounded-lg duration-150"
+                  onclick={() => {
+                    NahidaHelper.startDownload(mod);
+                  }}
+                >
+                  <DownloadIcon />
+                </button> -->
+
                 <PreviewModalButton
                   src={`nahida://external-image?url=${encodeURIComponent(`${mod.preview_url}`)}&t=${timestamp}`}
                   alt={`${mod.title} Modal`}
@@ -97,17 +107,7 @@
                   </div>
                   <div class="mt-2">
                     <span class="text-sm text-white">
-                      {new Date(mod.uploaded_at * 1000).toLocaleString(
-                        "ko-KR",
-                        {
-                          year: "numeric",
-                          month: "long",
-                          day: "numeric",
-                          hour: "numeric",
-                          minute: "numeric",
-                          hour12: true,
-                        },
-                      )}
+                      {formatDate(new Date(mod.uploaded_at * 1000))}
                     </span>
                   </div>
                 </div>

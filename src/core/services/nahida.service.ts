@@ -1,6 +1,6 @@
 import { HelloModsUrl } from "@core/const";
 import { fetcher } from "@core/lib/fetcher";
-import { HelloModsResp, NahidaIPCHelloModsParams } from "@shared/types/nahida.types";
+import { HelloModsResp, Mod, NahidaIPCHelloModsParams } from "@shared/types/nahida.types";
 import { Toast } from "./toast.service";
 
 
@@ -21,6 +21,11 @@ class NahidaServiceClass {
       }
       return resp.data;
     }
+  }
+
+  async startDownload(mod: Mod, path: string) {
+    console.log('title', mod.uuid);
+    return true;
   }
 }
 

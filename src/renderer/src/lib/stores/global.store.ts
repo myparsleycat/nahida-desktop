@@ -31,33 +31,55 @@ export class PreviewModalClass {
     }
 }
 
-export class CharPathSelectorClass {
-    static store = writable<{
+class CharPathSelectorClass {
+    store = writable<{
         isOpen: boolean;
         selectedPath: string | null;
+        currentFolderPath: string;
+        currentCharPath: string;
     }>({
         isOpen: false,
-        selectedPath: null
+        selectedPath: null,
+        currentFolderPath: "",
+        currentCharPath: ""
     });
 
-    static open() {
-        CharPathSelectorClass.store.set({
+    private resolvePromise: ((path: string) => void) | null = null;
+
+    open(): Promise<string> {
+        this.store.set({
             isOpen: true,
-            selectedPath: null
+            selectedPath: null,
+            currentCharPath: "",
+            currentFolderPath: ""
+        });
+
+        return new Promise<string>((resolve) => {
+            this.resolvePromise = resolve;
         });
     }
 
-    static close() {
-        CharPathSelectorClass.store.set({
+    close() {
+        this.store.set({
             isOpen: false,
-            selectedPath: null
+            selectedPath: null,
+            currentCharPath: "",
+            currentFolderPath: ""
         });
     }
 
-    static setPath(path: string) {
-        CharPathSelectorClass.store.set({
-            isOpen: get(this.store).isOpen,
+    setPath(path: string) {
+        this.store.update(state => ({
+            ...state,
             selectedPath: path
-        })
+        }));
+
+        if (this.resolvePromise) {
+            this.resolvePromise(path);
+            this.resolvePromise = null;
+            this.close();
+        }
     }
 }
+
+export const CharPathSelector = new CharPathSelectorClass();

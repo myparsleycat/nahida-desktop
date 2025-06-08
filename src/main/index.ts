@@ -155,7 +155,7 @@ if (!gotTheLock) {
   });
 
   autoUpdater.on("download-progress", (pg) => {
-    if (!progressBar) return; // progressBar가 없으면 무시
+    if (!progressBar) return;
 
     const percent = Math.floor(pg.percent);
     progressBar.value = percent;

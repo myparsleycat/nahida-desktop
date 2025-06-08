@@ -1,4 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
+import { format } from "date-fns";
+import { enUS, ko, zhCN } from "date-fns/locale";
 import { cubicOut } from "svelte/easing";
 import type { TransitionConfig } from "svelte/transition";
 import { twMerge } from "tailwind-merge";
@@ -74,10 +76,10 @@ export const preventEvent = (e: DragEvent) => {
 };
 
 export const formatSize = (size: number | null): string => {
-	if (size === null) return `0 Bytes`;
+	if (size === null) return "";
 
 	if (size < 1024) {
-		return `${size} Bytes`;
+		return `${size} B`;
 	}
 	if (size < 1024 * 1024) {
 		const kbSize = size / 1024;
@@ -94,6 +96,17 @@ export const formatSize = (size: number | null): string => {
 
 	return `${(size / (1024 * 1024 * 1024 * 1024)).toFixed(2)} TB`;
 };
+
+export const formatDate = (date: Date) => {
+	return format(date, "PPPp", {
+		locale: (() => {
+			const lang = window.navigator.language;
+			if (lang.startsWith("ko")) return ko;
+			if (lang.startsWith("zh")) return zhCN;
+			return enUS;
+		})(),
+	})
+}
 
 export function isNameConflict(childs: { name: string }[], name: string) {
 	return childs.some(child => child.name === name);

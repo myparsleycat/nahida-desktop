@@ -1,7 +1,7 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
 import type { DirCreateManyResp, MoveManyResp, TrashManyResp } from '@shared/types/drive.types';
 import type { DirectChildren } from '@shared/types/mods.types';
-import type { HelloModsRespSuccessResp } from '@shared/types/nahida.types';
+import type { HelloModsRespSuccessResp, Mod } from '@shared/types/nahida.types';
 
 declare global {
   interface Window {
@@ -21,10 +21,10 @@ declare global {
         select: (opt: ElectronAPI.OpenDialogOptions) => Promise<string | null>
         readDir: (path: string, options: ReadDirectoryOptions) => Promise<FileInfo[]>
         readFile: (path: string) => Promise<ArrayBufferLike>
-        saveFile: (path: string, data: ArrayBuffer) => Promise<void>
+        writeFile: (path: string, data: ArrayBuffer) => Promise<boolean>
         getStat: (path: string) => Promise<Stats>
         openPath: (path: string) => Promise<void>
-        deletePath: (path: string) => Promise<void>
+        deletePath: (path: string) => Promise<boolean>
         getImgBase64: (path: string) => Promise<string>
         watchFolder: (path: string, options?: { recursive?: boolean, depth?: number }) => Promise<boolean>
         unwatchFolder: (path: string) => Promise<boolean>
@@ -77,6 +77,7 @@ declare global {
         get: {
           mods: (params: NahidaIPCHelloModsParams) => Promise<HelloModsRespSuccessResp>
         }
+        startDownload: (mod: Mod, path: string) => Promise<boolean>
       }
 
       drive: {

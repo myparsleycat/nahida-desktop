@@ -1,6 +1,5 @@
-import { BrowserWindow } from "electron";
 import { Elysia, t } from "elysia";
-import { mainWindow } from "../../main/window";
+import { mainWindow } from "@main/window";
 
 const live = (app: Elysia) =>
   app

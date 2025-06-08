@@ -1,10 +1,11 @@
 import { BrowserWindow, dialog, shell } from "electron";
-import fse, { MakeDirectoryOptions } from 'fs-extra';
+import fse, { type MakeDirectoryOptions } from 'fs-extra';
 import path from 'node:path';
 import type { ReadDirectoryOptions, FileInfo } from "@shared/types/fs.types";
 import { bufferToArrayBuffer, bufferToBase64 } from "@core/utils";
 import { fileTypeFromBuffer } from "file-type";
 import _Watcher from 'watcher';
+import { Toast } from "./toast.service";
 // @ts-ignore
 const Watcher = _Watcher.default;
 
@@ -44,7 +45,15 @@ class FileSystemService {
   }
 
   async writeFile(path: string, data: any, options?: fse.WriteFileOptions | BufferEncoding | string) {
-    await fse.writeFile(path, data, options);
+    try {
+      await fse.writeFile(path, data, options);
+      return true;
+    } catch (e: any) {
+      Toast.error('파일 저장중 오류 발생', {
+        description: e.message
+      });
+      return false;
+    }
   }
 
   async mkdir(path: string, options?: MakeDirectoryOptions) {
@@ -155,12 +164,24 @@ class FileSystemService {
   }
 
   async deletePath(path: string) {
-    const stat = await this.getStat(path);
+    let isDirectory = false;
 
-    if (stat.isDirectory()) {
-      await fse.rm(path, { recursive: true, force: true });
-    } else {
-      await fse.unlink(path);
+    try {
+      const stat = await this.getStat(path);
+
+      if (stat.isDirectory()) {
+        isDirectory = true;
+        await fse.rm(path, { recursive: true, force: true });
+      } else {
+        await fse.unlink(path);
+      }
+
+      return true;
+    } catch (e: any) {
+      Toast.error(`${isDirectory ? '폴더' : '파일'} 삭제중 오류가 발생했습니다`, {
+        description: e.message
+      });
+      return false;
     }
   }
   watchFolderChanges(folderPath: string, options: {

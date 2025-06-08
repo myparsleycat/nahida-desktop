@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { auth } from "../services";
 import packageJson from "../../../package.json";
+import { is } from '@electron-toolkit/utils';
 
 interface CustomResponse<T = any> {
   data: T;
@@ -114,7 +115,9 @@ export async function fetcher<T = any>(url: string, options?: {
 }): Promise<CustomResponse<T>> {
   const { method = "GET", headers = {}, body, sessionToken, maxRedirects } = options || {};
 
-  console.log('fetcher handled', url);
+  if (is.dev) {
+    console.log('fetcher handled', url);
+  }
 
   const config: AxiosRequestConfig = {
     method,
