@@ -15,6 +15,7 @@ import { createTray } from './tray';
 import { createMainWindow, mainWindow } from './window';
 import { registerServices } from '@core/ipc';
 // import { createOverlayWindow } from '../core/overlay';
+import AutoLaunch from 'auto-launch';
 
 let progressBar: ProgressBar | null = null;
 let initialized = false;
@@ -102,6 +103,17 @@ if (!gotTheLock) {
             // On macOS it's common to re-create a window in the app when the
             // dock icon is clicked and there are no other windows open.
             if (BrowserWindow.getAllWindows().length === 0) await createMainWindow();
+        });
+    })
+
+    app.on('ready', () => {
+        const autoLaunch = new AutoLaunch({
+            name: 'Nahida Desktop',
+            path: app.getPath('exe'),
+            isHidden: true
+        });
+        autoLaunch.isEnabled().then((isEnabled) => {
+            if (!isEnabled) autoLaunch.enable();
         });
     })
 
