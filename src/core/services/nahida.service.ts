@@ -23,7 +23,7 @@ class NahidaServiceClass {
         }
     }
 
-    async startDownload(mod: Mod, path: string) {
+    async startDownload(mod: Mod, _path: string) {
         console.log('title', mod.uuid);
         return true;
     }
