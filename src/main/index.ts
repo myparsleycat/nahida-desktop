@@ -5,7 +5,6 @@ import path from 'node:path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { db } from '@core/db';
 import { auth, Toast } from '@core/services';
-import { registerServices } from '@core/ipc-channels';
 import ElectronUpdater from 'electron-updater';
 const { autoUpdater } = ElectronUpdater;
 import ProgressBar from 'electron-progressbar';
@@ -14,6 +13,7 @@ import { CrashReportUrl } from '@core/const';
 import server from '@core/server';
 import { createTray } from './tray';
 import { createMainWindow, mainWindow } from './window';
+import { registerServices } from '@core/ipc-channels';
 // import { createOverlayWindow } from '../core/overlay';
 
 let progressBar: ProgressBar | null = null;
