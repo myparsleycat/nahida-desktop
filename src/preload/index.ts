@@ -2,7 +2,7 @@
 
 import { contextBridge, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import { createApiInterface } from '@core/ipc-channels';
+import { createApiInterface } from '@core/ipc';
 
 const api = createApiInterface();
 

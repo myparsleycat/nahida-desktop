@@ -13,7 +13,7 @@ import { CrashReportUrl } from '@core/const';
 import server from '@core/server';
 import { createTray } from './tray';
 import { createMainWindow, mainWindow } from './window';
-import { registerServices } from '@core/ipc-channels';
+import { registerServices } from '@core/ipc';
 // import { createOverlayWindow } from '../core/overlay';
 
 let progressBar: ProgressBar | null = null;
