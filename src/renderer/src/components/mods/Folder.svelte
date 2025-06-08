@@ -132,33 +132,32 @@
   };
 
   const savePreviewImage = async (path: string, _data: ArrayBuffer) => {
-    try {
-      await FSH.saveFile(path, _data);
-      toast.success("프리뷰 이미지가 저장되었습니다");
-      timestamp = Date.now();
-      $data.refetch();
-    } catch (e: any) {
-      toast.error("이미지 저장 중 오류 발생", {
-        description: e.message,
+    await FSH.writeFile(path, _data)
+      .then((resp) => {
+        if (resp) {
+          toast.success("프리뷰 이미지가 저장되었습니다");
+          timestamp = Date.now();
+          $data.refetch();
+        }
+      })
+      .catch((e: any) => {
+        toast.error("이미지 저장 중 오류 발생", {
+          description: e.message,
+        });
       });
-    }
   };
 
   const getImageFromClipboard = async (): Promise<File | null> => {
     try {
-      // 클립보드에서 데이터 가져오기
       const clipboardItems = await navigator.clipboard.read();
 
       for (const clipboardItem of clipboardItems) {
-        // 이미지 타입 확인
         const imageTypes = clipboardItem.types.filter((type) =>
           type.startsWith("image/"),
         );
 
         if (imageTypes.length > 0) {
-          // 이미지 데이터 추출
           const blob = await clipboardItem.getType(imageTypes[0]);
-          // Blob에서 File로 변환
           return new File(
             [blob],
             `clipboard-image.${imageTypes[0].split("/")[1]}`,
@@ -167,10 +166,11 @@
         }
       }
 
-      // 이미지가 없는 경우
       return null;
-    } catch (err) {
-      console.error("클립보드에서 이미지를 가져오는 중 오류 발생:", err);
+    } catch (err: any) {
+      toast.error("클립보드에서 이미지를 가져오는 중 오류 발생", {
+        description: err.message,
+      });
       throw err;
     }
   };
@@ -642,14 +642,11 @@
           }
 
           FSH.deletePath(deleteDialog.mod.path)
-            .then(() => {
-              toast(`${deleteDialog.mod!.name} 모드가 삭제되었습니다`);
-              $data.refetch();
-            })
-            .catch((e: any) => {
-              toast.error("모드 삭제중 오류 발생", {
-                description: e.message,
-              });
+            .then((resp) => {
+              if (resp) {
+                toast(`${deleteDialog.mod!.name} 모드가 삭제되었습니다`);
+                $data.refetch();
+              }
             })
             .finally(() => {
               deleteDialogClear();

@@ -2,7 +2,6 @@ import { gunzipAsync, zstdDecompress } from "@core/utils";
 import { fss } from "./fs.service";
 import { DirInfo, FileInfo } from "./fs.service.ut";
 
-// 진행상황 콜백 타입 정의
 export interface DownloadProgressCallback {
   (progress: {
     downloadedBytes: number;
@@ -16,7 +15,6 @@ export interface DownloadProgressCallback {
   }): void;
 }
 
-// AbortSignal 지원을 위한 옵션
 export interface DownloadOptions {
   progressCallback?: DownloadProgressCallback;
   abortSignal?: AbortSignal;
@@ -49,7 +47,6 @@ export async function downloadFiles(
   const failedFiles: { file: FileInfo, error: string }[] = [];
   const downloadedFiles: { file: FileInfo, compressedPath: string, destPath: string }[] = [];
 
-  // 속도 계산을 위한 변수들
   let startTime = Date.now();
   let lastProgressTime = Date.now();
   let lastDownloadedBytes = 0;
@@ -57,7 +54,6 @@ export async function downloadFiles(
   const queue = [...files];
   const activePromises = new Map();
 
-  // 진행상황 업데이트 함수
   const updateProgress = (currentFileName: string = '', phase: 'downloading' | 'decompressing' = 'downloading') => {
     if (!progressCallback) return;
     
@@ -82,9 +78,7 @@ export async function downloadFiles(
   };
 
   try {
-    // 다운로드 단계
     while (queue.length > 0 || activePromises.size > 0) {
-      // Abort 체크
       if (abortSignal?.aborted) {
         throw new Error('Download aborted by user');
       }
@@ -187,7 +181,6 @@ async function downloadCompressedFile(
   let lastError: Error | null = null;
 
   while (retries <= retryAttempts) {
-    // Abort 체크
     if (abortSignal?.aborted) {
       throw new Error('Download aborted by user');
     }
@@ -196,7 +189,7 @@ async function downloadCompressedFile(
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-      // 기존 abortSignal과 새로운 timeout controller 연결
+      // abortSignal과 새로운 timeout controller 연결
       if (abortSignal) {
         abortSignal.addEventListener('abort', () => controller.abort());
       }
@@ -255,7 +248,6 @@ async function decompressAllFiles(
   const totalFiles = files.length;
 
   for (let i = 0; i < files.length; i += batchSize) {
-    // Abort 체크
     if (abortSignal?.aborted) {
       throw new Error('Decompression aborted by user');
     }

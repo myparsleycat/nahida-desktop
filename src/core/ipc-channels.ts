@@ -4,7 +4,7 @@ import { ipcRenderer, ipcMain } from 'electron';
 import { Toast, ToastMessage } from './services/toast.service';
 import { ReadDirectoryOptions } from '@shared/types/fs.types';
 import type { ExternalToast } from "svelte-sonner";
-import { NahidaIPCHelloModsParams } from '@shared/types/nahida.types';
+import { Mod, NahidaIPCHelloModsParams } from '@shared/types/nahida.types';
 
 type ServiceHandler = (...args: any[]) => Promise<any> | any;
 type EventCallback = (state: any) => boolean | void;
@@ -166,7 +166,7 @@ export class ServiceRegistry {
     const fssGroup = this.rootGroup.addGroup('fss');
     fssGroup.addChannel('readDir');
     fssGroup.addChannel('readFile');
-    fssGroup.addChannel('saveFile');
+    fssGroup.addChannel('writeFile');
     fssGroup.addChannel('getStat');
     fssGroup.addChannel('openPath');
     fssGroup.addChannel('deletePath');
@@ -183,7 +183,7 @@ export class ServiceRegistry {
     // MODS
     const modsGroup = this.rootGroup.addGroup('mods');
     modsGroup.addChannel('clearPath');
-    
+
     const modsUiGroup = modsGroup.addGroup('ui');
     const modsUiResizableGroup = modsUiGroup.addGroup('resizable');
     const modsUiLayoutGroup = modsUiGroup.addGroup('layout');
@@ -191,36 +191,37 @@ export class ServiceRegistry {
     modsUiResizableGroup.addChannel('set');
     modsUiLayoutGroup.addChannel('get');
     modsUiLayoutGroup.addChannel('set');
-    
+
     const modsFolderGroup = modsGroup.addGroup('folder');
     modsFolderGroup.addChannel('getAll');
     modsFolderGroup.addChannel('create');
     modsFolderGroup.addChannel('delete');
     modsFolderGroup.addChannel('changeSeq');
     modsFolderGroup.addChannel('read');
-    
+
     const modsFolderDirGroup = modsFolderGroup.addGroup('dir');
     modsFolderDirGroup.addChannel('read');
     modsFolderDirGroup.addChannel('disableAll');
     modsFolderDirGroup.addChannel('enableAll');
-    
+
     const modGroup = modsGroup.addGroup('mod');
     modGroup.addChannel('read');
     modGroup.addChannel('toggle');
-    
+
     const iniGroup = modsGroup.addGroup('ini');
     iniGroup.addChannel('parse');
     iniGroup.addChannel('update');
-    
+
     const intxGroup = modsGroup.addGroup('intx');
     intxGroup.addChannel('drop');
-    
+
     const modsMsgGroup = modsGroup.addGroup('msg');
     modsMsgGroup.addChannel('currentCharPathChanged', undefined, true, 'current-char-path-changed');
     modsMsgGroup.addChannel('currentFolderPathChanged', undefined, true, 'current-folder-path-changed');
 
     // NAHIDA
     const nahidaGroup = this.rootGroup.addGroup('nahida');
+    nahidaGroup.addChannel('startDownload');
     const nahidaGetGroup = nahidaGroup.addGroup('get');
     nahidaGetGroup.addChannel('mods');
 
@@ -231,10 +232,10 @@ export class ServiceRegistry {
     driveItemGroup.addChannel('move');
     driveItemGroup.addChannel('rename');
     driveItemGroup.addChannel('trash_many');
-    
+
     const driveItemDirGroup = driveItemGroup.addGroup('dir');
     driveItemDirGroup.addChannel('create');
-    
+
     const driveItemDownloadGroup = driveItemGroup.addGroup('download');
     driveItemDownloadGroup.addChannel('enqueue');
 
@@ -272,7 +273,7 @@ export class ServiceRegistry {
     this.injectHandlers('fss', {
       readDir: (path: string, options: ReadDirectoryOptions) => fss.readDirectory(path, options),
       readFile: (path: string) => fss.readFile(path, "arrbuf"),
-      saveFile: (path: string, data: ArrayBuffer) => fss.writeFile(path, Buffer.from(data)),
+      writeFile: (path: string, data: ArrayBuffer) => fss.writeFile(path, Buffer.from(data)),
       getStat: (path: string) => fss.getStat(path),
       openPath: (path: string) => fss.openPath(path),
       deletePath: (path: string) => fss.deletePath(path),
@@ -327,6 +328,10 @@ export class ServiceRegistry {
 
     this.injectHandlers('mods.intx', {
       drop: (data: string[]) => mods.intx.drop(data)
+    });
+
+    this.injectHandlers('nahida', {
+      startDownload: (mod: Mod, path: string) => NahidaService.startDownload(mod, path)
     });
 
     this.injectHandlers('nahida.get', {
@@ -388,7 +393,7 @@ export class ServiceRegistry {
     this.rootGroup.registerAllChannels(ipcMainInstance);
 
     ipcMainInstance.on('window-control', (_event, _command) => {
-      // window-control 이벤트 처리
+      // window-control
     });
   }
 

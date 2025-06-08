@@ -9,12 +9,12 @@
   import type { ModFolders } from "@shared/types/fs.types";
   import { createQuery } from "@tanstack/svelte-query";
   import { FSH } from "$lib/helpers/fs.helper";
-  import { CharPathSelectorClass } from "$lib/stores/global.store";
+  import { CharPathSelector } from "$lib/stores/global.store";
   import { fade } from "svelte/transition";
 
-  let CharPathSelectorStore = CharPathSelectorClass.store;
-  let currentFolderPath = $state("");
-  let currentCharPath = $state("");
+  let CharPathSelectorStore = CharPathSelector.store;
+  let currentFolderPath = $derived($CharPathSelectorStore.currentFolderPath);
+  let currentCharPath = $derived($CharPathSelectorStore.currentCharPath);
   let folders = $state<ModFolders[]>([]);
 
   const getFolderChildren = async (path: string) => {
@@ -29,7 +29,9 @@
   };
 
   $effect(() => {
-    getFolders();
+    if ($CharPathSelectorStore.isOpen) {
+      getFolders();
+    }
   });
 
   const routing = async (folder: ModFolders) => {
@@ -66,7 +68,7 @@
 <svelte:window
   onkeydown={(e) => {
     if (e.key === "Escape" && $CharPathSelectorStore.isOpen) {
-      CharPathSelectorClass.close();
+      CharPathSelector.close();
     }
   }}
 />
@@ -75,15 +77,15 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="fixed inset-0 bg-black/75 flex items-center justify-center"
+    class="fixed inset-0 bg-black/75 flex items-center justify-center z-10"
     onclick={(e) => {
       e.stopPropagation();
-      CharPathSelectorClass.close();
+      CharPathSelector.close();
     }}
     transition:fade={{ duration: 100 }}
   >
     <div
-      class="flex flex-col p-4 h-[80vh] border rounded-xl gap-3"
+      class="flex flex-col p-4 h-[80vh] border rounded-xl gap-3 bg-background min-w-[50vw]"
       onclick={(e) => e.stopPropagation()}
     >
       <div
@@ -168,7 +170,7 @@
         onclick={(e: MouseEvent) => {
           e.stopPropagation();
           const path = currentCharPath || currentFolderPath;
-          CharPathSelectorClass.setPath(path);
+          CharPathSelector.setPath(path);
         }}>저장</Button
       >
     </div>

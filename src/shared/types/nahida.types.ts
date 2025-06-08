@@ -5,6 +5,24 @@ export interface NahidaIPCHelloModsParams {
     page?: number;
 }
 
+export type Mod = {
+    uuid: string;
+    version: string;
+    password: boolean;
+    game: 'genshin' | 'starrail' | 'zzz' | 'wuwa';
+    title: string;
+    description: string | null;
+    tags: string[];
+    merged: boolean;
+    preview_url: string;
+    sha256: string;
+    size: number;
+    unzip_size: number;
+    uploaded_at: number;
+    expires_at: number | null;
+    status: string;
+}
+
 export type HelloModsRespSuccessResp = SuccessResponse & {
     data: {
         ps: number;
@@ -12,23 +30,7 @@ export type HelloModsRespSuccessResp = SuccessResponse & {
         tp: number;
         ti: number;
         st: number;
-        r: {
-            uuid: string;
-            version: string;
-            password: boolean;
-            game: 'genshin' | 'starrail' | 'zzz' | 'wuwa';
-            title: string;
-            description: string | null;
-            tags: string[];
-            merged: boolean;
-            preview_url: string;
-            sha256: string;
-            size: number;
-            unzip_size: number;
-            uploaded_at: number;
-            expires_at: number | null;
-            status: string;
-        }[];
+        r: Mod[];
     }
 };
 export type HelloModsRespErrorResp = ErrorResponse;

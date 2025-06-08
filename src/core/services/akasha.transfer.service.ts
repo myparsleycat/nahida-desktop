@@ -132,7 +132,7 @@ interface DownloadProgress {
   progress: number;
   downloadBytesPerSec: number;
   abortController: AbortController;
-  currentFileName?: string; // 현재 다운로드 중인 파일명
+  currentFileName?: string;
   phase?: 'downloading' | 'decompressing';
 }
 
@@ -163,10 +163,8 @@ class TransferService {
     }
   }
 
-  // 다운로드 큐 설정
   private downloadQueue = new PQueue({ concurrency: 1 });
 
-  // 큐 상태 추적용
   private queueStats = {
     running: 0,
     pending: 0,
@@ -174,7 +172,6 @@ class TransferService {
   };
 
   constructor() {
-    // 큐 이벤트 리스너
     this.downloadQueue.on('active', () => {
       this.queueStats.running++;
       this.queueStats.pending = Math.max(0, this.queueStats.pending - 1);
@@ -203,7 +200,6 @@ class TransferService {
 
   akasha = {
     download: {
-      // 다운로드 큐에 추가
       enqueue: async (id: string, save_path: string, options?: {
         linkId?: string;
         password?: string;
@@ -225,7 +221,6 @@ class TransferService {
           priority: options?.priority || 0
         };
 
-        // p-queue에 작업 추가
         return this.downloadQueue.add(
           () => this.akasha.download.processDownload(task),
           {
@@ -234,14 +229,12 @@ class TransferService {
         );
       },
 
-      // 개별 다운로드 처리
       processDownload: async (task: DownloadTask) => {
         const { PID, id, name, save_path, linkId, password } = task;
 
         try {
           const abortController = new AbortController();
 
-          // 진행상황 추적 시작
           const progress: DownloadProgress = {
             PID,
             id,
@@ -258,18 +251,15 @@ class TransferService {
 
           this.transfers.download.active.set(PID, progress);
 
-          // 다운로드 정보 가져오기
           const data = await GetDirDownloadWithStream({
             id,
             linkId,
             password
           });
 
-          // 진행상황 업데이트
           progress.totalSize = data.totalBytes;
           progress.totalFiles = data.files.length;
 
-          // 실제 다운로드 시작
           await this.akasha.download.startDownload({
             id,
             name,
@@ -281,7 +271,6 @@ class TransferService {
             progress
           });
 
-          // 완료 처리
           progress.status = 'completed';
           progress.progress = 100;
 
@@ -294,7 +283,6 @@ class TransferService {
           this.transfers.download.active.delete(PID);
 
         } catch (error) {
-          // 에러 처리
           const progress = this.transfers.download.active.get(PID);
           if (progress) {
             progress.status = 'failed';
@@ -306,7 +294,6 @@ class TransferService {
         }
       },
 
-      // 실제 다운로드 로직
       startDownload: async (params: {
         id: string;
         name: string;
@@ -326,7 +313,6 @@ class TransferService {
         const dirMap = createDirMap(uniqueDirs);
         const dirPaths = await createDirectoryStructure(rootDirPath, dirMap, id);
 
-        // 파일 다운로드 (진행상황 콜백과 함께)
         await downloadFiles(
           download.files,
           dirPaths,
@@ -340,20 +326,18 @@ class TransferService {
               progress.totalFiles = progressData.totalFiles;
               progress.progress = (progressData.downloadedBytes / progress.totalSize) * 100;
 
-              // 현재 다운로드 중인 파일명도 추가 정보로 저장
               if (progressData.currentFile) {
                 progress.currentFileName = progressData.currentFile;
               }
             },
             abortSignal,
-            concurrencyLimit: 50, // 다운로드 큐와 별도로 제어
+            concurrencyLimit: 50,
             retryAttempts: 3,
             timeout: 30000
           }
         );
       },
 
-      // 큐 관리 메소드들
       pause: () => {
         this.downloadQueue.pause();
       },
@@ -364,12 +348,10 @@ class TransferService {
 
       clear: () => {
         this.downloadQueue.clear();
-        // 상태 초기화
         this.queueStats.pending = 0;
         this.queueStats.running = 0;
       },
 
-      // 특정 다운로드 취소
       cancel: (PID: string) => {
         const progress = this.transfers.download.active.get(PID);
         if (progress) {
@@ -379,7 +361,6 @@ class TransferService {
         }
       },
 
-      // 현재 상태 조회
       getStatus: () => ({
         active: Array.from(this.transfers.download.active.values()),
         pending: this.downloadQueue.pending,

@@ -130,19 +130,19 @@ class AuthService {
 
       const requestUrl = `${OAuthCallbackUrl}/nahida?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`;
 
-      const response = await fetcher<{ token: string }>(requestUrl, {
+      const resp = await fetcher<{ token: string }>(requestUrl, {
         maxRedirects: 0
       });
 
-      const authToken = getHeader(response.headers, 'set-auth-token');
+      const authToken = getHeader(resp.headers, 'set-auth-token');
 
       if (authToken) {
         await this.session.set(authToken);
         mainWindow.webContents.send('auth-state-changed', true)
         return true;
       } else {
-        if (response.data && typeof response.data === 'object' && response.data.token) {
-          await this.session.set(response.data.token);
+        if (resp.data && typeof resp.data === 'object' && resp.data.token) {
+          await this.session.set(resp.data.token);
           mainWindow.webContents.send('auth-state-changed', true)
           return true;
         }

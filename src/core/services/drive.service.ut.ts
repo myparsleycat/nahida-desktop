@@ -1,8 +1,5 @@
 import { api } from '@core/lib/fetcher';
 import { DirDownloadUrl } from '@core/const';
-import { fss } from './fs.service';
-import fse from 'fs-extra';
-import { gunzipAsync, zstdDecompress } from '@core/utils';
 
 export const GetDirDownloadWithStream = async (params: {
   id: string;

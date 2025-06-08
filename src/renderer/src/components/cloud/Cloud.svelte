@@ -22,7 +22,6 @@
     RotateCcwIcon,
     Share2Icon,
   } from "@lucide/svelte";
-  import { cn } from "$lib/utils";
   import { writable, derived as storeDerived, get } from "svelte/store";
   import { format } from "date-fns";
   import { ko, enUS, zhCN } from "date-fns/locale";
@@ -30,7 +29,9 @@
   import * as Breadcrumb from "$lib/components/ui/breadcrumb/index";
   import { toast } from "svelte-sonner";
   import {
+    cn,
     formatSize,
+    formatDate,
     getChosung,
     getSearchScore,
     isNameConflict,
@@ -51,6 +52,8 @@
   import { NDH } from "$lib/helpers";
   import AkashaPreviewModal from "@/components/cloud/AkashaPreviewModal.svelte";
   import { ValidateName } from "$lib/utils/cloud.utils";
+  import { getRandInt } from "@shared/utils";
+  import { Skeleton } from "$lib/components/ui/skeleton";
 
   let currentId = NDH.currentId;
   let uploadDragging = $state(false);
@@ -676,11 +679,152 @@
   }}
 />
 
+{#snippet contextMenuContent()}
+  {#if selectedItems && selectedItems.length !== 0}
+    {#if selectedItems.length === 1}
+      {#if selectedItems[0].isDir}
+        <ContextMenu.Item
+          class="cursor-pointer gap-x-2"
+          onclick={() => currentId.set(selectedItems[0].id)}
+        >
+          <MousePointer2Icon size={18} />
+          {$_("drive.ui.context_menu.open")}
+        </ContextMenu.Item>
+        <ContextMenu.Separator />
+      {/if}
+
+      {#if selectedItems[0].mimeType?.startsWith("image")}
+        <ContextMenu.Item
+          class="cursor-pointer gap-x-2"
+          onclick={() => {
+            if (selectedItems[0].mimeType?.startsWith("image")) {
+              // 모달 열어야 함
+            }
+          }}
+        >
+          <EyeIcon size={18} />
+          {$_("drive.ui.context_menu.preview")}
+        </ContextMenu.Item>
+      {/if}
+
+      <ContextMenu.Item
+        class="cursor-pointer gap-x-2"
+        onclick={() => {
+          NDH.item.download
+            .enqueue(selectedItems[0].id, selectedItems[0].name)
+            .catch((e: any) => {
+              toast.error(e.message);
+            });
+        }}
+      >
+        <DownloadIcon size={18} />
+        {$_("drive.ui.context_menu.download")}
+      </ContextMenu.Item>
+      <ContextMenu.Separator />
+
+      <ContextMenu.Item
+        class="cursor-pointer gap-x-2"
+        onclick={() => {
+          if (selectedItems[0]) {
+            DialogStateStore.setOpen("shareDialog", true, {
+              id: selectedItems[0].id,
+            });
+          } else {
+            toast.warning("선택된 항목이 없습니다");
+          }
+        }}
+      >
+        <Share2Icon size={18} />
+        {$_("drive.ui.context_menu.share")}
+      </ContextMenu.Item>
+      <ContextMenu.Separator />
+
+      <ContextMenu.Item
+        class="cursor-pointer gap-x-2"
+        onclick={() => DialogStateStore.setOpen("renameDialog", true)}
+      >
+        <SquarePenIcon size={18} />
+        {$_("drive.ui.rename")}
+      </ContextMenu.Item>
+      <ContextMenu.Separator />
+
+      <ContextMenu.Item
+        class="cursor-pointer gap-x-2"
+        onclick={() => handleCopyId(selectedItems[0])}
+      >
+        <CopyIcon size={18} />
+        {$_("drive.ui.context_menu.copy_id")}
+      </ContextMenu.Item>
+      <ContextMenu.Separator />
+    {/if}
+
+    <ContextMenu.Item
+      class="cursor-pointer gap-x-2 text-red-500"
+      onclick={() => $TrashMutation.mutate(selectedItems)}
+    >
+      <Trash2Icon size={18} />
+      {$_("drive.ui.trash")}
+    </ContextMenu.Item>
+  {:else}
+    <ContextMenu.Item
+      class="cursor-pointer gap-x-2"
+      onclick={() => DialogStateStore.setOpen("createDirDialog", true)}
+    >
+      <FolderIcon size={18} />
+      {$_("drive.ui.new_dir")}
+    </ContextMenu.Item>
+  {/if}
+{/snippet}
+
+{#snippet skeleton(layout: LayoutType)}
+  {#if layout === "list"}
+    {#each { length: getRandInt(3, 12) } as _, idx}
+      <div class={cn("flex flex-row items-center px-3 py-2 gap-4")}>
+        <div class="flex flex-row items-center gap-2">
+          <div class="size-12 flex text-muted-foreground p-0.5">
+            <div class="w-full h-full flex items-center justify-center">
+              <Skeleton class="size-full rounded-lg" />
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-row items-center gap-2 w-full min-w-0">
+          <div class="grow min-w-0">
+            <Skeleton class="h-5" style="width: {getRandInt(80, 250)}px" />
+          </div>
+        </div>
+
+        <div class="flex flex-row items-center gap-2">
+          <div class="min-w-0 text-sm text-muted-foreground">
+            <Skeleton class="h-5" style="width: {getRandInt(45, 65)}px" />
+          </div>
+        </div>
+
+        <div class="text-right text-sm text-muted-foreground text-nowrap">
+          <Skeleton class="h-5" style="width: {getRandInt(145, 155)}px" />
+        </div>
+      </div>
+    {/each}
+  {:else}
+    <div class="p-4 overflow-auto">
+      <div
+        class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"
+      >
+        {#each { length: getRandInt(2, 8) } as _, idx}
+          <Skeleton
+            class="relative flex justify-center items-center aspect-square"
+          />
+        {/each}
+      </div>
+    </div>
+  {/if}
+{/snippet}
+
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="w-full h-full flex flex-col select-none">
   <!-- Breadcrumb 영역: 고정 높이 -->
-  <div class="h-11 flex items-center p-4 border-b w-full">
-    <div class="flex-1 w-0">
+  <div class="h-14 flex items-center p-4 border-b w-full">
+    <div class="flex-1 min-w-0">
       <Breadcrumb.Root>
         <Breadcrumb.List
           class="flex flex-nowrap overflow-hidden whitespace-nowrap"
@@ -733,13 +877,13 @@
       </Breadcrumb.Root>
     </div>
 
-    <div class="flex gap-1 ml-4 flex-shrink-0">
-      <div class="w-full relative flex items-center">
+    <div class="flex gap-3 ml-4 shrink-0">
+      <div class="w-full relative">
         <SearchIcon
-          class="w-5 h-5 absolute left-2.5 top-2.5 text-gray-500 dark:text-gray-400"
+          class="w-5 h-5 absolute left-2 top-2 text-gray-500 dark:text-gray-400"
         />
         <Input
-          class="pl-8 w-[200px] border-none h-7"
+          class="pl-8 w-[200px]"
           placeholder={$_("drive.ui.search_in_dir_placeholder")}
           bind:value={$searchInDirQuery}
           onfocus={() => (focusSearchInput = true)}
@@ -749,7 +893,7 @@
 
       <div>
         <Button
-          variant="ghost"
+          variant="outline"
           size="icon"
           onclick={() => {
             if (layout === "grid") {
@@ -768,7 +912,7 @@
       </div>
 
       <DropdownMenu.Root>
-        <DropdownMenu.Trigger class={buttonVariants({ variant: "ghost" })}>
+        <DropdownMenu.Trigger class={buttonVariants({ variant: "outline" })}>
           {$_("g.make_new")}
         </DropdownMenu.Trigger>
         <DropdownMenu.Content>
@@ -797,7 +941,7 @@
 
   <!-- 콘텐츠 영역 -->
   <div
-    class="ctx flex flex-col flex-1 overflow-auto"
+    class="flex flex-col flex-1 overflow-auto"
     ondragenter={onDragEnter}
     ondragleave={onDragLeave}
     ondragover={onDragOver}
@@ -883,14 +1027,13 @@
       </div>
     {/if}
 
-    <ContextMenu.Root>
-      <!-- 실제 파일/폴더 목록 -->
+    {#if $sortedContents.length > 0}
       {#if layout === "list"}
-        <ContextMenu.Trigger
-          class="flex-grow overflow-y-auto overflow-x-hidden border-none outline-none"
-        >
-          <div class="flex-1 flex flex-col h-full">
-            {#if $sortedContents.length > 0}
+        <ContextMenu.Root>
+          <ContextMenu.Trigger
+            class="flex-grow overflow-y-auto overflow-x-hidden"
+          >
+            <div class="flex-1 flex flex-col h-full">
               {#each $sortedContents as item, index (item.id)}
                 <!-- svelte-ignore a11y_click_events_have_key_events -->
                 <div
@@ -978,56 +1121,38 @@
                   <div
                     class="w-38 text-right text-sm text-muted-foreground text-nowrap"
                   >
-                    <!-- {format(item.updatedAt, "yyyy년 MM월 dd일 hh시 mm분")} -->
-                    {format(item.updatedAt, "PPP", { locale: ko })}
+                    {formatDate(item.updatedAt)}
                   </div>
                 </div>
               {/each}
-            {:else if $data.isFetched && $sortedContents.length < 1}
-              <div
-                class="flex flex-row items-center justify-center w-full h-full select-none"
-              >
-                <div class="flex flex-col p-4 justify-center items-center">
-                  <div>
-                    <FolderIcon size="100" />
-                  </div>
-                  <p class="text-xl text-center mt-4">
-                    {$_("drive.ui.no_contents_section_message.0")}
-                  </p>
-                  <p class="text-muted-foreground text-center">
-                    {$_("drive.ui.no_contents_section_message.1")}
-                  </p>
-                </div>
-              </div>
-            {:else}
-              <div class="flex h-full w-full justify-center items-center">
-                <LoaderIcon class="animate-spin-1.5" size="70" />
-              </div>
-            {/if}
 
-            <!-- 클릭시 선택 해제 영역 -->
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <div
-              class="flex-grow"
-              onclick={handleClickOutside}
-              oncontextmenu={handleClickOutside}
-            ></div>
-          </div>
-        </ContextMenu.Trigger>
+              <!-- 클릭시 선택 해제 영역 -->
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <div
+                class="flex-grow"
+                onclick={handleClickOutside}
+                oncontextmenu={handleClickOutside}
+              ></div>
+            </div>
+          </ContextMenu.Trigger>
+          <ContextMenu.Content class="flex-grow">
+            {@render contextMenuContent()}
+          </ContextMenu.Content>
+        </ContextMenu.Root>
       {:else if layout === "grid"}
         <!-- 그리드 뷰: CSS grid를 사용 -->
         <div class="p-4 overflow-auto">
-          {#if $sortedContents.length > 0}
-            <div
-              class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4"
-            >
-              {#each $sortedContents as item (item.id)}
+          <div
+            class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"
+          >
+            {#each $sortedContents as item (item.id)}
+              <ContextMenu.Root>
                 <ContextMenu.Trigger>
                   <!-- svelte-ignore a11y_click_events_have_key_events -->
                   <div
                     data-uuid={item.id}
                     class={cn(
-                      "border rounded p-2 hover:bg-secondary cursor-pointer",
+                      "border rounded-sm p-2 hover:bg-secondary cursor-pointer",
                       selectedItems.some(
                         (selected) => selected.id === item.id,
                       ) && "bg-secondary",
@@ -1083,129 +1208,33 @@
                     </div>
                   </div>
                 </ContextMenu.Trigger>
-              {/each}
-            </div>
-          {:else if $data.isFetched && $sortedContents.length < 1}
-            <div class="flex flex-col items-center justify-center h-full">
-              <FolderIcon size="100" />
-              <p class="mt-4 text-xl text-center">
-                {$_("drive.ui.no_contents_section_message.0")}
-              </p>
-              <p class="text-muted-foreground text-center">
-                {$_("drive.ui.no_contents_section_message.1")}
-              </p>
-            </div>
-          {:else}
-            <div class="flex h-full w-full justify-center items-center">
-              <LoaderIcon class="animate-spin-1.5" size="70" />
-            </div>
-          {/if}
+                <ContextMenu.Content class="flex-grow">
+                  {@render contextMenuContent()}
+                </ContextMenu.Content>
+              </ContextMenu.Root>
+            {/each}
+          </div>
         </div>
       {/if}
-
-      <!-- ContextMenu 내용 -->
-      <ContextMenu.Content class="flex-grow">
-        {#if selectedItems && selectedItems.length !== 0}
-          {#if selectedItems.length === 1}
-            {#if selectedItems[0].isDir}
-              <ContextMenu.Item
-                class="cursor-pointer gap-x-2"
-                onclick={() => {
-                  currentId.set(selectedItems[0].id);
-                }}
-              >
-                <MousePointer2Icon size={18} />
-                {$_("drive.ui.context_menu.open")}
-              </ContextMenu.Item>
-              <ContextMenu.Separator />
-            {/if}
-
-            {#if selectedItems[0].mimeType?.startsWith("text") || selectedItems[0].mimeType?.startsWith("image")}
-              <ContextMenu.Item
-                class="cursor-pointer gap-x-2"
-                onclick={() => {
-                  if (selectedItems[0].mimeType?.startsWith("text")) {
-                    // textViewerStore.openTextViewer(selectedItems[0]);
-                  } else if (selectedItems[0].mimeType?.startsWith("image")) {
-                  }
-                }}
-              >
-                <EyeIcon size={18} />
-                {$_("drive.ui.context_menu.preview")}
-              </ContextMenu.Item>
-            {/if}
-
-            <ContextMenu.Item
-              class="cursor-pointer gap-x-2"
-              onclick={() => {
-                NDH.item.download
-                  .enqueue(selectedItems[0].id, selectedItems[0].name)
-                  .catch((e: any) => {
-                    toast.error(e.message);
-                  });
-              }}
-            >
-              <DownloadIcon size={18} />
-              {$_("drive.ui.context_menu.download")}
-            </ContextMenu.Item>
-            <ContextMenu.Separator />
-            <ContextMenu.Item
-              class="cursor-pointer gap-x-2"
-              onclick={() => {
-                if (selectedItems[0]) {
-                  DialogStateStore.setOpen("shareDialog", true, {
-                    id: selectedItems[0].id,
-                  });
-                } else {
-                  toast.warning("선택된 항목이 없습니다");
-                }
-              }}
-            >
-              <Share2Icon size={18} />
-              {$_("drive.ui.context_menu.share")}
-            </ContextMenu.Item>
-            <ContextMenu.Separator />
-            <ContextMenu.Item
-              class="cursor-pointer gap-x-2"
-              onclick={() => DialogStateStore.setOpen("renameDialog", true)}
-            >
-              <SquarePenIcon size={18} />
-              {$_("drive.ui.rename")}
-            </ContextMenu.Item>
-            <ContextMenu.Separator />
-            <ContextMenu.Item
-              class="cursor-pointer gap-x-2"
-              onclick={() => handleCopyId(selectedItems[0])}
-            >
-              <CopyIcon size={18} />
-              {$_("drive.ui.context_menu.copy_id")}
-            </ContextMenu.Item>
-            <ContextMenu.Separator />
-          {/if}
-          {#if selectedItems.every( (item) => item.mimeType?.startsWith("image"), )}
-            <ContextMenu.Item class="cursor-pointer gap-x-2">
-              <RotateCcwIcon size={18} />
-              RG
-            </ContextMenu.Item>
-          {/if}
-          <ContextMenu.Item
-            class="cursor-pointer gap-x-2 text-red-500"
-            onclick={() => $TrashMutation.mutate(selectedItems)}
-          >
-            <Trash2Icon size={18} />
-            {$_("drive.ui.trash")}
-          </ContextMenu.Item>
-        {:else}
-          <ContextMenu.Item
-            class="cursor-pointer gap-x-2"
-            onclick={() => DialogStateStore.setOpen("createDirDialog", true)}
-          >
-            <FolderIcon size={18} />
-            {$_("drive.ui.new_dir")}
-          </ContextMenu.Item>
-        {/if}
-      </ContextMenu.Content>
-    </ContextMenu.Root>
+    {:else if $data.isFetched && $sortedContents.length < 1}
+      <div
+        class="flex flex-row items-center justify-center w-full h-full select-none"
+      >
+        <div class="flex flex-col p-4 justify-center items-center">
+          <div>
+            <FolderIcon size="100" />
+          </div>
+          <p class="text-xl text-center mt-4">
+            {$_("drive.ui.no_contents_section_message.0")}
+          </p>
+          <p class="text-muted-foreground text-center">
+            {$_("drive.ui.no_contents_section_message.1")}
+          </p>
+        </div>
+      </div>
+    {:else if $sortedContents.length === 0 && $data.isFetching}
+      {@render skeleton(layout)}
+    {/if}
   </div>
 </div>
 

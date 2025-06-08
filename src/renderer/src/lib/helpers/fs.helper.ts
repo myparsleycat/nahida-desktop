@@ -23,8 +23,8 @@ class FileSystemHelper {
     return window.api.fss.readFile(path);
   }
 
-  async saveFile(path: string, data: ArrayBuffer) {
-    return window.api.fss.saveFile(path, data);
+  async writeFile(path: string, data: ArrayBuffer) {
+    return window.api.fss.writeFile(path, data);
   }
 
   async getStat(path: string) {
