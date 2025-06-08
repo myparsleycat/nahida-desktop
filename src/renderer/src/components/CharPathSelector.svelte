@@ -47,7 +47,7 @@
 
   const data = $derived(
     createQuery({
-      queryKey: ["folders", currentFolderPath],
+      queryKey: ["cps-folders", currentFolderPath],
       queryFn: async () => {
         if (currentFolderPath) {
           return getFolderChildren(currentFolderPath);

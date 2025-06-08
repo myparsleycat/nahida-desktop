@@ -184,6 +184,27 @@ class FileSystemServiceClass {
             return false;
         }
     }
+
+    async generateUniqueFileName(basePath: string, fileName: string) {
+        let uniquePath = path.join(basePath, fileName);
+        let counter = 1;
+
+        while (true) {
+            try {
+                await fse.access(uniquePath);
+                counter++;
+                const ext = path.extname(fileName);
+                const nameWithoutExt = path.basename(fileName, ext);
+                const newFileName = ext ? `${nameWithoutExt} (${counter})${ext}` : `${fileName} (${counter})`;
+                uniquePath = path.join(basePath, newFileName);
+            } catch (error) {
+                break;
+            }
+        }
+
+        return uniquePath;
+    }
+
     watchFolderChanges(folderPath: string, options: {
         recursive?: boolean,
         depth?: number

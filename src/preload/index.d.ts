@@ -130,6 +130,7 @@ declare global {
       renderer: {
         requestCharPath: (callback: (data: any) => void) => () => any
         charPathResponse: (reqId: string, ob: { success: boolean; data: string }) => void
+        closeCharPathSelector: (callback: () => void) => () => void
       }
 
       window: WindowControls

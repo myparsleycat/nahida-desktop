@@ -166,13 +166,33 @@ class ModsServiceClass {
             const dirName = basename(path);
             const parentDir = dirname(path);
 
+            const alert_exists = () => {
+                ToastService.warning('모드 토글 실패', {
+                    description: '이미 동일한 이름을 가진 폴더가 존재합니다'
+                });
+            }
+
             if (dirName.toLowerCase().startsWith("disabled")) {
                 const newName = dirName.replace(/^disabled\s+/i, "");
-                await FSService.rename(path, join(parentDir, newName));
+                const newPath = join(parentDir, newName);
+
+                if (await FSService.exists(newPath)) {
+                    alert_exists();
+                    return false;
+                } else {
+                    await FSService.rename(path, newPath);
+                }
                 return true;
             } else {
                 const newName = "DISABLED " + dirName;
-                await FSService.rename(path, join(parentDir, newName));
+                const newPath = join(parentDir, newName);
+
+                if (await FSService.exists(newPath)) {
+                    alert_exists();
+                    return false;
+                } else {
+                    await FSService.rename(path, newPath);
+                }
                 return true;
             }
         }

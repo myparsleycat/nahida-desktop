@@ -8,8 +8,10 @@ import { pipeline } from "node:stream/promises";
 import fse from 'fs-extra';
 import { FSService } from "./fs.service";
 import { ProxyUrl } from "@core/const";
+import { extractFile } from "@core/lib/extractor";
+import { Notification } from "electron";
 
-type DownloadStatus = 'pending' | 'downloading' | 'completed' | 'failed';
+type DownloadStatus = 'pending' | 'downloading' | 'extracting' | 'completed' | 'failed';
 
 interface DownloadTask {
     PID: string;
@@ -46,7 +48,7 @@ interface TransferStore {
     }
 }
 
-class NahidaTransferService {
+class NahidaTransferServiceClass {
     transfers: TransferStore = {
         download: {
             active: new Map(),
@@ -95,7 +97,7 @@ class NahidaTransferService {
             priority?: number;
         }) => {
             try {
-                const headResponse = await fetch(ProxyUrl + url, {
+                const headResponse = await fetch(url, {
                     method: 'HEAD',
                     redirect: 'follow'
                 });
@@ -137,12 +139,12 @@ class NahidaTransferService {
                     priority: options?.priority || 0
                 };
 
-                return this.downloadQueue.add(
+                this.downloadQueue.add(
                     () => this.download.processDownload(task),
-                    {
-                        priority: options?.priority || 0
-                    }
+                    { priority: options?.priority || 0 }
                 );
+
+                return true;
             } catch (err: any) {
                 ToastService.error('대기열 등록 중 오류 발생', {
                     description: err.message
@@ -188,8 +190,14 @@ class NahidaTransferService {
                     }
                 );
 
-                progress.status = 'completed';
                 progress.progress = 100;
+                progress.status = 'extracting';
+
+                await extractFile({ filePath, delAfter: true });
+
+                progress.status = 'completed';
+                ToastService.success(`${fileName} 다운로드 완료`);
+                new Notification({ title: '다운로드 완료', body: `${fileName} 의 다운로드가 완료되었습니다` }).show();
 
                 this.transfers.download.completed.push({
                     pid: PID,
@@ -290,7 +298,7 @@ class NahidaTransferService {
                 await pipeline(readableStream, writeStream);
             } catch (e: any) {
                 if (e.name === 'AbortError') {
-                    console.log('다운로드가 취소되었습니다.');
+                    console.log('다운로드가 취소됨');
                 }
                 throw e;
             }
@@ -327,4 +335,4 @@ class NahidaTransferService {
     };
 }
 
-export const NTS = new NahidaTransferService();
+export const NahidaTransferService = new NahidaTransferServiceClass();
