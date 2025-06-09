@@ -20,7 +20,9 @@
       "mod_deleted": "The mod has been successfully deleted",
       "mod_activated": "The mod has been activated",
       "mod_deactivated": "The mod has been deactivated",
-      "mod_downloaded": "The mod has been downloaded"
+      "mod_downloaded": "The mod has been downloaded",
+      "favorite_removed": "Removed from favorites",
+      "favorite_added": "Added to favorites"
     }
   },
   "g": {
@@ -34,17 +36,17 @@
     "required": "Required",
     "optional": "Optional",
     "genshin": "Genshin Impact",
-    "starrail": "Honkai Starrail",
+    "starrail": "Honkai: Star Rail",
     "wuwa": "Wuthering Waves",
     "zzz": "Zenless Zone Zero",
-    "gf2": "Girls Frontline 2",
+    "gf2": "Girls' Frontline 2: Exilium",
     "login": "Login",
     "logout": "Logout",
     "account": "Account",
     "upload": "Upload",
     "mods": "Mods",
     "nahida_drive": "Nahida Drive",
-    "require_login": "Leed Login",
+    "require_login": "Need Login",
     "download": "Download",
     "download_complete": "Download Complete",
     "download_canceled": "Download has been canceled",
@@ -125,7 +127,7 @@
   },
   "c": {
     "data-table-actions": {
-      "goto_mod": "Go to Mode Page",
+      "goto_mod": "Go to Mod Page",
       "edit": "Edit",
       "update": "Update",
       "download": "Download",
@@ -136,7 +138,7 @@
       "dialog": {
         "d0": {
           "m0": "Do you want to delete this Mod?",
-          "m1": "This action cannot be undone. Are you sure you want to delete this mode?"
+          "m1": "This action cannot be undone. Are you sure you want to delete this Mod?"
         }
       }
     },
@@ -203,11 +205,13 @@
           }
         },
         "general": {
-          "theme": "Theme"
+          "theme": "Theme",
+          "desc": "Customize appearance"
         },
         "preview_cache_state": {
           "ui": {
-            "title": "Use Preview Cache"
+            "title": "Use Preview Cache",
+            "desc": "Activate preview caching"
           }
         }
       },
@@ -240,7 +244,8 @@
     "landing": {
       "getting_started": "Getting Started",
       "msg": "Back up all 3dmigoto mods from Nahida Drive for free with no limitations",
-      "msg1": "Backup all 3dmigoto mods from Nahida Drive for free without any limitations"
+      "msg1": "Backup all 3dmigoto mods from Nahida Drive for free without any limitations",
+      "msg1_1": "Back up all 3dmigoto mods from Nahida Drive for free with no limitations"
     }
   },
   "#": {

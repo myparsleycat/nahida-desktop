@@ -43,8 +43,8 @@
     "download": "다운로드",
     "download_complete": "다운로드 완료",
     "genshin": "원신",
-    "starrail": "스타레일",
-    "wuwa": "명조",
+    "starrail": "붕괴: 스타레일",
+    "wuwa": "명조: 워더링 웨이브",
     "zzz": "젠레스 존 제로",
     "gf2": "소녀전선2: 망명",
     "download_canceled": "다운로드가 취소되었습니다",
@@ -52,7 +52,9 @@
     "system": "시스템",
     "dark": "다크 모드",
     "light": "라이트 모드",
-    "search": "검색"
+    "search": "검색",
+    "optional": "선택",
+    "required": "필수"
   },
   "layout": {
     "dock": {
@@ -109,7 +111,17 @@
       "description": "설명",
       "tags": "태그",
       "previous": "이전",
-      "next": "다음"
+      "next": "다음",
+      "actions": {
+        "delete": "삭제",
+        "disable": "비활성화",
+        "enable": "활성화",
+        "edit": "편집",
+        "update": "모드 업데이트",
+        "download": "다운로드",
+        "goto_mod": "모드 페이지로",
+        "check_log": "로그 확인"
+      }
     },
     "delete_account": "계정 삭제"
   },
@@ -232,7 +244,8 @@
     "landing": {
       "msg1": "나히다 드라이브에서 모든 3dmigoto 모드를 무료로 제한없이 백업하세요.",
       "msg1_1": "모든 3dmigoto 모드를 무료로 제한없이 백업하세요.",
-      "getting_started": "지금 시작하기"
+      "getting_started": "지금 시작하기",
+      "msg": "모든 3dmigoto 모드를 무료로 제한없이 백업하세요."
     }
   },
   "#": {
