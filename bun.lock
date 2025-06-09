@@ -50,6 +50,7 @@
       },
       "devDependencies": {
         "@electron-toolkit/tsconfig": "^1.0.1",
+        "@internationalized/date": "^3.8.1",
         "@sveltejs/vite-plugin-svelte": "^5.1.0",
         "@types/node": "^22.15.30",
         "bits-ui": "^2.5.0",

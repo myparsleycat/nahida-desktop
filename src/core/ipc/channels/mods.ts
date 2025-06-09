@@ -1,6 +1,8 @@
 // src/core/ipc/channels/mods.ts
+import type { ModsService } from '@core/services';
 import { ChannelGroup } from '../registry';
 import type { ReadDirectoryOptions } from '@shared/types/fs.types';
+import type { Games } from '@shared/types/mods.types';
 
 export function defineModsChannels(rootGroup: ChannelGroup) {
     const modsGroup = rootGroup.addGroup('mods');
@@ -29,6 +31,7 @@ export function defineModsChannels(rootGroup: ChannelGroup) {
     const modGroup = modsGroup.addGroup('mod');
     modGroup.addChannel('read');
     modGroup.addChannel('toggle');
+    modGroup.addChannel('fix');
 
     const iniGroup = modsGroup.addGroup('ini');
     iniGroup.addChannel('parse');
@@ -42,7 +45,7 @@ export function defineModsChannels(rootGroup: ChannelGroup) {
     modsMsgGroup.addChannel('currentFolderPathChanged', undefined, true, 'current-folder-path-changed');
 }
 
-export function injectModsHandlers(registry: any, mods: any) {
+export function injectModsHandlers(registry: any, mods: typeof ModsService) {
     registry.injectHandlers('mods', {
         clearPath: () => mods.clearPath()
     });
@@ -73,7 +76,8 @@ export function injectModsHandlers(registry: any, mods: any) {
 
     registry.injectHandlers('mods.mod', {
         read: (path: string) => mods.mod.read(path),
-        toggle: (path: string) => mods.mod.toggle(path)
+        toggle: (path: string) => mods.mod.toggle(path),
+        fix: (path: string, game: Games) => mods.mod.fix(path, game)
     });
 
     registry.injectHandlers('mods.ini', {

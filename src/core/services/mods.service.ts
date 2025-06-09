@@ -8,6 +8,10 @@ import { basename, dirname, join } from "node:path";
 import { iniutil as ini, IniParseResult } from "@core/lib/InIUtil";
 import { ToastService } from "./toast.service";
 import Validator from "@shared/utils/Validator";
+import { fixGenshinMod } from "@core/lib/mod/fix/genshin.fix";
+import { processFolder } from "@core/lib/mod/fix/zzz.fix";
+import type { Games } from "@shared/types/mods.types";
+import fixHSRMod from "@core/lib/mod/fix/hsr.fix";
 
 class ModsServiceClass {
     currentFolderPath: string | null = null;
@@ -194,6 +198,35 @@ class ModsServiceClass {
                     await FSService.rename(path, newPath);
                 }
                 return true;
+            }
+        },
+
+        fix: async (path: string, game: Games) => {
+            try {
+                switch (game) {
+                    case 'genshin':
+                        await fixGenshinMod(path);
+                        break;
+                    case 'starrail':
+                        await fixHSRMod(path, { checkDirectory: false });
+                        break;
+                    case 'zzz':
+                        processFolder(path);
+                        break;
+                    default:
+                        ToastService.error('픽스 오류', {
+                            description: '잘못된 게임 타입을 입력받음'
+                        });
+                        return false;
+                }
+
+                ToastService.success('완료되었습니다');
+                return true;
+            } catch (e: any) {
+                ToastService.error('픽스 오류', {
+                    description: e.message
+                });
+                return false;
             }
         }
     }

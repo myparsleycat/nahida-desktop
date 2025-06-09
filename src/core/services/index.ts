@@ -5,3 +5,4 @@ export { FSService } from "./fs.service";
 export { ToastService } from './toast.service';
 export { ModsService } from './mods.service';
 export { NahidaService } from './nahida.service';
+export { SettingService } from './setting.service';
