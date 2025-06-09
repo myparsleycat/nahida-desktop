@@ -9,7 +9,7 @@ export type Mod = {
     uuid: string;
     version: string;
     password: boolean;
-    game: 'genshin' | 'starrail' | 'zzz' | 'wuwa';
+    game: 'genshin' | 'starrail' | 'zzz' | 'wuwa' | 'hk3rd';
     title: string;
     description: string | null;
     tags: string[];

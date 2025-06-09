@@ -10,6 +10,7 @@ import { FSService } from "./fs.service";
 import { ProxyUrl } from "@core/const";
 import { extractFile } from "@core/lib/extractor";
 import { Notification } from "electron";
+import { Mod } from "@shared/types/nahida.types";
 
 type DownloadStatus = 'pending' | 'downloading' | 'extracting' | 'completed' | 'failed';
 
@@ -17,7 +18,7 @@ interface DownloadTask {
     PID: string;
     fileUrl: string;
     fileName: string;
-    size: number | null;
+    mod: Mod;
     savePath: string;
     priority?: number;
 }
@@ -26,8 +27,7 @@ interface DownloadProgress {
     PID: string;
     status: DownloadStatus;
     fileUrl: string;
-    fileName: string;
-    size: number | null;
+    mod: Mod;
     savePath: string;
     speed: number;
     progress: number;
@@ -92,49 +92,31 @@ class NahidaTransferServiceClass {
     }
 
     download = {
-        enqueue: async (url: string, savePath: string, options?: {
-            name?: string;
+        enqueue: async (url: string, savePath: string, mod: Mod, options?: {
             priority?: number;
         }) => {
             try {
-                const headResponse = await fetch(url, {
+                const headresp = await fetch(url, {
                     method: 'HEAD',
                     redirect: 'follow'
                 });
 
-                if (!headResponse.ok) {
-                    throw new Error(`HTTP error! status: ${headResponse.status}`);
+                if (!headresp.ok) {
+                    const er = `HTTP error status: ${headresp.status}`;
+                    ToastService.error('나히다 모드 다운로드 실패', {
+                        description: er
+                    })
+                    return false;
                 }
 
-                const contentLength = headResponse.headers.get('content-length');
-                const fileSize = contentLength ? parseInt(contentLength, 10) : null;
-
-                let fileName = options?.name;
-
-                if (!fileName) {
-                    const contentDisposition = headResponse.headers.get('content-disposition');
-                    if (contentDisposition) {
-                        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-                        if (filenameMatch && filenameMatch[1]) {
-                            fileName = filenameMatch[1].replace(/['"]/g, '');
-                        }
-                    }
-
-                    if (!fileName) {
-                        const finalUrl = headResponse.url;
-                        const urlPath = new URL(finalUrl).pathname;
-                        fileName = urlPath.split('/').pop() || 'unknown';
-
-                        fileName = fileName.split('?')[0];
-                    }
-                }
+                let fileName = mod.title + '.zip';
 
                 const PID = nanoid();
                 const task: DownloadTask = {
                     PID,
                     fileUrl: url,
                     fileName,
-                    size: fileSize,
+                    mod,
                     savePath,
                     priority: options?.priority || 0
                 };
@@ -142,7 +124,7 @@ class NahidaTransferServiceClass {
                 this.downloadQueue.add(
                     () => this.download.processDownload(task),
                     { priority: options?.priority || 0 }
-                );
+                ).then();
 
                 return true;
             } catch (err: any) {
@@ -154,7 +136,7 @@ class NahidaTransferServiceClass {
         },
 
         processDownload: async (task: DownloadTask) => {
-            const { PID, fileUrl, fileName, size, savePath } = task;
+            const { PID, fileUrl, fileName, mod, savePath } = task;
             const abortController = new AbortController();
 
             try {
@@ -162,8 +144,7 @@ class NahidaTransferServiceClass {
                     PID,
                     status: 'pending',
                     fileUrl,
-                    fileName,
-                    size,
+                    mod,
                     savePath,
                     speed: 0,
                     progress: 0,
@@ -196,13 +177,13 @@ class NahidaTransferServiceClass {
                 await extractFile({ filePath, delAfter: true });
 
                 progress.status = 'completed';
-                ToastService.success(`${fileName} 다운로드 완료`);
+                ToastService.success(`${mod.title}의 다운로드가 완료되었습니다`);
                 new Notification({ title: '다운로드 완료', body: `${fileName} 의 다운로드가 완료되었습니다` }).show();
 
                 this.transfers.download.completed.push({
                     pid: PID,
                     name: fileName,
-                    size: size || 0
+                    size: mod.size || 0
                 });
 
                 this.transfers.download.active.delete(PID);
@@ -235,15 +216,15 @@ class NahidaTransferServiceClass {
             abortSignal: AbortSignal,
             onProgress?: (progress: number, downloadedSize: number, speed: number) => void
         ) => {
+            const resp = await fetch(ProxyUrl + url, { signal: abortSignal });
+
+            if (!resp.ok) {
+                throw new Error(`HTTP error! status: ${resp.status}`);
+            } else if (!resp.body) {
+                throw new Error('body is empty');
+            }
+
             try {
-                const resp = await fetch(ProxyUrl + url, { signal: abortSignal });
-
-                if (!resp.ok) {
-                    throw new Error(`HTTP error! status: ${resp.status}`);
-                } else if (!resp.body) {
-                    throw new Error('body is empty');
-                }
-
                 const totalSize = parseInt(resp.headers.get('content-length') || '0');
                 let downloadedSize = 0;
 
@@ -252,7 +233,8 @@ class NahidaTransferServiceClass {
                 let speed = 0;
 
                 const readableStream = new Readable({
-                    read() { }
+                    read() {
+                    }
                 });
 
                 const reader = resp.body.getReader();
