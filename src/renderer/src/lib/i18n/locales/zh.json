@@ -1,228 +1,40 @@
 {
-  "toast": {
-    "error": {
-      "internal_server_error": "服务器错误",
-      "login": "登录时发生错误"
-    },
-    "warning": {
-      "cannot_get_mod_data_from_nara": "获取模组信息失败",
-      "username_or_pw_missing": "请输入用户名和密码",
-      "download_expired": "下载已过期的模组",
-      "invalid_password": "密码不匹配",
-      "missing_cftoken": "Turnstile令牌丢失。请重试",
-      "mod_not_ready": "模组上传未完成或者不可下载",
-      "pw_is_required": "请输入密码",
-      "mod_manager_not_installed": "模组管理器未安装或无法使用",
-      "failure_turnstile": "Turnstile认证失败。请重试"
-    },
-    "success": {
-      "favorite_added": "已添加到收藏夹",
-      "favorite_removed": "已从收藏夹移除",
-      "login": "登录成功",
-      "mod_deleted": "模组删除完成",
-      "mod_activated": "模组已激活",
-      "mod_deactivated": "模组已停用",
-      "mod_downloaded": "模组已下载"
-    }
-  },
-  "g": {
-    "make_new": "新建",
-    "continue": "确认",
-    "cancel": "取消",
-    "name": "名称",
-    "username": "用户名",
-    "password": "密码",
-    "delete": "删除",
-    "login": "登录",
-    "logout": "登出",
-    "account": "账户",
-    "upload": "上传",
-    "mods": "模组",
-    "nahida_drive": "纳西妲云盘",
-    "require_login": "需要登录",
-    "download": "下载",
-    "download_complete": "下载完成",
-    "genshin": "原神",
-    "starrail": "崩坏：星穹铁道",
-    "wuwa": "鸣潮",
-    "zzz": "绝区零",
-    "gf2": "少女前线2：追放",
-    "download_canceled": "下载已取消",
-    "download_failed": "下载失败"
-  },
-  "layout": {
-    "dock": {
-      "home": "首页",
-      "add_to_fav": "添加到收藏夹",
-      "remove_from_fav": "从收藏夹移除",
-      "toggle_navigator": "切换导航器",
-      "change_to_mod_menu": "切换到模组菜单",
-      "change_languages": "更改语言",
-      "favorites": {
-        "toast": {
-          "added": "已添加到收藏夹！",
-          "removed": "已从收藏夹移除",
-          "unauthorized": "收藏夹功能需要登录后使用",
-          "forbidden": "您没有权限将此模组添加到收藏夹",
-          "no_download_history": "要将模组添加到收藏夹，需要至少下载一次",
-          "mod_not_found": "找不到模组。模组可能已被删除"
-        }
-      },
-      "donate": "捐赠",
-      "backup_for_free": "免费备份您的游戏模组"
-    }
-  },
-  "upload": {
-    "login_status": "登录状态",
-    "logged_in": "已登录",
-    "logged_out": "未登录",
-    "file_input_box_1": "拖放或点击选择文件",
-    "file_input_box_2": "请选择{size}GiB以下的zip文件",
-    "title": "标题",
-    "tags": "标签",
-    "description": "简要说明",
-    "target_game": "适用游戏",
-    "expiration_date": "分享过期日",
-    "select_game": "选择游戏",
-    "start_upload": "开始上传",
-    "access_n_security": "权限和安全",
-    "state": {
-      "uploading": "上传中...",
-      "waiting": "等待中..."
-    }
-  },
-  "u": {
-    "my_mods": "我的模组",
-    "favorites": "收藏夹",
-    "mods": {
-      "filter": "筛选",
-      "column": "列",
-      "preview": "预览",
-      "upload_date": "上传日期",
-      "status": "状态",
-      "password": "密码",
-      "title": "标题",
-      "description": "描述",
-      "tags": "标签",
-      "previous": "上一页",
-      "next": "下一页"
-    },
-    "delete_account": "删除账户"
-  },
-  "c": {
-    "data-table-actions": {
-      "goto_mod": "前往模组页面",
-      "edit": "编辑",
-      "update": "更新",
-      "download": "下载",
-      "check_log": "查看日志",
-      "deactivate": "停用",
-      "activate": "激活",
-      "delete": "删除",
-      "dialog": {
-        "d0": {
-          "m0": "是否删除此模组？",
-          "m1": "此操作无法撤销。您确定要删除此模组吗？"
-        }
-      }
-    },
-    "mod_page_Buttons": {
-      "general_download": "普通下载",
-      "dl_with_mod_manager": "使用模组管理器下载"
-    }
-  },
-  "drive": {
-    "ui": {
-      "process_sheet": {
-        "no_transfer_yet": "当前没有活跃的传输"
-      },
-      "search_in_dir_placeholder": "在此目录中搜索...",
-      "transfers": "传输",
-      "drive": "云盘",
-      "my_drive": "我的云盘",
-      "name": "名称",
-      "size": "大小",
-      "date": "日期",
-      "settings": "设置",
-      "help": "帮助",
-      "trash": "回收站",
-      "empty_trash": "清空回收站",
-      "rename": "重命名",
-      "new_dir": "创建目录",
-      "no_contents_section_message": {
-        "0": "尚未上传文件或目录",
-        "1": "您可以将文件或目录拖放到此处上传"
-      },
-      "context_menu": {
-        "preview": "预览",
-        "open": "打开",
-        "download": "下载",
-        "public_link": "公共链接",
-        "move": "移动",
-        "info": "信息",
-        "copy_id": "复制ID",
-        "share": "分享"
-      },
-      "dir_drop_here_section_message": {
-        "0": "将文件夹放在这里"
-      },
-      "no_trashed_content_section_message": "回收站内还没有任何内容",
-      "empty_trash_dialog": {
-        "0": "确定要清空回收站吗？此操作无法撤销或恢复。",
-        "1": "清空"
-      },
-      "settings_page": {
-        "preview_cache": {
-          "toast": {
-            "loading": "正在删除预览缓存...",
-            "success": "已删除所有预览缓存",
-            "error": "删除预览缓存时发生错误：{error}"
-          },
-          "ui": {
-            "title": "预览缓存",
-            "desc": "清除预览缓存",
-            "action": "清除",
-            "dialog": {
-              "title": "清除预览缓存",
-              "desc": "是否清除所有缓存的预览图片？这可以释放存储空间，但需要时会重新下载图片。"
-            }
-          }
-        }
-      }
-    },
-    "toast": {
-      "copied_to_clipboard": "已复制到剪贴板"
-    },
-    "link": {
-      "required_password": "访问此共享链接需要密码",
-      "move_to_parent_dir": "移至上级文件夹"
-    },
-    "upload_dir": "上传文件夹",
-    "upload_file": "上传文件",
-    "not_validateExt": {
-      "0": "不支持的文件类型",
-      "1": "只能上传模组文件(.dds, .ib, .vb, .buf, .fmt, .ini)、图片文件和部分允许的文件(.py, .json, .txt)"
-    },
-    "#": {
-      "processNextDownloadInQueue": {
-        "toast-promise": {
-          "loading": "正在获取下载URL...",
-          "error": "获取下载URL失败：{error}"
-        }
-      }
-    },
-    "landing": {
-      "getting_started": "开始使用",
-      "msg": "在纳西妲云盘中免费无限制地备份所有3dmigoto模组。",
-      "msg1": "在纳西妲云盘中免费无限制地备份所有3dmigoto模组。"
+  "@": {
+    "cannot_use_showSaveFilePicker": {
+      "0": "不支持的浏览器",
+      "1": "请使用Chrome、Edge等基于Chromium的浏览器"
     }
   },
   "#": {
-    "ValidateName": {
-      "0": "名称不能仅由空格组成",
-      "1": "名称不能以空格开头",
-      "2": "名称不能以空格结尾",
-      "3": "名称长度必须在1到255个字符之间"
+    "CreateDir": {
+      "0": "目录名称格式无效",
+      "1": "获取创建目录路径信息失败",
+      "toast-promise": {
+        "loading": "正在创建目录...",
+        "success": "目录已创建"
+      }
+    },
+    "EmptyTrash": {
+      "toast-promise": {
+        "loading": "正在清空回收站...",
+        "success": "已完全删除{p1}个项目"
+      }
+    },
+    "itemsDelete": {
+      "0": "已永久删除{p1}个文件和目录"
+    },
+    "itemsRestore": {
+      "0": "{name}已从回收站恢复",
+      "1": "恢复位置已存在与{name}同名的文件夹或目录",
+      "2": "已完成{p2}个恢复，包括{p1}"
+    },
+    "moveItems": {
+      "already_processing": "已有进行中的操作",
+      "toast-promise": {
+        "error": "移动项目失败：{error}",
+        "loading": "正在移动项目...",
+        "success": "项目已成功移动"
+      }
     },
     "RenameItem": {
       "0": "名称不能为空",
@@ -232,41 +44,229 @@
         "success": "名称已更改"
       }
     },
-    "CreateDir": {
-      "0": "目录名称格式无效",
-      "1": "获取创建目录路径信息失败",
-      "toast-promise": {
-        "loading": "正在创建目录...",
-        "success": "目录已创建"
-      }
-    },
-    "itemsRestore": {
-      "0": "{name}已从回收站恢复",
-      "1": "恢复位置已存在与{name}同名的文件夹或目录",
-      "2": "已完成{p2}个恢复，包括{p1}"
-    },
-    "itemsDelete": {
-      "0": "已永久删除{p1}个文件和目录"
-    },
-    "EmptyTrash": {
-      "toast-promise": {
-        "loading": "正在清空回收站...",
-        "success": "已完全删除{p1}个项目"
-      }
-    },
-    "moveItems": {
-      "already_processing": "已有进行中的操作",
-      "toast-promise": {
-        "loading": "正在移动项目...",
-        "success": "项目已成功移动",
-        "error": "移动项目失败：{error}"
-      }
+    "ValidateName": {
+      "0": "名称不能仅由空格组成",
+      "1": "名称不能以空格开头",
+      "2": "名称不能以空格结尾",
+      "3": "名称长度必须在1到255个字符之间"
     }
   },
-  "@": {
-    "cannot_use_showSaveFilePicker": {
-      "0": "不支持的浏览器",
-      "1": "请使用Chrome、Edge等基于Chromium的浏览器"
+  "c": {
+    "data-table-actions": {
+      "activate": "激活",
+      "check_log": "查看日志",
+      "deactivate": "停用",
+      "delete": "删除",
+      "dialog": {
+        "d0": {
+          "m0": "是否删除此模组？",
+          "m1": "此操作无法撤销。您确定要删除此模组吗？"
+        }
+      },
+      "download": "下载",
+      "edit": "编辑",
+      "goto_mod": "前往模组页面",
+      "update": "更新"
+    },
+    "mod_page_Buttons": {
+      "dl_with_mod_manager": "使用模组管理器下载",
+      "general_download": "普通下载"
     }
+  },
+  "drive": {
+    "#": {
+      "processNextDownloadInQueue": {
+        "toast-promise": {
+          "error": "获取下载URL失败：{error}",
+          "loading": "正在获取下载URL..."
+        }
+      }
+    },
+    "landing": {
+      "getting_started": "开始使用",
+      "msg": "在纳西妲云盘中免费无限制地备份所有3dmigoto模组。",
+      "msg1": "在纳西妲云盘中免费无限制地备份所有3dmigoto模组。"
+    },
+    "link": {
+      "move_to_parent_dir": "移至上级文件夹",
+      "required_password": "访问此共享链接需要密码"
+    },
+    "not_validateExt": {
+      "0": "不支持的文件类型",
+      "1": "只能上传模组文件(.dds, .ib, .vb, .buf, .fmt, .ini)、图片文件和部分允许的文件(.py, .json, .txt)"
+    },
+    "toast": {
+      "copied_to_clipboard": "已复制到剪贴板"
+    },
+    "ui": {
+      "context_menu": {
+        "copy_id": "复制ID",
+        "download": "下载",
+        "info": "信息",
+        "move": "移动",
+        "open": "打开",
+        "preview": "预览",
+        "public_link": "公共链接",
+        "share": "分享"
+      },
+      "date": "日期",
+      "dir_drop_here_section_message": {
+        "0": "将文件夹放在这里"
+      },
+      "drive": "云盘",
+      "empty_trash": "清空回收站",
+      "empty_trash_dialog": {
+        "0": "确定要清空回收站吗？此操作无法撤销或恢复。",
+        "1": "清空"
+      },
+      "help": "帮助",
+      "my_drive": "我的云盘",
+      "name": "名称",
+      "new_dir": "创建目录",
+      "no_contents_section_message": {
+        "0": "尚未上传文件或目录",
+        "1": "您可以将文件或目录拖放到此处上传"
+      },
+      "no_trashed_content_section_message": "回收站内还没有任何内容",
+      "process_sheet": {
+        "no_transfer_yet": "当前没有活跃的传输"
+      },
+      "rename": "重命名",
+      "search_in_dir_placeholder": "在此目录中搜索...",
+      "settings": "设置",
+      "settings_page": {
+        "preview_cache": {
+          "toast": {
+            "error": "删除预览缓存时发生错误：{error}",
+            "loading": "正在删除预览缓存...",
+            "success": "已删除所有预览缓存"
+          },
+          "ui": {
+            "action": "清除",
+            "desc": "清除预览缓存",
+            "dialog": {
+              "desc": "是否清除所有缓存的预览图片？这可以释放存储空间，但需要时会重新下载图片。",
+              "title": "清除预览缓存"
+            },
+            "title": "预览缓存"
+          }
+        }
+      },
+      "size": "大小",
+      "transfers": "传输",
+      "trash": "回收站"
+    },
+    "upload_dir": "上传文件夹",
+    "upload_file": "上传文件"
+  },
+  "g": {
+    "account": "账户",
+    "cancel": "取消",
+    "continue": "确认",
+    "delete": "删除",
+    "download": "下载",
+    "download_canceled": "下载已取消",
+    "download_complete": "下载完成",
+    "download_failed": "下载失败",
+    "genshin": "原神",
+    "gf2": "少女前线2：追放",
+    "login": "登录",
+    "logout": "登出",
+    "make_new": "新建",
+    "mods": "模组",
+    "nahida_drive": "纳西妲云盘",
+    "name": "名称",
+    "password": "密码",
+    "require_login": "需要登录",
+    "starrail": "崩坏：星穹铁道",
+    "upload": "上传",
+    "username": "用户名",
+    "wuwa": "鸣潮",
+    "zzz": "绝区零"
+  },
+  "layout": {
+    "dock": {
+      "add_to_fav": "添加到收藏夹",
+      "backup_for_free": "免费备份您的游戏模组",
+      "change_languages": "更改语言",
+      "change_to_mod_menu": "切换到模组菜单",
+      "donate": "捐赠",
+      "favorites": {
+        "toast": {
+          "added": "已添加到收藏夹！",
+          "forbidden": "您没有权限将此模组添加到收藏夹",
+          "mod_not_found": "找不到模组。模组可能已被删除",
+          "no_download_history": "要将模组添加到收藏夹，需要至少下载一次",
+          "removed": "已从收藏夹移除",
+          "unauthorized": "收藏夹功能需要登录后使用"
+        }
+      },
+      "home": "首页",
+      "remove_from_fav": "从收藏夹移除",
+      "toggle_navigator": "切换导航器"
+    }
+  },
+  "toast": {
+    "error": {
+      "internal_server_error": "服务器错误",
+      "login": "登录时发生错误"
+    },
+    "success": {
+      "favorite_added": "已添加到收藏夹",
+      "favorite_removed": "已从收藏夹移除",
+      "login": "登录成功",
+      "mod_activated": "模组已激活",
+      "mod_deactivated": "模组已停用",
+      "mod_deleted": "模组删除完成",
+      "mod_downloaded": "模组已下载"
+    },
+    "warning": {
+      "cannot_get_mod_data_from_nara": "获取模组信息失败",
+      "download_expired": "下载已过期的模组",
+      "failure_turnstile": "Turnstile认证失败。请重试",
+      "invalid_password": "密码不匹配",
+      "missing_cftoken": "Turnstile令牌丢失。请重试",
+      "mod_manager_not_installed": "模组管理器未安装或无法使用",
+      "mod_not_ready": "模组上传未完成或者不可下载",
+      "pw_is_required": "请输入密码",
+      "username_or_pw_missing": "请输入用户名和密码"
+    }
+  },
+  "u": {
+    "delete_account": "删除账户",
+    "favorites": "收藏夹",
+    "mods": {
+      "column": "列",
+      "description": "描述",
+      "filter": "筛选",
+      "next": "下一页",
+      "password": "密码",
+      "preview": "预览",
+      "previous": "上一页",
+      "status": "状态",
+      "tags": "标签",
+      "title": "标题",
+      "upload_date": "上传日期"
+    },
+    "my_mods": "我的模组"
+  },
+  "upload": {
+    "access_n_security": "权限和安全",
+    "description": "简要说明",
+    "expiration_date": "分享过期日",
+    "file_input_box_1": "拖放或点击选择文件",
+    "file_input_box_2": "请选择{size}GiB以下的zip文件",
+    "logged_in": "已登录",
+    "logged_out": "未登录",
+    "login_status": "登录状态",
+    "select_game": "选择游戏",
+    "start_upload": "开始上传",
+    "state": {
+      "uploading": "上传中...",
+      "waiting": "等待中..."
+    },
+    "tags": "标签",
+    "target_game": "适用游戏",
+    "title": "标题"
   }
 }
