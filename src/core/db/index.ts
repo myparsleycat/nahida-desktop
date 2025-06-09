@@ -16,6 +16,7 @@ interface StorageKeyValues {
     height: number;
   };
   mods_layout: 'grid' | 'list';
+  autofix_after_nahida_download: boolean;
 }
 
 interface ImageCacheItem {
@@ -71,7 +72,8 @@ const LocalStorageValues: StorageKeyValues = {
     width: 1000,
     height: 670
   },
-  mods_layout: 'grid'
+  mods_layout: 'grid',
+  autofix_after_nahida_download: true
 };
 
 

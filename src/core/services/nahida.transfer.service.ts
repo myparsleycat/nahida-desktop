@@ -11,6 +11,10 @@ import { ProxyUrl } from "@core/const";
 import { extractFile } from "@core/lib/extractor";
 import { Notification } from "electron";
 import { Mod } from "@shared/types/nahida.types";
+import { SettingService } from "./setting.service";
+import { fixGenshinMod } from "@core/lib/mod/fix/genshin.fix";
+import fixHSRMod from "@core/lib/mod/fix/hsr.fix";
+import { processFolder } from "@core/lib/mod/fix/zzz.fix";
 
 type DownloadStatus = 'pending' | 'downloading' | 'extracting' | 'completed' | 'failed';
 
@@ -174,11 +178,26 @@ class NahidaTransferServiceClass {
                 progress.progress = 100;
                 progress.status = 'extracting';
 
-                await extractFile({ filePath, delAfter: true });
+                const extractedPath = await extractFile({ filePath, delAfter: true });
 
                 progress.status = 'completed';
                 ToastService.success(`${mod.title}의 다운로드가 완료되었습니다`);
                 new Notification({ title: '다운로드 완료', body: `${fileName} 의 다운로드가 완료되었습니다` }).show();
+
+                const autofix = await SettingService.autofix.nahida.get();
+                if (autofix) {
+                    switch (mod.game) {
+                        case 'genshin':
+                            fixGenshinMod(extractedPath).then(() => { })
+                            break;
+                        case 'starrail':
+                            fixHSRMod(extractedPath).then(() => { })
+                            break;
+                        case 'zzz':
+                            processFolder(extractedPath).then(() => { })
+                            break;
+                    }
+                }
 
                 this.transfers.download.completed.push({
                     pid: PID,

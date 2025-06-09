@@ -17,3 +17,5 @@ export interface getDirectChildrenOptions {
   recursive?: number;
   dirOnly?: boolean;
 }
+
+export type Games = 'genshin' | 'starrail' | 'zzz';

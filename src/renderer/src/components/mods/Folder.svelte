@@ -11,6 +11,7 @@
     ListIcon,
     SearchIcon,
     Trash2Icon,
+    WrenchIcon,
   } from "@lucide/svelte";
   import { Input } from "$lib/components/ui/input";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
@@ -354,6 +355,36 @@
               </p>
 
               <div class="buttons flex items-center space-x-1 shrink-0">
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger
+                    class="rounded-lg p-1 hover:bg-muted/50 duration-200"
+                  >
+                    <WrenchIcon size={20} />
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Content>
+                    <DropdownMenu.Group>
+                      <DropdownMenu.Item
+                        onclick={async (e) => {
+                          e.stopPropagation();
+                          ModsHelper.mod.fix(mod.path, "genshin");
+                        }}>원신</DropdownMenu.Item
+                      >
+                      <DropdownMenu.Item
+                        onclick={async (e) => {
+                          e.stopPropagation();
+                          await ModsHelper.mod.fix(mod.path, "starrail");
+                        }}>스타레일</DropdownMenu.Item
+                      >
+                      <DropdownMenu.Item
+                        onclick={async (e) => {
+                          e.stopPropagation();
+                          await ModsHelper.mod.fix(mod.path, "zzz");
+                        }}>젠레스</DropdownMenu.Item
+                      >
+                    </DropdownMenu.Group>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Root>
+
                 {#if mod.ini && mod.ini.data.length > 0}
                   <Dialog.Root>
                     <Dialog.Trigger

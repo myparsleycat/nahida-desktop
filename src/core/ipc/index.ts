@@ -9,8 +9,9 @@ import {
     defineNahidaChannels, injectNahidaHandlers,
     defineDriveChannels, injectDriveHandlers,
     defineToastChannels, injectToastHandlers,
-    defineWindowChannels, defineRendererChannels,
-    injectRendererHandlers,
+    defineSettingChannels, injectSettingHandlers,
+    injectRendererHandlers, defineRendererChannels,
+    defineWindowChannels,
 } from './channels';
 import type { Services } from './types';
 
@@ -33,10 +34,18 @@ export class IPCManager {
         defineToastChannels(rootGroup);
         defineWindowChannels(rootGroup);
         defineRendererChannels(rootGroup);
+        defineSettingChannels(rootGroup);
     }
 
     injectServiceHandlers(services: Services): void {
-        const { AuthService, FSService, DriveService, ModsService, NahidaService } = services;
+        const {
+            AuthService,
+            FSService,
+            DriveService,
+            ModsService,
+            NahidaService,
+            SettingService
+        } = services;
 
         injectAuthHandlers(this.registry, AuthService);
         injectFsHandlers(this.registry, FSService);
@@ -44,6 +53,7 @@ export class IPCManager {
         injectNahidaHandlers(this.registry, NahidaService);
         injectDriveHandlers(this.registry, DriveService);
         injectToastHandlers(this.registry);
+        injectSettingHandlers(this.registry, SettingService)
     }
 
     registerServices(ipcMainInstance: typeof ipcMain): void {
@@ -72,7 +82,8 @@ export const registerServices = async (ipcMainInstance: typeof ipcMain) => {
         FSService,
         DriveService,
         ModsService,
-        NahidaService
+        NahidaService,
+        SettingService
     } = await import('@core/services');
 
     ipcManager.injectServiceHandlers({
@@ -80,7 +91,8 @@ export const registerServices = async (ipcMainInstance: typeof ipcMain) => {
         FSService,
         DriveService,
         ModsService,
-        NahidaService
+        NahidaService,
+        SettingService
     });
     ipcManager.registerServices(ipcMainInstance);
 };

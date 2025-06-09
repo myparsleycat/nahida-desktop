@@ -7,3 +7,4 @@ export * from './drive';
 export * from './toast';
 export * from './window';
 export * from './renderer';
+export * from './setting';

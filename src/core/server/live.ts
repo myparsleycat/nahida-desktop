@@ -3,7 +3,7 @@
 import { Elysia, t } from "elysia";
 import { focus } from "@main/window";
 import { RendererCallManager } from "@core/ipc";
-import {  ToastService } from "@core/services";
+import { ToastService } from "@core/services";
 import { NahidaTransferService } from "@core/services/nahida.transfer.service";
 import { modDTO } from "@core/server/types";
 

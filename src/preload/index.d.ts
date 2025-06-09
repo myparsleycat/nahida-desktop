@@ -1,7 +1,8 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
 import type { DirCreateManyResp, MoveManyResp, TrashManyResp } from '@shared/types/drive.types';
-import type { DirectChildren } from '@shared/types/mods.types';
+import type { DirectChildren, Games } from '@shared/types/mods.types';
 import type { HelloModsRespSuccessResp, Mod } from '@shared/types/nahida.types';
+import type { Games } from '@shared/types/mods.types';
 
 declare global {
   interface Window {
@@ -59,6 +60,7 @@ declare global {
         mod: {
           read: (path: string) => Promise<DirectChildren[]>
           toggle: (path: string) => Promise<boolean>
+          fix: (path: string, game: Games) => Promise<boolean>
         },
         ini: {
           parse: (path: string) => Promise<IniParseResult[]>
@@ -131,6 +133,15 @@ declare global {
         requestCharPath: (callback: (data: any) => void) => () => any
         charPathResponse: (reqId: string, ob: { success: boolean; data: string }) => void
         closeCharPathSelector: (callback: () => void) => () => void
+      }
+
+      setting: {
+        autofix: {
+          nahida: {
+            set: (value: boolean) => Promise<boolean>
+            get: () => Promise<boolean>
+          }
+        }
       }
 
       window: WindowControls
