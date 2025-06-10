@@ -19,3 +19,4 @@ export interface getDirectChildrenOptions {
 }
 
 export type Games = 'genshin' | 'starrail' | 'zzz';
+export type Fixx = 'genshin' | 'starrail:hash' | 'starrail:pipeline' | 'zzz';

@@ -2,6 +2,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
+export const version = '3.2T';
+
 // Error and warning strings
 const ERROR_STR = '\x1b[1m\x1b[0;31mError:\x1b[0m';
 const WARN_STR = '\x1b[1m\x1b[1;33mWarning:\x1b[0m';

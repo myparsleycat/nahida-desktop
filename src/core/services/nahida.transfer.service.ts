@@ -12,9 +12,9 @@ import { extractFile } from "@core/lib/extractor";
 import { Notification } from "electron";
 import { Mod } from "@shared/types/nahida.types";
 import { SettingService } from "./setting.service";
-import { fixGenshinMod } from "@core/lib/mod/fix/genshin.fix";
-import fixHSRMod from "@core/lib/mod/fix/hsr.fix";
-import { processFolder } from "@core/lib/mod/fix/zzz.fix";
+import { fixGenshinMod } from "@core/lib/mod/fix/genshin.hash.fix";
+import { fixHSRMod } from "@core/lib/mod/fix/hsr.hash.fix";
+import { processFolder } from "@core/lib/mod/fix/zzz.hash.fix";
 
 type DownloadStatus = 'pending' | 'downloading' | 'extracting' | 'completed' | 'failed';
 

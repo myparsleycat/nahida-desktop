@@ -2,7 +2,7 @@ import { ElectronAPI } from '@electron-toolkit/preload'
 import type { DirCreateManyResp, MoveManyResp, TrashManyResp } from '@shared/types/drive.types';
 import type { DirectChildren, Games } from '@shared/types/mods.types';
 import type { HelloModsRespSuccessResp, Mod } from '@shared/types/nahida.types';
-import type { Games } from '@shared/types/mods.types';
+import type { Fixx } from '@shared/types/mods.types';
 
 declare global {
   interface Window {
@@ -60,7 +60,7 @@ declare global {
         mod: {
           read: (path: string) => Promise<DirectChildren[]>
           toggle: (path: string) => Promise<boolean>
-          fix: (path: string, game: Games) => Promise<boolean>
+          fix: (path: string, fix: Fixx) => Promise<boolean>
         },
         ini: {
           parse: (path: string) => Promise<IniParseResult[]>

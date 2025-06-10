@@ -1,6 +1,6 @@
 import { writable, get, derived } from 'svelte/store';
 import type { FileInfo, ModFolders, ReadDirectoryOptions } from '@shared/types/fs.types';
-import type { DirectChildren, Games, getDirectChildrenOptions } from '@shared/types/mods.types';
+import type { DirectChildren, Fixx } from '@shared/types/mods.types';
 import type { IniParseResult } from '@core/lib/InIUtil';
 
 class ModsHelperClass {
@@ -46,7 +46,7 @@ class ModsHelperClass {
   mod = {
     read: async (path: string) => await window.api.mods.mod.read(path),
     toggle: async (path: string) => await window.api.mods.mod.toggle(path),
-    fix: async (path: string, game: Games) => await window.api.mods.mod.fix(path, game)
+    fix: async (path: string, fix: Fixx) => await window.api.mods.mod.fix(path, fix)
   }
 
   ini = {

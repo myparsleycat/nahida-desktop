@@ -1,5 +1,7 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import fse from 'fs-extra';
+import path from 'node:path';
+
+export const version = '5.4';
 
 interface RemapData {
     name: string;
@@ -3991,7 +3993,7 @@ for (const j of alljson_43) {
     }
 }
 
-function createBackup(filePath: string, isIni: boolean = false): string | null {
+async function createBackup(filePath: string, isIni: boolean = false) {
     try {
         let backupPath: string;
         if (isIni) {
@@ -4003,7 +4005,7 @@ function createBackup(filePath: string, isIni: boolean = false): string | null {
             backupPath = path.join(dir, backupName);
         }
 
-        fs.copyFileSync(filePath, backupPath);
+        await fse.copyFile(filePath, backupPath);
         return backupPath;
     } catch (error) {
         console.error(`Error creating backup for ${filePath}: ${error}`);
@@ -4011,7 +4013,7 @@ function createBackup(filePath: string, isIni: boolean = false): string | null {
     }
 }
 
-function collectIniFiles(folderPath: string, excludeDisabled: boolean = false): string[] {
+async function collectIniFiles(folderPath: string, excludeDisabled: boolean = false) {
     console.log("\nCollecting ini files, please wait...");
     const iniFiles: string[] = [];
     const excludeKeywords = new Set(['desktop', 'ntuser', 'disabled_backup']);
@@ -4020,16 +4022,16 @@ function collectIniFiles(folderPath: string, excludeDisabled: boolean = false): 
         excludeKeywords.add('disabled');
     }
 
-    function walkDir(dir: string) {
-        const files = fs.readdirSync(dir);
+    async function walkDir(dir: string) {
+        const files = await fse.readdir(dir);
 
         for (const file of files) {
             const fullPath = path.join(dir, file);
-            const stat = fs.statSync(fullPath);
+            const stat = await fse.stat(fullPath);
 
             if (stat.isDirectory()) {
                 if (!fullPath.includes('BufferValues')) {
-                    walkDir(fullPath);
+                    await walkDir(fullPath);
                 }
             } else if (file.toLowerCase().endsWith('.ini')) {
                 const shouldExclude = Array.from(excludeKeywords).some(keyword =>
@@ -4042,7 +4044,7 @@ function collectIniFiles(folderPath: string, excludeDisabled: boolean = false): 
         }
     }
 
-    walkDir(folderPath);
+    await walkDir(folderPath);
     return iniFiles;
 }
 
@@ -4069,14 +4071,14 @@ function remap(blendData: Buffer, vgRemap: number[]): Buffer {
     return remappedBlend;
 }
 
-function applyRemap(
+async function applyRemap(
     data: string,
     folderPath: string,
     blendFiles: string[],
     remaps: Record<string, RemapData>,
     reverse: boolean,
     noRemap: boolean
-): string {
+) {
     for (const [x, vgRemap] of Object.entries(remaps)) {
         if (data.includes(x)) {
             if (noRemap) {
@@ -4101,23 +4103,23 @@ function applyRemap(
                         const bakFile = `Original_${path.basename(blendFile)}.bak`;
                         const bakPath = path.join(folderPath, bakFile);
 
-                        if (fs.existsSync(bakPath)) {
-                            fs.unlinkSync(blendFile);
-                            fs.renameSync(bakPath, blendFile);
+                        if (await fse.pathExists(bakPath)) {
+                            await fse.unlink(blendFile);
+                            await fse.rename(bakPath, blendFile);
                             console.log(`Restored original file: ${path.basename(blendFile)}`);
                         } else {
                             console.log(`No backup found for ${path.basename(blendFile)}. Skipping.`);
                             continue;
                         }
                     } else {
-                        const backupPath = createBackup(blendFile);
+                        const backupPath = await createBackup(blendFile);
                         if (backupPath) {
                             console.log(`Backup created: ${path.basename(backupPath)}`);
                         }
 
-                        const blendData = fs.readFileSync(blendFile);
+                        const blendData = await fse.readFile(blendFile);
                         const remapData = remap(blendData, vgRemap.mapping);
-                        fs.writeFileSync(blendFile, remapData);
+                        await fse.writeFile(blendFile, remapData);
                         console.log(`File: ${path.basename(blendFile)} VGs remapped successfully!`);
                     }
                 } catch (error) {
@@ -4198,12 +4200,12 @@ function updateVersion(
     return data;
 }
 
-function processIniFile(
+async function processIniFile(
     iniFile: string,
     blendFiles: string[],
     remaps: Record<string, RemapData>,
     config: ProcessingConfig
-): ProcessingResult {
+): Promise<ProcessingResult> {
     let updated = false;
 
     try {
@@ -4211,7 +4213,7 @@ function processIniFile(
         const relativePath = path.relative(process.cwd(), path.dirname(iniFile));
         console.log(`Processing INI file: ${path.basename(iniFile)} (Path: ${relativePath})`);
 
-        let data = fs.readFileSync(iniFile, 'utf-8');
+        let data = await fse.readFile(iniFile, 'utf-8');
         const originalData = data;
 
         if (config.reverse) {
@@ -4241,7 +4243,7 @@ function processIniFile(
                 data = updateVersion(data, reverseMap, "4.3 (Reverse)");
             }
             if (config.fix_41) {
-                data = applyRemap(data, folderPath, blendFiles, remaps, config.reverse, config.no_remap);
+                data = await applyRemap(data, folderPath, blendFiles, remaps, config.reverse, config.no_remap);
                 const reverseMap: Record<string, string> = {};
                 for (const [k, v] of Object.entries(config.oldvsnew_41)) {
                     reverseMap[v] = k;
@@ -4251,7 +4253,7 @@ function processIniFile(
         } else {
             if (config.fix_41) {
                 data = updateVersion(data, config.oldvsnew_41, "4.1", alljson_41);
-                data = applyRemap(data, folderPath, blendFiles, remaps, config.reverse, config.no_remap);
+                data = await applyRemap(data, folderPath, blendFiles, remaps, config.reverse, config.no_remap);
             }
             if (config.fix_43) {
                 data = updateVersion(data, config.oldvsnew_43, "4.3");
@@ -4265,12 +4267,12 @@ function processIniFile(
         }
 
         if (data !== originalData) {
-            const backupPath = createBackup(iniFile, true);
+            const backupPath = await createBackup(iniFile, true);
             if (backupPath) {
                 console.log(`Backup created: ${path.basename(backupPath)}`);
             }
 
-            fs.writeFileSync(iniFile, data, 'utf-8');
+            await fse.writeFile(iniFile, data, 'utf-8');
             console.log(`File: ${path.basename(iniFile)} has been modified!`);
             updated = true;
         } else {
@@ -4327,14 +4329,14 @@ export async function fixGenshinMod(folderPath: string, options: {
         console.log("=".repeat(70));
     }
 
-    const iniFiles = collectIniFiles(folderPath, options.exclude_disabled);
+    const iniFiles = await collectIniFiles(folderPath, options.exclude_disabled);
     const blendFiles: string[] = [];
 
-    function collectBlendFiles(dir: string) {
-        const files = fs.readdirSync(dir);
+    async function collectBlendFiles(dir: string) {
+        const files = await fse.readdir(dir);
         for (const file of files) {
             const fullPath = path.join(dir, file);
-            const stat = fs.statSync(fullPath);
+            const stat = await fse.stat(fullPath);
 
             if (stat.isDirectory()) {
                 collectBlendFiles(fullPath);
@@ -4349,7 +4351,7 @@ export async function fixGenshinMod(folderPath: string, options: {
     let processedFilesCount = 0;
 
     for (const iniFile of iniFiles) {
-        const result = processIniFile(iniFile, blendFiles, remaps, config);
+        const result = await processIniFile(iniFile, blendFiles, remaps, config);
         if (result.updated) {
             processedFilesCount++;
         }

@@ -8,10 +8,11 @@ import { basename, dirname, join } from "node:path";
 import { iniutil as ini, IniParseResult } from "@core/lib/InIUtil";
 import { ToastService } from "./toast.service";
 import Validator from "@shared/utils/Validator";
-import { fixGenshinMod } from "@core/lib/mod/fix/genshin.fix";
-import { processFolder } from "@core/lib/mod/fix/zzz.fix";
-import type { Games } from "@shared/types/mods.types";
-import fixHSRMod from "@core/lib/mod/fix/hsr.fix";
+import { fixGenshinMod } from "@core/lib/mod/fix/genshin.hash.fix";
+import { processFolder } from "@core/lib/mod/fix/zzz.hash.fix";
+import type { Fixx } from "@shared/types/mods.types";
+import { fixHSRMod } from "@core/lib/mod/fix/hsr.hash.fix";
+import { HSRPipelineConvert } from "@core/lib/mod/fix/hsr.pipeline.convert";
 
 class ModsServiceClass {
     currentFolderPath: string | null = null;
@@ -201,14 +202,17 @@ class ModsServiceClass {
             }
         },
 
-        fix: async (path: string, game: Games) => {
+        fix: async (path: string, fix: Fixx) => {
             try {
-                switch (game) {
+                switch (fix) {
                     case 'genshin':
                         await fixGenshinMod(path);
                         break;
-                    case 'starrail':
+                    case 'starrail:hash':
                         await fixHSRMod(path, { checkDirectory: false });
+                        break;
+                    case 'starrail:pipeline':
+                        await HSRPipelineConvert(path);
                         break;
                     case 'zzz':
                         processFolder(path);
