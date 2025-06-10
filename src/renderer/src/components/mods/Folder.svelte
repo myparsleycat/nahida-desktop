@@ -372,8 +372,17 @@
                       <DropdownMenu.Item
                         onclick={async (e) => {
                           e.stopPropagation();
-                          await ModsHelper.mod.fix(mod.path, "starrail");
-                        }}>스타레일</DropdownMenu.Item
+                          await ModsHelper.mod.fix(mod.path, "starrail:hash");
+                        }}>스타레일 해시</DropdownMenu.Item
+                      >
+                      <DropdownMenu.Item
+                        onclick={async (e) => {
+                          e.stopPropagation();
+                          await ModsHelper.mod.fix(
+                            mod.path,
+                            "starrail:pipeline",
+                          );
+                        }}>스타레일 Pipeline</DropdownMenu.Item
                       >
                       <DropdownMenu.Item
                         onclick={async (e) => {
