@@ -1,5 +1,7 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import fse from 'fs-extra';
+import path from 'node:path';
+
+export const version = '1.7B';
 
 const globalModifiedBuffers: Record<string, string[]> = {};
 
@@ -25,7 +27,7 @@ interface CommandExecutor {
 }
 
 export async function processFolder(folderPath: string) {
-    const files = fs.readdirSync(folderPath);
+    const files = await fse.readdir(folderPath);
 
     for (const filename of files) {
         if (filename.toUpperCase().startsWith('DISABLED') && filename.toLowerCase().endsWith('.ini')) {
@@ -36,21 +38,21 @@ export async function processFolder(folderPath: string) {
         }
 
         const filepath = path.join(folderPath, filename);
-        const stats = fs.statSync(filepath);
+        const stats = await fse.stat(filepath);
 
         if (stats.isDirectory()) {
             processFolder(filepath);
         } else if (filename.endsWith('.ini')) {
             console.log('.ini 파일 발견:', filepath);
-            upgradeIni(filepath);
+            await upgradeIni(filepath);
         }
     }
 }
 
-function upgradeIni(filepath: string): boolean {
+async function upgradeIni(filepath: string): Promise<boolean> {
     try {
         const ini = new Ini(filepath).upgrade();
-        ini.save();
+        await ini.save();
         return true;
     } catch (error) {
         console.log('오류 발생:', error);
@@ -144,7 +146,7 @@ class Ini {
         this.filepath = filepath;
 
         try {
-            this.content = fs.readFileSync(filepath, 'utf-8');
+            this.content = fse.readFileSync(filepath, 'utf-8');
             this.encoding = 'utf-8';
         } catch (error) {
             throw error;
@@ -222,22 +224,22 @@ class Ini {
         return defaultArgs;
     }
 
-    save(): void {
+    async save(): Promise<void> {
         if (this.touched) {
             const basename = path.basename(this.filepath).split('.ini')[0];
             const dirPath = path.dirname(path.resolve(this.filepath));
             const backupFilename = `DISABLED_BACKUP_${Date.now()}.${basename}.ini`;
             const backupFullpath = path.join(dirPath, backupFilename);
 
-            fs.renameSync(this.filepath, backupFullpath);
+            await fse.rename(this.filepath, backupFullpath);
             console.log(`백업 생성: ${backupFilename} at ${dirPath}`);
 
-            fs.writeFileSync(this.filepath, this.content, this.encoding);
+            await fse.writeFile(this.filepath, this.content, this.encoding);
 
             if (Object.keys(this.modifiedBuffers).length > 0) {
                 console.log('업데이트된 버퍼 쓰기');
                 for (const [filepath, data] of Object.entries(this.modifiedBuffers)) {
-                    fs.writeFileSync(filepath, data);
+                    await fse.writeFile(filepath, data);
                     console.log(`\t저장됨: ${filepath}`);
                 }
             }
@@ -352,7 +354,7 @@ class Zzz13RemapTexcoord implements CommandExecutor {
             if (bufferDictKey in ini.modifiedBuffers) {
                 buffer = ini.modifiedBuffers[bufferDictKey];
             } else {
-                buffer = fs.readFileSync(bufferFilepath);
+                buffer = fse.readFileSync(bufferFilepath);
             }
 
             const vcount = Math.floor(buffer.length / oldStride);
@@ -749,7 +751,7 @@ class UpdateBufferBlendIndices implements CommandExecutor {
             if (bufferDictKey in ini.modifiedBuffers) {
                 buffer = ini.modifiedBuffers[bufferDictKey];
             } else {
-                buffer = fs.readFileSync(bufferFilepath);
+                buffer = fse.readFileSync(bufferFilepath);
             }
 
             const newBuffer = Buffer.alloc(buffer.length);
