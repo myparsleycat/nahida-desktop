@@ -561,14 +561,14 @@
                 <div class="absolute inset-0 w-full h-full">
                   <img
                     class="w-full h-full object-cover blur scale-110"
-                    src={`nahida://external-image?path=${encodeURIComponent(`${mod.preview.path}`)}&t=${timestamp}`}
+                    src={`nahida://image-local?path=${encodeURIComponent(`${mod.preview.path}`)}&t=${timestamp}`}
                     alt={mod.name}
                     loading="lazy"
                   />
                 </div>
                 <img
                   class="relative object-contain w-full h-full z-10"
-                  src={`nahida://external-image?path=${encodeURIComponent(`${mod.preview.path}`)}&t=${timestamp}`}
+                  src={`nahida://image-local?path=${encodeURIComponent(`${mod.preview.path}`)}&t=${timestamp}`}
                   alt={mod.name}
                   loading="lazy"
                 />
@@ -576,7 +576,7 @@
                   class="absolute left-1 top-1 z-20 opacity-0 group-hover:opacity-100 duration-200"
                 >
                   <PreviewModal
-                    src={`nahida://external-image?path=${encodeURIComponent(`${mod.preview.path}`)}&t=${timestamp}`}
+                    src={`nahida://image-local?path=${encodeURIComponent(`${mod.preview.path}`)}&t=${timestamp}`}
                     alt={`${mod.name} Modal`}
                   />
                 </div>
