@@ -15,6 +15,7 @@ import { SettingService } from "./setting.service";
 import { fixGenshinMod } from "@core/lib/mod/fix/genshin.hash.fix";
 import { fixHSRMod } from "@core/lib/mod/fix/hsr.hash.fix";
 import { processFolder } from "@core/lib/mod/fix/zzz.hash.fix";
+import wuwaModFix from "@core/lib/mod/fix/wuwa.fix";
 
 type DownloadStatus = 'pending' | 'downloading' | 'extracting' | 'completed' | 'failed';
 
@@ -195,6 +196,9 @@ class NahidaTransferServiceClass {
                             break;
                         case 'zzz':
                             processFolder(extractedPath).then(() => { })
+                            break;
+                        case 'wuwa':
+                            wuwaModFix(extractedPath).then(() => { })
                             break;
                     }
                 }

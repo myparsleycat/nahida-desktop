@@ -367,13 +367,13 @@
                         onclick={async (e) => {
                           e.stopPropagation();
                           ModsHelper.mod.fix(mod.path, "genshin");
-                        }}>원신</DropdownMenu.Item
+                        }}>{`${$_("g.genshin")} Hash`}</DropdownMenu.Item
                       >
                       <DropdownMenu.Item
                         onclick={async (e) => {
                           e.stopPropagation();
                           await ModsHelper.mod.fix(mod.path, "starrail:hash");
-                        }}>스타레일 해시</DropdownMenu.Item
+                        }}>{`${$_("g.starrail")} Hash`}</DropdownMenu.Item
                       >
                       <DropdownMenu.Item
                         onclick={async (e) => {
@@ -382,13 +382,19 @@
                             mod.path,
                             "starrail:pipeline",
                           );
-                        }}>스타레일 Pipeline</DropdownMenu.Item
+                        }}>{`${$_("g.starrail")} Pipeline`}</DropdownMenu.Item
                       >
                       <DropdownMenu.Item
                         onclick={async (e) => {
                           e.stopPropagation();
                           await ModsHelper.mod.fix(mod.path, "zzz");
-                        }}>젠레스</DropdownMenu.Item
+                        }}>{`${$_("g.zzz")} Hash`}</DropdownMenu.Item
+                      >
+                      <DropdownMenu.Item
+                        onclick={async (e) => {
+                          e.stopPropagation();
+                          await ModsHelper.mod.fix(mod.path, "wuwa");
+                        }}>{`${$_("g.wuwa")} Hash`}</DropdownMenu.Item
                       >
                     </DropdownMenu.Group>
                   </DropdownMenu.Content>
