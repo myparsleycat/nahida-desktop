@@ -37,8 +37,8 @@ class AutoUpdaterManager {
                 .showMessageBox({
                     type: "info",
                     title: `New Update Available: v${au.version}`,
-                    message:
-                        "새로운 버전으로 업데이트 할 수 있습니다. 지금 진행할까요?",
+                    message: "새로운 버전으로 업데이트 할 수 있습니다. 지금 진행할까요?",
+                    detail: `${au.releaseNotes}`,
                     buttons: ["확인", "나중에 진행"]
                 })
                 .then(result => {
