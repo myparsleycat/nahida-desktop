@@ -628,14 +628,3 @@ export async function HSRPipelineConvert(folderPath: string): Promise<void> {
     const processor = new IniBatchProcessor(folderPath);
     await processor.processAll();
 }
-
-// For direct execution
-export async function main(): Promise<void> {
-    const processor = new IniBatchProcessor(process.cwd());
-    await processor.processAll();
-}
-
-// If running directly
-if (require.main === module) {
-    main().catch(console.error);
-}
