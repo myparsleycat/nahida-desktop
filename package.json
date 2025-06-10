@@ -1,6 +1,6 @@
 {
   "name": "nahida-desktop",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Nahida.live Desktop App",
   "main": "./out/main/index.js",
   "author": "nahida.live",
@@ -67,7 +67,7 @@
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
-    "@internationalized/date": "^3.8.1",
+    "@internationalized/date": "^3.8.2",
     "@sveltejs/vite-plugin-svelte": "^5.1.0",
     "@types/node": "^22.15.30",
     "bits-ui": "^2.5.0",

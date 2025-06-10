@@ -13,6 +13,7 @@ import { processFolder } from "@core/lib/mod/fix/zzz.hash.fix";
 import type { Fixx } from "@shared/types/mods.types";
 import { fixHSRMod } from "@core/lib/mod/fix/hsr.hash.fix";
 import { HSRPipelineConvert } from "@core/lib/mod/fix/hsr.pipeline.convert";
+import wuwaModFix from "@core/lib/mod/fix/wuwa.fix";
 
 class ModsServiceClass {
     currentFolderPath: string | null = null;
@@ -216,6 +217,9 @@ class ModsServiceClass {
                         break;
                     case 'zzz':
                         processFolder(path);
+                        break;
+                    case 'wuwa':
+                        await wuwaModFix(path);
                         break;
                     default:
                         ToastService.error('픽스 오류', {
