@@ -361,7 +361,9 @@ class ModsServiceClass {
             }
 
             let previewPath: string | null = null;
-            const previewImage = child.children?.find(item => item.name === 'preview');
+            const previewImage = child.children?.find(item =>
+                item.name.toLowerCase().startsWith('preview.')
+            );
             const firstImage = child.children?.find(item => !item.isDirectory &&
                 ['jpg', 'jpeg', 'png', 'gif', 'avif', 'avifs', 'webp'].includes(item.name.split('.').pop()!.toLowerCase()));
 
