@@ -52,6 +52,7 @@ class FileSystemServiceClass {
             ToastService.error('파일 저장중 오류 발생', {
                 description: e.message
             });
+            console.error('writeFile Error', e);
             return false;
         }
     }
@@ -70,15 +71,6 @@ class FileSystemServiceClass {
 
     async openPath(path: string) {
         shell.openPath(path);
-    }
-
-    async getImgBase64(path: string) {
-        const buf = await this.readFile(path, "buf");
-        const [filetype, base64] = await Promise.all([
-            fileTypeFromBuffer(buf),
-            bufferToBase64(buf)
-        ]);
-        return `data:${filetype?.mime};base64,${base64}`;
     }
 
     async readDirectory(dirPath: string, options: ReadDirectoryOptions = {}, currentDepth: number = 0): Promise<FileInfo[]> {
@@ -132,7 +124,7 @@ class FileSystemServiceClass {
 
             return result;
         } catch (error) {
-            console.error(`폴더 읽기 오류 (${dirPath}):`, error);
+            console.error(`readDirectory (${dirPath}):`, error);
             throw error;
         }
     }
