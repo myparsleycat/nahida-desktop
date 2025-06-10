@@ -46,7 +46,7 @@
               <div class="absolute inset-0 w-full h-full">
                 <img
                   class="w-full h-full object-cover blur scale-110"
-                  src={`nahida://external-image?url=${encodeURIComponent(`${mod.preview_url}`)}&t=${timestamp}`}
+                  src={`nahida://image-web?url=${encodeURIComponent(`${mod.preview_url}`)}&t=${timestamp}`}
                   alt={mod.title}
                   loading="lazy"
                   decoding="async"
@@ -54,7 +54,7 @@
               </div>
               <img
                 class="relative object-contain w-full h-full"
-                src={`nahida://external-image?url=${encodeURIComponent(`${mod.preview_url}`)}&t=${timestamp}`}
+                src={`nahida://image-web?url=${encodeURIComponent(`${mod.preview_url}`)}&t=${timestamp}`}
                 alt={mod.title}
                 loading="lazy"
                 decoding="async"
@@ -72,7 +72,7 @@
                 </button> -->
 
                 <PreviewModalButton
-                  src={`nahida://external-image?url=${encodeURIComponent(`${mod.preview_url}`)}&t=${timestamp}`}
+                  src={`nahida://image-web?url=${encodeURIComponent(`${mod.preview_url}`)}&t=${timestamp}`}
                   alt={`${mod.title} Modal`}
                 />
               </div>

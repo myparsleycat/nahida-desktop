@@ -1,8 +1,9 @@
 import { fileTypeFromBuffer } from "file-type";
 import Database from "better-sqlite3";
-import log from 'electron-log';
 import type BetterSqlite3 from 'better-sqlite3';
 import { tableSchemas } from "./schema";
+import { app } from "electron";
+import path from "node:path";
 
 interface StorageKeyValues {
   sess: string | null;
@@ -176,14 +177,14 @@ class DbHandler {
   async init(): Promise<BetterSqlite3.Database> {
     if (this.db) {
       console.log("DB already initialized");
-      log.info("DB already initialized");
       return this.db;
     }
 
     try {
-      this.db = new Database('./database.db');
+      const userDataPath = app.getPath('userData');
+      const dbPath = path.join(userDataPath, 'database.db');
+      this.db = new Database(dbPath);
       console.log("Connected to the SQLite database");
-      log.info("Connected to the SQLite database");
 
       this.db.exec(META_TABLE_SCHEMA);
 
@@ -193,7 +194,6 @@ class DbHandler {
       return this.db;
     } catch (err) {
       console.error("Error during database initialization:", err);
-      log.error("Error during database initialization", err);
       throw err;
     }
   }
@@ -258,7 +258,7 @@ class DbHandler {
       const result = this.db!.prepare(query).get(tableName);
       return !!result;
     } catch (err) {
-      log.error(`Error checking table existence for ${tableName}:`, err);
+      console.error(`Error checking table existence for ${tableName}:`, err);
       return false;
     }
   }
@@ -269,7 +269,7 @@ class DbHandler {
       const result = this.db!.prepare(query).get(tableName) as { version: number } | undefined;
       return result?.version || 1;
     } catch (err) {
-      log.error(`Error getting schema version for ${tableName}:`, err);
+      console.error(`Error getting schema version for ${tableName}:`, err);
       return 1;
     }
   }
@@ -282,7 +282,7 @@ class DbHandler {
       `;
       this.db!.prepare(query).run(tableName, version);
     } catch (err) {
-      log.error(`Error setting schema version for ${tableName}:`, err);
+      console.error(`Error setting schema version for ${tableName}:`, err);
     }
   }
 
@@ -300,7 +300,7 @@ class DbHandler {
 
       return columns.map(col => col.name);
     } catch (err) {
-      log.error(`Error getting existing columns for ${tableName}:`, err);
+      console.error(`Error getting existing columns for ${tableName}:`, err);
       return [];
     }
   }
@@ -331,7 +331,7 @@ class DbHandler {
         }
       }
     } catch (err) {
-      log.error(`Error updating table schema for ${schema.name}:`, err);
+      console.error(`Error updating table schema for ${schema.name}:`, err);
       throw err;
     }
   }
@@ -354,7 +354,7 @@ class DbHandler {
       if (err instanceof Error && err.message.includes('duplicate column name')) {
         console.log(`Column ${columnDef.name} already exists in ${tableName} table`);
       } else {
-        log.error(`Error adding column ${columnDef.name} to ${tableName}:`, err);
+        console.error(`Error adding column ${columnDef.name} to ${tableName}:`, err);
         throw err;
       }
     }
@@ -434,7 +434,7 @@ class DbHandler {
         return row as T;
       }
     } catch (err) {
-      log.error(err);
+      console.error(err);
       throw err;
     }
   }
@@ -496,7 +496,7 @@ class DbHandler {
         throw new Error(`Unsupported table: ${table}`);
       }
     } catch (err) {
-      log.error(err);
+      console.error(err);
       throw err;
     }
   }
@@ -625,7 +625,7 @@ class DbHandler {
         throw new Error(`Unsupported table: ${table}`);
       }
     } catch (err) {
-      log.error(err);
+      console.error('update Error', err);
       throw err;
     }
   }
@@ -677,7 +677,7 @@ class DbHandler {
       const row = stmt.get(key);
       return !!row;
     } catch (err) {
-      log.error(err);
+      console.error('keyExists Error', err);
       throw err;
     }
   }
@@ -688,7 +688,7 @@ class DbHandler {
       const stmt = db.prepare(sql);
       return stmt.all(...params) as T[];
     } catch (err) {
-      log.error(err);
+      console.error('query Error', err);
       throw err;
     }
   }
@@ -700,7 +700,7 @@ class DbHandler {
       const info = stmt.run(...params);
       return info.changes;
     } catch (err) {
-      log.error(err);
+      console.error('exec Error', err);
       throw err;
     }
   }
@@ -734,7 +734,6 @@ class DbHandler {
       return deleted;
     } catch (err) {
       console.error(`Error deleting item with key ${key} from ${table}:`, err);
-      log.error(err);
       throw err;
     }
   }

@@ -1,11 +1,12 @@
 import { app, Menu, Tray } from "electron";
 import icon from '../../resources/nahida.png?asset'
 import { mainWindow } from "./window";
+import { getAutoUpdater } from "./updater";
 
 function createTray() {
   const tray = new Tray(icon);
   const contextMenu = Menu.buildFromTemplate([
-    // { label: '항목1', type: 'normal', click: () => { } },
+    { label: 'Check Update', type: 'normal', click: async () => { const updater = getAutoUpdater(); await updater.checkForUpdates() } },
     // { type: 'separator' },
     { label: 'Quit', type: 'normal', click: () => { app.quit(); } }
   ]);
