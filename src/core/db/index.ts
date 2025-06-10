@@ -16,6 +16,7 @@ interface StorageKeyValues {
     width: number;
     height: number;
   };
+  folders_layout: 'list' | 'align';
   mods_layout: 'grid' | 'list';
   autofix_after_nahida_download: boolean;
 }
@@ -73,6 +74,7 @@ const LocalStorageValues: StorageKeyValues = {
     width: 1000,
     height: 670
   },
+  folders_layout: 'align',
   mods_layout: 'grid',
   autofix_after_nahida_download: true
 };

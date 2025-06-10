@@ -10,11 +10,17 @@ export function defineModsChannels(rootGroup: ChannelGroup) {
 
     const modsUiGroup = modsGroup.addGroup('ui');
     const modsUiResizableGroup = modsUiGroup.addGroup('resizable');
-    const modsUiLayoutGroup = modsUiGroup.addGroup('layout');
     modsUiResizableGroup.addChannel('get');
     modsUiResizableGroup.addChannel('set');
-    modsUiLayoutGroup.addChannel('get');
-    modsUiLayoutGroup.addChannel('set');
+
+    const modsUiLayoutGroup = modsUiGroup.addGroup('layout');
+    const modsUiLayoutFolderGroup = modsUiLayoutGroup.addGroup('folder');
+    modsUiLayoutFolderGroup.addChannel('get');
+    modsUiLayoutFolderGroup.addChannel('set');
+
+    const modsUiLayoutModGroup = modsUiLayoutGroup.addGroup('mod');
+    modsUiLayoutModGroup.addChannel('get');
+    modsUiLayoutModGroup.addChannel('set');
 
     const modsFolderGroup = modsGroup.addGroup('folder');
     modsFolderGroup.addChannel('getAll');
@@ -55,9 +61,14 @@ export function injectModsHandlers(registry: any, mods: typeof ModsService) {
         set: (size: number) => mods.ui.resizable.set(size)
     });
 
-    registry.injectHandlers('mods.ui.layout', {
-        get: () => mods.ui.layout.get(),
-        set: (layout: 'grid' | 'list') => mods.ui.layout.set(layout)
+    registry.injectHandlers('mods.ui.layout.folder', {
+        get: () => mods.ui.layout.folder.get(),
+        set: (layout: 'list' | 'align') => mods.ui.layout.folder.set(layout)
+    });
+
+    registry.injectHandlers('mods.ui.layout.mod', {
+        get: () => mods.ui.layout.mod.get(),
+        set: (layout: 'grid' | 'list') => mods.ui.layout.mod.set(layout)
     });
 
     registry.injectHandlers('mods.folder', {

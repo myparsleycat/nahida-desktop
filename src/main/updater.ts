@@ -2,6 +2,7 @@ import { dialog } from 'electron';
 import ProgressBar from 'electron-progressbar';
 import electronUpdater, { type AppUpdater } from 'electron-updater';
 import log from 'electron-log';
+import { convert } from 'html-to-text';
 
 class AutoUpdaterManager {
     private static instance: AutoUpdaterManager | null = null;
@@ -38,7 +39,7 @@ class AutoUpdaterManager {
                     type: "info",
                     title: `New Update Available: v${au.version}`,
                     message: "새로운 버전으로 업데이트 할 수 있습니다. 지금 진행할까요?",
-                    detail: `${au.releaseNotes}`,
+                    detail: convert(String(au.releaseNotes)),
                     buttons: ["확인", "나중에 진행"]
                 })
                 .then(result => {

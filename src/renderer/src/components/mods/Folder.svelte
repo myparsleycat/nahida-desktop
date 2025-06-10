@@ -50,7 +50,7 @@
   let previewPathToOverwrite = $state<string | null>(null);
 
   onMount(async () => {
-    layout = await ModsHelper.ui.layout.get();
+    layout = await ModsHelper.ui.layout.mod.get();
   });
 
   const getMods = async (path: string) => {
@@ -204,7 +204,7 @@
             } else {
               layout = "grid";
             }
-            await ModsHelper.ui.layout.set(layout);
+            await ModsHelper.ui.layout.mod.set(layout);
           }}
         >
           {#if layout === "grid"}

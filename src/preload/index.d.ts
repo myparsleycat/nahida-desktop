@@ -41,8 +41,14 @@ declare global {
             set: (size: number) => Promise<void>
           }
           layout: {
-            get: () => Promise<'grid' | 'list'>
-            set: (layout: 'grid' | 'list') => Promise<void>
+            folder: {
+              get: () => Promise<'list' | 'align'>
+              set: (layout: 'list' | 'align') => Promise<void>
+            }
+            mod: {
+              get: () => Promise<'grid' | 'list'>
+              set: (layout: 'grid' | 'list') => Promise<void>
+            }
           }
         }
         folder: {
