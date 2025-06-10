@@ -2,7 +2,7 @@
 import type { ModsService } from '@core/services';
 import { ChannelGroup } from '../registry';
 import type { ReadDirectoryOptions } from '@shared/types/fs.types';
-import type { Games } from '@shared/types/mods.types';
+import type { Fixx } from '@shared/types/mods.types';
 
 export function defineModsChannels(rootGroup: ChannelGroup) {
     const modsGroup = rootGroup.addGroup('mods');
@@ -77,7 +77,7 @@ export function injectModsHandlers(registry: any, mods: typeof ModsService) {
     registry.injectHandlers('mods.mod', {
         read: (path: string) => mods.mod.read(path),
         toggle: (path: string) => mods.mod.toggle(path),
-        fix: (path: string, game: Games) => mods.mod.fix(path, game)
+        fix: (path: string, fix: Fixx) => mods.mod.fix(path, fix)
     });
 
     registry.injectHandlers('mods.ini', {
