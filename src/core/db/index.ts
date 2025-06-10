@@ -2,6 +2,8 @@ import { fileTypeFromBuffer } from "file-type";
 import Database from "better-sqlite3";
 import type BetterSqlite3 from 'better-sqlite3';
 import { tableSchemas } from "./schema";
+import { app } from "electron";
+import path from "node:path";
 
 interface StorageKeyValues {
   sess: string | null;
@@ -179,7 +181,9 @@ class DbHandler {
     }
 
     try {
-      this.db = new Database('./database.db');
+      const userDataPath = app.getPath('userData');
+      const dbPath = path.join(userDataPath, 'database.db');
+      this.db = new Database(dbPath);
       console.log("Connected to the SQLite database");
 
       this.db.exec(META_TABLE_SCHEMA);
