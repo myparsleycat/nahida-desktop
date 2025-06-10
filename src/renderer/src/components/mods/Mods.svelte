@@ -7,6 +7,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import {
+    AlignJustifyIcon,
     ArrowUpFromLineIcon,
     ChevronRightIcon,
     ChevronsDownUpIcon,
@@ -16,6 +17,7 @@
     FolderPenIcon,
     FolderPlusIcon,
     FolderSyncIcon,
+    ListIcon,
     SearchIcon,
     Trash2Icon,
     WrenchIcon,
@@ -29,6 +31,7 @@
   import type { ModFolders } from "@shared/types/fs.types";
   import { createQuery } from "@tanstack/svelte-query";
   import { FSH } from "$lib/helpers/fs.helper";
+  import { onMount } from "svelte";
 
   let size = ModsHelper.resizableSize;
   let currentFolderPath = ModsHelper.currentFolderPath;
@@ -36,10 +39,12 @@
   // let folderChildren = ModsHelper.folderChildren;
   let currentCharPath = ModsHelper.currentCharPath;
 
+  let layout = $state<"list" | "align">("align");
   let open = $state(false);
   let temp_name = $state<string | null>(null);
   let temp_path = $state<string | null>(null);
   let searchQuery = $state("");
+  let timestamp = $state(Date.now());
 
   let draggedIdx = $state<number | null>(null);
   let dropTargetIdx = $state<number | null>(null);
@@ -93,9 +98,10 @@
     }),
   );
 
-  $effect(() => {
-    getResizableSize();
-    getFolders();
+  onMount(async () => {
+    await getResizableSize();
+    await getFolders();
+    layout = await ModsHelper.ui.layout.folder.get();
   });
 </script>
 
@@ -110,16 +116,37 @@
       }}
     >
       <div class="h-full w-full flex flex-col pt-2 pb-2 pl-2 pr-1 space-y-2">
-        <div class="w-full relative flex items-center">
-          <SearchIcon
-            class="w-5 h-5 absolute left-1.5 top-1.5 text-gray-500 dark:text-gray-400"
-          />
-          <Input
-            class="pl-8 border-none h-8 w-full"
-            placeholder={$_("g.search")}
-            bind:value={searchQuery}
-            disabled
-          />
+        <div class="w-full flex items-center gap-2">
+          <div class="relative">
+            <SearchIcon
+              class="w-5 h-5 absolute left-1.5 top-1.5 text-gray-500 dark:text-gray-400"
+            />
+            <Input
+              class="pl-8 border-none h-8 w-full"
+              placeholder={$_("g.search")}
+              bind:value={searchQuery}
+              disabled
+            />
+          </div>
+
+          <Button
+            size="icon"
+            variant="outline"
+            onclick={async () => {
+              if (layout === "align") {
+                layout = "list";
+              } else {
+                layout = "align";
+              }
+              await ModsHelper.ui.layout.folder.set(layout);
+            }}
+          >
+            {#if layout === "align"}
+              <ListIcon />
+            {:else}
+              <AlignJustifyIcon />
+            {/if}
+          </Button>
         </div>
 
         <Separator />
@@ -245,7 +272,7 @@
               use:autoAnimate={{ easing: "ease-in-out" }}
             >
               {#if folder.path === $currentFolderPath}
-                {#each $data.data! as char}
+                {#each $data.data! as char, idx}
                   <button
                     class="flex w-full items-center min-h-8 group pr-2"
                     onclick={() => {
@@ -257,6 +284,24 @@
                       <div class="flex-shrink-0">
                         <ChevronRightIcon color="green" />
                       </div>
+                    {/if}
+
+                    {#if layout === "list"}
+                      <img
+                        class="object-cover rounded size-18 mr-3"
+                        src={char.preview
+                          ? `nahida://image-local?path=${encodeURIComponent(`${char.preview?.path}`)}&t=${timestamp}`
+                          : `nahida://image-web?url=https://nahida.live/${
+                              idx === 0
+                                ? "top.jpeg"
+                                : idx === $data.data!.length - 1
+                                  ? "bottom.jpg"
+                                  : "center.jpg"
+                            }`}
+                        alt={char.name}
+                        loading="lazy"
+                        decoding="async"
+                      />
                     {/if}
 
                     <p class="truncate">

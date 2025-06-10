@@ -31,13 +31,24 @@ class ModsServiceClass {
             }
         },
         layout: {
-            get: async () => {
-                const layout = await db.get('LocalStorage', 'mods_layout');
-                if (!layout) return 'grid';
-                return layout
+            folder: {
+                get: async () => {
+                    return (await db.get('LocalStorage', 'folders_layout'))!;
+                },
+                set: async (layout: 'list' | 'align') => {
+                    await db.update('LocalStorage', 'folders_layout', layout);
+                }
             },
-            set: async (layout: 'grid' | 'list') => {
-                await db.update('LocalStorage', 'mods_layout', layout);
+
+            mod: {
+                get: async () => {
+                    const layout = await db.get('LocalStorage', 'mods_layout');
+                    if (!layout) return 'grid';
+                    return layout
+                },
+                set: async (layout: 'grid' | 'list') => {
+                    await db.update('LocalStorage', 'mods_layout', layout);
+                }
             }
         }
     }
