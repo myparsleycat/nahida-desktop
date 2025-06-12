@@ -739,6 +739,16 @@ const WUWA_CONFIG: WuwaConfig = {
                 }
             }
         },
+        "CarlottaSplashingSummer": {
+            "main_hashes": [{ "old": ["98ec10c8"], "new": "98ec10c8" }],
+            "states": {
+                "injured": {
+                    "32b9363d": "e7520ca5",
+                    "f0fc511b": "f8ab33e2",
+                    "fb7d86dc": "90e7de37"
+                }
+            }
+        },
         "Camellya": {
             "main_hashes": [{ "old": ["7748c1d8"], "new": "7748c1d8" }],
             "texture_hashes": [],
@@ -755,7 +765,7 @@ const WUWA_CONFIG: WuwaConfig = {
                 { "old": ["243b7e59"], "new": "243b7e59" },
                 { "old": ["8fb7baf7"], "new": "8fb7baf7" }
             ],
-            "texture_hashes": [],
+            "texture_hashes": [{ "old": ["21828bbd"], "new": "27036b65" }],
             "states": {
                 "injured": {
                     "a658902c": "911dca0f",
@@ -961,6 +971,19 @@ const WUWA_CONFIG: WuwaConfig = {
                     "d36f54a5": "a260e7f7",
                     "a8e5e794": "a45bfe26",
                     "3bfaa05b": "d6f4003a"
+                }
+            }
+        },
+        "ChangliLaurelNymph": {
+            "main_hashes": [{ "old": ["acbfcfec"], "new": "acbfcfec" }],
+            "states": {
+                "injured": {
+                    "0ad91a84": "529d2b99",
+                    "f14d946b": "bfc103ef",
+                    "3121f41a": "12638aa6",
+                    "d961039b": "e3e045ee",
+                    "b9958562": "014b4c3f",
+                    "28d3e794": "6804b3ae"
                 }
             }
         },
@@ -1316,7 +1339,10 @@ const WUWA_CONFIG: WuwaConfig = {
         },
         "SanhuaExorcistic": {
             "main_hashes": [{ "old": ["b101dcf3"], "new": "b101dcf3" }],
-            "texture_hashes": [],
+            "texture_hashes": [
+                { "old": ["f22348f0"], "new": "4478285f" },
+                { "old": ["d5a089c8"], "new": "6a10c291" }
+            ],
             "states": {
                 "injured": {
                     "fb72762f": "464256d1",
@@ -1367,8 +1393,8 @@ const WUWA_CONFIG: WuwaConfig = {
                 { "old": ["35c01267", "b6deb6c2"], "new": "734ad993" },
                 { "old": ["0fce3633", "0480d129"], "new": "59c7c460" },
                 { "old": ["01c122b3"], "new": "e3127902" },
-                { "old": ["354e8743", "801b4344"], "new": "abd93fa3" },
-                { "old": ["28105b41", "884dc2c3"], "new": "3ea27f2c" },
+                { "old": ["354e8743", "801b4344", "abd93fa3"], "new": "a2f54eec" },
+                { "old": ["28105b41", "884dc2c3", "3ea27f2c"], "new": "a9b4d269" },
                 { "old": ["797bc768"], "new": "62a665e3" },
                 { "old": ["8f3ebd32"], "new": "5cfb3cbc" },
                 { "old": ["7423d5d0"], "new": "ad7c2fad" }
@@ -1384,14 +1410,14 @@ const WUWA_CONFIG: WuwaConfig = {
                 "wet": {
                     "5e48f2a4": "d789c54e",
                     "5cfb3cbc": "812ba53f",
-                    "abd93fa3": "734ad993",
+                    "a2f54eec": "734ad993",
                     "d67890aa": "dc14e209",
                     "ef3dab0e": "c93ea25b"
                 },
                 "wet_injured": {
                     "316457f4": "d789c54e",
                     "62a665e3": "812ba53f",
-                    "3ea27f2c": "734ad993",
+                    "a9b4d269": "734ad993",
                     "f9f65a14": "dc14e209",
                     "a45cb30b": "c93ea25b"
                 }
@@ -1400,18 +1426,6 @@ const WUWA_CONFIG: WuwaConfig = {
         "Cantarella_Umbrella": {
             "main_hashes": [{ "old": ["2005ef51"], "new": "2005ef51" }],
             "texture_hashes": [{ "old": ["52a54db3"], "new": "093cb526" }]
-        },
-        "Fleurdelys": {
-            "main_hashes": [
-                { "old": ["618a230e", "a74b1202"], "new": "6a4d2710" },
-                { "old": ["b1151c81"], "new": "2f1d7ffd" },
-                { "old": ["426cd36b"], "new": "2109de80" }
-            ],
-            "texture_hashes": [
-                { "old": ["874ab04e", "afb0ea93"], "new": "cc3910e7" },
-                { "old": ["c35ad2eb", "1036407c"], "new": "b08d5d57" },
-                { "old": ["e385365e", "f079e2b8"], "new": "1028b6b7" }
-            ]
         },
         "Zani_Interface": {
             "main_hashes": [{ "old": ["b9f4b0b4"], "new": "c2727ed7" }]
@@ -1433,25 +1447,103 @@ const WUWA_CONFIG: WuwaConfig = {
             "main_hashes": [{ "old": ["dbc0a3d1"], "new": "dbc0a3d1" }],
             "states": { "injured": { "f7694bcf": "c28372b3" } }
         },
-        "Cartethyia_NPC": {
-            "main_hashes": [{ "old": ["b1213fab"], "new": "b1213fab" }],
-            "texture_hashes": [
-                { "old": ["5ca9f916"], "new": "59d89437" },
-                { "old": ["f953f385"], "new": "7ef7dba9" },
-                { "old": ["a6ac08f5"], "new": "7f08cd4f" }
-            ]
-        },
         "Ciaccona": {
             "main_hashes": [{ "old": ["e57c9380"], "new": "e57c9380" }],
+            "texture_hashes": [
+                { "old": ["24af21ae"], "new": "d79a3f55" },
+                { "old": ["1603d6fa"], "new": "839d2623" }
+            ],
             "states": {
                 "injured": {
                     "70a4acf0": "fe853fcf",
                     "987a6f0e": "cca1af56",
                     "064492c6": "852b2b72",
-                    "1603d6fa": "24af21ae",
+                    "839d2623": "d79a3f55",
                     "bebbf828": "2f590d3f",
                     "17a8f8fa": "4c379f61",
                     "55dfd156": "1e072c24"
+                }
+            }
+        },
+        "Cartethyia": {
+            "main_hashes": [
+                { "old": ["b1213fab"], "new": "a48fddd1" },
+                { "old": ["ea95caf5"], "new": "4939c054" },
+                { "old": ["e75d5028"], "new": "131356ec" }
+            ],
+            "texture_hashes": [
+                { "old": ["5ca9f916", "59d89437"], "new": "423ec9ce" },
+                { "old": ["f953f385"], "new": "7ef7dba9" },
+                { "old": ["a6ac08f5"], "new": "7f08cd4f" },
+                { "old": ["037e710d"], "new": "51638d38" },
+                { "old": ["2a69362a"], "new": "052142b5" },
+                { "old": ["b5ce9d77"], "new": "fd0268ad" }
+            ],
+            "checksum": "3471",
+            "rules": [
+                {
+                    "line_prefix": "match_first_index",
+                    "replacements": [
+                        { "old": ["129168"], "new": "130992" },
+                        { "old": ["177507"], "new": "179571" },
+                        { "old": ["191925"], "new": "193989" },
+                        { "old": ["193953"], "new": "196017" }
+                    ]
+                },
+                {
+                    "line_prefix": "match_index_count",
+                    "replacements": [
+                        { "old": ["67176"], "new": "69000" },
+                        { "old": ["48339"], "new": "48579" }
+                    ]
+                }
+            ],
+            "vg_remaps": [
+                {
+                    "trigger_hash": ["b1213fab"],
+                    "vertex_groups": {
+                        "203": 204, "204": 203, "218": 214, "219": 215, "220": 216, "224": 220, "225": 221, "226": 222, "232": 228, "233": 229, "240": 236, "241": 237,
+                        "242": 238, "246": 242, "247": 243, "248": 244, "249": 245, "251": 247, "252": 248, "253": 249, "254": 250,
+                        "235": 231, "236": 232, "237": 233, "238": 234, "239": 235, "243": 239, "244": 240
+                    }
+                }
+            ],
+            "states": {
+                "injured": {
+                    "4fbc82ca": "8d9954bf",
+                    "bfd19633": "3ff8b56e",
+                    "58037f6f": "423ec9ce",
+                    "e08e17b5": "1f426e73",
+                    "f12ebf02": "51638d38",
+                    "beef40ba": "ae8fd5fb"
+                }
+            }
+        },
+        "Fleurdelys": {
+            "main_hashes": [
+                { "old": ["618a230e", "a74b1202", "6a4d2710"], "new": "6a6cd394" },
+                { "old": ["b1151c81"], "new": "2f1d7ffd" },
+                { "old": ["426cd36b"], "new": "2109de80" }
+            ],
+            "texture_hashes": [
+                { "old": ["874ab04e", "afb0ea93"], "new": "cc3910e7" },
+                { "old": ["c35ad2eb", "1036407c"], "new": "b08d5d57" },
+                { "old": ["e385365e", "f079e2b8"], "new": "1028b6b7" },
+                { "old": ["bd6bfc8f"], "new": "14e47dee" },
+                { "old": ["88f64559"], "new": "3766bc13" },
+                { "old": ["3ef0be7c"], "new": "00a2663b" },
+                { "old": ["f1c2e889"], "new": "6df8bc60" },
+                { "old": ["1028b6b7"], "new": "ece8436e" },
+                { "old": ["b08d5d57"], "new": "73110195" }
+            ],
+            "states": {
+                "injured": {
+                    "9c079580": "14e47dee",
+                    "b471214b": "1f606caf",
+                    "e4ea3515": "858f3573",
+                    "75f9c97e": "ece8436e",
+                    "1fb03721": "d685d037",
+                    "a92820a4": "a92820a4"
                 }
             }
         }
