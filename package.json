@@ -78,7 +78,7 @@
     "electron-builder": "^26.0.12",
     "electron-progressbar": "^2.2.1",
     "electron-vite": "^3.1.0",
-    "svelte": "^5.34.0",
+    "svelte": "^5.34.1",
     "svelte-check": "^4.2.1",
     "tailwind-merge": "^3.3.1",
     "tailwind-variants": "^1.0.0",
