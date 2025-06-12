@@ -1,9 +1,10 @@
 // src/core/services/auth.service.ts
 
-import { BrowserWindow, safeStorage, shell } from "electron";
+import { safeStorage, shell } from "electron";
 import { GetSessionURL, OAuthCallbackUrl, OAuthSigninURL, SignOutUrl } from "@core/const";
 import { fetcher } from "@core/lib/fetcher";
 import { db } from "@core/db";
+import { mainWindow } from "@main/window";
 
 interface session {
   id: string;
@@ -54,11 +55,6 @@ class AuthServiceClass {
   }
 
   async CheckSessionState() {
-    const mainWindow = BrowserWindow.getAllWindows()[0];
-    if (!mainWindow) {
-      throw new Error("메인 창을 가져오는데 실패함");
-    }
-
     const sessKey = await this.session.get();
     if (!sessKey) {
       mainWindow.webContents.send('auth.CheckSessionState', false);
@@ -116,8 +112,6 @@ class AuthServiceClass {
       }
       return null;
     };
-
-    const mainWindow = BrowserWindow.getAllWindows()[0];
 
     try {
       const urlObj = new URL(url);
@@ -208,8 +202,6 @@ class AuthServiceClass {
   }
 
   async Logout() {
-    const mainWindow = BrowserWindow.getAllWindows()[0];
-
     const resp = await fetcher<{ success: boolean; }>(SignOutUrl, {
       method: 'POST'
     })
