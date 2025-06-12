@@ -37,7 +37,7 @@ export function injectRendererHandlers(registry: any) {
 
 export const RendererCallManager = {
     async getSelectedCharPath(): Promise<string> {
-        const { mainWindow } = await import('../../../main/window');
+        const { mainWindow } = await import('@main/window');
 
         return new Promise((resolve, reject) => {
             const requestId = nanoid();
@@ -53,7 +53,7 @@ export const RendererCallManager = {
     },
 
     closeCharPathSelector: async () => {
-        const { mainWindow } = await import('../../../main/window');
+        const { mainWindow } = await import('@main/window');
         mainWindow.webContents.send('renderer:close-char-path-selector');
     }
 };

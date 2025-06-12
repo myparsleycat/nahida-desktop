@@ -1,6 +1,6 @@
 // src/core/ipc/rendererCallManager.ts
 import { nanoid } from 'nanoid';
-import { mainWindow } from '../../main/window';
+import { mainWindow } from '@main/window';
 
 interface PendingRequest {
     resolve: (value: any) => void;
