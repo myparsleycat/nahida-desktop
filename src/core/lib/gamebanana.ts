@@ -1,9 +1,9 @@
-import path from "node:path";
+import { join } from "node:path";
 import crypto from 'node:crypto';
 import { nanoid } from 'nanoid';
 import { FSService } from "@core/services";
 
-interface ModProfileResponse {
+export interface ModProfileResponse {
   _idRow: number;
   _aPreviewMedia: {
     _aImages: {
@@ -21,6 +21,10 @@ interface ModProfileResponse {
   _aSubmitter: {
     _sName: string; // 업로더 이름
   }
+  __aGame: {
+    _sName: string; // 게임 이름
+    _sAbbreviation: 'GI' | 'HSR' | 'ZZZ' | 'WuWa'; // 게임 약어
+  }
 }
 
 export interface FileData {
@@ -30,13 +34,16 @@ export interface FileData {
 }
 
 class GameBananaClass {
-  private baseApi: string;
+  private static baseApi = 'https://gamebanana.com/apiv11/Mod/';
+  private modId?: number;
+  private modData: ModProfileResponse | null = null;
+  private isLoaded: boolean = false;
 
-  constructor() {
-    this.baseApi = 'https://gamebanana.com/apiv11/Mod/';
+  constructor(modId?: number) {
+    this.modId = modId;
   }
 
-  async fetcher({
+  private async fetcher({
     url, method = "GET", body, response = 'json', useProxy = false
   }: {
     url: string; method?: "GET" | "POST"; body?: any; response: 'json' | 'raw'; useProxy?: boolean;
@@ -70,40 +77,99 @@ class GameBananaClass {
     }
   }
 
-  async GetModProfile(id: number): Promise<ModProfileResponse | null> {
-    const url = `${this.baseApi}${id}/ProfilePage`;
+  private async ensureModDataLoaded(): Promise<void> {
+    if (!this.isLoaded && this.modId) {
+      await this.GetModProfile(this.modId);
+    }
+  }
+
+  async GetModProfile(id?: number): Promise<ModProfileResponse | null> {
+    const modId = id || this.modId;
+    if (!modId) throw new Error("Mod ID is required");
+
+    const url = `${GameBananaClass.baseApi}${modId}/ProfilePage`;
     try {
-      return await this.fetcher({ url, response: 'json', useProxy: true });
+      const data = await this.fetcher({ url, response: 'json', useProxy: true });
+
+      if (!id && this.modId) {
+        this.modData = data;
+        this.isLoaded = true;
+      }
+
+      return data;
     } catch (err: any) {
-      console.error(`Error fetching mod profile for ID ${id}:`, err);
+      console.error(`Error fetching mod profile for ID ${modId}:`, err);
       return null;
     }
   }
 
-  GetFilesData(mod: ModProfileResponse) {
-    return mod._aFiles.map((file) => ({
+  GetFilesData(mod?: ModProfileResponse): FileData[] {
+    const modData = mod || this.modData;
+    if (!modData) throw new Error("Mod data is required");
+
+    return modData._aFiles.map((file) => ({
       name: file._sFile,
       url: file._sDownloadUrl.replace(/\\/g, ""),
       md5: file._sMd5Checksum
-    }))
+    }));
   }
 
-  GetImagesData(mod: ModProfileResponse) {
-    return mod._aPreviewMedia._aImages.map((img) => ({
+  GetFileData(modOrFileId: ModProfileResponse | number, fileId?: number): FileData {
+    let mod: ModProfileResponse;
+    let targetFileId: number;
+
+    if (typeof modOrFileId === 'number') {
+      mod = this.modData!;
+      targetFileId = modOrFileId;
+    } else {
+      mod = modOrFileId;
+      targetFileId = fileId!;
+    }
+
+    const file = mod._aFiles.find(f => f._idRow === targetFileId);
+    if (!file) {
+      throw new Error(`File with ID ${targetFileId} not found in mod ${mod._sName}`);
+    }
+
+    return {
+      name: file._sFile,
+      url: file._sDownloadUrl.replace(/\\/g, ""),
+      md5: file._sMd5Checksum
+    };
+  }
+
+  GetImagesData(mod?: ModProfileResponse): Array<{ name: string; url: string }> {
+    const modData = mod || this.modData;
+    if (!modData) throw new Error("Mod data is required");
+
+    return modData._aPreviewMedia._aImages.map((img) => ({
       name: img._sFile,
       url: img._sBaseUrl.replace(/\\/g, "") + '/' + img._sFile
-    }))
+    }));
   }
 
-  async DownloadModFiles(mod: ModProfileResponse, currentCharPath: string, retryCount = 3) {
+  async DownloadModFiles(modOrPath: ModProfileResponse | string, currentCharPath?: string, retryCount = 3) {
+    let mod: ModProfileResponse;
+    let path: string;
+
+    if (typeof modOrPath === 'string') {
+      await this.ensureModDataLoaded();
+      mod = this.modData!;
+      path = modOrPath;
+    } else {
+      mod = modOrPath;
+      path = currentCharPath!;
+    }
+
     const files = this.GetFilesData(mod);
-    if (!files || files.length === 0) throw new Error('파일 데이터를 가져오는데 실패했거나 배열이 비어있음');
+    if (!files || files.length === 0) {
+      throw new Error('파일 데이터를 가져오는데 실패했거나 배열이 비어있음');
+    }
 
     const downloadPromises = files.map(async (file) => {
       const id = nanoid();
       const extensionWithDot = file.name.substring(file.name.lastIndexOf('.'));
-      // const filePath = path.join(TEMP_DIR, id + extensionWithDot);
-      const filePath = path.join(currentCharPath, mod._sName + extensionWithDot);
+      const filePath = join(path, mod._sName + extensionWithDot);
       let downloadAttempts = 0;
       let checksumAttempts = 0;
 
@@ -124,24 +190,36 @@ class GameBananaClass {
             const hash = crypto.createHash('md5').update(filebuf).digest('hex');
 
             if (hash === file.md5) {
-              return { id, name: file.name, path: filePath, status: 'success' };
+              return { id, name: file.name, path: filePath, status: 'success' as const };
             }
             checksumAttempts++;
           }
 
           console.error('invalid_checksum');
-          return { id, name: file.name, path: filePath, status: 'invalid_checksum' };
+          return { id, name: file.name, path: filePath, status: 'invalid_checksum' as const };
         } catch (e: any) {
           console.error('에러', e.message);
         }
+        downloadAttempts++;
       }
 
       console.error('download fail');
-      return { id, name: file.name, path: filePath, status: 'download_fail' };
+      return { id, name: file.name, path: filePath, status: 'download_fail' as const };
     });
 
     return Promise.all(downloadPromises);
   }
+
+  async getModName(): Promise<string> {
+    await this.ensureModDataLoaded();
+    return this.modData!._sName;
+  }
+
+  async getSubmitterName(): Promise<string> {
+    await this.ensureModDataLoaded();
+    return this.modData!._aSubmitter._sName;
+  }
 }
 
 export const GameBanana = new GameBananaClass();
+export { GameBananaClass };

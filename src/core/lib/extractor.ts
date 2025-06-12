@@ -117,6 +117,51 @@ function analyzeSingleRootFolder(
   };
 }
 
+async function removeNestedSingleFolders(dirPath: string): Promise<void> {
+  try {
+    const items = fs.readdirSync(dirPath);
+
+    if (items.length === 1) {
+      const singleItem = items[0];
+      const singleItemPath = path.join(dirPath, singleItem);
+      const stats = fs.statSync(singleItemPath);
+
+      if (stats.isDirectory()) {
+        const subItems = fs.readdirSync(singleItemPath);
+
+        for (const subItem of subItems) {
+          const srcPath = path.join(singleItemPath, subItem);
+          const destPath = path.join(dirPath, subItem);
+
+          let uniqueDestPath = destPath;
+          try {
+            await fs.access(destPath);
+            uniqueDestPath = await FSService.generateUniqueFileName(dirPath, subItem);
+          } catch { }
+
+          fs.moveSync(srcPath, uniqueDestPath, { overwrite: false });
+        }
+
+        fs.removeSync(singleItemPath);
+        await removeNestedSingleFolders(dirPath);
+        return;
+      }
+    }
+
+    // Process subdirectories recursively
+    for (const item of items) {
+      const itemPath = path.join(dirPath, item);
+      const stats = fs.statSync(itemPath);
+
+      if (stats.isDirectory()) {
+        await removeNestedSingleFolders(itemPath);
+      }
+    }
+  } catch (error: any) {
+    throw new Error(`중첩된 싱글 폴더 제거 실패: ${error.message}`);
+  }
+}
+
 async function handleSingleRootFolder(
   tempDir: string,
   rootFolder: string,
@@ -147,7 +192,7 @@ async function extractZip(filePath: string, outputPath: string): Promise<string>
   try {
     const zip = new AdmZip(filePath);
 
-    // 중국어 인코딩 문제
+    // Handle Chinese encoding issues
     zip.getEntries().forEach((entry) => {
       if (Buffer.isBuffer(entry.rawEntryName)) {
         try {
@@ -183,6 +228,8 @@ async function extractZip(filePath: string, outputPath: string): Promise<string>
     } else {
       zip.extractAllTo(outputPath, true);
     }
+
+    await removeNestedSingleFolders(outputPath);
 
     await processNestedArchives(outputPath);
 
@@ -231,6 +278,8 @@ async function extractRar(filePath: string, outputPath: string): Promise<string>
       const files = [...extracted.files];
     }
 
+    await removeNestedSingleFolders(outputPath);
+
     await processNestedArchives(outputPath);
 
     return outputPath;
@@ -266,6 +315,9 @@ async function extract7z(filePath: string, outputPath: string): Promise<string> 
           extractStream.on('end', async () => {
             try {
               await handleSingleRootFolder(tempDir, rootFolder, outputPath);
+
+              await removeNestedSingleFolders(outputPath);
+
               await processNestedArchives(outputPath);
 
               resolve(outputPath);
@@ -291,6 +343,8 @@ async function extract7z(filePath: string, outputPath: string): Promise<string> 
           });
 
           extractStream.on('end', async () => {
+            await removeNestedSingleFolders(outputPath);
+
             await processNestedArchives(outputPath);
             resolve(outputPath);
           });
