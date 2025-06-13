@@ -80,7 +80,7 @@
             </Tooltip.Provider>
           </div>
 
-          <div class="flex">
+          <!-- <div class="flex">
             <Tooltip.Provider>
               <Tooltip.Root delayDuration={50}>
                 <Tooltip.Trigger>
@@ -107,9 +107,9 @@
                 </Tooltip.Content>
               </Tooltip.Root>
             </Tooltip.Provider>
-          </div>
+          </div> -->
 
-          <div class="flex">
+          <!-- <div class="flex">
             <Tooltip.Provider>
               <Tooltip.Root delayDuration={50}>
                 <Tooltip.Trigger>
@@ -137,7 +137,7 @@
                 </Tooltip.Content>
               </Tooltip.Root>
             </Tooltip.Provider>
-          </div>
+          </div> -->
 
           <div class="flex">
             <Tooltip.Provider>
