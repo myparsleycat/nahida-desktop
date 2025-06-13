@@ -18,6 +18,7 @@ async function startApp() {
   }
 
   await waitLocale();
+  setupWindowControls();
 
   const app = mount(App, {
     target: document.getElementById('app')!
@@ -27,13 +28,5 @@ async function startApp() {
 }
 
 const app = await startApp();
-
-let windowControlsSetup = false;
-document.addEventListener('DOMContentLoaded', () => {
-  if (!windowControlsSetup) {
-    setupWindowControls();
-    windowControlsSetup = true;
-  }
-});
 
 export default app;
