@@ -160,7 +160,7 @@
 </script>
 
 <div class="h-full w-full flex flex-col">
-  <div class="flex items-center p-1 px-4 dark:bg-[#111115] w-full h-12">
+  <div class="flex items-center p-1 px-4 w-full h-12">
     <div class="flex-1 min-w-0"></div>
 
     <div class="flex gap-1 ml-4 flex-shrink-0">
