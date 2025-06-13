@@ -4,6 +4,8 @@ import { locale } from "svelte-i18n";
 
 class SettingHelperClass {
     general = {
+        getAppVersion: () => window.api.setting.general.getAppVersion(),
+
         lang: {
             get: () => window.api.setting.general.lang.get(),
             set: async (lang: languages) => {

@@ -7,6 +7,8 @@ export function defineSettingChannels(rootGroup: ChannelGroup) {
     const settingsGroup = rootGroup.addGroup('setting');
 
     const generalGroup = settingsGroup.addGroup('general');
+    generalGroup.addChannel('getAppVersion');
+
     const generalLangGroup = generalGroup.addGroup('lang');
     generalLangGroup.addChannel('get');
     generalLangGroup.addChannel('set');
@@ -18,6 +20,9 @@ export function defineSettingChannels(rootGroup: ChannelGroup) {
 }
 
 export function injectSettingHandlers(registry: any, sv: typeof SettingService) {
+    registry.injectHandlers('setting.general', {
+        getAppVersion: () => sv.general.getAppVersion()
+    });
     registry.injectHandlers('setting.general.lang', {
         get: () => sv.general.lang.get(),
         set: (lang: languages) => sv.general.lang.set(lang)

@@ -10,14 +10,20 @@
     LogOutIcon,
     SettingsIcon,
   } from "@lucide/svelte";
-  import { Auth, Main } from "$lib/helpers";
+  import { Auth, Main, SettingHelper } from "$lib/helpers";
   import General from "./general/General.svelte";
   import { toast } from "svelte-sonner";
   import autoAnimate from "@formkit/auto-animate";
   import Mods from "./mods/Mods.svelte";
   import { _ } from "svelte-i18n";
+  import { onMount } from "svelte";
 
   let { checkingSession, loggedIn } = Auth;
+  let version = $state("");
+
+  onMount(async () => {
+    version = await SettingHelper.general.getAppVersion();
+  });
 
   type type = "general" | "mods" | "cloud";
   let page = $state<type>("general");
@@ -67,7 +73,7 @@
       onclick={() => (page = "mods")}
     >
       <HardDriveIcon size={22} />
-      {$_('setting.mods.a')}
+      {$_("setting.mods.a")}
     </button>
 
     <button
@@ -78,7 +84,7 @@
       onclick={() => (page = "cloud")}
     >
       <CloudIcon size={22} />
-      {$_('setting.cloud.a')}
+      {$_("setting.cloud.a")}
     </button>
 
     <button
@@ -100,17 +106,17 @@
           <Loader2Icon size={22} class="animate-spin-1.5" />
         {:else if $loggedIn}
           <LogOutIcon size={22} />
-          {$_('global.signout')}
+          {$_("global.signout")}
         {:else}
           <LogIn size={22} />
-          {$_('global.signin')}
+          {$_("global.signin")}
         {/if}
       </p>
     </button>
   </div>
 
-  <div class="flex flex-col p-6 h-full w-full items-center">
-    <div class="max-w-3xl w-full">
+  <div class="flex flex-col h-full w-full items-center relative">
+    <div class="max-w-3xl w-full p-6 pb-16">
       {#if page === "general"}
         <General />
       {:else if page === "mods"}
@@ -118,6 +124,10 @@
       {:else if page === "cloud"}
         <Cloud />
       {/if}
+    </div>
+
+    <div class="absolute bottom-0 flex w-full p-2">
+      <p>Version: {version}</p>
     </div>
   </div>
 </div>

@@ -1,10 +1,13 @@
 import { db } from "@core/db";
 import { ToastService } from "./toast.service";
 import type { languages } from "@shared/types/setting.types";
+import { app } from "electron";
 
 
 class SettingServiceClass {
     general = {
+        getAppVersion: () => app.getVersion(),
+
         lang: {
             get: async () => {
                 try {

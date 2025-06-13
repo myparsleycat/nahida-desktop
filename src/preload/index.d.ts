@@ -144,6 +144,7 @@ declare global {
 
       setting: {
         general: {
+          getAppVersion: () => Promise<string>
           lang: {
             get: () => Promise<string>
             set: (lang: languages) => Promise<boolean>
