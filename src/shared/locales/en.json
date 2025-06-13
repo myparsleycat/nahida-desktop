@@ -1,3 +1,143 @@
 {
-  
+  "global": {
+    "signin": "Sign In",
+    "signout": "Sign Out",
+    "cancel": "Cancel",
+    "search": "Search",
+    "name": "Name",
+    "path": "Path",
+    "drop_here": "Drop here",
+    "delete": "Delete",
+    "remove": "Remove",
+    "continue": "Continue",
+    "paste": "Paste"
+  },
+  "mods": {
+    "a": "Mods",
+    "l": {
+      "cm": {
+        "remove": {
+          "a": "Remove from list",
+          "toast": {
+            "success": "Removed from list",
+            "error": "Error occurred while removing from list"
+          }
+        }
+      },
+      "mkng": {
+        "a": "Create new group",
+        "b": "Write group name, select path, and press create button",
+        "toast": {
+          "nm": "Group name not entered",
+          "pm": "Path not selected",
+          "success": "Group created"
+        }
+      }
+    },
+    "r": {
+      "head": {
+        "dm": {
+          "allon": "Enable all",
+          "alloff": "Disable all",
+          "toast": {
+            "ccpm": "Please select target path"
+          }
+        }
+      },
+      "body": {
+        "mod": {
+          "head": {
+            "delmod": {
+              "a": "Delete mod",
+              "b": "Are you sure you want to delete this mod?",
+              "toast": {
+                "ddme": "Mod to delete not found",
+                "success": "{mod} mod deleted"
+              }
+            }
+          },
+          "misc": {
+            "save_preview": {
+              "toast": {
+                "success": "Preview image saved",
+                "error": "Error occurred while saving image"
+              }
+            },
+            "drop": {
+              "toast": {
+                "!files": "No files selected",
+                "files>1": "Only one file can be dropped",
+                "!image": "Only image files can be dropped"
+              }
+            },
+            "clipboard": {
+              "toast": {
+                "!file": "No image in clipboard",
+                "error": "Error occurred while getting image from clipboard"
+              }
+            },
+            "ow": {
+              "a": "Continue",
+              "b": "Preview image already exists. Do you want to overwrite?"
+            }
+          }
+        }
+      }
+    }
+  },
+  "live": {
+    "a": "Nahida Live"
+  },
+  "drive": {
+    "a": "Nahida Drive"
+  },
+  "setting": {
+    "a": "Settings",
+    "general": {
+      "a": "General",
+      "theme": {
+        "a": "Theme",
+        "b": "Change app appearance",
+        "themes": {
+          "system": "System",
+          "light": "Light",
+          "dark": "Dark"
+        }
+      },
+      "languege": {
+        "a": "Language",
+        "b": "Change app language"
+      }
+    },
+    "mods": {
+      "a": "Mods",
+      "autofix": {
+        "a": "Auto Fix",
+        "b": "Automatic hash fix when downloading to Nahida Desktop"
+      }
+    },
+    "cloud": {
+      "a": "Cloud",
+      "preview_cache": {
+        "s": {
+          "a": "Enable preview cache",
+          "b": "Enable preview cache"
+        },
+        "c": {
+          "a": "Preview cache",
+          "b": "Clear preview cache",
+          "dialog": {
+            "action": "Clear",
+            "a": "Clear preview cache",
+            "b": "Do you want to clear all cached preview images? This will free up storage space, but images will need to be downloaded again when needed."
+          },
+          "toast": {
+            "loading": "Deleting preview cache...",
+            "success": "All preview cache deleted",
+            "error": "Error occurred while deleting preview cache: {error}"
+          }
+        }
+      }
+    }
+  }
 }

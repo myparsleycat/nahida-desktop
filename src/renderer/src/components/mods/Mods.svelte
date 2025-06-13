@@ -123,7 +123,7 @@
             />
             <Input
               class="pl-8 border-none h-8 w-full"
-              placeholder={$_("g.search")}
+              placeholder={$_("global.search")}
               bind:value={searchQuery}
               disabled
             />
@@ -191,8 +191,6 @@
                     }
 
                     const draggedFolder = $folders[draggedIdx];
-
-                    // 새로운 순서 계산 (0부터 시작하는 인덱스를 1부터 시작하는 순서로 변환)
                     const newSequence = idx + 1;
 
                     ModsHelper.folder
@@ -250,19 +248,19 @@
                     ModsHelper.folder
                       .delete(folder.path)
                       .then(() => {
-                        toast.success("리스트에서 삭제되었습니다");
+                        toast.success($_("mods.l.cm.remove.toast.success"));
                         ModsHelper.clearPath();
                         getFolders();
                       })
                       .catch((e: any) => {
-                        toast.error("오류가 발생했습니다", {
+                        toast.error($_("mods.l.cm.remove.toast.error"), {
                           description: e.message,
                         });
                       });
                   }}
                 >
                   <Trash2Icon size={18} class="text-destructive" />
-                  목록에서 삭제
+                  {$_("mods.l.cm.remove.a")}
                 </ContextMenu.Item>
               </ContextMenu.Content>
             </ContextMenu.Root>
@@ -336,22 +334,26 @@
               class="flex gap-2 p-2 rounded-lg w-full hover:bg-muted duration-200 whitespace-nowrap"
             >
               <FolderPlusIcon />
-              항목 생성
+              {$_("mods.l.mkng.a")}
             </Dialog.Trigger>
             <Dialog.Content class="sm:max-w-[425px]">
               <Dialog.Header>
-                <Dialog.Title>새 항목 생성</Dialog.Title>
+                <Dialog.Title>{$_("mods.l.mkng.a")}</Dialog.Title>
                 <Dialog.Description>
-                  그룹 또는 폴더 이름을 작성하고 버튼을 누르세요.
+                  {$_("mods.l.mkng.b")}
                 </Dialog.Description>
               </Dialog.Header>
               <div class="grid gap-4 py-4">
                 <div class="flex w-full max-w-sm flex-col gap-1.5">
-                  <Label for="name">이름</Label>
-                  <Input id="name" placeholder="이름" bind:value={temp_name} />
+                  <Label for="name">{$_("global.name")}</Label>
+                  <Input
+                    id="name"
+                    placeholder={$_("global.name")}
+                    bind:value={temp_name}
+                  />
                 </div>
                 <div class="flex w-full max-w-sm flex-col gap-1.5">
-                  <Label for="path">경로</Label>
+                  <Label for="path">{$_("global.path")}</Label>
                   <div class="flex justify-center items-center gap-2">
                     <Input id="path" readonly bind:value={temp_path} />
                     <Button
@@ -372,10 +374,10 @@
                 <Button
                   onclick={async () => {
                     if (!temp_name) {
-                      toast.warning("이름을 지정해주세요");
+                      toast.warning($_("mods.l.mkng.toast.nm"));
                       return;
                     } else if (!temp_path) {
-                      toast.warning("경로를 선택헤주세요");
+                      toast.warning($_("mods.l.mkng.toast.pm"));
                       return;
                     }
 
@@ -383,7 +385,7 @@
                       .create(temp_name, temp_path)
                       .then((resp) => {
                         if (resp) {
-                          toast.success("생성되었습니다");
+                          toast.success($_("mods.l.mkng.toast.success"));
                           clear_temp();
                           open = false;
                           getFolders();

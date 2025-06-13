@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Switch } from "$lib/components/ui/switch/index";
   import { onMount } from "svelte";
-  import { toast } from "svelte-sonner";
+  import { _ } from "svelte-i18n";
 
   let autofix_after_nahida = $state(true);
   let autofix_after_nahida_disabled = $state(false);
@@ -22,9 +22,11 @@
   <div class="space-y-6">
     <div class="flex flex-row justify-between items-center gap-14 min-h-10">
       <div class="flex flex-col">
-        <p class="line-clamp-1 text-ellipsis break-all">나히다 자동 픽스</p>
+        <p class="line-clamp-1 text-ellipsis break-all">
+          {$_("setting.mods.autofix.a")}
+        </p>
         <p class="text-sm text-muted-foreground">
-          나히다 데스크톱으로 다운로드시 자동 픽스
+          {$_("setting.mods.autofix.b")}
         </p>
       </div>
       <div class="flex flex-row items-center gap-4">

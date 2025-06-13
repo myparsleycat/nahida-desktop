@@ -10,7 +10,6 @@ import App from './App.svelte'
 async function startApp() {
   try {
     const userLang = await SettingHelper.general.lang.get();
-    console.log('User language:', userLang);
     locale.set(userLang);
   } catch (e: any) {
     console.error('Failed to get user language preference:', e);
