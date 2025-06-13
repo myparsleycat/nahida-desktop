@@ -15,6 +15,7 @@
   import { toast } from "svelte-sonner";
   import autoAnimate from "@formkit/auto-animate";
   import Mods from "./mods/Mods.svelte";
+  import { _ } from "svelte-i18n";
 
   let { checkingSession, loggedIn } = Auth;
 
@@ -55,7 +56,7 @@
       onclick={() => (page = "general")}
     >
       <SettingsIcon size={22} />
-      일반
+      {$_("setting.general.a")}
     </button>
 
     <button
@@ -66,7 +67,7 @@
       onclick={() => (page = "mods")}
     >
       <HardDriveIcon size={22} />
-      모드
+      {$_('setting.mods.a')}
     </button>
 
     <button
@@ -77,7 +78,7 @@
       onclick={() => (page = "cloud")}
     >
       <CloudIcon size={22} />
-      클라우드
+      {$_('setting.cloud.a')}
     </button>
 
     <button
@@ -99,10 +100,10 @@
           <Loader2Icon size={22} class="animate-spin-1.5" />
         {:else if $loggedIn}
           <LogOutIcon size={22} />
-          로그아웃
+          {$_('global.signout')}
         {:else}
           <LogIn size={22} />
-          로그인
+          {$_('global.signin')}
         {/if}
       </p>
     </button>

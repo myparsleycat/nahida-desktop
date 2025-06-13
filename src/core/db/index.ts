@@ -65,7 +65,7 @@ export interface TableSchema {
 
 const LocalStorageValues: StorageKeyValues = {
   sess: null,
-  language: "en",
+  language: '',
   img_cache_on: true,
   mods_resizable_default: 25,
   bounds: {

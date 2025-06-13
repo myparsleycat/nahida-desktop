@@ -74,7 +74,7 @@
                   </button>
                 </Tooltip.Trigger>
                 <Tooltip.Content side="right">
-                  <p>{$_("drive.ui.my_mods")}</p>
+                  <p>{$_("mods.a")}</p>
                 </Tooltip.Content>
               </Tooltip.Root>
             </Tooltip.Provider>
@@ -103,7 +103,7 @@
                   </button>
                 </Tooltip.Trigger>
                 <Tooltip.Content side="right">
-                  <p>{$_("drive.ui.nahidalive")}</p>
+                  <p>{$_("live.a")}</p>
                 </Tooltip.Content>
               </Tooltip.Root>
             </Tooltip.Provider>
@@ -133,7 +133,7 @@
                   </button>
                 </Tooltip.Trigger>
                 <Tooltip.Content side="right">
-                  <p>{$_("drive.ui.cloud_drive")}</p>
+                  <p>{$_("drive.a")}</p>
                 </Tooltip.Content>
               </Tooltip.Root>
             </Tooltip.Provider>
@@ -154,7 +154,7 @@
                   </button>
                 </Tooltip.Trigger>
                 <Tooltip.Content side="right">
-                  <p>{$_("drive.ui.settings")}</p>
+                  <p>{$_("setting.a")}</p>
                 </Tooltip.Content>
               </Tooltip.Root>
             </Tooltip.Provider>
