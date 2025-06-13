@@ -26,7 +26,7 @@
     "@elysiajs/cors": "^1.3.3",
     "@elysiajs/node": "^1.3.0",
     "@formkit/auto-animate": "^0.8.2",
-    "@lucide/svelte": "^0.514.0",
+    "@lucide/svelte": "^0.515.0",
     "@tailwindcss/vite": "^4.1.10",
     "@tanstack/svelte-query": "^5.80.7",
     "@types/adm-zip": "^0.5.7",
