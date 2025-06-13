@@ -116,8 +116,8 @@
       }}
     >
       <div class="h-full w-full flex flex-col pt-2 pb-2 pl-2 pr-1 space-y-2">
-        <div class="w-full flex items-center gap-2">
-          <div class="relative">
+        <div class="flex items-center gap-2">
+          <div class="relative w-full">
             <SearchIcon
               class="w-5 h-5 absolute left-1.5 top-1.5 text-gray-500 dark:text-gray-400"
             />
@@ -391,7 +391,7 @@
                           getFolders();
                         }
                       });
-                  }}>생성</Button
+                  }}>{$_("mods.l.mkng.action")}</Button
                 >
               </Dialog.Footer>
             </Dialog.Content>
