@@ -1,40 +1,9 @@
 <script lang="ts">
-  import { _ } from "svelte-i18n";
-  import * as Select from "$lib/components/ui/select/index";
-  import { setMode, userPrefersMode } from "mode-watcher";
+  import Language from "./components/Language.svelte";
+  import Theme from "./components/Theme.svelte";
 </script>
 
-<div
-  class="flex flex-col gap-3 border rounded-xl p-4 shadow hover:dark:shadow-none hover:shadow-lg duration-200 dark:bg-zinc-950"
->
-  <div class="flex flex-row justify-between items-center gap-14 min-h-10">
-    <div class="flex flex-col">
-      <p class="line-clamp-1 text-ellipsis break-all">
-        {$_("drive.ui.settings_page.general.theme")}
-      </p>
-      <p class="text-sm text-muted-foreground">
-        {$_("drive.ui.settings_page.general.desc")}
-      </p>
-    </div>
-    <div class="flex flex-row items-center gap-4">
-      <Select.Root
-        required
-        type="single"
-        {...{
-          // @ts-ignore
-        }}
-        onValueChange={(v) => setMode(v)}
-        value={userPrefersMode.current}
-      >
-        <Select.Trigger class="w-[180px]">
-          {$_(`g.${userPrefersMode.current}`)}
-        </Select.Trigger>
-        <Select.Content>
-          <Select.Item value="light">{$_("g.light")}</Select.Item>
-          <Select.Item value="dark">{$_("g.dark")}</Select.Item>
-          <Select.Item value="system">{$_("g.system")}</Select.Item>
-        </Select.Content>
-      </Select.Root>
-    </div>
-  </div>
+<div class="space-y-4">
+  <Theme />
+  <Language />
 </div>

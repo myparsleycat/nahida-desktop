@@ -13,6 +13,7 @@
   let getStates = $state(true);
   let sizes = $state(0);
   let _state = $state(true);
+  let open = $state(false);
 
   const getState = async () => {
     NDH.util.imageCache
@@ -29,13 +30,14 @@
   const handleDeleteImageButtonClick = async () => {
     const clearPromise = NDH.util.imageCache.clear();
     toast.promise(clearPromise, {
-      loading: `${$_("drive.ui.settings_page.preview_cache.toast.loading")}`,
+      loading: `${$_("setting.cloud.preview_cache.c.toast.loading")}`,
       success: () => {
         getState();
-        return `${$_("drive.ui.settings_page.preview_cache.toast.success")}`;
+        open = false;
+        return `${$_("setting.cloud.preview_cache.c.toast.success")}`;
       },
       error: (err: any) =>
-        `${$_("drive.ui.settings_page.preview_cache.toast.error", { values: { error: err.message } })}`,
+        `${$_("setting.cloud.preview_cache.c.toast.error", { values: { error: err.message } })}`,
     });
   };
 
@@ -48,10 +50,10 @@
   <div class="flex flex-row justify-between items-center gap-14 min-h-10">
     <div class="flex flex-col">
       <p class="line-clamp-1 text-ellipsis break-all">
-        {$_("drive.ui.settings_page.preview_cache_state.ui.title")}
+        {$_("setting.cloud.preview_cache.s.a")}
       </p>
       <p class="text-sm text-muted-foreground">
-        {$_("drive.ui.settings_page.preview_cache_state.ui.desc")}
+        {$_("setting.cloud.preview_cache.s.b")}
       </p>
     </div>
     <div class="flex flex-row items-center gap-4">
@@ -71,10 +73,10 @@
   <div class="flex flex-row justify-between items-center gap-14 min-h-10">
     <div class="flex flex-col">
       <p class="line-clamp-1 text-ellipsis break-all">
-        {$_("drive.ui.settings_page.preview_cache.ui.title")}
+        {$_("setting.cloud.preview_cache.c.a")}
       </p>
       <p class="text-sm text-muted-foreground">
-        {$_("drive.ui.settings_page.preview_cache.ui.desc")}
+        {$_("setting.cloud.preview_cache.c.b")}
       </p>
     </div>
     <div class="flex flex-row items-center gap-4">
@@ -83,26 +85,26 @@
       {:else}
         <p class="text-muted-foreground">{formatSize(sizes)}</p>
       {/if}
-      <AlertDialog.Root>
+      <AlertDialog.Root bind:open>
         <AlertDialog.Trigger class={buttonVariants({ variant: "destructive" })}>
-          {$_("drive.ui.settings_page.preview_cache.ui.action")}
+          {$_("setting.cloud.preview_cache.c.dialog.action")}
         </AlertDialog.Trigger>
         <AlertDialog.Content>
           <AlertDialog.Header>
             <AlertDialog.Title>
-              {$_("drive.ui.settings_page.preview_cache.ui.dialog.title")}
+              {$_("setting.cloud.preview_cache.c.dialog.a")}
             </AlertDialog.Title>
             <AlertDialog.Description>
-              {$_("drive.ui.settings_page.preview_cache.ui.dialog.desc")}
+              {$_("setting.cloud.preview_cache.c.dialog.b")}
             </AlertDialog.Description>
           </AlertDialog.Header>
           <AlertDialog.Footer>
-            <AlertDialog.Cancel>{$_("g.cancel")}</AlertDialog.Cancel>
+            <AlertDialog.Cancel>{$_("global.cancel")}</AlertDialog.Cancel>
             <AlertDialog.Action
               class={buttonVariants({ variant: "destructive" })}
               onclick={handleDeleteImageButtonClick}
             >
-              {$_("drive.ui.settings_page.preview_cache.ui.action")}
+              {$_("setting.cloud.preview_cache.c.dialog.action")}
             </AlertDialog.Action>
           </AlertDialog.Footer>
         </AlertDialog.Content>

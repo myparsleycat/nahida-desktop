@@ -136,13 +136,13 @@
     await FSH.writeFile(path, _data)
       .then((resp) => {
         if (resp) {
-          toast.success("프리뷰 이미지가 저장되었습니다");
+          toast.success($_("mods.r.body.mod.misc.save_preview.toast.success"));
           timestamp = Date.now();
           $data.refetch();
         }
       })
       .catch((e: any) => {
-        toast.error("이미지 저장 중 오류 발생", {
+        toast.error($_("mods.r.body.mod.misc.save_preview.toast.error"), {
           description: e.message,
         });
       });
@@ -169,7 +169,7 @@
 
       return null;
     } catch (err: any) {
-      toast.error("클립보드에서 이미지를 가져오는 중 오류 발생", {
+      toast.error($_("mods.r.body.mod.misc.clipboard.toast.error"), {
         description: err.message,
       });
       throw err;
@@ -188,7 +188,7 @@
         />
         <Input
           class="pl-8 w-[200px] h-8"
-          placeholder={$_("g.search")}
+          placeholder={$_("global.search")}
           bind:value={searchQuery}
         />
       </div>
@@ -230,7 +230,7 @@
               class="cursor-pointer"
               onclick={() => {
                 if (!$currentCharPath) {
-                  toast.warning("작업할 대상 폴더를 선택해주세요");
+                  toast.warning($_("mods.r.head.dm.toast.ccpm"));
                   return;
                 }
 
@@ -239,13 +239,13 @@
                   .then((resp) => {
                     if (resp) $data.refetch();
                   });
-              }}>전체 활성화</DropdownMenu.Item
+              }}>{$_("mods.r.head.dm.allon")}</DropdownMenu.Item
             >
             <DropdownMenu.Item
               class="cursor-pointer"
               onclick={() => {
                 if (!$currentCharPath) {
-                  toast.warning("작업할 대상 폴더를 선택해주세요");
+                  toast.warning($_("mods.r.head.dm.toast.ccpm"));
                   return;
                 }
 
@@ -254,7 +254,7 @@
                   .then((resp) => {
                     if (resp) $data.refetch();
                   });
-              }}>전체 비활성화</DropdownMenu.Item
+              }}>{$_("mods.r.head.dm.alloff")}</DropdownMenu.Item
             >
           </DropdownMenu.Group>
         </DropdownMenu.Content>
@@ -311,7 +311,7 @@
     >
       <div class="text-white text-center">
         <span class="text-2xl">📁</span>
-        <p class="font-medium mt-2">여기에 드롭하세요</p>
+        <p class="font-medium mt-2">{$_("global.drop_here")}</p>
       </div>
     </div>
 
@@ -415,7 +415,7 @@
                     >
                       <Dialog.Header>
                         <Dialog.Title class="mb-4"
-                          >{mod.name} 토글 수정</Dialog.Title
+                          >{mod.name} Toggles</Dialog.Title
                         >
                       </Dialog.Header>
 
@@ -538,17 +538,17 @@
                 const files = e.dataTransfer?.files;
                 console.log(e.dataTransfer);
                 if (!files || files.length < 1) {
-                  toast.warning("선택된 파일이 없습니다");
+                  toast.warning($_("mods.r.body.mod.misc.drop.toast.!files"));
                   return;
                 } else if (files?.length > 1) {
-                  toast.warning("한개의 파일만 드랍할 수 있습니다");
+                  toast.warning($_("mods.r.body.mod.misc.drop.toast.files>1"));
                   return;
                 }
 
                 const file = files[0];
 
                 if (!file.type.startsWith("image/")) {
-                  toast.warning("이미지 파일만 드랍할 수 있습니다");
+                  toast.warning($_("mods.r.body.mod.misc.drop.toast.!image"));
                   return;
                 }
 
@@ -606,7 +606,7 @@
                 >
                   <div class="text-white text-center">
                     <span class="text-2xl">📁</span>
-                    <p class="font-medium mt-2">파일을 여기에 드롭하세요</p>
+                    <p class="font-medium mt-2">{$_("global.drop_here")}</p>
                   </div>
                 </div>
               {:else}
@@ -621,7 +621,9 @@
 
                       const file = await getImageFromClipboard();
                       if (!file) {
-                        toast.warning("클립보드에 이미지가 없습니다");
+                        toast.warning(
+                          $_("mods.r.body.mod.misc.clipboard.toast.!file"),
+                        );
                         return;
                       }
 
@@ -643,7 +645,7 @@
                         const path = `${mod.path}/preview.${ext}`;
                         await savePreviewImage(path, arrbuf);
                       }
-                    }}>Paste</button
+                    }}>{$_("global.paste")}</button
                   >
                 </div>
 
@@ -657,7 +659,7 @@
                 >
                   <div class="text-white text-center">
                     <span class="text-2xl">📁</span>
-                    <p class="font-medium mt-2">파일을 여기에 드롭하세요</p>
+                    <p class="font-medium mt-2">{$_("global.drop_here")}</p>
                   </div>
                 </div>
               {/if}
@@ -672,18 +674,20 @@
 <AlertDialog.Root bind:open={deleteDialog.open}>
   <AlertDialog.Content>
     <AlertDialog.Header>
-      <AlertDialog.Title>모드 삭제</AlertDialog.Title>
+      <AlertDialog.Title
+        >{$_("mods.r.body.mod.head.delmod.a")}</AlertDialog.Title
+      >
       <AlertDialog.Description>
-        정말 이 모드를 삭제할까요?
+        {$_("mods.r.body.mod.head.delmod.b")}
       </AlertDialog.Description>
     </AlertDialog.Header>
     <AlertDialog.Footer>
-      <AlertDialog.Cancel>취소</AlertDialog.Cancel>
+      <AlertDialog.Cancel>{$_("global.cancel")}</AlertDialog.Cancel>
       <AlertDialog.Action
         class={buttonVariants({ variant: "destructive" })}
         onclick={() => {
           if (!deleteDialog.mod) {
-            toast.warning("삭제할 모드를 찾을 수 없습니다");
+            toast.warning($_("mods.r.body.mod.head.delmod.toast.ddme"));
             return;
           }
 
@@ -691,7 +695,9 @@
             .then((resp) => {
               if (resp) {
                 toast.success(
-                  `${deleteDialog.mod!.name} 모드가 삭제되었습니다`,
+                  $_("mods.r.body.mod.head.delmod.toast.success", {
+                    values: { mod: deleteDialog.mod?.name },
+                  }),
                 );
                 $data.refetch();
               }
@@ -699,7 +705,7 @@
             .finally(() => {
               deleteDialogClear();
             });
-        }}>계속</AlertDialog.Action
+        }}>{$_("global.delete")}</AlertDialog.Action
       >
     </AlertDialog.Footer>
   </AlertDialog.Content>
@@ -708,9 +714,9 @@
 <AlertDialog.Root open={showOverwriteDialog}>
   <AlertDialog.Content>
     <AlertDialog.Header>
-      <AlertDialog.Title>계속 진행</AlertDialog.Title>
+      <AlertDialog.Title>{$_("mods.r.body.mod.misc.ow.a")}</AlertDialog.Title>
       <AlertDialog.Description>
-        모드 폴더에 이미 프리뷰 이미지가 있습니다. 이미지를 덮어쓸까요?
+        {$_("mods.r.body.mod.misc.ow.b")}
       </AlertDialog.Description>
     </AlertDialog.Header>
     <AlertDialog.Footer>
@@ -719,7 +725,7 @@
           showOverwriteDialog = false;
           fileToOverwrite = null;
           previewPathToOverwrite = null;
-        }}>취소</AlertDialog.Cancel
+        }}>{$_("global.cancel")}</AlertDialog.Cancel
       >
       <AlertDialog.Action
         onclick={async () => {
@@ -729,7 +735,7 @@
             fileToOverwrite = null;
             previewPathToOverwrite = null;
           }
-        }}>계속</AlertDialog.Action
+        }}>{$_("global.continue")}</AlertDialog.Action
       >
     </AlertDialog.Footer>
   </AlertDialog.Content>

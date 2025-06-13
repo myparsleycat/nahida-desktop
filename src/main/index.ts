@@ -33,10 +33,20 @@ if (process.defaultApp) {
 
 async function oneTimeInit() {
     if (initialized) return;
+
     await db.init();
+    const lang = await db.get('LocalStorage', 'language');
+    if (!lang) {
+        const locale = app.getLocale();
+        if (locale.startsWith('en')) await db.update('LocalStorage', 'language', 'en');
+        else if (locale === 'ko') await db.update('LocalStorage', 'language', 'ko');
+        else if (locale.startsWith('zh')) await db.update('LocalStorage', 'language', 'zh');
+    }
+
     server.listen(14327, ({ hostname, port }) => {
         log.info(`server is running at ${hostname}:${port}`);
     });
+
     initialized = true;
 }
 

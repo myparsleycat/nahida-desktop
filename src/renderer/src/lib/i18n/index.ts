@@ -9,5 +9,5 @@ register('zh', () => import('@shared/locales/zh.json'))
 
 init({
   fallbackLocale: defaultLocale,
-  initialLocale: window.navigator.language.split('-')[0] || defaultLocale,
+  initialLocale: defaultLocale,
 })

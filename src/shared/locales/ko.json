@@ -1,303 +1,143 @@
 {
-  "@": {
-    "cannot_use_showSaveFilePicker": {
-      "0": "지원하지 않는 브라우저입니다",
-      "1": "크롬, 엣지 등 크로미움 기반 브라우저를 이용해주세요"
-    }
+  "global": {
+    "signin": "로그인",
+    "signout": "로그아웃",
+    "cancel": "취소",
+    "search": "검색",
+    "name": "이름",
+    "path": "경로",
+    "drop_here": "여기에 드롭하세요",
+    "delete": "삭제",
+    "remove": "삭제",
+    "continue": "계속",
+    "paste": "붙여넣기"
   },
-  "#": {
-    "CreateDir": {
-      "0": "디렉토리 이름 형식이 유효하지 않습니다",
-      "1": "디렉토리를 생성할 경로의 정보를 가져오는데 실패했어요",
-      "toast-promise": {
-        "loading": "디렉토리를 생성하고 있습니다...",
-        "success": "디렉토리가 생성되었습니다"
-      }
-    },
-    "EmptyTrash": {
-      "toast-promise": {
-        "loading": "휴지통 비우는 중...",
-        "success": "{p1}개가 완전 삭제되었습니다"
-      }
-    },
-    "itemsDelete": {
-      "0": "{p1}개의 파일 및 디렉토리가 영구 삭제되었습니다"
-    },
-    "itemsRestore": {
-      "0": "{name}이(가) 휴지통에서 복원되었습니다",
-      "1": "복원 지점에 {name}과(와) 동일한 이름을 가진 폴더 또는 디렉토리가 존재합니다",
-      "2": "{p1}를 포함한 {p2}개의 복원이 완료되었습니다"
-    },
-    "moveItems": {
-      "already_processing": "이미 진행중인 작업이 있습니다",
-      "toast-promise": {
-        "error": "항목 이동에 실패했습니다: {error}",
-        "loading": "항목을 이동하고 있습니다...",
-        "success": "항목이 성공적으로 이동되었습니다"
-      }
-    },
-    "RenameItem": {
-      "0": "이름은 비워둘 수 없습니다",
-      "1": "디렉토리 이름 형식이 유효하지 않습니다",
-      "toast-promise": {
-        "loading": "이름을 변경하고 있습니다...",
-        "success": "이름이 변경되었습니다."
-      }
-    },
-    "ValidateName": {
-      "0": "이름은 공백으로만 구성될 수 없습니다",
-      "1": "이름은 공백으로 시작될 수 없습니다",
-      "2": "이름은 공백으로 끝날 수 없습니다",
-      "3": "이름은 최소 1글자에서 최대 255자까지 입력할 수 있습니다"
-    }
-  },
-  "c": {
-    "data-table-actions": {
-      "activate": "활성화",
-      "check_log": "로그 확인",
-      "deactivate": "비활성화",
-      "delete": "삭제",
-      "dialog": {
-        "d0": {
-          "m0": "모드를 삭제할까요?",
-          "m1": "이 작업은 되돌릴 수 없어요. 정말로 이 모드를 삭제할까요?"
+  "mods": {
+    "a": "모드",
+    "l": {
+      "cm": {
+        "remove": {
+          "a": "목록에서 삭제",
+          "toast": {
+            "success": "목록에서 삭제되었습니다",
+            "error": "목록에서 삭제 중 오류가 발생했습니다"
+          }
         }
       },
-      "download": "다운로드",
-      "edit": "수정",
-      "goto_mod": "모드 페이지로",
-      "update": "업데이트"
+      "mkng": {
+        "a": "새 그룹 생성",
+        "b": "그룹 이름을 작성하고 경로를 선택한 후 생성 버튼을 누르세요",
+        "toast": {
+          "nm": "그룹 이름이 입력되지 않았습니다",
+          "pm": "경로가 선택되지 않았습니다",
+          "success": "그룹이 생성되었습니다"
+        }
+      }
     },
-    "mod_page_Buttons": {
-      "dl_with_mod_manager": "모드 매니저로 다운로드",
-      "general_download": "일반 다운로드"
+    "r": {
+      "head": {
+        "dm": {
+          "allon": "전체 활성화",
+          "alloff": "전체 비활성화",
+          "toast": {
+            "ccpm": "작업 대상 경로를 선택해주세요"
+          }
+        }
+      },
+      "body": {
+        "mod": {
+          "head": {
+            "delmod": {
+              "a": "모드 삭제",
+              "b": "정말 이 모드를 삭제할까요?",
+              "toast": {
+                "ddme": "삭제할 모드를 찾을 수 없습니다",
+                "success": "{mod} 모드가 삭제되었습니다"
+              }
+            }
+          },
+          "misc": {
+            "save_preview": {
+              "toast": {
+                "success": "프리뷰 이미지가 저장되었습니다",
+                "error": "이미지 저장 중 오류 발생"
+              }
+            },
+            "drop": {
+              "toast": {
+                "!files": "선택된 파일이 없습니다",
+                "files>1": "한개의 파일만 드랍할 수 있습니다",
+                "!image": "이미지 파일만 드랍할 수 있습니다"
+              }
+            },
+            "clipboard": {
+              "toast": {
+                "!file": "클립보드에 이미지가 없습니다",
+                "error": "클립보드에서 이미지를 가져오는 중 오류 발생"
+              }
+            },
+            "ow": {
+              "a": "계속 진행",
+              "b": "이미 프리뷰 이미지가 존재합니다. 덮어쓸까요?"
+            }
+          }
+        }
+      }
     }
+  },
+  "live": {
+    "a": "나히다 라이브"
   },
   "drive": {
-    "#": {
-      "processNextDownloadInQueue": {
-        "toast-promise": {
-          "error": "다운로드 URL을 가져오는데 실패했습니다: {error}",
-          "loading": "다운로드 URL을 가져오고 있습니다..."
+    "a": "나히다 드라이브"
+  },
+  "setting": {
+    "a": "설정",
+    "general": {
+      "a": "일반",
+      "theme": {
+        "a": "테마",
+        "b": "앱 외관을 변경합니다",
+        "themes": {
+          "system": "시스템",
+          "light": "라이트",
+          "dark": "다크"
         }
+      },
+      "languege": {
+        "a": "언어",
+        "b": "앱 언어를 변경합니다"
       }
     },
-    "landing": {
-      "getting_started": "지금 시작하기",
-      "msg": "모든 3dmigoto 모드를 무료로 제한없이 백업하세요.",
-      "msg1": "나히다 드라이브에서 모든 3dmigoto 모드를 무료로 제한없이 백업하세요.",
-      "msg1_1": "모든 3dmigoto 모드를 무료로 제한없이 백업하세요."
-    },
-    "link": {
-      "move_to_parent_dir": "상위 폴더로 이동",
-      "required_password": "이 공유 링크에 접근하려면 비밀번호가 필요합니다"
-    },
-    "not_validateExt": {
-      "0": "업로드 할 수 없는 파일 형식이에요",
-      "1": "모드 파일(.dds, .ib, .vb, .buf, .fmt, .ini)과 이미지 파일, 그리고 일부 허용된 파일(.py, .json, .txt)만 업로드 할 수 있어요"
-    },
-    "toast": {
-      "copied_to_clipboard": "클립보드에 복사되었습니다"
-    },
-    "ui": {
-      "cloud_drive": "클라우드 드라이브",
-      "context_menu": {
-        "copy_id": "ID 복사",
-        "download": "다운로드",
-        "info": "정보",
-        "move": "이동",
-        "open": "열기",
-        "preview": "미리보기",
-        "public_link": "공개 링크",
-        "share": "공유"
-      },
-      "date": "날짜",
-      "dir_drop_here_section_message": {
-        "0": "폴더를 여기에 놓으세요"
-      },
-      "drive": "드라이브",
-      "empty_trash": "휴지통 비우기",
-      "empty_trash_dialog": {
-        "0": "정말 휴지통을 비울까요? 이 작업은 실행 취소하거나 되돌릴 수 없어요.",
-        "1": "비우기"
-      },
-      "help": "도움말",
-      "my_drive": "내 드라이브",
-      "my_mods": "내 모드",
-      "nahidalive": "나히다 라이브",
-      "name": "이름",
-      "new_dir": "디렉토리 생성",
-      "no_contents_section_message": {
-        "0": "아직 파일이나 디렉토리가 업로드 되지 않았어요",
-        "1": "여기로 파일이나 디렉토리를 드래그 앤 드롭 해서 업로드 할 수 있어요"
-      },
-      "no_trashed_content_section_message": "아직 휴지통에 아무것도 없어요",
-      "process_sheet": {
-        "no_transfer_yet": "현재 활성화된 전송이 없습니다"
-      },
-      "rename": "이름 바꾸기",
-      "search_in_dir_placeholder": "이 디렉토리에서 검색...",
-      "settings": "설정",
-      "settings_page": {
-        "general": {
-          "desc": "앱 외관을 변경할 수 있어요",
-          "theme": "테마"
-        },
-        "preview_cache": {
-          "toast": {
-            "error": "프리뷰 캐시 삭제중 오류가 발생했습니다: {error}",
-            "loading": "프리뷰 캐시를 삭제하는 중입니다...",
-            "success": "프리뷰 캐시를 모두 삭제했습니다"
-          },
-          "ui": {
-            "action": "지우기",
-            "desc": "프리뷰 캐시를 지울 수 있어요",
-            "dialog": {
-              "desc": "캐싱된 프리뷰 이미지를 모두 지울까요? 저장 공간을 확보할 수 있지만 필요할 때 이미지를 다시 다운로드 해야 합니다.",
-              "title": "프리뷰 캐시 지우기"
-            },
-            "title": "프리뷰 캐시 정리"
-          }
-        },
-        "preview_cache_state": {
-          "ui": {
-            "desc": "프리뷰 캐싱을 활성화 할 수 있어요",
-            "title": "프리뷰 캐시 활성화"
-          }
-        }
-      },
-      "share": "공유",
-      "size": "크기",
-      "transfers": "전송",
-      "trash": "휴지통"
-    },
-    "upload_dir": "폴더 업로드",
-    "upload_file": "파일 업로드"
-  },
-  "g": {
-    "account": "계정",
-    "cancel": "취소",
-    "continue": "확인",
-    "dark": "다크 모드",
-    "delete": "삭제",
-    "download": "다운로드",
-    "download_canceled": "다운로드가 취소되었습니다",
-    "download_complete": "다운로드 완료",
-    "download_failed": "다운로드 실패",
-    "genshin": "원신",
-    "gf2": "소녀전선2: 망명",
-    "light": "라이트 모드",
-    "login": "로그인",
-    "logout": "로그아웃",
-    "make_new": "새로 만들기",
-    "mods": "모드",
-    "nahida_drive": "나히다 드라이브",
-    "name": "이름",
-    "optional": "선택",
-    "password": "비밀번호",
-    "require_login": "로그인이 필요합니다",
-    "required": "필수",
-    "search": "검색",
-    "starrail": "붕괴: 스타레일",
-    "system": "시스템",
-    "upload": "업로드",
-    "username": "아이디",
-    "wuwa": "명조: 워더링 웨이브",
-    "zzz": "젠레스 존 제로"
-  },
-  "layout": {
-    "dock": {
-      "add_to_fav": "즐겨찾기에 추가",
-      "backup_for_free": "모드를 제한없이 백업해보세요",
-      "change_languages": "언어 변경",
-      "change_to_mod_menu": "모드 메뉴로 전환",
-      "donate": "후원",
-      "favorites": {
-        "toast": {
-          "added": "즐겨찾기에 추가됐어요!",
-          "forbidden": "이 모드를 즐겨찾기에 추가할 수 있는 권한이 없습니다",
-          "mod_not_found": "모드를 찾을 수 없습니다. 모드가 삭제되었을 수 있습니다",
-          "no_download_history": "모드를 즐겨찾기에 추가하려면 최소 1회 이상 다운로드 해야합니다",
-          "removed": "즐겨찾기에서 삭제됐어요",
-          "unauthorized": "즐겨찾기는 로그인 후 이용 가능합니다"
-        }
-      },
-      "home": "홈",
-      "remove_from_fav": "즐겨찾기 해제",
-      "toggle_navigator": "네비게이터 전환"
-    }
-  },
-  "toast": {
-    "error": {
-      "internal_server_error": "서버 오류가 발생했습니다",
-      "login": "로그인 중 오류가 발생했습니다"
-    },
-    "success": {
-      "favorite_added": "즐겨찾기에 추가됐어요",
-      "favorite_removed": "즐겨찾에서 삭제됐어요",
-      "login": "성공적으로 로그인했습니다",
-      "mod_activated": "모드가 활성화 되었습니다",
-      "mod_deactivated": "모드가 비활성화 되었습니다",
-      "mod_deleted": "모드 삭제가 완료되었습니다",
-      "mod_downloaded": "모드가 다운로드 되었습니다"
-    },
-    "warning": {
-      "cannot_get_mod_data_from_nara": "현재 모드 정보를 가져오는데 실패했어요",
-      "download_expired": "다운로드가 만료된 모드입니다",
-      "failure_turnstile": "Turnstile 인증에 실패했어요. 다시 시도해주세요",
-      "invalid_password": "비밀번호가 일치하지 않습니다",
-      "missing_cftoken": "Turnstile 토큰이 누락되었습니다. 다시 시도해주세요",
-      "mod_manager_not_installed": "모드 매니저가 설치되지 않았거나 사용할 수 없는 상태입니다",
-      "mod_not_ready": "모드의 업로드가 완료되지 않았거나 다운로드 할 수 없는 상태입니다",
-      "pw_is_required": "비밀번호를 입력해주세요",
-      "username_or_pw_missing": "아이디와 비밀번호를 입력해주세요"
-    }
-  },
-  "u": {
-    "delete_account": "계정 삭제",
-    "favorites": "즐겨찾기",
     "mods": {
-      "actions": {
-        "check_log": "로그 확인",
-        "delete": "삭제",
-        "disable": "비활성화",
-        "download": "다운로드",
-        "edit": "편집",
-        "enable": "활성화",
-        "goto_mod": "모드 페이지로",
-        "update": "모드 업데이트"
-      },
-      "column": "컬럼",
-      "description": "설명",
-      "filter": "필터",
-      "next": "다음",
-      "password": "암호",
-      "preview": "프리뷰",
-      "previous": "이전",
-      "status": "상태",
-      "tags": "태그",
-      "title": "타이틀",
-      "upload_date": "업로드 날짜"
+      "a": "모드",
+      "autofix": {
+        "a": "자동 픽스",
+        "b": "나히다 데스크탑으로 다운로드시 자동 해시 픽스"
+      }
     },
-    "my_mods": "내 모드"
-  },
-  "upload": {
-    "access_n_security": "권한 및 보안",
-    "description": "간단한 설명",
-    "expiration_date": "공유 만료일",
-    "file_input_box_1": "드래그 드랍하거나 클릭해 파일을 선택하세요.",
-    "file_input_box_2": "{size}GiB 이하 zip 파일을 선택해주세요",
-    "logged_in": "로그인",
-    "logged_out": "로그아웃",
-    "login_status": "로그인 상태",
-    "select_game": "게임 선택",
-    "start_upload": "업로드 시작",
-    "state": {
-      "uploading": "업로드 중...",
-      "waiting": "대기중..."
-    },
-    "tags": "태그",
-    "target_game": "적용 게임",
-    "title": "타이틀"
+    "cloud": {
+      "a": "클라우드",
+      "preview_cache": {
+        "s": {
+          "a": "프리뷰 캐시 활성화",
+          "b": "프리뷰 캐시를 활성화합니다"
+        },
+        "c": {
+          "a": "프리뷰 캐시",
+          "b": "프리뷰 캐시를 지웁니다",
+          "dialog": {
+            "action": "지우기",
+            "a": "프리뷰 캐시 지우기",
+            "b": "캐싱된 프리뷰 이미지를 모두 지울까요? 저장 공간을 확보할 수 있지만 필요할 때 이미지를 다시 다운로드 해야 합니다."
+          },
+          "toast": {
+            "loading": "프리뷰 캐시를 삭제하는 중입니다...",
+            "success": "프리뷰 캐시를 모두 삭제했습니다",
+            "error": "프리뷰 캐시 삭제중 오류가 발생했습니다: {error}"
+          }
+        }
+      }
+    }
   }
 }
