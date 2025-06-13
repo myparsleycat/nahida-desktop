@@ -4,11 +4,8 @@
   import { ModeWatcher } from "mode-watcher";
   import Layout from "./components/Layout.svelte";
   import { onDestroy, onMount } from "svelte";
-  import { toast, type ExternalToast } from "svelte-sonner";
-  import { ModsHelper } from "./lib/helpers";
   import { QueryClientProvider } from "@tanstack/svelte-query";
   import { queryClient } from "./queryClient";
-  import { CharPathSelector } from "./lib/stores/global.store";
   import { ListenersManager } from "./listeners";
 
   onMount(async () => {

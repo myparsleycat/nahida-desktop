@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ModsHelper } from "$lib/helpers";
   import { FSH } from "$lib/helpers/fs.helper";
-  import { cn, getSearchScore } from "$lib/utils";
+  import { cn } from "$lib/utils";
   import {
     EllipsisIcon,
     FolderOpenIcon,
@@ -17,7 +17,6 @@
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { Button, buttonVariants } from "$lib/components/ui/button";
   import { _ } from "svelte-i18n";
-  import { getChosung } from "$lib/utils";
   import { flip } from "svelte/animate";
   import { fade } from "svelte/transition";
   import { sineOut } from "svelte/easing";
@@ -30,7 +29,7 @@
   import { onMount } from "svelte";
   import type { DirectChildren } from "@shared/types/mods.types";
   import Validator from "@shared/utils/Validator";
-  import { clickWithoutDrag } from "$lib/utils/global.utils";
+  import { Sejong } from "@shared/utils/sejong";
 
   let currentCharPath = ModsHelper.currentCharPath;
   let layout = $state<"grid" | "list">("grid");
@@ -91,26 +90,9 @@
 
   const filteredMods = $derived(
     sortedMods && searchQuery.trim()
-      ? sortedMods
-          .map((item) => ({
-            item,
-            score: getSearchScore(item.name, searchQuery.toLowerCase().trim()),
-          }))
-          .filter(({ item, score }) => {
-            if (score > 0) return true;
-
-            const query = searchQuery.toLowerCase().trim();
-            const isChosungSearch = /^[ㄱ-ㅎ]+$/.test(query);
-
-            if (isChosungSearch) {
-              const itemChosung = getChosung(item.name.toLowerCase());
-              return itemChosung.includes(query);
-            }
-
-            return false;
-          })
-          .sort((a, b) => b.score - a.score)
-          .map(({ item }) => item)
+      ? Sejong.search(sortedMods, searchQuery.trim(), (item) => item.name).map(
+          ({ searchScore, ...item }) => item,
+        )
       : sortedMods,
   );
 
