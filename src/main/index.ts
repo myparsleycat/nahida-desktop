@@ -108,14 +108,16 @@ if (!gotTheLock) {
     })
 
     app.on('ready', () => {
-        const autoLaunch = new AutoLaunch({
-            name: 'Nahida Desktop',
-            path: app.getPath('exe'),
-            isHidden: true
-        });
-        autoLaunch.isEnabled().then((isEnabled) => {
-            if (!isEnabled) autoLaunch.enable();
-        });
+        if (app.isPackaged) {
+            const autoLaunch = new AutoLaunch({
+                name: 'Nahida Desktop',
+                path: app.getPath('exe'),
+                isHidden: true
+            });
+            autoLaunch.isEnabled().then((isEnabled) => {
+                if (!isEnabled) autoLaunch.enable();
+            });
+        }
     })
 
     // Quit when all windows are closed, except on macOS. There, it's common
