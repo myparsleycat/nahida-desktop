@@ -413,17 +413,17 @@ class DbHandler {
       const stmt = db.prepare(query);
       const row: any = stmt.get(key);
 
-      if (!row) {
-        if (table === "LocalStorage" && key in LocalStorageValues) {
-          return (LocalStorageValues as any)[key] as T;
-        } else {
-          return null;
-        }
-      }
-
       if (table === "LocalStorage") {
-        if (row.value === null) {
-          return null;
+        if (!row) {
+          if (key in LocalStorageValues) {
+            return (LocalStorageValues as any)[key] as T;
+          } else {
+            throw new Error(`LocalStorage key '${key}' not found and no default value available`);
+          }
+        }
+
+        if (!('value' in row)) {
+          throw new Error(`LocalStorage column 'value' not found for key '${key}'`);
         }
 
         try {
@@ -433,6 +433,9 @@ class DbHandler {
           return row.value as T;
         }
       } else {
+        if (!row) {
+          return null;
+        }
         return row as T;
       }
     } catch (err) {
