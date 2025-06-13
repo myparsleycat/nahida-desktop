@@ -3,6 +3,7 @@ import type { DirCreateManyResp, MoveManyResp, TrashManyResp } from '@shared/typ
 import type { DirectChildren, Games } from '@shared/types/mods.types';
 import type { HelloModsRespSuccessResp, Mod } from '@shared/types/nahida.types';
 import type { Fixx } from '@shared/types/mods.types';
+import type { languages } from '@shared/types/setting.types';
 
 declare global {
   interface Window {
@@ -142,6 +143,12 @@ declare global {
       }
 
       setting: {
+        general: {
+          lang: {
+            get: () => Promise<string>
+            set: (lang: languages) => Promise<boolean>
+          }
+        }
         autofix: {
           nahida: {
             set: (value: boolean) => Promise<boolean>
