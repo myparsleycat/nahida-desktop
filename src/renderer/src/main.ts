@@ -1,5 +1,5 @@
 import { mount } from 'svelte'
-import './app.css';
+import '../app.css';
 import "$lib/i18n";
 import { locale, waitLocale } from "svelte-i18n";
 import { setupWindowControls } from './window-controls'
