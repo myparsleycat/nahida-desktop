@@ -76,7 +76,7 @@ export const preventEvent = (e: DragEvent) => {
 };
 
 export const formatSize = (size: number | null): string => {
-	if (size === null) return "";
+	if (size === null) return "0 B";
 
 	if (size < 1024) {
 		return `${size} B`;
