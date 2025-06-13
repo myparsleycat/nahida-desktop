@@ -3,22 +3,19 @@
 import { app, BrowserWindow, ipcMain, dialog, protocol, crashReporter } from 'electron';
 import path from 'node:path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
-import { db } from '@core/db';
 import { AuthService, ToastService } from '@core/services';
 import { NahidaProtocolHandler } from '@core/nahida.protocol';
 import { CrashReportUrl } from '@core/const';
-import server from '@core/server';
-import { createTray } from './tray';
 import { createMainWindow, mainWindow } from './window';
 import { registerServices } from '@core/ipc';
-// import { createOverlayWindow } from '../core/overlay';
 import AutoLaunch from 'auto-launch';
 import { getAutoUpdater } from './updater';
 import log from 'electron-log';
+import { startInit } from './init';
 
-let initialized = false;
 console.log = log.log;
 console.error = log.error;
+console.info = log.info;
 
 crashReporter.start({ submitURL: CrashReportUrl });
 
@@ -29,25 +26,6 @@ if (process.defaultApp) {
     }
 } else {
     app.setAsDefaultProtocolClient('nahida');
-}
-
-async function oneTimeInit() {
-    if (initialized) return;
-
-    await db.init();
-    const lang = await db.get('LocalStorage', 'language');
-    if (!lang) {
-        const locale = app.getLocale();
-        if (locale.startsWith('en')) await db.update('LocalStorage', 'language', 'en');
-        else if (locale === 'ko') await db.update('LocalStorage', 'language', 'ko');
-        else if (locale.startsWith('zh')) await db.update('LocalStorage', 'language', 'zh');
-    }
-
-    server.listen(14327, ({ hostname, port }) => {
-        log.info(`server is running at ${hostname}:${port}`);
-    });
-
-    initialized = true;
 }
 
 function registerCustomProtocol() {
@@ -77,8 +55,7 @@ if (!gotTheLock) {
     // initialization and is ready to create browser windows.
     // Some APIs can only be used after this event occurs.
     app.whenReady().then(async () => {
-        await oneTimeInit();
-        createTray();
+        await startInit();
 
         app.on('open-url', (_, url) => {
             // dialog.showErrorBox('Welcome Back', `You arrived from: ${url}`)
@@ -96,7 +73,6 @@ if (!gotTheLock) {
         });
 
         // ipc
-        ipcMain.on('ping', () => console.log('pong'));
         registerServices(ipcMain);
 
         registerCustomProtocol();
