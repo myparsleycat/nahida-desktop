@@ -246,7 +246,7 @@
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="pl-3 pb-3 pt-1 pr-1.5 flex flex-col flex-1 overflow-auto relative"
+    class="flex flex-col flex-1 overflow-auto relative pr-1.5"
     ondragover={(e) => {
       e.preventDefault();
       modDragState = true;
@@ -299,7 +299,7 @@
 
     <div
       bind:this={modsContainerElement}
-      class="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 h-full overflow-y-auto pr-1.5"
+      class="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 h-full overflow-y-auto pr-1.5 pl-3 pb-3 pt-1"
     >
       {#if filteredMods}
         {#each filteredMods as mod (mod.path)}
