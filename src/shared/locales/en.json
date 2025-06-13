@@ -27,6 +27,7 @@
       "mkng": {
         "a": "Create new group",
         "b": "Write group name, select path, and press create button",
+        "action": "Create",
         "toast": {
           "nm": "Group name not entered",
           "pm": "Path not selected",
