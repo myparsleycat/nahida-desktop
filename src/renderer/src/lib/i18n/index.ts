@@ -3,9 +3,9 @@ import { init, register } from 'svelte-i18n'
 
 const defaultLocale = 'en'
 
-register('en', () => import('./locales/en.json'))
-register('ko', () => import('./locales/ko.json'))
-register('zh', () => import('./locales/zh.json'))
+register('en', () => import('@shared/locales/en.json'))
+register('ko', () => import('@shared/locales/ko.json'))
+register('zh', () => import('@shared/locales/zh.json'))
 
 init({
   fallbackLocale: defaultLocale,
