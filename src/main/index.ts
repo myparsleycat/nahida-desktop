@@ -15,6 +15,9 @@ import { registerServices } from '@core/ipc';
 import AutoLaunch from 'auto-launch';
 import { getAutoUpdater } from './updater';
 import log from 'electron-log';
+import psList from 'ps-list';
+import { OverlayService } from '@core/services/overlay.service';
+import { createOverlayWindow } from '@core/overlay';
 
 let initialized = false;
 console.log = log.log;
@@ -108,14 +111,14 @@ if (!gotTheLock) {
         })
 
         // 오버레이
-        // createOverlayWindow('Zenless');
+        await OverlayService.createOverlayWindow();
 
         app.on('activate', async () => {
             // On macOS it's common to re-create a window in the app when the
             // dock icon is clicked and there are no other windows open.
             if (BrowserWindow.getAllWindows().length === 0) await createMainWindow();
         });
-    })
+    });
 
     app.on('ready', () => {
         if (app.isPackaged) {

@@ -7,22 +7,31 @@
   import Mods from "@/components/mods/Mods.svelte";
   import { QueryClientProvider } from "@tanstack/svelte-query";
   import { queryClient } from "@/queryClient";
+  import { onDestroy, onMount } from "svelte";
+  import { ListenersManager } from "@/listeners";
 
-  $effect(() => {
+  onMount(async () => {
     createDraggable(".square");
+    await ListenersManager.init();
+
+    const folderPathListener = window.api.overlay.visibilityChange((state) => {
+      console.log(state)
+    });
+  });
+
+  onDestroy(() => {
+    ListenersManager.destroy();
   });
 </script>
 
 <ModeWatcher defaultMode="system" />
 <Toaster richColors position="bottom-left" />
 <QueryClientProvider client={queryClient}>
-  <div class="h-screen w-screen">
+  <div class="h-screen w-full">
     <div
-      class="square draggable bg-black/50 rounded-lg p-2 absolute bottom-4 left-4 w-1/3 h-1/3"
+      class="square draggable bg-black/75 rounded-lg p-2 absolute bottom-4 left-4 w-1/3 h-1/3"
     >
-      <Mods>
-        
-      </Mods>
+      <Mods></Mods>
     </div>
   </div>
 </QueryClientProvider>

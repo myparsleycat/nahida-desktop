@@ -39,6 +39,9 @@
       "@core/*": [
         "core/*"
       ],
+      "@preload/*": [
+        "preload/*"
+      ],
       "$lib": [
         "renderer/src/lib",
         "renderer/overlay"

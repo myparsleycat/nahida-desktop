@@ -10,24 +10,27 @@ const toggleShowKey = 'Ctrl + K'
 
 export function createOverlayWindow(windowName: string) {
   window = new BrowserWindow({
-    width: 1920,
-    height: 1080,
+    width: 1280,
+    height: 720,
     frame: false,
-    resizable: true,
     transparent: true,
-    backgroundColor: "#00000000",
-    autoHideMenuBar: true,
-    fullscreenable: true,
-    minimizable: false,
-    maximizable: false,
-    closable: false,
-    fullscreen: true,
+    backgroundColor: '#00000000',
+    alwaysOnTop: true,
+    focusable: false,
+    skipTaskbar: true,
     hasShadow: false,
+    type: 'toolbar',
+    autoHideMenuBar: true,
+    show: false,
+    resizable: false,
+    thickFrame: false,
     roundedCorners: false,
+    useContentSize: true,
+    minimizable: false,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
-      preload: path.join(__dirname, '../preload/index.js'),
+      preload: path.join(__dirname, '../preload/index.mjs'),
       sandbox: false
     },
     // ...OVERLAY_WINDOW_OPTS

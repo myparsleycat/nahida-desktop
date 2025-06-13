@@ -12,6 +12,8 @@ import {
     defineSettingChannels, injectSettingHandlers,
     injectRendererHandlers, defineRendererChannels,
     defineWindowChannels,
+    defineOverlayChannels,
+    injectOverlayHandlers,
 } from './channels';
 import type { Services } from './types';
 
@@ -35,6 +37,7 @@ export class IPCManager {
         defineWindowChannels(rootGroup);
         defineRendererChannels(rootGroup);
         defineSettingChannels(rootGroup);
+        defineOverlayChannels(rootGroup);
     }
 
     injectServiceHandlers(services: Services): void {
@@ -54,6 +57,7 @@ export class IPCManager {
         injectDriveHandlers(this.registry, DriveService);
         injectToastHandlers(this.registry);
         injectSettingHandlers(this.registry, SettingService)
+        injectOverlayHandlers(this.registry);
     }
 
     registerServices(ipcMainInstance: typeof ipcMain): void {

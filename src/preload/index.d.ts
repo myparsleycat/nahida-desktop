@@ -114,22 +114,7 @@ declare global {
       }
 
       overlay: {
-        activate: () => Promise<void>
-        focusTarget: () => Promise<void>
-        screenshot: (width: number, height: number) => Promise<Buffer>
-        overlayEvent: (callback: (event: {
-          type: 'attach' | 'detach' | 'focus' | 'blur' | 'moveresize';
-          data?: {
-            bounds?: {
-              x: number;
-              y: number;
-              width: number;
-              height: number;
-            };
-            hasAccess?: boolean;
-            isFullscreen?: boolean;
-          };
-        }) => void) => () => void
+        visibilityChange: (callback: (value: boolean) => void) => () => void
       }
 
       toast: {
