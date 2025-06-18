@@ -1,8 +1,40 @@
 import { db } from "@core/db";
 import { ToastService } from "./toast.service";
+import type { languages } from "@shared/types/setting.types";
+import { app } from "electron";
 
 
 class SettingServiceClass {
+    general = {
+        getAppVersion: () => app.getVersion(),
+
+        lang: {
+            get: async () => {
+                try {
+                    return (await db.get('LocalStorage', 'language'))!;
+                } catch (e: any) {
+                    console.error('setting.general.lang.get Error', e);
+                    ToastService.error('언어 조회중 오류 발생', {
+                        description: e.message
+                    });
+                    return '';
+                }
+            },
+            set: async (lang: languages) => {
+                try {
+                    await db.update('LocalStorage', 'language', lang);
+                    return true;
+                } catch (e: any) {
+                    console.error('setting.general.lang.set Error', e);
+                    ToastService.error('언어 저장중 오류 발생', {
+                        description: e.message
+                    });
+                    return false;
+                }
+            }
+        }
+    }
+
     autofix = {
         nahida: {
             set: async (value: boolean) => {

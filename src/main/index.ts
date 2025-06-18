@@ -3,22 +3,19 @@
 import { app, BrowserWindow, ipcMain, dialog, protocol, crashReporter } from 'electron';
 import path from 'node:path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
-import { db } from '@core/db';
 import { AuthService, ToastService } from '@core/services';
 import { NahidaProtocolHandler } from '@core/nahida.protocol';
 import { CrashReportUrl } from '@core/const';
-import server from '@core/server';
-import { createTray } from './tray';
 import { createMainWindow, mainWindow } from './window';
 import { registerServices } from '@core/ipc';
-// import { createOverlayWindow } from '../core/overlay';
 import AutoLaunch from 'auto-launch';
 import { getAutoUpdater } from './updater';
 import log from 'electron-log';
+import { startInit } from './init';
 
-let initialized = false;
 console.log = log.log;
 console.error = log.error;
+console.info = log.info;
 
 crashReporter.start({ submitURL: CrashReportUrl });
 
@@ -29,15 +26,6 @@ if (process.defaultApp) {
     }
 } else {
     app.setAsDefaultProtocolClient('nahida');
-}
-
-async function oneTimeInit() {
-    if (initialized) return;
-    await db.init();
-    server.listen(14327, ({ hostname, port }) => {
-        log.info(`server is running at ${hostname}:${port}`);
-    });
-    initialized = true;
 }
 
 function registerCustomProtocol() {
@@ -67,8 +55,7 @@ if (!gotTheLock) {
     // initialization and is ready to create browser windows.
     // Some APIs can only be used after this event occurs.
     app.whenReady().then(async () => {
-        await oneTimeInit();
-        createTray();
+        await startInit();
 
         app.on('open-url', (_, url) => {
             // dialog.showErrorBox('Welcome Back', `You arrived from: ${url}`)
@@ -86,7 +73,6 @@ if (!gotTheLock) {
         });
 
         // ipc
-        ipcMain.on('ping', () => console.log('pong'));
         registerServices(ipcMain);
 
         registerCustomProtocol();
@@ -108,14 +94,16 @@ if (!gotTheLock) {
     })
 
     app.on('ready', () => {
-        const autoLaunch = new AutoLaunch({
-            name: 'Nahida Desktop',
-            path: app.getPath('exe'),
-            isHidden: true
-        });
-        autoLaunch.isEnabled().then((isEnabled) => {
-            if (!isEnabled) autoLaunch.enable();
-        });
+        if (app.isPackaged) {
+            const autoLaunch = new AutoLaunch({
+                name: 'Nahida Desktop',
+                path: app.getPath('exe'),
+                isHidden: true
+            });
+            autoLaunch.isEnabled().then((isEnabled) => {
+                if (!isEnabled) autoLaunch.enable();
+            });
+        }
     })
 
     // Quit when all windows are closed, except on macOS. There, it's common

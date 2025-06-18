@@ -10,7 +10,8 @@ export default defineConfig({
       alias: {
         '@shared': path.resolve('./src/shared'),
         '@core': path.resolve('./src/core'),
-        '@main': path.resolve('./src/main')
+        '@main': path.resolve('./src/main'),
+        '@preload': path.resolve('./src/preload')
       }
     }
   },
@@ -27,7 +28,9 @@ export default defineConfig({
     resolve: {
       alias: {
         '@shared': path.resolve('./src/shared'),
-        '@core': path.resolve('./src/core')
+        '@core': path.resolve('./src/core'),
+        '@main': path.resolve('./src/main'),
+        '@preload': path.resolve('./src/preload')
       }
     }
   },

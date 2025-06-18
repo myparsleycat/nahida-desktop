@@ -4,6 +4,7 @@ import { writable } from "svelte/store";
 import { Auth } from "./auth.helper";
 import { NDH } from "./drive.helper";
 import { ModsHelper } from "./mods.helper";
+import { SettingHelper } from "./setting.helper";
 import { toast as svsonner, type ExternalToast } from "svelte-sonner";
 
 type Pages = "mods" | "nahida" | "cloud" | "setting"
@@ -22,5 +23,6 @@ export {
   Main,
   ModsHelper,
   Auth,
-  NDH
+  NDH,
+  SettingHelper
 }

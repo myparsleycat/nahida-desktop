@@ -1,0 +1,1 @@
+export type languages = 'en' | 'ko' | 'zh';

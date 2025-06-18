@@ -4,86 +4,16 @@
   import { ModeWatcher } from "mode-watcher";
   import Layout from "./components/Layout.svelte";
   import { onDestroy, onMount } from "svelte";
-  import { toast, type ExternalToast } from "svelte-sonner";
-  import { ModsHelper } from "./lib/helpers";
   import { QueryClientProvider } from "@tanstack/svelte-query";
   import { queryClient } from "./queryClient";
-  import { CharPathSelector } from "./lib/stores/global.store";
+  import { ListenersManager } from "./listeners";
 
-  let listeners: (() => void)[] = [];
-
-  onMount(() => {
-    const folderPathListener = window.api.mods.msg.currentFolderPathChanged(
-      (resp) => {
-        ModsHelper.currentFolderPath.set(resp);
-      },
-    );
-    listeners.push(folderPathListener);
-
-    const charPathListener = window.api.mods.msg.currentCharPathChanged(
-      (resp) => {
-        ModsHelper.currentCharPath.set(resp);
-      },
-    );
-    listeners.push(charPathListener);
-
-    const toastListener = window.api.toast.toastShow(
-      (params: {
-        message: string;
-        type?: "default" | "success" | "error" | "warning" | "info";
-        data?: ExternalToast;
-      }) => {
-        const { message, type = "default", data } = params;
-
-        switch (type) {
-          case "success":
-            toast.success(message, data);
-            break;
-          case "error":
-            toast.error(message, data);
-            break;
-          case "warning":
-            toast.warning(message, data);
-            break;
-          case "info":
-            toast.info(message, data);
-            break;
-          default:
-            toast(message, data);
-        }
-      },
-    );
-    listeners.push(toastListener);
-
-    const charPathRequestListener = window.api.renderer.requestCharPath(
-      async (data: any) => {
-        const { requestId } = data;
-        const result = await CharPathSelector.open();
-
-        window.api.renderer.charPathResponse(requestId, {
-          success: true,
-          data: result,
-        });
-      },
-    );
-    listeners.push(charPathRequestListener);
+  onMount(async () => {
+    await ListenersManager.init();
   });
 
-  const closeCharPathSelectorListener =
-    window.api.renderer.closeCharPathSelector(async () => {
-      CharPathSelector.close();
-    });
-  listeners.push(closeCharPathSelectorListener);
-
-  const clearListeners = () => {
-    listeners.forEach((removeListener) => {
-      removeListener();
-    });
-    listeners = [];
-  };
-
   onDestroy(() => {
-    clearListeners();
+    ListenersManager.destroy();
   });
 </script>
 

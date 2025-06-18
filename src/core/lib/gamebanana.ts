@@ -2,6 +2,7 @@ import { join } from "node:path";
 import crypto from 'node:crypto';
 import { nanoid } from 'nanoid';
 import { FSService } from "@core/services";
+import { ProxyUrl } from "@core/const";
 
 export interface ModProfileResponse {
   _idRow: number;
@@ -49,7 +50,7 @@ class GameBananaClass {
     url: string; method?: "GET" | "POST"; body?: any; response: 'json' | 'raw'; useProxy?: boolean;
   }) {
     try {
-      const aurl = useProxy ? `https://proxy.nahida.live/?url=${url}` : url;
+      const aurl = useProxy ? ProxyUrl + url : url;
       const res = await fetch(aurl, {
         method,
         headers: {
@@ -64,16 +65,12 @@ class GameBananaClass {
         throw new Error(`HTTP Error: ${res.status} ${res.statusText}`);
       }
 
-      if (response === 'json') {
-        return await res.json();
-      } else if (response === 'raw') {
-        return res;
-      } else {
-        throw new Error("잘못된 response 파라미터");
-      }
+      if (response === 'json') return await res.json();
+      else if (response === 'raw') return res;
+      else throw new Error("Invalid response");
     } catch (err: any) {
-      console.error("Gamebanana fetcher Error:", err);
-      throw new Error("Failed to fetch data from GameBanana API.");
+      console.error("Gamebanana fetcher Error:", err.message);
+      throw err;
     }
   }
 
@@ -175,7 +172,6 @@ class GameBananaClass {
 
       while (downloadAttempts < retryCount) {
         try {
-          console.log('url', file.url);
           const response = await this.fetcher({ url: file.url, response: 'raw', useProxy: false });
           if (!response.ok) {
             downloadAttempts++;

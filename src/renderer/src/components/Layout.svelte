@@ -34,53 +34,47 @@
         class="flex flex-col overflow-y-auto overflow-x-hidden dragselect-start-allowed px-2"
       >
         <div class="space-y-2">
-          <div class="flex">
+          <!-- <div class="flex">
             <Tooltip.Provider>
               <Tooltip.Root delayDuration={50}>
                 <Tooltip.Trigger>
-                  <!-- <ProcessSheet /> -->
+                  <ProcessSheet />
                 </Tooltip.Trigger>
                 <Tooltip.Content side="right">
                   <p>{$_("drive.ui.transfers")}</p>
                 </Tooltip.Content>
               </Tooltip.Root>
             </Tooltip.Provider>
-          </div>
+          </div> -->
 
           <Separator />
 
           <div class="flex">
             <Tooltip.Provider>
               <Tooltip.Root delayDuration={50}>
-                <Tooltip.Trigger>
-                  <button
-                    class={cn(
-                      "flex flex-row gap-2.5 w-full p-2 rounded-md transition-all items-center hover:bg-secondary text-primary cursor-pointer active",
-                      $page === "mods" && "bg-secondary",
-                    )}
-                    onclick={() => {
-                      if ($page !== "mods") {
-                        page.set("mods");
-                      }
-                      NDH.nav.move("mods");
-                      ModsHelper.clearPath();
-                    }}
-                  >
-                    <div class="flex flex-row gap-2 items-center">
-                      <div>
-                        <HardDriveIcon />
-                      </div>
-                    </div>
-                  </button>
+                <Tooltip.Trigger
+                  class={cn(
+                    "flex flex-row gap-2.5 w-full p-2 rounded-md transition-all items-center hover:bg-secondary text-primary cursor-pointer active",
+                    $page === "mods" && "bg-secondary",
+                  )}
+                  onclick={() => {
+                    if ($page !== "mods") {
+                      page.set("mods");
+                    }
+                    NDH.nav.move("mods");
+                    ModsHelper.clearPath();
+                  }}
+                >
+                  <HardDriveIcon />
                 </Tooltip.Trigger>
                 <Tooltip.Content side="right">
-                  <p>{$_("drive.ui.my_mods")}</p>
+                  <p>{$_("mods.a")}</p>
                 </Tooltip.Content>
               </Tooltip.Root>
             </Tooltip.Provider>
           </div>
 
-          <div class="flex">
+          <!-- <div class="flex">
             <Tooltip.Provider>
               <Tooltip.Root delayDuration={50}>
                 <Tooltip.Trigger>
@@ -103,13 +97,13 @@
                   </button>
                 </Tooltip.Trigger>
                 <Tooltip.Content side="right">
-                  <p>{$_("drive.ui.nahidalive")}</p>
+                  <p>{$_("live.a")}</p>
                 </Tooltip.Content>
               </Tooltip.Root>
             </Tooltip.Provider>
-          </div>
+          </div> -->
 
-          <div class="flex">
+          <!-- <div class="flex">
             <Tooltip.Provider>
               <Tooltip.Root delayDuration={50}>
                 <Tooltip.Trigger>
@@ -133,28 +127,26 @@
                   </button>
                 </Tooltip.Trigger>
                 <Tooltip.Content side="right">
-                  <p>{$_("drive.ui.cloud_drive")}</p>
+                  <p>{$_("drive.a")}</p>
                 </Tooltip.Content>
               </Tooltip.Root>
             </Tooltip.Provider>
-          </div>
+          </div> -->
 
           <div class="flex">
             <Tooltip.Provider>
               <Tooltip.Root delayDuration={50}>
-                <Tooltip.Trigger>
-                  <button
-                    class={cn(
-                      "flex flex-row gap-2.5 w-full p-2 rounded-md transition-all items-center hover:bg-secondary text-primary cursor-pointer bg-transparent",
-                      $page === "setting" && "bg-secondary",
-                    )}
-                    onclick={() => Main.page.set("setting")}
-                  >
-                    <SettingsIcon />
-                  </button>
+                <Tooltip.Trigger
+                  class={cn(
+                    "flex flex-row gap-2.5 w-full p-2 rounded-md transition-all items-center hover:bg-secondary text-primary cursor-pointer bg-transparent",
+                    $page === "setting" && "bg-secondary",
+                  )}
+                  onclick={() => Main.page.set("setting")}
+                >
+                  <SettingsIcon />
                 </Tooltip.Trigger>
                 <Tooltip.Content side="right">
-                  <p>{$_("drive.ui.settings")}</p>
+                  <p>{$_("setting.a")}</p>
                 </Tooltip.Content>
               </Tooltip.Root>
             </Tooltip.Provider>

@@ -32,9 +32,6 @@
     cn,
     formatSize,
     formatDate,
-    getChosung,
-    getSearchScore,
-    isNameConflict,
     preventEvent,
   } from "$lib/utils";
   import {
@@ -54,6 +51,7 @@
   import { ValidateName } from "$lib/utils/cloud.utils";
   import { getRandInt } from "@shared/utils";
   import { Skeleton } from "$lib/components/ui/skeleton";
+  import { Sejong } from "@shared/utils/sejong";
 
   let currentId = NDH.currentId;
   let uploadDragging = $state(false);
@@ -493,13 +491,13 @@
       return $sortedContents
         .map((item) => ({
           item,
-          score: getSearchScore(item.name, query),
+          score: Sejong.getSearchScore(item.name, query),
         }))
         .filter(({ item, score }) => {
           if (score > 0) return true;
 
           if (isChosungSearch) {
-            const itemChosung = getChosung(item.name.toLowerCase());
+            const itemChosung = Sejong.getChosung(item.name.toLowerCase());
             return itemChosung.includes(query);
           }
 
