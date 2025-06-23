@@ -38,6 +38,7 @@ export function defineModsChannels(rootGroup: ChannelGroup) {
     modGroup.addChannel('read');
     modGroup.addChannel('toggle');
     modGroup.addChannel('fix');
+    modGroup.addChannel('outline');
 
     const iniGroup = modsGroup.addGroup('ini');
     iniGroup.addChannel('parse');
@@ -88,7 +89,8 @@ export function injectModsHandlers(registry: any, mods: typeof ModsService) {
     registry.injectHandlers('mods.mod', {
         read: (path: string) => mods.mod.read(path),
         toggle: (path: string) => mods.mod.toggle(path),
-        fix: (path: string, fix: Fixx) => mods.mod.fix(path, fix)
+        fix: (path: string, fix: Fixx) => mods.mod.fix(path, fix),
+        outline: (path: string, thickness: number) => mods.mod.outline(path, thickness)
     });
 
     registry.injectHandlers('mods.ini', {
