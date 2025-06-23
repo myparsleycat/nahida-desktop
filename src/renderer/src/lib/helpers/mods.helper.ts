@@ -54,7 +54,8 @@ class ModsHelperClass {
     mod = {
         read: async (path: string) => await window.api.mods.mod.read(path),
         toggle: async (path: string) => await window.api.mods.mod.toggle(path),
-        fix: async (path: string, fix: Fixx) => await window.api.mods.mod.fix(path, fix)
+        fix: async (path: string, fix: Fixx) => await window.api.mods.mod.fix(path, fix),
+        outline: async (path: string, thickness: number) => await window.api.mods.mod.outline(path, thickness)
     }
 
     ini = {

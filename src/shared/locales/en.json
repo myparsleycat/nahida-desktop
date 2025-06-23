@@ -10,7 +10,8 @@
     "delete": "Delete",
     "remove": "Remove",
     "continue": "Continue",
-    "paste": "Paste"
+    "paste": "Paste",
+    "save": "Save"
   },
   "mods": {
     "a": "Mods",

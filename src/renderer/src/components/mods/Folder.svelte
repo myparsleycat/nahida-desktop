@@ -48,6 +48,8 @@
   let fileToOverwrite = $state<ArrayBuffer | null>(null);
   let previewPathToOverwrite = $state<string | null>(null);
 
+  let thickness = $state(128);
+
   onMount(async () => {
     layout = await ModsHelper.ui.layout.mod.get();
   });
@@ -157,6 +159,10 @@
       throw err;
     }
   };
+
+  async function work(path: string) {
+    await ModsHelper.mod.outline(path, thickness);
+  }
 </script>
 
 <div class="h-full w-full flex flex-col">
@@ -343,7 +349,40 @@
                   >
                     <WrenchIcon size={20} />
                   </DropdownMenu.Trigger>
+
                   <DropdownMenu.Content>
+                    <DropdownMenu.Group>
+                      <DropdownMenu.Item>
+                        <Dialog.Root>
+                          <Dialog.Trigger
+                            onclick={(e) => {
+                              e.stopPropagation();
+                            }}>Set Outline</Dialog.Trigger
+                          >
+                          <Dialog.Content>
+                            <Dialog.Header>
+                              <Dialog.Title
+                                >Change Outline Thickness</Dialog.Title
+                              >
+                            </Dialog.Header>
+                            <div class="flex gap-2">
+                              <Input
+                                type="number"
+                                min="0"
+                                max="255"
+                                bind:value={thickness}
+                              />
+                              <Button onClickPromise={() => work(mod.path)}
+                                >{$_("global.save")}</Button
+                              >
+                            </div>
+                          </Dialog.Content>
+                        </Dialog.Root>
+                      </DropdownMenu.Item>
+                    </DropdownMenu.Group>
+
+                    <DropdownMenu.Separator />
+
                     <DropdownMenu.Group>
                       <DropdownMenu.Item
                         onclick={async (e) => {

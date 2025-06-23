@@ -14,6 +14,7 @@ import type { Fixx } from "@shared/types/mods.types";
 import { fixHSRMod } from "@core/lib/mod/fix/hsr.hash.fix";
 import { HSRPipelineConvert } from "@core/lib/mod/fix/hsr.pipeline.convert";
 import wuwaModFix from "@core/lib/mod/fix/wuwa.fix";
+import { setOutline } from "@core/lib/mod/fix/auto_outline";
 
 class ModsServiceClass {
     currentFolderPath: string | null = null;
@@ -243,6 +244,21 @@ class ModsServiceClass {
                 return true;
             } catch (e: any) {
                 ToastService.error('픽스 오류', {
+                    description: e.message
+                });
+                return false;
+            }
+        },
+
+        outline: async (path: string, thickness: number) => {
+            try {
+                await setOutline(path, thickness);
+                ToastService.success(`Outline thickness set to ${thickness}`);
+                return true;
+            } catch (e: any) {
+                console.error('setOutline Error');
+                console.error(e);
+                ToastService.error("setOutline Error", {
                     description: e.message
                 });
                 return false;

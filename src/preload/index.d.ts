@@ -68,6 +68,7 @@ declare global {
           read: (path: string) => Promise<DirectChildren[]>
           toggle: (path: string) => Promise<boolean>
           fix: (path: string, fix: Fixx) => Promise<boolean>
+          outline: (path: string, thickness: number) => Promise<boolean>
         },
         ini: {
           parse: (path: string) => Promise<IniParseResult[]>
