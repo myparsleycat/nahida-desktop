@@ -10,7 +10,8 @@
     "delete": "删除",
     "remove": "移除",
     "continue": "继续",
-    "paste": "粘贴"
+    "paste": "粘贴",
+    "save": "保存"
   },
   "mods": {
     "a": "模组",

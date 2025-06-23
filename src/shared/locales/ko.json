@@ -10,7 +10,8 @@
     "delete": "삭제",
     "remove": "삭제",
     "continue": "계속",
-    "paste": "붙여넣기"
+    "paste": "붙여넣기",
+    "save": "저장"
   },
   "mods": {
     "a": "모드",
