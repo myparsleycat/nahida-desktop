@@ -26,12 +26,12 @@
     "@elysiajs/cors": "^1.3.3",
     "@elysiajs/node": "^1.3.0",
     "@formkit/auto-animate": "^0.8.2",
-    "@lucide/svelte": "^0.522.0",
+    "@lucide/svelte": "^0.523.0",
     "@tanstack/svelte-query": "^5.81.2",
     "adm-zip": "^0.5.16",
     "auto-launch": "^5.0.6",
     "axios": "^1.10.0",
-    "better-sqlite3": "^12.1.0",
+    "better-sqlite3": "^12.1.1",
     "date-fns": "^4.1.0",
     "electron-log": "^5.4.1",
     "electron-overlay-window": "github:myparsleycat/electron-overlay-window",
@@ -79,7 +79,7 @@
     "tailwindcss-animate": "^1.0.7",
     "tw-animate-css": "^1.3.4",
     "typescript": "^5.8.3",
-    "vite": "^6.3.5",
+    "vite": "^7.0.0",
     "@tailwindcss/vite": "^4.1.10"
   }
 }

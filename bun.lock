@@ -9,12 +9,12 @@
         "@elysiajs/cors": "^1.3.3",
         "@elysiajs/node": "^1.3.0",
         "@formkit/auto-animate": "^0.8.2",
-        "@lucide/svelte": "^0.522.0",
+        "@lucide/svelte": "^0.523.0",
         "@tanstack/svelte-query": "^5.81.2",
         "adm-zip": "^0.5.16",
         "auto-launch": "^5.0.6",
         "axios": "^1.10.0",
-        "better-sqlite3": "^12.1.0",
+        "better-sqlite3": "^12.1.1",
         "date-fns": "^4.1.0",
         "electron-log": "^5.4.1",
         "electron-overlay-window": "github:myparsleycat/electron-overlay-window",
@@ -63,7 +63,7 @@
         "tailwindcss-animate": "^1.0.7",
         "tw-animate-css": "^1.3.4",
         "typescript": "^5.8.3",
-        "vite": "^6.3.5",
+        "vite": "^7.0.0",
       },
     },
   },
@@ -228,7 +228,7 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.25", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-vNk6aEwybGtawWmy/PzwnGDOjCkLWSD2wqvjGGAgOAwCGWySYXfYoxt00IJkTF+8Lb57DwOb3Aa0o9CApepiYQ=="],
 
-    "@lucide/svelte": ["@lucide/svelte@0.522.0", "", { "peerDependencies": { "svelte": "^5" } }, "sha512-Q10WkheTfb0sZ6y+EQVTqW4DN8nD2mym00gVpinbe3dJWRW3/R7SeTGF9pW+Ux4PrzkNV9dUdUTWcbO/AdKwQQ=="],
+    "@lucide/svelte": ["@lucide/svelte@0.523.0", "", { "peerDependencies": { "svelte": "^5" } }, "sha512-t6CNxUAC7to9IPQv+yaJD8OlpXVeEL7wT1nw5+lx62HoBnkO6//xYZSTkV8Ia3bqtoF4deI3Pjff/8cPyQjiCw=="],
 
     "@malept/cross-spawn-promise": ["@malept/cross-spawn-promise@2.0.0", "", { "dependencies": { "cross-spawn": "^7.0.1" } }, "sha512-1DpKU0Z5ThltBwjNySMC14g0CkbyhCaz9FkhxqNsZI6uAPJXFS8cMXlBKo26FJ8ZuW6S9GCMcR9IO5k2X5/9Fg=="],
 
@@ -430,7 +430,7 @@
 
     "base64-js": ["base64-js@1.5.1", "", {}, "sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA=="],
 
-    "better-sqlite3": ["better-sqlite3@12.1.0", "", { "dependencies": { "bindings": "^1.5.0", "prebuild-install": "^7.1.1" } }, "sha512-8f5xvlc6bcGZ57kYzQmeWYHqbKj57RRK/WiTrBGUowiX8ZbrgStWznBPIMGJi5MP7SNhJCKSc4TBaX9hhQL6Iw=="],
+    "better-sqlite3": ["better-sqlite3@12.1.1", "", { "dependencies": { "bindings": "^1.5.0", "prebuild-install": "^7.1.1" } }, "sha512-xjl/TjWLy/6yLa5wkbQSjTgIgSiaEJy3XzjF5TAdiWaAsu/v0OCkYOc6tos+PkM/k4qURN2pFKTsbcG3gk29Uw=="],
 
     "bindings": ["bindings@1.5.0", "", { "dependencies": { "file-uri-to-path": "1.0.0" } }, "sha512-p2q/t/mhvuOj/UeLlV6566GD/guowlr0hHxClI0W9m7MWYkL1F0hLo+0Aexs9HSPCtR1SXQ0TD3MMKrXZajbiQ=="],
 
@@ -1246,7 +1246,7 @@
 
     "verror": ["verror@1.10.1", "", { "dependencies": { "assert-plus": "^1.0.0", "core-util-is": "1.0.2", "extsprintf": "^1.2.0" } }, "sha512-veufcmxri4e3XSrT0xwfUR7kguIkaxBeosDg00yDWhk49wdwkSUrvvsm7nc75e1PUyvIeZj6nS8VQRYz2/S4Xg=="],
 
-    "vite": ["vite@6.3.5", "", { "dependencies": { "esbuild": "^0.25.0", "fdir": "^6.4.4", "picomatch": "^4.0.2", "postcss": "^8.5.3", "rollup": "^4.34.9", "tinyglobby": "^0.2.13" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^18.0.0 || ^20.0.0 || >=22.0.0", "jiti": ">=1.21.0", "less": "*", "lightningcss": "^1.21.0", "sass": "*", "sass-embedded": "*", "stylus": "*", "sugarss": "*", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "jiti", "less", "lightningcss", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-cZn6NDFE7wdTpINgs++ZJ4N49W2vRp8LCKrn3Ob1kYNtOo21vfDoaV5GzBfLU4MovSAB8uNRm4jgzVQZ+mBzPQ=="],
+    "vite": ["vite@7.0.0", "", { "dependencies": { "esbuild": "^0.25.0", "fdir": "^6.4.6", "picomatch": "^4.0.2", "postcss": "^8.5.6", "rollup": "^4.40.0", "tinyglobby": "^0.2.14" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "jiti": ">=1.21.0", "less": "^4.0.0", "lightningcss": "^1.21.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "jiti", "less", "lightningcss", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-ixXJB1YRgDIw2OszKQS9WxGHKwLdCsbQNkpJN171udl6szi/rIySHL6/Os3s2+oE4P/FLD4dxg4mD7Wust+u5g=="],
 
     "vitefu": ["vitefu@1.0.6", "", { "peerDependencies": { "vite": "^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0" }, "optionalPeers": ["vite"] }, "sha512-+Rex1GlappUyNN6UfwbVZne/9cYC4+R2XDk9xkNXBKMw6HQagdX9PgZ8V2v1WUSK1wfBLp7qbI1+XSNIlB1xmA=="],
 
