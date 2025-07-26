@@ -4,6 +4,7 @@ import { cors } from '@elysiajs/cors';
 import live from './live';
 import gb from './gb';
 
+// @ts-ignore
 const app = new Elysia({ adapter: node() })
   .use(cors())
   .get('/ping', () => 'pong')
