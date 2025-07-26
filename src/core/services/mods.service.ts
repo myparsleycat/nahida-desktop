@@ -359,6 +359,7 @@ class ModsServiceClass {
 
             const iniFiles = child.children?.filter(item =>
                 !item.isDirectory &&
+                !item.name.includes('desktop.ini') &&
                 item.name.endsWith('.ini') &&
                 !item.name.toLowerCase().startsWith('disabled')
             ) || [];
