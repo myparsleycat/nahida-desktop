@@ -15,6 +15,7 @@ import { fixHSRMod } from "@core/lib/mod/fix/hsr.hash.fix";
 import { HSRPipelineConvert } from "@core/lib/mod/fix/hsr.pipeline.convert";
 import wuwaModFix from "@core/lib/mod/fix/wuwa.fix";
 import { setOutline } from "@core/lib/mod/fix/auto_outline";
+import npath from 'node:path';
 
 class ModsServiceClass {
     currentFolderPath: string | null = null;
@@ -359,6 +360,7 @@ class ModsServiceClass {
 
             const iniFiles = child.children?.filter(item =>
                 !item.isDirectory &&
+                !item.name.includes('desktop.ini') &&
                 item.name.endsWith('.ini') &&
                 !item.name.toLowerCase().startsWith('disabled')
             ) || [];
@@ -388,21 +390,30 @@ class ModsServiceClass {
             }
 
             let previewPath: string | null = null;
+            let previewType: 'img' | 'video' = 'img';
             const previewImage = child.children?.find(item =>
                 item.name.toLowerCase().startsWith('preview.')
             );
             const firstImage = child.children?.find(item => !item.isDirectory &&
-                ['jpg', 'jpeg', 'png', 'gif', 'avif', 'avifs', 'webp'].includes(item.name.split('.').pop()!.toLowerCase()));
+                ['jpg', 'jpeg', 'png', 'gif', 'avif', 'avifs', 'webp'].includes(npath.extname(item.name).toLowerCase()));
+            const firstMP4 = child.children?.find(i => !i.isDirectory && 'mp4' === npath.extname(i.name).toLowerCase());
 
-            if (previewImage) {
+            if (firstMP4) {
+                previewPath = firstMP4.path;
+                previewType = 'video';
+            } else if (previewImage) {
                 previewPath = previewImage.path;
+                previewType = npath.extname(previewImage.name).toLowerCase() === '.mp4' ? 'video' : 'img';
             } else if (firstImage) {
                 previewPath = firstImage.path;
+                previewType = 'img';
             }
 
-            let preview: { path: string, base64: string | null } | null = null;
+            let preview: { path: string, base64: string | null; type: 'img' | 'video'; } | null = null;
             if (previewPath) {
-                preview = { path: previewPath, base64: null };
+                const ext = npath.extname(previewPath).toLowerCase();
+                const type = ext === '.mp4' ? 'video' : 'img';
+                preview = { path: previewPath, base64: null, type };
             }
 
             return {

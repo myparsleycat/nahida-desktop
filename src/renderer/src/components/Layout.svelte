@@ -20,6 +20,7 @@
   import { fade, scale } from "svelte/transition";
   import { sineOut } from "svelte/easing";
   import CharPathSelector from "./CharPathSelector.svelte";
+  import ImgOrVideo from "./ImgOrVideo.svelte";
 
   let page = Main.page;
   let previewModalStore = PreviewModalClass.store;
@@ -55,7 +56,7 @@
                 <Tooltip.Trigger
                   class={cn(
                     "flex flex-row gap-2.5 w-full p-2 rounded-md transition-all items-center hover:bg-secondary text-primary cursor-pointer active",
-                    $page === "mods" && "bg-secondary",
+                    $page === "mods" && "bg-secondary"
                   )}
                   onclick={() => {
                     if ($page !== "mods") {
@@ -139,7 +140,7 @@
                 <Tooltip.Trigger
                   class={cn(
                     "flex flex-row gap-2.5 w-full p-2 rounded-md transition-all items-center hover:bg-secondary text-primary cursor-pointer bg-transparent",
-                    $page === "setting" && "bg-secondary",
+                    $page === "setting" && "bg-secondary"
                   )}
                   onclick={() => Main.page.set("setting")}
                 >
@@ -189,7 +190,14 @@
     }}
     transition:fade={{ duration: 100 }}
   >
-    <img
+    <ImgOrVideo
+      src={$previewModalStore.src!}
+      alt={$previewModalStore.alt!}
+      class="max-h-[90vh] max-w-[90vw] object-contain"
+      draggable="false"
+      transition="modal"
+    />
+    <!-- <img
       src={$previewModalStore.src}
       alt={$previewModalStore.alt}
       class="max-h-[90vh] max-w-[90vw] object-contain"
@@ -200,7 +208,7 @@
         easing: sineOut,
         start: 0.93,
       }}
-    />
+    /> -->
   </div>
 {/if}
 

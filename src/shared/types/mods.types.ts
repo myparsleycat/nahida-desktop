@@ -10,6 +10,7 @@ export interface DirectChildren {
   preview: {
     path: string;
     base64: string | null;
+    type: 'img' | 'video';
   } | null
 }
 

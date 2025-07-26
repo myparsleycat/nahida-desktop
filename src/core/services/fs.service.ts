@@ -6,6 +6,8 @@ import { bufferToArrayBuffer, bufferToBase64 } from "@core/utils";
 import { fileTypeFromBuffer } from "file-type";
 import _Watcher from 'watcher';
 import { ToastService } from "./toast.service";
+import type { ExploreOptions, FInfo } from "./fs.service.types";
+import { calculateSHA256, getFileType } from "./fs.service.ut";
 // @ts-ignore
 const Watcher = _Watcher.default;
 
@@ -195,6 +197,55 @@ class FileSystemServiceClass {
         }
 
         return uniquePath;
+    }
+
+    async exploreFolderStructure(
+        dirPath: string,
+        options: ExploreOptions = {}
+    ) {
+        const { recursive = true, hash = false, mime = true } = options;
+
+        try {
+            const items = await fse.readdir(dirPath);
+            const result: { [key: string]: FInfo } = {};
+
+            for (const item of items) {
+                const itemPath = path.join(dirPath, item);
+                const stats = await fse.stat(itemPath);
+
+                const fileInfo: FInfo = {
+                    name: item,
+                    isDir: stats.isDirectory(),
+                    path: itemPath,
+                };
+
+                if (stats.isFile()) {
+                    fileInfo.size = stats.size;
+
+                    if (hash) {
+                        fileInfo.hash = await calculateSHA256(itemPath);
+                    }
+
+                    if (mime) {
+                        const mimeInfo = await getFileType(itemPath);
+                        if (mimeInfo) {
+                            fileInfo.mimeType = mimeInfo.mime;
+                            fileInfo.ext = mimeInfo.ext;
+                        }
+                    }
+                }
+
+                else if (stats.isDirectory() && recursive) {
+                    fileInfo.children = await this.exploreFolderStructure(itemPath, options);
+                }
+
+                result[item] = fileInfo;
+            }
+
+            return result;
+        } catch (err: any) {
+            throw new Error(`폴더 탐색 중 오류 발생: ${err}`);
+        }
     }
 
     watchFolderChanges(folderPath: string, options: {

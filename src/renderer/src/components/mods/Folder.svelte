@@ -30,6 +30,7 @@
   import type { DirectChildren } from "@shared/types/mods.types";
   import Validator from "@shared/utils/Validator";
   import { Sejong } from "@shared/utils/sejong";
+  import ImgOrVideo from "../ImgOrVideo.svelte";
 
   let currentCharPath = ModsHelper.currentCharPath;
   let layout = $state<"grid" | "list">("grid");
@@ -74,7 +75,7 @@
         }
         return 2500; //
       },
-    }),
+    })
   );
 
   const sortedMods = $derived(
@@ -87,15 +88,15 @@
           if (!aDisabled && bDisabled) return -1;
           return 0;
         })
-      : null,
+      : null
   );
 
   const filteredMods = $derived(
     sortedMods && searchQuery.trim()
       ? Sejong.search(sortedMods, searchQuery.trim(), (item) => item.name).map(
-          ({ searchScore, ...item }) => item,
+          ({ searchScore, ...item }) => item
         )
-      : sortedMods,
+      : sortedMods
   );
 
   $effect(() => {
@@ -138,7 +139,7 @@
 
       for (const clipboardItem of clipboardItems) {
         const imageTypes = clipboardItem.types.filter((type) =>
-          type.startsWith("image/"),
+          type.startsWith("image/")
         );
 
         if (imageTypes.length > 0) {
@@ -146,7 +147,7 @@
           return new File(
             [blob],
             `clipboard-image.${imageTypes[0].split("/")[1]}`,
-            { type: imageTypes[0] },
+            { type: imageTypes[0] }
           );
         }
       }
@@ -207,7 +208,7 @@
         <DropdownMenu.Trigger
           class={cn(
             buttonVariants({ variant: "outline", size: "icon" }),
-            "size-8",
+            "size-8"
           )}
         >
           <EllipsisIcon />
@@ -277,8 +278,8 @@
 
         dropItems.push(
           ...Array.from(e.dataTransfer.files).map((file) =>
-            window.webUtils.getPathForFile(file),
-          ),
+            window.webUtils.getPathForFile(file)
+          )
         );
 
         if (dropItems.length > 0) {
@@ -294,7 +295,7 @@
     <div
       class={cn(
         "absolute inset-0 bg-black/30 z-30 flex items-center justify-center pointer-events-none duration-200 outline-dotted rounded-lg m-2",
-        modDragState ? "opacity-100" : "opacity-0",
+        modDragState ? "opacity-100" : "opacity-0"
       )}
     >
       <div class="text-white text-center">
@@ -320,7 +321,7 @@
                 : "border-green-700 dark:border-green-800",
               mod.name.toLowerCase().startsWith("disabled")
                 ? "bg-neutral-300 dark:bg-neutral-500"
-                : "bg-green-700 dark:bg-green-800",
+                : "bg-green-700 dark:bg-green-800"
             )}
             onclick={() => {
               ModsHelper.mod
@@ -401,7 +402,7 @@
                           e.stopPropagation();
                           await ModsHelper.mod.fix(
                             mod.path,
-                            "starrail:pipeline",
+                            "starrail:pipeline"
                           );
                         }}>{`${$_("g.starrail")} Pipeline`}</DropdownMenu.Item
                       >
@@ -479,7 +480,7 @@
                                             mod.ini!.path,
                                             ini.sectionName,
                                             "key",
-                                            e.currentTarget.value,
+                                            e.currentTarget.value
                                           )
                                           .then((resp) => {
                                             if (resp) $data.refetch();
@@ -497,7 +498,7 @@
                                             mod.ini!.path,
                                             ini.sectionName,
                                             "back",
-                                            e.currentTarget.value,
+                                            e.currentTarget.value
                                           )
                                           .then((resp) => {
                                             if (resp) $data.refetch();
@@ -539,7 +540,7 @@
 
             <div
               class={cn(
-                "relative flex justify-center items-center aspect-square duration-200 transition-all overflow-hidden group",
+                "relative flex justify-center items-center aspect-square duration-200 transition-all overflow-hidden group"
               )}
               ondragover={(e) => {
                 e.preventDefault();
@@ -595,24 +596,28 @@
             >
               {#if mod.preview}
                 <div class="absolute inset-0 w-full h-full">
-                  <img
+                  <ImgOrVideo
                     class="w-full h-full object-cover blur scale-110"
-                    src={`nahida://image-local?path=${encodeURIComponent(`${mod.preview.path}`)}&t=${timestamp}`}
+                    path={mod.preview.path}
+                    {timestamp}
                     alt={mod.name}
-                    loading="lazy"
+                    type={mod.preview.type}
                   />
                 </div>
-                <img
+                <ImgOrVideo
                   class="relative object-contain w-full h-full z-10"
-                  src={`nahida://image-local?path=${encodeURIComponent(`${mod.preview.path}`)}&t=${timestamp}`}
+                  path={mod.preview.path}
+                  {timestamp}
                   alt={mod.name}
-                  loading="lazy"
+                  type={mod.preview.type}
                 />
                 <div
                   class="absolute left-1 top-1 z-20 opacity-0 group-hover:opacity-100 duration-200"
                 >
                   <PreviewModal
-                    src={`nahida://image-local?path=${encodeURIComponent(`${mod.preview.path}`)}&t=${timestamp}`}
+                    src={mod.preview.type === "img"
+                      ? `nahida://image-local?path=${encodeURIComponent(`${mod.preview.path}`)}&t=${timestamp}`
+                      : `nahida://video-local?path=${encodeURIComponent(`${mod.preview.path}`)}&t=${timestamp}`}
                     alt={`${mod.name} Modal`}
                   />
                 </div>
@@ -620,9 +625,7 @@
                 <div
                   class={cn(
                     "absolute inset-0 bg-black/60 z-30 flex items-center justify-center pointer-events-none duration-200",
-                    previewDragState.get(mod.path)
-                      ? "opacity-100"
-                      : "opacity-0",
+                    previewDragState.get(mod.path) ? "opacity-100" : "opacity-0"
                   )}
                 >
                   <div class="text-white text-center">
@@ -635,7 +638,7 @@
                   <ImageOffIcon size={50} />
                   <button
                     class={cn(
-                      "border border-black dark:border-white bg-transparent py-0.5 px-1.5 rounded-lg duration-200 hover:bg-white/10",
+                      "border border-black dark:border-white bg-transparent py-0.5 px-1.5 rounded-lg duration-200 hover:bg-white/10"
                     )}
                     onclick={async (e: MouseEvent) => {
                       e.stopPropagation();
@@ -643,7 +646,7 @@
                       const file = await getImageFromClipboard();
                       if (!file) {
                         toast.warning(
-                          $_("mods.r.body.mod.misc.clipboard.toast.!file"),
+                          $_("mods.r.body.mod.misc.clipboard.toast.!file")
                         );
                         return;
                       }
@@ -673,9 +676,7 @@
                 <div
                   class={cn(
                     "absolute inset-0 bg-black/60 z-30 flex items-center justify-center pointer-events-none duration-200",
-                    previewDragState.get(mod.path)
-                      ? "opacity-100"
-                      : "opacity-0",
+                    previewDragState.get(mod.path) ? "opacity-100" : "opacity-0"
                   )}
                 >
                   <div class="text-white text-center">
@@ -718,7 +719,7 @@
                 toast.success(
                   $_("mods.r.body.mod.head.delmod.toast.success", {
                     values: { mod: deleteDialog.mod?.name },
-                  }),
+                  })
                 );
                 $data.refetch();
               }
