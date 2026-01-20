@@ -127,6 +127,8 @@ export type IpcHandlers = {
     "mod:setLastGame": (game: string) => void;
     "mod:extractArchive": (archivePath: string, groupPath: string) => void;
     "mod:copyFolder": (folderPath: string, groupPath: string) => void;
+    "mod:enableAll": (groupPath: string) => void;
+    "mod:disableAll": (groupPath: string) => void;
 
     "logger:log": (
         level: "info" | "debug" | "warn" | "error" | "trace" | "fatal",

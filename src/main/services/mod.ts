@@ -435,6 +435,48 @@ export class Mod {
             }
         },
 
+        enableAll: async (groupPath: string): Promise<void> => {
+            try {
+                const modFolders = await fg("*", {
+                    cwd: groupPath,
+                    onlyDirectories: true,
+                });
+
+                for (const modFolderName of modFolders) {
+                    const modPath = path.join(groupPath, modFolderName);
+                    try {
+                        await this.fn.enable(modPath);
+                    } catch (error) {
+                        this.desktop.logger.error(error, `Mod:enableAll:${modPath}`);
+                    }
+                }
+            } catch (error) {
+                this.desktop.logger.error(error, `Mod:enableAll:${groupPath}`);
+                throw error;
+            }
+        },
+
+        disableAll: async (groupPath: string): Promise<void> => {
+            try {
+                const modFolders = await fg("*", {
+                    cwd: groupPath,
+                    onlyDirectories: true,
+                });
+
+                for (const modFolderName of modFolders) {
+                    const modPath = path.join(groupPath, modFolderName);
+                    try {
+                        await this.fn.disable(modPath);
+                    } catch (error) {
+                        this.desktop.logger.error(error, `Mod:disableAll:${modPath}`);
+                    }
+                }
+            } catch (error) {
+                this.desktop.logger.error(error, `Mod:disableAll:${groupPath}`);
+                throw error;
+            }
+        },
+
         updateToggleKey: async (
             iniPath: string,
             sectionName: string,
