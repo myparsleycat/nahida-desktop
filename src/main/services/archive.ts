@@ -26,9 +26,13 @@ export class ArchiveService {
         }
 
         try {
-            const { stderr } = await execFileAsync(extractorPath, [archivePath, targetDir], {
-                maxBuffer: 10 * 1024 * 1024,
-            });
+            const { stdout, stderr } = await execFileAsync(
+                extractorPath,
+                [archivePath, targetDir],
+                {
+                    maxBuffer: 10 * 1024 * 1024,
+                },
+            );
 
             if (stderr && stderr.trim()) {
                 try {
@@ -38,9 +42,14 @@ export class ArchiveService {
                     throw new Error(`Extraction failed: ${stderr}`);
                 }
             }
+
+            return stdout.trim();
         } catch (error: any) {
             if (error.code === "ENOENT") {
                 throw new Error(`Extractor binary not found: ${extractorPath}`);
+            }
+            if (error.message && error.message.includes("Extraction failed:")) {
+                throw error;
             }
             throw new Error(`Failed to extract archive: ${error.message}`);
         }

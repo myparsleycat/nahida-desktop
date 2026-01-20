@@ -42,28 +42,30 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := extractArchive(archivePath, outputDir); err != nil {
+	targetPath, err := extractArchive(archivePath, outputDir)
+	if err != nil {
 		sendError("ExtractionFailed", err.Error())
 		os.Exit(1)
 	}
 
+	fmt.Print(targetPath)
 	os.Exit(0)
 }
 
-func extractArchive(archivePath, outputDir string) error {
+func extractArchive(archivePath, outputDir string) (string, error) {
 	absArchive, err := filepath.Abs(archivePath)
 	if err != nil {
-		return fmt.Errorf("failed to get absolute archive path: %v", err)
+		return "", fmt.Errorf("failed to get absolute archive path: %v", err)
 	}
 
 	absOutput, err := filepath.Abs(outputDir)
 	if err != nil {
-		return fmt.Errorf("failed to get absolute output path: %v", err)
+		return "", fmt.Errorf("failed to get absolute output path: %v", err)
 	}
 
 	tempDir, err := os.MkdirTemp(absOutput, ".xtractr_temp_*")
 	if err != nil {
-		return fmt.Errorf("failed to create temp directory: %v", err)
+		return "", fmt.Errorf("failed to create temp directory: %v", err)
 	}
 	defer os.RemoveAll(tempDir)
 
@@ -76,12 +78,12 @@ func extractArchive(archivePath, outputDir string) error {
 
 	_, _, _, err = xtractr.ExtractFile(xfile)
 	if err != nil {
-		return fmt.Errorf("extraction failed: %v", err)
+		return "", fmt.Errorf("extraction failed: %v", err)
 	}
 
 	entries, err := os.ReadDir(tempDir)
 	if err != nil {
-		return fmt.Errorf("failed to read temp directory: %v", err)
+		return "", fmt.Errorf("failed to read temp directory: %v", err)
 	}
 
 	var targetDir string
@@ -92,10 +94,12 @@ func extractArchive(archivePath, outputDir string) error {
 		targetDir = filepath.Join(absOutput, stem)
 
 		if err := os.MkdirAll(targetDir, 0755); err != nil {
-			return fmt.Errorf("failed to create specific directory: %v", err)
+			return "", fmt.Errorf("failed to create specific directory: %v", err)
 		}
-	} else {
+	} else if len(entries) == 1 {
 		targetDir = absOutput
+	} else {
+		return absOutput, nil
 	}
 
 	for _, entry := range entries {
@@ -103,11 +107,11 @@ func extractArchive(archivePath, outputDir string) error {
 		dstPath := filepath.Join(targetDir, entry.Name())
 
 		if err := os.Rename(srcPath, dstPath); err != nil {
-			return fmt.Errorf("failed to move file from temp to target: %v", err)
+			return "", fmt.Errorf("failed to move file from temp to target: %v", err)
 		}
 	}
 
-	return nil
+	return targetDir, nil
 }
 
 func sendError(errorType, message string) {
