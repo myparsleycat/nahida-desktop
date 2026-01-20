@@ -25,8 +25,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@renderer/components/ui/alert-dialog";
 import { createFileRoute } from "@tanstack/react-router";
-import { Plus, FolderOpen } from "lucide-react";
+import { Plus, FolderOpen, Trash2 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import type { FolderGroup, Preset, ModInfo, GameConfig } from "@shared/types";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -63,6 +73,8 @@ function RouteComponent() {
   const setNewGameName = useModStore((s) => s.setNewGameName);
   const newGamePath = useModStore((s) => s.newGamePath);
   const setNewGamePath = useModStore((s) => s.setNewGamePath);
+
+  const [isDeleteGameDialogOpen, setIsDeleteGameDialogOpen] = useState(false);
 
   const downloadMode = useModStore((s) => s.downloadMode);
   const setDownloadMode = useModStore((s) => s.setDownloadMode);
@@ -184,6 +196,15 @@ function RouteComponent() {
       setNewGamePath("");
       setIsAddGameDialogOpen(false);
       toast.success("게임이 추가되었습니다.");
+    },
+  });
+
+  const deleteGameMutation = useMutation({
+    mutationFn: (game: string) => window.api.invoke("mod:removeGame", game),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["games"] });
+      setSelectedGame("");
+      toast.success("게임이 삭제되었습니다.");
     },
   });
 
@@ -381,15 +402,32 @@ function RouteComponent() {
                       <Button variant="outline">취소</Button>
                     </DialogClose>
                     <Button
-                      onClick={() =>
-                        addGameMutation.mutate({ name: newGameName, path: newGamePath })
-                      }
+                      onClick={() => {
+                        if (!newGameName.trim()) {
+                          toast.error("게임 이름을 입력해주세요.");
+                          return;
+                        }
+                        if (!newGamePath.trim()) {
+                          toast.error("모드 폴더 경로를 선택해주세요.");
+                          return;
+                        }
+                        addGameMutation.mutate({ name: newGameName, path: newGamePath });
+                      }}
                     >
                       추가
                     </Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
+
+              <Button
+                variant="outline"
+                size="icon"
+                disabled={!selectedGame}
+                onClick={() => setIsDeleteGameDialogOpen(true)}
+              >
+                <Trash2 className="size-4 text-destructive" />
+              </Button>
             </div>
 
             <div className="flex w-full space-x-1">
@@ -439,7 +477,17 @@ function RouteComponent() {
                     <DialogClose asChild>
                       <Button variant="outline">취소</Button>
                     </DialogClose>
-                    <Button onClick={() => createPresetMutation.mutate()}>프리셋 생성</Button>
+                    <Button
+                      onClick={() => {
+                        if (!newPresetName.trim()) {
+                          toast.error("프리셋 이름을 입력해주세요.");
+                          return;
+                        }
+                        createPresetMutation.mutate();
+                      }}
+                    >
+                      프리셋 생성
+                    </Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
@@ -475,15 +523,19 @@ function RouteComponent() {
                         key={mod.path}
                         mod={mod}
                         onToggle={(m) => toggleModMutation.mutate(m)}
-                        onToggleKeyUpdate={(modPath, iniFileName, sectionName, variable, value) =>
+                        onToggleKeyUpdate={(modPath, iniFileName, sectionName, variable, value) => {
+                          if (!value.trim()) {
+                            toast.error("값을 입력해주세요.");
+                            return;
+                          }
                           updateToggleKeyMutation.mutate({
                             modPath,
                             iniFileName,
                             sectionName,
                             variable,
                             value,
-                          })
-                        }
+                          });
+                        }}
                       />
                     ))}
               </div>
@@ -532,6 +584,31 @@ function RouteComponent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={isDeleteGameDialogOpen} onOpenChange={setIsDeleteGameDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>게임 삭제</AlertDialogTitle>
+            <AlertDialogDescription>
+              정말로 "{selectedGame}" 게임을 삭제하시겠습니까? 이 작업은 되돌릴 수 없으며, 해당
+              게임의 프리셋 정보도 함께 삭제됩니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (selectedGame) {
+                  deleteGameMutation.mutate(selectedGame);
+                }
+              }}
+            >
+              삭제
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

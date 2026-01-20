@@ -524,6 +524,9 @@ export class Mod {
         },
 
         addGame: async (game: string, modFolderPath: string) => {
+            if (!game || !modFolderPath) {
+                throw new Error("Game and modFolderPath are required");
+            }
             await db.insert(gamePaths).values({ game, modFolderPath }).onConflictDoUpdate({
                 target: gamePaths.game,
                 set: { modFolderPath },
