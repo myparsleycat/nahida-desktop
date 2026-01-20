@@ -1,0 +1,609 @@
+import { NahidaDesktop } from "..";
+import { eden2url } from "@main/client";
+import { nanoid } from "nanoid";
+import createSseWorker from "@main/worker/drive/sse.worker?nodeWorker";
+import { TransferData } from "@shared/types";
+import path from "node:path";
+import fse from "fs-extra";
+import { pipeline } from "node:stream/promises";
+import { Readable } from "node:stream";
+import { retry, throttle } from "es-toolkit";
+import { createZstdDecompress, createGunzip } from "node:zlib";
+import PQueue from "p-queue";
+import ky from "ky";
+
+export type DownloadParams = {
+    type: "download";
+    id: string;
+    savePath: string;
+    suggestedName?: string;
+};
+
+export type DownloadMetadata = {
+    root: { id: string; parentId: string | null; name: string };
+    totalBytes: number;
+    files: Array<{
+        id: string;
+        fileId: string;
+        parentId: string | null;
+        name: string;
+        size: number;
+        compAlg: "gzip" | "zstd" | null;
+        url: string;
+    }>;
+    dirs: Array<{
+        id: string;
+        parentId: string | null;
+        name: string;
+    }>;
+};
+
+class DownloadStreamer {
+    constructor(private readonly desktop: NahidaDesktop) {}
+
+    public async fetchMetadata(uuid: string, signal: AbortSignal): Promise<DownloadMetadata> {
+        const url = eden2url.akasha.dir.download.url({ query: { uuid } });
+        const worker = createSseWorker({
+            workerData: {
+                url: url.toString(),
+                token: await this.desktop.service.auth.getToken(),
+            },
+        });
+
+        return new Promise<DownloadMetadata>((resolve, reject) => {
+            const downloadData: Omit<DownloadMetadata, "root"> = {
+                totalBytes: 0,
+                files: [],
+                dirs: [],
+            };
+            let rootDir: DownloadMetadata["root"] | null = null;
+
+            const onAbort = () => {
+                worker.terminate();
+                reject(new Error("download aborted"));
+            };
+
+            if (signal.aborted) return onAbort();
+            signal.addEventListener("abort", onAbort, { once: true });
+
+            worker.on("message", (event) => {
+                const { type, payload } = event;
+                switch (type) {
+                    case "dirs":
+                        downloadData.dirs = downloadData.dirs.concat(payload);
+                        break;
+                    case "files":
+                        downloadData.files = downloadData.files.concat(payload);
+                        break;
+                    case "metadata":
+                        downloadData.totalBytes = payload.totalBytes;
+                        rootDir = payload.root;
+                        break;
+                    case "complete":
+                        worker.terminate();
+                        signal.removeEventListener("abort", onAbort);
+                        if (!rootDir)
+                            return reject(
+                                new Error("Root directory information was not received."),
+                            );
+                        resolve({ root: rootDir, ...downloadData });
+                        break;
+                    case "error":
+                        worker.terminate();
+                        signal.removeEventListener("abort", onAbort);
+                        reject(new Error(payload || "An unknown worker error occurred"));
+                        break;
+                }
+            });
+
+            worker.on("error", (error) => {
+                worker.terminate();
+                signal.removeEventListener("abort", onAbort);
+                reject(error);
+            });
+
+            worker.postMessage("start");
+        });
+    }
+}
+
+class DownloadFileSystem {
+    constructor(private readonly desktop: NahidaDesktop) {}
+
+    public resolveDirectoryPaths(
+        root: DownloadMetadata["root"],
+        dirs: DownloadMetadata["dirs"],
+        savePath: string,
+    ): Map<string, string> {
+        const pathMap = new Map<string, string>();
+        const rootPath = path.join(savePath, root.name);
+        pathMap.set(root.id, rootPath);
+
+        const childrenMap = new Map<string, DownloadMetadata["dirs"]>();
+        for (const dir of dirs) {
+            if (!dir.parentId || dir.id === root.id) continue;
+            const list = childrenMap.get(dir.parentId) ?? [];
+            list.push(dir);
+            childrenMap.set(dir.parentId, list);
+        }
+
+        const stack = [root.id];
+        while (stack.length > 0) {
+            const parentId = stack.pop()!;
+            const parentPath = pathMap.get(parentId);
+            if (!parentPath) continue;
+
+            const children = childrenMap.get(parentId) ?? [];
+            for (const child of children) {
+                const childPath = path.join(parentPath, child.name);
+                pathMap.set(child.id, childPath);
+                stack.push(child.id);
+            }
+        }
+
+        return pathMap;
+    }
+
+    public async checkFileCompleted(filePath: string, expectedSize: number): Promise<boolean> {
+        try {
+            if (await this.desktop.lib.fs.pathExists(filePath)) {
+                const stats = await this.desktop.lib.fs.stat(filePath);
+                return stats.size === expectedSize;
+            }
+        } catch {
+            return false;
+        }
+        return false;
+    }
+
+    public redistributeFilesBySize<T extends { size: number }>(files: T[]): T[] {
+        const LARGE_FILE_THRESHOLD = 50 * 1024 * 1024;
+
+        const largeFiles: T[] = [];
+        const smallFiles: T[] = [];
+
+        for (const file of files) {
+            if (file.size >= LARGE_FILE_THRESHOLD) {
+                largeFiles.push(file);
+            } else {
+                smallFiles.push(file);
+            }
+        }
+
+        if (largeFiles.length === 0 || smallFiles.length === 0) {
+            return files;
+        }
+
+        const interval = Math.floor(smallFiles.length / largeFiles.length) || 1;
+        const result: T[] = [];
+
+        let largeFileIndex = 0;
+        let smallFileIndex = 0;
+
+        while (smallFileIndex < smallFiles.length || largeFileIndex < largeFiles.length) {
+            for (let i = 0; i < interval && smallFileIndex < smallFiles.length; i++) {
+                result.push(smallFiles[smallFileIndex++]);
+            }
+
+            if (largeFileIndex < largeFiles.length) {
+                result.push(largeFiles[largeFileIndex++]);
+            }
+        }
+
+        return result;
+    }
+}
+
+class FileDownloadTask {
+    constructor(private readonly desktop: NahidaDesktop) {}
+
+    public async execute({
+        file,
+        filePath,
+        signal,
+        onComplete,
+        onProgress,
+        currentConcurrency,
+    }: {
+        file: DownloadMetadata["files"][0];
+        filePath: string;
+        signal: AbortSignal;
+        onComplete: () => void;
+        onProgress?: (bytes: number) => void;
+        currentConcurrency?: () => number;
+    }): Promise<void> {
+        const isSmallFile = file.size < 1024 * 1024;
+        const targetPath = isSmallFile ? filePath : `${filePath}.ntmp`;
+
+        await retry(
+            async () => {
+                if (signal.aborted) return;
+
+                const token = await this.desktop.service.auth.getToken();
+                let lastTransferredBytes = 0;
+
+                const response = await ky(file.url, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "User-Agent": "Nahida Desktop/1.0.0",
+                    },
+                    signal,
+                    throwHttpErrors: false,
+                    timeout: 100000,
+                    onDownloadProgress: (progress) => {
+                        if (onProgress) {
+                            const incremental = progress.transferredBytes - lastTransferredBytes;
+                            lastTransferredBytes = progress.transferredBytes;
+                            if (incremental > 0) {
+                                onProgress(incremental);
+                            }
+                        }
+                    },
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Download failed: ${response.statusText}`);
+                }
+
+                if (!response.body) throw new Error("No response body");
+
+                const fileStream = fse.createWriteStream(targetPath);
+                const streams: any[] = [Readable.fromWeb(response.body as any)];
+
+                if (file.compAlg === "gzip") streams.push(createGunzip());
+                else if (file.compAlg === "zstd") streams.push(createZstdDecompress());
+
+                streams.push(fileStream);
+
+                try {
+                    await (pipeline as any)(...streams, { signal });
+                } catch (pipeErr) {
+                    fileStream.destroy();
+                    await fse.remove(targetPath).catch(() => {});
+                    throw pipeErr;
+                }
+
+                if (signal.aborted) {
+                    await fse.remove(targetPath).catch(() => {});
+                    return;
+                }
+
+                if (!isSmallFile) {
+                    await this.desktop.lib.fs.rename(targetPath, filePath);
+                }
+
+                onComplete();
+            },
+            {
+                retries: 2,
+                delay: (attempt) => Math.pow(2, attempt) * 1000,
+                shouldRetry: (err: any) => !(err.name === "AbortError" || signal.aborted),
+                signal,
+            },
+        ).catch(async (err) => {
+            if (signal.aborted) return;
+            await fse.remove(targetPath).catch(() => {});
+            throw err;
+        });
+    }
+
+    public async executeWithSlowRetry({
+        file,
+        filePath,
+        signal,
+        onComplete,
+        onProgress,
+        currentConcurrency,
+    }: {
+        file: DownloadMetadata["files"][0];
+        filePath: string;
+        signal: AbortSignal;
+        onComplete: () => void;
+        onProgress?: (bytes: number) => void;
+        currentConcurrency?: () => number;
+    }): Promise<void> {
+        const SMALL_FILE_THRESHOLD = 5 * 1024 * 1024; // 5MB
+        const LOW_CONCURRENCY_THRESHOLD = 6; // 병렬 다운로드 개수 threshold
+        const SLOW_SPEED_THRESHOLD = 500 * 1024; // 500KB/s
+        const SPEED_CHECK_DELAY = 3000; // 3초 후
+        const MAX_RETRY_ATTEMPTS = 2;
+
+        const isSmallFile = file.size < SMALL_FILE_THRESHOLD;
+        const targetPath = isSmallFile ? filePath : `${filePath}.ntmp`;
+
+        let retryCount = 0;
+
+        while (retryCount <= MAX_RETRY_ATTEMPTS) {
+            if (signal.aborted) return;
+
+            const abortController = new AbortController();
+            const combinedSignal = AbortSignal.any([signal, abortController.signal]);
+
+            let speedCheckTimeout: NodeJS.Timeout | null = null;
+            let startTime = Date.now();
+            let startBytes = 0;
+            let currentBytes = 0;
+            let shouldRetryDueToSlowSpeed = false;
+
+            try {
+                const token = await this.desktop.service.auth.getToken();
+                let lastTransferredBytes = 0;
+
+                if (
+                    isSmallFile &&
+                    currentConcurrency &&
+                    currentConcurrency() < LOW_CONCURRENCY_THRESHOLD
+                ) {
+                    speedCheckTimeout = setTimeout(() => {
+                        const elapsed = (Date.now() - startTime) / 1000; // seconds
+                        const transferred = currentBytes - startBytes;
+                        const speed = transferred / elapsed;
+
+                        if (speed < SLOW_SPEED_THRESHOLD && retryCount < MAX_RETRY_ATTEMPTS) {
+                            this.desktop.logger.warn(
+                                `Slow download detected for ${file.name}: ${Math.round(speed / 1024)}KB/s. Retrying... (${retryCount + 1}/${MAX_RETRY_ATTEMPTS})`,
+                                "FileDownloadTask:slowSpeed",
+                            );
+                            shouldRetryDueToSlowSpeed = true;
+                            abortController.abort();
+                        }
+                    }, SPEED_CHECK_DELAY);
+                }
+
+                const response = await ky(file.url, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "User-Agent": "Nahida Desktop/1.0.0",
+                    },
+                    signal: combinedSignal,
+                    throwHttpErrors: false,
+                    timeout: 100000,
+                    onDownloadProgress: (progress) => {
+                        currentBytes = progress.transferredBytes;
+                        if (onProgress) {
+                            const incremental = progress.transferredBytes - lastTransferredBytes;
+                            lastTransferredBytes = progress.transferredBytes;
+                            if (incremental > 0) {
+                                onProgress(incremental);
+                            }
+                        }
+                    },
+                });
+
+                if (speedCheckTimeout) {
+                    clearTimeout(speedCheckTimeout);
+                    speedCheckTimeout = null;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`Download failed: ${response.statusText}`);
+                }
+
+                if (!response.body) throw new Error("No response body");
+
+                const fileStream = fse.createWriteStream(targetPath);
+                const streams: any[] = [Readable.fromWeb(response.body as any)];
+
+                if (file.compAlg === "gzip") streams.push(createGunzip());
+                else if (file.compAlg === "zstd") streams.push(createZstdDecompress());
+
+                streams.push(fileStream);
+
+                try {
+                    await (pipeline as any)(...streams, { signal: combinedSignal });
+                } catch (pipeErr) {
+                    fileStream.destroy();
+                    await fse.remove(targetPath).catch(() => {});
+                    throw pipeErr;
+                }
+
+                if (signal.aborted || combinedSignal.aborted) {
+                    await fse.remove(targetPath).catch(() => {});
+                    if (shouldRetryDueToSlowSpeed) {
+                        throw new Error("Slow speed retry");
+                    }
+                    return;
+                }
+
+                if (!isSmallFile) {
+                    await this.desktop.lib.fs.rename(targetPath, filePath);
+                }
+
+                onComplete();
+                return;
+            } catch (err: any) {
+                if (speedCheckTimeout) {
+                    clearTimeout(speedCheckTimeout);
+                }
+
+                if (signal.aborted || err.name === "AbortError") {
+                    if (!shouldRetryDueToSlowSpeed) {
+                        await fse.remove(targetPath).catch(() => {});
+                        throw err;
+                    }
+                }
+
+                if (shouldRetryDueToSlowSpeed && retryCount < MAX_RETRY_ATTEMPTS) {
+                    retryCount++;
+                    await fse.remove(targetPath).catch(() => {});
+                    await new Promise((resolve) =>
+                        setTimeout(resolve, Math.pow(2, retryCount) * 1000),
+                    );
+                    continue;
+                }
+
+                if (retryCount < MAX_RETRY_ATTEMPTS) {
+                    retryCount++;
+                    await fse.remove(targetPath).catch(() => {});
+                    await new Promise((resolve) =>
+                        setTimeout(resolve, Math.pow(2, retryCount) * 1000),
+                    );
+                    continue;
+                }
+
+                await fse.remove(targetPath).catch(() => {});
+                throw err;
+            }
+        }
+    }
+}
+
+export class DownloadLib {
+    private readonly streamer: DownloadStreamer;
+    private readonly fs: DownloadFileSystem;
+    private readonly task: FileDownloadTask;
+    private readonly fileQueue: PQueue = new PQueue({ concurrency: 64 });
+
+    public constructor(private readonly desktop: NahidaDesktop) {
+        this.streamer = new DownloadStreamer(desktop);
+        this.fs = new DownloadFileSystem(desktop);
+        this.task = new FileDownloadTask(desktop);
+    }
+
+    public async startStreamingDownload(uuid: string, signal: AbortSignal) {
+        return this.streamer.fetchMetadata(uuid, signal);
+    }
+
+    public async getDownloadUrl(id: string, signal: AbortSignal): Promise<DownloadMetadata> {
+        const data = await this.startStreamingDownload(id, signal);
+        return {
+            root: data.root,
+            files: data.files,
+            dirs: [data.root, ...data.dirs],
+            totalBytes: data.totalBytes,
+        };
+    }
+
+    public async prepareDownload(id: string, name: string) {
+        const pid = nanoid();
+        const abort = new AbortController();
+        const getDownloadUrlsPromise = this.getDownloadUrl(id, abort.signal);
+
+        const data = await getDownloadUrlsPromise;
+        return { pid, abort, data };
+    }
+
+    public async executeDownload({
+        pid,
+        params,
+        data,
+        abort,
+        initialTransferedSize,
+        initialTransferedFiles,
+    }: {
+        pid: string;
+        params: DownloadParams;
+        data: TransferData;
+        abort: AbortController;
+        initialTransferedSize?: number;
+        initialTransferedFiles?: number;
+    }) {
+        try {
+            if (!data.root) throw new Error("Root directory information was not received.");
+
+            this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
+
+            const pathMap = this.fs.resolveDirectoryPaths(data.root, data.dirs, params.savePath);
+
+            for (const dirPath of pathMap.values()) {
+                await this.desktop.lib.fs.ensureDir(dirPath);
+            }
+
+            let downloadedBytes = initialTransferedSize ?? 0;
+            let downloadedCount = initialTransferedFiles ?? 0;
+
+            const throttledUpdate = throttle((bytes: number, count: number) => {
+                this.desktop.service.transfer.updateTransfer(pid, {
+                    transferedSize: bytes,
+                    transferedFiles: count,
+                });
+            }, 100);
+
+            const BACKPRESSURE_LIMIT = 200;
+
+            const redistributedFiles = this.fs.redistributeFilesBySize(data.files);
+
+            for (const file of redistributedFiles) {
+                if (abort.signal.aborted) break;
+
+                if (this.fileQueue.size >= BACKPRESSURE_LIMIT) {
+                    await new Promise<void>((resolve) =>
+                        this.fileQueue.once("next", () => resolve()),
+                    );
+                }
+
+                if (abort.signal.aborted) break;
+
+                const parentPath = pathMap.get(file.parentId ?? "");
+                if (!parentPath) continue;
+
+                this.fileQueue.add(async () => {
+                    if (abort.signal.aborted) return;
+
+                    const filePath = path.join(parentPath, file.name);
+
+                    let isCompleted = this.desktop.service.transfer.isFileCompleted(pid, file.id);
+                    if (!isCompleted) {
+                        try {
+                            isCompleted = await this.fs.checkFileCompleted(filePath, file.size);
+                        } catch {}
+                    }
+
+                    if (isCompleted) {
+                        if (!this.desktop.service.transfer.isFileCompleted(pid, file.id)) {
+                            this.desktop.service.transfer.markFileCompleted(pid, file.id);
+                        }
+                        downloadedBytes += file.size;
+                        downloadedCount++;
+                        throttledUpdate(downloadedBytes, downloadedCount);
+                        return;
+                    }
+
+                    try {
+                        await this.task.executeWithSlowRetry({
+                            file,
+                            filePath,
+                            signal: abort.signal,
+                            onComplete: () => {
+                                this.desktop.service.transfer.markFileCompleted(pid, file.id);
+                                downloadedCount++;
+                                throttledUpdate(downloadedBytes, downloadedCount);
+                            },
+                            onProgress: (bytes) => {
+                                downloadedBytes += bytes;
+                                throttledUpdate(downloadedBytes, downloadedCount);
+                            },
+                            currentConcurrency: () => this.fileQueue.pending,
+                        });
+                    } catch (err) {
+                        this.desktop.logger.error(err, `DownloadLib:executeDownload:${file.name}`);
+                    }
+                });
+            }
+
+            if (!abort.signal.aborted) await this.fileQueue.onIdle();
+            throttledUpdate.flush();
+
+            if (abort.signal.aborted) return;
+
+            this.desktop.service.transfer.updateTransfer(pid, {
+                status: "completed",
+                progress: 100,
+            });
+
+            const mainWindow = this.desktop.window.main;
+            if (mainWindow && data.root) {
+                this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
+                    path: params.savePath,
+                    name: data.root.name,
+                });
+            }
+        } catch (err) {
+            if (abort.signal.aborted) return;
+            this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
+            throw err;
+        }
+    }
+}
+
+export default DownloadLib;

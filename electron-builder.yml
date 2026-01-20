@@ -1,0 +1,50 @@
+appId: com.nahida.app
+productName: Nahida Desktop
+directories:
+    buildResources: build
+files:
+    - "!**/.vscode/*"
+    - "!src/*"
+    - "!electron.vite.config.{js,ts,mjs,cjs}"
+    - "!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}"
+    - "!{.env,.env.*,.npmrc,pnpm-lock.yaml}"
+    - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
+    - "!node_modules/.pnpm/@cbor-extract+cbor-extract-darwin-arm64@*/**/*"
+    - "!node_modules/.pnpm/@cbor-extract+cbor-extract-darwin-x64@*/**/*"
+    - "!node_modules/.pnpm/@cbor-extract+cbor-extract-linux-arm@*/**/*"
+    - "!node_modules/.pnpm/@cbor-extract+cbor-extract-linux-arm64@*/**/*"
+    - "!node_modules/.pnpm/@cbor-extract+cbor-extract-linux-x64@*/**/*"
+# asar: false
+asarUnpack:
+    - resources/**
+win:
+    executableName: Nahida Desktop
+nsis:
+    artifactName: Nahida Desktop Setup ${version}.${ext}
+    shortcutName: ${productName}
+    uninstallDisplayName: ${productName}
+    createDesktopShortcut: always
+mac:
+    entitlementsInherit: build/entitlements.mac.plist
+    extendInfo:
+        - NSCameraUsageDescription: Application requests access to the device's camera.
+        - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+        - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+        - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    notarize: false
+dmg:
+    artifactName: ${productName}.${ext}
+linux:
+    target:
+        - AppImage
+        - snap
+        - deb
+    maintainer: electronjs.org
+    category: Utility
+appImage:
+    artifactName: ${productName}.${ext}
+npmRebuild: false
+publish:
+    provider: github
+    owner: myparsleycat
+    repo: nahida-desktop

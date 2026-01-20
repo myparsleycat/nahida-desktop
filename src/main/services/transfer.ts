@@ -1,0 +1,366 @@
+import { throttle } from "es-toolkit";
+import { NahidaDesktop } from "..";
+import { Transfer, TransferData, TransferStatus } from "@shared/types";
+
+interface LocalTransfer extends Transfer {
+    abortController: AbortController;
+    restartParams?: any;
+    completedFileUuids?: Set<string>;
+    sessionStartBytes: number;
+    speedSamples: Array<{ timestamp: number; bytes: number }>;
+}
+
+export class TransferService {
+    private desktop: NahidaDesktop;
+    private isQueueRunning: boolean = false;
+    private isPowerSaveBlockerActive: boolean = false;
+    private transfers: LocalTransfer[] = [];
+
+    private throttledEmits: Map<string, () => void> = new Map();
+    private runners: Map<string, () => Promise<void>> = new Map();
+
+    constructor(desktop: NahidaDesktop) {
+        this.desktop = desktop;
+    }
+
+    private async checkSettingAndChangePowerSaveBlock() {
+        const powerSaveBlockInTransfer =
+            await this.desktop.setting.general.getPowerSaveBlockInTransfer();
+        const anyTransfering = this.transfers.some(
+            (t) => t.status === "progress" || t.status === "preparing",
+        );
+
+        if (anyTransfering && powerSaveBlockInTransfer) {
+            if (!this.isPowerSaveBlockerActive) {
+                try {
+                    this.desktop.lib.utils.preventAppSuspension(true);
+                    this.isPowerSaveBlockerActive = true;
+                } catch (e) {
+                    this.desktop.logger.error(e, "Transfer:preventAppSuspension:start");
+                }
+            }
+        } else if (!anyTransfering && this.isPowerSaveBlockerActive) {
+            try {
+                this.desktop.lib.utils.preventAppSuspension(false);
+                this.isPowerSaveBlockerActive = false;
+            } catch (e) {
+                this.desktop.logger.error(e, "Transfer:preventAppSuspension:stop");
+            }
+        }
+    }
+
+    private emitUpdate() {
+        const safeTransfers = this.transfers.map((t) => {
+            const {
+                abortController,
+                restartParams,
+                completedFileUuids,
+                sessionStartBytes,
+                data,
+                ...rest
+            } = t;
+            return rest;
+        });
+        this.desktop.window.main?.webContents.send("transfer:update", safeTransfers);
+    }
+
+    public getAllTransfer() {
+        return this.transfers.map((t) => {
+            const { abortController, restartParams, sessionStartBytes, data, ...rest } = t;
+            return rest;
+        });
+    }
+
+    public getTransferByPID(pid: string) {
+        return this.transfers.find((t) => t.pid === pid);
+    }
+
+    public markFileCompleted(pid: string, fileUuid: string) {
+        const transfer = this.transfers.find((t) => t.pid === pid);
+        if (!transfer) return;
+
+        if (!transfer.completedFileUuids) {
+            transfer.completedFileUuids = new Set();
+        }
+        transfer.completedFileUuids.add(fileUuid);
+    }
+
+    public isFileCompleted(pid: string, fileUuid: string): boolean {
+        const transfer = this.transfers.find((t) => t.pid === pid);
+        if (!transfer || !transfer.completedFileUuids) return false;
+        return transfer.completedFileUuids.has(fileUuid);
+    }
+
+    public getCompletedFilesCount(pid: string): number {
+        const transfer = this.transfers.find((t) => t.pid === pid);
+        if (!transfer || !transfer.completedFileUuids) return 0;
+        return transfer.completedFileUuids.size;
+    }
+
+    public async createTransfer(
+        pid: string,
+        type: "upload" | "download",
+        data: TransferData,
+        abortController: AbortController,
+        name: string,
+        restartParams?: any,
+        initialStatus: TransferStatus = "pending",
+        path?: string,
+    ) {
+        const totalSize = data.files.reduce((acc, cur) => acc + cur.size, 0);
+        const transfer: LocalTransfer = {
+            pid,
+            type,
+            status: initialStatus,
+            totalSize,
+            transferedSize: 0,
+            progress: 0,
+            speed: 0,
+            eta: 0,
+            abortController,
+            startTime: Date.now(),
+            sessionStartBytes: 0,
+            speedSamples: [],
+            data,
+            name,
+            totalFiles: data.files.length,
+            transferedFiles: 0,
+            restartParams,
+            completedFileUuids: new Set(),
+            path,
+        };
+
+        this.transfers.push(transfer);
+
+        this.throttledEmits.set(
+            pid,
+            throttle(() => this.emitUpdate(), 500),
+        );
+
+        this.checkSettingAndChangePowerSaveBlock();
+        this.emitUpdate();
+
+        if (this.desktop.window.main) {
+            this.desktop.ipc.postMessageToWindow(
+                this.desktop.window.main,
+                "fn:toast",
+                "전송이 시작되었습니다",
+                {
+                    description: name,
+                },
+            );
+
+            const moveTransferPageWhenStartTransfer =
+                await this.desktop.setting.general.getMoveTransferPageWhenStartTransfer();
+            if (moveTransferPageWhenStartTransfer) {
+                this.desktop.ipc.postMessageToWindow(
+                    this.desktop.window.main,
+                    "fn:navi",
+                    "/transfer",
+                );
+            }
+        }
+
+        return transfer;
+    }
+
+    public registerRunner(pid: string, runner: () => Promise<void>) {
+        this.runners.set(pid, runner);
+
+        const transfer = this.getTransferByPID(pid);
+        if (transfer && transfer.status === "pending") {
+            this.processQueue();
+        }
+    }
+
+    public async processQueue() {
+        if (this.isQueueRunning) return;
+
+        const nextTransfer = this.transfers.find((t) => t.status === "pending");
+        if (!nextTransfer) return;
+
+        const runner = this.runners.get(nextTransfer.pid);
+        if (!runner) return;
+
+        this.isQueueRunning = true;
+
+        try {
+            await runner();
+        } catch (error) {
+            // runner에서 처리함
+        } finally {
+            this.isQueueRunning = false;
+            this.processQueue();
+        }
+    }
+
+    public async manualStart(pid: string) {
+        const transfer = this.getTransferByPID(pid);
+        if (!transfer) return;
+        if (transfer.status === "progress") return;
+
+        const running = this.transfers.find(
+            (t) => t.status === "progress" || t.status === "preparing",
+        );
+        if (running && running.pid !== pid) {
+            this.pauseTransfer(running.pid);
+        }
+
+        const index = this.transfers.indexOf(transfer);
+        if (index > -1) {
+            this.transfers.splice(index, 1);
+            this.transfers.unshift(transfer);
+        }
+
+        if (transfer.status !== "preparing") {
+            transfer.status = "pending";
+        }
+
+        this.emitUpdate();
+        this.processQueue();
+    }
+
+    public updateTransfer(
+        pid: string,
+        updates: Partial<Omit<Transfer, "pid" | "type" | "data" | "startTime">>,
+    ) {
+        const transfer = this.transfers.find((t) => t.pid === pid);
+        if (!transfer) return;
+
+        Object.assign(transfer, updates);
+
+        if (updates.transferedSize !== undefined && transfer.status === "progress") {
+            const now = Date.now();
+
+            transfer.speedSamples.push({
+                timestamp: now,
+                bytes: transfer.transferedSize,
+            });
+
+            const SAMPLE_WINDOW_MS = 5000; // 5 seconds
+            const cutoffTime = now - SAMPLE_WINDOW_MS;
+            transfer.speedSamples = transfer.speedSamples.filter(
+                (sample) => sample.timestamp >= cutoffTime,
+            );
+
+            if (transfer.speedSamples.length >= 2) {
+                const oldestSample = transfer.speedSamples[0];
+                const newestSample = transfer.speedSamples[transfer.speedSamples.length - 1];
+
+                const timeDiff = (newestSample.timestamp - oldestSample.timestamp) / 1000;
+                const bytesDiff = newestSample.bytes - oldestSample.bytes;
+
+                if (timeDiff > 0) {
+                    transfer.speed = bytesDiff / timeDiff;
+
+                    if (transfer.speed > 0) {
+                        const remaining = transfer.totalSize - transfer.transferedSize;
+                        transfer.eta = Math.ceil(remaining / transfer.speed);
+                    }
+                }
+            }
+
+            transfer.progress = Math.min(100, (transfer.transferedSize / transfer.totalSize) * 100);
+        }
+
+        if (updates.status) {
+            this.checkSettingAndChangePowerSaveBlock();
+            this.emitUpdate();
+        } else {
+            const throttledEmit = this.throttledEmits.get(pid);
+            if (throttledEmit) {
+                throttledEmit();
+            } else {
+                this.emitUpdate();
+            }
+        }
+    }
+
+    public cancelTransfer(pid: string) {
+        const transfer = this.transfers.find((t) => t.pid === pid);
+        if (!transfer) return;
+        if (
+            transfer.status === "canceled" ||
+            transfer.status === "error" ||
+            transfer.status === "completed"
+        ) {
+            this.removeTransfer(pid);
+            return;
+        }
+
+        if (
+            transfer.status === "pending" ||
+            transfer.status === "progress" ||
+            transfer.status === "paused" ||
+            transfer.status === "preparing"
+        ) {
+            transfer.abortController.abort();
+            transfer.status = "canceled";
+            this.checkSettingAndChangePowerSaveBlock();
+            this.emitUpdate();
+        }
+    }
+
+    public pauseTransfer(pid: string) {
+        const transfer = this.transfers.find((t) => t.pid === pid);
+        if (!transfer) return;
+
+        if (
+            transfer.status === "progress" ||
+            transfer.status === "pending" ||
+            transfer.status === "preparing"
+        ) {
+            transfer.abortController.abort();
+            transfer.status = "paused";
+            this.checkSettingAndChangePowerSaveBlock();
+            this.emitUpdate();
+        }
+    }
+
+    public removeTransfer(pid: string) {
+        const index = this.transfers.findIndex((t) => t.pid === pid);
+        if (index !== -1) {
+            const transfer = this.transfers[index];
+            if (transfer.status === "progress" || transfer.status === "preparing") {
+                transfer.abortController.abort();
+            }
+            this.transfers.splice(index, 1);
+            this.throttledEmits.delete(pid);
+            this.runners.delete(pid);
+            this.checkSettingAndChangePowerSaveBlock();
+            this.emitUpdate();
+        }
+    }
+
+    public updateAbortController(pid: string, controller: AbortController) {
+        const transfer = this.transfers.find((t) => t.pid === pid);
+        if (transfer) {
+            transfer.abortController = controller;
+        }
+    }
+
+    public resetStartTime(pid: string) {
+        const transfer = this.transfers.find((t) => t.pid === pid);
+        if (transfer) {
+            transfer.startTime = Date.now();
+            transfer.sessionStartBytes = transfer.transferedSize;
+        }
+    }
+
+    public resetTransfer(pid: string) {
+        const transfer = this.transfers.find((t) => t.pid === pid);
+        if (transfer) {
+            transfer.transferedSize = 0;
+            transfer.progress = 0;
+            transfer.speed = 0;
+            transfer.eta = 0;
+            transfer.startTime = Date.now();
+            transfer.sessionStartBytes = 0;
+            transfer.speedSamples = [];
+            transfer.transferedFiles = 0;
+            this.emitUpdate();
+        }
+    }
+}
+
+export default TransferService;
