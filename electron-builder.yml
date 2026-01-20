@@ -23,7 +23,8 @@ nsis:
     artifactName: Nahida Desktop Setup ${version}.${ext}
     shortcutName: ${productName}
     uninstallDisplayName: ${productName}
-    createDesktopShortcut: always
+    createDesktopShortcut: true
+    include: build/installer.nsh
 mac:
     entitlementsInherit: build/entitlements.mac.plist
     extendInfo:
