@@ -40,7 +40,7 @@ export type DownloadMetadata = {
 };
 
 class DownloadStreamer {
-    constructor(private readonly desktop: NahidaDesktop) { }
+    constructor(private readonly desktop: NahidaDesktop) {}
 
     public async fetchMetadata(uuid: string, signal: AbortSignal): Promise<DownloadMetadata> {
         const url = eden2url.akasha.dir.download.url({ query: { uuid } });
@@ -109,7 +109,7 @@ class DownloadStreamer {
 }
 
 class DownloadFileSystem {
-    constructor(private readonly desktop: NahidaDesktop) { }
+    constructor(private readonly desktop: NahidaDesktop) {}
 
     public resolveDirectoryPaths(
         root: DownloadMetadata["root"],
@@ -196,14 +196,14 @@ class DownloadFileSystem {
 }
 
 class FileDownloadTask {
-    constructor(private readonly desktop: NahidaDesktop) { }
+    constructor(private readonly desktop: NahidaDesktop) {}
 
     private async checkRangeSupport(url: string, token: string): Promise<boolean> {
         try {
             const response = await ky.head(url, {
                 headers: {
                     Authorization: `Bearer ${token}`,
-                    "User-Agent": "Nahida Desktop/1.0.0",
+                    "User-Agent": `Nahida Desktop/${appVersion}`,
                 },
                 timeout: 10000,
                 throwHttpErrors: false,
@@ -278,7 +278,7 @@ class FileDownloadTask {
             await (pipeline as any)(...streams, { signal });
         } catch (pipeErr) {
             fileStream.destroy();
-            await fse.remove(chunkPath).catch(() => { });
+            await fse.remove(chunkPath).catch(() => {});
             throw pipeErr;
         }
     }
@@ -316,12 +316,12 @@ class FileDownloadTask {
             });
 
             for (const chunkPath of chunkPaths) {
-                await fse.remove(chunkPath).catch(() => { });
+                await fse.remove(chunkPath).catch(() => {});
             }
         } catch (err) {
             fileStream.destroy();
             for (const chunkPath of chunkPaths) {
-                await fse.remove(chunkPath).catch(() => { });
+                await fse.remove(chunkPath).catch(() => {});
             }
             throw err;
         }
@@ -389,7 +389,7 @@ class FileDownloadTask {
 
         if (signal.aborted) {
             for (const chunkPath of chunkPaths) {
-                await fse.remove(chunkPath).catch(() => { });
+                await fse.remove(chunkPath).catch(() => {});
             }
             return;
         }
@@ -401,7 +401,7 @@ class FileDownloadTask {
         });
 
         if (signal.aborted) {
-            await fse.remove(targetPath).catch(() => { });
+            await fse.remove(targetPath).catch(() => {});
             return;
         }
 
@@ -501,12 +501,12 @@ class FileDownloadTask {
                     await (pipeline as any)(...streams, { signal });
                 } catch (pipeErr) {
                     fileStream.destroy();
-                    await fse.remove(targetPath).catch(() => { });
+                    await fse.remove(targetPath).catch(() => {});
                     throw pipeErr;
                 }
 
                 if (signal.aborted) {
-                    await fse.remove(targetPath).catch(() => { });
+                    await fse.remove(targetPath).catch(() => {});
                     return;
                 }
 
@@ -524,7 +524,7 @@ class FileDownloadTask {
             },
         ).catch(async (err) => {
             if (signal.aborted) return;
-            await fse.remove(targetPath).catch(() => { });
+            await fse.remove(targetPath).catch(() => {});
             throw err;
         });
     }
@@ -635,12 +635,12 @@ class FileDownloadTask {
                     await (pipeline as any)(...streams, { signal: combinedSignal });
                 } catch (pipeErr) {
                     fileStream.destroy();
-                    await fse.remove(targetPath).catch(() => { });
+                    await fse.remove(targetPath).catch(() => {});
                     throw pipeErr;
                 }
 
                 if (signal.aborted || combinedSignal.aborted) {
-                    await fse.remove(targetPath).catch(() => { });
+                    await fse.remove(targetPath).catch(() => {});
                     if (shouldRetryDueToSlowSpeed) {
                         throw new Error("Slow speed retry");
                     }
@@ -660,14 +660,14 @@ class FileDownloadTask {
 
                 if (signal.aborted || err.name === "AbortError") {
                     if (!shouldRetryDueToSlowSpeed) {
-                        await fse.remove(targetPath).catch(() => { });
+                        await fse.remove(targetPath).catch(() => {});
                         throw err;
                     }
                 }
 
                 if (shouldRetryDueToSlowSpeed && retryCount < MAX_RETRY_ATTEMPTS) {
                     retryCount++;
-                    await fse.remove(targetPath).catch(() => { });
+                    await fse.remove(targetPath).catch(() => {});
                     await new Promise((resolve) =>
                         setTimeout(resolve, Math.pow(2, retryCount) * 1000),
                     );
@@ -676,14 +676,14 @@ class FileDownloadTask {
 
                 if (retryCount < MAX_RETRY_ATTEMPTS) {
                     retryCount++;
-                    await fse.remove(targetPath).catch(() => { });
+                    await fse.remove(targetPath).catch(() => {});
                     await new Promise((resolve) =>
                         setTimeout(resolve, Math.pow(2, retryCount) * 1000),
                     );
                     continue;
                 }
 
-                await fse.remove(targetPath).catch(() => { });
+                await fse.remove(targetPath).catch(() => {});
                 throw err;
             }
         }
@@ -788,7 +788,7 @@ export class DownloadLib {
                     if (!isCompleted) {
                         try {
                             isCompleted = await this.fs.checkFileCompleted(filePath, file.size);
-                        } catch { }
+                        } catch {}
                     }
 
                     if (isCompleted) {

@@ -12,6 +12,7 @@ import fse from "fs-extra";
 import { fileTypeFromBuffer } from "file-type/node";
 import PQueue from "p-queue";
 import ky from "ky";
+import { appVersion } from "@main/const";
 
 const CHUNK_SIZE = 500;
 
@@ -303,7 +304,7 @@ export class UploadLib {
                     body: formData,
                     headers: {
                         Authorization: `Bearer ${token}`,
-                        "User-Agent": "Nahida Desktop/1.0.0",
+                        "User-Agent": `Nahida Desktop/${appVersion}`,
                     },
                     signal,
                     throwHttpErrors: false,
