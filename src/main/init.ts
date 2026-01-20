@@ -29,11 +29,16 @@ export async function startInit(desktop: NahidaDesktop) {
     }
 
     // make server
-    serve({
-        fetch: server.fetch,
-        port: 1027,
-    });
-    desktop.logger.info("server started on port 1027", "Server");
+    try {
+        serve({
+            fetch: server.fetch,
+            port: 1027,
+        });
+        desktop.logger.info("server started on port 1027", "Server");
+    } catch (error) {
+        desktop.logger.error(`Failed to start server on port 1027: ${error}`, "Server");
+        throw error;
+    }
 
     // make tray
     // createTray();

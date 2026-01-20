@@ -157,26 +157,6 @@ if (process.defaultApp) {
     app.setAsDefaultProtocolClient("nahida");
 }
 
-const gotTheLock = app.requestSingleInstanceLock();
-
-if (!gotTheLock) {
-    desktop.logger.warn("앱이 이미 실행중임");
-    app.quit();
-}
-
-app.on("second-instance", (_event, commandLine, _workingDirectory) => {
-    const deepLinkUrl = commandLine.find((arg) => arg.startsWith("nahida://"));
-    if (deepLinkUrl && deepLinkUrl.startsWith("nahida://auth")) {
-        // AuthService.handleOAuth2Callback(deepLinkUrl);
-    }
-
-    if (desktop.window.main) {
-        if (desktop.window.main.isMinimized()) desktop.window.main.restore();
-        desktop.window.main.show();
-        desktop.window.main.focus();
-    }
-});
-
 protocol.registerSchemesAsPrivileged([
     {
         scheme: "local",
@@ -194,6 +174,26 @@ protocol.registerSchemesAsPrivileged([
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
+    const gotTheLock = app.requestSingleInstanceLock();
+
+    if (!gotTheLock) {
+        desktop.logger.warn("앱이 이미 실행중임");
+        app.quit();
+        return;
+    }
+
+    app.on("second-instance", (_event, commandLine, _workingDirectory) => {
+        const deepLinkUrl = commandLine.find((arg) => arg.startsWith("nahida://"));
+        if (deepLinkUrl && deepLinkUrl.startsWith("nahida://auth")) {
+            // AuthService.handleOAuth2Callback(deepLinkUrl);
+        }
+
+        if (desktop.window.main) {
+            if (desktop.window.main.isMinimized()) desktop.window.main.restore();
+            desktop.window.main.show();
+            desktop.window.main.focus();
+        }
+    });
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.nahida");
 
