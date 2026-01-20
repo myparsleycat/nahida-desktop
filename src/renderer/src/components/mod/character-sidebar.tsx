@@ -42,12 +42,12 @@ export function CharacterSidebar({ groups, isLoading = false }: CharacterSidebar
   };
 
   return (
-    <div className="bg-[#1a1a1a] flex flex-col h-full border-[#2a2a2a]">
+    <div className="flex flex-col h-full">
       <div className="p-2 h-12">
         <div className="relative">
           <Search className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            className="bg-[#0a0a0a] border-[#2a2a2a] h-8 pr-8 text-sm"
+            className="h-8 pr-8 text-sm"
             placeholder="검색..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -58,8 +58,7 @@ export function CharacterSidebar({ groups, isLoading = false }: CharacterSidebar
       <ScrollArea className="flex-1 overflow-y-auto">
         <div className="flex flex-col">
           {isLoading
-            ? // Skeleton loading state
-              Array.from({ length: 8 }).map((_, index) => (
+            ? Array.from({ length: 8 }).map((_, index) => (
                 <div
                   key={index}
                   className="w-full grid items-center gap-3 pl-2 pr-4 py-2"
@@ -79,12 +78,12 @@ export function CharacterSidebar({ groups, isLoading = false }: CharacterSidebar
                   }}
                   onClick={() => handleSelect(group.name)}
                   className={cn(
-                    "w-full grid grid-columns-[auto_1fr_auto] items-center gap-3 pl-2 pr-4 py-2 hover:bg-[#2a2a2a]",
-                    selectedGroup === group.name && "bg-[#2a2a2a]",
+                    "w-full grid grid-columns-[auto_1fr_auto] items-center gap-3 pl-2 pr-4 py-2 hover:bg-[#cecece] dark:hover:bg-[#2a2a2a]",
+                    selectedGroup === group.name && "dark:bg-[#2a2a2a] bg-[#cecece]",
                   )}
                   style={{ gridTemplateColumns: "auto 1fr auto" }}
                 >
-                  <div className="w-10 h-10 rounded-full bg-[#3a3a3a] flex items-center justify-center shrink-0 overflow-hidden">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 overflow-hidden">
                     {group.preview ? (
                       group.preview.toLowerCase().match(/\.(mp4|webm|avi|mkv|mov)$/) ? (
                         <video

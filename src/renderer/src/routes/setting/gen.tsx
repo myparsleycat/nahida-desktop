@@ -23,7 +23,7 @@ export const Route = createFileRoute("/setting/gen")({
 });
 
 function RouteComponent() {
-  const { setTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
 
   const [runOnStartup, setRunOnStartup] = useState(false);
   const [autoUpdate, setAutoUpdate] = useState(false);
@@ -114,7 +114,7 @@ function RouteComponent() {
         </div>
         <div className="space-y-3">
           <label className="text-sm font-medium">Theme</label>
-          <Select defaultValue="system" onValueChange={(v) => setTheme(v as Theme)}>
+          <Select value={theme} onValueChange={(v) => setTheme(v as Theme)}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="테마 선택" />
             </SelectTrigger>

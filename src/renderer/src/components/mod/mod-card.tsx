@@ -49,9 +49,17 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
 
   const getModColorClass = () => {
     if (mod.isEnabled) {
-      return "bg-[#0d430d]";
+      return "dark:bg-[#0d430d] bg-[#048117]";
     } else {
-      return "bg-[#58151b]";
+      return "dark:bg-[#58151b] bg-[#af2938]";
+    }
+  };
+
+  const getToggleInputColorClass = () => {
+    if (mod.isEnabled) {
+      return "dark:bg-[#0a3a0c] bg-[#007317]";
+    } else {
+      return "dark:bg-[#4d1319] bg-[#781d26]";
     }
   };
 
@@ -71,7 +79,7 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="size-7"
+            className="size-7 hover:bg-accent/20"
             onClick={(e) => {
               e.stopPropagation();
               window.api.invoke("util:openCmd", mod.path);
@@ -82,7 +90,7 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
 
           <AlertDialog>
             <AlertDialogTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <Button variant="ghost" size="icon" className="size-7">
+              <Button variant="ghost" size="icon" className="size-7 hover:bg-accent/20">
                 <TrashIcon />
               </Button>
             </AlertDialogTrigger>
@@ -118,7 +126,7 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="size-7"
+            className="size-7 hover:bg-accent/20"
             onClick={(e) => {
               e.stopPropagation();
               window.api.invoke("util:openPath", mod.path);
@@ -191,10 +199,7 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
                         <span className="text-sm">key:</span>
                         <Input
                           key={`key-${toggleKey.sectionName}-${toggleKey.key}`}
-                          className={cn(
-                            "h-7 text-sm",
-                            mod.isEnabled ? "bg-[#275727]" : "bg-[#6a2e34]",
-                          )}
+                          className={cn("h-7 text-sm", getToggleInputColorClass())}
                           defaultValue={toggleKey.key}
                           onClick={(e) => e.stopPropagation()}
                           onBlur={(e) => {
@@ -217,10 +222,7 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
                         <span className="text-sm">back:</span>
                         <Input
                           key={`back-${toggleKey.sectionName}-${toggleKey.back}`}
-                          className={cn(
-                            "h-6 text-sm",
-                            mod.isEnabled ? "bg-[#275727]" : "bg-[#6a2e34]",
-                          )}
+                          className={cn("h-6 text-sm", getToggleInputColorClass())}
                           defaultValue={toggleKey.back}
                           onClick={(e) => e.stopPropagation()}
                           onBlur={(e) => {

@@ -36,17 +36,31 @@ export function ThemeProvider({
     root.classList.remove("light", "dark");
 
     if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-        .matches
-        ? "dark"
-        : "light";
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      const handleChange = () => {
+        root.classList.remove("light", "dark");
+        root.classList.add(mediaQuery.matches ? "dark" : "light");
+      };
 
-      root.classList.add(systemTheme);
-      return;
+      handleChange();
+      mediaQuery.addEventListener("change", handleChange);
+      return () => mediaQuery.removeEventListener("change", handleChange);
     }
 
     root.classList.add(theme);
+    return;
   }, [theme]);
+
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === storageKey && e.newValue) {
+        setTheme(e.newValue as Theme);
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [storageKey]);
 
   const value = {
     theme,
@@ -66,8 +80,7 @@ export function ThemeProvider({
 export const useTheme = () => {
   const context = useContext(ThemeProviderContext);
 
-  if (context === undefined)
-    throw new Error("useTheme must be used within a ThemeProvider");
+  if (context === undefined) throw new Error("useTheme must be used within a ThemeProvider");
 
   return context;
 };

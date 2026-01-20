@@ -13,7 +13,7 @@ export function ContentHeader({ groupName, groupPath }: ContentHeaderProps) {
   const searchValue = useModStore((s) => s.searchQuery);
   const onSearchChange = useModStore((s) => s.setSearchQuery);
   return (
-    <div className="flex items-center justify-between h-12 px-3 border-[#2a2a2a] border-b">
+    <div className="flex items-center justify-between h-12 px-3 border-b">
       <div className="flex items-center gap-3">
         {groupName ? (
           <h1 className="text-2xl font-semibold text-foreground">{groupName}</h1>
@@ -25,7 +25,7 @@ export function ContentHeader({ groupName, groupPath }: ContentHeaderProps) {
       <div className="flex items-center gap-2">
         <div className="relative w-[200px]">
           <Input
-            className="bg-[#2a2a2a] border-[#3a3a3a] h-8 pr-8 text-sm"
+            className="h-8 pr-8 text-sm"
             placeholder="검색..."
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
@@ -37,7 +37,6 @@ export function ContentHeader({ groupName, groupPath }: ContentHeaderProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 hover:bg-[#2a2a2a]"
             onClick={() => {
               window.api.invoke("util:openPath", groupPath);
             }}
