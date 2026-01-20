@@ -151,13 +151,17 @@ export class DriveService {
 
                 this.pendingDownloads.set(downloadId, { id, data, suggestedName });
 
-                const mainWindow = this.desktop.window.main;
-                if (mainWindow) {
-                    this.desktop.ipc.postMessageToWindow(mainWindow, "download:modeSelect", {
-                        downloadId,
-                        suggestedName,
-                    });
+                const mainWindow = this.desktop.window.main.window;
+                if (!mainWindow) {
+                    await this.desktop.window.main.createMainWindow();
                 }
+
+                this.desktop.window.main.focus();
+
+                this.desktop.ipc.postMessageToWindow(mainWindow!, "download:modeSelect", {
+                    downloadId,
+                    suggestedName,
+                });
                 return;
             }
 
@@ -237,7 +241,7 @@ export class DriveService {
     };
 
     private async selectUploadPaths(paths?: string[]): Promise<string[] | null> {
-        const window = this.desktop.window.main;
+        const window = this.desktop.window.main.window;
         if (!window) {
             throw new Error("main window not found");
         }
@@ -384,7 +388,7 @@ export class DriveService {
     }
 
     private async selectDownloadPath(): Promise<string | null> {
-        const window = this.desktop.window.main;
+        const window = this.desktop.window.main.window;
         if (!window) {
             throw new Error("main window not found");
         }

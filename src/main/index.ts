@@ -11,9 +11,9 @@ import { IS_ELECTRON } from "./const";
 import Updater from "./internal/updater";
 import Logger from "./internal/logger";
 import { IPC } from "./ipc";
-import { createMainWindow } from "./windows/main";
-import { createLoginWindow } from "./windows/login";
-import { createSettingWindow } from "./windows/setting";
+import MainWindow from "./windows/main";
+import LoginWindow from "./windows/login";
+import SettingWindow from "./windows/setting";
 import { DriveService } from "./services/drive";
 import { FS } from "./lib/fs";
 import Utils from "./lib/utils";
@@ -24,6 +24,7 @@ import TransferService from "./services/transfer";
 import Mod from "./services/mod";
 import ArchiveService from "./services/archive";
 import { pathToFileURL } from "node:url";
+import GameBanana from "./lib/gb";
 
 if (IS_ELECTRON) {
     // Needs to be here, otherwise Chromium's FileSystemAccess API won't work. Waiting for the electron team to fix it.
@@ -46,9 +47,9 @@ export class NahidaDesktop {
     public shouldExitOnQuit: boolean = false;
 
     public window: {
-        main: BrowserWindow | null;
-        auth: BrowserWindow | null;
-        setting: BrowserWindow | null;
+        main: MainWindow;
+        auth: LoginWindow;
+        setting: SettingWindow;
     };
 
     public lib: {
@@ -57,6 +58,7 @@ export class NahidaDesktop {
         tray: Tray;
         crypto: CryptoLib;
         compressor: Compressor;
+        gb: GameBanana;
     };
 
     public service: {
@@ -74,9 +76,9 @@ export class NahidaDesktop {
         this.updater = new Updater(this);
         this.logger = new Logger(false, false);
         this.window = {
-            main: null,
-            auth: null,
-            setting: null,
+            main: new MainWindow(this),
+            auth: new LoginWindow(this),
+            setting: new SettingWindow(this),
         };
         this.lib = {
             fs: new FS(this),
@@ -84,6 +86,7 @@ export class NahidaDesktop {
             tray: new Tray(this),
             crypto: new CryptoLib(this),
             compressor: new Compressor(this),
+            gb: new GameBanana(this),
         };
         this.service = {
             auth: new Auth(this),
@@ -92,30 +95,6 @@ export class NahidaDesktop {
             mod: new Mod(this),
             archive: new ArchiveService(this),
         };
-    }
-
-    public async createMainWindow() {
-        if (this.window.main) {
-            this.window.main.show();
-            return this.window.main;
-        }
-        return await createMainWindow(this);
-    }
-
-    public createLoginWindow() {
-        if (this.window.auth) {
-            this.window.auth.show();
-            return this.window.auth;
-        }
-        return createLoginWindow(this);
-    }
-
-    public createSettingWindow() {
-        if (this.window.setting) {
-            this.window.setting.show();
-            return this.window.setting;
-        }
-        return createSettingWindow(this);
     }
 
     public async init() {
@@ -191,10 +170,10 @@ app.whenReady().then(async () => {
             // AuthService.handleOAuth2Callback(deepLinkUrl);
         }
 
-        if (desktop.window.main) {
-            if (desktop.window.main.isMinimized()) desktop.window.main.restore();
-            desktop.window.main.show();
-            desktop.window.main.focus();
+        if (desktop.window.main.window) {
+            if (desktop.window.main.window.isMinimized()) desktop.window.main.window.restore();
+            desktop.window.main.window.show();
+            desktop.window.main.window.focus();
         }
     });
     // Set app user model id for windows
@@ -229,9 +208,9 @@ app.whenReady().then(async () => {
     const loggedIn = await desktop.service.auth.isLoggedIn();
     if (loggedIn) {
         desktop.lib.tray.createTray();
-        await desktop.createMainWindow();
+        await desktop.window.main.createMainWindow();
     } else {
-        desktop.createLoginWindow();
+        await desktop.window.auth.createLoginWindow();
     }
 
     // app.on('activate', async () => {

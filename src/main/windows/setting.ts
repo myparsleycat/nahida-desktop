@@ -6,60 +6,72 @@ import type { NahidaDesktop } from "@main/index";
 import { getDefaultWebPreferences } from "./utils";
 import { fileURLToPath } from "node:url";
 
-export function createSettingWindow(desktop: NahidaDesktop) {
-    if (desktop.window.setting && !desktop.window.setting.isDestroyed()) {
-        desktop.window.setting.show();
-        desktop.window.setting.focus();
-        return;
+export class SettingWindow {
+    private readonly desktop: NahidaDesktop;
+    public window: BrowserWindow | null;
+
+    public constructor(desktop: NahidaDesktop) {
+        this.desktop = desktop;
+        this.window = null;
     }
 
-    desktop.window.setting = new BrowserWindow({
-        title: "설정",
-        width: 580,
-        minWidth: 580,
-        height: 740,
-        maxHeight: 740,
-        show: false,
-        frame: false,
-        maximizable: false,
-        autoHideMenuBar: true,
-        ...(process.platform === "linux" ? { icon } : {}),
-        webPreferences: {
-            ...getDefaultWebPreferences(),
-        },
-        icon,
-    });
-
-    desktop.window.setting.webContents.setWindowOpenHandler(({ url }) => {
-        if (url.startsWith("http")) {
-            shell.openExternal(url);
-            return { action: "deny" };
+    async createSettingWindow() {
+        if (this.window && !this.window.isDestroyed()) {
+            this.window.show();
+            this.window.focus();
+            return;
         }
-        return { action: "allow" };
-    });
 
-    desktop.window.setting.on("ready-to-show", () => {
-        desktop.window.setting?.show();
-    });
-
-    desktop.window.setting.on("close", () => {
-        desktop.window.setting = null;
-    });
-
-    if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-        desktop.window.setting.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/#/setting`);
-    } else {
-        // cjs
-        // desktop.window.setting.loadFile(path.join(__dirname, "../renderer/index.html"), {
-        //     hash: "setting",
-        // });
-
-        // esm
-        desktop.window.setting.loadFile(
-            fileURLToPath(new URL("../renderer/index.html", import.meta.url)),
-            {
-                hash: "setting",
+        this.window = new BrowserWindow({
+            title: "설정",
+            width: 580,
+            minWidth: 580,
+            height: 740,
+            maxHeight: 740,
+            show: false,
+            frame: false,
+            maximizable: false,
+            autoHideMenuBar: true,
+            ...(process.platform === "linux" ? { icon } : {}),
+            webPreferences: {
+                ...getDefaultWebPreferences(),
             },
-        );
+            icon,
+        });
+
+        this.window.webContents.setWindowOpenHandler(({ url }) => {
+            if (url.startsWith("http")) {
+                shell.openExternal(url);
+                return { action: "deny" };
+            }
+            return { action: "allow" };
+        });
+
+        this.window.on("ready-to-show", () => {
+            this.window?.show();
+        });
+
+        this.window.on("close", () => {
+            this.window = null;
+        });
+
+        if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
+            this.window.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/#/setting`);
+        } else {
+            // cjs
+            // desktop.window.setting.loadFile(path.join(__dirname, "../renderer/index.html"), {
+            //     hash: "setting",
+            // });
+
+            // esm
+            this.window.loadFile(
+                fileURLToPath(new URL("../renderer/index.html", import.meta.url)),
+                {
+                    hash: "setting",
+                },
+            );
+        }
     }
 }
+
+export default SettingWindow;

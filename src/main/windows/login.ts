@@ -6,51 +6,63 @@ import type { NahidaDesktop } from "@main/index";
 import { getDefaultWebPreferences } from "./utils";
 import { fileURLToPath } from "node:url";
 
-export function createLoginWindow(desktop: NahidaDesktop) {
-    if (desktop.window.auth && !desktop.window.auth.isDestroyed()) {
-        desktop.window.auth.show();
-        desktop.window.auth.focus();
-        return;
+export class LoginWindow {
+    private readonly desktop: NahidaDesktop;
+    public window: BrowserWindow | null;
+
+    public constructor(desktop: NahidaDesktop) {
+        this.desktop = desktop;
+        this.window = null;
     }
 
-    desktop.window.auth = new BrowserWindow({
-        title: "로그인",
-        width: 350,
-        height: 350,
-        resizable: false,
-        show: false,
-        frame: false,
-        maximizable: false,
-        autoHideMenuBar: true,
-        ...(process.platform === "linux" ? { icon } : {}),
-        webPreferences: {
-            ...getDefaultWebPreferences(),
-        },
-        icon,
-    });
+    async createLoginWindow() {
+        if (this.window && !this.window.isDestroyed()) {
+            this.window.show();
+            this.window.focus();
+            return;
+        }
 
-    desktop.window.auth.on("ready-to-show", () => {
-        desktop.window.auth?.show();
-    });
-
-    desktop.window.auth.on("close", () => {
-        desktop.window.auth = null;
-    });
-
-    if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-        desktop.window.auth.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/#/auth`);
-    } else {
-        // cjs
-        // desktop.window.auth.loadFile(path.join(__dirname, "../renderer/index.html"), {
-        //     hash: "auth",
-        // });
-
-        // esm
-        desktop.window.auth.loadFile(
-            fileURLToPath(new URL("../renderer/index.html", import.meta.url)),
-            {
-                hash: "auth",
+        this.window = new BrowserWindow({
+            title: "로그인",
+            width: 350,
+            height: 350,
+            resizable: false,
+            show: false,
+            frame: false,
+            maximizable: false,
+            autoHideMenuBar: true,
+            ...(process.platform === "linux" ? { icon } : {}),
+            webPreferences: {
+                ...getDefaultWebPreferences(),
             },
-        );
+            icon,
+        });
+
+        this.window.on("ready-to-show", () => {
+            this.window?.show();
+        });
+
+        this.window.on("close", () => {
+            this.window = null;
+        });
+
+        if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
+            this.window.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/#/auth`);
+        } else {
+            // cjs
+            // desktop.window.auth.loadFile(path.join(__dirname, "../renderer/index.html"), {
+            //     hash: "auth",
+            // });
+
+            // esm
+            this.window.loadFile(
+                fileURLToPath(new URL("../renderer/index.html", import.meta.url)),
+                {
+                    hash: "auth",
+                },
+            );
+        }
     }
 }
+
+export default LoginWindow;

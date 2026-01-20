@@ -6,75 +6,90 @@ import type { NahidaDesktop } from "@main/index";
 import { getDefaultWebPreferences } from "./utils";
 import { fileURLToPath } from "node:url";
 import { debounce } from "es-toolkit";
+import { focus } from "./utils";
 
-export async function createMainWindow(desktop: NahidaDesktop) {
-    const bounds = await desktop.setting.getBounds();
-    desktop.window.main = new BrowserWindow({
-        title: "Nahida Desktop",
-        x: bounds?.x || undefined,
-        y: bounds?.y || undefined,
-        width: bounds?.width || 1200,
-        height: bounds?.height || 800,
-        minWidth: 800,
-        minHeight: 600,
-        show: false,
-        frame: false,
-        autoHideMenuBar: true,
-        ...(process.platform === "linux" ? { icon } : {}),
-        webPreferences: {
-            ...getDefaultWebPreferences(),
-        },
-        icon,
-    });
+export class MainWindow {
+    private readonly desktop: NahidaDesktop;
+    public window: BrowserWindow | null;
 
-    desktop.window.main.on("ready-to-show", async () => {
-        desktop.window.main?.show();
-    });
-
-    const saveBounds = debounce(async () => {
-        if (!desktop.window.main) return;
-        const bounds = desktop.window.main.getBounds();
-        await desktop.setting.setBounds(bounds);
-    }, 1000);
-
-    desktop.window.main.on("resize", saveBounds);
-    desktop.window.main.on("move", saveBounds);
-
-    desktop.window.main.on("close", async () => {
-        saveBounds.cancel();
-        const bounds = desktop.window.main?.getBounds();
-        if (bounds) await desktop.setting.setBounds(bounds);
-        desktop.window.main = null;
-    });
-
-    desktop.window.main.webContents.setWindowOpenHandler((details) => {
-        shell.openExternal(details.url);
-        return { action: "deny" };
-    });
-
-    if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-        desktop.window.main.loadURL(process.env["ELECTRON_RENDERER_URL"]);
-    } else {
-        // cjs
-        // desktop.window.main.loadFile(path.join(__dirname, "../renderer/index.html"));
-
-        // esm
-        desktop.window.main.loadFile(
-            fileURLToPath(new URL("../renderer/index.html", import.meta.url)),
-        );
+    constructor(desktop: NahidaDesktop) {
+        this.desktop = desktop;
+        this.window = null;
     }
 
-    desktop.window.main.on("blur", () => {
-        if (!desktop.window.main) return;
-        desktop.ipc.postMessageToWindow(desktop.window.main, "window:blur");
-    });
+    public focus() {
+        if (!this.window) return;
+        focus(this.window);
+    }
 
-    desktop.window.main.on("focus", () => {
-        if (!desktop.window.main) return;
-        desktop.ipc.postMessageToWindow(desktop.window.main, "window:focus");
-    });
+    async createMainWindow() {
+        const bounds = await this.desktop.setting.getBounds();
+        this.window = new BrowserWindow({
+            title: "Nahida Desktop",
+            x: bounds?.x || undefined,
+            y: bounds?.y || undefined,
+            width: bounds?.width || 1200,
+            height: bounds?.height || 800,
+            minWidth: 800,
+            minHeight: 600,
+            show: false,
+            frame: false,
+            autoHideMenuBar: true,
+            ...(process.platform === "linux" ? { icon } : {}),
+            webPreferences: {
+                ...getDefaultWebPreferences(),
+            },
+            icon,
+        });
 
-    // desktop.window.main.webContents.openDevTools();
+        this.window.on("ready-to-show", async () => {
+            this.window?.show();
+        });
 
-    return desktop.window.main;
+        const saveBounds = debounce(async () => {
+            if (!this.window) return;
+            const bounds = this.window.getBounds();
+            await this.desktop.setting.setBounds(bounds);
+        }, 1000);
+
+        this.window.on("resize", saveBounds);
+        this.window.on("move", saveBounds);
+
+        this.window.on("close", async () => {
+            saveBounds.cancel();
+            const bounds = this.window?.getBounds();
+            if (bounds) await this.desktop.setting.setBounds(bounds);
+            this.window = null;
+        });
+
+        this.window.webContents.setWindowOpenHandler((details) => {
+            shell.openExternal(details.url);
+            return { action: "deny" };
+        });
+
+        if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
+            this.window.loadURL(process.env["ELECTRON_RENDERER_URL"]);
+        } else {
+            // cjs
+            // this.window.loadFile(path.join(__dirname, "../renderer/index.html"));
+
+            // esm
+            this.window.loadFile(fileURLToPath(new URL("../renderer/index.html", import.meta.url)));
+        }
+
+        this.window.on("blur", () => {
+            if (!this.window) return;
+            this.desktop.ipc.postMessageToWindow(this.window, "window:blur");
+        });
+
+        this.window.on("focus", () => {
+            if (!this.window) return;
+            this.desktop.ipc.postMessageToWindow(this.window, "window:focus");
+        });
+
+        // this.window.webContents.openDevTools();
+        return this.window;
+    }
 }
+
+export default MainWindow;
