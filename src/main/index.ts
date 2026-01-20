@@ -22,6 +22,7 @@ import CryptoLib from "./lib/crypto";
 import Compressor from "./lib/compressor";
 import TransferService from "./services/transfer";
 import Mod from "./services/mod";
+import ArchiveService from "./services/archive";
 import { pathToFileURL } from "node:url";
 
 if (IS_ELECTRON) {
@@ -63,6 +64,7 @@ export class NahidaDesktop {
         drive: DriveService;
         transfer: TransferService;
         mod: Mod;
+        archive: ArchiveService;
     };
 
     public constructor() {
@@ -88,6 +90,7 @@ export class NahidaDesktop {
             drive: new DriveService(this),
             transfer: new TransferService(this),
             mod: new Mod(this),
+            archive: new ArchiveService(this),
         };
     }
 
