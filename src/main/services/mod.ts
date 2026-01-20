@@ -175,7 +175,9 @@ export class Mod {
             const isEnabled = this.isModEnabled(folderName);
 
             const files = await fs.readdir(modPath);
-            const iniFiles = files.filter((f) => f.toLowerCase().endsWith(".ini"));
+            const iniFiles = files.filter(
+                (f) => f.toLowerCase().endsWith(".ini") && !f.toLowerCase().startsWith("disabled"),
+            );
 
             let toggleKeys: ToggleKey[] = [];
             for (const iniFile of iniFiles) {
@@ -186,13 +188,20 @@ export class Mod {
 
             const preview = await this.findPreview(modPath);
 
-            const ini =
-                iniFiles.length > 0
-                    ? {
-                          name: iniFiles[0],
-                          path: path.join(modPath, iniFiles[0]),
-                      }
-                    : undefined;
+            let selectedIni: string | undefined;
+            if (iniFiles.length > 0) {
+                const mergedIni = iniFiles.find(
+                    (f) => f.toLowerCase().replace(".ini", "") === "merged",
+                );
+                selectedIni = mergedIni || iniFiles[0];
+            }
+
+            const ini = selectedIni
+                ? {
+                      name: selectedIni,
+                      path: path.join(modPath, selectedIni),
+                  }
+                : undefined;
 
             return {
                 name: folderName,
