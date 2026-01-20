@@ -115,4 +115,17 @@ export function registerModHandlers(desktop: NahidaDesktop) {
     ipcMain.handle("mod:setLastGame", async (_event, game: string) => {
         return await desktop.service.mod.fn.setLastGame(game);
     });
+
+    ipcMain.handle("mod:extractArchive", async (_event, archivePath: string, groupPath: string) => {
+        return await desktop.service.mod.fn.extractArchiveToGroup(archivePath, groupPath);
+    });
+
+    ipcMain.handle("mod:copyFolder", async (_event, folderPath: string, groupPath: string) => {
+        const moveInsteadOfCopy = await desktop.setting.mod.getMoveFolderInsteadOfCopy();
+        return await desktop.service.mod.fn.copyFolderToGroup(
+            folderPath,
+            groupPath,
+            moveInsteadOfCopy,
+        );
+    });
 }

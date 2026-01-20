@@ -125,6 +125,8 @@ export type IpcHandlers = {
     "mod:updatePresetName": (presetId: string, newName: string) => void;
     "mod:getLastGame": () => string | null;
     "mod:setLastGame": (game: string) => void;
+    "mod:extractArchive": (archivePath: string, groupPath: string) => void;
+    "mod:copyFolder": (folderPath: string, groupPath: string) => void;
 
     "logger:log": (
         level: "info" | "debug" | "warn" | "error" | "trace" | "fatal",

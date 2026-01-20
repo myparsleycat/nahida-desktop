@@ -1,11 +1,29 @@
 import { NahidaDesktop } from "..";
 import { trim } from "es-toolkit";
 import path from "path";
+
 import fse from "fs-extra";
+import fg from "fast-glob";
 import { eq } from "drizzle-orm";
 import { db } from "../internal/db";
 import { gamePaths, modPresets, setting } from "../internal/db/schema";
 import { nanoid } from "nanoid";
+
+const PREVIEW_EXTENSIONS = [
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".bmp",
+    ".mp4",
+    ".webm",
+    ".avi",
+    ".mkv",
+    ".mov",
+];
+const MOD_FILE_EXTENSIONS = [".ini", ...PREVIEW_EXTENSIONS];
+const MOD_FILE_GLOB = `*.{${MOD_FILE_EXTENSIONS.map((e) => e.slice(1)).join(",")}}`;
 
 interface ToggleKey {
     sectionName: string;
@@ -127,9 +145,19 @@ export class Mod {
         };
     }
 
-    private async findPreview(modPath: string): Promise<string | null> {
+    private async findPreview(modPath: string, files?: string[]): Promise<string | null> {
         try {
-            const files = await fse.readdir(modPath);
+            if (!files) {
+                files = await fg(
+                    PREVIEW_EXTENSIONS.map((ext) => `*${ext}`),
+                    {
+                        cwd: modPath,
+                        onlyFiles: true,
+                        caseSensitiveMatch: false,
+                    },
+                );
+            }
+
             const imageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"];
             const videoExtensions = [".mp4", ".webm", ".avi", ".mkv", ".mov"];
             const excludedKeywords = ["normal", "light", "material", "diffuse"];
@@ -184,7 +212,12 @@ export class Mod {
             const folderName = path.basename(modPath);
             const isEnabled = this.isModEnabled(folderName);
 
-            const files = await fse.readdir(modPath);
+            const files = await fg(MOD_FILE_GLOB, {
+                cwd: modPath,
+                onlyFiles: true,
+                caseSensitiveMatch: false,
+            });
+
             const iniFiles = files.filter(
                 (f) => f.toLowerCase().endsWith(".ini") && !f.toLowerCase().startsWith("disabled"),
             );
@@ -196,7 +229,7 @@ export class Mod {
                 toggleKeys.push(...keys);
             }
 
-            const preview = await this.findPreview(modPath);
+            const preview = await this.findPreview(modPath, files);
 
             let selectedIni: string | undefined;
             if (iniFiles.length > 0) {
@@ -242,20 +275,22 @@ export class Mod {
             }
 
             try {
-                const groupFolders = await fse.readdir(modFolderPath, { withFileTypes: true });
+                const groupFolders = await fg("*", {
+                    cwd: modFolderPath,
+                    onlyDirectories: true,
+                });
                 const groups: FolderGroup[] = [];
 
-                for (const groupFolder of groupFolders) {
-                    if (!groupFolder.isDirectory()) continue;
-
-                    const groupPath = path.join(modFolderPath, groupFolder.name);
-                    const modFolders = await fse.readdir(groupPath, { withFileTypes: true });
+                for (const groupFolderName of groupFolders) {
+                    const groupPath = path.join(modFolderPath, groupFolderName);
+                    const modFolders = await fg("*", {
+                        cwd: groupPath,
+                        onlyDirectories: true,
+                    });
 
                     const mods: ModInfo[] = [];
-                    for (const modFolder of modFolders) {
-                        if (!modFolder.isDirectory()) continue;
-
-                        const modPath = path.join(groupPath, modFolder.name);
+                    for (const modFolderName of modFolders) {
+                        const modPath = path.join(groupPath, modFolderName);
                         const modInfo = await this.scanModFolder(modPath);
                         if (modInfo) {
                             mods.push(modInfo);
@@ -265,7 +300,7 @@ export class Mod {
                     const preview = await this.findPreview(groupPath);
 
                     groups.push({
-                        name: groupFolder.name,
+                        name: groupFolderName,
                         path: groupPath,
                         mods,
                         preview: preview || undefined,
@@ -282,13 +317,14 @@ export class Mod {
         scanGroup: async (groupPath: string): Promise<FolderGroup> => {
             try {
                 const groupName = path.basename(groupPath);
-                const modFolders = await fse.readdir(groupPath, { withFileTypes: true });
+                const modFolders = await fg("*", {
+                    cwd: groupPath,
+                    onlyDirectories: true,
+                });
 
                 const mods: ModInfo[] = [];
-                for (const modFolder of modFolders) {
-                    if (!modFolder.isDirectory()) continue;
-
-                    const modPath = path.join(groupPath, modFolder.name);
+                for (const modFolderName of modFolders) {
+                    const modPath = path.join(groupPath, modFolderName);
                     const modInfo = await this.scanModFolder(modPath);
                     if (modInfo) {
                         mods.push(modInfo);
@@ -546,6 +582,99 @@ export class Mod {
                     target: setting.key,
                     set: { value: game },
                 });
+        },
+
+        extractArchiveToGroup: async (archivePath: string, groupPath: string): Promise<void> => {
+            const deleteAfterExtract =
+                await this.desktop.setting.mod.getDeleteArchiveAfterExtract();
+
+            const tempDir = path.join(groupPath, `.tmp_${nanoid()}`);
+            await fse.ensureDir(tempDir);
+
+            try {
+                await this.desktop.service.archive.extract(archivePath, tempDir);
+
+                let sourcePath = tempDir;
+                let targetFolderName = path.basename(archivePath, path.extname(archivePath));
+
+                let currentPath = tempDir;
+                while (true) {
+                    const items = await fse.readdir(currentPath);
+                    const validItems = items.filter((item) => {
+                        const lower = item.toLowerCase();
+                        return ![".ds_store", "__macosx", "desktop.ini", "thumbs.db"].includes(
+                            lower,
+                        );
+                    });
+
+                    if (validItems.length === 1) {
+                        const singleItemPath = path.join(currentPath, validItems[0]);
+                        const stats = await fse.stat(singleItemPath);
+                        if (stats.isDirectory()) {
+                            currentPath = singleItemPath;
+                            targetFolderName = validItems[0];
+                            continue;
+                        }
+                    }
+                    break;
+                }
+                sourcePath = currentPath;
+
+                const finalTargetPath = path.join(groupPath, targetFolderName);
+
+                if (await fse.pathExists(finalTargetPath)) {
+                    throw new Error(`ALREADY_EXISTS:${targetFolderName}`);
+                }
+
+                await fse.move(sourcePath, finalTargetPath);
+
+                this.desktop.logger.info(
+                    `Extracted archive ${archivePath} to ${finalTargetPath}`,
+                    "Mod:extractArchiveToGroup",
+                );
+
+                if (deleteAfterExtract) {
+                    await fse.remove(archivePath);
+                }
+            } catch (error) {
+                this.desktop.logger.error(error, `Mod:extractArchiveToGroup:${archivePath}`);
+                throw error;
+            } finally {
+                await fse.remove(tempDir);
+            }
+        },
+
+        copyFolderToGroup: async (
+            folderPath: string,
+            groupPath: string,
+            move: boolean,
+        ): Promise<void> => {
+            try {
+                const folderName = path.basename(folderPath);
+                const targetPath = path.join(groupPath, folderName);
+
+                const exists = await fse.pathExists(targetPath);
+                if (exists) {
+                    throw new Error(`ALREADY_EXISTS:${folderName}`);
+                }
+
+                if (move) {
+                    await fse.move(folderPath, targetPath);
+                    this.desktop.logger.info(
+                        `Moved folder ${folderPath} to ${targetPath}`,
+                        "Mod:copyFolderToGroup",
+                    );
+                } else {
+                    await fse.copy(folderPath, targetPath);
+                    this.desktop.logger.info(
+                        `Copied folder ${folderPath} to ${targetPath}`,
+                        "Mod:copyFolderToGroup",
+                    );
+                }
+            } catch (error) {
+                this.desktop.logger.error(error, `Mod:copyFolderToGroup:${folderPath}`);
+                throw error;
+            }
         },
     };
 }

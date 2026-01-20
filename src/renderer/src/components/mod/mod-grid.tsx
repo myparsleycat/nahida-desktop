@@ -14,12 +14,23 @@ interface ModGridProps {
     variable: string,
     value: string,
   ) => void;
+  groupPath?: string;
+  game: string;
+  isDragging?: boolean;
 }
 
-export function ModGrid({ mods, isLoading, onToggle, onToggleKeyUpdate }: ModGridProps) {
+export function ModGrid({
+  mods,
+  isLoading,
+  onToggle,
+  onToggleKeyUpdate,
+  groupPath,
+  game,
+  isDragging,
+}: ModGridProps) {
   return (
     <ScrollArea className="flex-1 overflow-y-auto">
-      <div className="">
+      <div className="relative">
         <div className="gap-3 p-3 grid grid-cols-1 min-[1000px]:grid-cols-2 min-[1500px]:grid-cols-3 min-[2000px]:grid-cols-4 min-[2500px]:grid-cols-5 min-[3000px]:grid-cols-6 min-[3500px]:grid-cols-7">
           {isLoading
             ? Array.from({ length: 12 }).map((_, index) => (

@@ -20,6 +20,7 @@ import {
 } from "@renderer/hooks/use-mod-mutations";
 import { useFilteredMods } from "@renderer/hooks/use-filtered-mods";
 import { useModRefreshOnFocus, useDownloadCompletionHandler } from "@renderer/hooks/use-mod-events";
+import { useModDragDrop } from "@renderer/hooks/use-mod-drag-drop";
 
 export const Route = createFileRoute("/mod/")({
   component: RouteComponent,
@@ -86,6 +87,10 @@ function RouteComponent() {
 
   useModRefreshOnFocus(selectedGame, queryClient);
   useDownloadCompletionHandler(selectedGame, queryClient);
+
+  const selectedGroupData = groups.find((g) => g.name === selectedGroup);
+  const { isDragging, handleDragEnter, handleDragLeave, handleDragOver, handleDrop } =
+    useModDragDrop(selectedGroupData?.path, queryClient, selectedGame || "");
 
   useEffect(() => {
     const initGame = async () => {
@@ -209,7 +214,13 @@ function RouteComponent() {
           />
         </div>
 
-        <div className="flex-1 flex flex-col overflow-hidden relative">
+        <div
+          className="flex-1 flex flex-col overflow-hidden relative"
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
           <ContentHeader
             groupName={selectedGroup || ""}
             groupPath={groups.find((g) => g.name === selectedGroup)?.path}
@@ -220,7 +231,21 @@ function RouteComponent() {
             isLoading={isGroupsLoading}
             onToggle={(m) => toggleModMutation.mutate(m)}
             onToggleKeyUpdate={handleToggleKeyUpdate}
+            groupPath={selectedGroupData?.path}
+            game={selectedGame || ""}
+            isDragging={isDragging}
           />
+
+          {isDragging && (
+            <div className="absolute flex-1 h-full inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm border-2 border-dashed border-primary">
+              <div className="text-center">
+                <p className="text-2xl font-bold">모드 그리드에 드롭</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  압축 파일은 자동으로 압축 해제됩니다
+                </p>
+              </div>
+            </div>
+          )}
 
           {downloadMode && (
             <DownloadConfirmationOverlay
