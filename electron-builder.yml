@@ -15,6 +15,10 @@ files:
     - "!node_modules/.pnpm/@cbor-extract+cbor-extract-linux-arm64@*/**/*"
     - "!node_modules/.pnpm/@cbor-extract+cbor-extract-linux-x64@*/**/*"
 # asar: false
+extraResources:
+    - from: build/extractor/extractor.exe
+      filter:
+          - "**/*"
 asarUnpack:
     - resources/**
 win:
