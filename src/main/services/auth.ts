@@ -11,6 +11,7 @@ import { parseServerSentEvents } from "parse-sse";
 import { closeAllWindows } from "./util";
 import { focus } from "@main/windows/utils";
 import type { NahidaDesktop } from "@main/index";
+import { appVersion } from "@main/const";
 
 export class Auth {
     private desktop: NahidaDesktop;
@@ -83,6 +84,9 @@ export class Auth {
         const iWantToLoginResp = await ky(iWantToLoginUrl, {
             credentials: "include",
             throwHttpErrors: false,
+            headers: {
+                'User-Agent': `Nahida Desktop/${appVersion}`
+            }
         });
 
         if (!iWantToLoginResp.ok) {
@@ -100,6 +104,9 @@ export class Auth {
 
         const resp = await ky(data.stateResponse, {
             throwHttpErrors: false,
+            headers: {
+                'User-Agent': `Nahida Desktop/${appVersion}`
+            }
         });
 
         if (!resp.body) {

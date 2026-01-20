@@ -1,7 +1,7 @@
 import ky from "ky";
 import { Agent, Pool } from "undici";
 import { desktop } from "@main/index";
-import isDev from "./isDev";
+import { appVersion } from "@main/const";
 
 const agent = new Agent({
     factory(origin, options) {
@@ -22,6 +22,7 @@ export async function fetcher(url: string, options?: RequestInit) {
         headers: {
             ...options?.headers,
             ...(token && isNHD && { Authorization: `Bearer ${token}` }),
+            "User-Agent": `Nahida Desktop/${appVersion}`,
         },
         // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
         dispatcher: agent,

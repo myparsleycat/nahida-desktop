@@ -4,13 +4,14 @@ import { BACKEND_URL } from "@shared/const";
 import ky from "ky";
 import { isEmpty } from "es-toolkit/compat";
 import { desktop } from "./index";
+import { appVersion } from "@main/const";
 
 const fetcher = async (url: string | Request | URL, init?: RequestInit) => {
     const headers = new Headers(init?.headers);
 
     const token = await desktop.service.auth.getToken();
 
-    headers.set("User-Agent", "Nahida Desktop/1.0.0");
+    headers.set("User-Agent", `Nahida Desktop/${appVersion}`);
     headers.set("Authorization", `Bearer ${token}`);
 
     return ky(url, {
@@ -41,8 +42,8 @@ export type Eden = typeof eden;
 type EdenProxy = {
     [K in string]: EdenProxy;
 } & ((args?: Record<string, any>) => EdenProxy) & {
-        url: (options?: { query?: Record<string, any> }) => string;
-    };
+    url: (options?: { query?: Record<string, any> }) => string;
+};
 
 function createProxy(pathSegments: string[] = []): EdenProxy {
     const handler: ProxyHandler<any> = {
@@ -75,7 +76,7 @@ function createProxy(pathSegments: string[] = []): EdenProxy {
         },
     };
 
-    const target = () => {};
+    const target = () => { };
     return new Proxy(target, handler) as unknown as EdenProxy;
 }
 
