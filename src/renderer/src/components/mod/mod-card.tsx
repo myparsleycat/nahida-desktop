@@ -55,11 +55,19 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
     }
   };
 
+  const getToggleBoxColorClass = () => {
+    if (mod.isEnabled) {
+      return "dark:bg-[#0f4d0f] bg-[#008a1c]";
+    } else {
+      return "dark:bg-[#63181e] bg-[#781d26]";
+    }
+  };
+
   const getToggleInputColorClass = () => {
     if (mod.isEnabled) {
-      return "dark:bg-[#0a3a0c] bg-[#007317]";
+      return "dark:bg-[#115a11] bg-[#00941e]";
     } else {
-      return "dark:bg-[#4d1319] bg-[#781d26]";
+      return "dark:bg-[#731c23] bg-[#781d26]";
     }
   };
 
@@ -172,7 +180,7 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
           <>
             <Separator orientation="vertical" />
             <ScrollArea className="w-[160px] flex flex-col gap-2 overflow-y-auto">
-              <div className={cn("p-1.5 rounded", mod.isEnabled ? "bg-[#194d19]" : "bg-[#612127]")}>
+              <div className={cn("p-1.5 rounded", getToggleBoxColorClass())}>
                 {mod.ini && (
                   <div className="flex items-center justify-between mb-1 gap-1">
                     <span className="text-xs truncate opacity-80 flex-1" title={mod.ini.name}>
@@ -199,7 +207,7 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
                         <span className="text-sm">key:</span>
                         <Input
                           key={`key-${toggleKey.sectionName}-${toggleKey.key}`}
-                          className={cn("h-7 text-sm", getToggleInputColorClass())}
+                          className={cn("h-7 text-sm border-white/30", getToggleInputColorClass())}
                           defaultValue={toggleKey.key}
                           onClick={(e) => e.stopPropagation()}
                           onBlur={(e) => {
