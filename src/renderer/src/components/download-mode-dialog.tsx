@@ -9,6 +9,7 @@ import {
 } from "@renderer/components/ui/dialog";
 import { FolderOpen, Grid3x3 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
+import { useModStore } from "@renderer/store/mod";
 
 interface DownloadModeDialogProps {
   open: boolean;
@@ -24,6 +25,7 @@ export function DownloadModeDialog({
   suggestedName,
 }: DownloadModeDialogProps) {
   const navi = useNavigate();
+  const setDownloadMode = useModStore((s) => s.setDownloadMode);
 
   const handleFolderSelect = async () => {
     await window.api.invoke("drive:fn:selectPathForDownload", downloadId);
@@ -31,8 +33,8 @@ export function DownloadModeDialog({
   };
 
   const handleModManagerSelect = () => {
+    setDownloadMode({ downloadId, suggestedName });
     navi({ to: "/mod" });
-    sessionStorage.setItem("pendingDownload", JSON.stringify({ downloadId, suggestedName }));
     onOpenChange(false);
   };
 

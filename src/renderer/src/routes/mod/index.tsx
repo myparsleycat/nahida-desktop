@@ -100,15 +100,6 @@ function RouteComponent() {
   }, [games]);
 
   useEffect(() => {
-    const pendingDownload = sessionStorage.getItem("pendingDownload");
-    if (pendingDownload) {
-      const data = JSON.parse(pendingDownload);
-      setDownloadMode(data);
-      sessionStorage.removeItem("pendingDownload");
-    }
-  }, []);
-
-  useEffect(() => {
     if (groups.length > 0) {
       if (!selectedGroup || !groups.find((g) => g.name === selectedGroup)) {
         setSelectedGroup(groups[0].name);
