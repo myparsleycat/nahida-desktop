@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"golift.io/xtractr"
 )
@@ -60,9 +61,15 @@ func extractArchive(archivePath, outputDir string) error {
 		return fmt.Errorf("failed to get absolute output path: %v", err)
 	}
 
+	tempDir, err := os.MkdirTemp(absOutput, ".xtractr_temp_*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
 	xfile := &xtractr.XFile{
 		FilePath:  absArchive,
-		OutputDir: absOutput,
+		OutputDir: tempDir,
 		FileMode:  0644,
 		DirMode:   0755,
 	}
@@ -70,6 +77,34 @@ func extractArchive(archivePath, outputDir string) error {
 	_, _, _, err = xtractr.ExtractFile(xfile)
 	if err != nil {
 		return fmt.Errorf("extraction failed: %v", err)
+	}
+
+	entries, err := os.ReadDir(tempDir)
+	if err != nil {
+		return fmt.Errorf("failed to read temp directory: %v", err)
+	}
+
+	var targetDir string
+	if len(entries) > 1 {
+		filename := filepath.Base(absArchive)
+		ext := filepath.Ext(filename)
+		stem := strings.TrimSuffix(filename, ext)
+		targetDir = filepath.Join(absOutput, stem)
+
+		if err := os.MkdirAll(targetDir, 0755); err != nil {
+			return fmt.Errorf("failed to create specific directory: %v", err)
+		}
+	} else {
+		targetDir = absOutput
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(tempDir, entry.Name())
+		dstPath := filepath.Join(targetDir, entry.Name())
+
+		if err := os.Rename(srcPath, dstPath); err != nil {
+			return fmt.Errorf("failed to move file from temp to target: %v", err)
+		}
 	}
 
 	return nil
