@@ -28,7 +28,7 @@ function RouteComponent() {
 
   const navItems = [
     { icon: Settings, label: "일반", path: "/setting/gen" },
-    // { icon: GamepadIcon, label: "모드", path: "/setting/mod" },
+    { icon: GamepadIcon, label: "모드", path: "/setting/mod" },
     { icon: User, label: "계정", path: "/setting/acc" },
     // { icon: RefreshCw, label: "동기화", path: "/setting/sync" },
     // { icon: Database, label: "백업", path: "/setting/bak" },

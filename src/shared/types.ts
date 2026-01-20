@@ -55,6 +55,11 @@ export type IpcHandlers = {
     "setting:general:setDefaultStartPage": (page: string | null) => void;
     "setting:general:checkUpdate": () => void;
 
+    "setting:mod:getDeleteArchiveAfterExtract": () => boolean;
+    "setting:mod:setDeleteArchiveAfterExtract": (enabled: boolean) => void;
+    "setting:mod:getMoveFolderInsteadOfCopy": () => boolean;
+    "setting:mod:setMoveFolderInsteadOfCopy": (enabled: boolean) => void;
+
     "window:closeWindow": (window: string) => void;
     "window:openReport": () => void;
     "window:openSetting": () => void;

@@ -163,6 +163,58 @@ export class Setting {
             await this.desktop.updater.checkForUpdates(true);
         },
     };
+
+    mod = {
+        getDeleteArchiveAfterExtract: async () => {
+            const qr = await db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "mod_delete_archive_after_extract"),
+            });
+
+            if (!qr) {
+                await db
+                    .insert(setting)
+                    .values({ key: "mod_delete_archive_after_extract", value: "false" });
+                return false;
+            }
+
+            return qr.value === "true";
+        },
+
+        setDeleteArchiveAfterExtract: async (enabled: boolean) => {
+            await db
+                .insert(setting)
+                .values({ key: "mod_delete_archive_after_extract", value: String(enabled) })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(enabled) },
+                });
+        },
+
+        getMoveFolderInsteadOfCopy: async () => {
+            const qr = await db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "mod_move_folder_instead_of_copy"),
+            });
+
+            if (!qr) {
+                await db
+                    .insert(setting)
+                    .values({ key: "mod_move_folder_instead_of_copy", value: "false" });
+                return false;
+            }
+
+            return qr.value === "true";
+        },
+
+        setMoveFolderInsteadOfCopy: async (enabled: boolean) => {
+            await db
+                .insert(setting)
+                .values({ key: "mod_move_folder_instead_of_copy", value: String(enabled) })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(enabled) },
+                });
+        },
+    };
 }
 
 export default Setting;

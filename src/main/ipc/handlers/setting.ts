@@ -37,4 +37,20 @@ export function registerSettingHandlers(d: NahidaDesktop) {
     rh("setting:general:checkUpdate", async () => {
         return await d.setting.general.checkUpdate();
     });
+
+    rh("setting:mod:getDeleteArchiveAfterExtract", async () => {
+        return await d.setting.mod.getDeleteArchiveAfterExtract();
+    });
+
+    rh("setting:mod:setDeleteArchiveAfterExtract", async (enabled) => {
+        return await d.setting.mod.setDeleteArchiveAfterExtract(enabled);
+    });
+
+    rh("setting:mod:getMoveFolderInsteadOfCopy", async () => {
+        return await d.setting.mod.getMoveFolderInsteadOfCopy();
+    });
+
+    rh("setting:mod:setMoveFolderInsteadOfCopy", async (enabled) => {
+        return await d.setting.mod.setMoveFolderInsteadOfCopy(enabled);
+    });
 }
