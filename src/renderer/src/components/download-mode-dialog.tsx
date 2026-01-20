@@ -54,32 +54,34 @@ export function DownloadModeDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3 py-4">
+        <div className="grid grid-cols-2 gap-3 py-4">
           <Button
             variant="outline"
-            className="h-auto py-6 px-6 flex flex-col items-center gap-2"
-            onClick={handleFolderSelect}
+            className="h-auto p-3 flex flex-col items-center gap-2 whitespace-normal"
+            onClick={handleModManagerSelect}
           >
-            <FolderOpen className="size-8" />
-            <div className="flex flex-col items-center">
-              <span className="font-semibold">경로 선택</span>
-              <span className="text-xs text-muted-foreground">
-                파일 탐색기에서 폴더를 선택합니다
-              </span>
+            <Grid3x3 className="size-8" />
+            <div className="flex flex-col items-center text-center">
+              <span className="font-semibold">매니저에서 선택</span>
+              <div className="flex flex-col items-center text-center text-xs text-muted-foreground">
+                <span>모드 매니저에서</span>
+                <span>캐릭터 폴더를 선택합니다</span>
+              </div>
             </div>
           </Button>
 
           <Button
             variant="outline"
-            className="h-auto py-6 px-6 flex flex-col items-center gap-2"
-            onClick={handleModManagerSelect}
+            className="h-auto p-3 flex flex-col items-center gap-2 whitespace-normal"
+            onClick={handleFolderSelect}
           >
-            <Grid3x3 className="size-8" />
-            <div className="flex flex-col items-center">
-              <span className="font-semibold">매니저에서 선택</span>
-              <span className="text-xs text-muted-foreground">
-                모드 매니저에서 캐릭터 폴더를 선택합니다
-              </span>
+            <FolderOpen className="size-8" />
+            <div className="flex flex-col items-center text-center">
+              <span className="font-semibold">경로 선택</span>
+              <div className="flex flex-col items-center text-center text-xs text-muted-foreground">
+                <span>파일 탐색기에서</span>
+                <span>폴더를 선택합니다</span>
+              </div>
             </div>
           </Button>
         </div>
