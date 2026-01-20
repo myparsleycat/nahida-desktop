@@ -4,6 +4,7 @@ import { zValidator } from "@hono/zod-validator";
 import { decode } from "cbor-x";
 import { desktop } from "..";
 import { z } from "zod";
+import { focus } from "@main/windows/utils";
 
 const downloadFromLiveModFormSchema = z.object({
     id: z.string(),
@@ -55,6 +56,9 @@ export const app = new Hono()
 
             const metadata = downloadMetadataSchema.parse(decoded);
             await desktop.service.drive.fn.startDownload({ id, data: metadata, suggestedName });
+
+            const window = desktop.window.main;
+            if (window) focus(window);
 
             return ctx.newResponse(null, 204);
         },
