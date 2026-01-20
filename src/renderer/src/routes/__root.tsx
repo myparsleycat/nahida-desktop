@@ -3,26 +3,27 @@ import { Sidebar } from "@renderer/components/sidebar";
 import { Titlebar } from "@renderer/components/titlebar";
 import { Toaster } from "@renderer/components/ui/sonner";
 import { useGlobalEvents } from "@renderer/hooks/useGlobalEvents";
-import { DownloadModeDialog } from "@renderer/components/download-mode-dialog";
+import { PathSelectorDialog } from "@renderer/components/path-selector-dialog";
 import { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet, useLocation } from "@tanstack/react-router";
 import { useState, useCallback } from "react";
 
 function RootComponent() {
   const location = useLocation();
-  const [downloadModeData, setDownloadModeData] = useState<{
-    downloadId: string;
+
+  const [pathSelectorData, setPathSelectorData] = useState<{
+    selectionId: string;
     suggestedName?: string;
   } | null>(null);
 
-  const handleDownloadModeSelect = useCallback(
-    (data: { downloadId: string; suggestedName?: string }) => {
-      setDownloadModeData(data);
+  const handlePathSelectorModeSelect = useCallback(
+    (data: { selectionId: string; suggestedName?: string }) => {
+      setPathSelectorData(data);
     },
     [],
   );
 
-  useGlobalEvents(handleDownloadModeSelect);
+  useGlobalEvents(handlePathSelectorModeSelect);
 
   const noSidebarPath = ["/setting", "/auth"];
   const isNoSidebar = noSidebarPath.some((path) => location.pathname.startsWith(path));
@@ -33,12 +34,12 @@ function RootComponent() {
 
       <Toaster position="bottom-right" richColors />
 
-      {downloadModeData && (
-        <DownloadModeDialog
-          open={!!downloadModeData}
-          onOpenChange={(open) => !open && setDownloadModeData(null)}
-          downloadId={downloadModeData.downloadId}
-          suggestedName={downloadModeData.suggestedName}
+      {pathSelectorData && (
+        <PathSelectorDialog
+          open={!!pathSelectorData}
+          onOpenChange={(open) => !open && setPathSelectorData(null)}
+          selectionId={pathSelectorData.selectionId}
+          suggestedName={pathSelectorData.suggestedName}
         />
       )}
 

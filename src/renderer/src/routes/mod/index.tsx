@@ -140,14 +140,14 @@ function RouteComponent() {
 
     try {
       await window.api.invoke(
-        "drive:fn:startDownloadWithPath",
+        "pathSelector:selectModManagerPath",
         downloadMode.downloadId,
         selectedGroupData.path,
       );
-      toast.success("다운로드가 시작되었습니다.");
+
       setDownloadMode(null);
     } catch (error) {
-      toast.error("다운로드 시작에 실패했습니다.");
+      toast.error("경로 선택에 실패했습니다.");
       Logger.error(error, "Route:Mod:handleDownloadConfirm");
     }
   };
@@ -156,7 +156,7 @@ function RouteComponent() {
     if (!downloadMode) return;
 
     try {
-      await window.api.invoke("drive:fn:cancelPendingDownload", downloadMode.downloadId);
+      await window.api.invoke("pathSelector:cancel", downloadMode.downloadId);
       setDownloadMode(null);
     } catch (error) {
       Logger.error(error, "Route:Mod:handleDownloadCancel");

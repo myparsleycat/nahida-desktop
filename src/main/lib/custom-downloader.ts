@@ -1,0 +1,306 @@
+import { NahidaDesktop } from "..";
+import { ParallelDownloader } from "./parallel-downloader";
+import ky from "ky";
+import fse from "fs-extra";
+import { pipeline } from "node:stream/promises";
+import { nanoid } from "nanoid";
+import { TransferData } from "@shared/types";
+import { throttle } from "es-toolkit";
+import path from "node:path";
+
+export class CustomDownloader {
+    public desktop: NahidaDesktop;
+    private readonly downloader: ParallelDownloader;
+
+    public constructor(desktop: NahidaDesktop) {
+        this.desktop = desktop;
+        this.downloader = new ParallelDownloader({
+            logger: desktop.logger,
+        });
+    }
+
+    private async downloadFile(props: {
+        url: string;
+        savePath: string;
+        fileSize: number;
+        signal: AbortSignal;
+        onProgress?: (bytes: number) => void;
+    }) {
+        const { url, savePath, fileSize, signal, onProgress } = props;
+        const supportsRange = await this.downloader.checkRangeSupport(url);
+
+        if (supportsRange) {
+            await this.downloader.download({
+                url,
+                savePath,
+                fileSize,
+                signal,
+                onProgress(bytes) {
+                    onProgress?.(bytes);
+                },
+                maxChunks: 8,
+            });
+        } else {
+            const fileStream = fse.createWriteStream(savePath);
+            let lastTransferredBytes = 0;
+
+            const resp = await ky.get(url, {
+                signal,
+                onDownloadProgress(progress, _chunk) {
+                    if (onProgress) {
+                        const incremental = progress.transferredBytes - lastTransferredBytes;
+                        lastTransferredBytes = progress.transferredBytes;
+                        if (incremental > 0) {
+                            onProgress(incremental);
+                        }
+                    }
+                },
+            });
+            if (!resp.ok) {
+                throw new Error(`Failed to download file: ${resp.statusText}`);
+            }
+            try {
+                await pipeline(resp.body as any, fileStream, { signal });
+            } catch (err) {
+                fileStream.destroy();
+                await fse.remove(savePath).catch(() => {});
+                throw err;
+            }
+        }
+    }
+
+    public async GBDownloader(props: {
+        fileUrl: string;
+        title: string;
+        previewUrl?: string | null;
+    }) {
+        const { title, fileUrl, previewUrl } = props;
+        const result = await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(title);
+
+        if (!result.path) {
+            return;
+        }
+
+        const resp = await ky.head(fileUrl, {
+            redirect: "follow",
+            throwHttpErrors: false,
+        });
+        if (!resp.ok) {
+            throw new Error(`Failed to get real file URL: ${resp.statusText}`);
+        }
+
+        const realFileUrl = resp.url;
+        const fileName = realFileUrl.split("/").pop() || "unknown";
+        const rootName = title + " - " + fileName;
+        const savePath = path.join(result.path, rootName);
+        const fileSize = Number(resp.headers.get("Content-Length"));
+
+        const pid = nanoid();
+        const abortController = new AbortController();
+
+        const transferData: TransferData = {
+            root: {
+                id: pid,
+                parentId: null,
+                name: rootName,
+            },
+            files: [
+                {
+                    id: pid,
+                    fileId: pid,
+                    parentId: pid,
+                    name: fileName,
+                    size: fileSize,
+                    compAlg: null,
+                    url: realFileUrl,
+                },
+            ],
+            dirs: [],
+        };
+
+        await this.desktop.service.transfer.createTransfer(
+            pid,
+            "download",
+            transferData,
+            abortController,
+            title,
+            null,
+            "pending",
+            result.path,
+        );
+
+        this.desktop.service.transfer.registerRunner(pid, async () => {
+            try {
+                this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
+
+                let downloadedBytes = 0;
+                const throttledUpdate = throttle((bytes: number) => {
+                    this.desktop.service.transfer.updateTransfer(pid, {
+                        transferedSize: bytes,
+                    });
+                }, 100);
+
+                await this.downloadFile({
+                    url: realFileUrl,
+                    savePath,
+                    fileSize,
+                    signal: abortController.signal,
+                    onProgress: (bytes) => {
+                        downloadedBytes += bytes;
+                        throttledUpdate(downloadedBytes);
+                    },
+                });
+
+                throttledUpdate.flush();
+
+                if (abortController.signal.aborted) throw new Error("Aborted");
+
+                await this.desktop.service.archive.extract(savePath, path.dirname(savePath));
+                await fse.rm(savePath, { force: true });
+
+                this.desktop.service.transfer.markFileCompleted(pid, pid);
+
+                this.desktop.service.transfer.updateTransfer(pid, {
+                    status: "completed",
+                    progress: 100,
+                    transferedSize: fileSize,
+                    transferedFiles: 1,
+                });
+
+                const mainWindow = this.desktop.window.main.window;
+                if (mainWindow) {
+                    this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
+                        path: result.path!,
+                        name: rootName,
+                    });
+                }
+            } catch (err: any) {
+                if (
+                    abortController.signal.aborted ||
+                    err.name === "AbortError" ||
+                    err.message === "Aborted"
+                ) {
+                    this.desktop.service.transfer.updateTransfer(pid, { status: "canceled" });
+                } else {
+                    this.desktop.logger.error(err, "GameBanana:downloadFromGB");
+                    this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
+                }
+            }
+        });
+    }
+
+    public async HuiDownloader(props: { fileUrl: string; title: string }) {
+        const { title, fileUrl } = props;
+        const result = await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(title);
+
+        if (!result.path) {
+            return;
+        }
+
+        const resp = await ky.head(fileUrl, {
+            redirect: "follow",
+            throwHttpErrors: false,
+        });
+        if (!resp.ok) {
+            throw new Error(`Failed to get real file URL: ${resp.statusText}`);
+        }
+
+        const savePath = path.join(result.path, title);
+        const fileSize = Number(resp.headers.get("Content-Length"));
+
+        const pid = nanoid();
+        const abortController = new AbortController();
+
+        const transferData: TransferData = {
+            root: {
+                id: pid,
+                parentId: null,
+                name: title,
+            },
+            files: [
+                {
+                    id: pid,
+                    fileId: pid,
+                    parentId: pid,
+                    name: title,
+                    size: fileSize,
+                    compAlg: null,
+                    url: fileUrl,
+                },
+            ],
+            dirs: [],
+        };
+
+        await this.desktop.service.transfer.createTransfer(
+            pid,
+            "download",
+            transferData,
+            abortController,
+            title,
+            null,
+            "pending",
+            result.path,
+        );
+
+        this.desktop.service.transfer.registerRunner(pid, async () => {
+            try {
+                this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
+
+                let downloadedBytes = 0;
+                const throttledUpdate = throttle((bytes: number) => {
+                    this.desktop.service.transfer.updateTransfer(pid, {
+                        transferedSize: bytes,
+                    });
+                }, 100);
+
+                await this.downloadFile({
+                    url: fileUrl,
+                    savePath,
+                    fileSize,
+                    signal: abortController.signal,
+                    onProgress: (bytes) => {
+                        downloadedBytes += bytes;
+                        throttledUpdate(downloadedBytes);
+                    },
+                });
+
+                throttledUpdate.flush();
+
+                if (abortController.signal.aborted) throw new Error("Aborted");
+
+                await this.desktop.service.archive.extract(savePath, path.dirname(savePath));
+                await fse.rm(savePath, { force: true });
+
+                this.desktop.service.transfer.markFileCompleted(pid, pid);
+
+                this.desktop.service.transfer.updateTransfer(pid, {
+                    status: "completed",
+                    progress: 100,
+                    transferedSize: fileSize,
+                    transferedFiles: 1,
+                });
+
+                const mainWindow = this.desktop.window.main.window;
+                if (mainWindow) {
+                    this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
+                        path: result.path!,
+                        name: fileUrl,
+                    });
+                }
+            } catch (err: any) {
+                if (
+                    abortController.signal.aborted ||
+                    err.name === "AbortError" ||
+                    err.message === "Aborted"
+                ) {
+                    this.desktop.service.transfer.updateTransfer(pid, { status: "canceled" });
+                } else {
+                    this.desktop.logger.error(err, "GameBanana:downloadFromGB");
+                    this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
+                }
+            }
+        });
+    }
+}
+
+export default CustomDownloader;

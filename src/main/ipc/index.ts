@@ -8,6 +8,7 @@ import { registerWindowHandlers } from "./handlers/window";
 import { registerTransferHandlers } from "./handlers/transfer";
 import { registerModHandlers } from "./handlers/mod";
 import { registerLoggerHandlers } from "./handlers/logger";
+import { registerPathSelectorHandlers } from "./handlers/path-selector";
 import { IpcEvents } from "@shared/types";
 
 export class IPC {
@@ -27,6 +28,7 @@ export class IPC {
         registerTransferHandlers(this.d);
         registerModHandlers(this.d);
         registerLoggerHandlers(this.d);
+        registerPathSelectorHandlers();
     }
 
     public postMessageToWindow<K extends keyof IpcEvents>(

@@ -12,6 +12,7 @@ import { createZstdDecompress, createGunzip } from "node:zlib";
 import PQueue from "p-queue";
 import ky from "ky";
 import { appVersion } from "@main/const";
+import { ParallelDownloader } from "./parallel-downloader";
 
 export type DownloadParams = {
     type: "download";
@@ -196,217 +197,12 @@ class DownloadFileSystem {
 }
 
 class FileDownloadTask {
-    constructor(private readonly desktop: NahidaDesktop) {}
+    private parallelDownloader: ParallelDownloader;
 
-    private async checkRangeSupport(url: string, token: string): Promise<boolean> {
-        try {
-            const response = await ky.head(url, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "User-Agent": `Nahida Desktop/${appVersion}`,
-                },
-                timeout: 10000,
-                throwHttpErrors: false,
-            });
-
-            const acceptRanges = response.headers.get("Accept-Ranges");
-            return acceptRanges === "bytes";
-        } catch {
-            return false;
-        }
-    }
-
-    private calculateChunkCount(sizeInBytes: number): number {
-        const sizeInMB = sizeInBytes / (1024 * 1024);
-
-        const firstDigit = Math.floor(sizeInMB / Math.pow(10, Math.floor(Math.log10(sizeInMB))));
-
-        return Math.max(2, firstDigit);
-    }
-
-    private async downloadChunk({
-        url,
-        token,
-        start,
-        end,
-        chunkPath,
-        signal,
-        onProgress,
-    }: {
-        url: string;
-        token: string;
-        start: number;
-        end: number;
-        chunkPath: string;
-        signal: AbortSignal;
-        onProgress?: (bytes: number) => void;
-    }): Promise<void> {
-        let lastTransferredBytes = 0;
-
-        const response = await ky(url, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                "User-Agent": `Nahida Desktop/${appVersion}`,
-                Range: `bytes=${start}-${end}`,
-            },
-            signal,
-            throwHttpErrors: false,
-            timeout: 100000,
-            onDownloadProgress: (progress) => {
-                if (onProgress) {
-                    const incremental = progress.transferredBytes - lastTransferredBytes;
-                    lastTransferredBytes = progress.transferredBytes;
-                    if (incremental > 0) {
-                        onProgress(incremental);
-                    }
-                }
-            },
+    constructor(private readonly desktop: NahidaDesktop) {
+        this.parallelDownloader = new ParallelDownloader({
+            logger: this.desktop.logger,
         });
-
-        if (!response.ok && response.status !== 206) {
-            throw new Error(`Chunk download failed: ${response.statusText}`);
-        }
-
-        if (!response.body) throw new Error("No response body");
-
-        const fileStream = fse.createWriteStream(chunkPath);
-        const streams: any[] = [Readable.fromWeb(response.body as any)];
-
-        streams.push(fileStream);
-
-        try {
-            await (pipeline as any)(...streams, { signal });
-        } catch (pipeErr) {
-            fileStream.destroy();
-            await fse.remove(chunkPath).catch(() => {});
-            throw pipeErr;
-        }
-    }
-
-    private async combineChunks({
-        chunkPaths,
-        targetPath,
-        signal,
-    }: {
-        chunkPaths: string[];
-        targetPath: string;
-        signal: AbortSignal;
-    }): Promise<void> {
-        const fileStream = fse.createWriteStream(targetPath);
-
-        try {
-            for (const chunkPath of chunkPaths) {
-                if (signal.aborted) {
-                    fileStream.destroy();
-                    throw new Error("Aborted during chunk combination");
-                }
-
-                const chunkStream = fse.createReadStream(chunkPath);
-                await new Promise<void>((resolve, reject) => {
-                    chunkStream.pipe(fileStream, { end: false });
-                    chunkStream.on("end", resolve);
-                    chunkStream.on("error", reject);
-                });
-            }
-
-            fileStream.end();
-            await new Promise<void>((resolve, reject) => {
-                fileStream.on("finish", resolve);
-                fileStream.on("error", reject);
-            });
-
-            for (const chunkPath of chunkPaths) {
-                await fse.remove(chunkPath).catch(() => {});
-            }
-        } catch (err) {
-            fileStream.destroy();
-            for (const chunkPath of chunkPaths) {
-                await fse.remove(chunkPath).catch(() => {});
-            }
-            throw err;
-        }
-    }
-
-    private async executeParallelDownload({
-        file,
-        filePath,
-        signal,
-        onComplete,
-        onProgress,
-    }: {
-        file: DownloadMetadata["files"][0];
-        filePath: string;
-        signal: AbortSignal;
-        onComplete: () => void;
-        onProgress?: (bytes: number) => void;
-    }): Promise<void> {
-        const token = await this.desktop.service.auth.getToken();
-        if (!token) {
-            throw new Error("Authentication token not available for parallel download");
-        }
-        const targetPath = `${filePath}.ntmp`;
-
-        const chunkCount = this.calculateChunkCount(file.size);
-        const chunkSize = Math.ceil(file.size / chunkCount);
-
-        this.desktop.logger.info(
-            `Parallel download: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB) into ${chunkCount} chunks of ~${(chunkSize / 1024 / 1024).toFixed(2)}MB each`,
-            "FileDownloadTask:parallel",
-        );
-
-        const chunkPaths: string[] = [];
-        const downloadPromises: Promise<void>[] = [];
-
-        for (let i = 0; i < chunkCount; i++) {
-            const start = i * chunkSize;
-            const end = Math.min(start + chunkSize - 1, file.size - 1);
-            const chunkPath = `${filePath}.chunk${i}`;
-            chunkPaths.push(chunkPath);
-
-            const downloadPromise = retry(
-                () =>
-                    this.downloadChunk({
-                        url: file.url,
-                        token,
-                        start,
-                        end,
-                        chunkPath,
-                        signal,
-                        onProgress,
-                    }),
-                {
-                    retries: 2,
-                    delay: (attempt) => Math.pow(2, attempt) * 1000,
-                    shouldRetry: (err: any) => !(err.name === "AbortError" || signal.aborted),
-                    signal,
-                },
-            );
-
-            downloadPromises.push(downloadPromise);
-        }
-
-        await Promise.all(downloadPromises);
-
-        if (signal.aborted) {
-            for (const chunkPath of chunkPaths) {
-                await fse.remove(chunkPath).catch(() => {});
-            }
-            return;
-        }
-
-        await this.combineChunks({
-            chunkPaths,
-            targetPath,
-            signal,
-        });
-
-        if (signal.aborted) {
-            await fse.remove(targetPath).catch(() => {});
-            return;
-        }
-
-        await this.desktop.lib.fs.rename(targetPath, filePath);
-        onComplete();
     }
 
     public async execute({
@@ -432,17 +228,23 @@ class FileDownloadTask {
             const token = await this.desktop.service.auth.getToken();
             if (!token) {
             } else {
-                const supportsRange = await this.checkRangeSupport(file.url, token);
+                const supportsRange = await this.parallelDownloader.checkRangeSupport(
+                    file.url,
+                    token,
+                );
 
                 if (supportsRange) {
                     try {
-                        await this.executeParallelDownload({
-                            file,
-                            filePath,
+                        await this.parallelDownloader.download({
+                            url: file.url,
+                            savePath: filePath,
+                            fileSize: file.size,
+                            token,
                             signal,
-                            onComplete,
+                            maxChunks: 8,
                             onProgress,
                         });
+                        onComplete();
                         return;
                     } catch (err: any) {
                         if (signal.aborted || err.name === "AbortError") {
@@ -833,7 +635,7 @@ export class DownloadLib {
                 progress: 100,
             });
 
-            const mainWindow = this.desktop.window.main;
+            const mainWindow = this.desktop.window.main.window;
             if (mainWindow && data.root) {
                 this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
                     path: params.savePath,

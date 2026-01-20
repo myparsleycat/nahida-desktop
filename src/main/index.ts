@@ -24,7 +24,8 @@ import TransferService from "./services/transfer";
 import Mod from "./services/mod";
 import ArchiveService from "./services/archive";
 import { pathToFileURL } from "node:url";
-import GameBanana from "./lib/gb";
+import CustomDownloader from "./lib/custom-downloader";
+import { PathSelector } from "./lib/path-selector";
 
 if (IS_ELECTRON) {
     // Needs to be here, otherwise Chromium's FileSystemAccess API won't work. Waiting for the electron team to fix it.
@@ -58,7 +59,8 @@ export class NahidaDesktop {
         tray: Tray;
         crypto: CryptoLib;
         compressor: Compressor;
-        gb: GameBanana;
+        customDownloader: CustomDownloader;
+        pathSelector: PathSelector;
     };
 
     public service: {
@@ -86,7 +88,8 @@ export class NahidaDesktop {
             tray: new Tray(this),
             crypto: new CryptoLib(this),
             compressor: new Compressor(this),
-            gb: new GameBanana(this),
+            customDownloader: new CustomDownloader(this),
+            pathSelector: new PathSelector(this),
         };
         this.service = {
             auth: new Auth(this),

@@ -15,17 +15,10 @@ export const zstdDecompressAsync = promisify(zstdDecompress);
 
 export type TransferParams = UploadParams | DownloadParams;
 
-export interface PendingDownload {
-    id: string;
-    data: DownloadMetadata;
-    suggestedName?: string;
-}
-
 export class DriveService {
     private readonly desktop: NahidaDesktop;
     private readonly download: Download;
     private readonly upload: Upload;
-    private readonly pendingDownloads: Map<string, PendingDownload> = new Map();
 
     public constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
@@ -141,85 +134,52 @@ export class DriveService {
             suggestedName?: string;
             targetPath?: string;
         }) => {
-            if (!targetPath) {
-                const downloadId = nanoid();
+            try {
+                let savePath = targetPath;
 
-                if (!data) {
-                    const abortController = new AbortController();
-                    data = await this.download.getDownloadUrl(id, abortController.signal);
+                if (!savePath) {
+                    const result =
+                        await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(
+                            suggestedName,
+                        );
+                    if (!result.path) {
+                        this.desktop.logger.info(
+                            "Download cancelled by user selection",
+                            "Drive:Download",
+                        );
+                        return;
+                    }
+                    savePath = result.path;
                 }
 
-                this.pendingDownloads.set(downloadId, { id, data, suggestedName });
-
-                const mainWindow = this.desktop.window.main.window;
-                if (!mainWindow) {
-                    await this.desktop.window.main.createMainWindow();
+                const isWritable = this.desktop.lib.fs.isPathWritable(savePath);
+                if (!isWritable) {
+                    throw new Error(`Path is not writable: ${savePath}`);
                 }
 
-                this.desktop.window.main.focus();
+                const { pid, restartParams, abortController } =
+                    await this.createDownloadTransferEntry({
+                        id,
+                        savePath,
+                        suggestedName,
+                    });
 
-                this.desktop.ipc.postMessageToWindow(mainWindow!, "download:modeSelect", {
-                    downloadId,
+                this.processDownloadAsync({
+                    id,
+                    pid,
+                    restartParams,
+                    abortController,
+                    data,
                     suggestedName,
+                }).catch((err) => {
+                    this.desktop.logger.error(err, "Drive:Download:Preprocessing");
+                    this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
                 });
-                return;
+            } catch (error) {
+                console.error("Drive:Download:Error", error);
+                this.desktop.logger.error(error, "Drive:Download:Start");
+                throw error;
             }
-
-            const savePath = targetPath;
-            const isWritable = this.desktop.lib.fs.isPathWritable(savePath);
-            if (!isWritable) {
-                throw new Error("Path is not writable");
-            }
-
-            const { pid, restartParams, abortController } = await this.createDownloadTransferEntry({
-                id,
-                savePath,
-                suggestedName,
-            });
-
-            this.processDownloadAsync({
-                id,
-                pid,
-                restartParams,
-                abortController,
-                data,
-                suggestedName,
-            }).catch((err) => {
-                this.desktop.logger.error(err, "Drive:Download:Preprocessing");
-                this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
-            });
-        },
-
-        startDownloadWithPath: async (downloadId: string, targetPath: string) => {
-            const pending = this.pendingDownloads.get(downloadId);
-            if (!pending) {
-                throw new Error("Pending download not found");
-            }
-
-            this.pendingDownloads.delete(downloadId);
-
-            await this.fn.startDownload({
-                id: pending.id,
-                data: pending.data,
-                suggestedName: pending.suggestedName,
-                targetPath,
-            });
-        },
-
-        cancelPendingDownload: async (downloadId: string) => {
-            this.pendingDownloads.delete(downloadId);
-        },
-
-        selectPathForDownload: async (downloadId: string) => {
-            const pending = this.pendingDownloads.get(downloadId);
-            if (!pending) {
-                throw new Error("Pending download not found");
-            }
-
-            const savePath = await this.selectDownloadPath();
-            if (!savePath) return;
-
-            await this.fn.startDownloadWithPath(downloadId, savePath);
         },
 
         resumeTransfer: async (pid: string) => {

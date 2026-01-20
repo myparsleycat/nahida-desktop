@@ -11,35 +11,36 @@ import { FolderOpen, Grid3x3 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useModStore } from "@renderer/store/mod";
 
-interface DownloadModeDialogProps {
+interface PathSelectorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  downloadId: string;
+  selectionId: string;
   suggestedName?: string;
 }
 
-export function DownloadModeDialog({
+export function PathSelectorDialog({
   open,
   onOpenChange,
-  downloadId,
+  selectionId,
   suggestedName,
-}: DownloadModeDialogProps) {
+}: PathSelectorDialogProps) {
   const navi = useNavigate();
   const setDownloadMode = useModStore((s) => s.setDownloadMode);
 
   const handleFolderSelect = async () => {
-    await window.api.invoke("drive:fn:selectPathForDownload", downloadId);
+    await window.api.invoke("pathSelector:selectFolderPath", selectionId);
     onOpenChange(false);
   };
 
   const handleModManagerSelect = () => {
-    setDownloadMode({ downloadId, suggestedName });
+    // Navigate to mod page with download mode set
+    setDownloadMode({ downloadId: selectionId, suggestedName });
     navi({ to: "/mod" });
     onOpenChange(false);
   };
 
   const handleCancel = async () => {
-    await window.api.invoke("drive:fn:cancelPendingDownload", downloadId);
+    await window.api.invoke("pathSelector:cancel", selectionId);
     onOpenChange(false);
   };
 
@@ -47,10 +48,10 @@ export function DownloadModeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-112.5">
         <DialogHeader>
-          <DialogTitle>다운로드 경로 선택</DialogTitle>
+          <DialogTitle>경로 선택</DialogTitle>
           <DialogDescription>
             {suggestedName && `"${suggestedName}" `}
-            다운로드 경로를 선택하는 방법을 선택하세요.
+            경로를 선택하는 방법을 선택하세요.
           </DialogDescription>
         </DialogHeader>
 

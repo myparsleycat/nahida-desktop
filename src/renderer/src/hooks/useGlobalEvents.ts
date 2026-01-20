@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 export function useGlobalEvents(
-    onDownloadModeSelect?: (data: { downloadId: string; suggestedName?: string }) => void,
+    onPathSelectorModeSelect?: (data: { selectionId: string; suggestedName?: string }) => void,
 ) {
     const navi = useNavigate();
     const [listeners, setListeners] = useState<Map<string, () => void>>(new Map());
@@ -26,15 +26,15 @@ export function useGlobalEvents(
         });
         setListeners(new Map(listeners.set("fn:navi", removeNaviListener)));
 
-        const removeDownloadModeListener = window.api.on("download:modeSelect", (data) => {
-            if (onDownloadModeSelect) {
-                onDownloadModeSelect(data);
+        const removePathSelectorListener = window.api.on("pathSelector:modeSelect", (data) => {
+            if (onPathSelectorModeSelect) {
+                onPathSelectorModeSelect(data);
             }
         });
-        setListeners(new Map(listeners.set("download:modeSelect", removeDownloadModeListener)));
+        setListeners(new Map(listeners.set("pathSelector:modeSelect", removePathSelectorListener)));
 
         return () => {
             removeAllListeners();
         };
-    }, [onDownloadModeSelect]);
+    }, [onPathSelectorModeSelect]);
 }

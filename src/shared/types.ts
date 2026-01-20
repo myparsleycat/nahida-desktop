@@ -89,9 +89,6 @@ export type IpcHandlers = {
     "drive:delete:items": (ids: string[]) => void;
     "drive:fn:startDownload": (id: string) => void;
     "drive:fn:startUpload": (destId: string, paths: string[]) => void;
-    "drive:fn:startDownloadWithPath": (downloadId: string, targetPath: string) => void;
-    "drive:fn:cancelPendingDownload": (downloadId: string) => void;
-    "drive:fn:selectPathForDownload": (downloadId: string) => void;
 
     "transfer:list": () => TransferWithoutData[];
     "transfer:cancel": (pid: string) => void;
@@ -130,6 +127,10 @@ export type IpcHandlers = {
     "mod:enableAll": (groupPath: string) => void;
     "mod:disableAll": (groupPath: string) => void;
 
+    "pathSelector:selectFolderPath": (selectionId: string) => void;
+    "pathSelector:selectModManagerPath": (selectionId: string, path: string) => void;
+    "pathSelector:cancel": (selectionId: string) => void;
+
     "logger:log": (
         level: "info" | "debug" | "warn" | "error" | "trace" | "fatal",
         object: unknown,
@@ -150,8 +151,8 @@ export type IpcEvents = {
 
     "fn:toast": (message: string, data?: ToastData) => void;
     "fn:navi": (path: string) => void;
-    "download:modeSelect": (data: { downloadId: string; suggestedName?: string }) => void;
     "download:completed": (data: { path: string; name: string }) => void;
+    "pathSelector:modeSelect": (data: { selectionId: string; suggestedName?: string }) => void;
 };
 
 const akashaModIdGet = eden.akasha.content({ id: "" }).get;

@@ -25,16 +25,4 @@ export function registerDriveHandlers(d: NahidaDesktop) {
     rh("drive:fn:startUpload", async (destId, paths) => {
         return d.service.drive.fn.startUpload({ destId, paths });
     });
-
-    rh("drive:fn:startDownloadWithPath", async (downloadId, targetPath) => {
-        return await d.service.drive.fn.startDownloadWithPath(downloadId, targetPath);
-    });
-
-    rh("drive:fn:cancelPendingDownload", async (downloadId) => {
-        return await d.service.drive.fn.cancelPendingDownload(downloadId);
-    });
-
-    rh("drive:fn:selectPathForDownload", async (downloadId) => {
-        return await d.service.drive.fn.selectPathForDownload(downloadId);
-    });
 }
