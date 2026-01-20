@@ -132,12 +132,22 @@ export class Mod {
             const files = await fs.readdir(modPath);
             const imageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"];
             const videoExtensions = [".mp4", ".webm", ".avi", ".mkv", ".mov"];
+            const excludedKeywords = ["normal", "light", "material", "diffuse"];
 
-            const imageFiles = files.filter((file) =>
-                imageExtensions.some((ext) => file.toLowerCase().endsWith(ext)),
+            const isExcludedFile = (filename: string): boolean => {
+                const lowerFilename = filename.toLowerCase();
+                return excludedKeywords.some((keyword) => lowerFilename.includes(keyword));
+            };
+
+            const imageFiles = files.filter(
+                (file) =>
+                    imageExtensions.some((ext) => file.toLowerCase().endsWith(ext)) &&
+                    !isExcludedFile(file),
             );
-            const videoFiles = files.filter((file) =>
-                videoExtensions.some((ext) => file.toLowerCase().endsWith(ext)),
+            const videoFiles = files.filter(
+                (file) =>
+                    videoExtensions.some((ext) => file.toLowerCase().endsWith(ext)) &&
+                    !isExcludedFile(file),
             );
 
             // 프리뷰 붙은 영상
