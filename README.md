@@ -1,34 +1,44 @@
-# Nahida Desktop
+<br/>
+<p align="center">
+  <h3 align="center">Nahida Desktop</h3>
 
-An Electron application with React and TypeScript
+  <p align="center">
+    Desktop client for nahida.live
+    <br/>
+    <br/>
+  </p>
+</p>
 
-## Recommended IDE Setup
+### Installation and building
 
-- [VSCode](https://code.visualstudio.com/) + [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) + [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
+1. Clone repository
 
-## Project Setup
-
-### Install
-
-```bash
-$ pnpm install
+```sh
+git clone https://github.com/myparsleycat/nahida-desktop.git
 ```
 
-### Development
+2. Update dependencies
 
-```bash
-$ pnpm dev
+```sh
+cd nahida-desktop && pnpm install
 ```
 
-### Build
+3. Running a development build
 
-```bash
-# For windows
-$ pnpm build:win
+To run a development
 
-# For macOS
-$ pnpm build:mac
-
-# For Linux
-$ pnpm build:linux
+```sh
+pnpm dev
 ```
+
+4. Build
+
+```sh
+pnpm run build:win
+
+Building the client requires setting up signing and notarization. See "build/" directory and package.json key.
+```
+
+## License
+
+Distributed under the Apache-2.0 license.
