@@ -33,12 +33,27 @@ export class DriveService {
         this.upload = new Upload(this.desktop);
     }
 
+    private async makeMyDrive() {
+        const { data, error } = await eden.akasha.drive.my.post();
+        if (error) {
+            throw String(error);
+        }
+        return data;
+    }
+
     get = {
-        item: async (itemId: string) => {
+        item: async (itemId: string): Promise<any> => {
             const { data, error } = await eden.akasha.content({ id: itemId }).get();
+
             if (error) {
+                if (error.status === 404 && error.value === "user_drive_not_generated") {
+                    await this.makeMyDrive();
+                    return this.desktop.service.drive.get.item(itemId);
+                }
+
                 throw error;
             }
+
             return data;
         },
     };
