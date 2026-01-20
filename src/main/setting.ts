@@ -173,8 +173,8 @@ export class Setting {
             if (!qr) {
                 await db
                     .insert(setting)
-                    .values({ key: "mod_delete_archive_after_extract", value: "false" });
-                return false;
+                    .values({ key: "mod_delete_archive_after_extract", value: "true" });
+                return true;
             }
 
             return qr.value === "true";
@@ -198,8 +198,8 @@ export class Setting {
             if (!qr) {
                 await db
                     .insert(setting)
-                    .values({ key: "mod_move_folder_instead_of_copy", value: "false" });
-                return false;
+                    .values({ key: "mod_move_folder_instead_of_copy", value: "true" });
+                return true;
             }
 
             return qr.value === "true";
