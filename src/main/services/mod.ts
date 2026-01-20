@@ -1,7 +1,7 @@
 import { NahidaDesktop } from "..";
 import { trim } from "es-toolkit";
 import path from "path";
-import fs from "fs/promises";
+import fse from "fs-extra";
 import { eq } from "drizzle-orm";
 import { db } from "../internal/db";
 import { gamePaths, modPresets, setting } from "../internal/db/schema";
@@ -54,7 +54,7 @@ export class Mod {
     private async parseIni(iniPath: string): Promise<ToggleKey[]> {
         try {
             const iniFileName = path.basename(iniPath);
-            const content = await fs.readFile(iniPath, "utf-8");
+            const content = await fse.readFile(iniPath, "utf-8");
             const toggleKeys: ToggleKey[] = [];
             const lines = content.split("\n");
 
@@ -129,7 +129,7 @@ export class Mod {
 
     private async findPreview(modPath: string): Promise<string | null> {
         try {
-            const files = await fs.readdir(modPath);
+            const files = await fse.readdir(modPath);
             const imageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"];
             const videoExtensions = [".mp4", ".webm", ".avi", ".mkv", ".mov"];
             const excludedKeywords = ["normal", "light", "material", "diffuse"];
@@ -184,7 +184,7 @@ export class Mod {
             const folderName = path.basename(modPath);
             const isEnabled = this.isModEnabled(folderName);
 
-            const files = await fs.readdir(modPath);
+            const files = await fse.readdir(modPath);
             const iniFiles = files.filter(
                 (f) => f.toLowerCase().endsWith(".ini") && !f.toLowerCase().startsWith("disabled"),
             );
@@ -242,14 +242,14 @@ export class Mod {
             }
 
             try {
-                const groupFolders = await fs.readdir(modFolderPath, { withFileTypes: true });
+                const groupFolders = await fse.readdir(modFolderPath, { withFileTypes: true });
                 const groups: FolderGroup[] = [];
 
                 for (const groupFolder of groupFolders) {
                     if (!groupFolder.isDirectory()) continue;
 
                     const groupPath = path.join(modFolderPath, groupFolder.name);
-                    const modFolders = await fs.readdir(groupPath, { withFileTypes: true });
+                    const modFolders = await fse.readdir(groupPath, { withFileTypes: true });
 
                     const mods: ModInfo[] = [];
                     for (const modFolder of modFolders) {
@@ -282,7 +282,7 @@ export class Mod {
         scanGroup: async (groupPath: string): Promise<FolderGroup> => {
             try {
                 const groupName = path.basename(groupPath);
-                const modFolders = await fs.readdir(groupPath, { withFileTypes: true });
+                const modFolders = await fse.readdir(groupPath, { withFileTypes: true });
 
                 const mods: ModInfo[] = [];
                 for (const modFolder of modFolders) {
@@ -351,11 +351,11 @@ export class Mod {
                 const newPath = path.join(path.dirname(modPath), newFolderName);
 
                 try {
-                    await fs.access(newPath);
+                    await fse.access(newPath);
                     throw new Error(`ALREADY_EXISTS:${newFolderName}`);
                 } catch (error: any) {
                     if (error.code === "ENOENT") {
-                        await fs.rename(modPath, newPath);
+                        await fse.rename(modPath, newPath);
                         return newPath;
                     }
                     throw error;
@@ -374,11 +374,11 @@ export class Mod {
                 const newPath = path.join(path.dirname(modPath), newFolderName);
 
                 try {
-                    await fs.access(newPath);
+                    await fse.access(newPath);
                     throw new Error(`ALREADY_EXISTS:${newFolderName}`);
                 } catch (error: any) {
                     if (error.code === "ENOENT") {
-                        await fs.rename(modPath, newPath);
+                        await fse.rename(modPath, newPath);
                         return newPath;
                     }
                     throw error;
@@ -406,7 +406,7 @@ export class Mod {
             value: string,
         ): Promise<void> => {
             try {
-                const content = await fs.readFile(iniPath, "utf-8");
+                const content = await fse.readFile(iniPath, "utf-8");
                 const lines = content.split("\n");
                 const newLines: string[] = [];
 
@@ -431,7 +431,7 @@ export class Mod {
                 }
 
                 if (updated) {
-                    await fs.writeFile(iniPath, newLines.join("\n"), "utf-8");
+                    await fse.writeFile(iniPath, newLines.join("\n"), "utf-8");
                 }
             } catch (error) {
                 this.desktop.logger.error(error, `Mod:updateToggleKey:${iniPath}`);
@@ -478,7 +478,7 @@ export class Mod {
                     let actualModPath: string | null = null;
 
                     try {
-                        await fs.access(modPath);
+                        await fse.access(modPath);
                         actualModPath = modPath;
                     } catch {
                         let alternativePath: string;
@@ -491,7 +491,7 @@ export class Mod {
                         }
 
                         try {
-                            await fs.access(alternativePath);
+                            await fse.access(alternativePath);
                             actualModPath = alternativePath;
                         } catch {
                             this.desktop.logger.warn(
