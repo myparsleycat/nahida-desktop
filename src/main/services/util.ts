@@ -7,7 +7,6 @@ import {
     BrowserWindow,
     clipboard,
 } from "electron";
-import trs from "trash";
 
 export type ShowModalReturnValue = ReturnType<typeof dialog.showMessageBox>;
 
@@ -39,7 +38,7 @@ export function openPath(path: string) {
 }
 
 export async function trash(path: string) {
-    await trs(path);
+    await shell.trashItem(path);
     return;
 }
 

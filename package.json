@@ -52,7 +52,6 @@
         "parse-sse": "^0.1.0",
         "pino": "^10.2.0",
         "rotating-file-stream": "^3.2.7",
-        "trash": "^10.0.1",
         "undici": "^7.18.2",
         "valdex": "^1.0.4",
         "validator": "^13.15.26",
