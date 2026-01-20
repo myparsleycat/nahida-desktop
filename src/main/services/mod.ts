@@ -154,6 +154,7 @@ export class Mod {
                         cwd: modPath,
                         onlyFiles: true,
                         caseSensitiveMatch: false,
+                        dot: true,
                     },
                 );
             }
