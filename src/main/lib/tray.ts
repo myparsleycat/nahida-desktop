@@ -17,7 +17,7 @@ export class TrayManager {
                 label: "Check Update",
                 type: "normal",
                 click: async () => {
-                    await this.desktop.updater.checkForUpdates();
+                    await this.desktop.updater.checkForUpdates(true);
                 },
             },
             {

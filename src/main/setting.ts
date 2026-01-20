@@ -160,7 +160,7 @@ export class Setting {
         },
 
         checkUpdate: async () => {
-            await this.desktop.updater.checkForUpdates();
+            await this.desktop.updater.checkForUpdates(true);
         },
     };
 }

@@ -1,7 +1,7 @@
 import updaterPkg from "electron-updater";
 const { autoUpdater } = updaterPkg; // esm support
 import { serializeError } from "./utils";
-import { BrowserWindow, app, dialog } from "electron";
+import { BrowserWindow, app, dialog, Notification } from "electron";
 import ProgressBar from "electron-progressbar";
 import { convert } from "html-to-text";
 import isDev from "./isDev";
@@ -14,6 +14,9 @@ autoUpdater.disableDifferentialDownload = true;
 autoUpdater.autoRunAppAfterInstall = true;
 autoUpdater.allowPrerelease = false;
 autoUpdater.disableWebInstaller = true;
+if (isDev) {
+    autoUpdater.forceDevUpdateConfig = true;
+}
 
 export class Updater {
     private readonly desktop: NahidaDesktop;
@@ -21,6 +24,7 @@ export class Updater {
     public updateAvailable: boolean = false;
     private interval: ReturnType<typeof setInterval> | undefined = undefined;
     private progressBar: ProgressBar | null = null;
+    private isManualCheck: boolean = false;
 
     public constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
@@ -29,6 +33,12 @@ export class Updater {
     public initialize(): void {
         autoUpdater.on("checking-for-update", () => {
             this.desktop.logger.log("info", "Checking for update");
+            if (this.isManualCheck) {
+                new Notification({
+                    title: "Nahida Desktop",
+                    body: "업데이트 확인중...",
+                }).show();
+            }
         });
 
         autoUpdater.on("download-progress", (progress) => {
@@ -94,6 +104,13 @@ export class Updater {
             this.updateAvailable = false;
 
             this.desktop.logger.log("info", "No update available");
+
+            if (this.isManualCheck) {
+                new Notification({
+                    title: "Nahida Desktop",
+                    body: "지금은 업데이트가 없습니다",
+                }).show();
+            }
         });
 
         autoUpdater.on("update-downloaded", (info) => {
@@ -139,7 +156,8 @@ export class Updater {
         }, 3600000);
     }
 
-    public async checkForUpdates(): Promise<void> {
+    public async checkForUpdates(manual: boolean = false): Promise<void> {
+        this.isManualCheck = manual;
         await autoUpdater.checkForUpdates();
     }
 
