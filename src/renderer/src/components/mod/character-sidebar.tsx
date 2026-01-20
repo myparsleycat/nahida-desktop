@@ -1,20 +1,20 @@
-import { Search, HelpCircle, Terminal, Settings, MoreHorizontal, Folder } from "lucide-react";
+import { Search } from "lucide-react";
 import { Input } from "@renderer/components/ui/input";
-import { cn } from "@renderer/lib/utils";
 import { ScrollArea } from "../ui/scroll-area";
-import { Skeleton } from "@renderer/components/ui/skeleton";
 import type { FolderGroup } from "@renderer/types/mod";
 import { useRef, useState } from "react";
 import { filter } from "es-toolkit/compat";
 
 import { useModStore } from "@renderer/store/mod";
+import { CharacterSidebarItem, CharacterSidebarItemSkeleton } from "./character-sidebar-item";
 
 interface CharacterSidebarProps {
   groups: FolderGroup[];
   isLoading?: boolean;
+  onModDrop: (files: File[], groupPath: string) => void;
 }
 
-export function CharacterSidebar({ groups, isLoading = false }: CharacterSidebarProps) {
+export function CharacterSidebar({ groups, isLoading = false, onModDrop }: CharacterSidebarProps) {
   const selectedGroup = useModStore((s) => s.selectedGroup);
   const setSelectedGroup = useModStore((s) => s.setSelectedGroup);
   const [searchTerm, setSearchTerm] = useState("");
@@ -59,61 +59,20 @@ export function CharacterSidebar({ groups, isLoading = false }: CharacterSidebar
         <div className="flex flex-col">
           {isLoading
             ? Array.from({ length: 8 }).map((_, index) => (
-                <div
-                  key={index}
-                  className="w-full grid items-center gap-3 pl-2 pr-4 py-2"
-                  style={{ gridTemplateColumns: "auto 1fr auto" }}
-                >
-                  <Skeleton className="w-10 h-10 rounded-full" />
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-8" />
-                </div>
+                <CharacterSidebarItemSkeleton key={index} />
               ))
             : filteredGroups.map((group) => (
-                <button
+                <CharacterSidebarItem
                   key={group.name}
                   ref={(el) => {
                     if (el) itemRefs.current.set(group.name, el);
                     else itemRefs.current.delete(group.name);
                   }}
+                  group={group}
+                  isSelected={selectedGroup === group.name}
                   onClick={() => handleSelect(group.name)}
-                  className={cn(
-                    "w-full grid grid-columns-[auto_1fr_auto] items-center gap-3 pl-2 pr-4 py-2 hover:bg-[#cecece] dark:hover:bg-[#2a2a2a]",
-                    selectedGroup === group.name && "dark:bg-[#2a2a2a] bg-[#cecece]",
-                  )}
-                  style={{ gridTemplateColumns: "auto 1fr auto" }}
-                >
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 overflow-hidden">
-                    {group.preview ? (
-                      group.preview.toLowerCase().match(/\.(mp4|webm|avi|mkv|mov)$/) ? (
-                        <video
-                          src={`local://${group.preview}`}
-                          className="w-full h-full object-cover"
-                          autoPlay
-                          loop
-                          muted
-                          playsInline
-                        />
-                      ) : (
-                        <img
-                          src={`local://${group.preview}`}
-                          alt={group.name}
-                          className="w-full h-full object-cover"
-                          decoding="async"
-                          loading="lazy"
-                        />
-                      )
-                    ) : (
-                      <span className="text-lg font-bold text-center">?</span>
-                    )}
-                  </div>
-                  <span className="text-left text-sm text-foreground truncate min-w-0">
-                    {group.name}
-                  </span>
-                  <span className="text-sm text-muted-foreground shrink-0">
-                    {group.mods.length}
-                  </span>
-                </button>
+                  onDrop={(files) => onModDrop(files, group.path)}
+                />
               ))}
         </div>
       </ScrollArea>

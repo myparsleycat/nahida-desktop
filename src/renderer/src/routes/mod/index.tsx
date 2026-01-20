@@ -89,8 +89,14 @@ function RouteComponent() {
   useDownloadCompletionHandler(selectedGame, queryClient);
 
   const selectedGroupData = groups.find((g) => g.name === selectedGroup);
-  const { isDragging, handleDragEnter, handleDragLeave, handleDragOver, handleDrop } =
-    useModDragDrop(selectedGroupData?.path, queryClient, selectedGame || "");
+  const {
+    isDragging,
+    handleDragEnter,
+    handleDragLeave,
+    handleDragOver,
+    handleDrop,
+    handleFilesDrop,
+  } = useModDragDrop(selectedGroupData?.path, queryClient, selectedGame || "");
 
   useEffect(() => {
     const initGame = async () => {
@@ -184,7 +190,11 @@ function RouteComponent() {
       <div className="flex-1 flex overflow-hidden h-full">
         <div className="border-r h-full flex flex-col w-64">
           <div className="flex-1 overflow-y-auto h-full">
-            <CharacterSidebar groups={groups} isLoading={isGroupsLoading} />
+            <CharacterSidebar
+              groups={groups}
+              isLoading={isGroupsLoading}
+              onModDrop={handleFilesDrop}
+            />
           </div>
 
           <GamePresetSelector

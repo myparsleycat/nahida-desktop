@@ -56,22 +56,9 @@ export function useModDragDrop(
             setIsDragging(true);
         }
     };
-    const handleDrop = async (e: React.DragEvent) => {
-        console.log("handleDrop Triggered");
-
-        if (!e.dataTransfer?.types.includes("Files")) return;
-
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragging(false);
-
-        if (!groupPath) {
-            toast.error("그룹 경로가 설정되지 않았습니다.");
-            return;
-        }
-
-        const files = Array.from(e.dataTransfer.files);
-        if (files.length === 0) {
+    const handleFilesDrop = async (files: File[], targetPath: string) => {
+        if (!targetPath) {
+            toast.error("대상 경로가 설정되지 않았습니다.");
             return;
         }
 
@@ -85,7 +72,7 @@ export function useModDragDrop(
                 }
 
                 if (isArchive(filePath)) {
-                    toast.promise(window.api.invoke("mod:extractArchive", filePath, groupPath), {
+                    toast.promise(window.api.invoke("mod:extractArchive", filePath, targetPath), {
                         loading: `${file.name} 압축 해제 중...`,
                         success: () => {
                             queryClient.invalidateQueries({ queryKey: ["mods", game] });
@@ -101,7 +88,7 @@ export function useModDragDrop(
                         },
                     });
                 } else {
-                    toast.promise(window.api.invoke("mod:copyFolder", filePath, groupPath), {
+                    toast.promise(window.api.invoke("mod:copyFolder", filePath, targetPath), {
                         loading: `${file.name} 처리 중...`,
                         success: () => {
                             queryClient.invalidateQueries({ queryKey: ["mods", game] });
@@ -124,11 +111,34 @@ export function useModDragDrop(
         }
     };
 
+    const handleDrop = async (e: React.DragEvent) => {
+        console.log("handleDrop Triggered");
+
+        if (!e.dataTransfer?.types.includes("Files")) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+
+        if (!groupPath) {
+            toast.error("그룹 경로가 설정되지 않았습니다.");
+            return;
+        }
+
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length === 0) {
+            return;
+        }
+
+        await handleFilesDrop(files, groupPath);
+    };
+
     return {
         isDragging,
         handleDragEnter,
         handleDragLeave,
         handleDragOver,
         handleDrop,
+        handleFilesDrop,
     };
 }
