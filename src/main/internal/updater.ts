@@ -173,10 +173,10 @@ export class Updater {
         app.removeAllListeners("window-all-closed");
         app.removeAllListeners("will-quit");
 
-        this.desktop.window.main?.removeAllListeners("close");
-        this.desktop.window.main?.removeAllListeners("show");
-        this.desktop.window.main?.removeAllListeners("minimize");
-        this.desktop.window.main?.removeAllListeners("maximize");
+        this.desktop.window.main.window?.removeAllListeners("close");
+        this.desktop.window.main.window?.removeAllListeners("show");
+        this.desktop.window.main.window?.removeAllListeners("minimize");
+        this.desktop.window.main.window?.removeAllListeners("maximize");
 
         try {
             for (const window of BrowserWindow.getAllWindows()) {

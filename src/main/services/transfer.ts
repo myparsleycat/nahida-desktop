@@ -61,7 +61,7 @@ export class TransferService {
             } = t;
             return rest;
         });
-        this.desktop.window.main?.webContents.send("transfer:update", safeTransfers);
+        this.desktop.window.main.window?.webContents.send("transfer:update", safeTransfers);
     }
 
     public getAllTransfer() {
@@ -140,9 +140,9 @@ export class TransferService {
         this.checkSettingAndChangePowerSaveBlock();
         this.emitUpdate();
 
-        if (this.desktop.window.main) {
+        if (this.desktop.window.main.window) {
             this.desktop.ipc.postMessageToWindow(
-                this.desktop.window.main,
+                this.desktop.window.main.window,
                 "fn:toast",
                 "전송이 시작되었습니다",
                 {
@@ -154,7 +154,7 @@ export class TransferService {
                 await this.desktop.setting.general.getMoveTransferPageWhenStartTransfer();
             if (moveTransferPageWhenStartTransfer) {
                 this.desktop.ipc.postMessageToWindow(
-                    this.desktop.window.main,
+                    this.desktop.window.main.window,
                     "fn:navi",
                     "/transfer",
                 );
