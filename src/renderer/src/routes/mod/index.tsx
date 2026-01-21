@@ -132,7 +132,7 @@ function RouteComponent() {
     }
   };
 
-  const handleDownloadConfirm = async () => {
+  const handleDownloadConfirm = async (fileName: string) => {
     if (!downloadMode || !selectedGroup) return;
 
     const selectedGroupData = groups.find((g) => g.name === selectedGroup);
@@ -143,6 +143,7 @@ function RouteComponent() {
         "pathSelector:selectModManagerPath",
         downloadMode.downloadId,
         selectedGroupData.path,
+        fileName,
       );
 
       setDownloadMode(null);

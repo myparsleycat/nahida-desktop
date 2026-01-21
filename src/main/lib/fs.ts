@@ -55,6 +55,11 @@ export class FS {
         return fse.stat(path);
     }
 
+    public sanitizeWindowsFilename(input: string) {
+        const reservedChars = /[<>:"\/\\|?*]/g;
+        return input.replace(reservedChars, "_");
+    }
+
     public async readdirRecursive(
         dirPath: string,
         options: ReaddirOptions & { mode: "tree" },

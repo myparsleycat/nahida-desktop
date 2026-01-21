@@ -128,7 +128,11 @@ export type IpcHandlers = {
     "mod:disableAll": (groupPath: string) => void;
 
     "pathSelector:selectFolderPath": (selectionId: string) => void;
-    "pathSelector:selectModManagerPath": (selectionId: string, path: string) => void;
+    "pathSelector:selectModManagerPath": (
+        selectionId: string,
+        path: string,
+        fileName?: string,
+    ) => void;
     "pathSelector:cancel": (selectionId: string) => void;
 
     "logger:log": (

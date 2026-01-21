@@ -7,6 +7,7 @@ export type PathSelectorMode = "folder" | "modManager";
 export interface PathSelectorResult {
     mode: PathSelectorMode;
     path: string | null;
+    fileName?: string;
 }
 
 export interface PendingPathSelection {
@@ -91,13 +92,17 @@ export class PathSelector {
         this.pendingSelections.delete(selectionId);
     }
 
-    public async selectModManagerPath(selectionId: string, path: string): Promise<void> {
+    public async selectModManagerPath(
+        selectionId: string,
+        path: string,
+        fileName?: string,
+    ): Promise<void> {
         const pending = this.pendingSelections.get(selectionId);
         if (!pending) {
             throw new Error("Pending selection not found");
         }
 
-        pending.resolve({ mode: "modManager", path });
+        pending.resolve({ mode: "modManager", path, fileName });
         this.pendingSelections.delete(selectionId);
     }
 

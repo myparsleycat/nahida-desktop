@@ -6,9 +6,12 @@ export function registerPathSelectorHandlers() {
         return desktop.lib.pathSelector.selectFolderPath(selectionId);
     });
 
-    ipcMain.handle("pathSelector:selectModManagerPath", async (_event, selectionId, path) => {
-        return desktop.lib.pathSelector.selectModManagerPath(selectionId, path);
-    });
+    ipcMain.handle(
+        "pathSelector:selectModManagerPath",
+        async (_event, selectionId, path, fileName) => {
+            return desktop.lib.pathSelector.selectModManagerPath(selectionId, path, fileName);
+        },
+    );
 
     ipcMain.handle("pathSelector:cancel", async (_event, selectionId) => {
         return desktop.lib.pathSelector.cancelSelection(selectionId);

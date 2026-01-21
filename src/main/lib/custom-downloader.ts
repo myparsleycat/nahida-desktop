@@ -7,6 +7,7 @@ import { nanoid } from "nanoid";
 import { TransferData } from "@shared/types";
 import { throttle } from "es-toolkit";
 import path from "node:path";
+import { Notification } from "electron";
 
 export class CustomDownloader {
     public desktop: NahidaDesktop;
@@ -74,26 +75,35 @@ export class CustomDownloader {
         title: string;
         previewUrl?: string | null;
     }) {
-        const { title, fileUrl, previewUrl } = props;
-        const result = await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(title);
+        const { title: _title, fileUrl, previewUrl } = props;
+        const title = this.desktop.lib.fs.sanitizeWindowsFilename(_title);
 
-        if (!result.path) {
-            return;
-        }
-
-        const resp = await ky.head(fileUrl, {
+        const respPromise = ky.head(fileUrl, {
             redirect: "follow",
             throwHttpErrors: false,
         });
+
+        new Notification({
+            title: "다운로드 준비중",
+            body: "다운로드 URL을 가져오고 있습니다...",
+        }).show();
+
+        const resp = await respPromise;
+
         if (!resp.ok) {
             throw new Error(`Failed to get real file URL: ${resp.statusText}`);
         }
 
         const realFileUrl = resp.url;
-        const fileName = realFileUrl.split("/").pop() || "unknown";
-        const rootName = title + " - " + fileName;
-        const savePath = path.join(result.path, rootName);
         const fileSize = Number(resp.headers.get("Content-Length"));
+        const suggestedFileName = realFileUrl.split("/").pop() || _title;
+
+        const result =
+            await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(suggestedFileName);
+        if (!result.path) return;
+
+        const finalFileName = result.fileName || suggestedFileName;
+        const savePath = path.join(result.path, finalFileName);
 
         const pid = nanoid();
         const abortController = new AbortController();
@@ -102,14 +112,14 @@ export class CustomDownloader {
             root: {
                 id: pid,
                 parentId: null,
-                name: rootName,
+                name: finalFileName,
             },
             files: [
                 {
                     id: pid,
                     fileId: pid,
                     parentId: pid,
-                    name: fileName,
+                    name: finalFileName,
                     size: fileSize,
                     compAlg: null,
                     url: realFileUrl,
@@ -118,16 +128,15 @@ export class CustomDownloader {
             dirs: [],
         };
 
-        await this.desktop.service.transfer.createTransfer(
+        await this.desktop.service.transfer.createTransfer({
             pid,
-            "download",
-            transferData,
+            type: "download",
+            data: transferData,
             abortController,
-            title,
-            null,
-            "pending",
-            result.path,
-        );
+            name: finalFileName,
+            initialStatus: "pending",
+            path: result.path,
+        });
 
         this.desktop.service.transfer.registerRunner(pid, async () => {
             try {
@@ -184,7 +193,7 @@ export class CustomDownloader {
                 if (mainWindow) {
                     this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
                         path: result.path!,
-                        name: rootName,
+                        name: finalFileName,
                     });
                 }
 
@@ -192,7 +201,7 @@ export class CustomDownloader {
                     await previewPromise;
                     this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
                         path: result.path!,
-                        name: rootName,
+                        name: finalFileName,
                         disableToast: true,
                     });
                 }
@@ -212,7 +221,8 @@ export class CustomDownloader {
     }
 
     public async HuiDownloader(props: { fileUrl: string; title: string }) {
-        const { title, fileUrl } = props;
+        const { title: _title, fileUrl } = props;
+        const title = this.desktop.lib.fs.sanitizeWindowsFilename(_title);
         const result = await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(title);
 
         if (!result.path) {
@@ -227,7 +237,8 @@ export class CustomDownloader {
             throw new Error(`Failed to get real file URL: ${resp.statusText}`);
         }
 
-        const savePath = path.join(result.path, title);
+        const finalFileName = result.fileName || title;
+        const savePath = path.join(result.path, finalFileName);
         const fileSize = Number(resp.headers.get("Content-Length"));
 
         const pid = nanoid();
@@ -237,14 +248,14 @@ export class CustomDownloader {
             root: {
                 id: pid,
                 parentId: null,
-                name: title,
+                name: finalFileName,
             },
             files: [
                 {
                     id: pid,
                     fileId: pid,
                     parentId: pid,
-                    name: title,
+                    name: finalFileName,
                     size: fileSize,
                     compAlg: null,
                     url: fileUrl,
@@ -253,16 +264,15 @@ export class CustomDownloader {
             dirs: [],
         };
 
-        await this.desktop.service.transfer.createTransfer(
+        await this.desktop.service.transfer.createTransfer({
             pid,
-            "download",
-            transferData,
+            type: "download",
+            data: transferData,
             abortController,
-            title,
-            null,
-            "pending",
-            result.path,
-        );
+            name: title,
+            initialStatus: "pending",
+            path: result.path,
+        });
 
         this.desktop.service.transfer.registerRunner(pid, async () => {
             try {
@@ -306,7 +316,7 @@ export class CustomDownloader {
                 if (mainWindow) {
                     this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
                         path: result.path!,
-                        name: fileUrl,
+                        name: finalFileName,
                     });
                 }
             } catch (err: any) {
