@@ -21,7 +21,7 @@ import Tray from "./lib/tray";
 import CryptoLib from "./lib/crypto";
 import Compressor from "./lib/compressor";
 import TransferService from "./services/transfer";
-import Mod from "./services/mod";
+import ModManager from "./services/mod-manager";
 import ArchiveService from "./services/archive";
 import { pathToFileURL } from "node:url";
 import CustomDownloader from "./lib/custom-downloader";
@@ -67,7 +67,7 @@ export class NahidaDesktop {
         auth: Auth;
         drive: DriveService;
         transfer: TransferService;
-        mod: Mod;
+        mod: ModManager;
         archive: ArchiveService;
     };
 
@@ -95,7 +95,7 @@ export class NahidaDesktop {
             auth: new Auth(this),
             drive: new DriveService(this),
             transfer: new TransferService(this),
-            mod: new Mod(this),
+            mod: new ModManager(this),
             archive: new ArchiveService(this),
         };
     }

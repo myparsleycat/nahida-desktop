@@ -42,10 +42,10 @@ interface ModInfo {
     isEnabled: boolean;
     toggleKeys: ToggleKey[];
     preview?: string;
-    ini?: {
+    inis: {
         name: string;
         path: string;
-    };
+    }[];
 }
 
 interface FolderGroup {
@@ -62,7 +62,7 @@ interface Preset {
     mods: string[];
 }
 
-export class Mod {
+export class ModManager {
     private desktop: NahidaDesktop;
 
     constructor(desktop: NahidaDesktop) {
@@ -233,20 +233,10 @@ export class Mod {
 
             const preview = await this.findPreview(modPath, files);
 
-            let selectedIni: string | undefined;
-            if (iniFiles.length > 0) {
-                const mergedIni = iniFiles.find(
-                    (f) => f.toLowerCase().replace(".ini", "") === "merged",
-                );
-                selectedIni = mergedIni || iniFiles[0];
-            }
-
-            const ini = selectedIni
-                ? {
-                      name: selectedIni,
-                      path: path.join(modPath, selectedIni),
-                  }
-                : undefined;
+            const inis = iniFiles.map((iniFile) => ({
+                name: iniFile,
+                path: path.join(modPath, iniFile),
+            }));
 
             return {
                 name: folderName,
@@ -254,7 +244,7 @@ export class Mod {
                 isEnabled,
                 toggleKeys,
                 preview: preview || undefined,
-                ini,
+                inis,
             };
         } catch (error) {
             this.desktop.logger.error(error, `Mod:scanModFolder:${modPath}`);
@@ -723,4 +713,4 @@ export class Mod {
     };
 }
 
-export default Mod;
+export default ModManager;
