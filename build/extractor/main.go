@@ -42,13 +42,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	targetPath, err := extractArchive(archivePath, outputDir)
+	resultPath, err := extractArchive(archivePath, outputDir)
 	if err != nil {
 		sendError("ExtractionFailed", err.Error())
 		os.Exit(1)
 	}
 
-	fmt.Print(targetPath)
+	fmt.Print(resultPath)
 	os.Exit(0)
 }
 
@@ -86,32 +86,42 @@ func extractArchive(archivePath, outputDir string) (string, error) {
 		return "", fmt.Errorf("failed to read temp directory: %v", err)
 	}
 
-	var targetDir string
-	if len(entries) > 1 {
-		filename := filepath.Base(absArchive)
-		ext := filepath.Ext(filename)
-		stem := strings.TrimSuffix(filename, ext)
-		targetDir = filepath.Join(absOutput, stem)
-
-		if err := os.MkdirAll(targetDir, 0755); err != nil {
-			return "", fmt.Errorf("failed to create specific directory: %v", err)
-		}
-	} else if len(entries) == 1 {
-		targetDir = absOutput
-	} else {
+	if len(entries) == 0 {
 		return absOutput, nil
 	}
 
-	for _, entry := range entries {
+	var finalPath string
+	if len(entries) == 1 {
+		entry := entries[0]
 		srcPath := filepath.Join(tempDir, entry.Name())
-		dstPath := filepath.Join(targetDir, entry.Name())
+		dstPath := filepath.Join(absOutput, entry.Name())
 
 		if err := os.Rename(srcPath, dstPath); err != nil {
-			return "", fmt.Errorf("failed to move file from temp to target: %v", err)
+			return "", fmt.Errorf("failed to move single entry: %v", err)
 		}
+
+		finalPath = dstPath
+	} else {
+		filename := filepath.Base(absArchive)
+		ext := filepath.Ext(filename)
+		stem := strings.TrimSuffix(filename, ext)
+		targetDir := filepath.Join(absOutput, stem)
+
+		if err := os.MkdirAll(targetDir, 0755); err != nil {
+			return "", fmt.Errorf("failed to create wrapper directory: %v", err)
+		}
+
+		for _, entry := range entries {
+			srcPath := filepath.Join(tempDir, entry.Name())
+			dstPath := filepath.Join(targetDir, entry.Name())
+			if err := os.Rename(srcPath, dstPath); err != nil {
+				return "", fmt.Errorf("failed to move files to wrapper: %v", err)
+			}
+		}
+		finalPath = targetDir
 	}
 
-	return targetDir, nil
+	return finalPath, nil
 }
 
 func sendError(errorType, message string) {
