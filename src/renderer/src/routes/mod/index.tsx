@@ -132,7 +132,7 @@ function RouteComponent() {
     }
   };
 
-  const handleDownloadConfirm = async (fileName: string) => {
+  const handleDownloadConfirm = async (fileName?: string) => {
     if (!downloadMode || !selectedGroup) return;
 
     const selectedGroupData = groups.find((g) => g.name === selectedGroup);

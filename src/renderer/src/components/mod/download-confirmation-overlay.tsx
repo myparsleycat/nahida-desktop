@@ -7,7 +7,7 @@ interface DownloadConfirmationOverlayProps {
   selectedPath: string | null;
   selectedGroupName: string | null;
   suggestedName?: string;
-  onConfirm: (fileName: string) => void;
+  onConfirm: (fileName?: string) => void;
   onCancel: () => void;
 }
 
@@ -25,8 +25,12 @@ export function DownloadConfirmationOverlay({
   }, [suggestedName]);
 
   const handleConfirm = () => {
-    if (fileName.trim()) {
-      onConfirm(fileName.trim());
+    if (suggestedName) {
+      if (fileName.trim()) {
+        onConfirm(fileName.trim());
+      }
+    } else {
+      onConfirm(undefined);
     }
   };
 
@@ -83,7 +87,7 @@ export function DownloadConfirmationOverlay({
             </Button>
             <Button
               onClick={handleConfirm}
-              disabled={!selectedPath || !fileName.trim()}
+              disabled={!selectedPath || (suggestedName ? !fileName.trim() : false)}
               className="flex-1"
             >
               <Download className="size-4 mr-2" />
