@@ -1,6 +1,6 @@
 import { createFileRoute, useLocation } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useViewStore } from "@renderer/store/drive";
+import { useViewStore, viewStore } from "@renderer/store/drive";
 import { useEffect, useMemo } from "react";
 import { commonSort } from "@renderer/lib/utils";
 import { disassemble, getChoseong } from "es-hangul";
@@ -63,6 +63,13 @@ function RouteComponent() {
   useEffect(() => {
     if (searchInDirQuery) {
       setSearchInDirQuery("");
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (id) {
+      const setLastShareId = viewStore.getState().setLastShareId;
+      setLastShareId(id);
     }
   }, [id]);
 

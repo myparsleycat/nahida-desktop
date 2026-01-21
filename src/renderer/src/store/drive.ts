@@ -14,6 +14,10 @@ interface ViewState {
     setSearchInDirQuery: (query: string) => void;
     isfocusSearchInput: boolean;
     setFocusSearchInputState: (state: boolean) => void;
+    lastDriveId: string;
+    setLastDriveId: (id: string) => void;
+    lastShareId: string;
+    setLastShareId: (id: string) => void;
 }
 
 export const viewStore = createStore<ViewState>((set) => ({
@@ -25,6 +29,10 @@ export const viewStore = createStore<ViewState>((set) => ({
     setSearchInDirQuery: (searchInDirQuery) => set({ searchInDirQuery }),
     isfocusSearchInput: false,
     setFocusSearchInputState: (isfocusSearchInput) => set({ isfocusSearchInput }),
+    lastDriveId: "root",
+    setLastDriveId: (lastDriveId) => set({ lastDriveId }),
+    lastShareId: "share",
+    setLastShareId: (lastShareId) => set({ lastShareId }),
 }));
 
 export function useViewStore<T>(selector: (state: ViewState) => T): T {

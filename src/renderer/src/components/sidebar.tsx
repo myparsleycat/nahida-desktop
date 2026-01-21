@@ -11,6 +11,7 @@ import { cn } from "@renderer/lib/utils";
 import { Button } from "./ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { Separator } from "./ui/separator";
+import { viewStore } from "@renderer/store/drive";
 
 export function Sidebar({ className }: { className?: string }) {
   const navi = useNavigate();
@@ -35,7 +36,6 @@ export function Sidebar({ className }: { className?: string }) {
                 onClick={() => {
                   navi({ to: "/transfer" });
                 }}
-                isActive={location.pathname.startsWith("/transfer")}
               >
                 <ArrowUpDownIcon className={cn(iconSize)} />
               </Button>
@@ -52,6 +52,15 @@ export function Sidebar({ className }: { className?: string }) {
                 size="icon"
                 onPointerDown={handlePointerDown}
                 onClick={() => {
+                  const lastDriveId = viewStore.getState().lastDriveId;
+                  navi({
+                    to: "/drive/drive/$id",
+                    params: {
+                      id: lastDriveId,
+                    },
+                  });
+                }}
+                onDoubleClick={() => {
                   navi({
                     to: "/drive/drive/$id",
                     params: {
@@ -59,7 +68,6 @@ export function Sidebar({ className }: { className?: string }) {
                     },
                   });
                 }}
-                isActive={location.pathname.startsWith("/drive/drive/")}
               >
                 <HardDriveIcon className={cn(iconSize)} />
               </Button>
@@ -76,6 +84,15 @@ export function Sidebar({ className }: { className?: string }) {
                 size="icon"
                 onPointerDown={handlePointerDown}
                 onClick={() => {
+                  const lastShareId = viewStore.getState().lastShareId;
+                  navi({
+                    to: "/drive/share/$id",
+                    params: {
+                      id: lastShareId,
+                    },
+                  });
+                }}
+                onDoubleClick={() => {
                   navi({
                     to: "/drive/share/$id",
                     params: {
@@ -83,7 +100,6 @@ export function Sidebar({ className }: { className?: string }) {
                     },
                   });
                 }}
-                isActive={location.pathname.startsWith("/drive/share/")}
               >
                 <Share2Icon className={cn(iconSize)} />
               </Button>
@@ -104,7 +120,6 @@ export function Sidebar({ className }: { className?: string }) {
                 onClick={() => {
                   navi({ to: "/mod" });
                 }}
-                isActive={location.pathname.startsWith("/mod")}
               >
                 <GamepadIcon className={cn(iconSize)} />
               </Button>
