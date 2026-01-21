@@ -2,7 +2,7 @@ import { RootProvider } from "@renderer/components/root-provider";
 import { Sidebar } from "@renderer/components/sidebar";
 import { Titlebar } from "@renderer/components/titlebar";
 import { Toaster } from "@renderer/components/ui/sonner";
-import { useGlobalEvents } from "@renderer/hooks/useGlobalEvents";
+import { useGlobalEvents } from "@renderer/hooks/use-global-events";
 import { PathSelectorDialog } from "@renderer/components/path-selector-dialog";
 import { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet, useLocation } from "@tanstack/react-router";
