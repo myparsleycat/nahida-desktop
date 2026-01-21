@@ -151,7 +151,7 @@ export type IpcEvents = {
 
     "fn:toast": (message: string, data?: ToastData) => void;
     "fn:navi": (path: string) => void;
-    "download:completed": (data: { path: string; name: string }) => void;
+    "download:completed": (data: { path: string; name: string; disableToast?: boolean }) => void;
     "pathSelector:modeSelect": (data: { selectionId: string; suggestedName?: string }) => void;
 };
 

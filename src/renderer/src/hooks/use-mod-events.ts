@@ -25,7 +25,9 @@ export function useDownloadCompletionHandler(
         const unsubscribe = window.api.on("download:completed", (data) => {
             if (selectedGame) {
                 queryClient.invalidateQueries({ queryKey: ["mods", selectedGame] });
-                toast.success(`"${data.name}" 다운로드가 완료되었습니다.`);
+                if (!data.disableToast) {
+                    toast.success(`"${data.name}" 다운로드가 완료되었습니다.`);
+                }
             }
         });
 

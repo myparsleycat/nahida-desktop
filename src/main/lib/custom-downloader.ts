@@ -22,14 +22,14 @@ export class CustomDownloader {
     private async downloadFile(props: {
         url: string;
         savePath: string;
-        fileSize: number;
-        signal: AbortSignal;
+        fileSize?: number;
+        signal?: AbortSignal;
         onProgress?: (bytes: number) => void;
     }) {
         const { url, savePath, fileSize, signal, onProgress } = props;
         const supportsRange = await this.downloader.checkRangeSupport(url);
 
-        if (supportsRange) {
+        if (supportsRange && fileSize) {
             await this.downloader.download({
                 url,
                 savePath,
@@ -155,8 +155,21 @@ export class CustomDownloader {
 
                 if (abortController.signal.aborted) throw new Error("Aborted");
 
-                await this.desktop.service.archive.extract(savePath, path.dirname(savePath));
+                const extractedPath = path.dirname(savePath);
+                const finalPath = await this.desktop.service.archive.extract(
+                    savePath,
+                    extractedPath,
+                );
                 await fse.rm(savePath, { force: true });
+
+                let previewPromise: Promise<void> | null = null;
+                if (previewUrl) {
+                    const previewSavePath = path.join(finalPath, "preview.jpg");
+                    previewPromise = this.downloadFile({
+                        url: previewUrl,
+                        savePath: previewSavePath,
+                    });
+                }
 
                 this.desktop.service.transfer.markFileCompleted(pid, pid);
 
@@ -172,6 +185,15 @@ export class CustomDownloader {
                     this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
                         path: result.path!,
                         name: rootName,
+                    });
+                }
+
+                if (previewPromise && mainWindow) {
+                    await previewPromise;
+                    this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
+                        path: result.path!,
+                        name: rootName,
+                        disableToast: true,
                     });
                 }
             } catch (err: any) {
