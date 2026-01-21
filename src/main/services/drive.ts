@@ -240,10 +240,10 @@ export class DriveService {
         const restartParams: UploadParams = { type: "upload", destId, paths };
         const abortController = new AbortController();
 
-        await this.desktop.service.transfer.createTransfer(
+        await this.desktop.service.transfer.createTransfer({
             pid,
-            "upload",
-            {
+            type: "upload",
+            data: {
                 files: files.map((f: any) => ({
                     uuid: f.FID,
                     fileId: "",
@@ -260,11 +260,11 @@ export class DriveService {
                 })),
             },
             abortController,
-            processName,
+            name: processName,
             restartParams,
-            "preparing",
-            paths[0],
-        );
+            initialStatus: "preparing",
+            path: paths[0],
+        });
 
         return { pid, restartParams, abortController };
     }
@@ -382,16 +382,16 @@ export class DriveService {
         const abortController = new AbortController();
         const restartParams: DownloadParams = { type: "download", id, savePath, suggestedName };
 
-        await this.desktop.service.transfer.createTransfer(
+        await this.desktop.service.transfer.createTransfer({
             pid,
-            "download",
-            { root: { id: "", parentId: null, name: "Loading..." }, files: [], dirs: [] },
+            type: "download",
+            data: { root: { id: "", parentId: null, name: "Loading..." }, files: [], dirs: [] },
             abortController,
-            "Preparing Download...",
+            name: "Preparing Download...",
             restartParams,
-            "preparing",
-            savePath,
-        );
+            initialStatus: "preparing",
+            path: savePath,
+        });
 
         return { pid, restartParams, abortController };
     }

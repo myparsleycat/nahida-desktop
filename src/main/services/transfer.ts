@@ -97,16 +97,25 @@ export class TransferService {
         return transfer.completedFileUuids.size;
     }
 
-    public async createTransfer(
-        pid: string,
-        type: "upload" | "download",
-        data: TransferData,
-        abortController: AbortController,
-        name: string,
-        restartParams?: any,
-        initialStatus: TransferStatus = "pending",
-        path?: string,
-    ) {
+    public async createTransfer({
+        pid,
+        type,
+        data,
+        abortController,
+        name,
+        restartParams,
+        initialStatus,
+        path,
+    }: {
+        pid: string;
+        type: "upload" | "download";
+        data: TransferData;
+        abortController: AbortController;
+        name: string;
+        restartParams?: any;
+        initialStatus: TransferStatus;
+        path?: string;
+    }) {
         const totalSize = data.files.reduce((acc, cur) => acc + cur.size, 0);
         const transfer: LocalTransfer = {
             pid,
