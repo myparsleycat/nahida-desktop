@@ -217,6 +217,7 @@ export class Mod {
                 cwd: modPath,
                 onlyFiles: true,
                 caseSensitiveMatch: false,
+                dot: true,
             });
 
             const iniFiles = files.filter(
