@@ -15,10 +15,10 @@ export interface ModInfo {
     isEnabled: boolean;
     toggleKeys: ToggleKey[];
     preview?: string;
-    ini?: {
+    inis: {
         name: string;
         path: string;
-    };
+    }[];
 }
 
 export interface FolderGroup {
