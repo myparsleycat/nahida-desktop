@@ -4,7 +4,7 @@ import type { NahidaDesktop } from "@main/index";
 
 export function registerWindowHandlers(d: NahidaDesktop) {
     rh("window:openSetting", async () => {
-        d.createSettingWindow();
+        d.window.setting.createSettingWindow();
     });
 
     ipcMain.on("window-control", (event, command) => {
@@ -23,7 +23,7 @@ export function registerWindowHandlers(d: NahidaDesktop) {
                 }
                 break;
             case "close":
-                if (win === d.window.main) {
+                if (win === d.window.main.window) {
                     win.hide();
                 } else {
                     win.close();

@@ -85,8 +85,8 @@ export class Auth {
             credentials: "include",
             throwHttpErrors: false,
             headers: {
-                'User-Agent': `Nahida Desktop/${appVersion}`
-            }
+                "User-Agent": `Nahida Desktop/${appVersion}`,
+            },
         });
 
         if (!iWantToLoginResp.ok) {
@@ -105,8 +105,8 @@ export class Auth {
         const resp = await ky(data.stateResponse, {
             throwHttpErrors: false,
             headers: {
-                'User-Agent': `Nahida Desktop/${appVersion}`
-            }
+                "User-Agent": `Nahida Desktop/${appVersion}`,
+            },
         });
 
         if (!resp.body) {
@@ -137,10 +137,11 @@ export class Auth {
                         if (!this.desktop.lib.tray.tray) {
                             this.desktop.lib.tray.createTray();
                         }
-                        await this.desktop.createMainWindow().then((window) => {
+                        await this.desktop.window.main.createMainWindow().then((window) => {
                             if (window) focus(window);
                         });
-                        if (this.desktop.window.auth) this.desktop.window.auth.close();
+                        if (this.desktop.window.auth.window)
+                            this.desktop.window.auth.window.close();
                     }
 
                     if (payload.status === "expired") {
@@ -168,7 +169,7 @@ export class Auth {
 
         await this.removeToken();
         closeAllWindows();
-        this.desktop.createLoginWindow();
+        this.desktop.window.auth.createLoginWindow();
     }
 }
 

@@ -26,9 +26,9 @@ export class TrayManager {
                 click: async () => {
                     const loggedIn = await this.desktop.service.auth.isLoggedIn();
                     if (loggedIn) {
-                        this.desktop.createSettingWindow();
+                        this.desktop.window.setting.createSettingWindow();
                     } else {
-                        this.desktop.createLoginWindow();
+                        this.desktop.window.auth.createLoginWindow();
                     }
                 },
             },
@@ -46,9 +46,9 @@ export class TrayManager {
         this.tray.on("click", async () => {
             const loggedIn = await this.desktop.service.auth.isLoggedIn();
             if (loggedIn) {
-                this.desktop.createMainWindow();
+                this.desktop.window.main.createMainWindow();
             } else {
-                this.desktop.createLoginWindow();
+                this.desktop.window.auth.createLoginWindow();
             }
         });
     }
