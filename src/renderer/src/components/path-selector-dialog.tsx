@@ -46,12 +46,11 @@ export function PathSelectorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-112.5" onOpenAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>경로 선택</DialogTitle>
           <DialogDescription>
-            {suggestedName && `"${suggestedName}" `}
-            경로를 선택하는 방법을 선택하세요.
+            {suggestedName && `"${suggestedName}" `}를 어떤 방식으로 다운로드 할지 선택하세요
           </DialogDescription>
         </DialogHeader>
 
@@ -63,7 +62,7 @@ export function PathSelectorDialog({
           >
             <Grid3x3 className="size-8" />
             <div className="flex flex-col items-center text-center">
-              <span className="font-semibold">매니저에서 선택</span>
+              <span className="font-semibold">모드 매니저</span>
               <div className="flex flex-col items-center text-center text-xs text-muted-foreground">
                 <span>모드 매니저에서</span>
                 <span>캐릭터 폴더를 선택합니다</span>
