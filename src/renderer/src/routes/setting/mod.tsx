@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Switch } from "@renderer/components/ui/switch";
-import { Label } from "@renderer/components/ui/label";
+import { Checkbox } from "@renderer/components/ui/checkbox";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Logger } from "@renderer/lib/logger";
@@ -68,39 +67,37 @@ function RouteComponent() {
       <div className="space-y-6">
         <Card>
           <CardContent className="flex flex-col space-y-4">
-            <div className="flex flex-row items-center justify-between space-x-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <Checkbox
+                id="delete-archive"
+                checked={deleteArchiveAfterExtract}
+                onCheckedChange={(checked) => handleDeleteArchiveChange(checked as boolean)}
+                className="mt-1"
+              />
               <div className="flex-1 space-y-1">
-                <Label htmlFor="delete-archive" className="text-sm font-medium">
-                  압축 해제 후 삭제
-                </Label>
+                <span className="text-sm font-medium">압축 해제 후 삭제</span>
                 <p className="text-sm text-muted-foreground">
                   압축 파일을 모드 폴더에 해제한 후 원본 압축 파일을 삭제합니다
                 </p>
               </div>
-              <Switch
-                id="delete-archive"
-                checked={deleteArchiveAfterExtract}
-                onCheckedChange={handleDeleteArchiveChange}
-              />
-            </div>
+            </label>
 
             <Separator />
 
-            <div className="flex flex-row items-center justify-between space-x-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <Checkbox
+                id="move-folder"
+                checked={moveFolderInsteadOfCopy}
+                onCheckedChange={(checked) => handleMoveFolderChange(checked as boolean)}
+                className="mt-1"
+              />
               <div className="flex-1 space-y-1">
-                <Label htmlFor="move-folder" className="text-sm font-medium">
-                  폴더 복사 대신 이동
-                </Label>
+                <span className="text-sm font-medium">폴더 복사 대신 이동</span>
                 <p className="text-sm text-muted-foreground">
                   폴더를 모드 폴더에 드롭할 때 복사하지 않고 이동합니다 (원본 삭제)
                 </p>
               </div>
-              <Switch
-                id="move-folder"
-                checked={moveFolderInsteadOfCopy}
-                onCheckedChange={handleMoveFolderChange}
-              />
-            </div>
+            </label>
           </CardContent>
         </Card>
       </div>

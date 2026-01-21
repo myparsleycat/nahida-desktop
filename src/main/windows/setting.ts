@@ -25,9 +25,8 @@ export class SettingWindow {
         this.window = new BrowserWindow({
             title: "설정",
             width: 580,
-            minWidth: 580,
             height: 740,
-            maxHeight: 740,
+            resizable: false,
             show: false,
             frame: false,
             maximizable: false,
