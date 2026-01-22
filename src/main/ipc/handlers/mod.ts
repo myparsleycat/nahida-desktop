@@ -136,4 +136,11 @@ export function registerModHandlers(desktop: NahidaDesktop) {
             moveInsteadOfCopy,
         );
     });
+
+    ipcMain.handle(
+        "mod:pastePreview",
+        async (_event, modPath: string, data: string, type: "url" | "base64" | "path") => {
+            return await desktop.service.mod.fn.pastePreview(modPath, data, type);
+        },
+    );
 }

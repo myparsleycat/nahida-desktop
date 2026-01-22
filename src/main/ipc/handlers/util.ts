@@ -1,6 +1,14 @@
 import type { MessageBoxOptions, OpenExternalOptions } from "electron";
 import { rh } from "../helper";
-import { openExternal, showModal, copyStr, openPath, trash, openCmd } from "@main/services/util";
+import {
+    openExternal,
+    showModal,
+    copyStr,
+    openPath,
+    trash,
+    openCmd,
+    getClipboardFiles,
+} from "@main/services/util";
 import type { NahidaDesktop } from "@main/index";
 
 export function registerUtilHandlers(_desktop: NahidaDesktop) {
@@ -13,4 +21,5 @@ export function registerUtilHandlers(_desktop: NahidaDesktop) {
     rh("util:openPath", openPath);
     rh("util:fs:trash", trash);
     rh("util:openCmd", openCmd);
+    rh("util:getClipboardFiles", getClipboardFiles);
 }

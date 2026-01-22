@@ -710,6 +710,53 @@ export class ModManager {
                 throw error;
             }
         },
+
+        pastePreview: async (
+            modPath: string,
+            data: string,
+            type: "url" | "base64" | "path",
+        ): Promise<void> => {
+            try {
+                let buffer: Buffer;
+                let extension = ".png";
+
+                if (type === "url") {
+                    const response = await fetch(data);
+                    if (!response.ok) {
+                        throw new Error(`Failed to download image: ${response.statusText}`);
+                    }
+                    const contentType = response.headers.get("content-type");
+                    if (contentType) {
+                        const ext = contentType.split("/")[1];
+                        if (ext) extension = `.${ext}`;
+                    }
+                    const arrayBuffer = await response.arrayBuffer();
+                    buffer = Buffer.from(arrayBuffer);
+                } else if (type === "base64") {
+                    const matches = data.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
+                    if (matches) {
+                        extension = `.${matches[1]}`;
+                        buffer = Buffer.from(matches[2], "base64");
+                    } else {
+                        buffer = Buffer.from(data, "base64");
+                    }
+                } else if (type === "path") {
+                    extension = path.extname(data);
+                    buffer = await fse.readFile(data);
+                } else {
+                    throw new Error(`Invalid paste type: ${type}`);
+                }
+
+                const fileName = `preview${extension}`;
+                const filePath = path.join(modPath, fileName);
+
+                await fse.writeFile(filePath, buffer);
+                this.desktop.logger.info(`Saved preview image to ${filePath}`, "Mod:pastePreview");
+            } catch (error) {
+                this.desktop.logger.error(error, `Mod:pastePreview:${modPath}`);
+                throw error;
+            }
+        },
     };
 }
 

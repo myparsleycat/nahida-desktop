@@ -49,3 +49,28 @@ export function openCmd(path: string) {
         stdio: "ignore",
     }).unref();
 }
+
+export function getClipboardFiles(): string[] {
+    const buffer = clipboard.readBuffer("FileNameW");
+    if (buffer && buffer.length > 0) {
+        const path = buffer.toString("ucs2").replace(/\0+$/, "");
+        if (path) return [path];
+    }
+
+    const text = clipboard.read("text/uri-list");
+    if (text) {
+        return text
+            .split(/\r?\n/)
+            .filter((line) => line.trim().startsWith("file://"))
+            .map((line) => {
+                const url = new URL(line.trim());
+                let p = decodeURIComponent(url.pathname);
+                if (process.platform === "win32" && p.startsWith("/")) {
+                    p = p.slice(1);
+                }
+                return p;
+            });
+    }
+
+    return [];
+}

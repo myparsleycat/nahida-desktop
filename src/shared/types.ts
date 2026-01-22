@@ -78,6 +78,7 @@ export type IpcHandlers = {
     "util:openPath": (path: string) => void;
     "util:fs:trash": (path: string) => void;
     "util:openCmd": (path: string) => void;
+    "util:getClipboardFiles": () => string[];
 
     "drive:get:item": (itemId: string) => ModIdGetResp;
     "drive:patch:rename": (
@@ -128,6 +129,7 @@ export type IpcHandlers = {
     "mod:copyFolder": (folderPath: string, groupPath: string) => void;
     "mod:enableAll": (groupPath: string) => void;
     "mod:disableAll": (groupPath: string) => void;
+    "mod:pastePreview": (modPath: string, data: string, type: "url" | "base64" | "path") => void;
 
     "pathSelector:selectFolderPath": (selectionId: string) => void;
     "pathSelector:selectModManagerPath": (
