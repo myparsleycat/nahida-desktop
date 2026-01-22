@@ -67,11 +67,11 @@ function RouteComponent() {
   }, [id]);
 
   useEffect(() => {
-    if (id) {
+    if (id && location.pathname.startsWith("/drive/share/")) {
       const setLastShareId = viewStore.getState().setLastShareId;
       setLastShareId(id);
     }
-  }, [id]);
+  }, [id, location.pathname]);
 
   const rawContents = useMemo(() => {
     if (!query.data?.children) return [];
