@@ -38,6 +38,14 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         return await d.setting.general.checkUpdate();
     });
 
+    rh("setting:general:getCheckBackgroundUpdates", async () => {
+        return await d.setting.general.getCheckBackgroundUpdates();
+    });
+
+    rh("setting:general:setCheckBackgroundUpdates", async (enabled) => {
+        return await d.setting.general.setCheckBackgroundUpdates(enabled);
+    });
+
     rh("setting:mod:getDeleteArchiveAfterExtract", async () => {
         return await d.setting.mod.getDeleteArchiveAfterExtract();
     });

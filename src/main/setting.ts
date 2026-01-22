@@ -162,6 +162,29 @@ export class Setting {
         checkUpdate: async () => {
             await this.desktop.updater.checkForUpdates(true);
         },
+
+        getCheckBackgroundUpdates: async () => {
+            const qr = await db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "checkBackgroundUpdates"),
+            });
+
+            if (!qr) {
+                await db.insert(setting).values({ key: "checkBackgroundUpdates", value: "true" });
+                return true;
+            }
+
+            return qr.value === "true";
+        },
+
+        setCheckBackgroundUpdates: async (enabled: boolean) => {
+            await db
+                .insert(setting)
+                .values({ key: "checkBackgroundUpdates", value: String(enabled) })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(enabled) },
+                });
+        },
     };
 
     mod = {

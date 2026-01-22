@@ -26,6 +26,7 @@ function RouteComponent() {
   const { theme, setTheme } = useTheme();
 
   const [runOnStartup, setRunOnStartup] = useState(false);
+  const [checkBackgroundUpdates, setCheckBackgroundUpdates] = useState(true);
   const [autoUpdate, setAutoUpdate] = useState(false);
   const [moveTransferPageWhenStartTransfer, setMoveTransferPageWhenStartTransfer] = useState(false);
   const [powerSaveBlockInTransfer, setPowerSaveBlockInTransfer] = useState(false);
@@ -34,6 +35,10 @@ function RouteComponent() {
   useEffect(() => {
     window.api.invoke("setting:general:getRunOnStartup").then((val: boolean) => {
       setRunOnStartup(val);
+    });
+
+    window.api.invoke("setting:general:getCheckBackgroundUpdates").then((val: boolean) => {
+      setCheckBackgroundUpdates(val);
     });
 
     window.api
@@ -68,6 +73,17 @@ function RouteComponent() {
                     }}
                   />
                   <span className="text-sm">로그인할 때 실행</span>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <Checkbox
+                    checked={checkBackgroundUpdates}
+                    onCheckedChange={(checked) => {
+                      const val = checked as boolean;
+                      setCheckBackgroundUpdates(val);
+                      window.api.invoke("setting:general:setCheckBackgroundUpdates", val);
+                    }}
+                  />
+                  <span className="text-sm">백그라운드 업데이트 확인</span>
                 </label>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <Checkbox

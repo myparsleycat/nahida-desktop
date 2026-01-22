@@ -54,6 +54,8 @@ export type IpcHandlers = {
     "setting:general:getDefaultStartPage": () => string | null;
     "setting:general:setDefaultStartPage": (page: string | null) => void;
     "setting:general:checkUpdate": () => void;
+    "setting:general:getCheckBackgroundUpdates": () => boolean;
+    "setting:general:setCheckBackgroundUpdates": (enabled: boolean) => void;
 
     "setting:mod:getDeleteArchiveAfterExtract": () => boolean;
     "setting:mod:setDeleteArchiveAfterExtract": (enabled: boolean) => void;

@@ -141,19 +141,27 @@ export class Updater {
             this.desktop.logger.log("info", "Update cancelled");
         });
 
-        autoUpdater.checkForUpdates().catch((err) => {
-            this.desktop.logger.log("error", err, "updater.interval");
-            this.desktop.logger.log("error", err);
-        });
-
         clearInterval(this.interval);
 
-        this.interval = setInterval(() => {
+        this.interval = setInterval(async () => {
+            const checkBackgroundUpdates =
+                await this.desktop.setting.general.getCheckBackgroundUpdates();
+            if (!checkBackgroundUpdates) return;
+
             autoUpdater.checkForUpdates().catch((err) => {
                 this.desktop.logger.log("error", err, "updater.interval");
                 this.desktop.logger.log("error", err);
             });
         }, 3600000);
+
+        this.desktop.setting.general.getCheckBackgroundUpdates().then((checkBackgroundUpdates) => {
+            if (checkBackgroundUpdates) {
+                autoUpdater.checkForUpdates().catch((err) => {
+                    this.desktop.logger.log("error", err, "updater.initialCheck");
+                    this.desktop.logger.log("error", err);
+                });
+            }
+        });
     }
 
     public async checkForUpdates(manual: boolean = false): Promise<void> {
