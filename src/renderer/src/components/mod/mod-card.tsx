@@ -272,16 +272,18 @@ function ModIniList({
 }) {
   return (
     <ScrollArea className="w-[160px] flex flex-col gap-2 overflow-y-auto">
-      <div className={cn("p-1.5 rounded space-y-2", getToggleBoxColorClass(mod.isEnabled))}>
+      <div
+        className={cn("p-1.5 rounded space-y-2 w-[160px]", getToggleBoxColorClass(mod.isEnabled))}
+      >
         {mod.inis.map((ini, iniIdx) => {
           const iniToggleKeys = mod.toggleKeys.filter((tk) => tk.iniFileName === ini.name);
 
           return (
             <div key={iniIdx} className="space-y-1">
               <div className="flex items-center justify-between gap-1">
-                <span className="text-xs truncate opacity-80 flex-1" title={ini.name}>
+                <p className="text-xs truncate opacity-80 whitespace-normal" title={ini.name}>
                   {ini.name}
-                </span>
+                </p>
                 <Button
                   variant="ghost"
                   size="icon"
