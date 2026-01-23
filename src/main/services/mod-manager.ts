@@ -83,7 +83,7 @@ export class ModManager {
                 line = line.trim();
 
                 if (line.startsWith("[") && line.endsWith("]")) {
-                    if (currentSection && currentSection.startsWith("Key")) {
+                    if (currentSection && currentSection.toLowerCase().startsWith("key")) {
                         const toggleKey = this.extractToggleKey(
                             currentSection,
                             sectionData,
@@ -106,7 +106,7 @@ export class ModManager {
                 }
             }
 
-            if (currentSection && currentSection.startsWith("Key")) {
+            if (currentSection && currentSection.toLowerCase().startsWith("key")) {
                 const toggleKey = this.extractToggleKey(currentSection, sectionData, iniFileName);
                 if (toggleKey) {
                     toggleKeys.push(toggleKey);
@@ -125,7 +125,8 @@ export class ModManager {
         data: any,
         iniFileName: string,
     ): ToggleKey | null {
-        const variableEntry = Object.entries(data).find(([key]) => key.startsWith("$"));
+        const entries = Object.entries(data);
+        const variableEntry = entries.find(([key]) => key.startsWith("$"));
         if (!variableEntry) return null;
 
         const [variable, valuesStr] = variableEntry;
@@ -133,12 +134,17 @@ export class ModManager {
 
         if (values.length < 2) return null;
 
+        const getCaseInsensitive = (obj: any, target: string) => {
+            const key = Object.keys(obj).find((k) => k.toLowerCase() === target.toLowerCase());
+            return key ? obj[key] : undefined;
+        };
+
         return {
             sectionName,
             iniFileName,
-            key: data.key,
-            back: data.back,
-            type: data.type,
+            key: getCaseInsensitive(data, "key"),
+            back: getCaseInsensitive(data, "back"),
+            type: getCaseInsensitive(data, "type"),
             variable,
             values,
             currentValue: values[0],
@@ -495,7 +501,16 @@ export class ModManager {
                         continue;
                     }
 
-                    if (currentSection === sectionName && trimmedLine.startsWith(variable + " =")) {
+                    const lowerLine = trimmedLine.toLowerCase();
+                    const lowerVar = variable.toLowerCase();
+                    const isVariableLine =
+                        lowerLine.startsWith(lowerVar + " =") ||
+                        lowerLine.startsWith(lowerVar + "=");
+
+                    if (
+                        currentSection?.toLowerCase() === sectionName.toLowerCase() &&
+                        isVariableLine
+                    ) {
                         newLines.push(`${variable} = ${value}`);
                         updated = true;
                     } else {
