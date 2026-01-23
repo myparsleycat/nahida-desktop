@@ -23,7 +23,7 @@ const PREVIEW_EXTENSIONS = [
     ".mov",
 ];
 const MOD_FILE_EXTENSIONS = [".ini", ...PREVIEW_EXTENSIONS];
-const MOD_FILE_GLOB = `*.{${MOD_FILE_EXTENSIONS.map((e) => e.slice(1)).join(",")}}`;
+const MOD_FILE_GLOB = `**/*.{${MOD_FILE_EXTENSIONS.map((e) => e.slice(1)).join(",")}}`;
 
 interface ToggleKey {
     sectionName: string;
@@ -149,7 +149,7 @@ export class ModManager {
         try {
             if (!files) {
                 files = await fg(
-                    PREVIEW_EXTENSIONS.map((ext) => `*${ext}`),
+                    PREVIEW_EXTENSIONS.map((ext) => `**/*${ext}`),
                     {
                         cwd: modPath,
                         onlyFiles: true,
@@ -213,12 +213,12 @@ export class ModManager {
             const folderName = path.basename(modPath);
             const isEnabled = this.isModEnabled(folderName);
 
-            const files = await fg(MOD_FILE_GLOB, {
+            const files = (await fg(MOD_FILE_GLOB, {
                 cwd: modPath,
                 onlyFiles: true,
                 caseSensitiveMatch: false,
                 dot: true,
-            });
+            })) as string[];
 
             const iniFiles = files.filter(
                 (f) => f.toLowerCase().endsWith(".ini") && !f.toLowerCase().startsWith("disabled"),
