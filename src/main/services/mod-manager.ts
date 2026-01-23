@@ -224,12 +224,12 @@ export class ModManager {
                 (f) => f.toLowerCase().endsWith(".ini") && !f.toLowerCase().startsWith("disabled"),
             );
 
-            let toggleKeys: ToggleKey[] = [];
-            for (const iniFile of iniFiles) {
+            const toggleKeysPromises = iniFiles.map((iniFile) => {
                 const iniPath = path.join(modPath, iniFile);
-                const keys = await this.parseIni(iniPath);
-                toggleKeys.push(...keys);
-            }
+                return this.parseIni(iniPath);
+            });
+            const toggleKeysResults = await Promise.all(toggleKeysPromises);
+            const toggleKeys = toggleKeysResults.flat();
 
             const preview = await this.findPreview(modPath, files);
 
@@ -271,33 +271,33 @@ export class ModManager {
                     cwd: modFolderPath,
                     onlyDirectories: true,
                 });
-                const groups: FolderGroup[] = [];
 
-                for (const groupFolderName of groupFolders) {
-                    const groupPath = path.join(modFolderPath, groupFolderName);
-                    const modFolders = await fg("*", {
-                        cwd: groupPath,
-                        onlyDirectories: true,
-                    });
+                const groups = await Promise.all(
+                    groupFolders.map(async (groupFolderName) => {
+                        const groupPath = path.join(modFolderPath, groupFolderName);
+                        const modFolders = await fg("*", {
+                            cwd: groupPath,
+                            onlyDirectories: true,
+                        });
 
-                    const mods: ModInfo[] = [];
-                    for (const modFolderName of modFolders) {
-                        const modPath = path.join(groupPath, modFolderName);
-                        const modInfo = await this.scanModFolder(modPath);
-                        if (modInfo) {
-                            mods.push(modInfo);
-                        }
-                    }
+                        const modsPromises = modFolders.map((modFolderName) => {
+                            const modPath = path.join(groupPath, modFolderName);
+                            return this.scanModFolder(modPath);
+                        });
 
-                    const preview = await this.findPreview(groupPath);
+                        const [mods, preview] = await Promise.all([
+                            Promise.all(modsPromises),
+                            this.findPreview(groupPath),
+                        ]);
 
-                    groups.push({
-                        name: groupFolderName,
-                        path: groupPath,
-                        mods,
-                        preview: preview || undefined,
-                    });
-                }
+                        return {
+                            name: groupFolderName,
+                            path: groupPath,
+                            mods: mods.filter((m): m is ModInfo => m !== null),
+                            preview: preview || undefined,
+                        };
+                    }),
+                );
 
                 return groups;
             } catch (error) {
@@ -314,21 +314,20 @@ export class ModManager {
                     onlyDirectories: true,
                 });
 
-                const mods: ModInfo[] = [];
-                for (const modFolderName of modFolders) {
+                const modsPromises = modFolders.map((modFolderName) => {
                     const modPath = path.join(groupPath, modFolderName);
-                    const modInfo = await this.scanModFolder(modPath);
-                    if (modInfo) {
-                        mods.push(modInfo);
-                    }
-                }
+                    return this.scanModFolder(modPath);
+                });
 
-                const preview = await this.findPreview(groupPath);
+                const [mods, preview] = await Promise.all([
+                    Promise.all(modsPromises),
+                    this.findPreview(groupPath),
+                ]);
 
                 return {
                     name: groupName,
                     path: groupPath,
-                    mods,
+                    mods: mods.filter((m): m is ModInfo => m !== null),
                     preview: preview || undefined,
                 };
             } catch (error) {
@@ -434,14 +433,16 @@ export class ModManager {
                     onlyDirectories: true,
                 });
 
-                for (const modFolderName of modFolders) {
+                const enablePromises = modFolders.map(async (modFolderName) => {
                     const modPath = path.join(groupPath, modFolderName);
                     try {
                         await this.fn.enable(modPath);
                     } catch (error) {
                         this.desktop.logger.error(error, `Mod:enableAll:${modPath}`);
                     }
-                }
+                });
+
+                await Promise.all(enablePromises);
             } catch (error) {
                 this.desktop.logger.error(error, `Mod:enableAll:${groupPath}`);
                 throw error;
@@ -455,14 +456,16 @@ export class ModManager {
                     onlyDirectories: true,
                 });
 
-                for (const modFolderName of modFolders) {
+                const disablePromises = modFolders.map(async (modFolderName) => {
                     const modPath = path.join(groupPath, modFolderName);
                     try {
                         await this.fn.disable(modPath);
                     } catch (error) {
                         this.desktop.logger.error(error, `Mod:disableAll:${modPath}`);
                     }
-                }
+                });
+
+                await Promise.all(disablePromises);
             } catch (error) {
                 this.desktop.logger.error(error, `Mod:disableAll:${groupPath}`);
                 throw error;
@@ -539,50 +542,52 @@ export class ModManager {
 
             const modPaths = JSON.parse(preset.mods) as string[];
 
-            for (const modPath of modPaths) {
-                try {
-                    const folderName = path.basename(modPath);
-                    const parentPath = path.dirname(modPath);
-                    const isEnabledInPreset = !/^disabled\s+/i.test(folderName);
-
-                    let actualModPath: string | null = null;
-
+            await Promise.all(
+                modPaths.map(async (modPath) => {
                     try {
-                        await fse.access(modPath);
-                        actualModPath = modPath;
-                    } catch {
-                        let alternativePath: string;
-                        if (isEnabledInPreset) {
-                            alternativePath = path.join(parentPath, `DISABLED ${folderName}`);
-                        } else {
-                            const regex = /^disabled\s+/i;
-                            const cleanName = trim(folderName.replace(regex, ""));
-                            alternativePath = path.join(parentPath, cleanName);
-                        }
+                        const folderName = path.basename(modPath);
+                        const parentPath = path.dirname(modPath);
+                        const isEnabledInPreset = !/^disabled\s+/i.test(folderName);
+
+                        let actualModPath: string | null = null;
 
                         try {
-                            await fse.access(alternativePath);
-                            actualModPath = alternativePath;
+                            await fse.access(modPath);
+                            actualModPath = modPath;
                         } catch {
-                            this.desktop.logger.warn(
-                                `Mod ${modPath} not found, skipping`,
-                                "Mod:applyPreset",
-                            );
-                            continue;
-                        }
-                    }
+                            let alternativePath: string;
+                            if (isEnabledInPreset) {
+                                alternativePath = path.join(parentPath, `DISABLED ${folderName}`);
+                            } else {
+                                const regex = /^disabled\s+/i;
+                                const cleanName = trim(folderName.replace(regex, ""));
+                                alternativePath = path.join(parentPath, cleanName);
+                            }
 
-                    if (actualModPath) {
-                        if (isEnabledInPreset) {
-                            await this.fn.enable(actualModPath);
-                        } else {
-                            await this.fn.disable(actualModPath);
+                            try {
+                                await fse.access(alternativePath);
+                                actualModPath = alternativePath;
+                            } catch {
+                                this.desktop.logger.warn(
+                                    `Mod ${modPath} not found, skipping`,
+                                    "Mod:applyPreset",
+                                );
+                                return;
+                            }
                         }
+
+                        if (actualModPath) {
+                            if (isEnabledInPreset) {
+                                await this.fn.enable(actualModPath);
+                            } else {
+                                await this.fn.disable(actualModPath);
+                            }
+                        }
+                    } catch (error) {
+                        this.desktop.logger.error(error, `Mod:applyPreset:${modPath}`);
                     }
-                } catch (error) {
-                    this.desktop.logger.error(error, `Mod:applyPreset:${modPath}`);
-                }
-            }
+                }),
+            );
         },
 
         deletePreset: async (presetId: string): Promise<void> => {
