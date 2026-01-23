@@ -29,7 +29,7 @@ export async function fetcher(url: string, options?: RequestInit) {
     });
 
     if (resp.status === 401) {
-        await desktop.service.auth.startLogout();
+        await desktop.service.auth.getSession();
     }
 
     return resp;

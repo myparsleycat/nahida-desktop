@@ -5,7 +5,7 @@ import { BACKEND_URL } from "@shared/const";
 import { fetcher } from "@main/internal/fetcher";
 import { SessionSchema } from "@shared/schemas/auth";
 import ky from "ky";
-import { Nullable, validate } from "valdex";
+import { Nullable, Optional, validate } from "valdex";
 import { shell } from "electron";
 import { parseServerSentEvents } from "parse-sse";
 import { closeAllWindows } from "./util";
@@ -64,7 +64,10 @@ export class Auth {
             return null;
         }
         const data = await resp.json();
-        if (!data) {
+        validate(data, {
+            session: Optional({ id: String }),
+        });
+        if (!data.session) {
             await this.startLogout();
             return null;
         }
