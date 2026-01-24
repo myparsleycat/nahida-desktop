@@ -1,4 +1,4 @@
-import { BrowserWindow, shell } from "electron";
+import { BrowserWindow, shell, screen } from "electron";
 import path from "node:path";
 import icon from "../../../resources/nahida.png?asset";
 import { is } from "@electron-toolkit/utils";
@@ -23,7 +23,26 @@ export class MainWindow {
     }
 
     async createMainWindow() {
-        const bounds = await this.desktop.setting.getBounds();
+        const savedBounds = await this.desktop.setting.getBounds();
+        let bounds = savedBounds;
+
+        if (bounds) {
+            const displays = screen.getAllDisplays();
+            const isValid = displays.some((display) => {
+                const area = display.workArea;
+                return (
+                    bounds!.x >= area.x &&
+                    bounds!.y >= area.y &&
+                    bounds!.x < area.x + area.width &&
+                    bounds!.y < area.y + area.height
+                );
+            });
+
+            if (!isValid) {
+                bounds = null;
+            }
+        }
+
         this.window = new BrowserWindow({
             title: "Nahida Desktop",
             x: bounds?.x || undefined,
@@ -48,6 +67,12 @@ export class MainWindow {
 
         const saveBounds = debounce(async () => {
             if (!this.window) return;
+            if (
+                this.window.isMaximized() ||
+                this.window.isMinimized() ||
+                this.window.isFullScreen()
+            )
+                return;
             const bounds = this.window.getBounds();
             await this.desktop.setting.setBounds(bounds);
         }, 1000);
@@ -57,6 +82,15 @@ export class MainWindow {
 
         this.window.on("close", async () => {
             saveBounds.cancel();
+            if (!this.window) return;
+            if (
+                this.window.isMaximized() ||
+                this.window.isMinimized() ||
+                this.window.isFullScreen()
+            ) {
+                this.window = null;
+                return;
+            }
             const bounds = this.window?.getBounds();
             if (bounds) await this.desktop.setting.setBounds(bounds);
             this.window = null;
