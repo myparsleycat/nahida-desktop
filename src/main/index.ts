@@ -26,6 +26,7 @@ import ArchiveService from "./services/archive";
 import { pathToFileURL } from "node:url";
 import CustomDownloader from "./lib/custom-downloader";
 import { PathSelector } from "./lib/path-selector";
+import Watcher from "./lib/watcher";
 
 if (IS_ELECTRON) {
     // Needs to be here, otherwise Chromium's FileSystemAccess API won't work. Waiting for the electron team to fix it.
@@ -61,6 +62,7 @@ export class NahidaDesktop {
         compressor: Compressor;
         customDownloader: CustomDownloader;
         pathSelector: PathSelector;
+        watcher: Watcher;
     };
 
     public service: {
@@ -90,6 +92,7 @@ export class NahidaDesktop {
             compressor: new Compressor(this),
             customDownloader: new CustomDownloader(this),
             pathSelector: new PathSelector(this),
+            watcher: new Watcher(this),
         };
         this.service = {
             auth: new Auth(this),

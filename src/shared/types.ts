@@ -136,6 +136,8 @@ export type IpcHandlers = {
     "mod:enableAll": (groupPath: string) => void;
     "mod:disableAll": (groupPath: string) => void;
     "mod:pastePreview": (modPath: string, data: string, type: "url" | "base64" | "path") => void;
+    "mod:watchGame": (game: string) => void;
+    "mod:watchCharacter": (characterPath: string) => void;
 
     "pathSelector:selectFolderPath": (selectionId: string) => void;
     "pathSelector:selectModManagerPath": (
@@ -167,6 +169,9 @@ export type IpcEvents = {
     "fn:navi": (path: string) => void;
     "download:completed": (data: { path: string; name: string; disableToast?: boolean }) => void;
     "pathSelector:modeSelect": (data: { selectionId: string; suggestedName?: string }) => void;
+
+    "mod:update-game": () => void;
+    "mod:update-mods": () => void;
 };
 
 const akashaModIdGet = eden.akasha.content({ id: "" }).get;

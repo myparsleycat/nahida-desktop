@@ -132,4 +132,12 @@ export function registerModHandlers(desktop: NahidaDesktop) {
             return await desktop.service.mod.fn.pastePreview(modPath, data, type);
         },
     );
+
+    ipcMain.handle("mod:watchGame", async (_event, game: string) => {
+        return await desktop.service.mod.watchGame(game);
+    });
+
+    ipcMain.handle("mod:watchCharacter", async (_event, characterPath: string) => {
+        return await desktop.service.mod.watchCharacter(characterPath);
+    });
 }

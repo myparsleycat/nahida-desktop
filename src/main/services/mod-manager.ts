@@ -65,9 +65,80 @@ interface Preset {
 
 export class ModManager {
     private desktop: NahidaDesktop;
+    private gameWatcherId: string | null = null;
+    private characterWatcherId: string | null = null;
 
     constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
+    }
+
+    public async watchGame(game: string) {
+        const modFolderPath = await this.get.gamePath(game);
+        if (!modFolderPath) return;
+
+        if (this.gameWatcherId) {
+            await this.desktop.lib.watcher.removeWatcher(this.gameWatcherId);
+            this.gameWatcherId = null;
+        }
+
+        try {
+            this.gameWatcherId = this.desktop.lib.watcher.createWatcher(
+                modFolderPath,
+                {
+                    depth: 0,
+                    ignoreInitial: true,
+                    awaitWriteFinish: {
+                        stabilityThreshold: 2000,
+                        pollInterval: 100,
+                    },
+                },
+                (event) => {
+                    if (event === "addDir" || event === "unlinkDir") {
+                        if (this.desktop.window.main.window) {
+                            this.desktop.ipc.postMessageToWindow(
+                                this.desktop.window.main.window,
+                                "mod:update-game",
+                            );
+                        }
+                    }
+                },
+            );
+        } catch (error) {
+            this.desktop.logger.error(error, `Mod:watchGame:${game}`);
+        }
+    }
+
+    public async watchCharacter(characterPath: string) {
+        if (this.characterWatcherId) {
+            await this.desktop.lib.watcher.removeWatcher(this.characterWatcherId);
+            this.characterWatcherId = null;
+        }
+
+        try {
+            this.characterWatcherId = this.desktop.lib.watcher.createWatcher(
+                characterPath,
+                {
+                    depth: 0,
+                    ignoreInitial: true,
+                    awaitWriteFinish: {
+                        stabilityThreshold: 2000,
+                        pollInterval: 100,
+                    },
+                },
+                (event) => {
+                    if (event === "addDir" || event === "unlinkDir") {
+                        if (this.desktop.window.main.window) {
+                            this.desktop.ipc.postMessageToWindow(
+                                this.desktop.window.main.window,
+                                "mod:update-mods",
+                            );
+                        }
+                    }
+                },
+            );
+        } catch (error) {
+            this.desktop.logger.error(error, `Mod:watchCharacter:${characterPath}`);
+        }
     }
 
     private async parseIni(iniPath: string): Promise<ToggleKey[]> {

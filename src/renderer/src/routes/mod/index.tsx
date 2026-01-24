@@ -19,7 +19,11 @@ import {
   usePresetMutations,
 } from "@renderer/hooks/use-mod-mutations";
 import { useFilteredMods } from "@renderer/hooks/use-filtered-mods";
-import { useModRefreshOnFocus, useDownloadCompletionHandler } from "@renderer/hooks/use-mod-events";
+import {
+  useModRefreshOnFocus,
+  useDownloadCompletionHandler,
+  useModWatcherEvents,
+} from "@renderer/hooks/use-mod-events";
 import { useModDragDrop } from "@renderer/hooks/use-mod-drag-drop";
 
 export const Route = createFileRoute("/mod/")({
@@ -83,10 +87,11 @@ function RouteComponent() {
 
   const currentMods = useFilteredMods(activeGroup?.mods || [], searchQuery);
 
+  const selectedGroupData = characters.find((g) => g.name === selectedGroup);
+
   useModRefreshOnFocus(selectedGame, queryClient);
   useDownloadCompletionHandler(selectedGame, queryClient);
-
-  const selectedGroupData = characters.find((g) => g.name === selectedGroup);
+  useModWatcherEvents(selectedGame, selectedGroupData?.path, queryClient);
   const {
     isDragging,
     handleDragEnter,
@@ -117,6 +122,18 @@ function RouteComponent() {
       setSelectedGroup(null);
     }
   }, [characters, selectedGroup, setSelectedGroup]);
+
+  useEffect(() => {
+    if (selectedGame) {
+      window.api.invoke("mod:watchGame", selectedGame);
+    }
+  }, [selectedGame]);
+
+  useEffect(() => {
+    if (selectedGroupData?.path) {
+      window.api.invoke("mod:watchCharacter", selectedGroupData.path);
+    }
+  }, [selectedGroupData?.path]);
 
   const handleGameSelect = async (game: string) => {
     setSelectedGame(game);

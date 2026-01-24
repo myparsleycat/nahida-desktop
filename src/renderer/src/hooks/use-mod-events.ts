@@ -36,3 +36,28 @@ export function useDownloadCompletionHandler(
         };
     }, [selectedGame, queryClient]);
 }
+
+export function useModWatcherEvents(
+    selectedGame: string | null,
+    selectedGroupPath: string | undefined,
+    queryClient: QueryClient,
+) {
+    useEffect(() => {
+        const removeGameListener = window.api.on("mod:update-game", () => {
+            if (selectedGame) {
+                queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] });
+            }
+        });
+
+        const removeModsListener = window.api.on("mod:update-mods", () => {
+            if (selectedGroupPath) {
+                queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
+            }
+        });
+
+        return () => {
+            removeGameListener();
+            removeModsListener();
+        };
+    }, [selectedGame, selectedGroupPath, queryClient]);
+}
