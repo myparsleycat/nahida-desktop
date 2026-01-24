@@ -11,6 +11,7 @@ import {
   TerminalSquareIcon,
   Clipboard as ClipboardIcon,
 } from "lucide-react";
+import { Preview } from "./preview";
 import { Input } from "@renderer/components/ui/input";
 import {
   AlertDialog,
@@ -226,39 +227,24 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
 function ModPreview({ mod, onPaste }: { mod: ModInfo; onPaste: (e: React.MouseEvent) => void }) {
   return (
     <div className="flex-1 p-2 flex items-center justify-center relative overflow-hidden">
-      {mod.preview ? (
-        <>
-          {mod.preview.toLowerCase().match(/\.(mp4|webm|avi|mkv|mov)$/) ? (
-            <video
-              src={`local://${mod.preview}`}
-              className="absolute inset-0 w-full h-full object-contain"
-              autoPlay
-              loop
-              muted
-              playsInline
-            />
-          ) : (
-            <img
-              src={`local://${mod.preview}`}
-              alt={mod.name}
-              className="absolute inset-0 w-full h-full object-contain"
-              loading="lazy"
-              decoding="async"
-            />
-          )}
-        </>
-      ) : (
-        <div className="flex flex-col items-center justify-center gap-2">
-          <ImageIcon className="w-12 h-12 text-muted-foreground/50" />
-          <div className="flex flex-col items-center gap-1">
-            <span className="text-sm text-muted-foreground">No Preview</span>
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onPaste}>
-              <ClipboardIcon className="w-3 h-3" />
-              Paste
-            </Button>
+      <Preview
+        path={mod.preview}
+        alt={mod.name}
+        objectFit="contain"
+        className="absolute inset-0"
+        fallback={
+          <div className="flex flex-col items-center justify-center gap-2">
+            <ImageIcon className="w-12 h-12 text-muted-foreground/50" />
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-sm text-muted-foreground">No Preview</span>
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onPaste}>
+                <ClipboardIcon className="w-3 h-3" />
+                Paste
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
+        }
+      />
     </div>
   );
 }

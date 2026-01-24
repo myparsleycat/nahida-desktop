@@ -3,6 +3,8 @@ import { Skeleton } from "@renderer/components/ui/skeleton";
 import type { FolderGroup } from "@renderer/types/mod";
 import { forwardRef, useState } from "react";
 
+import { Preview } from "./preview";
+
 interface CharacterSidebarItemProps {
   group: FolderGroup;
   isSelected: boolean;
@@ -66,7 +68,7 @@ export const CharacterSidebarItem = forwardRef<HTMLButtonElement, CharacterSideb
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         className={cn(
-          "relative w-full grid grid-columns-[auto_1fr_auto] items-center gap-3 pl-2 pr-4 py-2 hover:bg-[#cecece] dark:hover:bg-[#2a2a2a] overflow-hidden",
+          "relative w-full grid grid-columns-[auto_1fr_auto] items-center gap-3 pl-2 pr-4 py-2 hover:bg-[#cecece] dark:hover:bg-[#2a2a2a] overflow-hidden h-14",
           isSelected && "dark:bg-[#2a2a2a] bg-[#cecece]",
         )}
         style={{ gridTemplateColumns: "auto 1fr auto" }}
@@ -76,29 +78,14 @@ export const CharacterSidebarItem = forwardRef<HTMLButtonElement, CharacterSideb
             <span className="text-sm font-bold">이 캐릭터에 추가</span>
           </div>
         )}
-        <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 overflow-hidden">
-          {group.preview ? (
-            group.preview.toLowerCase().match(/\.(mp4|webm|avi|mkv|mov)$/) ? (
-              <video
-                src={`local://${group.preview}`}
-                className="w-full h-full object-cover"
-                autoPlay
-                loop
-                muted
-                playsInline
-              />
-            ) : (
-              <img
-                src={`local://${group.preview}`}
-                alt={group.name}
-                className="w-full h-full object-cover"
-                decoding="async"
-                loading="lazy"
-              />
-            )
-          ) : (
-            <span className="text-lg font-bold text-center">?</span>
-          )}
+        <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 overflow-hidden bg-muted">
+          <Preview
+            path={group.preview}
+            alt={group.name}
+            objectFit="cover"
+            fallback={<span className="text-lg font-bold text-center">?</span>}
+            allowPlay={true}
+          />
         </div>
         <span className="text-left text-sm text-foreground truncate min-w-0">{group.name}</span>
         <span className="text-sm text-muted-foreground shrink-0">
