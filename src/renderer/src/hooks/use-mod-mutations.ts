@@ -1,15 +1,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { FolderGroup, ModInfo } from "@shared/types";
 import { toast } from "sonner";
+import { useModStore } from "@renderer/store/mod";
 
-export function useGameMutations(
-    selectedGame: string | null,
-    setSelectedGame: (game: string) => void,
-    setNewGameName: (name: string) => void,
-    setNewGamePath: (path: string) => void,
-    setIsAddGameDialogOpen: (open: boolean) => void,
-) {
+export function useGameMutations() {
     const queryClient = useQueryClient();
+    const setSelectedGame = useModStore((s) => s.setSelectedGame);
+    const setNewGameName = useModStore((s) => s.setNewGameName);
+    const setNewGamePath = useModStore((s) => s.setNewGamePath);
+    const setIsAddGameDialogOpen = useModStore((s) => s.setIsAddGameDialogOpen);
 
     const addGameMutation = useMutation({
         mutationFn: ({ name, path }: { name: string; path: string }) =>
@@ -35,11 +34,7 @@ export function useGameMutations(
     return { addGameMutation, deleteGameMutation };
 }
 
-export function useModMutations(
-    selectedGame: string | null,
-    selectedGroup: string | null,
-    groups: FolderGroup[],
-) {
+export function useModMutations(selectedGroup: string | null, groups: FolderGroup[]) {
     const queryClient = useQueryClient();
 
     const updateLocalGroupCache = (refreshedGroup: FolderGroup) => {
@@ -113,15 +108,14 @@ export function useModMutations(
     return { toggleModMutation, updateToggleKeyMutation };
 }
 
-export function usePresetMutations(
-    selectedGame: string | null,
-    newPresetName: string,
-    setNewPresetName: (name: string) => void,
-    setIsPresetDialogOpen: (open: boolean) => void,
-    setIsSelectedPresetDialogOpen: (open: boolean) => void,
-    setSelectedPreset: (preset: any) => void,
-) {
+export function usePresetMutations() {
     const queryClient = useQueryClient();
+    const selectedGame = useModStore((s) => s.selectedGame);
+    const newPresetName = useModStore((s) => s.newPresetName);
+    const setNewPresetName = useModStore((s) => s.setNewPresetName);
+    const setIsPresetDialogOpen = useModStore((s) => s.setIsPresetDialogOpen);
+    const setIsSelectedPresetDialogOpen = useModStore((s) => s.setIsSelectedPresetDialogOpen);
+    const setSelectedPreset = useModStore((s) => s.setSelectedPreset);
 
     const createPresetMutation = useMutation({
         mutationFn: () => {

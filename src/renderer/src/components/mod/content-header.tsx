@@ -6,25 +6,25 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
 
 import { useModStore } from "@renderer/store/mod";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useCharacters } from "@renderer/hooks/use-mod-data";
 
-interface ContentHeaderProps {
-  groupName: string;
-  groupPath?: string;
-}
-
-export function ContentHeader({ groupName, groupPath }: ContentHeaderProps) {
+export function ContentHeader() {
   const searchValue = useModStore((s) => s.searchQuery);
   const onSearchChange = useModStore((s) => s.setSearchQuery);
   const selectedGame = useModStore((s) => s.selectedGame);
+  const selectedGroup = useModStore((s) => s.selectedGroup);
   const queryClient = useQueryClient();
+
+  const { data: characters = [] } = useCharacters(selectedGame);
+  const selectedGroupData = characters.find((g) => g.name === selectedGroup);
+  const groupName = selectedGroup || "";
+  const groupPath = selectedGroupData?.path;
 
   const handleEnableAll = async () => {
     if (!groupPath) return;

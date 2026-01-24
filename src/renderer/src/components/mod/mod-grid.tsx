@@ -4,34 +4,29 @@ import { Skeleton } from "@renderer/components/ui/skeleton";
 import { ModCard } from "./mod-card";
 import type { ModInfo } from "@shared/types";
 import { useModStore } from "@renderer/store/mod";
+import { useModMutations } from "@renderer/hooks/use-mod-mutations";
+import { useFilteredMods } from "@renderer/hooks/use-filtered-mods";
+import { useCharacters, useModGroup } from "@renderer/hooks/use-mod-data";
+import { toast } from "sonner";
 
 interface ModGridProps {
-  mods: ModInfo[];
-  isLoading: boolean;
-  onToggle: (mod: ModInfo) => void;
-  onToggleKeyUpdate: (
-    modPath: string,
-    iniFileName: string,
-    sectionName: string,
-    variable: string,
-    value: string,
-  ) => void;
-  groupPath?: string;
-  game: string;
   isDragging?: boolean;
 }
 
-export function ModGrid({
-  mods,
-  isLoading,
-  onToggle,
-  onToggleKeyUpdate,
-  groupPath,
-  game,
-  isDragging,
-}: ModGridProps) {
+export function ModGrid({ isDragging }: ModGridProps) {
+  const selectedGame = useModStore((s) => s.selectedGame);
   const selectedGroup = useModStore((s) => s.selectedGroup);
+  const searchQuery = useModStore((s) => s.searchQuery);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  const { data: characters = [] } = useCharacters(selectedGame);
+  const selectedGroupPath = characters.find((c) => c.name === selectedGroup)?.path;
+  const { data: activeGroup } = useModGroup(selectedGroupPath);
+
+  const { toggleModMutation, updateToggleKeyMutation } = useModMutations(selectedGroup, characters);
+
+  const mods = useFilteredMods(activeGroup?.mods || [], searchQuery);
+  const isLoading = !activeGroup && !!selectedGroup;
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -41,6 +36,26 @@ export function ModGrid({
       }
     }
   }, [selectedGroup]);
+
+  const handleToggleKeyUpdate = (
+    modPath: string,
+    iniFileName: string,
+    sectionName: string,
+    variable: string,
+    value: string,
+  ) => {
+    if (!value.trim()) {
+      toast.error("값을 입력해주세요.");
+      return;
+    }
+    updateToggleKeyMutation.mutate({
+      modPath,
+      iniFileName,
+      sectionName,
+      variable,
+      value,
+    });
+  };
 
   return (
     <ScrollArea ref={scrollAreaRef} className="flex-1 overflow-y-auto">
@@ -64,8 +79,8 @@ export function ModGrid({
                 <ModCard
                   key={mod.path}
                   mod={mod}
-                  onToggle={onToggle}
-                  onToggleKeyUpdate={onToggleKeyUpdate}
+                  onToggle={(m) => toggleModMutation.mutate(m)}
+                  onToggleKeyUpdate={handleToggleKeyUpdate}
                 />
               ))}
         </div>

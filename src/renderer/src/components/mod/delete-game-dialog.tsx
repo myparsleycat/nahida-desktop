@@ -8,22 +8,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@renderer/components/ui/alert-dialog";
+import { useModStore } from "@renderer/store/mod";
+import { useGameMutations } from "@renderer/hooks/use-mod-mutations";
 
-interface DeleteGameDialogProps {
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-  selectedGame: string | null;
-  onDeleteGame: (game: string) => void;
-}
+export function DeleteGameDialog() {
+  const isOpen = useModStore((s) => s.isDeleteGameDialogOpen);
+  const setIsOpen = useModStore((s) => s.setIsDeleteGameDialogOpen);
+  const selectedGame = useModStore((s) => s.selectedGame);
 
-export function DeleteGameDialog({
-  isOpen,
-  onOpenChange,
-  selectedGame,
-  onDeleteGame,
-}: DeleteGameDialogProps) {
+  const { deleteGameMutation } = useGameMutations();
+
   return (
-    <AlertDialog open={isOpen} onOpenChange={onOpenChange}>
+    <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>게임 삭제</AlertDialogTitle>
@@ -38,7 +34,7 @@ export function DeleteGameDialog({
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             onClick={() => {
               if (selectedGame) {
-                onDeleteGame(selectedGame);
+                deleteGameMutation.mutate(selectedGame);
               }
             }}
           >

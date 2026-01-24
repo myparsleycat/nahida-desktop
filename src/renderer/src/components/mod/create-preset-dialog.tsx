@@ -11,24 +11,19 @@ import {
 import { Input } from "@renderer/components/ui/input";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
+import { useModStore } from "@renderer/store/mod";
 
 interface CreatePresetDialogProps {
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-  newPresetName: string;
-  onPresetNameChange: (name: string) => void;
   onCreatePreset: () => void;
   disabled?: boolean;
 }
 
-export function CreatePresetDialog({
-  isOpen,
-  onOpenChange,
-  newPresetName,
-  onPresetNameChange,
-  onCreatePreset,
-  disabled = false,
-}: CreatePresetDialogProps) {
+export function CreatePresetDialog({ onCreatePreset, disabled = false }: CreatePresetDialogProps) {
+  const isOpen = useModStore((s) => s.isPresetDialogOpen);
+  const setIsOpen = useModStore((s) => s.setIsPresetDialogOpen);
+  const newPresetName = useModStore((s) => s.newPresetName);
+  const setNewPresetName = useModStore((s) => s.setNewPresetName);
+
   const handleCreate = () => {
     if (!newPresetName.trim()) {
       toast.error("프리셋 이름을 입력해주세요.");
@@ -38,7 +33,7 @@ export function CreatePresetDialog({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="icon" disabled={disabled}>
           <Plus className="size-4" />
@@ -52,7 +47,7 @@ export function CreatePresetDialog({
           <Input
             placeholder="프리셋 이름"
             value={newPresetName}
-            onChange={(e) => onPresetNameChange(e.target.value)}
+            onChange={(e) => setNewPresetName(e.target.value)}
           />
         </div>
         <DialogFooter>

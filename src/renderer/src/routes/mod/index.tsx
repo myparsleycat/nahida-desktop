@@ -37,69 +37,28 @@ function RouteComponent() {
   const setSelectedGame = useModStore((s) => s.setSelectedGame);
   const selectedGroup = useModStore((s) => s.selectedGroup);
   const setSelectedGroup = useModStore((s) => s.setSelectedGroup);
-  const selectedPreset = useModStore((s) => s.selectedPreset);
-  const setSelectedPreset = useModStore((s) => s.setSelectedPreset);
-  const newPresetName = useModStore((s) => s.newPresetName);
-  const setNewPresetName = useModStore((s) => s.setNewPresetName);
-  const isPresetDialogOpen = useModStore((s) => s.isPresetDialogOpen);
-  const setIsPresetDialogOpen = useModStore((s) => s.setIsPresetDialogOpen);
-  const isSelectedPresetDialogOpen = useModStore((s) => s.isSelectedPresetDialogOpen);
-  const setIsSelectedPresetDialogOpen = useModStore((s) => s.setIsSelectedPresetDialogOpen);
-  const isAddGameDialogOpen = useModStore((s) => s.isAddGameDialogOpen);
-  const setIsAddGameDialogOpen = useModStore((s) => s.setIsAddGameDialogOpen);
-  const newGameName = useModStore((s) => s.newGameName);
-  const setNewGameName = useModStore((s) => s.setNewGameName);
-  const newGamePath = useModStore((s) => s.newGamePath);
   const setNewGamePath = useModStore((s) => s.setNewGamePath);
   const downloadMode = useModStore((s) => s.downloadMode);
-  const setDownloadMode = useModStore((s) => s.setDownloadMode);
-  const searchQuery = useModStore((s) => s.searchQuery);
-
-  const [isDeleteGameDialogOpen, setIsDeleteGameDialogOpen] = useState(false);
+  const setIsDeleteGameDialogOpen = useModStore((s) => s.setIsDeleteGameDialogOpen);
 
   const { data: games = [] } = useGames();
-  const { data: characters = [], isLoading: isCharactersLoading } = useCharacters(selectedGame);
-  const { data: activeGroup } = useModGroup(characters.find((c) => c.name === selectedGroup)?.path);
-  const { data: presets = [] } = usePresets(selectedGame);
-
-  const { addGameMutation, deleteGameMutation } = useGameMutations(
-    selectedGame,
-    setSelectedGame,
-    setNewGameName,
-    setNewGamePath,
-    setIsAddGameDialogOpen,
-  );
-
-  const { toggleModMutation, updateToggleKeyMutation } = useModMutations(
-    selectedGame,
-    selectedGroup,
-    characters,
-  );
-
-  const { createPresetMutation, applyPresetMutation, deletePresetMutation } = usePresetMutations(
-    selectedGame,
-    newPresetName,
-    setNewPresetName,
-    setIsPresetDialogOpen,
-    setIsSelectedPresetDialogOpen,
-    setSelectedPreset,
-  );
-
-  const currentMods = useFilteredMods(activeGroup?.mods || [], searchQuery);
-
+  const { data: characters = [] } = useCharacters(selectedGame);
   const selectedGroupData = characters.find((g) => g.name === selectedGroup);
+
+  const { addGameMutation } = useGameMutations();
+
+  const handleFilesDrop = useModDragDrop(
+    selectedGroupData?.path,
+    queryClient,
+    selectedGame || "",
+  ).handleFilesDrop;
 
   useModRefreshOnFocus(selectedGame, queryClient);
   useDownloadCompletionHandler(selectedGame, queryClient);
   useModWatcherEvents(selectedGame, selectedGroupData?.path, queryClient);
-  const {
-    isDragging,
-    handleDragEnter,
-    handleDragLeave,
-    handleDragOver,
-    handleDrop,
-    handleFilesDrop,
-  } = useModDragDrop(selectedGroupData?.path, queryClient, selectedGame || "");
+
+  const { isDragging, handleDragEnter, handleDragLeave, handleDragOver, handleDrop } =
+    useModDragDrop(selectedGroupData?.path, queryClient, selectedGame || "");
 
   useEffect(() => {
     const initGame = async () => {
@@ -135,68 +94,11 @@ function RouteComponent() {
     }
   }, [selectedGroupData?.path]);
 
-  const handleGameSelect = async (game: string) => {
-    setSelectedGame(game);
-    await window.api.invoke("mod:setLastGame", game);
-  };
-
   const handleBrowseFolder = async () => {
     const path = await window.api.invoke("mod:pickFolder");
     if (path) {
       setNewGamePath(path);
     }
-  };
-
-  const handleDownloadConfirm = async (fileName?: string) => {
-    if (!downloadMode || !selectedGroup) return;
-
-    const selectedGroupData = characters.find((g) => g.name === selectedGroup);
-    if (!selectedGroupData) return;
-
-    try {
-      await window.api.invoke(
-        "pathSelector:selectModManagerPath",
-        downloadMode.downloadId,
-        selectedGroupData.path,
-        fileName,
-      );
-
-      setDownloadMode(null);
-    } catch (error) {
-      toast.error("경로 선택에 실패했습니다.");
-      Logger.error(error, "Route:Mod:handleDownloadConfirm");
-    }
-  };
-
-  const handleDownloadCancel = async () => {
-    if (!downloadMode) return;
-
-    try {
-      await window.api.invoke("pathSelector:cancel", downloadMode.downloadId);
-      setDownloadMode(null);
-    } catch (error) {
-      Logger.error(error, "Route:Mod:handleDownloadCancel");
-    }
-  };
-
-  const handleToggleKeyUpdate = (
-    modPath: string,
-    iniFileName: string,
-    sectionName: string,
-    variable: string,
-    value: string,
-  ) => {
-    if (!value.trim()) {
-      toast.error("값을 입력해주세요.");
-      return;
-    }
-    updateToggleKeyMutation.mutate({
-      modPath,
-      iniFileName,
-      sectionName,
-      variable,
-      value,
-    });
   };
 
   return (
@@ -208,35 +110,16 @@ function RouteComponent() {
           <div className="flex-1 overflow-y-auto h-full">
             <CharacterSidebar
               groups={characters}
-              isLoading={isCharactersLoading}
+              isLoading={characters.length === 0 && !!selectedGame}
               onModDrop={handleFilesDrop}
             />
           </div>
 
           <GamePresetSelector
             games={games}
-            selectedGame={selectedGame}
-            onGameSelect={handleGameSelect}
             onDeleteGameClick={() => setIsDeleteGameDialogOpen(true)}
-            isAddGameDialogOpen={isAddGameDialogOpen}
-            onAddGameDialogOpenChange={setIsAddGameDialogOpen}
-            newGameName={newGameName}
-            newGamePath={newGamePath}
-            onNewGameNameChange={setNewGameName}
-            onNewGamePathChange={setNewGamePath}
             onBrowseFolder={handleBrowseFolder}
             onAddGame={(name, path) => addGameMutation.mutate({ name, path })}
-            presets={presets}
-            selectedPreset={selectedPreset}
-            onPresetSelect={(preset) => {
-              setSelectedPreset(preset);
-              setIsSelectedPresetDialogOpen(true);
-            }}
-            isPresetDialogOpen={isPresetDialogOpen}
-            onPresetDialogOpenChange={setIsPresetDialogOpen}
-            newPresetName={newPresetName}
-            onNewPresetNameChange={setNewPresetName}
-            onCreatePreset={() => createPresetMutation.mutate()}
           />
         </div>
 
@@ -247,20 +130,9 @@ function RouteComponent() {
           onDragOver={handleDragOver}
           onDrop={handleDrop}
         >
-          <ContentHeader
-            groupName={selectedGroup || ""}
-            groupPath={characters.find((g) => g.name === selectedGroup)?.path}
-          />
+          <ContentHeader />
 
-          <ModGrid
-            mods={currentMods}
-            isLoading={!activeGroup && !!selectedGroup}
-            onToggle={(m) => toggleModMutation.mutate(m)}
-            onToggleKeyUpdate={handleToggleKeyUpdate}
-            groupPath={selectedGroupData?.path}
-            game={selectedGame || ""}
-            isDragging={isDragging}
-          />
+          <ModGrid isDragging={isDragging} />
 
           {isDragging && (
             <div className="absolute flex-1 h-full inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm border-2 border-dashed border-primary">
@@ -273,32 +145,13 @@ function RouteComponent() {
             </div>
           )}
 
-          {downloadMode && (
-            <DownloadConfirmationOverlay
-              selectedPath={characters.find((g) => g.name === selectedGroup)?.path || null}
-              selectedGroupName={selectedGroup}
-              suggestedName={downloadMode.suggestedName}
-              onConfirm={handleDownloadConfirm}
-              onCancel={handleDownloadCancel}
-            />
-          )}
+          {downloadMode && <DownloadConfirmationOverlay />}
         </div>
       </div>
 
-      <PresetManagementDialog
-        isOpen={isSelectedPresetDialogOpen}
-        onOpenChange={setIsSelectedPresetDialogOpen}
-        selectedPreset={selectedPreset}
-        onApplyPreset={(presetId) => applyPresetMutation.mutate(presetId)}
-        onDeletePreset={(presetId) => deletePresetMutation.mutate(presetId)}
-      />
+      <PresetManagementDialog />
 
-      <DeleteGameDialog
-        isOpen={isDeleteGameDialogOpen}
-        onOpenChange={setIsDeleteGameDialogOpen}
-        selectedGame={selectedGame}
-        onDeleteGame={(game) => deleteGameMutation.mutate(game)}
-      />
+      <DeleteGameDialog />
     </>
   );
 }

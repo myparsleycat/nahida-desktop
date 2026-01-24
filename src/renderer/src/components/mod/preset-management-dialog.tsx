@@ -7,25 +7,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@renderer/components/ui/dialog";
-import type { Preset } from "@shared/types";
+import { useModStore } from "@renderer/store/mod";
+import { usePresetMutations } from "@renderer/hooks/use-mod-mutations";
 
-interface PresetManagementDialogProps {
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-  selectedPreset: Preset | null;
-  onApplyPreset: (presetId: string) => void;
-  onDeletePreset: (presetId: string) => void;
-}
+export function PresetManagementDialog() {
+  const isOpen = useModStore((s) => s.isSelectedPresetDialogOpen);
+  const setIsOpen = useModStore((s) => s.setIsSelectedPresetDialogOpen);
+  const selectedPreset = useModStore((s) => s.selectedPreset);
 
-export function PresetManagementDialog({
-  isOpen,
-  onOpenChange,
-  selectedPreset,
-  onApplyPreset,
-  onDeletePreset,
-}: PresetManagementDialogProps) {
+  const { applyPresetMutation, deletePresetMutation } = usePresetMutations();
+
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="w-100">
         <DialogHeader>
           <DialogTitle>{selectedPreset?.name}</DialogTitle>
@@ -38,7 +31,7 @@ export function PresetManagementDialog({
         <DialogFooter className="flex justify-between">
           <Button
             variant="destructive"
-            onClick={() => selectedPreset && onDeletePreset(selectedPreset.id)}
+            onClick={() => selectedPreset && deletePresetMutation.mutate(selectedPreset.id)}
           >
             삭제
           </Button>
@@ -46,7 +39,9 @@ export function PresetManagementDialog({
             <DialogClose asChild>
               <Button variant="outline">취소</Button>
             </DialogClose>
-            <Button onClick={() => selectedPreset && onApplyPreset(selectedPreset.id)}>적용</Button>
+            <Button onClick={() => selectedPreset && applyPresetMutation.mutate(selectedPreset.id)}>
+              적용
+            </Button>
           </div>
         </DialogFooter>
       </DialogContent>

@@ -16,6 +16,8 @@ interface ModState {
     setIsSelectedPresetDialogOpen: (open: boolean) => void;
     isAddGameDialogOpen: boolean;
     setIsAddGameDialogOpen: (open: boolean) => void;
+    isDeleteGameDialogOpen: boolean;
+    setIsDeleteGameDialogOpen: (open: boolean) => void;
     newGameName: string;
     setNewGameName: (name: string) => void;
     newGamePath: string;
@@ -42,6 +44,8 @@ export const modStore = createStore<ModState>((set) => ({
         set({ isSelectedPresetDialogOpen }),
     isAddGameDialogOpen: false,
     setIsAddGameDialogOpen: (isAddGameDialogOpen) => set({ isAddGameDialogOpen }),
+    isDeleteGameDialogOpen: false,
+    setIsDeleteGameDialogOpen: (isDeleteGameDialogOpen) => set({ isDeleteGameDialogOpen }),
     newGameName: "",
     setNewGameName: (newGameName) => set({ newGameName }),
     newGamePath: "",

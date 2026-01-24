@@ -12,60 +12,42 @@ import { Trash2 } from "lucide-react";
 import type { GameConfig, Preset } from "@shared/types";
 import { AddGameDialog } from "./add-game-dialog";
 import { CreatePresetDialog } from "./create-preset-dialog";
+import { useModStore } from "@renderer/store/mod";
+import { usePresets } from "@renderer/hooks/use-mod-data";
+import { usePresetMutations } from "@renderer/hooks/use-mod-mutations";
 
 interface GamePresetSelectorProps {
   games: GameConfig[];
-  selectedGame: string | null;
-  onGameSelect: (game: string) => void;
   onDeleteGameClick: () => void;
-
-  isAddGameDialogOpen: boolean;
-  onAddGameDialogOpenChange: (open: boolean) => void;
-  newGameName: string;
-  newGamePath: string;
-  onNewGameNameChange: (name: string) => void;
-  onNewGamePathChange: (path: string) => void;
   onBrowseFolder: () => void;
   onAddGame: (name: string, path: string) => void;
-
-  presets: Preset[];
-  selectedPreset: Preset | null;
-  onPresetSelect: (preset: Preset) => void;
-
-  isPresetDialogOpen: boolean;
-  onPresetDialogOpenChange: (open: boolean) => void;
-  newPresetName: string;
-  onNewPresetNameChange: (name: string) => void;
-  onCreatePreset: () => void;
 }
 
 export function GamePresetSelector({
   games,
-  selectedGame,
-  onGameSelect,
   onDeleteGameClick,
-  isAddGameDialogOpen,
-  onAddGameDialogOpenChange,
-  newGameName,
-  newGamePath,
-  onNewGameNameChange,
-  onNewGamePathChange,
   onBrowseFolder,
   onAddGame,
-  presets,
-  selectedPreset,
-  onPresetSelect,
-  isPresetDialogOpen,
-  onPresetDialogOpenChange,
-  newPresetName,
-  onNewPresetNameChange,
-  onCreatePreset,
 }: GamePresetSelectorProps) {
+  const selectedGame = useModStore((s) => s.selectedGame);
+  const setSelectedGame = useModStore((s) => s.setSelectedGame);
+  const selectedPreset = useModStore((s) => s.selectedPreset);
+  const setSelectedPreset = useModStore((s) => s.setSelectedPreset);
+  const setIsSelectedPresetDialogOpen = useModStore((s) => s.setIsSelectedPresetDialogOpen);
+
+  const { data: presets = [] } = usePresets(selectedGame);
+  const { createPresetMutation } = usePresetMutations();
+
+  const handleGameSelect = async (game: string) => {
+    setSelectedGame(game);
+    await window.api.invoke("mod:setLastGame", game);
+  };
+
   return (
     <div className="flex flex-col items-center justify-center w-full p-2 border-t space-y-3">
       {/* Game Selection */}
       <div className="flex w-full space-x-1">
-        <Select value={selectedGame || undefined} onValueChange={onGameSelect}>
+        <Select value={selectedGame || undefined} onValueChange={handleGameSelect}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Select a Game" />
           </SelectTrigger>
@@ -81,16 +63,7 @@ export function GamePresetSelector({
           </SelectContent>
         </Select>
 
-        <AddGameDialog
-          isOpen={isAddGameDialogOpen}
-          onOpenChange={onAddGameDialogOpenChange}
-          newGameName={newGameName}
-          newGamePath={newGamePath}
-          onGameNameChange={onNewGameNameChange}
-          onGamePathChange={onNewGamePathChange}
-          onBrowseFolder={onBrowseFolder}
-          onAddGame={onAddGame}
-        />
+        <AddGameDialog onBrowseFolder={onBrowseFolder} onAddGame={onAddGame} />
 
         <Button variant="outline" size="icon" disabled={!selectedGame} onClick={onDeleteGameClick}>
           <Trash2 className="size-4 text-destructive" />
@@ -104,7 +77,8 @@ export function GamePresetSelector({
           onValueChange={(id) => {
             const preset = presets.find((p) => p.id === id);
             if (preset) {
-              onPresetSelect(preset);
+              setSelectedPreset(preset);
+              setIsSelectedPresetDialogOpen(true);
             }
           }}
         >
@@ -124,11 +98,7 @@ export function GamePresetSelector({
         </Select>
 
         <CreatePresetDialog
-          isOpen={isPresetDialogOpen}
-          onOpenChange={onPresetDialogOpenChange}
-          newPresetName={newPresetName}
-          onPresetNameChange={onNewPresetNameChange}
-          onCreatePreset={onCreatePreset}
+          onCreatePreset={() => createPresetMutation.mutate()}
           disabled={!selectedGame}
         />
       </div>

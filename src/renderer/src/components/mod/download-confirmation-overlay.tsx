@@ -1,38 +1,60 @@
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
-import { Download, X } from "lucide-react";
+import { Download } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useModStore } from "@renderer/store/mod";
+import { useCharacters } from "@renderer/hooks/use-mod-data";
+import { toast } from "sonner";
+import { Logger } from "@renderer/lib/logger";
 
-interface DownloadConfirmationOverlayProps {
-  selectedPath: string | null;
-  selectedGroupName: string | null;
-  suggestedName?: string;
-  onConfirm: (fileName?: string) => void;
-  onCancel: () => void;
-}
+export function DownloadConfirmationOverlay() {
+  const downloadMode = useModStore((s) => s.downloadMode);
+  const setDownloadMode = useModStore((s) => s.setDownloadMode);
+  const selectedGame = useModStore((s) => s.selectedGame);
+  const selectedGroup = useModStore((s) => s.selectedGroup);
 
-export function DownloadConfirmationOverlay({
-  selectedPath,
-  selectedGroupName,
-  suggestedName,
-  onConfirm,
-  onCancel,
-}: DownloadConfirmationOverlayProps) {
+  const { data: characters = [] } = useCharacters(selectedGame);
+  const selectedGroupData = characters.find((g) => g.name === selectedGroup);
+  const selectedPath = selectedGroupData?.path || null;
+  const selectedGroupName = selectedGroup;
+  const suggestedName = downloadMode?.suggestedName;
+
   const [fileName, setFileName] = useState(suggestedName || "");
 
   useEffect(() => {
     setFileName(suggestedName || "");
   }, [suggestedName]);
 
-  const handleConfirm = () => {
-    if (suggestedName) {
-      if (fileName.trim()) {
-        onConfirm(fileName.trim());
-      }
-    } else {
-      onConfirm(undefined);
+  const handleConfirm = async () => {
+    if (!downloadMode || !selectedGroup || !selectedGroupData) return;
+
+    try {
+      await window.api.invoke(
+        "pathSelector:selectModManagerPath",
+        downloadMode.downloadId,
+        selectedGroupData.path,
+        suggestedName ? fileName.trim() : undefined,
+      );
+
+      setDownloadMode(null);
+    } catch (error) {
+      toast.error("경로 선택에 실패했습니다.");
+      Logger.error(error, "DownloadConfirmationOverlay:handleConfirm");
     }
   };
+
+  const handleCancel = async () => {
+    if (!downloadMode) return;
+
+    try {
+      await window.api.invoke("pathSelector:cancel", downloadMode.downloadId);
+      setDownloadMode(null);
+    } catch (error) {
+      Logger.error(error, "DownloadConfirmationOverlay:handleCancel");
+    }
+  };
+
+  if (!downloadMode) return null;
 
   return (
     <div
@@ -82,7 +104,7 @@ export function DownloadConfirmationOverlay({
           </div>
 
           <div className="flex gap-2 pt-2">
-            <Button variant="outline" onClick={onCancel} className="flex-1">
+            <Button variant="outline" onClick={handleCancel} className="flex-1">
               취소
             </Button>
             <Button

@@ -11,28 +11,20 @@ import {
 import { Input } from "@renderer/components/ui/input";
 import { Plus, FolderOpen } from "lucide-react";
 import { toast } from "sonner";
+import { useModStore } from "@renderer/store/mod";
 
 interface AddGameDialogProps {
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-  newGameName: string;
-  newGamePath: string;
-  onGameNameChange: (name: string) => void;
-  onGamePathChange: (path: string) => void;
   onBrowseFolder: () => void;
   onAddGame: (name: string, path: string) => void;
 }
 
-export function AddGameDialog({
-  isOpen,
-  onOpenChange,
-  newGameName,
-  newGamePath,
-  onGameNameChange,
-  onGamePathChange,
-  onBrowseFolder,
-  onAddGame,
-}: AddGameDialogProps) {
+export function AddGameDialog({ onBrowseFolder, onAddGame }: AddGameDialogProps) {
+  const isOpen = useModStore((s) => s.isAddGameDialogOpen);
+  const setIsOpen = useModStore((s) => s.setIsAddGameDialogOpen);
+  const newGameName = useModStore((s) => s.newGameName);
+  const setNewGameName = useModStore((s) => s.setNewGameName);
+  const newGamePath = useModStore((s) => s.newGamePath);
+
   const handleAdd = () => {
     if (!newGameName.trim()) {
       toast.error("게임 이름을 입력해주세요.");
@@ -46,7 +38,7 @@ export function AddGameDialog({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="icon">
           <Plus className="size-4" />
@@ -61,7 +53,7 @@ export function AddGameDialog({
             <Input
               placeholder="게임 이름 (예: 원공노)"
               value={newGameName}
-              onChange={(e) => onGameNameChange(e.target.value)}
+              onChange={(e) => setNewGameName(e.target.value)}
             />
           </div>
           <div className="flex gap-2">
