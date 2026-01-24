@@ -53,6 +53,7 @@ interface FolderGroup {
     path: string;
     mods: ModInfo[];
     preview?: string;
+    modCount?: number;
 }
 
 interface Preset {
@@ -266,7 +267,7 @@ export class ModManager {
             return result?.modFolderPath || null;
         },
 
-        list: async (game: string): Promise<FolderGroup[]> => {
+        characters: async (game: string): Promise<FolderGroup[]> => {
             const modFolderPath = await this.get.gamePath(game);
             if (!modFolderPath) {
                 throw new Error(`No mod folder path set for ${game}`);
@@ -286,33 +287,26 @@ export class ModManager {
                             onlyDirectories: true,
                         });
 
-                        const modsPromises = modFolders.map((modFolderName) => {
-                            const modPath = path.join(groupPath, modFolderName);
-                            return this.scanModFolder(modPath);
-                        });
-
-                        const [mods, preview] = await Promise.all([
-                            Promise.all(modsPromises),
-                            this.findPreview(groupPath),
-                        ]);
+                        const preview = await this.findPreview(groupPath);
 
                         return {
                             name: groupFolderName,
                             path: groupPath,
-                            mods: mods.filter((m): m is ModInfo => m !== null),
+                            mods: [],
                             preview: preview || undefined,
+                            modCount: modFolders.length,
                         };
                     }),
                 );
 
                 return groups;
             } catch (error) {
-                this.desktop.logger.error(error, `Mod:list:${game}`);
+                this.desktop.logger.error(error, `Mod:characters:${game}`);
                 throw error;
             }
         },
 
-        scanGroup: async (groupPath: string): Promise<FolderGroup> => {
+        mods: async (groupPath: string): Promise<FolderGroup> => {
             try {
                 const groupName = path.basename(groupPath);
                 const modFolders = await fg("*", {
@@ -330,14 +324,17 @@ export class ModManager {
                     this.findPreview(groupPath),
                 ]);
 
+                const validMods = mods.filter((m): m is ModInfo => m !== null);
+
                 return {
                     name: groupName,
                     path: groupPath,
-                    mods: mods.filter((m): m is ModInfo => m !== null),
+                    mods: validMods,
                     preview: preview || undefined,
+                    modCount: validMods.length,
                 };
             } catch (error) {
-                this.desktop.logger.error(error, `Mod:scanGroup:${groupPath}`);
+                this.desktop.logger.error(error, `Mod:mods:${groupPath}`);
                 throw error;
             }
         },
@@ -527,20 +524,32 @@ export class ModManager {
             }
         },
 
-        createPreset: async (game: string, name: string, modPaths: string[]): Promise<Preset> => {
+        createPreset: async (game: string, name: string): Promise<Preset> => {
+            const enabledMods: string[] = [];
+
+            const characterGroups = await this.get.characters(game);
+            for (const charGroup of characterGroups) {
+                const fullGroup = await this.get.mods(charGroup.path);
+                for (const mod of fullGroup.mods) {
+                    if (mod.isEnabled) {
+                        enabledMods.push(mod.path);
+                    }
+                }
+            }
+
             const id = nanoid();
             const preset: Preset = {
                 id,
                 game,
                 name,
-                mods: modPaths,
+                mods: enabledMods,
             };
 
             await db.insert(modPresets).values({
                 id,
                 game,
                 name,
-                mods: JSON.stringify(modPaths),
+                mods: JSON.stringify(enabledMods),
             });
 
             return preset;

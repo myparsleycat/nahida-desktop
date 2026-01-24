@@ -45,12 +45,12 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return result.filePaths[0];
     });
 
-    ipcMain.handle("mod:list", async (_event, game: string) => {
-        return await desktop.service.mod.get.list(game);
+    ipcMain.handle("mod:getCharacters", async (_event, game: string) => {
+        return await desktop.service.mod.get.characters(game);
     });
 
-    ipcMain.handle("mod:scanGroup", async (_event, groupPath: string) => {
-        return await desktop.service.mod.get.scanGroup(groupPath);
+    ipcMain.handle("mod:getMods", async (_event, groupPath: string) => {
+        return await desktop.service.mod.get.mods(groupPath);
     });
 
     ipcMain.handle("mod:toggle", async (_event, modPath: string) => {
@@ -90,18 +90,7 @@ export function registerModHandlers(desktop: NahidaDesktop) {
     });
 
     ipcMain.handle("mod:createPreset", async (_event, game: string, name: string) => {
-        const groups = await desktop.service.mod.get.list(game);
-        const enabledMods: string[] = [];
-
-        for (const group of groups) {
-            for (const mod of group.mods) {
-                if (mod.isEnabled) {
-                    enabledMods.push(mod.path);
-                }
-            }
-        }
-
-        return await desktop.service.mod.fn.createPreset(game, name, enabledMods);
+        return await desktop.service.mod.fn.createPreset(game, name);
     });
 
     ipcMain.handle("mod:applyPreset", async (_event, presetId: string) => {

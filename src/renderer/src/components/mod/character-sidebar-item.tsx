@@ -101,7 +101,9 @@ export const CharacterSidebarItem = forwardRef<HTMLButtonElement, CharacterSideb
           )}
         </div>
         <span className="text-left text-sm text-foreground truncate min-w-0">{group.name}</span>
-        <span className="text-sm text-muted-foreground shrink-0">{group.mods.length}</span>
+        <span className="text-sm text-muted-foreground shrink-0">
+          {group.modCount ?? group.mods.length}
+        </span>
       </button>
     );
   },

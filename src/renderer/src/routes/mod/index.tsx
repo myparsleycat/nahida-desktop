@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { Logger } from "@renderer/lib/logger";
 
 import { useModStore } from "@renderer/store/mod";
-import { useGames, useModGroups, usePresets } from "@renderer/hooks/use-mod-data";
+import { useGames, useCharacters, useModGroup, usePresets } from "@renderer/hooks/use-mod-data";
 import {
   useGameMutations,
   useModMutations,
@@ -54,7 +54,8 @@ function RouteComponent() {
   const [isDeleteGameDialogOpen, setIsDeleteGameDialogOpen] = useState(false);
 
   const { data: games = [] } = useGames();
-  const { data: groups = [], isLoading: isGroupsLoading } = useModGroups(selectedGame);
+  const { data: characters = [], isLoading: isCharactersLoading } = useCharacters(selectedGame);
+  const { data: activeGroup } = useModGroup(characters.find((c) => c.name === selectedGroup)?.path);
   const { data: presets = [] } = usePresets(selectedGame);
 
   const { addGameMutation, deleteGameMutation } = useGameMutations(
@@ -68,7 +69,7 @@ function RouteComponent() {
   const { toggleModMutation, updateToggleKeyMutation } = useModMutations(
     selectedGame,
     selectedGroup,
-    groups,
+    characters,
   );
 
   const { createPresetMutation, applyPresetMutation, deletePresetMutation } = usePresetMutations(
@@ -80,15 +81,12 @@ function RouteComponent() {
     setSelectedPreset,
   );
 
-  const currentMods = useFilteredMods(
-    groups.find((g) => g.name === selectedGroup)?.mods || [],
-    searchQuery,
-  );
+  const currentMods = useFilteredMods(activeGroup?.mods || [], searchQuery);
 
   useModRefreshOnFocus(selectedGame, queryClient);
   useDownloadCompletionHandler(selectedGame, queryClient);
 
-  const selectedGroupData = groups.find((g) => g.name === selectedGroup);
+  const selectedGroupData = characters.find((g) => g.name === selectedGroup);
   const {
     isDragging,
     handleDragEnter,
@@ -111,14 +109,14 @@ function RouteComponent() {
   }, [games, selectedGame, setSelectedGame]);
 
   useEffect(() => {
-    if (groups.length > 0) {
-      if (!selectedGroup || !groups.find((g) => g.name === selectedGroup)) {
-        setSelectedGroup(groups[0].name);
+    if (characters.length > 0) {
+      if (!selectedGroup || !characters.find((g) => g.name === selectedGroup)) {
+        setSelectedGroup(characters[0].name);
       }
     } else {
       setSelectedGroup(null);
     }
-  }, [groups, selectedGroup, setSelectedGroup]);
+  }, [characters, selectedGroup, setSelectedGroup]);
 
   const handleGameSelect = async (game: string) => {
     setSelectedGame(game);
@@ -135,7 +133,7 @@ function RouteComponent() {
   const handleDownloadConfirm = async (fileName?: string) => {
     if (!downloadMode || !selectedGroup) return;
 
-    const selectedGroupData = groups.find((g) => g.name === selectedGroup);
+    const selectedGroupData = characters.find((g) => g.name === selectedGroup);
     if (!selectedGroupData) return;
 
     try {
@@ -192,8 +190,8 @@ function RouteComponent() {
         <div className="border-r h-full flex flex-col w-64">
           <div className="flex-1 overflow-y-auto h-full">
             <CharacterSidebar
-              groups={groups}
-              isLoading={isGroupsLoading}
+              groups={characters}
+              isLoading={isCharactersLoading}
               onModDrop={handleFilesDrop}
             />
           </div>
@@ -234,12 +232,12 @@ function RouteComponent() {
         >
           <ContentHeader
             groupName={selectedGroup || ""}
-            groupPath={groups.find((g) => g.name === selectedGroup)?.path}
+            groupPath={characters.find((g) => g.name === selectedGroup)?.path}
           />
 
           <ModGrid
             mods={currentMods}
-            isLoading={isGroupsLoading}
+            isLoading={!activeGroup && !!selectedGroup}
             onToggle={(m) => toggleModMutation.mutate(m)}
             onToggleKeyUpdate={handleToggleKeyUpdate}
             groupPath={selectedGroupData?.path}
@@ -260,7 +258,7 @@ function RouteComponent() {
 
           {downloadMode && (
             <DownloadConfirmationOverlay
-              selectedPath={groups.find((g) => g.name === selectedGroup)?.path || null}
+              selectedPath={characters.find((g) => g.name === selectedGroup)?.path || null}
               selectedGroupName={selectedGroup}
               suggestedName={downloadMode.suggestedName}
               onConfirm={handleDownloadConfirm}

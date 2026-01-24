@@ -26,6 +26,10 @@ export interface ModInfo {
     isEnabled: boolean;
     toggleKeys: ToggleKey[];
     preview?: string;
+    inis: {
+        name: string;
+        path: string;
+    }[];
 }
 
 export interface FolderGroup {
@@ -33,6 +37,7 @@ export interface FolderGroup {
     path: string;
     mods: ModInfo[];
     preview?: string;
+    modCount?: number;
 }
 
 export interface Preset {
@@ -108,8 +113,9 @@ export type IpcHandlers = {
     "mod:addGame": (game: string, path: string) => void;
     "mod:removeGame": (game: string) => void;
     "mod:pickFolder": () => string | null;
-    "mod:list": (game: string) => FolderGroup[];
-    "mod:scanGroup": (groupPath: string) => FolderGroup;
+
+    "mod:getCharacters": (game: string) => FolderGroup[];
+    "mod:getMods": (groupPath: string) => FolderGroup;
     "mod:toggle": (modPath: string) => string;
     "mod:updateToggleKey": (
         modPath: string,

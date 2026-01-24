@@ -43,10 +43,7 @@ export function useModMutations(
     const queryClient = useQueryClient();
 
     const updateLocalGroupCache = (refreshedGroup: FolderGroup) => {
-        queryClient.setQueryData<FolderGroup[]>(["mods", selectedGame], (oldGroups) => {
-            if (!oldGroups) return [];
-            return oldGroups.map((g) => (g.name === refreshedGroup.name ? refreshedGroup : g));
-        });
+        queryClient.setQueryData(["modGroup", refreshedGroup.path], refreshedGroup);
     };
 
     const toggleModMutation = useMutation({
@@ -56,7 +53,7 @@ export function useModMutations(
                 const currentGroupPath = groups.find((g) => g.name === selectedGroup)?.path;
                 if (currentGroupPath) {
                     const refreshedGroup = (await window.api.invoke(
-                        "mod:scanGroup",
+                        "mod:getMods",
                         currentGroupPath,
                     )) as FolderGroup;
                     return refreshedGroup;
@@ -99,7 +96,7 @@ export function useModMutations(
             const currentGroupPath = groups.find((g) => g.name === selectedGroup)?.path;
             if (currentGroupPath) {
                 const refreshedGroup = (await window.api.invoke(
-                    "mod:scanGroup",
+                    "mod:getMods",
                     currentGroupPath,
                 )) as FolderGroup;
                 return refreshedGroup;
@@ -144,7 +141,8 @@ export function usePresetMutations(
     const applyPresetMutation = useMutation({
         mutationFn: (presetId: string) => window.api.invoke("mod:applyPreset", presetId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["mods", selectedGame] });
+            queryClient.invalidateQueries({ queryKey: ["modGroup"] });
+            queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] });
             setIsSelectedPresetDialogOpen(false);
             toast.success("프리셋이 적용되었습니다.");
         },

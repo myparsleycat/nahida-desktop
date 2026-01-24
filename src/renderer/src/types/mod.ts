@@ -26,6 +26,7 @@ export interface FolderGroup {
     path: string;
     mods: ModInfo[];
     preview?: string;
+    modCount?: number;
 }
 
 export interface Preset {

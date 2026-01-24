@@ -8,11 +8,19 @@ export function useGames() {
     });
 }
 
-export function useModGroups(selectedGame: string) {
+export function useCharacters(selectedGame: string) {
     return useQuery<FolderGroup[]>({
-        queryKey: ["mods", selectedGame],
-        queryFn: () => window.api.invoke("mod:list", selectedGame),
+        queryKey: ["characters", selectedGame],
+        queryFn: () => window.api.invoke("mod:getCharacters", selectedGame),
         enabled: !!selectedGame,
+    });
+}
+
+export function useModGroup(groupPath?: string) {
+    return useQuery<FolderGroup>({
+        queryKey: ["modGroup", groupPath],
+        queryFn: () => window.api.invoke("mod:getMods", groupPath!),
+        enabled: !!groupPath,
     });
 }
 
