@@ -1,5 +1,6 @@
 import { cn } from "@renderer/lib/utils";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { VideoCanvas } from "../ui/video-canvas";
 
 interface PreviewProps {
   path?: string | null;
@@ -18,12 +19,13 @@ export function Preview({
   fallback,
   allowPlay = true,
 }: PreviewProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLCanvasElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !allowPlay) {
-      if (video) video.pause();
+    const element = videoRef.current;
+    if (!element || !allowPlay) {
+      setIsPlaying(false);
       return;
     }
 
@@ -31,9 +33,9 @@ export function Preview({
       (entries) => {
         entries.forEach((entry) => {
           if (entry.intersectionRatio >= 0.8) {
-            video.play().catch(() => {});
+            setIsPlaying(true);
           } else {
-            video.pause();
+            setIsPlaying(false);
           }
         });
       },
@@ -42,10 +44,10 @@ export function Preview({
       },
     );
 
-    observer.observe(video);
+    observer.observe(element);
 
     return () => {
-      observer.unobserve(video);
+      observer.unobserve(element);
       observer.disconnect();
     };
   }, [path, allowPlay]);
@@ -56,17 +58,14 @@ export function Preview({
 
   if (isVideo) {
     return (
-      <video
+      <VideoCanvas
         ref={videoRef}
         src={`local://${path}`}
-        className={cn(
-          "w-full h-full",
-          objectFit === "cover" ? "object-cover" : "object-contain",
-          className,
-        )}
-        loop
+        className={cn("w-full h-full", className)}
+        objectFit={objectFit}
+        playing={isPlaying}
         muted
-        playsInline
+        loop
       />
     );
   }
