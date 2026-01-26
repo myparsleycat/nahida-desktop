@@ -5,7 +5,6 @@
     "main": "./out/main/index.js",
     "author": "nahida.live",
     "homepage": "https://nahida.live",
-    "type": "module",
     "scripts": {
         "go:build": "cd build/extractor && go build -ldflags \"-s -w\" -o extractor.exe",
         "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",

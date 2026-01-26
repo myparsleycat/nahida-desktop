@@ -27,6 +27,11 @@ export default defineConfig({
         ],
     },
     preload: {
+        build: {
+            rollupOptions: {
+                external: ["electron"],
+            },
+        },
         resolve: {
             alias: {
                 "@shared": resolve("src/shared"),

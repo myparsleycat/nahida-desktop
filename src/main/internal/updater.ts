@@ -1,6 +1,5 @@
-import updaterPkg from "electron-updater";
-const { autoUpdater } = updaterPkg; // esm support
-import { serializeError } from "./utils";
+const { autoUpdater } = require("electron-updater");
+
 import { BrowserWindow, app, dialog, Notification } from "electron";
 import ProgressBar from "electron-progressbar";
 import { convert } from "html-to-text";
