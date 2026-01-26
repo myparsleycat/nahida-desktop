@@ -61,42 +61,18 @@ export class Updater {
 
             this.desktop.logger.log("info", "Update available");
 
-            dialog
-                .showMessageBox({
-                    type: "info",
-                    title: `New Update Available: v${updateInfo.version}`,
-                    message: "새로운 버전으로 업데이트 할 수 있습니다. 지금 진행할까요?",
-                    detail: convert(String(updateInfo.releaseNotes)),
-                    buttons: ["확인", "나중에 진행"],
-                })
-                .then((result) => {
-                    const { response } = result;
-
-                    if (response === 0) {
-                        this.progressBar = new ProgressBar({
-                            detail: "Wait...",
-                            text: "Download Files...",
-                            initialValue: 0,
-                            maxValue: 100,
-                        });
-
-                        this.progressBar
-                            .on("completed", () => {
-                                this.desktop.logger.log("info", `completed...`);
-                                if (this.progressBar)
-                                    this.progressBar.detail = "Update completed. Closing...";
-                            })
-                            .on("aborted", () => {
-                                this.desktop.logger.log("info", "aborted");
-                            })
-                            .on("progress", (percent: number) => {
-                                if (this.progressBar)
-                                    this.progressBar.text = `Download Files... ${percent}%`;
-                            });
-
-                        autoUpdater.downloadUpdate();
-                    }
+            if (this.isManualCheck) {
+                this.showUpdateDialog(updateInfo);
+            } else {
+                const notification = new Notification({
+                    title: "Nahida Desktop 업데이트 가능",
+                    body: `새로운 버전 v${updateInfo.version}이(가) 출시되었습니다. 클릭하여 설치를 시작하세요.`,
                 });
+                notification.on("click", () => {
+                    this.showUpdateDialog(updateInfo);
+                });
+                notification.show();
+            }
         });
 
         autoUpdater.on("update-not-available", () => {
@@ -148,7 +124,7 @@ export class Updater {
                 await this.desktop.setting.general.getCheckBackgroundUpdates();
             if (!checkBackgroundUpdates) return;
 
-            autoUpdater.checkForUpdates().catch((err) => {
+            this.checkForUpdates(false).catch((err) => {
                 this.desktop.logger.log("error", err, "updater.interval");
                 this.desktop.logger.log("error", err);
             });
@@ -156,12 +132,51 @@ export class Updater {
 
         this.desktop.setting.general.getCheckBackgroundUpdates().then((checkBackgroundUpdates) => {
             if (checkBackgroundUpdates) {
-                autoUpdater.checkForUpdates().catch((err) => {
+                this.checkForUpdates(false).catch((err) => {
                     this.desktop.logger.log("error", err, "updater.initialCheck");
                     this.desktop.logger.log("error", err);
                 });
             }
         });
+    }
+
+    private showUpdateDialog(updateInfo: any): void {
+        dialog
+            .showMessageBox({
+                type: "info",
+                title: `New Update Available: v${updateInfo.version}`,
+                message: "새로운 버전으로 업데이트 할 수 있습니다. 지금 진행할까요?",
+                detail: convert(String(updateInfo.releaseNotes)),
+                buttons: ["확인", "나중에 진행"],
+            })
+            .then((result) => {
+                const { response } = result;
+
+                if (response === 0) {
+                    this.progressBar = new ProgressBar({
+                        detail: "Wait...",
+                        text: "Download Files...",
+                        initialValue: 0,
+                        maxValue: 100,
+                    });
+
+                    this.progressBar
+                        .on("completed", () => {
+                            this.desktop.logger.log("info", `completed...`);
+                            if (this.progressBar)
+                                this.progressBar.detail = "Update completed. Closing...";
+                        })
+                        .on("aborted", () => {
+                            this.desktop.logger.log("info", "aborted");
+                        })
+                        .on("progress", (percent: number) => {
+                            if (this.progressBar)
+                                this.progressBar.text = `Download Files... ${percent}%`;
+                        });
+
+                    autoUpdater.downloadUpdate();
+                }
+            });
     }
 
     public async checkForUpdates(manual: boolean = false): Promise<void> {
