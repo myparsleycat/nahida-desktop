@@ -112,7 +112,7 @@ export class ModManager {
                 characterPath,
                 { depth: 0 },
                 (event) => {
-                    if (event === "add" || event === "unlink") {
+                    if (event === "update" || event === "unlink") {
                         if (this.desktop.window.main.window) {
                             this.desktop.ipc.postMessageToWindow(
                                 this.desktop.window.main.window,

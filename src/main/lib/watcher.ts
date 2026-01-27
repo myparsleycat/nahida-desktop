@@ -1,7 +1,7 @@
 import { NahidaDesktop } from "..";
 import path from "node:path";
 import { nanoid } from "nanoid";
-import { Client } from "fb-watchman";
+import { Client, SubscriptionResponse } from "fb-watchman";
 import isDev from "@main/internal/isDev";
 import { app } from "electron";
 
@@ -45,7 +45,7 @@ export class Watcher {
         this.callbacks = new Map();
         this.subscriptionToPath = new Map();
 
-        this.client.on("subscription", (resp: any) => {
+        this.client.on("subscription", (resp: SubscriptionResponse) => {
             this.handleEvents(resp);
         });
 
@@ -54,7 +54,7 @@ export class Watcher {
         });
     }
 
-    private handleEvents(resp: any) {
+    private handleEvents(resp: SubscriptionResponse) {
         const subscriptionName = resp.subscription;
         const watchedPath = this.subscriptionToPath.get(subscriptionName);
         if (!watchedPath) return;
@@ -65,10 +65,8 @@ export class Watcher {
         const isRecursive = this.pathToRecursive.get(watchedPath);
 
         for (const file of resp.files) {
-            // file.name is relative to the subscription root
             const fullPath = path.join(watchedPath, file.name);
 
-            // respect depth: 0 (non-recursive)
             if (isRecursive === false) {
                 if (path.dirname(fullPath) !== watchedPath) {
                     continue;
@@ -78,8 +76,6 @@ export class Watcher {
             let eventName: string;
             if (file.exists === false) {
                 eventName = "unlink";
-            } else if (file.new) {
-                eventName = "add";
             } else {
                 eventName = "update";
             }
