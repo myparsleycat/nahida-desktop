@@ -53,7 +53,7 @@ export function ContentHeader() {
   };
 
   return (
-    <div className="flex items-center justify-between h-12 px-3 border-b">
+    <div className="flex items-center justify-between h-12 px-3 border-b z-20">
       <div className="flex items-center gap-3">
         {groupName ? (
           <h1 className="text-2xl font-semibold text-foreground">{groupName}</h1>

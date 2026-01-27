@@ -1,5 +1,5 @@
 import { ContentHeader } from "@renderer/components/mod/content-header";
-import { DownloadConfirmationOverlay } from "@renderer/components/mod/download-confirmation-overlay";
+import { DownloadConfirmationOverlay } from "@renderer/components/download-confirmation-overlay";
 import { ModGrid } from "@renderer/components/mod/mod-grid";
 import { DeleteGameDialog } from "@renderer/components/mod/delete-game-dialog";
 import { PresetManagementDialog } from "@renderer/components/mod/preset-management-dialog";

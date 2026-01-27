@@ -1,6 +1,6 @@
 import { CharacterSidebar } from "@renderer/components/mod/character-sidebar";
 import { ContentHeader } from "@renderer/components/mod/content-header";
-import { DownloadConfirmationOverlay } from "@renderer/components/mod/download-confirmation-overlay";
+import { DownloadConfirmationOverlay } from "@renderer/components/download-confirmation-overlay";
 import { GamePresetSelector } from "@renderer/components/mod/game-preset-selector";
 import { ModGrid } from "@renderer/components/mod/mod-grid";
 import { DeleteGameDialog } from "@renderer/components/mod/delete-game-dialog";
@@ -58,7 +58,7 @@ export default function ModSidebar() {
   const { addGameMutation } = useGameMutations();
 
   return (
-    <div className="border-r h-full flex flex-col w-64">
+    <div className="border-r h-full flex flex-col w-64 z-20">
       <div className="flex-1 overflow-y-auto h-full">
         <CharacterSidebar
           groups={characters}

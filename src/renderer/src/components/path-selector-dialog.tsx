@@ -46,7 +46,7 @@ export function PathSelectorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent onOpenAutoFocus={(e) => e.preventDefault()} showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>경로 선택</DialogTitle>
           <DialogDescription>
