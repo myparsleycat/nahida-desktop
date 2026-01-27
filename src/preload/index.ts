@@ -2,11 +2,25 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { webUtils } from "electron";
+import { IPC_EVENT_CHANNELS, IPC_HANDLER_CHANNELS } from "@/shared/ipc-spec";
 
 const api = {
-    invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
-    send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),
+    invoke: (channel: string, ...args: any[]) => {
+        if (!IPC_HANDLER_CHANNELS.includes(channel as any)) {
+            throw new Error(`Unauthorized IPC channel: ${channel}`);
+        }
+        return ipcRenderer.invoke(channel, ...args);
+    },
+    send: (channel: string, ...args: any[]) => {
+        if (!IPC_HANDLER_CHANNELS.includes(channel as any)) {
+            throw new Error(`Unauthorized IPC channel: ${channel}`);
+        }
+        ipcRenderer.send(channel, ...args);
+    },
     on: (channel: string, listener: (...args: any[]) => void) => {
+        if (!IPC_EVENT_CHANNELS.includes(channel as any)) {
+            throw new Error(`Unauthorized IPC channel: ${channel}`);
+        }
         const subscription = (_event: any, ...args: any[]) => listener(...args);
         ipcRenderer.on(channel, subscription);
         return () => ipcRenderer.removeListener(channel, subscription);
@@ -26,10 +40,10 @@ if (process.contextIsolated) {
         console.error(error);
     }
 } else {
-    // @ts-ignore
+    // @ts-expect-error
     window.electron = electronAPI;
-    // @ts-ignore
+    // @ts-expect-error
     window.api = api;
-    // @ts-ignore
+    // @ts-expect-error
     window.webUtils = customWebUtils;
 }

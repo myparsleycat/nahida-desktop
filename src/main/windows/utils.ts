@@ -7,6 +7,7 @@ export function getDefaultWebPreferences() {
         backgroundThrottling: false,
         autoplayPolicy: "no-user-gesture-required" as const,
         contextIsolation: true,
+        nodeIntegration: false,
         experimentalFeatures: false,
         devTools: isDev,
         zoomFactor: 1,
@@ -16,7 +17,7 @@ export function getDefaultWebPreferences() {
 
         // esm
         // preload: fileURLToPath(new URL("../preload/index.mjs", import.meta.url)),
-    };
+    } as Electron.WebPreferences;
 }
 
 export function focus(window: BrowserWindow) {

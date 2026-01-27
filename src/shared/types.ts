@@ -4,6 +4,7 @@ import { ShowModalReturnValue } from "@main/services/util";
 import { eden } from "@main/client";
 import { Treaty } from "@elysiajs/eden";
 import { desktop } from "@main/index";
+import "./types-check";
 
 interface ToastData {
     description?: string;
