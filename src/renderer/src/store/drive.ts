@@ -309,7 +309,10 @@ export function useContentMenu(sortedContents?: Content[]) {
             if (item.mimeType?.startsWith("text")) {
                 // textViewerStore.openTextViewer(item);
             } else {
-                await window.api.invoke("drive:fn:startDownload", item.id);
+                await window.api.invoke("drive:fn:startDownload", {
+                    id: item.id,
+                    suggestedName: item.name,
+                });
             }
         }
     };

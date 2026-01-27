@@ -95,7 +95,13 @@ export type IpcHandlers = {
         name: string,
     ) => ReturnType<typeof desktop.service.drive.post.dir>;
     "drive:delete:items": (ids: string[]) => void;
-    "drive:fn:startDownload": (id: string) => void;
+    "drive:fn:startDownload": ({
+        id,
+        suggestedName,
+    }: {
+        id: string;
+        suggestedName?: string;
+    }) => void;
     "drive:fn:startUpload": (destId: string, paths: string[]) => void;
 
     "transfer:list": () => TransferWithoutData[];
