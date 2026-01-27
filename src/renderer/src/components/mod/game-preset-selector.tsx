@@ -94,7 +94,11 @@ export function GamePresetSelector({
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Select a Preset" />
           </SelectTrigger>
-          <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
+          <SelectContent
+            position="popper"
+            onCloseAutoFocus={(e) => e.preventDefault()}
+            aria-describedby={undefined}
+          >
             <SelectGroup>
               <SelectLabel>Preset</SelectLabel>
               {presets.map((preset) => (
