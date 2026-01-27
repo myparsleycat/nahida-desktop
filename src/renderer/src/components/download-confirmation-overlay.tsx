@@ -3,20 +3,16 @@ import { Input } from "@renderer/components/ui/input";
 import { Download } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useModStore } from "@renderer/store/mod";
-import { useCharacters } from "@renderer/hooks/use-mod-data";
 import { toast } from "sonner";
 import { Logger } from "@renderer/lib/logger";
 
 export function DownloadConfirmationOverlay() {
   const downloadMode = useModStore((s) => s.downloadMode);
   const setDownloadMode = useModStore((s) => s.setDownloadMode);
-  const selectedGame = useModStore((s) => s.selectedGame);
   const selectedGroup = useModStore((s) => s.selectedGroup);
 
-  const { data: characters = [] } = useCharacters(selectedGame);
-  const selectedGroupData = characters.find((g) => g.name === selectedGroup);
-  const selectedPath = selectedGroupData?.path || null;
-  const selectedGroupName = selectedGroup;
+  const selectedPath = selectedGroup?.path || null;
+  const selectedGroupName = selectedGroup?.name;
   const suggestedName = downloadMode?.suggestedName;
 
   const [fileName, setFileName] = useState(suggestedName || "");
@@ -26,13 +22,13 @@ export function DownloadConfirmationOverlay() {
   }, [suggestedName]);
 
   const handleConfirm = async () => {
-    if (!downloadMode || !selectedGroup || !selectedGroupData) return;
+    if (!downloadMode || !selectedGroup) return;
 
     try {
       await window.api.invoke(
         "pathSelector:selectModManagerPath",
         downloadMode.downloadId,
-        selectedGroupData.path,
+        selectedGroup.path,
         suggestedName ? fileName.trim() : undefined,
       );
 

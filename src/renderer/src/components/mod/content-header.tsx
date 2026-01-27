@@ -21,17 +21,15 @@ export function ContentHeader() {
   const selectedGroup = useModStore((s) => s.selectedGroup);
   const queryClient = useQueryClient();
 
-  const { data: characters = [] } = useCharacters(selectedGame);
-  const selectedGroupData = characters.find((g) => g.name === selectedGroup);
-  const groupName = selectedGroup || "";
-  const groupPath = selectedGroupData?.path;
+  const groupName = selectedGroup?.name || "";
+  const groupPath = selectedGroup?.path;
 
   const handleEnableAll = async () => {
     if (!groupPath) return;
 
     try {
       await window.api.invoke("mod:enableAll", groupPath);
-      queryClient.invalidateQueries({ queryKey: ["mods", selectedGame] });
+      queryClient.invalidateQueries({ queryKey: ["modGroup", groupPath] });
       toast.success("모든 모드가 활성화되었습니다.");
     } catch (error) {
       toast.error("모드 활성화에 실패했습니다.");
@@ -44,7 +42,7 @@ export function ContentHeader() {
 
     try {
       await window.api.invoke("mod:disableAll", groupPath);
-      queryClient.invalidateQueries({ queryKey: ["mods", selectedGame] });
+      queryClient.invalidateQueries({ queryKey: ["modGroup", groupPath] });
       toast.success("모든 모드가 비활성화되었습니다.");
     } catch (error) {
       toast.error("모드 비활성화에 실패했습니다.");

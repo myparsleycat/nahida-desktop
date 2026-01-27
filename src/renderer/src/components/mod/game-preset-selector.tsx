@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Trash2 } from "lucide-react";
-import type { GameConfig, Preset } from "@shared/types";
+import type { GameConfig } from "@shared/types";
 import { AddGameDialog } from "./add-game-dialog";
 import { CreatePresetDialog } from "./create-preset-dialog";
 import { useModStore } from "@renderer/store/mod";

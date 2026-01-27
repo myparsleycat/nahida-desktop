@@ -24,12 +24,12 @@ export function CharacterSidebar({ groups, isLoading = false, onModDrop }: Chara
     group.name.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
-  const handleSelect = (groupName: string) => {
-    setSelectedGroup(groupName);
+  const handleSelect = (group: FolderGroup) => {
+    setSelectedGroup(group);
 
     if (searchTerm) {
       setTimeout(() => {
-        const element = itemRefs.current.get(groupName);
+        const element = itemRefs.current.get(group.name);
         if (element) {
           element.scrollIntoView({
             behavior: "auto",
@@ -69,8 +69,8 @@ export function CharacterSidebar({ groups, isLoading = false, onModDrop }: Chara
                     else itemRefs.current.delete(group.name);
                   }}
                   group={group}
-                  isSelected={selectedGroup === group.name}
-                  onClick={() => handleSelect(group.name)}
+                  isSelected={selectedGroup?.name === group.name}
+                  onClick={() => handleSelect(group)}
                   onDrop={(files) => onModDrop(files, group.path)}
                 />
               ))}

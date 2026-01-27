@@ -2,11 +2,10 @@ import { useEffect, useRef } from "react";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { ModCard } from "./mod-card";
-import type { ModInfo } from "@shared/types";
 import { useModStore } from "@renderer/store/mod";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { useFilteredMods } from "@renderer/hooks/use-filtered-mods";
-import { useCharacters, useModGroup } from "@renderer/hooks/use-mod-data";
+import { useModGroup } from "@renderer/hooks/use-mod-data";
 import { toast } from "sonner";
 
 interface ModGridProps {
@@ -14,16 +13,14 @@ interface ModGridProps {
 }
 
 export function ModGrid({ isDragging }: ModGridProps) {
-  const selectedGame = useModStore((s) => s.selectedGame);
   const selectedGroup = useModStore((s) => s.selectedGroup);
   const searchQuery = useModStore((s) => s.searchQuery);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  const { data: characters = [] } = useCharacters(selectedGame);
-  const selectedGroupPath = characters.find((c) => c.name === selectedGroup)?.path;
+  const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
   const { data: activeGroup } = useModGroup(selectedGroupPath);
 
-  const { toggleModMutation, updateToggleKeyMutation } = useModMutations(selectedGroup, characters);
+  const { toggleModMutation, updateToggleKeyMutation } = useModMutations();
 
   const mods = useFilteredMods(activeGroup?.mods || [], searchQuery);
   const isLoading = !activeGroup && !!selectedGroup;

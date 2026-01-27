@@ -1,11 +1,11 @@
-import { Preset } from "@shared/types";
+import { FolderGroup, Preset } from "@shared/types";
 import { createStore, useStore } from "zustand";
 
 interface ModState {
     selectedGame: string;
     setSelectedGame: (game: string) => void;
-    selectedGroup: string | null;
-    setSelectedGroup: (group: string | null) => void;
+    selectedGroup: FolderGroup | null;
+    setSelectedGroup: (group: FolderGroup | null) => void;
     selectedPreset: Preset | null;
     setSelectedPreset: (preset: Preset | null) => void;
     newPresetName: string;

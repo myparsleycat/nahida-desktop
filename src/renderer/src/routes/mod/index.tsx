@@ -31,7 +31,7 @@ function RouteComponent() {
 
   const { data: games = [] } = useGames();
   const { data: characters = [] } = useCharacters(selectedGame);
-  const selectedGroupData = characters.find((g) => g.name === selectedGroup);
+  const selectedGroupData = characters.find((g) => g.name === selectedGroup?.name);
 
   useModRefreshOnFocus(selectedGame, queryClient);
   useDownloadCompletionHandler(selectedGame, queryClient);
@@ -54,8 +54,8 @@ function RouteComponent() {
 
   useEffect(() => {
     if (characters.length > 0) {
-      if (!selectedGroup || !characters.find((g) => g.name === selectedGroup)) {
-        setSelectedGroup(characters[0].name);
+      if (!selectedGroup || !characters.find((g) => g.name === selectedGroup.name)) {
+        setSelectedGroup(characters[0]);
       }
     } else {
       setSelectedGroup(null);

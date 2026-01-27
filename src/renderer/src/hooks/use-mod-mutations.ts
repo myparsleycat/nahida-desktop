@@ -34,8 +34,9 @@ export function useGameMutations() {
     return { addGameMutation, deleteGameMutation };
 }
 
-export function useModMutations(selectedGroup: string | null, groups: FolderGroup[]) {
+export function useModMutations() {
     const queryClient = useQueryClient();
+    const selectedGroup = useModStore((s) => s.selectedGroup);
 
     const updateLocalGroupCache = (refreshedGroup: FolderGroup) => {
         queryClient.setQueryData(["modGroup", refreshedGroup.path], refreshedGroup);
@@ -45,7 +46,7 @@ export function useModMutations(selectedGroup: string | null, groups: FolderGrou
         mutationFn: async (mod: ModInfo) => {
             try {
                 await window.api.invoke("mod:toggle", mod.path);
-                const currentGroupPath = groups.find((g) => g.name === selectedGroup)?.path;
+                const currentGroupPath = selectedGroup?.path;
                 if (currentGroupPath) {
                     const refreshedGroup = (await window.api.invoke(
                         "mod:getMods",
@@ -88,7 +89,7 @@ export function useModMutations(selectedGroup: string | null, groups: FolderGrou
                 params.variable,
                 params.value,
             );
-            const currentGroupPath = groups.find((g) => g.name === selectedGroup)?.path;
+            const currentGroupPath = selectedGroup?.path;
             if (currentGroupPath) {
                 const refreshedGroup = (await window.api.invoke(
                     "mod:getMods",

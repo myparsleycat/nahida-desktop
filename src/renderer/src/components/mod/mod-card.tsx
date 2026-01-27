@@ -1,15 +1,10 @@
 import {
-  HelpCircle,
   ImageIcon,
-  Trash2,
-  Copy,
-  FileText,
   FolderIcon,
   FileCogIcon,
   TrashIcon,
-  TerminalIcon,
   TerminalSquareIcon,
-  Clipboard as ClipboardIcon,
+  ClipboardIcon,
 } from "lucide-react";
 import { Preview } from "./preview";
 import { Input } from "@renderer/components/ui/input";
@@ -23,12 +18,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "../ui/alert-dialog";
+} from "@renderer/components/ui/alert-dialog";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@renderer/components/ui/context-menu";
 import type { ModInfo } from "@renderer/types/mod";
 import { cn } from "@renderer/lib/utils";
-import { ScrollArea } from "../ui/scroll-area";
-import { Separator } from "../ui/separator";
-import { Button } from "../ui/button";
+import { ScrollArea } from "@renderer/components/ui/scroll-area";
+import { Separator } from "@renderer/components/ui/separator";
+import { Button } from "@renderer/components/ui/button";
 import { useRouteContext } from "@tanstack/react-router";
 import { useModStore } from "@renderer/store/mod";
 import { toast } from "sonner";
@@ -71,7 +72,8 @@ const getToggleInputColorClass = (isEnabled: boolean) => {
 
 export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
   const { queryClient } = useRouteContext({ from: "/mod/" });
-  const selectedGame = useModStore((s) => s.selectedGame);
+  const selectedGroup = useModStore((s) => s.selectedGroup);
+  const selectedGroupPath = selectedGroup?.path;
 
   const handlePaste = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -87,7 +89,7 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
             error: "Failed to copy preview",
           });
           promise.then(() => {
-            queryClient.invalidateQueries({ queryKey: ["mods", selectedGame] });
+            queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
           });
           return;
         }
@@ -103,7 +105,7 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
             error: "Failed to download preview",
           });
           promise.then(() => {
-            queryClient.invalidateQueries({ queryKey: ["mods", selectedGame] });
+            queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
           });
           return;
         }
@@ -123,7 +125,7 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
               error: "Failed to save preview",
             });
             promise.then(() => {
-              queryClient.invalidateQueries({ queryKey: ["mods", selectedGame] });
+              queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
             });
           };
           reader.readAsDataURL(blob);
@@ -147,7 +149,7 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
       error: "삭제 실패",
     });
     promise.then(() => {
-      queryClient.invalidateQueries({ queryKey: ["mods", selectedGame] });
+      queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
     });
   };
 
@@ -225,26 +227,62 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
 }
 
 function ModPreview({ mod, onPaste }: { mod: ModInfo; onPaste: (e: React.MouseEvent) => void }) {
+  const { queryClient } = useRouteContext({ from: "/mod/" });
+  const selectedGroup = useModStore((s) => s.selectedGroup);
+
+  const previewContent = (
+    <Preview
+      path={mod.preview}
+      alt={mod.name}
+      objectFit="contain"
+      className="absolute inset-0"
+      fallback={
+        <div className="flex flex-col items-center justify-center gap-2">
+          <ImageIcon className="w-12 h-12 text-muted-foreground/50" />
+          <div className="flex flex-col items-center gap-1">
+            <span className="text-sm text-muted-foreground">No Preview</span>
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onPaste}>
+              <ClipboardIcon className="w-3 h-3" />
+              Paste
+            </Button>
+          </div>
+        </div>
+      }
+    />
+  );
+
+  const handleDelete = () => {
+    if (!mod.preview) return;
+    const promise = window.api.invoke("util:fs:trash", mod.preview);
+    toast.promise(promise, {
+      loading: "휴지통으로 이동 중...",
+      success: "삭제 완료",
+      error: "삭제 실패",
+    });
+    promise.then(() => {
+      queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroup?.path] });
+    });
+  };
+
   return (
     <div className="flex-1 p-2 flex items-center justify-center relative overflow-hidden">
-      <Preview
-        path={mod.preview}
-        alt={mod.name}
-        objectFit="contain"
-        className="absolute inset-0"
-        fallback={
-          <div className="flex flex-col items-center justify-center gap-2">
-            <ImageIcon className="w-12 h-12 text-muted-foreground/50" />
-            <div className="flex flex-col items-center gap-1">
-              <span className="text-sm text-muted-foreground">No Preview</span>
-              <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onPaste}>
-                <ClipboardIcon className="w-3 h-3" />
-                Paste
-              </Button>
-            </div>
-          </div>
-        }
-      />
+      {mod.preview ? (
+        <ContextMenu>
+          <ContextMenuTrigger>{previewContent}</ContextMenuTrigger>
+          <ContextMenuContent onClick={(e) => e.stopPropagation()}>
+            <ContextMenuItem onClick={() => window.api.invoke("util:openExternal", mod.preview!)}>
+              <ImageIcon />
+              뷰어로 열기
+            </ContextMenuItem>
+            <ContextMenuItem onClick={handleDelete}>
+              <TrashIcon />
+              프리뷰 삭제
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+      ) : (
+        previewContent
+      )}
     </div>
   );
 }
