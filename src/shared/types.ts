@@ -48,6 +48,15 @@ export interface Preset {
     mods: string[];
 }
 
+export interface PathMetadata {
+    isDirectory: boolean;
+    isFile: boolean;
+    size: number;
+    mtime: Date;
+    ctime: Date;
+    birthtime: Date;
+}
+
 export type IpcHandlers = {
     ping: () => string;
 
@@ -85,6 +94,7 @@ export type IpcHandlers = {
     "util:fs:trash": (path: string) => void;
     "util:openCmd": (path: string) => void;
     "util:getClipboardFiles": () => string[];
+    "util:fs:metadata": (path: string) => Promise<PathMetadata>;
 
     "drive:get:item": (itemId: string) => ModIdGetResp;
     "drive:patch:rename": (

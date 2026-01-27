@@ -50,6 +50,7 @@ export const IPC_HANDLER_CHANNELS = [
     "util:fs:trash",
     "util:openCmd",
     "util:getClipboardFiles",
+    "util:fs:metadata",
 
     "drive:get:item",
     "drive:patch:rename",

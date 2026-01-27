@@ -11,7 +11,7 @@ import { CharacterSidebarItem, CharacterSidebarItemSkeleton } from "./character-
 interface CharacterSidebarProps {
   groups: FolderGroup[];
   isLoading?: boolean;
-  onModDrop: (files: File[], groupPath: string) => void;
+  onModDrop: (files: File[], groupPath: string, options?: { allowImages?: boolean }) => void;
 }
 
 export function CharacterSidebar({ groups, isLoading = false, onModDrop }: CharacterSidebarProps) {
@@ -71,7 +71,7 @@ export function CharacterSidebar({ groups, isLoading = false, onModDrop }: Chara
                   group={group}
                   isSelected={selectedGroup?.name === group.name}
                   onClick={() => handleSelect(group)}
-                  onDrop={(files) => onModDrop(files, group.path)}
+                  onDrop={(files) => onModDrop(files, group.path, { allowImages: true })}
                 />
               ))}
         </div>

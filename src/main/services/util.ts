@@ -1,3 +1,4 @@
+import { PathMetadata } from "@shared/types";
 import { spawn } from "child_process";
 import {
     dialog,
@@ -7,6 +8,7 @@ import {
     BrowserWindow,
     clipboard,
 } from "electron";
+import fse from "fs-extra";
 
 export type ShowModalReturnValue = ReturnType<typeof dialog.showMessageBox>;
 
@@ -73,4 +75,16 @@ export function getClipboardFiles(): string[] {
     }
 
     return [];
+}
+
+export async function getPathMetadata(path: string): Promise<PathMetadata> {
+    const stat = await fse.stat(path);
+    return {
+        isDirectory: stat.isDirectory(),
+        isFile: stat.isFile(),
+        size: stat.size,
+        mtime: stat.mtime,
+        ctime: stat.ctime,
+        birthtime: stat.birthtime,
+    };
 }

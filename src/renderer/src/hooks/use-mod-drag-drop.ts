@@ -3,14 +3,19 @@ import { toast } from "sonner";
 import { Logger } from "@renderer/lib/logger";
 import { QueryClient } from "@tanstack/react-query";
 import path from "path-browserify";
+import { useModStore } from "@renderer/store/mod";
 
 const SUPPORTED_ARCHIVE_EXTENSIONS = [".zip", ".rar", ".7z"];
+const SUPPORTED_IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"];
 
 export function useModDragDrop(
     groupPath: string | undefined,
     queryClient: QueryClient,
     game: string,
 ) {
+    const selectedGame = useModStore((s) => s.selectedGame);
+    const selectedGroup = useModStore((s) => s.selectedGroup);
+
     const [isDragging, setIsDragging] = useState(false);
 
     const isArchive = (filePath: string): boolean => {
@@ -18,9 +23,15 @@ export function useModDragDrop(
         return SUPPORTED_ARCHIVE_EXTENSIONS.includes(ext);
     };
 
+    const isImage = (filePath: string): boolean => {
+        const ext = path.extname(filePath).toLowerCase();
+        return SUPPORTED_IMAGE_EXTENSIONS.includes(ext);
+    };
+
     const isDirectory = async (filePath: string): Promise<boolean> => {
         try {
-            return true;
+            const metadata = await window.api.invoke("util:fs:metadata", filePath);
+            return metadata.isDirectory;
         } catch {
             return false;
         }
@@ -56,11 +67,18 @@ export function useModDragDrop(
             setIsDragging(true);
         }
     };
-    const handleFilesDrop = async (files: File[], targetPath: string) => {
+
+    const handleFilesDrop = async (
+        files: File[],
+        targetPath: string,
+        options: { allowImages?: boolean } = {},
+    ) => {
         if (!targetPath) {
             toast.error("대상 경로가 설정되지 않았습니다.");
             return;
         }
+
+        const { allowImages = false } = options;
 
         for (const file of files) {
             try {
@@ -71,11 +89,28 @@ export function useModDragDrop(
                     continue;
                 }
 
-                if (isArchive(filePath)) {
+                const isDir = await isDirectory(filePath);
+                const isArch = isArchive(filePath);
+                const isImg = isImage(filePath);
+
+                if (!isDir && !isArch && (!allowImages || !isImg)) {
+                    const message = allowImages
+                        ? `${file.name}은(는) 지원하는 파일 형식이 아닙니다. (압축 파일, 폴더, 이미지 파일만 가능)`
+                        : `${file.name}은(는) 지원하는 파일 형식이 아닙니다. (압축 파일 또는 폴더만 가능)`;
+                    toast.warning(message);
+                    continue;
+                }
+
+                if (isArch) {
                     toast.promise(window.api.invoke("mod:extractArchive", filePath, targetPath), {
                         loading: `${file.name} 압축 해제 중...`,
                         success: () => {
-                            queryClient.invalidateQueries({ queryKey: ["mods", game] });
+                            queryClient.invalidateQueries({
+                                queryKey: ["characters", selectedGame],
+                            });
+                            queryClient.invalidateQueries({
+                                queryKey: ["modGroup", selectedGroup?.path],
+                            });
                             return `${file.name} 압축 해제 완료`;
                         },
                         error: (error) => {
@@ -87,18 +122,23 @@ export function useModDragDrop(
                             return `${file.name} 압축 해제 실패`;
                         },
                     });
-                } else {
+                } else if (isDir || (allowImages && isImg)) {
                     toast.promise(window.api.invoke("mod:copyFolder", filePath, targetPath), {
                         loading: `${file.name} 처리 중...`,
                         success: () => {
-                            queryClient.invalidateQueries({ queryKey: ["mods", game] });
+                            queryClient.invalidateQueries({
+                                queryKey: ["characters", selectedGame],
+                            });
+                            queryClient.invalidateQueries({
+                                queryKey: ["modGroup", selectedGroup?.path],
+                            });
                             return `${file.name} 추가 완료`;
                         },
                         error: (error) => {
                             Logger.error(error, "ModDragDrop:copyFolder");
                             if (error.message?.includes("ALREADY_EXISTS")) {
                                 const folderName = error.message.split(":")[1];
-                                return `이미 존재하는 폴더입니다: ${folderName}`;
+                                return `이미 존재하는 항목입니다: ${folderName}`;
                             }
                             return `${file.name} 추가 실패`;
                         },
@@ -112,8 +152,6 @@ export function useModDragDrop(
     };
 
     const handleDrop = async (e: React.DragEvent) => {
-        console.log("handleDrop Triggered");
-
         if (!e.dataTransfer?.types.includes("Files")) return;
 
         e.preventDefault();
@@ -130,7 +168,7 @@ export function useModDragDrop(
             return;
         }
 
-        await handleFilesDrop(files, groupPath);
+        await handleFilesDrop(files, groupPath, { allowImages: false });
     };
 
     return {
