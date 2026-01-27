@@ -18,6 +18,7 @@ files:
 extraResources:
     - from: build/extractor/extractor.exe
     # - from: build/watcher/watcher.exe
+    - from: build/watchman-v2025.02.24.00-windows
 asarUnpack:
     - resources/**
 win:
