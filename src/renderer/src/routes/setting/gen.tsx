@@ -114,7 +114,7 @@ function RouteComponent() {
             <SelectTrigger className="w-full">
               <SelectValue placeholder="언어 선택" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
               <SelectItem value="ko">한국어</SelectItem>
               <SelectItem value="en" disabled>
                 English (Soon)
@@ -134,7 +134,7 @@ function RouteComponent() {
             <SelectTrigger className="w-full">
               <SelectValue placeholder="테마 선택" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
               <SelectItem value="system">시스템 기본값</SelectItem>
               <SelectItem value="light">밝게</SelectItem>
               <SelectItem value="dark">어둡게</SelectItem>
@@ -153,7 +153,7 @@ function RouteComponent() {
             <SelectTrigger className="w-full">
               <SelectValue placeholder="시작 페이지 선택" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
               <SelectItem value="/transfer">전송 페이지</SelectItem>
               <SelectItem value="/drive/drive/root">내 드라이브</SelectItem>
               <SelectItem value="/drive/share/root">공유 드라이브</SelectItem>

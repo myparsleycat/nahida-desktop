@@ -130,7 +130,11 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
             <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="max-w-[400px]">
+        <DropdownMenuContent
+          align="start"
+          className="max-w-[400px]"
+          onCloseAutoFocus={(e) => e.preventDefault()}
+        >
           {[...breadcrumbItems].reverse().map((ancestor) => (
             <DropdownMenuItem
               key={ancestor.id}
@@ -209,7 +213,7 @@ export function AkashaHeadButtons(props: AkashaHeadButtonsProps) {
           <DropdownMenuTrigger className={buttonVariants({ variant: "ghost", size: "icon" })}>
             <DownloadIcon size={20} />
           </DropdownMenuTrigger>
-          <DropdownMenuContent>
+          <DropdownMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
             <DropdownMenuItem onClick={handleDownload}>
               <DownloadIcon className="mr-2 h-4 w-4" />
               {t("g.download")}
@@ -221,7 +225,7 @@ export function AkashaHeadButtons(props: AkashaHeadButtonsProps) {
           <DropdownMenuTrigger className={buttonVariants({ variant: "ghost" })}>
             {t("g.make_new")}
           </DropdownMenuTrigger>
-          <DropdownMenuContent>
+          <DropdownMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
             <DropdownMenuItem
               className="gap-3 cursor-pointer"
               onClick={() => dialog.setOpen("createDirDialog", true)}
@@ -319,7 +323,12 @@ function ContextMenuContentSnippet() {
 
           <ContextMenuItem
             className="gap-x-2"
-            onClick={() => window.api.invoke("drive:fn:startDownload", selectedItems[0].id)}
+            onClick={() =>
+              window.api.invoke("drive:fn:startDownload", {
+                id: selectedItems[0].id,
+                suggestedName: selectedItems[0].name,
+              })
+            }
           >
             <DownloadIcon size={18} />
             {t("drive.ui.context_menu.download")}
