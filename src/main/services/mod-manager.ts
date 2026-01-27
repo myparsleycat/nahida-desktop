@@ -82,7 +82,7 @@ export class ModManager {
         }
 
         try {
-            this.gameWatcherId = this.desktop.lib.watcher.createWatcher(
+            this.gameWatcherId = await this.desktop.lib.watcher.createWatcher(
                 modFolderPath,
                 { depth: 0 },
                 (event) => {
@@ -108,7 +108,7 @@ export class ModManager {
         }
 
         try {
-            this.characterWatcherId = this.desktop.lib.watcher.createWatcher(
+            this.characterWatcherId = await this.desktop.lib.watcher.createWatcher(
                 characterPath,
                 { depth: 0 },
                 (event) => {

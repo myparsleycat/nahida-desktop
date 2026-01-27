@@ -17,7 +17,7 @@ files:
 # asar: false
 extraResources:
     - from: build/extractor/extractor.exe
-    - from: build/watcher/watcher.exe
+    # - from: build/watcher/watcher.exe
 asarUnpack:
     - resources/**
 win:

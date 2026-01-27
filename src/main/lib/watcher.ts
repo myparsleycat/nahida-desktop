@@ -1,86 +1,62 @@
 import { NahidaDesktop } from "..";
 import path from "node:path";
-import { app } from "electron";
-import { spawn, ChildProcess } from "node:child_process";
 import { nanoid } from "nanoid";
+import watcher, { AsyncSubscription, Event } from "@parcel/watcher";
 
 interface WatcherOptions {
     recursive?: boolean;
+    depth?: number;
 }
 
 export class Watcher {
     private readonly desktop: NahidaDesktop;
-    private process: ChildProcess | null = null;
-    private callbacks: Map<string, (eventName: string, path: string) => void>;
+    private subscriptions: Map<string, AsyncSubscription>;
     private pathToIds: Map<string, Set<string>>;
     private idToPath: Map<string, string>;
+    private pathToRecursive: Map<string, boolean>;
+    private callbacks: Map<string, (eventName: string, path: string) => void>;
 
     constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
-        this.callbacks = new Map();
+        this.subscriptions = new Map();
         this.pathToIds = new Map();
         this.idToPath = new Map();
-        this.startProcess();
+        this.pathToRecursive = new Map();
+        this.callbacks = new Map();
     }
 
-    private getWatcherPath(): string {
-        if (app.isPackaged) {
-            return path.join(app.getAppPath(), "..", "watcher.exe");
-        }
-        return path.join(app.getAppPath(), "build", "watcher", "watcher.exe");
-    }
+    private handleEvents(watchedPath: string, events: Event[]) {
+        const ids = this.pathToIds.get(watchedPath);
+        if (!ids) return;
 
-    private startProcess() {
-        const exePath = this.getWatcherPath();
-        this.process = spawn(exePath);
+        const isRecursive = this.pathToRecursive.get(watchedPath);
 
-        this.process.stdout?.on("data", (data) => {
-            const lines = data.toString().split("\n");
-            for (const line of lines) {
-                if (!line.trim()) continue;
-                try {
-                    const msg = JSON.parse(line);
-                    this.handleMessage(msg);
-                } catch (e) {
-                    console.error("Failed to parse watcher output:", line, e);
+        for (const event of events) {
+            // respect depth: 0 (non-recursive)
+            if (isRecursive === false) {
+                if (path.dirname(event.path) !== watchedPath) {
+                    continue;
                 }
             }
-        });
 
-        this.process.stderr?.on("data", (data) => {
-            console.error("Watcher stderr:", data.toString());
-        });
+            let eventName = event.type as string;
+            if (eventName === "create") eventName = "add";
+            if (eventName === "delete") eventName = "unlink";
 
-        this.process.on("close", (code) => {
-            console.log("Watcher process exited with code", code);
-            this.process = null;
-            setTimeout(() => this.startProcess(), 1000);
-        });
-    }
-
-    private handleMessage(msg: any) {
-        if (msg.event === "error") {
-            console.error("Watcher error:", msg.info);
-            return;
-        }
-
-        for (const [watchedRoot, ids] of this.pathToIds) {
-            if (msg.path.startsWith(watchedRoot)) {
-                for (const id of ids) {
-                    const callback = this.callbacks.get(id);
-                    if (callback) {
-                        callback(msg.event, msg.path);
-                    }
+            for (const id of ids) {
+                const callback = this.callbacks.get(id);
+                if (callback) {
+                    callback(eventName, event.path);
                 }
             }
         }
     }
 
-    public createWatcher(
+    public async createWatcher(
         dest: string | string[],
-        options: { recursive?: boolean; depth?: number } = {},
+        options: WatcherOptions = {},
         callback: (eventName: string, path: string) => void,
-    ): string {
+    ): Promise<string> {
         const id = nanoid();
         const paths = Array.isArray(dest) ? dest : [dest];
 
@@ -93,12 +69,26 @@ export class Watcher {
 
             if (!this.pathToIds.has(normalizedPath)) {
                 this.pathToIds.set(normalizedPath, new Set());
-                // Send command to Go
-                this.sendCommand({
-                    action: "watch",
-                    path: normalizedPath,
-                    recursive: recursive,
-                });
+                this.pathToRecursive.set(normalizedPath, recursive);
+
+                try {
+                    const subscription = await watcher.subscribe(
+                        normalizedPath,
+                        (err, events) => {
+                            if (err) {
+                                this.desktop.logger.error(err, `Watcher:error:${normalizedPath}`);
+                                return;
+                            }
+                            this.handleEvents(normalizedPath, events);
+                        },
+                        {
+                            backend: "windows",
+                        },
+                    );
+                    this.subscriptions.set(normalizedPath, subscription);
+                } catch (error) {
+                    this.desktop.logger.error(error, `Watcher:subscribe:${normalizedPath}`);
+                }
             }
             this.pathToIds.get(normalizedPath)!.add(id);
             this.idToPath.set(id, normalizedPath);
@@ -119,20 +109,16 @@ export class Watcher {
                     ids.delete(id);
                     if (ids.size === 0) {
                         this.pathToIds.delete(watchedPath);
-                        this.sendCommand({
-                            action: "unwatch",
-                            path: watchedPath,
-                        });
+                        this.pathToRecursive.delete(watchedPath);
+                        const subscription = this.subscriptions.get(watchedPath);
+                        if (subscription) {
+                            await subscription.unsubscribe();
+                            this.subscriptions.delete(watchedPath);
+                        }
                     }
                 }
                 this.idToPath.delete(id);
             }
-        }
-    }
-
-    private sendCommand(cmd: any) {
-        if (this.process && this.process.stdin) {
-            this.process.stdin.write(JSON.stringify(cmd) + "\n");
         }
     }
 }
