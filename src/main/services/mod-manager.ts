@@ -84,16 +84,9 @@ export class ModManager {
         try {
             this.gameWatcherId = this.desktop.lib.watcher.createWatcher(
                 modFolderPath,
-                {
-                    depth: 0,
-                    ignoreInitial: true,
-                    awaitWriteFinish: {
-                        stabilityThreshold: 2000,
-                        pollInterval: 100,
-                    },
-                },
+                { depth: 0 },
                 (event) => {
-                    if (event === "addDir" || event === "unlinkDir") {
+                    if (event === "add" || event === "unlink") {
                         if (this.desktop.window.main.window) {
                             this.desktop.ipc.postMessageToWindow(
                                 this.desktop.window.main.window,
@@ -117,16 +110,9 @@ export class ModManager {
         try {
             this.characterWatcherId = this.desktop.lib.watcher.createWatcher(
                 characterPath,
-                {
-                    depth: 0,
-                    ignoreInitial: true,
-                    awaitWriteFinish: {
-                        stabilityThreshold: 2000,
-                        pollInterval: 100,
-                    },
-                },
+                { depth: 0 },
                 (event) => {
-                    if (event === "addDir" || event === "unlinkDir") {
+                    if (event === "add" || event === "unlink") {
                         if (this.desktop.window.main.window) {
                             this.desktop.ipc.postMessageToWindow(
                                 this.desktop.window.main.window,
