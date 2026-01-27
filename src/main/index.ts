@@ -185,7 +185,7 @@ app.whenReady().then(async () => {
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.nahida");
 
-    protocol.handle("local", (request) => {
+    protocol.handle("local", async (request) => {
         const url = new URL(request.url);
 
         let fullPath = decodeURIComponent(url.pathname);
@@ -199,7 +199,13 @@ app.whenReady().then(async () => {
         }
 
         const fileUrl = pathToFileURL(fullPath).href;
-        return net.fetch(fileUrl);
+
+        try {
+            const response = await net.fetch(fileUrl);
+            return response;
+        } catch (error) {
+            return new Response("not found", { status: 404 });
+        }
     });
 
     // Default open or close DevTools by F12 in development
