@@ -6,8 +6,8 @@
     "author": "nahida.live",
     "homepage": "https://nahida.live",
     "scripts": {
-        "go:build:extractor": "cd build/extractor && go build -o extractor.exe",
-        "go:build:watcher": "cd build/watcher && go build -o watcher.exe",
+        "go:build:extractor": "cd build/extractor && go mod tidy && go build -o extractor.exe",
+        "go:build:watcher": "cd build/watcher && go mod tidy && go build -o watcher.exe",
         "go:build": "pnpm run go:build:extractor && pnpm run go:build:watcher",
         "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
         "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
