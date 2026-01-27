@@ -14,7 +14,7 @@ import { AddGameDialog } from "./add-game-dialog";
 import { CreatePresetDialog } from "./create-preset-dialog";
 import { useModStore } from "@renderer/store/mod";
 import { usePresets } from "@renderer/hooks/use-mod-data";
-import { usePresetMutations } from "@renderer/hooks/use-mod-mutations";
+import { useEffect } from "react";
 
 interface GamePresetSelectorProps {
   games: GameConfig[];
@@ -34,9 +34,15 @@ export function GamePresetSelector({
   const selectedPreset = useModStore((s) => s.selectedPreset);
   const setSelectedPreset = useModStore((s) => s.setSelectedPreset);
   const setIsSelectedPresetDialogOpen = useModStore((s) => s.setIsSelectedPresetDialogOpen);
+  const isSelectedPresetDialogOpen = useModStore((s) => s.isSelectedPresetDialogOpen);
 
   const { data: presets = [] } = usePresets(selectedGame);
-  const { createPresetMutation } = usePresetMutations();
+
+  useEffect(() => {
+    if (!isSelectedPresetDialogOpen) {
+      setSelectedPreset(null);
+    }
+  }, [isSelectedPresetDialogOpen, setSelectedPreset]);
 
   const handleGameSelect = async (game: string) => {
     setSelectedGame(game);
@@ -45,13 +51,16 @@ export function GamePresetSelector({
 
   return (
     <div className="flex flex-col items-center justify-center w-full p-2 border-t space-y-3">
-      {/* Game Selection */}
       <div className="flex w-full space-x-1">
-        <Select value={selectedGame || undefined} onValueChange={handleGameSelect}>
+        <Select value={selectedGame || ""} onValueChange={handleGameSelect}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Select a Game" />
           </SelectTrigger>
-          <SelectContent position="popper">
+          <SelectContent
+            position="popper"
+            onCloseAutoFocus={(e) => e.preventDefault()}
+            aria-describedby={undefined}
+          >
             <SelectGroup>
               <SelectLabel>Games</SelectLabel>
               {games.map((game) => (
@@ -70,11 +79,11 @@ export function GamePresetSelector({
         </Button>
       </div>
 
-      {/* Preset Selection */}
       <div className="flex w-full space-x-1">
         <Select
-          value={selectedPreset?.id}
+          value={selectedPreset?.id || ""}
           onValueChange={(id) => {
+            if (!id) return;
             const preset = presets.find((p) => p.id === id);
             if (preset) {
               setSelectedPreset(preset);
@@ -85,7 +94,7 @@ export function GamePresetSelector({
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Select a Preset" />
           </SelectTrigger>
-          <SelectContent position="popper">
+          <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
             <SelectGroup>
               <SelectLabel>Preset</SelectLabel>
               {presets.map((preset) => (
@@ -97,10 +106,7 @@ export function GamePresetSelector({
           </SelectContent>
         </Select>
 
-        <CreatePresetDialog
-          onCreatePreset={() => createPresetMutation.mutate()}
-          disabled={!selectedGame}
-        />
+        <CreatePresetDialog disabled={!selectedGame} />
       </div>
     </div>
   );
