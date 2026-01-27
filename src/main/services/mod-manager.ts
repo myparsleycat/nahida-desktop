@@ -237,6 +237,10 @@ export class ModManager {
                 );
             }
 
+            files.sort((a, b) =>
+                a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
+            );
+
             const imageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"];
             const videoExtensions = [".mp4", ".webm", ".avi", ".mkv", ".mov"];
             const excludedKeywords = ["normal", "light", "material", "diffuse"];
