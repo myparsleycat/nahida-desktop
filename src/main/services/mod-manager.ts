@@ -82,7 +82,7 @@ export class ModManager {
         }
 
         try {
-            this.gameWatcherId = this.desktop.lib.watcher.createWatcher(
+            this.gameWatcherId = await this.desktop.lib.watcher.createWatcher(
                 modFolderPath,
                 { depth: 0 },
                 (event) => {
@@ -108,11 +108,11 @@ export class ModManager {
         }
 
         try {
-            this.characterWatcherId = this.desktop.lib.watcher.createWatcher(
+            this.characterWatcherId = await this.desktop.lib.watcher.createWatcher(
                 characterPath,
                 { depth: 0 },
                 (event) => {
-                    if (event === "add" || event === "unlink") {
+                    if (event === "update" || event === "unlink") {
                         if (this.desktop.window.main.window) {
                             this.desktop.ipc.postMessageToWindow(
                                 this.desktop.window.main.window,
@@ -223,49 +223,63 @@ export class ModManager {
                 );
             }
 
-            files.sort((a, b) =>
-                a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
-            );
-
             const imageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"];
             const videoExtensions = [".mp4", ".webm", ".avi", ".mkv", ".mov"];
             const excludedKeywords = ["normal", "light", "material", "diffuse"];
 
-            const isExcludedFile = (filename: string): boolean => {
-                const lowerFilename = filename.toLowerCase();
+            const isExcludedFile = (file: string): boolean => {
+                const lowerFilename = path.basename(file).toLowerCase();
+                if (lowerFilename.includes("preview")) return false;
                 return excludedKeywords.some((keyword) => lowerFilename.includes(keyword));
             };
 
-            const imageFiles = files.filter(
-                (file) =>
-                    imageExtensions.some((ext) => file.toLowerCase().endsWith(ext)) &&
-                    !isExcludedFile(file),
+            const getScore = (file: string): number => {
+                const lowerFile = file.toLowerCase();
+                const filename = path.basename(lowerFile);
+                const isRoot = !file.includes("/") && !file.includes("\\");
+                const isVideo = videoExtensions.some((ext) => lowerFile.endsWith(ext));
+
+                let score = 0;
+
+                if (filename.startsWith("preview")) {
+                    score += 1000;
+                } else if (filename.includes("preview")) {
+                    score += 500;
+                }
+
+                if (isRoot) score += 200;
+
+                if (isVideo) score += 10;
+
+                return score;
+            };
+
+            const isMediaFile = (file: string): boolean => {
+                const lowerFile = file.toLowerCase();
+                return (
+                    imageExtensions.some((ext) => lowerFile.endsWith(ext)) ||
+                    videoExtensions.some((ext) => lowerFile.endsWith(ext))
+                );
+            };
+
+            const candidateFiles = files.filter(
+                (file) => isMediaFile(file) && !isExcludedFile(file),
             );
-            const videoFiles = files.filter(
-                (file) =>
-                    videoExtensions.some((ext) => file.toLowerCase().endsWith(ext)) &&
-                    !isExcludedFile(file),
-            );
 
-            // 프리뷰 붙은 영상
-            const previewVideoFile = videoFiles.find((file) =>
-                file.toLowerCase().includes("preview"),
-            );
-            if (previewVideoFile) return path.join(modPath, previewVideoFile);
+            if (candidateFiles.length === 0) return null;
 
-            // 프리뷰 붙은 이미지
-            const previewImageFile = imageFiles.find((file) =>
-                file.toLowerCase().includes("preview"),
-            );
-            if (previewImageFile) return path.join(modPath, previewImageFile);
+            candidateFiles.sort((a, b) => {
+                const scoreA = getScore(a);
+                const scoreB = getScore(b);
 
-            // 첫번째 영상
-            if (videoFiles.length > 0) return path.join(modPath, videoFiles[0]);
+                if (scoreA !== scoreB) {
+                    return scoreB - scoreA;
+                }
 
-            // 첫번째 이미지
-            if (imageFiles.length > 0) return path.join(modPath, imageFiles[0]);
+                return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+            });
 
-            return null;
+            return path.join(modPath, candidateFiles[0]);
         } catch (error) {
             this.desktop.logger.error(error, `Mod:findPreview:${modPath}`);
             return null;

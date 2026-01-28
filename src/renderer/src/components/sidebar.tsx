@@ -1,5 +1,6 @@
 import {
   ArrowUpDownIcon,
+  DatabaseBackupIcon,
   GamepadIcon,
   HardDriveIcon,
   HomeIcon,
@@ -128,6 +129,24 @@ export function Sidebar({ className }: { className?: string }) {
               모드
             </TooltipContent>
           </Tooltip>
+
+          {/* <Tooltip disableHoverableContent={true}>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onPointerDown={handlePointerDown}
+                onClick={() => {
+                  navi({ to: "/backup" });
+                }}
+              >
+                <DatabaseBackupIcon className={cn(iconSize)} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right" hideWhenDetached={true}>
+              백업
+            </TooltipContent>
+          </Tooltip> */}
 
           <Separator orientation="horizontal" />
 

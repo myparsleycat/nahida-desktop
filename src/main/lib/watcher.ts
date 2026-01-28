@@ -1,86 +1,105 @@
 import { NahidaDesktop } from "..";
 import path from "node:path";
-import { app } from "electron";
-import { spawn, ChildProcess } from "node:child_process";
 import { nanoid } from "nanoid";
+import { Client, SubscriptionResponse } from "fb-watchman";
+import { app } from "electron";
+import { Subject } from "rxjs";
+
+const watchmanBinaryPath = app.isPackaged
+    ? path.join(app.getAppPath(), "..", "watchman", "watchman.exe")
+    : path.join(
+          app.getAppPath(),
+          "build",
+          "watchman-v2025.02.24.00-windows",
+          "watchman",
+          "watchman.exe",
+      );
 
 interface WatcherOptions {
     recursive?: boolean;
+    depth?: number;
+}
+
+interface WatchData {
+    watchRoot: string;
+    subscriptionName: string;
+}
+
+interface WatchmanEvent {
+    watchedPath: string;
+    eventName: string;
+    fullPath: string;
 }
 
 export class Watcher {
     private readonly desktop: NahidaDesktop;
-    private process: ChildProcess | null = null;
-    private callbacks: Map<string, (eventName: string, path: string) => void>;
+    private client: Client;
+    private pathToWatchData: Map<string, WatchData>;
     private pathToIds: Map<string, Set<string>>;
     private idToPath: Map<string, string>;
+    private pathToRecursive: Map<string, boolean>;
+    private callbacks: Map<string, (eventName: string, path: string) => void>;
+    private subscriptionToPath: Map<string, string>;
+
+    private readonly events$ = new Subject<WatchmanEvent>();
 
     constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
-        this.callbacks = new Map();
+        this.client = new Client({ watchmanBinaryPath });
+        this.pathToWatchData = new Map();
         this.pathToIds = new Map();
         this.idToPath = new Map();
-        this.startProcess();
+        this.pathToRecursive = new Map();
+        this.callbacks = new Map();
+        this.subscriptionToPath = new Map();
+
+        this.initEventListeners();
     }
 
-    private getWatcherPath(): string {
-        if (app.isPackaged) {
-            return path.join(app.getAppPath(), "..", "watcher.exe");
-        }
-        return path.join(app.getAppPath(), "build", "watcher", "watcher.exe");
-    }
+    private initEventListeners() {
+        this.client.on("subscription", (resp: SubscriptionResponse) => {
+            const subscriptionName = resp.subscription;
+            const watchedPath = this.subscriptionToPath.get(subscriptionName);
+            if (!watchedPath) return;
 
-    private startProcess() {
-        const exePath = this.getWatcherPath();
-        this.process = spawn(exePath);
+            const isRecursive = this.pathToRecursive.get(watchedPath);
 
-        this.process.stdout?.on("data", (data) => {
-            const lines = data.toString().split("\n");
-            for (const line of lines) {
-                if (!line.trim()) continue;
-                try {
-                    const msg = JSON.parse(line);
-                    this.handleMessage(msg);
-                } catch (e) {
-                    console.error("Failed to parse watcher output:", line, e);
-                }
-            }
-        });
+            for (const file of resp.files) {
+                const fullPath = path.join(watchedPath, file.name);
 
-        this.process.stderr?.on("data", (data) => {
-            console.error("Watcher stderr:", data.toString());
-        });
-
-        this.process.on("close", (code) => {
-            console.log("Watcher process exited with code", code);
-            this.process = null;
-            setTimeout(() => this.startProcess(), 1000);
-        });
-    }
-
-    private handleMessage(msg: any) {
-        if (msg.event === "error") {
-            console.error("Watcher error:", msg.info);
-            return;
-        }
-
-        for (const [watchedRoot, ids] of this.pathToIds) {
-            if (msg.path.startsWith(watchedRoot)) {
-                for (const id of ids) {
-                    const callback = this.callbacks.get(id);
-                    if (callback) {
-                        callback(msg.event, msg.path);
+                if (isRecursive === false) {
+                    if (path.dirname(fullPath) !== watchedPath) {
+                        continue;
                     }
                 }
+
+                const eventName = file.exists === false ? "unlink" : "update";
+                this.events$.next({ watchedPath, eventName, fullPath });
             }
-        }
+        });
+
+        this.client.on("error", (err: Error) => {
+            this.desktop.logger.error(err, "Watcher:watchman:error");
+        });
+
+        this.events$.subscribe(({ watchedPath, eventName, fullPath }) => {
+            const ids = this.pathToIds.get(watchedPath);
+            if (!ids) return;
+
+            for (const id of ids) {
+                const callback = this.callbacks.get(id);
+                if (callback) {
+                    callback(eventName, fullPath);
+                }
+            }
+        });
     }
 
-    public createWatcher(
+    public async createWatcher(
         dest: string | string[],
-        options: { recursive?: boolean; depth?: number } = {},
+        options: WatcherOptions = {},
         callback: (eventName: string, path: string) => void,
-    ): string {
+    ): Promise<string> {
         const id = nanoid();
         const paths = Array.isArray(dest) ? dest : [dest];
 
@@ -93,12 +112,13 @@ export class Watcher {
 
             if (!this.pathToIds.has(normalizedPath)) {
                 this.pathToIds.set(normalizedPath, new Set());
-                // Send command to Go
-                this.sendCommand({
-                    action: "watch",
-                    path: normalizedPath,
-                    recursive: recursive,
-                });
+                this.pathToRecursive.set(normalizedPath, recursive);
+
+                try {
+                    await this.subscribe(normalizedPath);
+                } catch (error) {
+                    this.desktop.logger.error(error, `Watcher:subscribe:${normalizedPath}`);
+                }
             }
             this.pathToIds.get(normalizedPath)!.add(id);
             this.idToPath.set(id, normalizedPath);
@@ -106,6 +126,53 @@ export class Watcher {
 
         this.callbacks.set(id, callback);
         return id;
+    }
+
+    private subscribe(normalizedPath: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            this.client.capabilityCheck({ optional: [], required: ["relative_root"] }, (err) => {
+                if (err) return reject(err);
+
+                this.client.command(["watch-project", normalizedPath], (err, resp: any) => {
+                    if (err) return reject(err);
+
+                    if (resp.warning) {
+                        this.desktop.logger.warn(resp.warning, "Watcher:watchman:warning");
+                    }
+
+                    const watchRoot = resp.watch;
+                    const relativePath = resp.relative_path;
+
+                    this.client.command(["clock", watchRoot], (err, clockResp: any) => {
+                        if (err) return reject(err);
+
+                        const subscriptionName = `sub-${nanoid()}`;
+                        const sub: any = {
+                            fields: ["name", "size", "mtime_ms", "exists", "type", "new"],
+                            since: clockResp.clock,
+                        };
+
+                        if (relativePath) {
+                            sub.relative_root = relativePath;
+                        }
+
+                        this.client.command(
+                            ["subscribe", watchRoot, subscriptionName, sub],
+                            (err) => {
+                                if (err) return reject(err);
+
+                                this.pathToWatchData.set(normalizedPath, {
+                                    watchRoot,
+                                    subscriptionName,
+                                });
+                                this.subscriptionToPath.set(subscriptionName, normalizedPath);
+                                resolve();
+                            },
+                        );
+                    });
+                });
+            });
+        });
     }
 
     public async removeWatcher(id: string) {
@@ -118,21 +185,28 @@ export class Watcher {
                 if (ids) {
                     ids.delete(id);
                     if (ids.size === 0) {
+                        const data = this.pathToWatchData.get(watchedPath);
+                        if (data) {
+                            this.client.command(
+                                ["unsubscribe", data.watchRoot, data.subscriptionName],
+                                (err) => {
+                                    if (err) {
+                                        this.desktop.logger.error(
+                                            err,
+                                            `Watcher:unsubscribe:${watchedPath}`,
+                                        );
+                                    }
+                                },
+                            );
+                            this.subscriptionToPath.delete(data.subscriptionName);
+                            this.pathToWatchData.delete(watchedPath);
+                        }
                         this.pathToIds.delete(watchedPath);
-                        this.sendCommand({
-                            action: "unwatch",
-                            path: watchedPath,
-                        });
+                        this.pathToRecursive.delete(watchedPath);
                     }
                 }
                 this.idToPath.delete(id);
             }
-        }
-    }
-
-    private sendCommand(cmd: any) {
-        if (this.process && this.process.stdin) {
-            this.process.stdin.write(JSON.stringify(cmd) + "\n");
         }
     }
 }
