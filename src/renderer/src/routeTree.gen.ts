@@ -13,8 +13,10 @@ import { Route as TransferRouteImport } from './routes/transfer'
 import { Route as ReportRouteImport } from './routes/report'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as SettingRouteRouteImport } from './routes/setting/route'
+import { Route as BackupRouteRouteImport } from './routes/backup/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ModIndexRouteImport } from './routes/mod/index'
+import { Route as BackupIndexRouteImport } from './routes/backup/index'
 import { Route as SettingSyncRouteImport } from './routes/setting/sync'
 import { Route as SettingSpaceRouteImport } from './routes/setting/space'
 import { Route as SettingNotiRouteImport } from './routes/setting/noti'
@@ -46,6 +48,11 @@ const SettingRouteRoute = SettingRouteRouteImport.update({
   path: '/setting',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BackupRouteRoute = BackupRouteRouteImport.update({
+  id: '/backup',
+  path: '/backup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -55,6 +62,11 @@ const ModIndexRoute = ModIndexRouteImport.update({
   id: '/mod/',
   path: '/mod/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const BackupIndexRoute = BackupIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => BackupRouteRoute,
 } as any)
 const SettingSyncRoute = SettingSyncRouteImport.update({
   id: '/sync',
@@ -109,6 +121,7 @@ const DriveDriveIdRoute = DriveDriveIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/backup': typeof BackupRouteRouteWithChildren
   '/setting': typeof SettingRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/report': typeof ReportRoute
@@ -121,6 +134,7 @@ export interface FileRoutesByFullPath {
   '/setting/noti': typeof SettingNotiRoute
   '/setting/space': typeof SettingSpaceRoute
   '/setting/sync': typeof SettingSyncRoute
+  '/backup/': typeof BackupIndexRoute
   '/mod/': typeof ModIndexRoute
   '/drive/drive/$id': typeof DriveDriveIdRoute
   '/drive/share/$id': typeof DriveShareIdRoute
@@ -139,6 +153,7 @@ export interface FileRoutesByTo {
   '/setting/noti': typeof SettingNotiRoute
   '/setting/space': typeof SettingSpaceRoute
   '/setting/sync': typeof SettingSyncRoute
+  '/backup': typeof BackupIndexRoute
   '/mod': typeof ModIndexRoute
   '/drive/drive/$id': typeof DriveDriveIdRoute
   '/drive/share/$id': typeof DriveShareIdRoute
@@ -146,6 +161,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/backup': typeof BackupRouteRouteWithChildren
   '/setting': typeof SettingRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/report': typeof ReportRoute
@@ -158,6 +174,7 @@ export interface FileRoutesById {
   '/setting/noti': typeof SettingNotiRoute
   '/setting/space': typeof SettingSpaceRoute
   '/setting/sync': typeof SettingSyncRoute
+  '/backup/': typeof BackupIndexRoute
   '/mod/': typeof ModIndexRoute
   '/drive/drive/$id': typeof DriveDriveIdRoute
   '/drive/share/$id': typeof DriveShareIdRoute
@@ -166,6 +183,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/backup'
     | '/setting'
     | '/auth'
     | '/report'
@@ -178,6 +196,7 @@ export interface FileRouteTypes {
     | '/setting/noti'
     | '/setting/space'
     | '/setting/sync'
+    | '/backup/'
     | '/mod/'
     | '/drive/drive/$id'
     | '/drive/share/$id'
@@ -196,12 +215,14 @@ export interface FileRouteTypes {
     | '/setting/noti'
     | '/setting/space'
     | '/setting/sync'
+    | '/backup'
     | '/mod'
     | '/drive/drive/$id'
     | '/drive/share/$id'
   id:
     | '__root__'
     | '/'
+    | '/backup'
     | '/setting'
     | '/auth'
     | '/report'
@@ -214,6 +235,7 @@ export interface FileRouteTypes {
     | '/setting/noti'
     | '/setting/space'
     | '/setting/sync'
+    | '/backup/'
     | '/mod/'
     | '/drive/drive/$id'
     | '/drive/share/$id'
@@ -221,6 +243,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BackupRouteRoute: typeof BackupRouteRouteWithChildren
   SettingRouteRoute: typeof SettingRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ReportRoute: typeof ReportRoute
@@ -260,6 +283,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/backup': {
+      id: '/backup'
+      path: '/backup'
+      fullPath: '/backup'
+      preLoaderRoute: typeof BackupRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -273,6 +303,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/mod/'
       preLoaderRoute: typeof ModIndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/backup/': {
+      id: '/backup/'
+      path: '/'
+      fullPath: '/backup/'
+      preLoaderRoute: typeof BackupIndexRouteImport
+      parentRoute: typeof BackupRouteRoute
     }
     '/setting/sync': {
       id: '/setting/sync'
@@ -347,6 +384,18 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface BackupRouteRouteChildren {
+  BackupIndexRoute: typeof BackupIndexRoute
+}
+
+const BackupRouteRouteChildren: BackupRouteRouteChildren = {
+  BackupIndexRoute: BackupIndexRoute,
+}
+
+const BackupRouteRouteWithChildren = BackupRouteRoute._addFileChildren(
+  BackupRouteRouteChildren,
+)
+
 interface SettingRouteRouteChildren {
   SettingAccRoute: typeof SettingAccRoute
   SettingBakRoute: typeof SettingBakRoute
@@ -375,6 +424,7 @@ const SettingRouteRouteWithChildren = SettingRouteRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BackupRouteRoute: BackupRouteRouteWithChildren,
   SettingRouteRoute: SettingRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ReportRoute: ReportRoute,
