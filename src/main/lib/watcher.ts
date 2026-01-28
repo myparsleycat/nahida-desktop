@@ -2,8 +2,8 @@ import { NahidaDesktop } from "..";
 import path from "node:path";
 import { nanoid } from "nanoid";
 import { Client, SubscriptionResponse } from "fb-watchman";
-import isDev from "@main/internal/isDev";
 import { app } from "electron";
+import { Subject } from "rxjs";
 
 const watchmanBinaryPath = app.isPackaged
     ? path.join(app.getAppPath(), "..", "watchman", "watchman.exe")
@@ -25,6 +25,12 @@ interface WatchData {
     subscriptionName: string;
 }
 
+interface WatchmanEvent {
+    watchedPath: string;
+    eventName: string;
+    fullPath: string;
+}
+
 export class Watcher {
     private readonly desktop: NahidaDesktop;
     private client: Client;
@@ -34,6 +40,8 @@ export class Watcher {
     private pathToRecursive: Map<string, boolean>;
     private callbacks: Map<string, (eventName: string, path: string) => void>;
     private subscriptionToPath: Map<string, string>;
+
+    private readonly events$ = new Subject<WatchmanEvent>();
 
     constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
@@ -45,40 +53,38 @@ export class Watcher {
         this.callbacks = new Map();
         this.subscriptionToPath = new Map();
 
+        this.initEventListeners();
+    }
+
+    private initEventListeners() {
         this.client.on("subscription", (resp: SubscriptionResponse) => {
-            this.handleEvents(resp);
+            const subscriptionName = resp.subscription;
+            const watchedPath = this.subscriptionToPath.get(subscriptionName);
+            if (!watchedPath) return;
+
+            const isRecursive = this.pathToRecursive.get(watchedPath);
+
+            for (const file of resp.files) {
+                const fullPath = path.join(watchedPath, file.name);
+
+                if (isRecursive === false) {
+                    if (path.dirname(fullPath) !== watchedPath) {
+                        continue;
+                    }
+                }
+
+                const eventName = file.exists === false ? "unlink" : "update";
+                this.events$.next({ watchedPath, eventName, fullPath });
+            }
         });
 
         this.client.on("error", (err: Error) => {
             this.desktop.logger.error(err, "Watcher:watchman:error");
         });
-    }
 
-    private handleEvents(resp: SubscriptionResponse) {
-        const subscriptionName = resp.subscription;
-        const watchedPath = this.subscriptionToPath.get(subscriptionName);
-        if (!watchedPath) return;
-
-        const ids = this.pathToIds.get(watchedPath);
-        if (!ids) return;
-
-        const isRecursive = this.pathToRecursive.get(watchedPath);
-
-        for (const file of resp.files) {
-            const fullPath = path.join(watchedPath, file.name);
-
-            if (isRecursive === false) {
-                if (path.dirname(fullPath) !== watchedPath) {
-                    continue;
-                }
-            }
-
-            let eventName: string;
-            if (file.exists === false) {
-                eventName = "unlink";
-            } else {
-                eventName = "update";
-            }
+        this.events$.subscribe(({ watchedPath, eventName, fullPath }) => {
+            const ids = this.pathToIds.get(watchedPath);
+            if (!ids) return;
 
             for (const id of ids) {
                 const callback = this.callbacks.get(id);
@@ -86,7 +92,7 @@ export class Watcher {
                     callback(eventName, fullPath);
                 }
             }
-        }
+        });
     }
 
     public async createWatcher(
