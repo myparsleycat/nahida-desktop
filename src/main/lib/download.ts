@@ -7,23 +7,12 @@ import path from "node:path";
 import fse from "fs-extra";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
-import { throttle } from "es-toolkit";
+import { retry, throttle } from "es-toolkit";
 import { createZstdDecompress, createGunzip } from "node:zlib";
+import PQueue from "p-queue";
 import ky from "ky";
 import { appVersion } from "@main/const";
 import { ParallelDownloader } from "./parallel-downloader";
-import {
-    Observable,
-    from,
-    mergeMap,
-    retry,
-    timer,
-    defer,
-    lastValueFrom,
-    Subject,
-    takeUntil,
-    finalize,
-} from "rxjs";
 
 export type DownloadParams = {
     type: "download";
@@ -54,83 +43,69 @@ export type DownloadMetadata = {
 class DownloadStreamer {
     constructor(private readonly desktop: NahidaDesktop) {}
 
-    public fetchMetadata(uuid: string, signal: AbortSignal): Promise<DownloadMetadata> {
-        return lastValueFrom(
-            new Observable<DownloadMetadata>((subscriber) => {
-                const downloadData: Omit<DownloadMetadata, "root"> = {
-                    totalBytes: 0,
-                    files: [],
-                    dirs: [],
-                };
-                let rootDir: DownloadMetadata["root"] | null = null;
+    public async fetchMetadata(uuid: string, signal: AbortSignal): Promise<DownloadMetadata> {
+        const url = eden2url.akasha.dir.download.url({ query: { uuid } });
+        const worker = createSseWorker({
+            workerData: {
+                url: url.toString(),
+                token: await this.desktop.service.auth.getToken(),
+            },
+        });
 
-                let worker: any;
+        return new Promise<DownloadMetadata>((resolve, reject) => {
+            const downloadData: Omit<DownloadMetadata, "root"> = {
+                totalBytes: 0,
+                files: [],
+                dirs: [],
+            };
+            let rootDir: DownloadMetadata["root"] | null = null;
 
-                const start = async () => {
-                    const token = await this.desktop.service.auth.getToken();
-                    const url = eden2url.akasha.dir.download.url({ query: { uuid } });
+            const onAbort = () => {
+                worker.terminate();
+                reject(new Error("download aborted"));
+            };
 
-                    worker = createSseWorker({
-                        workerData: {
-                            url: url.toString(),
-                            token,
-                        },
-                    });
+            if (signal.aborted) return onAbort();
+            signal.addEventListener("abort", onAbort, { once: true });
 
-                    worker.on("message", (event: any) => {
-                        const { type, payload } = event;
-                        switch (type) {
-                            case "dirs":
-                                downloadData.dirs = downloadData.dirs.concat(payload);
-                                break;
-                            case "files":
-                                downloadData.files = downloadData.files.concat(payload);
-                                break;
-                            case "metadata":
-                                downloadData.totalBytes = payload.totalBytes;
-                                rootDir = payload.root;
-                                break;
-                            case "complete":
-                                if (!rootDir) {
-                                    subscriber.error(
-                                        new Error("Root directory information was not received."),
-                                    );
-                                } else {
-                                    subscriber.next({ root: rootDir, ...downloadData });
-                                    subscriber.complete();
-                                }
-                                break;
-                            case "error":
-                                subscriber.error(
-                                    new Error(payload || "An unknown worker error occurred"),
-                                );
-                                break;
-                        }
-                    });
+            worker.on("message", (event) => {
+                const { type, payload } = event;
+                switch (type) {
+                    case "dirs":
+                        downloadData.dirs = downloadData.dirs.concat(payload);
+                        break;
+                    case "files":
+                        downloadData.files = downloadData.files.concat(payload);
+                        break;
+                    case "metadata":
+                        downloadData.totalBytes = payload.totalBytes;
+                        rootDir = payload.root;
+                        break;
+                    case "complete":
+                        worker.terminate();
+                        signal.removeEventListener("abort", onAbort);
+                        if (!rootDir)
+                            return reject(
+                                new Error("Root directory information was not received."),
+                            );
+                        resolve({ root: rootDir, ...downloadData });
+                        break;
+                    case "error":
+                        worker.terminate();
+                        signal.removeEventListener("abort", onAbort);
+                        reject(new Error(payload || "An unknown worker error occurred"));
+                        break;
+                }
+            });
 
-                    worker.on("error", (error: any) => {
-                        subscriber.error(error);
-                    });
+            worker.on("error", (error) => {
+                worker.terminate();
+                signal.removeEventListener("abort", onAbort);
+                reject(error);
+            });
 
-                    worker.postMessage("start");
-                };
-
-                start();
-
-                const onAbort = () => {
-                    if (worker) worker.terminate();
-                    subscriber.error(new Error("download aborted"));
-                };
-
-                if (signal.aborted) onAbort();
-                signal.addEventListener("abort", onAbort, { once: true });
-
-                return () => {
-                    if (worker) worker.terminate();
-                    signal.removeEventListener("abort", onAbort);
-                };
-            }),
-        );
+            worker.postMessage("start");
+        });
     }
 }
 
@@ -230,151 +205,289 @@ class FileDownloadTask {
         });
     }
 
-    public async executeWithSlowRetry({
+    public async execute({
         file,
         filePath,
         signal,
         onComplete,
         onProgress,
-        getConcurrency,
+        currentConcurrency,
     }: {
         file: DownloadMetadata["files"][0];
         filePath: string;
         signal: AbortSignal;
         onComplete: () => void;
         onProgress?: (bytes: number) => void;
-        getConcurrency?: () => number;
+        currentConcurrency?: () => number;
     }): Promise<void> {
-        const SMALL_FILE_THRESHOLD = 5 * 1024 * 1024;
-        const LOW_CONCURRENCY_THRESHOLD = 6;
-        const SLOW_SPEED_THRESHOLD = 500 * 1024;
-        const SPEED_CHECK_DELAY = 3000;
+        const PARALLEL_DOWNLOAD_THRESHOLD = 20 * 1024 * 1024; // 20MB
+        const isSmallFile = file.size < 1024 * 1024;
+        const targetPath = isSmallFile ? filePath : `${filePath}.ntmp`;
+
+        if (file.size >= PARALLEL_DOWNLOAD_THRESHOLD && !file.compAlg) {
+            const token = await this.desktop.service.auth.getToken();
+            if (!token) {
+            } else {
+                const supportsRange = await this.parallelDownloader.checkRangeSupport(
+                    file.url,
+                    token,
+                );
+
+                if (supportsRange) {
+                    try {
+                        await this.parallelDownloader.download({
+                            url: file.url,
+                            savePath: filePath,
+                            fileSize: file.size,
+                            token,
+                            signal,
+                            maxChunks: 8,
+                            onProgress,
+                        });
+                        onComplete();
+                        return;
+                    } catch (err: any) {
+                        if (signal.aborted || err.name === "AbortError") {
+                            throw err;
+                        }
+                        this.desktop.logger.warn(
+                            `Parallel download failed for ${file.name}, falling back to regular download`,
+                            "FileDownloadTask:fallback",
+                        );
+                    }
+                }
+            }
+        }
+
+        await retry(
+            async () => {
+                if (signal.aborted) return;
+
+                const token = await this.desktop.service.auth.getToken();
+                let lastTransferredBytes = 0;
+
+                const response = await ky(file.url, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "User-Agent": `Nahida Desktop/${appVersion}`,
+                    },
+                    signal,
+                    throwHttpErrors: false,
+                    timeout: 100000,
+                    onDownloadProgress: (progress) => {
+                        if (onProgress) {
+                            const incremental = progress.transferredBytes - lastTransferredBytes;
+                            lastTransferredBytes = progress.transferredBytes;
+                            if (incremental > 0) {
+                                onProgress(incremental);
+                            }
+                        }
+                    },
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Download failed: ${response.statusText}`);
+                }
+
+                if (!response.body) throw new Error("No response body");
+
+                const fileStream = fse.createWriteStream(targetPath);
+                const streams: any[] = [Readable.fromWeb(response.body as any)];
+
+                if (file.compAlg === "gzip") streams.push(createGunzip());
+                else if (file.compAlg === "zstd") streams.push(createZstdDecompress());
+
+                streams.push(fileStream);
+
+                try {
+                    await (pipeline as any)(...streams, { signal });
+                } catch (pipeErr) {
+                    fileStream.destroy();
+                    await fse.remove(targetPath).catch(() => {});
+                    throw pipeErr;
+                }
+
+                if (signal.aborted) {
+                    await fse.remove(targetPath).catch(() => {});
+                    return;
+                }
+
+                if (!isSmallFile) {
+                    await this.desktop.lib.fs.rename(targetPath, filePath);
+                }
+
+                onComplete();
+            },
+            {
+                retries: 2,
+                delay: (attempt) => Math.pow(2, attempt) * 1000,
+                shouldRetry: (err: any) => !(err.name === "AbortError" || signal.aborted),
+                signal,
+            },
+        ).catch(async (err) => {
+            if (signal.aborted) return;
+            await fse.remove(targetPath).catch(() => {});
+            throw err;
+        });
+    }
+
+    public async executeWithSlowRetry({
+        file,
+        filePath,
+        signal,
+        onComplete,
+        onProgress,
+        currentConcurrency,
+    }: {
+        file: DownloadMetadata["files"][0];
+        filePath: string;
+        signal: AbortSignal;
+        onComplete: () => void;
+        onProgress?: (bytes: number) => void;
+        currentConcurrency?: () => number;
+    }): Promise<void> {
+        const SMALL_FILE_THRESHOLD = 5 * 1024 * 1024; // 5MB
+        const LOW_CONCURRENCY_THRESHOLD = 6; // 병렬 다운로드 개수 threshold
+        const SLOW_SPEED_THRESHOLD = 500 * 1024; // 500KB/s
+        const SPEED_CHECK_DELAY = 3000; // 3초 후
         const MAX_RETRY_ATTEMPTS = 2;
 
         const isSmallFile = file.size < SMALL_FILE_THRESHOLD;
         const targetPath = isSmallFile ? filePath : `${filePath}.ntmp`;
 
-        const downloadObservable = defer(() =>
-            from(
-                this.downloadCore({
-                    file,
-                    filePath: targetPath,
-                    signal,
-                    onProgress,
-                    isSmallFile,
-                    speedCheck: {
-                        enabled:
-                            isSmallFile &&
-                            !!getConcurrency &&
-                            getConcurrency() < LOW_CONCURRENCY_THRESHOLD,
-                        delay: SPEED_CHECK_DELAY,
-                        threshold: SLOW_SPEED_THRESHOLD,
-                    },
-                }),
-            ),
-        ).pipe(
-            retry({
-                count: MAX_RETRY_ATTEMPTS,
-                delay: (error, retryCount) => {
-                    this.desktop.logger.warn(
-                        `Retrying download for ${file.name} (${retryCount}/${MAX_RETRY_ATTEMPTS}) due to: ${error.message}`,
-                    );
-                    return timer(Math.pow(2, retryCount) * 1000);
-                },
-            }),
-            finalize(async () => {
-                if (!onCompleteExecuted) {
-                    await fse.remove(targetPath).catch(() => {});
-                }
-            }),
-        );
+        let retryCount = 0;
 
-        let onCompleteExecuted = false;
-        await lastValueFrom(downloadObservable);
+        while (retryCount <= MAX_RETRY_ATTEMPTS) {
+            if (signal.aborted) return;
 
-        if (!isSmallFile) {
-            await this.desktop.lib.fs.rename(targetPath, filePath);
-        }
-        onCompleteExecuted = true;
-        onComplete();
-    }
+            const abortController = new AbortController();
+            const combinedSignal = AbortSignal.any([signal, abortController.signal]);
 
-    private async downloadCore({
-        file,
-        filePath,
-        signal,
-        onProgress,
-        isSmallFile,
-        speedCheck,
-    }: {
-        file: DownloadMetadata["files"][0];
-        filePath: string;
-        signal: AbortSignal;
-        onProgress?: (bytes: number) => void;
-        isSmallFile: boolean;
-        speedCheck: { enabled: boolean; delay: number; threshold: number };
-    }) {
-        const abortController = new AbortController();
-        const combinedSignal = AbortSignal.any([signal, abortController.signal]);
-
-        let lastTransferredBytes = 0;
-        let currentBytes = 0;
-        let startTime = Date.now();
-
-        let speedCheckTimeout: NodeJS.Timeout | null = null;
-
-        if (speedCheck.enabled) {
-            speedCheckTimeout = setTimeout(() => {
-                const elapsed = (Date.now() - startTime) / 1000;
-                const speed = currentBytes / elapsed;
-                if (speed < speedCheck.threshold) {
-                    abortController.abort(new Error("Slow speed detected"));
-                }
-            }, speedCheck.delay);
-        }
-
-        try {
-            const token = await this.desktop.service.auth.getToken();
-            const response = await ky(file.url, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "User-Agent": `Nahida Desktop/${appVersion}`,
-                },
-                signal: combinedSignal,
-                throwHttpErrors: false,
-                timeout: 100000,
-                onDownloadProgress: (progress) => {
-                    currentBytes = progress.transferredBytes;
-                    if (onProgress) {
-                        const incremental = progress.transferredBytes - lastTransferredBytes;
-                        lastTransferredBytes = progress.transferredBytes;
-                        if (incremental > 0) onProgress(incremental);
-                    }
-                },
-            });
-
-            if (speedCheckTimeout) clearTimeout(speedCheckTimeout);
-
-            if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
-            if (!response.body) throw new Error("No response body");
-
-            const fileStream = fse.createWriteStream(filePath);
-            const streams: any[] = [Readable.fromWeb(response.body as any)];
-
-            if (file.compAlg === "gzip") streams.push(createGunzip());
-            else if (file.compAlg === "zstd") streams.push(createZstdDecompress());
-
-            streams.push(fileStream);
+            let speedCheckTimeout: NodeJS.Timeout | null = null;
+            let startTime = Date.now();
+            let startBytes = 0;
+            let currentBytes = 0;
+            let shouldRetryDueToSlowSpeed = false;
 
             try {
-                await (pipeline as any)(...streams, { signal: combinedSignal });
-            } catch (pipeErr) {
-                fileStream.destroy();
-                throw pipeErr;
+                const token = await this.desktop.service.auth.getToken();
+                let lastTransferredBytes = 0;
+
+                if (
+                    isSmallFile &&
+                    currentConcurrency &&
+                    currentConcurrency() < LOW_CONCURRENCY_THRESHOLD
+                ) {
+                    speedCheckTimeout = setTimeout(() => {
+                        const elapsed = (Date.now() - startTime) / 1000; // seconds
+                        const transferred = currentBytes - startBytes;
+                        const speed = transferred / elapsed;
+
+                        if (speed < SLOW_SPEED_THRESHOLD && retryCount < MAX_RETRY_ATTEMPTS) {
+                            this.desktop.logger.warn(
+                                `Slow download detected for ${file.name}: ${Math.round(speed / 1024)}KB/s. Retrying... (${retryCount + 1}/${MAX_RETRY_ATTEMPTS})`,
+                                "FileDownloadTask:slowSpeed",
+                            );
+                            shouldRetryDueToSlowSpeed = true;
+                            abortController.abort();
+                        }
+                    }, SPEED_CHECK_DELAY);
+                }
+
+                const response = await ky(file.url, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "User-Agent": `Nahida Desktop/${appVersion}`,
+                    },
+                    signal: combinedSignal,
+                    throwHttpErrors: false,
+                    timeout: 100000,
+                    onDownloadProgress: (progress) => {
+                        currentBytes = progress.transferredBytes;
+                        if (onProgress) {
+                            const incremental = progress.transferredBytes - lastTransferredBytes;
+                            lastTransferredBytes = progress.transferredBytes;
+                            if (incremental > 0) {
+                                onProgress(incremental);
+                            }
+                        }
+                    },
+                });
+
+                if (speedCheckTimeout) {
+                    clearTimeout(speedCheckTimeout);
+                    speedCheckTimeout = null;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`Download failed: ${response.statusText}`);
+                }
+
+                if (!response.body) throw new Error("No response body");
+
+                const fileStream = fse.createWriteStream(targetPath);
+                const streams: any[] = [Readable.fromWeb(response.body as any)];
+
+                if (file.compAlg === "gzip") streams.push(createGunzip());
+                else if (file.compAlg === "zstd") streams.push(createZstdDecompress());
+
+                streams.push(fileStream);
+
+                try {
+                    await (pipeline as any)(...streams, { signal: combinedSignal });
+                } catch (pipeErr) {
+                    fileStream.destroy();
+                    await fse.remove(targetPath).catch(() => {});
+                    throw pipeErr;
+                }
+
+                if (signal.aborted || combinedSignal.aborted) {
+                    await fse.remove(targetPath).catch(() => {});
+                    if (shouldRetryDueToSlowSpeed) {
+                        throw new Error("Slow speed retry");
+                    }
+                    return;
+                }
+
+                if (!isSmallFile) {
+                    await this.desktop.lib.fs.rename(targetPath, filePath);
+                }
+
+                onComplete();
+                return;
+            } catch (err: any) {
+                if (speedCheckTimeout) {
+                    clearTimeout(speedCheckTimeout);
+                }
+
+                if (signal.aborted || err.name === "AbortError") {
+                    if (!shouldRetryDueToSlowSpeed) {
+                        await fse.remove(targetPath).catch(() => {});
+                        throw err;
+                    }
+                }
+
+                if (shouldRetryDueToSlowSpeed && retryCount < MAX_RETRY_ATTEMPTS) {
+                    retryCount++;
+                    await fse.remove(targetPath).catch(() => {});
+                    await new Promise((resolve) =>
+                        setTimeout(resolve, Math.pow(2, retryCount) * 1000),
+                    );
+                    continue;
+                }
+
+                if (retryCount < MAX_RETRY_ATTEMPTS) {
+                    retryCount++;
+                    await fse.remove(targetPath).catch(() => {});
+                    await new Promise((resolve) =>
+                        setTimeout(resolve, Math.pow(2, retryCount) * 1000),
+                    );
+                    continue;
+                }
+
+                await fse.remove(targetPath).catch(() => {});
+                throw err;
             }
-        } catch (err) {
-            if (speedCheckTimeout) clearTimeout(speedCheckTimeout);
-            throw err;
         }
     }
 }
@@ -383,7 +496,7 @@ export class DownloadLib {
     private readonly streamer: DownloadStreamer;
     private readonly fs: DownloadFileSystem;
     private readonly task: FileDownloadTask;
-    private readonly CONCURRENCY = 64;
+    private readonly fileQueue: PQueue = new PQueue({ concurrency: 64 });
 
     public constructor(private readonly desktop: NahidaDesktop) {
         this.streamer = new DownloadStreamer(desktop);
@@ -391,8 +504,12 @@ export class DownloadLib {
         this.task = new FileDownloadTask(desktop);
     }
 
+    public async startStreamingDownload(uuid: string, signal: AbortSignal) {
+        return this.streamer.fetchMetadata(uuid, signal);
+    }
+
     public async getDownloadUrl(id: string, signal: AbortSignal): Promise<DownloadMetadata> {
-        const data = await this.streamer.fetchMetadata(id, signal);
+        const data = await this.startStreamingDownload(id, signal);
         return {
             root: data.root,
             files: data.files,
@@ -404,7 +521,9 @@ export class DownloadLib {
     public async prepareDownload(id: string, name: string) {
         const pid = nanoid();
         const abort = new AbortController();
-        const data = await this.getDownloadUrl(id, abort.signal);
+        const getDownloadUrlsPromise = this.getDownloadUrl(id, abort.signal);
+
+        const data = await getDownloadUrlsPromise;
         return { pid, abort, data };
     }
 
@@ -423,9 +542,6 @@ export class DownloadLib {
         initialTransferedSize?: number;
         initialTransferedFiles?: number;
     }) {
-        const cancel$ = new Subject<void>();
-        abort.signal.addEventListener("abort", () => cancel$.next(), { once: true });
-
         try {
             if (!data.root) throw new Error("Root directory information was not received.");
 
@@ -447,14 +563,26 @@ export class DownloadLib {
                 });
             }, 100);
 
-            const redistributedFiles = this.fs.redistributeFilesBySize(data.files);
-            let activeCount = 0;
+            const BACKPRESSURE_LIMIT = 200;
 
-            const downloadStream$ = from(redistributedFiles).pipe(
-                takeUntil(cancel$),
-                mergeMap(async (file) => {
-                    const parentPath = pathMap.get(file.parentId ?? "");
-                    if (!parentPath) return;
+            const redistributedFiles = this.fs.redistributeFilesBySize(data.files);
+
+            for (const file of redistributedFiles) {
+                if (abort.signal.aborted) break;
+
+                if (this.fileQueue.size >= BACKPRESSURE_LIMIT) {
+                    await new Promise<void>((resolve) =>
+                        this.fileQueue.once("next", () => resolve()),
+                    );
+                }
+
+                if (abort.signal.aborted) break;
+
+                const parentPath = pathMap.get(file.parentId ?? "");
+                if (!parentPath) continue;
+
+                this.fileQueue.add(async () => {
+                    if (abort.signal.aborted) return;
 
                     const filePath = path.join(parentPath, file.name);
 
@@ -475,7 +603,6 @@ export class DownloadLib {
                         return;
                     }
 
-                    activeCount++;
                     try {
                         await this.task.executeWithSlowRetry({
                             file,
@@ -490,22 +617,15 @@ export class DownloadLib {
                                 downloadedBytes += bytes;
                                 throttledUpdate(downloadedBytes, downloadedCount);
                             },
-                            getConcurrency: () => activeCount,
+                            currentConcurrency: () => this.fileQueue.pending,
                         });
                     } catch (err) {
-                        if (!abort.signal.aborted) {
-                            this.desktop.logger.error(
-                                err,
-                                `DownloadLib:executeDownload:${file.name}`,
-                            );
-                        }
-                    } finally {
-                        activeCount--;
+                        this.desktop.logger.error(err, `DownloadLib:executeDownload:${file.name}`);
                     }
-                }, this.CONCURRENCY),
-            );
+                });
+            }
 
-            await lastValueFrom(downloadStream$, { defaultValue: undefined });
+            if (!abort.signal.aborted) await this.fileQueue.onIdle();
             throttledUpdate.flush();
 
             if (abort.signal.aborted) return;
@@ -526,8 +646,6 @@ export class DownloadLib {
             if (abort.signal.aborted) return;
             this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
             throw err;
-        } finally {
-            cancel$.complete();
         }
     }
 }
