@@ -1,7 +1,7 @@
 import { NahidaDesktop } from "..";
 import { nanoid } from "nanoid";
 import { Content } from "@shared/types";
-import { chunk, flatten, groupBy, orderBy, sumBy } from "es-toolkit";
+import { chunk, compact, flatten, groupBy, orderBy, sumBy, retry } from "es-toolkit";
 import path from "node:path";
 import fg from "fast-glob";
 import os from "node:os";
@@ -10,9 +10,9 @@ import sha256Worker from "@main/worker/drive/sha256.worker?modulePath";
 import { eden, eden2url } from "@main/client";
 import fse from "fs-extra";
 import { fileTypeFromBuffer } from "file-type/node";
+import PQueue from "p-queue";
 import ky from "ky";
 import { appVersion } from "@main/const";
-import { from, mergeMap, retry, timer, defer, lastValueFrom, of, catchError, EMPTY } from "rxjs";
 
 const CHUNK_SIZE = 500;
 
@@ -61,7 +61,7 @@ export type UploadParams = {
 
 export class UploadLib {
     private readonly desktop: NahidaDesktop;
-    private readonly CONCURRENCY = 8;
+    private readonly fileQueue: PQueue = new PQueue({ concurrency: 8 });
 
     public constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
@@ -283,73 +283,61 @@ export class UploadLib {
         const compAlg = zstdFile ? "zstd" : undefined;
         let fileToUpload = zstdFile || fileBuffer;
 
-        const uploadObservable = defer(() =>
-            from(
-                this.uploadFileCore(fileToUpload, name, sha256, form, compAlg, signal, onProgress),
-            ),
-        ).pipe(
-            retry({
-                count: 3,
-                delay: (error, retryCount) => timer(Math.pow(2, retryCount) * 1000),
-            }),
-        );
+        await retry(
+            async () => {
+                if (signal?.aborted) throw new Error("Aborted");
 
-        return lastValueFrom(uploadObservable);
-    }
+                const token = await this.desktop.service.auth.getToken();
+                const uploadUrl = eden2url.akasha.file.upload.url();
 
-    private async uploadFileCore(
-        fileToUpload: Buffer,
-        name: string,
-        sha256: string,
-        form: { key: string; parentId: string | null },
-        compAlg: string | undefined,
-        signal?: AbortSignal,
-        onProgress?: (bytes: number) => void,
-    ) {
-        if (signal?.aborted) throw new Error("Aborted");
+                const formData = new FormData();
+                formData.append("file", new Blob([new Uint8Array(fileToUpload)]), name);
+                formData.append("sha256", sha256);
+                formData.append("key", form.key);
+                formData.append("name", name);
+                if (compAlg) formData.append("comp-alg", compAlg);
+                if (form.parentId) formData.append("parent", form.parentId);
 
-        const token = await this.desktop.service.auth.getToken();
-        const uploadUrl = eden2url.akasha.file.upload.url();
+                let lastTransferredBytes = 0;
 
-        const formData = new FormData();
-        formData.append("file", new Blob([new Uint8Array(fileToUpload)]), name);
-        formData.append("sha256", sha256);
-        formData.append("key", form.key);
-        formData.append("name", name);
-        if (compAlg) formData.append("comp-alg", compAlg);
-        if (form.parentId) formData.append("parent", form.parentId);
+                const response = await ky.post(uploadUrl, {
+                    body: formData,
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "User-Agent": `Nahida Desktop/${appVersion}`,
+                    },
+                    signal,
+                    throwHttpErrors: false,
+                    timeout: 100000,
+                    onUploadProgress: (progress) => {
+                        if (onProgress) {
+                            const incremental = progress.transferredBytes - lastTransferredBytes;
+                            lastTransferredBytes = progress.transferredBytes;
+                            if (incremental > 0) {
+                                onProgress(incremental);
+                            }
+                        }
+                    },
+                });
 
-        let lastTransferredBytes = 0;
-
-        const response = await ky.post(uploadUrl, {
-            body: formData,
-            headers: {
-                Authorization: `Bearer ${token}`,
-                "User-Agent": `Nahida Desktop/${appVersion}`,
-            },
-            signal,
-            throwHttpErrors: false,
-            timeout: 100000,
-            onUploadProgress: (progress) => {
-                if (onProgress) {
-                    const incremental = progress.transferredBytes - lastTransferredBytes;
-                    lastTransferredBytes = progress.transferredBytes;
-                    if (incremental > 0) {
-                        onProgress(incremental);
+                if (!response.ok) {
+                    if (response.status === 403) {
+                        const reversed = await this.reverseFile(fileToUpload);
+                        fileToUpload = Buffer.from(reversed);
                     }
+                    const errorText = await response.text().catch(() => "Unknown error");
+                    throw new Error(`Upload failed: ${errorText}`);
                 }
             },
-        });
-
-        if (!response.ok) {
-            if (response.status === 403) {
-                const reversed = await this.reverseFile(fileToUpload);
-                const newBuffer = Buffer.from(reversed);
-                fileToUpload = newBuffer;
-            }
-            const errorText = await response.text().catch(() => "Unknown error");
-            throw new Error(`Upload failed: ${errorText}`);
-        }
+            {
+                retries: 3,
+                delay: (attempt) => Math.pow(2, attempt) * 1000,
+                shouldRetry: (err: any) => {
+                    if (signal?.aborted) return false;
+                    return true;
+                },
+            },
+        );
     }
 
     public async calculateHashes(files: ParentIdFiles[]) {
@@ -482,6 +470,8 @@ export class UploadLib {
             }
         });
 
+        const BACKPRESSURE_LIMIT = (this.fileQueue.concurrency || 32) * 3;
+
         const processChunk = async (chunkItems: FinalFile[]) => {
             if (signal?.aborted || chunkItems.length === 0) return;
 
@@ -527,8 +517,18 @@ export class UploadLib {
                 }
             }
 
-            const uploadStream$ = from(filesToUpload).pipe(
-                mergeMap(async (file) => {
+            for (const file of filesToUpload) {
+                if (signal?.aborted) break;
+
+                if (this.fileQueue.size >= BACKPRESSURE_LIMIT) {
+                    await new Promise<void>((resolve) => {
+                        this.fileQueue.once("next", () => resolve());
+                    });
+                }
+
+                if (signal?.aborted) break;
+
+                this.fileQueue.add(async () => {
                     if (signal?.aborted) return;
                     try {
                         await this.uploadFile(file, signal, (bytes) => {
@@ -551,10 +551,8 @@ export class UploadLib {
                         if (signal?.aborted) return;
                         this.desktop.logger.error(err, `UploadLib:filesUpload:${file.name}`);
                     }
-                }, this.CONCURRENCY),
-            );
-
-            await lastValueFrom(uploadStream$, { defaultValue: undefined });
+                });
+            }
         };
 
         const representativeChunks = chunk(representativeFiles, CHUNK_SIZE);
@@ -567,6 +565,10 @@ export class UploadLib {
         for (const fileChunk of remainingChunks) {
             if (signal?.aborted) break;
             await processChunk(fileChunk);
+        }
+
+        if (!signal?.aborted) {
+            await this.fileQueue.onIdle();
         }
     }
 
