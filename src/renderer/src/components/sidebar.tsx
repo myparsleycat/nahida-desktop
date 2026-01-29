@@ -130,7 +130,7 @@ export function Sidebar({ className }: { className?: string }) {
             </TooltipContent>
           </Tooltip>
 
-          {/* <Tooltip disableHoverableContent={true}>
+          <Tooltip disableHoverableContent={true}>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
@@ -146,7 +146,7 @@ export function Sidebar({ className }: { className?: string }) {
             <TooltipContent side="right" hideWhenDetached={true}>
               백업
             </TooltipContent>
-          </Tooltip> */}
+          </Tooltip>
 
           <Separator orientation="horizontal" />
 
