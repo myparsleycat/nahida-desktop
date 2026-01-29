@@ -7,6 +7,7 @@ import {
     MessageBoxOptions,
     BrowserWindow,
     clipboard,
+    OpenDialogOptions,
 } from "electron";
 import fse from "fs-extra";
 
@@ -87,4 +88,8 @@ export async function getPathMetadata(path: string): Promise<PathMetadata> {
         ctime: stat.ctime,
         birthtime: stat.birthtime,
     };
+}
+
+export async function showOpenDialog(options: OpenDialogOptions) {
+    return dialog.showOpenDialog(options);
 }

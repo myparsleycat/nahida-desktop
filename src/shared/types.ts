@@ -1,4 +1,9 @@
-import { MessageBoxOptions, OpenExternalOptions } from "electron";
+import {
+    MessageBoxOptions,
+    OpenDialogOptions,
+    OpenDialogReturnValue,
+    OpenExternalOptions,
+} from "electron";
 import { Session } from "./schemas/auth";
 import { ShowModalReturnValue } from "@main/services/util";
 import { eden } from "@main/client";
@@ -95,6 +100,7 @@ export type IpcHandlers = {
     "util:openCmd": (path: string) => void;
     "util:getClipboardFiles": () => string[];
     "util:fs:metadata": (path: string) => Promise<PathMetadata>;
+    "util:showOpenDialog": (options: OpenDialogOptions) => Promise<OpenDialogReturnValue>;
 
     "drive:get:item": (itemId: string) => ModIdGetResp;
     "drive:patch:rename": (

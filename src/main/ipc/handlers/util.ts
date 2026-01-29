@@ -9,6 +9,7 @@ import {
     openCmd,
     getClipboardFiles,
     getPathMetadata,
+    showOpenDialog,
 } from "@main/services/util";
 import type { NahidaDesktop } from "@main/index";
 
@@ -24,4 +25,5 @@ export function registerUtilHandlers(_desktop: NahidaDesktop) {
     rh("util:openCmd", openCmd);
     rh("util:getClipboardFiles", getClipboardFiles);
     rh("util:fs:metadata", getPathMetadata);
+    rh("util:showOpenDialog", showOpenDialog);
 }
