@@ -10,10 +10,10 @@ importers:
     dependencies:
       '@electron-toolkit/preload':
         specifier: ^3.0.2
-        version: 3.0.2(electron@40.0.0)
+        version: 3.0.2(electron@40.1.0)
       '@electron-toolkit/utils':
         specifier: ^4.0.0
-        version: 4.0.0(electron@40.0.0)
+        version: 4.0.0(electron@40.1.0)
       '@hono/node-server':
         specifier: ^1.19.9
         version: 1.19.9(hono@4.11.7)
@@ -114,7 +114,7 @@ importers:
         specifier: ^7.8.2
         version: 7.8.2
       undici:
-        specifier: ^7.19.1
+        specifier: ^7.19.2
         version: 7.19.2
       valdex:
         specifier: ^1.0.4
@@ -178,7 +178,7 @@ importers:
         specifier: ^9.0.4
         version: 9.0.4
       '@types/node':
-        specifier: ^25.0.10
+        specifier: ^25.1.0
         version: 25.1.0
       '@types/node-7z':
         specifier: ^2.1.11
@@ -220,8 +220,8 @@ importers:
         specifier: ^0.31.8
         version: 0.31.8
       electron:
-        specifier: ^40.0.0
-        version: 40.0.0
+        specifier: ^40.1.0
+        version: 40.1.0
       electron-builder:
         specifier: ^26.4.0
         version: 26.4.0(electron-builder-squirrel-windows@26.4.0)
@@ -2912,8 +2912,8 @@ packages:
     resolution: {integrity: sha512-bO3y10YikuUwUuDUQRM4KfwNkKhnpVO7IPdbsrejwN9/AABJzzTQ4GeHwyzNSrVO+tEH3/Np255a3sVZpZDjvg==}
     engines: {node: '>=8.0.0'}
 
-  electron@40.0.0:
-    resolution: {integrity: sha512-UyBy5yJ0/wm4gNugCtNPjvddjAknMTuXR2aCHioXicH7aKRKGDBPp4xqTEi/doVcB3R+MN3wfU9o8d/9pwgK2A==}
+  electron@40.1.0:
+    resolution: {integrity: sha512-2j/kvw7uF0H1PnzYBzw2k2Q6q16J8ToKrtQzZfsAoXbbMY0l5gQi2DLOauIZLzwp4O01n8Wt/74JhSRwG0yj9A==}
     engines: {node: '>= 12.20.55'}
     hasBin: true
 
@@ -5047,17 +5047,17 @@ snapshots:
 
   '@drizzle-team/brocli@0.10.2': {}
 
-  '@electron-toolkit/preload@3.0.2(electron@40.0.0)':
+  '@electron-toolkit/preload@3.0.2(electron@40.1.0)':
     dependencies:
-      electron: 40.0.0
+      electron: 40.1.0
 
   '@electron-toolkit/tsconfig@2.0.0(@types/node@25.1.0)':
     dependencies:
       '@types/node': 25.1.0
 
-  '@electron-toolkit/utils@4.0.0(electron@40.0.0)':
+  '@electron-toolkit/utils@4.0.0(electron@40.1.0)':
     dependencies:
-      electron: 40.0.0
+      electron: 40.1.0
 
   '@electron/asar@3.4.1':
     dependencies:
@@ -6652,7 +6652,7 @@ snapshots:
 
   '@types/electron-progressbar@2.2.0':
     dependencies:
-      electron: 40.0.0
+      electron: 40.1.0
     transitivePeerDependencies:
       - supports-color
 
@@ -7432,7 +7432,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron@40.0.0:
+  electron@40.1.0:
     dependencies:
       '@electron/get': 2.0.3
       '@types/node': 24.10.9
