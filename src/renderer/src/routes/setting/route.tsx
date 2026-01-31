@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useEffect } from "react";
 import { useGlobalStore } from "@renderer/store/global";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
 
 export const Route = createFileRoute("/setting")({
   component: RouteComponent,
@@ -21,6 +22,8 @@ function RouteComponent() {
   const location = useLocation();
   const navi = useNavigate();
   const appStatus = useGlobalStore((state) => state.appStatus);
+
+  const [parent, _enableAnimations] = useAutoAnimate({ duration: 100 });
 
   useEffect(() => {
     if (location.pathname === "/setting") {
@@ -62,7 +65,7 @@ function RouteComponent() {
         </div>
       </nav>
 
-      <div className="flex-1 flex flex-col p-2">
+      <div className="flex-1 flex flex-col p-2" ref={parent}>
         <Outlet />
       </div>
 
