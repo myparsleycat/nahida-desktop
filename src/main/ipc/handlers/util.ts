@@ -10,10 +10,12 @@ import {
     getClipboardFiles,
     getPathMetadata,
     showOpenDialog,
+    getAppStatus,
 } from "@main/services/util";
 import type { NahidaDesktop } from "@main/index";
 
 export function registerUtilHandlers(_desktop: NahidaDesktop) {
+    rh("util:getAppStatus", getAppStatus);
     rh("util:showModal", async (options: MessageBoxOptions) => await showModal(options));
     rh(
         "util:openExternal",

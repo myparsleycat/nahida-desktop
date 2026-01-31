@@ -42,6 +42,7 @@ export const IPC_HANDLER_CHANNELS = [
     "auth:startLogout",
     "auth:getSession",
 
+    "util:getAppStatus",
     "util:showModal",
     "util:openExternal",
     "util:copyStr",

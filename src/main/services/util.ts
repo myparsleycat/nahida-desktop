@@ -1,4 +1,5 @@
-import { PathMetadata } from "@shared/types";
+import isDev from "@main/internal/isDev";
+import type { AppStatus, PathMetadata } from "@shared/types";
 import { spawn } from "child_process";
 import {
     dialog,
@@ -9,7 +10,16 @@ import {
     clipboard,
     OpenDialogOptions,
 } from "electron";
+import { app } from "electron/main";
 import fse from "fs-extra";
+
+export function getAppStatus(): AppStatus {
+    return {
+        version: app.getVersion(),
+        isPackaged: app.isPackaged,
+        isDev: isDev,
+    };
+}
 
 export type ShowModalReturnValue = ReturnType<typeof dialog.showMessageBox>;
 
