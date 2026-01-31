@@ -3,7 +3,7 @@ import { Agent, Pool } from "undici";
 import { desktop } from "@main/index";
 import { appVersion } from "@main/const";
 
-const agent = new Agent({
+export const agent = new Agent({
     factory(origin, options) {
         return new Pool(origin, {
             ...options,

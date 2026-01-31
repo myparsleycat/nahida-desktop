@@ -13,6 +13,7 @@ import PQueue from "p-queue";
 import ky from "ky";
 import { appVersion } from "@main/const";
 import { ParallelDownloader } from "./parallel-downloader";
+import { agent } from "@main/internal/fetcher";
 
 export type DownloadParams = {
     type: "download";
@@ -289,6 +290,8 @@ class FileDownloadTask {
                             }
                         }
                     },
+                    // @ts-expect-error
+                    dispatcher: agent,
                 });
 
                 if (!response.ok) {
@@ -423,6 +426,8 @@ class FileDownloadTask {
                             }
                         }
                     },
+                    // @ts-expect-error
+                    dispatcher: agent,
                 });
 
                 if (speedCheckTimeout) {
@@ -507,7 +512,7 @@ export class DownloadLib {
     private readonly streamer: DownloadStreamer;
     private readonly fs: DownloadFileSystem;
     private readonly task: FileDownloadTask;
-    private readonly fileQueue: PQueue = new PQueue({ concurrency: 64 });
+    private readonly fileQueue: PQueue = new PQueue({ concurrency: 32 });
 
     public constructor(private readonly desktop: NahidaDesktop) {
         this.streamer = new DownloadStreamer(desktop);
