@@ -61,4 +61,12 @@ export function registerSettingHandlers(d: NahidaDesktop) {
     rh("setting:mod:setMoveFolderInsteadOfCopy", async (enabled) => {
         return await d.setting.mod.setMoveFolderInsteadOfCopy(enabled);
     });
+
+    rh("setting:net:getProxy", async () => {
+        return await d.setting.net.getProxy();
+    });
+
+    rh("setting:net:setProxy", async (settings) => {
+        return await d.setting.net.setProxy(settings);
+    });
 }

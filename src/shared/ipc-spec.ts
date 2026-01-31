@@ -28,6 +28,8 @@ export const IPC_HANDLER_CHANNELS = [
     "setting:general:getCheckBackgroundUpdates",
     "setting:general:setCheckBackgroundUpdates",
 
+    "setting:net:getProxy",
+    "setting:net:setProxy",
     "setting:mod:getDeleteArchiveAfterExtract",
     "setting:mod:setDeleteArchiveAfterExtract",
     "setting:mod:getMoveFolderInsteadOfCopy",

@@ -38,7 +38,7 @@ function RouteComponent() {
     // { icon: RefreshCw, label: "동기화", path: "/setting/sync" },
     // { icon: Database, label: "백업", path: "/setting/bak" },
     // { icon: Folder, label: "공간", path: "/setting/space" },
-    // { icon: Globe, label: "네트워크", path: "/setting/net" },
+    { icon: Globe, label: "네트워크", path: "/setting/net" },
     // { icon: Bell, label: "알림", path: "/setting/noti" },
   ];
 

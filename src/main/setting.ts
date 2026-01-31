@@ -238,6 +238,36 @@ export class Setting {
                 });
         },
     };
+
+    net = {
+        getProxy: async () => {
+            const qr = await db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "net_proxy"),
+            });
+
+            if (!qr) {
+                const defaultProxy = { type: "disabled" };
+                await db
+                    .insert(setting)
+                    .values({ key: "net_proxy", value: JSON.stringify(defaultProxy) });
+                return defaultProxy;
+            }
+
+            return JSON.parse(qr.value as string);
+        },
+
+        setProxy: async (settings: any) => {
+            await db
+                .insert(setting)
+                .values({ key: "net_proxy", value: JSON.stringify(settings) })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: JSON.stringify(settings) },
+                });
+
+            await this.desktop.updateProxy();
+        },
+    };
 }
 
 export default Setting;

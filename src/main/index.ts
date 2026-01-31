@@ -1,6 +1,6 @@
 import os from "node:os";
 import path from "node:path";
-import { app, BrowserWindow, crashReporter, net, protocol } from "electron";
+import { app, BrowserWindow, crashReporter, net, protocol, session } from "electron";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
 import AutoLaunch from "auto-launch";
 import { BACKEND_URL } from "@shared/const";
@@ -130,6 +130,23 @@ export class NahidaDesktop {
             } else {
                 autoLaunch.disable();
             }
+        }
+
+        await this.updateProxy();
+    }
+
+    public async updateProxy() {
+        const proxy = await this.setting.net.getProxy();
+        if (proxy && proxy.type !== "disabled" && proxy.host && proxy.port) {
+            const protocol = proxy.type === "socks5" ? "socks5" : "http";
+            const proxyRules = `${protocol}://${proxy.host}:${proxy.port}`;
+            await app.whenReady();
+            await session.defaultSession.setProxy({ proxyRules });
+            this.logger.info(`Proxy updated: ${proxyRules}`, "NahidaDesktop:updateProxy");
+        } else {
+            await app.whenReady();
+            await session.defaultSession.setProxy({ proxyRules: "" });
+            this.logger.info("Proxy disabled", "NahidaDesktop:updateProxy");
         }
     }
 }

@@ -17,6 +17,15 @@ export interface AppStatus {
     isDev: boolean;
 }
 
+export interface ProxySettings {
+    type: "disabled" | "https" | "socks5";
+    host?: string;
+    port?: string;
+    requiresAuth?: boolean;
+    username?: string;
+    password?: string;
+}
+
 interface ToastData {
     description?: string;
 }
@@ -83,6 +92,8 @@ export type IpcHandlers = {
     "setting:general:getCheckBackgroundUpdates": () => boolean;
     "setting:general:setCheckBackgroundUpdates": (enabled: boolean) => void;
 
+    "setting:net:getProxy": () => Promise<ProxySettings>;
+    "setting:net:setProxy": (settings: ProxySettings) => Promise<void>;
     "setting:mod:getDeleteArchiveAfterExtract": () => boolean;
     "setting:mod:setDeleteArchiveAfterExtract": (enabled: boolean) => void;
     "setting:mod:getMoveFolderInsteadOfCopy": () => boolean;

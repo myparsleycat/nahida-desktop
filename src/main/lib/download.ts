@@ -13,7 +13,7 @@ import PQueue from "p-queue";
 import ky from "ky";
 import { appVersion } from "@main/const";
 import { ParallelDownloader } from "./parallel-downloader";
-import { agent } from "@main/internal/fetcher";
+import { getAgent } from "@main/internal/fetcher";
 
 export type DownloadParams = {
     type: "download";
@@ -268,6 +268,7 @@ class FileDownloadTask {
                 signal,
                 maxChunks: 8,
                 onProgress,
+                agent: await getAgent(),
             });
             return true;
         } catch (err: any) {
@@ -334,7 +335,7 @@ class FileDownloadTask {
                 }
             },
             // @ts-expect-error
-            dispatcher: agent,
+            dispatcher: await getAgent(),
         });
 
         if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
