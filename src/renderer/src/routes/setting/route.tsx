@@ -11,6 +11,7 @@ import {
   GamepadIcon,
 } from "lucide-react";
 import { useEffect } from "react";
+import { useGlobalStore } from "@renderer/store/global";
 
 export const Route = createFileRoute("/setting")({
   component: RouteComponent,
@@ -19,6 +20,7 @@ export const Route = createFileRoute("/setting")({
 function RouteComponent() {
   const location = useLocation();
   const navi = useNavigate();
+  const appStatus = useGlobalStore((state) => state.appStatus);
 
   useEffect(() => {
     if (location.pathname === "/setting") {
@@ -38,7 +40,7 @@ function RouteComponent() {
   ];
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full relative">
       <Titlebar title={{ text: "설정", position: "center" }} />
 
       <nav className="border-b">
@@ -62,6 +64,10 @@ function RouteComponent() {
 
       <div className="flex-1 flex flex-col p-2">
         <Outlet />
+      </div>
+
+      <div className="absolute bottom-4 right-4 pointer-events-none">
+        <span className="text-xs text-muted-foreground">v{appStatus?.version}</span>
       </div>
     </div>
   );
