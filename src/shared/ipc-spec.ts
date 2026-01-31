@@ -42,6 +42,7 @@ export const IPC_HANDLER_CHANNELS = [
     "auth:startLogout",
     "auth:getSession",
 
+    "util:getAppStatus",
     "util:showModal",
     "util:openExternal",
     "util:copyStr",
@@ -51,6 +52,7 @@ export const IPC_HANDLER_CHANNELS = [
     "util:openCmd",
     "util:getClipboardFiles",
     "util:fs:metadata",
+    "util:showOpenDialog",
 
     "drive:get:item",
     "drive:patch:rename",

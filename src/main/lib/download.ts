@@ -13,6 +13,7 @@ import PQueue from "p-queue";
 import ky from "ky";
 import { appVersion } from "@main/const";
 import { ParallelDownloader } from "./parallel-downloader";
+import { agent } from "@main/internal/fetcher";
 
 export type DownloadParams = {
     type: "download";
@@ -220,6 +221,12 @@ class FileDownloadTask {
         onProgress?: (bytes: number) => void;
         currentConcurrency?: () => number;
     }): Promise<void> {
+        if (file.size === 0) {
+            await fse.writeFile(filePath, "");
+            onComplete();
+            return;
+        }
+
         const PARALLEL_DOWNLOAD_THRESHOLD = 20 * 1024 * 1024; // 20MB
         const isSmallFile = file.size < 1024 * 1024;
         const targetPath = isSmallFile ? filePath : `${filePath}.ntmp`;
@@ -283,6 +290,8 @@ class FileDownloadTask {
                             }
                         }
                     },
+                    // @ts-expect-error
+                    dispatcher: agent,
                 });
 
                 if (!response.ok) {
@@ -346,6 +355,11 @@ class FileDownloadTask {
         onProgress?: (bytes: number) => void;
         currentConcurrency?: () => number;
     }): Promise<void> {
+        if (file.size === 0) {
+            await fse.writeFile(filePath, "");
+            onComplete();
+            return;
+        }
         const SMALL_FILE_THRESHOLD = 5 * 1024 * 1024; // 5MB
         const LOW_CONCURRENCY_THRESHOLD = 6; // 병렬 다운로드 개수 threshold
         const SLOW_SPEED_THRESHOLD = 500 * 1024; // 500KB/s
@@ -412,6 +426,8 @@ class FileDownloadTask {
                             }
                         }
                     },
+                    // @ts-expect-error
+                    dispatcher: agent,
                 });
 
                 if (speedCheckTimeout) {
@@ -496,7 +512,7 @@ export class DownloadLib {
     private readonly streamer: DownloadStreamer;
     private readonly fs: DownloadFileSystem;
     private readonly task: FileDownloadTask;
-    private readonly fileQueue: PQueue = new PQueue({ concurrency: 64 });
+    private readonly fileQueue: PQueue = new PQueue({ concurrency: 32 });
 
     public constructor(private readonly desktop: NahidaDesktop) {
         this.streamer = new DownloadStreamer(desktop);

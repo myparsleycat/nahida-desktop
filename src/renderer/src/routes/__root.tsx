@@ -7,9 +7,15 @@ import { PathSelectorDialog } from "@renderer/components/path-selector-dialog";
 import { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet, useLocation } from "@tanstack/react-router";
 import { useState, useCallback } from "react";
+import { useGlobalStore } from "@renderer/store/global";
 
 function RootComponent() {
   const location = useLocation();
+  const setAppStatus = useGlobalStore((state) => state.setAppStatus);
+
+  window.api.invoke("util:getAppStatus").then((appStatus) => {
+    setAppStatus(appStatus);
+  });
 
   const [pathSelectorData, setPathSelectorData] = useState<{
     selectionId: string;

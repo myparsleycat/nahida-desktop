@@ -1,10 +1,21 @@
-import { MessageBoxOptions, OpenExternalOptions } from "electron";
+import {
+    MessageBoxOptions,
+    OpenDialogOptions,
+    OpenDialogReturnValue,
+    OpenExternalOptions,
+} from "electron";
 import { Session } from "./schemas/auth";
-import { ShowModalReturnValue } from "@main/services/util";
+import type { ShowModalReturnValue } from "@main/services/util";
 import { eden } from "@main/client";
 import { Treaty } from "@elysiajs/eden";
 import { desktop } from "@main/index";
 import "./types-check";
+
+export interface AppStatus {
+    version: string;
+    isPackaged: boolean;
+    isDev: boolean;
+}
 
 interface ToastData {
     description?: string;
@@ -86,6 +97,7 @@ export type IpcHandlers = {
     "auth:startLogout": () => void;
     "auth:getSession": () => Session | null;
 
+    "util:getAppStatus": () => AppStatus;
     "util:showModal": (opt: MessageBoxOptions) => ShowModalReturnValue;
     "util:openExternal": (url: string, opt?: OpenExternalOptions) => void;
     "util:copyStr": (str: string) => void;
@@ -95,6 +107,7 @@ export type IpcHandlers = {
     "util:openCmd": (path: string) => void;
     "util:getClipboardFiles": () => string[];
     "util:fs:metadata": (path: string) => Promise<PathMetadata>;
+    "util:showOpenDialog": (options: OpenDialogOptions) => Promise<OpenDialogReturnValue>;
 
     "drive:get:item": (itemId: string) => ModIdGetResp;
     "drive:patch:rename": (

@@ -13,10 +13,12 @@ import { Button } from "./ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { Separator } from "./ui/separator";
 import { viewStore } from "@renderer/store/drive";
+import { useGlobalStore } from "@renderer/store/global";
 
 export function Sidebar({ className }: { className?: string }) {
   const navi = useNavigate();
   const location = useLocation();
+  const appStatus = useGlobalStore((state) => state.appStatus);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -130,23 +132,25 @@ export function Sidebar({ className }: { className?: string }) {
             </TooltipContent>
           </Tooltip>
 
-          {/* <Tooltip disableHoverableContent={true}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onPointerDown={handlePointerDown}
-                onClick={() => {
-                  navi({ to: "/backup" });
-                }}
-              >
-                <DatabaseBackupIcon className={cn(iconSize)} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right" hideWhenDetached={true}>
-              백업
-            </TooltipContent>
-          </Tooltip> */}
+          {appStatus?.isDev && (
+            <Tooltip disableHoverableContent={true}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onPointerDown={handlePointerDown}
+                  onClick={() => {
+                    navi({ to: "/backup" });
+                  }}
+                >
+                  <DatabaseBackupIcon className={cn(iconSize)} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right" hideWhenDetached={true}>
+                백업
+              </TooltipContent>
+            </Tooltip>
+          )}
 
           <Separator orientation="horizontal" />
 
