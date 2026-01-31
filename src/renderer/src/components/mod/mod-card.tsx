@@ -160,6 +160,7 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
         getModColorClass(mod.isEnabled),
       )}
       onClick={() => onToggle(mod)}
+      draggable={false}
     >
       <div className="flex items-center justify-between pb-1">
         <span className="text-sm truncate font-semibold">
