@@ -220,6 +220,12 @@ class FileDownloadTask {
         onProgress?: (bytes: number) => void;
         currentConcurrency?: () => number;
     }): Promise<void> {
+        if (file.size === 0) {
+            await fse.writeFile(filePath, "");
+            onComplete();
+            return;
+        }
+
         const PARALLEL_DOWNLOAD_THRESHOLD = 20 * 1024 * 1024; // 20MB
         const isSmallFile = file.size < 1024 * 1024;
         const targetPath = isSmallFile ? filePath : `${filePath}.ntmp`;
@@ -346,6 +352,11 @@ class FileDownloadTask {
         onProgress?: (bytes: number) => void;
         currentConcurrency?: () => number;
     }): Promise<void> {
+        if (file.size === 0) {
+            await fse.writeFile(filePath, "");
+            onComplete();
+            return;
+        }
         const SMALL_FILE_THRESHOLD = 5 * 1024 * 1024; // 5MB
         const LOW_CONCURRENCY_THRESHOLD = 6; // 병렬 다운로드 개수 threshold
         const SLOW_SPEED_THRESHOLD = 500 * 1024; // 500KB/s
