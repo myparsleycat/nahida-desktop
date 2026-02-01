@@ -2,7 +2,7 @@ import { Search } from "lucide-react";
 import { Input } from "@renderer/components/ui/input";
 import { ScrollArea } from "../ui/scroll-area";
 import type { FolderGroup } from "@renderer/types/mod";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { filter } from "es-toolkit/compat";
 
 import { useModStore } from "@renderer/store/mod";
@@ -23,13 +23,13 @@ export function CharacterSidebar({ groups, isLoading = false, onModDrop }: Chara
   const itemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const showSkeleton = useDelayedSkeleton(isLoading);
 
-  const [parent] = useAutoAnimate({ duration: 150 });
+  // const [anim1, setAnim1Enabled] = useAutoAnimate({ duration: 150 });
 
   const filteredGroups = filter(groups, (group) =>
     group.name.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
-  const handleSelect = (group: FolderGroup) => {
+  const handleSelect = (group: FolderGroup, resetSearch: boolean) => {
     setSelectedGroup(group);
 
     if (searchTerm) {
@@ -42,9 +42,15 @@ export function CharacterSidebar({ groups, isLoading = false, onModDrop }: Chara
           });
         }
       }, 0);
-      setSearchTerm("");
+      if (resetSearch) setSearchTerm("");
     }
   };
+
+  useEffect(() => {
+    if (searchTerm && filteredGroups.length === 1) {
+      handleSelect(filteredGroups[0], false);
+    }
+  }, [searchTerm, filteredGroups]);
 
   return (
     <div className="flex flex-col h-full">
@@ -52,6 +58,7 @@ export function CharacterSidebar({ groups, isLoading = false, onModDrop }: Chara
         <div className="relative">
           <Search className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
+            id="character-search-input"
             className="h-8 pr-8 text-sm"
             placeholder="검색..."
             value={searchTerm}
@@ -61,7 +68,10 @@ export function CharacterSidebar({ groups, isLoading = false, onModDrop }: Chara
       </div>
 
       <ScrollArea className="flex-1 overflow-hidden">
-        <div className="flex flex-col" ref={parent}>
+        <div
+          className="flex flex-col"
+          // ref={anim1}
+        >
           {showSkeleton
             ? Array.from({ length: 8 }).map((_, index) => (
                 <CharacterSidebarItemSkeleton key={index} />
@@ -75,7 +85,7 @@ export function CharacterSidebar({ groups, isLoading = false, onModDrop }: Chara
                   }}
                   group={group}
                   isSelected={selectedGroup?.name === group.name}
-                  onClick={() => handleSelect(group)}
+                  onClick={() => handleSelect(group, true)}
                   onDrop={(files) => onModDrop(files, group.path, { allowImages: true })}
                 />
               ))}

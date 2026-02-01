@@ -39,7 +39,7 @@ import { Badge } from "@renderer/components/ui/badge";
 interface ModCardProps {
   mod: ModInfo;
   selectedGroupPath?: string;
-  onToggle: (mod: ModInfo) => void;
+  onToggle: (mod: ModInfo, event?: React.MouseEvent) => void;
   onToggleKeyUpdate: (
     modPath: string,
     iniFileName: string,
@@ -169,12 +169,12 @@ export const ModCard = memo(function ModCard({
       onMouseDown={(e) => {
         mouseDownTargetRef.current = e.target;
       }}
-      onClick={() => {
+      onClick={(e) => {
         const target = mouseDownTargetRef.current as HTMLElement;
         if (target && (target.tagName === "INPUT" || target.closest("button"))) {
           return;
         }
-        onToggle(mod);
+        onToggle(mod, e);
       }}
       draggable={false}
     >

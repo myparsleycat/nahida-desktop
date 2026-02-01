@@ -15,6 +15,7 @@ import {
 } from "@renderer/hooks/use-mod-events";
 import { useModDragDrop } from "@renderer/hooks/use-mod-drag-drop";
 import ModSidebar from "@renderer/components/mod/sidebar";
+import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
 
 export const Route = createFileRoute("/mod/")({
   component: RouteComponent,
@@ -36,6 +37,7 @@ function RouteComponent() {
   useModRefreshOnFocus(selectedGame, queryClient);
   useDownloadCompletionHandler(selectedGame, queryClient);
   useModWatcherEvents(selectedGame, selectedGroupData?.path, queryClient);
+  useModShortcuts();
 
   const { isDragging, handleDragEnter, handleDragLeave, handleDragOver, handleDrop } =
     useModDragDrop(selectedGroupData?.path, queryClient, selectedGame || "");

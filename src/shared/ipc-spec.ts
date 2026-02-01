@@ -87,6 +87,7 @@ export const IPC_HANDLER_CHANNELS = [
     "mod:getCharacters",
     "mod:getMods",
     "mod:toggle",
+    "mod:exclusiveToggle",
     "mod:updateToggleKey",
     "mod:getPresets",
     "mod:createPreset",

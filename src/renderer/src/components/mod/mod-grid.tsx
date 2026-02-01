@@ -28,7 +28,8 @@ export function ModGrid({ isDragging }: ModGridProps) {
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
   const { data: activeGroup, isPlaceholderData, isPending } = useModGroup(selectedGroupPath);
 
-  const { toggleModMutation, updateToggleKeyMutation } = useModMutations();
+  const { toggleModMutation, exclusiveToggleModMutation, updateToggleKeyMutation } =
+    useModMutations();
 
   const mods = useFilteredMods(activeGroup?.mods || [], searchQuery);
   const isLoading = isPending || isPlaceholderData;
@@ -85,10 +86,14 @@ export function ModGrid({ isDragging }: ModGridProps) {
   }, [selectedGroupPath, searchQuery, rowVirtualizer, isVirtualizationEnabled]);
 
   const handleToggle = useCallback(
-    (mod: ModInfo) => {
-      toggleModMutation.mutate(mod);
+    (mod: ModInfo, event?: React.MouseEvent) => {
+      if (event && (event.ctrlKey || event.metaKey)) {
+        exclusiveToggleModMutation.mutate(mod);
+      } else {
+        toggleModMutation.mutate(mod);
+      }
     },
-    [toggleModMutation.mutate],
+    [toggleModMutation.mutate, exclusiveToggleModMutation.mutate],
   );
 
   const handleToggleKeyUpdate = useCallback(

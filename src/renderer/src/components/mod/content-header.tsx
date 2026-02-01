@@ -114,6 +114,7 @@ export function ContentHeader() {
       <div className="flex items-center gap-2">
         <div className="relative w-[180px]">
           <Input
+            id="mod-search-input"
             className="h-8 pr-8 text-sm"
             placeholder="검색..."
             value={searchValue}

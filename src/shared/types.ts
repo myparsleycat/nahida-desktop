@@ -164,6 +164,7 @@ export type IpcHandlers = {
     "mod:getCharacters": (game: string) => FolderGroup[];
     "mod:getMods": (groupPath: string) => FolderGroup;
     "mod:toggle": (modPath: string) => string;
+    "mod:exclusiveToggle": (modPath: string) => string;
     "mod:updateToggleKey": (
         modPath: string,
         iniFileName: string,

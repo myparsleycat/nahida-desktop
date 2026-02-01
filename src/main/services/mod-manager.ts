@@ -550,6 +550,41 @@ export class ModManager {
             }
         },
 
+        exclusiveToggle: async (modPath: string): Promise<string> => {
+            const folderName = path.basename(modPath);
+            const isEnabled = !/^disabled\s+/i.test(folderName);
+
+            if (!isEnabled) {
+                const groupPath = path.dirname(modPath);
+                const modFolders = await fg("*", {
+                    cwd: groupPath,
+                    onlyDirectories: true,
+                });
+
+                const disablePromises = modFolders.map(async (modFolderName) => {
+                    const currentModPath = path.join(groupPath, modFolderName);
+                    if (currentModPath === modPath) return;
+
+                    try {
+                        const isOtherEnabled = !/^disabled\s+/i.test(modFolderName);
+                        if (isOtherEnabled) {
+                            await this.fn.disable(currentModPath);
+                        }
+                    } catch (error) {
+                        this.desktop.logger.error(
+                            error,
+                            `Mod:exclusiveToggle:disable:${currentModPath}`,
+                        );
+                    }
+                });
+
+                await Promise.all(disablePromises);
+                return await this.fn.enable(modPath);
+            } else {
+                return await this.fn.disable(modPath);
+            }
+        },
+
         enableAll: async (groupPath: string): Promise<void> => {
             try {
                 const modFolders = await fg("*", {
