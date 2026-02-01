@@ -264,60 +264,177 @@ export class UploadLib {
         onProgress?: (bytes: number) => void,
     ) {
         if (signal?.aborted) throw new Error("Aborted");
-        const { name, sha256, fullPath, form } = file;
+        const { fullPath, form } = file;
 
         const readable = await this.desktop.lib.fs.isPathReadable(fullPath);
         if (!readable) throw new Error("path is not readable");
         if (!form) throw new Error("form is not defined");
 
+        const CHUNK_THRESHOLD = 50 * 1024 * 1024; // 50MB
+        if (file.size > CHUNK_THRESHOLD) {
+            await this.uploadLargeFile(file, signal, onProgress);
+        } else {
+            await this.uploadSmallFile(file, signal, onProgress);
+        }
+    }
+
+    private async postFormData({
+        name,
+        sha256,
+        key,
+        parentId,
+        fileToUpload,
+        part,
+        compAlg,
+        signal,
+        onProgress,
+    }: {
+        name: string;
+        sha256: string;
+        key: string;
+        parentId?: string | null;
+        fileToUpload: Buffer | Blob;
+        part?: string;
+        compAlg?: string;
+        signal?: AbortSignal;
+        onProgress?: (bytes: number) => void;
+    }) {
+        const token = await this.desktop.service.auth.getToken();
+        const uploadUrl = eden2url.akasha.file.upload.url();
+
+        const formData = new FormData();
+        formData.append(
+            "file",
+            fileToUpload instanceof Blob ? fileToUpload : new Blob([new Uint8Array(fileToUpload)]),
+            name,
+        );
+        formData.append("sha256", sha256);
+        formData.append("key", key);
+        formData.append("name", name);
+        if (part) formData.append("part", part);
+        if (compAlg) formData.append("comp-alg", compAlg);
+        if (parentId) formData.append("parent", parentId);
+
+        let lastTransferredBytes = 0;
+
+        const response = await ky.post(uploadUrl, {
+            body: formData,
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "User-Agent": `Nahida Desktop/${appVersion}`,
+            },
+            signal,
+            throwHttpErrors: false,
+            timeout: 100000,
+            onUploadProgress: (progress) => {
+                if (onProgress) {
+                    const incremental = progress.transferredBytes - lastTransferredBytes;
+                    lastTransferredBytes = progress.transferredBytes;
+                    if (incremental > 0) {
+                        onProgress(incremental);
+                    }
+                }
+            },
+        });
+
+        return response;
+    }
+
+    private async uploadLargeFile(
+        file: FinalFile,
+        signal?: AbortSignal,
+        onProgress?: (bytes: number) => void,
+    ) {
+        const { name, sha256, fullPath, form } = file;
+        const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
+        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+        const maxIndex = totalChunks - 1;
+
+        const fd = await fse.open(fullPath, "r");
+        try {
+            const chunkQueue = new PQueue({ concurrency: 4 });
+            const uploadChunk = async (index: number) => {
+                const start = index * CHUNK_SIZE;
+                const end = Math.min(start + CHUNK_SIZE, file.size);
+                const length = end - start;
+                const buffer = Buffer.allocUnsafe(length);
+                await fse.read(fd, buffer, 0, length, start);
+
+                const partToken = `${index}-${maxIndex}`;
+                let chunkToUpload: Buffer = buffer;
+
+                await retry(
+                    async () => {
+                        if (signal?.aborted) throw new Error("Aborted");
+                        const response = await this.postFormData({
+                            name,
+                            sha256,
+                            key: form!.key,
+                            parentId: form!.parentId,
+                            fileToUpload: chunkToUpload,
+                            part: partToken,
+                            signal,
+                            onProgress,
+                        });
+
+                        if (!response.ok) {
+                            if (response.status === 403) {
+                                const reversed = await this.reverseFile(chunkToUpload);
+                                chunkToUpload = Buffer.from(reversed);
+                            }
+                            const errorText = await response.text().catch(() => "Unknown error");
+                            throw new Error(`Chunk ${index} upload failed: ${errorText}`);
+                        }
+                    },
+                    {
+                        retries: 3,
+                        delay: (attempt) => Math.pow(2, attempt) * 1000,
+                        shouldRetry: () => !signal?.aborted,
+                    },
+                );
+            };
+
+            const promises: Promise<void>[] = [];
+            for (let i = 0; i < maxIndex; i++) {
+                promises.push(chunkQueue.add(() => uploadChunk(i)));
+            }
+            await Promise.all(promises);
+            await uploadChunk(maxIndex);
+        } finally {
+            await fse.close(fd);
+        }
+    }
+
+    private async uploadSmallFile(
+        file: FinalFile,
+        signal?: AbortSignal,
+        onProgress?: (bytes: number) => void,
+    ) {
+        const { name, sha256, fullPath, form } = file;
         const fileBuffer = await fse.readFile(fullPath);
         const isPreview = await this.isPreviewFile(fileBuffer, name);
-        let zstdFile: Buffer | undefined = undefined;
 
+        let zstdFile: Buffer | undefined;
         if (!isPreview && file.size > 100) {
-            const compressedData = await this.desktop.lib.compressor.zstd.compress(fileBuffer);
-            if (!compressedData) throw new Error("Failed to compress file");
-            zstdFile = compressedData;
+            zstdFile = (await this.desktop.lib.compressor.zstd.compress(fileBuffer)) ?? undefined;
+            if (!zstdFile) throw new Error("Failed to compress file");
         }
 
         const compAlg = zstdFile ? "zstd" : undefined;
-        let fileToUpload = zstdFile || fileBuffer;
+        let fileToUpload: Buffer = zstdFile || fileBuffer;
 
         await retry(
             async () => {
                 if (signal?.aborted) throw new Error("Aborted");
-
-                const token = await this.desktop.service.auth.getToken();
-                const uploadUrl = eden2url.akasha.file.upload.url();
-
-                const formData = new FormData();
-                formData.append("file", new Blob([new Uint8Array(fileToUpload)]), name);
-                formData.append("sha256", sha256);
-                formData.append("key", form.key);
-                formData.append("name", name);
-                if (compAlg) formData.append("comp-alg", compAlg);
-                if (form.parentId) formData.append("parent", form.parentId);
-
-                let lastTransferredBytes = 0;
-
-                const response = await ky.post(uploadUrl, {
-                    body: formData,
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                        "User-Agent": `Nahida Desktop/${appVersion}`,
-                    },
+                const response = await this.postFormData({
+                    name,
+                    sha256,
+                    key: form!.key,
+                    parentId: form!.parentId,
+                    fileToUpload,
+                    compAlg,
                     signal,
-                    throwHttpErrors: false,
-                    timeout: 100000,
-                    onUploadProgress: (progress) => {
-                        if (onProgress) {
-                            const incremental = progress.transferredBytes - lastTransferredBytes;
-                            lastTransferredBytes = progress.transferredBytes;
-                            if (incremental > 0) {
-                                onProgress(incremental);
-                            }
-                        }
-                    },
+                    onProgress,
                 });
 
                 if (!response.ok) {
@@ -332,10 +449,7 @@ export class UploadLib {
             {
                 retries: 3,
                 delay: (attempt) => Math.pow(2, attempt) * 1000,
-                shouldRetry: (err: any) => {
-                    if (signal?.aborted) return false;
-                    return true;
-                },
+                shouldRetry: () => !signal?.aborted,
             },
         );
     }
@@ -680,10 +794,6 @@ export class UploadLib {
 
     public async prepareUpload(paths: string[], items: Content[]) {
         const files = await this.collectFiles(paths, [".blend"]);
-        const largeFile = files.find((v) => v.size > 150 * 1000 * 1000);
-        if (largeFile) {
-            throw new Error(`${largeFile.name} 파일이 최대 파일 크기 제한인 150MiB를 초과합니다.`);
-        }
 
         const directories = await this.collectDirectories(paths);
         let processName = paths.length === 1 ? path.basename(paths[0]) : "";
