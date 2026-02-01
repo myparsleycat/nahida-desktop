@@ -33,6 +33,8 @@ import { Separator } from "@renderer/components/ui/separator";
 import { Button } from "@renderer/components/ui/button";
 import { useRouteContext } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { formatDate, formatSize } from "@shared/utils";
+import { Badge } from "@renderer/components/ui/badge";
 
 interface ModCardProps {
   mod: ModInfo;
@@ -49,25 +51,25 @@ interface ModCardProps {
 
 const getModColorClass = (isEnabled: boolean) => {
   if (isEnabled) {
-    return "dark:bg-[#0d430d] bg-[#048117]";
+    return "dark:bg-[#0d430d] bg-[#6aad6a]";
   } else {
-    return "dark:bg-[#58151b] bg-[#af2938]";
+    return "dark:bg-[#58151b] bg-[#f1afb4]";
   }
 };
 
 const getToggleBoxColorClass = (isEnabled: boolean) => {
   if (isEnabled) {
-    return "dark:bg-[#0f4d0f] bg-[#008a1c]";
+    return "dark:bg-[#0f4d0f] bg-[#72b172]";
   } else {
-    return "dark:bg-[#63181e] bg-[#781d26]";
+    return "dark:bg-[#612127] bg-[#f2b3b8]";
   }
 };
 
 const getToggleInputColorClass = (isEnabled: boolean) => {
   if (isEnabled) {
-    return "dark:bg-[#115a11] bg-[#00941e]";
+    return "dark:bg-[#115a11] bg-[#d5e8d5]";
   } else {
-    return "dark:bg-[#731c23] bg-[#781d26]";
+    return "dark:bg-[#6a2e34] bg-[#fbe8ea]";
   }
 };
 
@@ -161,7 +163,7 @@ export const ModCard = memo(function ModCard({
   return (
     <div
       className={cn(
-        "rounded-sm overflow-hidden border cursor-pointer shadow-lg p-1 h-[400px]",
+        "rounded-sm overflow-hidden border-border/75 cursor-pointer p-1 h-[400px] relative hover:shadow-lg transition-shadow duration-150",
         getModColorClass(mod.isEnabled),
       )}
       onMouseDown={(e) => {
@@ -236,6 +238,15 @@ export const ModCard = memo(function ModCard({
             <ModIniList mod={mod} onToggleKeyUpdate={onToggleKeyUpdate} />
           </>
         )}
+      </div>
+
+      <div className="absolute left-1 bottom-1 flex flex-col space-y-1">
+        <Badge className="bg-background/15 backdrop-blur text-foreground text-xs h-5">
+          {formatSize(mod.size)}
+        </Badge>
+        <Badge className="bg-background/15 backdrop-blur text-foreground text-xs h-5">
+          {formatDate(new Date(mod.mtime), "ko")}
+        </Badge>
       </div>
     </div>
   );
@@ -353,7 +364,10 @@ function ModIniList({
                           <span className="text-sm">key:</span>
                           <Input
                             key={`key-${toggleKey.sectionName}-${toggleKey.key}`}
-                            className={cn("h-7 text-sm", getToggleInputColorClass(mod.isEnabled))}
+                            className={cn(
+                              "h-7 text-sm border-none shadow",
+                              getToggleInputColorClass(mod.isEnabled),
+                            )}
                             defaultValue={toggleKey.key}
                             onClick={(e) => e.stopPropagation()}
                             onBlur={(e) => {
