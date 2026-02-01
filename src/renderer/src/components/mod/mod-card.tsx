@@ -366,7 +366,7 @@ function ModIniList({
                 </div>
 
                 {iniToggleKeys.length > 0 && (
-                  <div className="space-y-1">
+                  <div className="space-y-2.5">
                     {iniToggleKeys.map((toggleKey, idx) => (
                       <div key={idx} className="space-y-1">
                         <span className="text-sm">{toggleKey.sectionName}</span>
