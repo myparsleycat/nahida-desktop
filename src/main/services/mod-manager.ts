@@ -302,9 +302,17 @@ export class ModManager {
                 dot: true,
             })) as string[];
 
-            const iniFiles = files.filter(
-                (f) => f.toLowerCase().endsWith(".ini") && !f.toLowerCase().startsWith("disabled"),
-            );
+            const collator = new Intl.Collator(undefined, {
+                numeric: true,
+                sensitivity: "base",
+            });
+
+            const iniFiles = files
+                .filter(
+                    (f) =>
+                        f.toLowerCase().endsWith(".ini") && !f.toLowerCase().startsWith("disabled"),
+                )
+                .sort(collator.compare);
 
             const toggleKeysPromises = iniFiles.map((iniFile) => {
                 const iniPath = path.join(modPath, iniFile);
