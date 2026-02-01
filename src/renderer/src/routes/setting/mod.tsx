@@ -139,14 +139,14 @@ function RouteComponent() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium">모드 그리드 가상화</CardTitle>
+            <CardTitle className="text-sm font-medium">가상화</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col space-y-4" ref={anim1}>
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <span className="text-sm font-bold">가상화 사용</span>
                 <p className="text-xs text-muted-foreground">
-                  모드 개수가 많을 때 성능을 위해 모드 그리드에 가상화를 적용합니다
+                  모드 개수가 많을 때 성능을 위해 가상화를 사용합니다
                 </p>
               </div>
               <Switch
