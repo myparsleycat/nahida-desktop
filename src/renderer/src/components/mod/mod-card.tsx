@@ -37,6 +37,7 @@ import { toast } from "sonner";
 
 interface ModCardProps {
   mod: ModInfo;
+  selectedGroupPath?: string;
   onToggle: (mod: ModInfo) => void;
   onToggleKeyUpdate: (
     modPath: string,
@@ -71,10 +72,13 @@ const getToggleInputColorClass = (isEnabled: boolean) => {
   }
 };
 
-export const ModCard = memo(function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
+export const ModCard = memo(function ModCard({
+  mod,
+  selectedGroupPath,
+  onToggle,
+  onToggleKeyUpdate,
+}: ModCardProps) {
   const { queryClient } = useRouteContext({ from: "/mod/" });
-  const selectedGroup = useModStore((s) => s.selectedGroup);
-  const selectedGroupPath = selectedGroup?.path;
 
   const handlePaste = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -215,7 +219,7 @@ export const ModCard = memo(function ModCard({ mod, onToggle, onToggleKeyUpdate 
       </div>
 
       <div className="flex flex-row h-[calc(100%-2.5rem)] space-x-1.5">
-        <ModPreview mod={mod} onPaste={handlePaste} />
+        <ModPreview mod={mod} selectedGroupPath={selectedGroupPath} onPaste={handlePaste} />
 
         {mod.inis.length > 0 && (
           <>
@@ -228,9 +232,16 @@ export const ModCard = memo(function ModCard({ mod, onToggle, onToggleKeyUpdate 
   );
 });
 
-function ModPreview({ mod, onPaste }: { mod: ModInfo; onPaste: (e: React.MouseEvent) => void }) {
+function ModPreview({
+  mod,
+  selectedGroupPath,
+  onPaste,
+}: {
+  mod: ModInfo;
+  selectedGroupPath?: string;
+  onPaste: (e: React.MouseEvent) => void;
+}) {
   const { queryClient } = useRouteContext({ from: "/mod/" });
-  const selectedGroup = useModStore((s) => s.selectedGroup);
 
   const previewContent = (
     <Preview
@@ -262,7 +273,7 @@ function ModPreview({ mod, onPaste }: { mod: ModInfo; onPaste: (e: React.MouseEv
       error: "삭제 실패",
     });
     promise.then(() => {
-      queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroup?.path] });
+      queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
     });
   };
 

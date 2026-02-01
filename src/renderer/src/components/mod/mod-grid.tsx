@@ -70,7 +70,7 @@ export function ModGrid({ isDragging }: ModGridProps) {
     if (rowVirtualizer) {
       rowVirtualizer.scrollToOffset(0);
     }
-  }, [selectedGroup, rowVirtualizer]);
+  }, [selectedGroupPath, searchQuery, rowVirtualizer]);
 
   const handleToggle = useCallback(
     (mod: ModInfo) => {
@@ -136,6 +136,8 @@ export function ModGrid({ isDragging }: ModGridProps) {
           >
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
               const rowMods = rows[virtualRow.index];
+              if (!rowMods) return null;
+
               return (
                 <div
                   key={virtualRow.key}
@@ -159,6 +161,7 @@ export function ModGrid({ isDragging }: ModGridProps) {
                       <ModCard
                         key={mod.path}
                         mod={mod}
+                        selectedGroupPath={selectedGroupPath}
                         onToggle={handleToggle}
                         onToggleKeyUpdate={handleToggleKeyUpdate}
                       />
