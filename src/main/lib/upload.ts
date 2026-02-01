@@ -691,17 +691,27 @@ export class UploadLib {
             }
         };
 
+        const metadataQueue = new PQueue({ concurrency: 1 });
+
         const representativeChunks = chunk(representativeFiles, CHUNK_SIZE);
-        for (const fileChunk of representativeChunks) {
-            if (signal?.aborted) break;
-            await processChunk(fileChunk);
-        }
+        await Promise.all(
+            representativeChunks.map((fileChunk) =>
+                metadataQueue.add(async () => {
+                    if (signal?.aborted) return;
+                    await processChunk(fileChunk);
+                }),
+            ),
+        );
 
         const remainingChunks = chunk(allRemainingFiles, CHUNK_SIZE);
-        for (const fileChunk of remainingChunks) {
-            if (signal?.aborted) break;
-            await processChunk(fileChunk);
-        }
+        await Promise.all(
+            remainingChunks.map((fileChunk) =>
+                metadataQueue.add(async () => {
+                    if (signal?.aborted) return;
+                    await processChunk(fileChunk);
+                }),
+            ),
+        );
 
         if (!signal?.aborted) {
             await this.fileQueue.onIdle();
@@ -784,29 +794,36 @@ export class UploadLib {
             let currentUploadedBytes = initialTransferedSize ?? alreadyUploadedBytes;
             let currentUploadedCount = alreadyUploadedCount;
 
-            this.desktop.service.transfer.updateTransfer(pid, {
-                status: "progress",
-                transferedSize: currentUploadedBytes,
-                transferedFiles: currentUploadedCount,
-            });
+            const updateUI = () => {
+                this.desktop.service.transfer.updateTransfer(pid, {
+                    status: "progress",
+                    transferedSize: currentUploadedBytes,
+                    transferedFiles: currentUploadedCount,
+                });
+            };
 
-            await this.filesUpload({
-                files: finalFiles,
-                totalSize,
-                onProgress: (progress: UploadProgress) => {
-                    if (progress.fileId) {
-                        this.desktop.service.transfer.markFileCompleted(pid, progress.fileId);
-                        currentUploadedCount++;
-                    }
-                    currentUploadedBytes += progress.bytes;
-                    this.desktop.service.transfer.updateTransfer(pid, {
-                        transferedSize: currentUploadedBytes,
-                        transferedFiles: currentUploadedCount,
-                    });
-                },
-                signal: abortController.signal,
-                pid,
-            });
+            updateUI();
+
+            const heartbeat = setInterval(updateUI, 1000);
+
+            try {
+                await this.filesUpload({
+                    files: finalFiles,
+                    totalSize,
+                    onProgress: (progress: UploadProgress) => {
+                        if (progress.fileId) {
+                            this.desktop.service.transfer.markFileCompleted(pid, progress.fileId);
+                            currentUploadedCount++;
+                        }
+                        currentUploadedBytes += progress.bytes;
+                        updateUI();
+                    },
+                    signal: abortController.signal,
+                    pid,
+                });
+            } finally {
+                clearInterval(heartbeat);
+            }
 
             if (abortController.signal.aborted) return;
 
