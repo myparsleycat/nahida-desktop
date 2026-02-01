@@ -607,14 +607,27 @@ export class UploadLib {
                 sha256: f.sha256,
             }));
 
-            const { data, error } = await eden.akasha.file.create_many.post({
-                current: "",
-                files: fileMetadatas,
-            });
+            const { data, error } = await retry(
+                async () => {
+                    const result = await eden.akasha.file.create_many.post({
+                        current: "",
+                        files: fileMetadatas,
+                    });
 
-            if (error) {
-                throw new Error(`[create_files chunk failed] ${error.value.toString()}`);
-            }
+                    if (result.error) {
+                        throw new Error(
+                            `[create_files chunk failed] ${result.error.value.toString()}`,
+                        );
+                    }
+
+                    return result;
+                },
+                {
+                    retries: 3,
+                    delay: (attempt) => Math.pow(2, attempt) * 1000,
+                    shouldRetry: () => !signal?.aborted,
+                },
+            );
 
             const serverDataMap = new Map(data.map((item) => [item.FID, item]));
             const filesToUpload: FinalFile[] = [];
@@ -725,6 +738,7 @@ export class UploadLib {
             const createdDirs = await this.desktop.service.drive.post.dirs(
                 params.destId,
                 directories,
+                abortController.signal,
             );
             const parentIdProcessedFiles = this.mapFilesToParentIds(
                 files,

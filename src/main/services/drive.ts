@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { dialog } from "electron";
 import Upload, { DirectoriesComponent, UploadParams } from "@main/lib/upload";
 import { nanoid } from "nanoid";
+import { retry } from "es-toolkit";
 import { windowsReservedNameRegex } from "filename-reserved-regex";
 
 export const gzipAsync = promisify(gzip);
@@ -52,27 +53,45 @@ export class DriveService {
     };
 
     post = {
-        dir: async (parentId: string, name: string) => {
-            const { data, error } = await eden.akasha.dir.create_many.post({
-                current: parentId,
-                parentId: parentId,
-                dirs: [{ path: parentId, name }],
-            });
-            if (error) {
-                throw error;
-            }
-            return data;
+        dir: async (parentId: string, name: string, signal?: AbortSignal) => {
+            return await retry(
+                async () => {
+                    const { data, error } = await eden.akasha.dir.create_many.post({
+                        current: parentId,
+                        parentId: parentId,
+                        dirs: [{ path: parentId, name }],
+                    });
+                    if (error) {
+                        throw error;
+                    }
+                    return data;
+                },
+                {
+                    retries: 3,
+                    delay: (attempt) => Math.pow(2, attempt) * 1000,
+                    shouldRetry: () => !signal?.aborted,
+                },
+            );
         },
 
-        dirs: async (parentId: string, dirs: DirectoriesComponent[]) => {
-            const { data, error } = await eden.akasha["create-dirs"].post({
-                parentId,
-                dirs,
-            });
-            if (error) {
-                throw new Error(error.value.toString());
-            }
-            return data;
+        dirs: async (parentId: string, dirs: DirectoriesComponent[], signal?: AbortSignal) => {
+            return await retry(
+                async () => {
+                    const { data, error } = await eden.akasha["create-dirs"].post({
+                        parentId,
+                        dirs,
+                    });
+                    if (error) {
+                        throw new Error(error.value.toString());
+                    }
+                    return data;
+                },
+                {
+                    retries: 3,
+                    delay: (attempt) => Math.pow(2, attempt) * 1000,
+                    shouldRetry: () => !signal?.aborted,
+                },
+            );
         },
     };
 
