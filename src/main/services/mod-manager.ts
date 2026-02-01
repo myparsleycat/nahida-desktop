@@ -40,13 +40,13 @@ interface ModInfo {
     name: string;
     path: string;
     isEnabled: boolean;
-    toggleKeys: ToggleKey[];
     preview?: string;
     mtime: number;
     size: number;
     inis: {
         name: string;
         path: string;
+        toggleKeys: ToggleKey[];
     }[];
 }
 
@@ -354,8 +354,6 @@ export class ModManager {
                 return collator.compare(a.name, b.name);
             });
 
-            const toggleKeys = iniData.flatMap((d) => d.toggleKeys);
-
             const preview = await this.findPreview(
                 modPath,
                 files.map((f) => f.path),
@@ -364,13 +362,13 @@ export class ModManager {
             const inis = iniData.map((d) => ({
                 name: d.name,
                 path: d.path,
+                toggleKeys: d.toggleKeys,
             }));
 
             return {
                 name: folderName,
                 path: modPath,
                 isEnabled,
-                toggleKeys,
                 preview: preview || undefined,
                 mtime,
                 size,

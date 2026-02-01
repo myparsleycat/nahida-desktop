@@ -13,13 +13,13 @@ export interface ModInfo {
     name: string;
     path: string;
     isEnabled: boolean;
-    toggleKeys: ToggleKey[];
     preview?: string;
     mtime: number;
     size: number;
     inis: {
         name: string;
         path: string;
+        toggleKeys: ToggleKey[];
     }[];
 }
 
