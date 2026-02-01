@@ -34,9 +34,10 @@ const isPartialMatch = (target: string, query: string): boolean => {
     return targetJamo.includes(queryJamo);
 };
 
-const isChosungMatch = (target: string, query: string): boolean => {
-    const targetChosung = getChoseong(target.toLowerCase());
-    return targetChosung.includes(query.toLowerCase());
+const isChosungMatch = (chosung: string, query: string): boolean => {
+    const disassembledChosung = disassemble(chosung);
+    const disassembledQuery = disassemble(query.toLowerCase());
+    return disassembledChosung.includes(disassembledQuery);
 };
 
 export const getSearchScore = (
