@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { chunk } from "es-toolkit";
 import { ModInfo } from "@renderer/types/mod";
+import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
 
 interface ModGridProps {
   isDragging?: boolean;
@@ -21,12 +22,13 @@ export function ModGrid({ isDragging }: ModGridProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
-  const { data: activeGroup } = useModGroup(selectedGroupPath);
+  const { data: activeGroup, isPlaceholderData, isPending } = useModGroup(selectedGroupPath);
 
   const { toggleModMutation, updateToggleKeyMutation } = useModMutations();
 
   const mods = useFilteredMods(activeGroup?.mods || [], searchQuery);
-  const isLoading = !activeGroup && !!selectedGroup;
+  const isLoading = isPending || isPlaceholderData;
+  const showSkeleton = useDelayedSkeleton(isLoading);
 
   const [columnCount, setColumnCount] = useState(1);
 
@@ -103,7 +105,7 @@ export function ModGrid({ isDragging }: ModGridProps) {
   return (
     <ScrollArea ref={scrollAreaRef} className="flex-1 overflow-y-auto">
       <div className="relative w-full p-3">
-        {isLoading ? (
+        {showSkeleton ? (
           <div
             className="grid gap-3"
             style={{

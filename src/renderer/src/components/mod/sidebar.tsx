@@ -15,7 +15,7 @@ export default function ModSidebar() {
   const setIsDeleteGameDialogOpen = useModStore((s) => s.setIsDeleteGameDialogOpen);
 
   const { data: games = [] } = useGames();
-  const { data: characters = [] } = useCharacters(selectedGame);
+  const { data: characters = [], isPlaceholderData, isPending } = useCharacters(selectedGame);
 
   const handleFilesDrop = useModDragDrop(
     selectedGroup?.path,
@@ -37,7 +37,7 @@ export default function ModSidebar() {
       <div className="flex-1 overflow-y-auto h-full">
         <CharacterSidebar
           groups={characters}
-          isLoading={characters.length === 0 && !!selectedGame}
+          isLoading={isPending || isPlaceholderData}
           onModDrop={handleFilesDrop}
         />
       </div>
