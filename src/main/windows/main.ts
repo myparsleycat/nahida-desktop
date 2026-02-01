@@ -7,6 +7,7 @@ import { getDefaultWebPreferences } from "./utils";
 import { fileURLToPath } from "node:url";
 import { debounce } from "es-toolkit";
 import { focus } from "./utils";
+import { openExternal } from "@main/services/util";
 
 export class MainWindow {
     private readonly desktop: NahidaDesktop;
@@ -97,7 +98,7 @@ export class MainWindow {
         });
 
         this.window.webContents.setWindowOpenHandler((details) => {
-            shell.openExternal(details.url);
+            openExternal(details.url);
             return { action: "deny" };
         });
 

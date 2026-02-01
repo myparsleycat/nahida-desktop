@@ -45,13 +45,13 @@ export interface ModInfo {
     name: string;
     path: string;
     isEnabled: boolean;
-    toggleKeys: ToggleKey[];
     preview?: string;
     mtime: number;
     size: number;
     inis: {
         name: string;
         path: string;
+        toggleKeys: ToggleKey[];
     }[];
 }
 
@@ -164,6 +164,7 @@ export type IpcHandlers = {
     "mod:getCharacters": (game: string) => FolderGroup[];
     "mod:getMods": (groupPath: string) => FolderGroup;
     "mod:toggle": (modPath: string) => string;
+    "mod:exclusiveToggle": (modPath: string) => string;
     "mod:updateToggleKey": (
         modPath: string,
         iniFileName: string,

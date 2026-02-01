@@ -39,7 +39,7 @@ import { Badge } from "@renderer/components/ui/badge";
 interface ModCardProps {
   mod: ModInfo;
   selectedGroupPath?: string;
-  onToggle: (mod: ModInfo) => void;
+  onToggle: (mod: ModInfo, event?: React.MouseEvent) => void;
   onToggleKeyUpdate: (
     modPath: string,
     iniFileName: string,
@@ -169,12 +169,12 @@ export const ModCard = memo(function ModCard({
       onMouseDown={(e) => {
         mouseDownTargetRef.current = e.target;
       }}
-      onClick={() => {
+      onClick={(e) => {
         const target = mouseDownTargetRef.current as HTMLElement;
         if (target && (target.tagName === "INPUT" || target.closest("button"))) {
           return;
         }
-        onToggle(mod);
+        onToggle(mod, e);
       }}
       draggable={false}
     >
@@ -309,7 +309,15 @@ function ModPreview({
         <ContextMenu>
           <ContextMenuTrigger>{previewContent}</ContextMenuTrigger>
           <ContextMenuContent onClick={(e) => e.stopPropagation()}>
-            <ContextMenuItem onClick={() => window.api.invoke("util:openExternal", mod.preview!)}>
+            <ContextMenuItem
+              onClick={() => {
+                window.api.invoke("util:openExternal", mod.preview!).catch((error) => {
+                  toast.error("Failed to open external", {
+                    description: error.message,
+                  });
+                });
+              }}
+            >
               <ImageIcon />
               뷰어로 열기
             </ContextMenuItem>
@@ -343,7 +351,7 @@ function ModIniList({
         )}
       >
         {mod.inis.map((ini, iniIdx) => {
-          const iniToggleKeys = mod.toggleKeys.filter((tk) => tk.iniFileName === ini.name);
+          const iniToggleKeys = ini.toggleKeys;
 
           return (
             <>

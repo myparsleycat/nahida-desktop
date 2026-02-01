@@ -40,13 +40,13 @@ interface ModInfo {
     name: string;
     path: string;
     isEnabled: boolean;
-    toggleKeys: ToggleKey[];
     preview?: string;
     mtime: number;
     size: number;
     inis: {
         name: string;
         path: string;
+        toggleKeys: ToggleKey[];
     }[];
 }
 
@@ -297,17 +297,19 @@ export class ModManager {
             const folderName = path.basename(modPath);
             const isEnabled = this.isModEnabled(folderName);
 
-            const files = (await fg(MOD_FILE_GLOB, {
+            const files = await fg(MOD_FILE_GLOB, {
                 cwd: modPath,
                 onlyFiles: true,
                 caseSensitiveMatch: false,
                 dot: true,
                 stats: true,
-            })) as any[];
+            });
 
             let maxMtime = 0;
 
             for (const file of files) {
+                if (!file.stats) continue;
+
                 if (file.stats.mtimeMs > maxMtime) {
                     maxMtime = file.stats.mtimeMs;
                 }
@@ -322,7 +324,7 @@ export class ModManager {
             });
 
             const rawIniFiles = files
-                .map((f) => f.name)
+                .map((f) => f.path)
                 .filter(
                     (f) =>
                         f.toLowerCase().endsWith(".ini") && !f.toLowerCase().startsWith("disabled"),
@@ -352,8 +354,6 @@ export class ModManager {
                 return collator.compare(a.name, b.name);
             });
 
-            const toggleKeys = iniData.flatMap((d) => d.toggleKeys);
-
             const preview = await this.findPreview(
                 modPath,
                 files.map((f) => f.path),
@@ -362,13 +362,13 @@ export class ModManager {
             const inis = iniData.map((d) => ({
                 name: d.name,
                 path: d.path,
+                toggleKeys: d.toggleKeys,
             }));
 
             return {
                 name: folderName,
                 path: modPath,
                 isEnabled,
-                toggleKeys,
                 preview: preview || undefined,
                 mtime,
                 size,
@@ -547,6 +547,41 @@ export class ModManager {
                 return await this.fn.disable(modPath);
             } else {
                 return await this.fn.enable(modPath);
+            }
+        },
+
+        exclusiveToggle: async (modPath: string): Promise<string> => {
+            const folderName = path.basename(modPath);
+            const isEnabled = !/^disabled\s+/i.test(folderName);
+
+            if (!isEnabled) {
+                const groupPath = path.dirname(modPath);
+                const modFolders = await fg("*", {
+                    cwd: groupPath,
+                    onlyDirectories: true,
+                });
+
+                const disablePromises = modFolders.map(async (modFolderName) => {
+                    const currentModPath = path.join(groupPath, modFolderName);
+                    if (currentModPath === modPath) return;
+
+                    try {
+                        const isOtherEnabled = !/^disabled\s+/i.test(modFolderName);
+                        if (isOtherEnabled) {
+                            await this.fn.disable(currentModPath);
+                        }
+                    } catch (error) {
+                        this.desktop.logger.error(
+                            error,
+                            `Mod:exclusiveToggle:disable:${currentModPath}`,
+                        );
+                    }
+                });
+
+                await Promise.all(disablePromises);
+                return await this.fn.enable(modPath);
+            } else {
+                return await this.fn.disable(modPath);
             }
         },
 

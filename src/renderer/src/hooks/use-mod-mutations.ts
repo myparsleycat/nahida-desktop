@@ -73,6 +73,37 @@ export function useModMutations() {
         },
     });
 
+    const exclusiveToggleModMutation = useMutation({
+        mutationFn: async (mod: ModInfo) => {
+            try {
+                await window.api.invoke("mod:exclusiveToggle", mod.path);
+                const currentGroupPath = selectedGroup?.path;
+                if (currentGroupPath) {
+                    const refreshedGroup = (await window.api.invoke(
+                        "mod:getMods",
+                        currentGroupPath,
+                    )) as FolderGroup;
+                    return refreshedGroup;
+                }
+                return null;
+            } catch (error: any) {
+                const errorMessage = error.message || "";
+                if (errorMessage.includes("ALREADY_EXISTS")) {
+                    const folderName = errorMessage.split("ALREADY_EXISTS:")[1] || "알 수 없는";
+                    toast.error(`이미 "${folderName}" 폴더가 존재합니다.`);
+                } else {
+                    toast.error("모드 상태 변경에 실패했습니다.");
+                }
+                throw error;
+            }
+        },
+        onSuccess: (refreshedGroup) => {
+            if (refreshedGroup) {
+                updateLocalGroupCache(refreshedGroup);
+            }
+        },
+    });
+
     const updateToggleKeyMutation = useMutation({
         mutationFn: async (params: {
             modPath: string;
@@ -106,7 +137,7 @@ export function useModMutations() {
         },
     });
 
-    return { toggleModMutation, updateToggleKeyMutation };
+    return { toggleModMutation, exclusiveToggleModMutation, updateToggleKeyMutation };
 }
 
 export function usePresetMutations() {

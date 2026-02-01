@@ -8,7 +8,7 @@ import ky from "ky";
 import { Nullable, Optional, validate } from "valdex";
 import { shell } from "electron";
 import { parseServerSentEvents } from "parse-sse";
-import { closeAllWindows } from "./util";
+import { closeAllWindows, openExternal } from "./util";
 import { focus } from "@main/windows/utils";
 import type { NahidaDesktop } from "@main/index";
 import { appVersion } from "@main/const";
@@ -96,7 +96,7 @@ export class Auth {
             stateResponse: String,
         });
 
-        await shell.openExternal(data.pageUrl);
+        await openExternal(data.pageUrl);
 
         const resp = await ky(data.stateResponse, {
             throwHttpErrors: false,

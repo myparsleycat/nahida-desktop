@@ -57,6 +57,10 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return await desktop.service.mod.fn.toggle(modPath);
     });
 
+    ipcMain.handle("mod:exclusiveToggle", async (_event, modPath: string) => {
+        return await desktop.service.mod.fn.exclusiveToggle(modPath);
+    });
+
     ipcMain.handle("mod:enableAll", async (_event, groupPath: string) => {
         return await desktop.service.mod.fn.enableAll(groupPath);
     });
