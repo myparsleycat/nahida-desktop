@@ -161,8 +161,10 @@ export const TransferItem = memo((props: TransferItemProps) => {
             </span>
           </div>
           <span className={cn("shrink-0 text-xs font-medium", getStatusColor(status))}>
-            {status === "preparing" && totalFiles && processedFiles !== undefined
-              ? `Preparing (${processedFiles}/${totalFiles})`
+            {(status === "preparing" || status === "downloading") &&
+            totalFiles &&
+            processedFiles !== undefined
+              ? `${status.charAt(0).toUpperCase() + status.slice(1)} (${processedFiles}/${totalFiles})`
               : status.charAt(0).toUpperCase() + status.slice(1)}
           </span>
         </div>
