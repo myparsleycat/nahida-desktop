@@ -5,6 +5,7 @@ import { is } from "@electron-toolkit/utils";
 import type { NahidaDesktop } from "@main/index";
 import { getDefaultWebPreferences } from "./utils";
 import { fileURLToPath } from "node:url";
+import { openExternal } from "@main/services/util";
 
 export class SettingWindow {
     private readonly desktop: NahidaDesktop;
@@ -40,7 +41,7 @@ export class SettingWindow {
 
         this.window.webContents.setWindowOpenHandler(({ url }) => {
             if (url.startsWith("http")) {
-                shell.openExternal(url);
+                openExternal(url);
                 return { action: "deny" };
             }
             return { action: "allow" };

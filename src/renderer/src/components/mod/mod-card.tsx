@@ -309,7 +309,15 @@ function ModPreview({
         <ContextMenu>
           <ContextMenuTrigger>{previewContent}</ContextMenuTrigger>
           <ContextMenuContent onClick={(e) => e.stopPropagation()}>
-            <ContextMenuItem onClick={() => window.api.invoke("util:openExternal", mod.preview!)}>
+            <ContextMenuItem
+              onClick={() => {
+                window.api.invoke("util:openExternal", mod.preview!).catch((error) => {
+                  toast.error("Failed to open external", {
+                    description: error.message,
+                  });
+                });
+              }}
+            >
               <ImageIcon />
               뷰어로 열기
             </ContextMenuItem>
@@ -343,7 +351,7 @@ function ModIniList({
         )}
       >
         {mod.inis.map((ini, iniIdx) => {
-          const iniToggleKeys = mod.toggleKeys.filter((tk) => tk.iniFileName === ini.name);
+          const iniToggleKeys = ini.toggleKeys;
 
           return (
             <>

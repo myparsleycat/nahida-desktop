@@ -12,6 +12,7 @@ import {
 } from "electron";
 import { app } from "electron/main";
 import fse from "fs-extra";
+import { desktop } from "..";
 
 export function getAppStatus(): AppStatus {
     return {
@@ -31,8 +32,18 @@ export async function showModal(options: MessageBoxOptions) {
     });
 }
 
-export async function openExternal(url: string, opt?: OpenExternalOptions) {
-    await shell.openExternal(url, opt);
+export async function openExternal(str: string, opt?: OpenExternalOptions) {
+    try {
+        try {
+            const parsedUrl = new URL(str);
+            await shell.openExternal(parsedUrl.toString(), opt);
+        } catch {
+            await shell.openPath(str);
+        }
+    } catch (error) {
+        desktop.logger.error(error, `util:openExternal`);
+        throw error;
+    }
 }
 
 export function closeAllWindows() {
