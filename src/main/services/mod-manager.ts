@@ -297,17 +297,19 @@ export class ModManager {
             const folderName = path.basename(modPath);
             const isEnabled = this.isModEnabled(folderName);
 
-            const files = (await fg(MOD_FILE_GLOB, {
+            const files = await fg(MOD_FILE_GLOB, {
                 cwd: modPath,
                 onlyFiles: true,
                 caseSensitiveMatch: false,
                 dot: true,
                 stats: true,
-            })) as any[];
+            });
 
             let maxMtime = 0;
 
             for (const file of files) {
+                if (!file.stats) continue;
+
                 if (file.stats.mtimeMs > maxMtime) {
                     maxMtime = file.stats.mtimeMs;
                 }
@@ -322,7 +324,7 @@ export class ModManager {
             });
 
             const rawIniFiles = files
-                .map((f) => f.name)
+                .map((f) => f.path)
                 .filter(
                     (f) =>
                         f.toLowerCase().endsWith(".ini") && !f.toLowerCase().startsWith("disabled"),
