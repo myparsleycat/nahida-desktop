@@ -13,6 +13,7 @@ import {
 import { useEffect } from "react";
 import { useGlobalStore } from "@renderer/store/global";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
+import { Button } from "@renderer/components/ui/button";
 
 export const Route = createFileRoute("/setting")({
   component: RouteComponent,
@@ -23,7 +24,7 @@ function RouteComponent() {
   const navi = useNavigate();
   const appStatus = useGlobalStore((state) => state.appStatus);
 
-  const [parent, _enableAnimations] = useAutoAnimate({ duration: 100 });
+  const [anim1] = useAutoAnimate({ duration: 100 });
 
   useEffect(() => {
     if (location.pathname === "/setting") {
@@ -47,12 +48,12 @@ function RouteComponent() {
       <Titlebar title={{ text: "설정", position: "center" }} />
 
       <nav className="border-b">
-        <div className="flex items-center justify-center gap-8 px-4 py-4">
+        <div className="flex items-center justify-center gap-1 p-3">
           {navItems.map((item, index) => (
-            <Link
+            <button
               key={index}
-              to={item.path}
-              className={`flex flex-col items-center gap-2 transition-colors ${
+              onClick={() => navi({ to: item.path })}
+              className={`flex flex-col items-center gap-2 transition-colors size-14 ${
                 location.pathname === item.path
                   ? "text-foreground"
                   : "text-muted-foreground hover:text-foreground"
@@ -60,12 +61,12 @@ function RouteComponent() {
             >
               <item.icon className="h-6 w-6" />
               <span className="text-sm">{item.label}</span>
-            </Link>
+            </button>
           ))}
         </div>
       </nav>
 
-      <div className="flex-1 flex flex-col p-2" ref={parent}>
+      <div className="flex-1 flex flex-col p-2" ref={anim1}>
         <Outlet />
       </div>
 

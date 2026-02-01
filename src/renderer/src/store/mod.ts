@@ -26,6 +26,10 @@ interface ModState {
     setDownloadMode: (mode: { downloadId: string; suggestedName?: string } | null) => void;
     searchQuery: string;
     setSearchQuery: (query: string) => void;
+    sortType: "name" | "date" | "size";
+    setSortType: (type: "name" | "date" | "size") => void;
+    sortOrder: "asc" | "desc";
+    setSortOrder: (order: "asc" | "desc") => void;
 }
 
 export const modStore = createStore<ModState>((set) => ({
@@ -54,6 +58,10 @@ export const modStore = createStore<ModState>((set) => ({
     setDownloadMode: (downloadMode) => set({ downloadMode }),
     searchQuery: "",
     setSearchQuery: (searchQuery) => set({ searchQuery }),
+    sortType: "name",
+    setSortType: (sortType) => set({ sortType }),
+    sortOrder: "asc",
+    setSortOrder: (sortOrder) => set({ sortOrder }),
 }));
 
 export function useModStore<T>(selector: (state: ModState) => T): T {

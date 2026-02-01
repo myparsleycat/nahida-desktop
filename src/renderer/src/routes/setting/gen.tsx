@@ -1,13 +1,6 @@
 import { Theme, useTheme } from "@renderer/components/theme-provider";
 import { Button } from "@renderer/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@renderer/components/ui/card";
-import { Checkbox } from "@renderer/components/ui/checkbox";
+import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -15,6 +8,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
+import { Switch } from "@renderer/components/ui/switch";
+import { Separator } from "@renderer/components/ui/separator";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 
@@ -59,50 +54,63 @@ function RouteComponent() {
   return (
     <main className="flex-1 flex flex-col mx-auto p-4 space-y-6 w-full select-none">
       <Card>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-2 flex-1">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <Checkbox
-                    checked={runOnStartup}
-                    onCheckedChange={(checked) => {
-                      const val = checked as boolean;
-                      setRunOnStartup(val);
-                      window.api.invoke("setting:general:setRunOnStartup", val);
-                    }}
-                  />
-                  <span className="text-sm">로그인할 때 실행</span>
-                </label>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <Checkbox
-                    checked={checkBackgroundUpdates}
-                    onCheckedChange={(checked) => {
-                      const val = checked as boolean;
-                      setCheckBackgroundUpdates(val);
-                      window.api.invoke("setting:general:setCheckBackgroundUpdates", val);
-                    }}
-                  />
-                  <span className="text-sm">백그라운드 업데이트 확인</span>
-                </label>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <Checkbox
-                    checked={autoUpdate}
-                    onCheckedChange={(checked) => setAutoUpdate(checked as boolean)}
-                    disabled
-                  />
-                  <span className="text-sm text-muted">자동 업데이트</span>
-                </label>
-              </div>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">애플리케이션 설정</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-sm font-medium">로그인할 때 실행</span>
+              <p className="text-xs text-muted-foreground">
+                시스템이 시작될 때 앱을 자동으로 실행합니다.
+              </p>
+            </div>
+            <Switch
+              checked={runOnStartup}
+              onCheckedChange={(val) => {
+                setRunOnStartup(val);
+                window.api.invoke("setting:general:setRunOnStartup", val);
+              }}
+            />
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5 flex-1">
+              <span className="text-sm font-medium">백그라운드 업데이트 확인</span>
+              <p className="text-xs text-muted-foreground">
+                앱을 사용 중일 때 새로운 업데이트를 자동으로 확인합니다.
+              </p>
+            </div>
+            <div className="flex items-center gap-4">
               <Button
-                className="ml-4"
                 variant="secondary"
                 size="sm"
                 onClick={() => window.api.invoke("setting:general:checkUpdate")}
               >
                 업데이트 확인
               </Button>
+              <Switch
+                checked={checkBackgroundUpdates}
+                onCheckedChange={(val) => {
+                  setCheckBackgroundUpdates(val);
+                  window.api.invoke("setting:general:setCheckBackgroundUpdates", val);
+                }}
+              />
             </div>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-sm font-medium text-muted-foreground">자동 업데이트</span>
+              <p className="text-xs text-muted-foreground">
+                업데이트를 확인한 후 자동으로 설치합니다 (준비 중).
+              </p>
+            </div>
+            <Switch checked={autoUpdate} onCheckedChange={setAutoUpdate} disabled />
           </div>
         </CardContent>
       </Card>
@@ -129,7 +137,7 @@ function RouteComponent() {
           </Select>
         </div>
         <div className="space-y-3">
-          <label className="text-sm font-medium">Theme</label>
+          <label className="text-sm font-medium">테마</label>
           <Select value={theme} onValueChange={(v) => setTheme(v as Theme)}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="테마 선택" />
@@ -164,49 +172,45 @@ function RouteComponent() {
       </div>
 
       <Card>
-        <CardContent className="space-y-2">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <Checkbox
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">작업 및 성능</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-sm font-medium">전송 시작 시 페이지 이동</span>
+              <p className="text-xs text-muted-foreground">
+                파일 전송이 시작되면 자동으로 전송 관리 페이지로 이동합니다.
+              </p>
+            </div>
+            <Switch
               checked={moveTransferPageWhenStartTransfer}
-              onCheckedChange={(checked) => {
-                const val = checked as boolean;
+              onCheckedChange={(val) => {
                 setMoveTransferPageWhenStartTransfer(val);
                 window.api.invoke("setting:general:setMoveTransferPageWhenStartTransfer", val);
               }}
             />
-            <span className="text-sm">전송이 시작될 때 전송 페이지로 이동합니다.</span>
-          </label>
+          </div>
 
-          <label className="flex items-center gap-3 cursor-pointer">
-            <Checkbox
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-sm font-medium">절전 모드 방지</span>
+              <p className="text-xs text-muted-foreground">
+                전송 또는 동기화가 진행 중일 때 시스템이 대기 상태로 들어가는 것을 막습니다.
+              </p>
+            </div>
+            <Switch
               checked={powerSaveBlockInTransfer}
-              onCheckedChange={(checked) => {
-                const val = checked as boolean;
+              onCheckedChange={(val) => {
                 setPowerSaveBlockInTransfer(val);
                 window.api.invoke("setting:general:setPowerSaveBlockInTransfer", val);
               }}
             />
-            <span className="text-sm">
-              전송 또는 동기화가 진행 중일 때 컴퓨터가 절전 모드에 들어가는 것을 방지합니다.
-            </span>
-          </label>
-        </CardContent>
-      </Card>
-
-      {/* <Card>
-        <CardContent>
-          <div className="flex items-center gap-4">
-            <p className="flex-1">만약 어떤 문제에 부딪혔다면 저에게 알려주세요.</p>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => window.api.invoke("window:openReport")}
-            >
-              문제 신고
-            </Button>
           </div>
         </CardContent>
-      </Card> */}
+      </Card>
     </main>
   );
 }

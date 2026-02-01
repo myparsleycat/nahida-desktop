@@ -101,7 +101,7 @@ CharacterSidebarItem.displayName = "CharacterSidebarItem";
 export function CharacterSidebarItemSkeleton() {
   return (
     <div
-      className="w-full grid items-center gap-3 pl-2 pr-4 py-2"
+      className="w-full grid items-center gap-3 pl-2 pr-4 py-2 h-14"
       style={{ gridTemplateColumns: "auto 1fr auto" }}
     >
       <Skeleton className="w-10 h-10 rounded-full" />

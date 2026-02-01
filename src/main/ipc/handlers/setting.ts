@@ -51,7 +51,8 @@ export function registerSettingHandlers(d: NahidaDesktop) {
     });
 
     rh("setting:mod:setDeleteArchiveAfterExtract", async (enabled) => {
-        return await d.setting.mod.setDeleteArchiveAfterExtract(enabled);
+        await d.setting.mod.setDeleteArchiveAfterExtract(enabled);
+        d.ipc.broadcast("mod:update-settings");
     });
 
     rh("setting:mod:getMoveFolderInsteadOfCopy", async () => {
@@ -59,7 +60,26 @@ export function registerSettingHandlers(d: NahidaDesktop) {
     });
 
     rh("setting:mod:setMoveFolderInsteadOfCopy", async (enabled) => {
-        return await d.setting.mod.setMoveFolderInsteadOfCopy(enabled);
+        await d.setting.mod.setMoveFolderInsteadOfCopy(enabled);
+        d.ipc.broadcast("mod:update-settings");
+    });
+
+    rh("setting:mod:getVirtualizationEnabled", async () => {
+        return await d.setting.mod.getVirtualizationEnabled();
+    });
+
+    rh("setting:mod:setVirtualizationEnabled", async (enabled) => {
+        await d.setting.mod.setVirtualizationEnabled(enabled);
+        d.ipc.broadcast("mod:update-settings");
+    });
+
+    rh("setting:mod:getVirtualizationThreshold", async () => {
+        return await d.setting.mod.getVirtualizationThreshold();
+    });
+
+    rh("setting:mod:setVirtualizationThreshold", async (threshold) => {
+        await d.setting.mod.setVirtualizationThreshold(threshold);
+        d.ipc.broadcast("mod:update-settings");
     });
 
     rh("setting:net:getProxy", async () => {

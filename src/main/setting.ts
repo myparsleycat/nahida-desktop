@@ -237,6 +237,56 @@ export class Setting {
                     set: { value: String(enabled) },
                 });
         },
+
+        getVirtualizationEnabled: async () => {
+            const qr = await db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "mod_virtualization_enabled"),
+            });
+
+            if (!qr) {
+                await db
+                    .insert(setting)
+                    .values({ key: "mod_virtualization_enabled", value: "true" });
+                return true;
+            }
+
+            return qr.value === "true";
+        },
+
+        setVirtualizationEnabled: async (enabled: boolean) => {
+            await db
+                .insert(setting)
+                .values({ key: "mod_virtualization_enabled", value: String(enabled) })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(enabled) },
+                });
+        },
+
+        getVirtualizationThreshold: async () => {
+            const qr = await db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "mod_virtualization_threshold"),
+            });
+
+            if (!qr) {
+                await db
+                    .insert(setting)
+                    .values({ key: "mod_virtualization_threshold", value: "30" });
+                return 30;
+            }
+
+            return parseInt(qr.value as string) || 30;
+        },
+
+        setVirtualizationThreshold: async (threshold: number) => {
+            await db
+                .insert(setting)
+                .values({ key: "mod_virtualization_threshold", value: String(threshold) })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(threshold) },
+                });
+        },
     };
 
     net = {

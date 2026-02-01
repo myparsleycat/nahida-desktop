@@ -11,6 +11,7 @@ export const IPC_EVENT_CHANNELS = [
 
     "mod:update-game",
     "mod:update-mods",
+    "mod:update-settings",
 ] as const;
 
 export const IPC_HANDLER_CHANNELS = [
@@ -34,6 +35,10 @@ export const IPC_HANDLER_CHANNELS = [
     "setting:mod:setDeleteArchiveAfterExtract",
     "setting:mod:getMoveFolderInsteadOfCopy",
     "setting:mod:setMoveFolderInsteadOfCopy",
+    "setting:mod:getVirtualizationEnabled",
+    "setting:mod:setVirtualizationEnabled",
+    "setting:mod:getVirtualizationThreshold",
+    "setting:mod:setVirtualizationThreshold",
 
     "window:closeWindow",
     "window:openReport",

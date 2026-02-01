@@ -8,6 +8,7 @@ import { filter } from "es-toolkit/compat";
 import { useModStore } from "@renderer/store/mod";
 import { CharacterSidebarItem, CharacterSidebarItemSkeleton } from "./character-sidebar-item";
 import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
 
 interface CharacterSidebarProps {
   groups: FolderGroup[];
@@ -21,6 +22,8 @@ export function CharacterSidebar({ groups, isLoading = false, onModDrop }: Chara
   const [searchTerm, setSearchTerm] = useState("");
   const itemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const showSkeleton = useDelayedSkeleton(isLoading);
+
+  const [parent] = useAutoAnimate({ duration: 150 });
 
   const filteredGroups = filter(groups, (group) =>
     group.name.toLowerCase().includes(searchTerm.toLowerCase()),
@@ -57,8 +60,8 @@ export function CharacterSidebar({ groups, isLoading = false, onModDrop }: Chara
         </div>
       </div>
 
-      <ScrollArea className="flex-1 overflow-y-auto">
-        <div className="flex flex-col">
+      <ScrollArea className="flex-1 overflow-hidden">
+        <div className="flex flex-col" ref={parent}>
           {showSkeleton
             ? Array.from({ length: 8 }).map((_, index) => (
                 <CharacterSidebarItemSkeleton key={index} />

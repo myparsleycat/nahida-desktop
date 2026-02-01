@@ -11,6 +11,8 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { chunk } from "es-toolkit";
 import { ModInfo } from "@renderer/types/mod";
 import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
+import { useVirtualizationSettings } from "@renderer/hooks/use-settings";
 
 interface ModGridProps {
   isDragging?: boolean;
@@ -21,6 +23,8 @@ export function ModGrid({ isDragging }: ModGridProps) {
   const searchQuery = useModStore((s) => s.searchQuery);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
+  const [parent] = useAutoAnimate({ duration: 150 });
+
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
   const { data: activeGroup, isPlaceholderData, isPending } = useModGroup(selectedGroupPath);
 
@@ -29,6 +33,8 @@ export function ModGrid({ isDragging }: ModGridProps) {
   const mods = useFilteredMods(activeGroup?.mods || [], searchQuery);
   const isLoading = isPending || isPlaceholderData;
   const showSkeleton = useDelayedSkeleton(isLoading);
+
+  const { data: vSettings } = useVirtualizationSettings();
 
   const [columnCount, setColumnCount] = useState(1);
 
@@ -57,7 +63,8 @@ export function ModGrid({ isDragging }: ModGridProps) {
   }, [scrollAreaRef.current]);
 
   const rows = useMemo(() => chunk(mods, columnCount), [mods, columnCount]);
-  const isVirtualizationEnabled = mods.length >= 30;
+  const isVirtualizationEnabled =
+    (vSettings?.enabled ?? true) && mods.length >= (vSettings?.threshold ?? 30);
 
   const rowVirtualizer = useVirtualizer({
     count: isVirtualizationEnabled ? rows.length : 0,
@@ -138,6 +145,7 @@ export function ModGrid({ isDragging }: ModGridProps) {
               style={{
                 gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
               }}
+              ref={parent}
             >
               {mods.map((mod) => (
                 <ModCard
