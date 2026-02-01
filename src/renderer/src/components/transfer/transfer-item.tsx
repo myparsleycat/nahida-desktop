@@ -126,6 +126,8 @@ export const TransferItem = memo((props: TransferItemProps) => {
     onResume,
     onCancel,
     onRetry,
+    totalFiles,
+    processedFiles,
   } = props;
 
   const [isHovered, setIsHovered] = useState(false);
@@ -159,7 +161,9 @@ export const TransferItem = memo((props: TransferItemProps) => {
             </span>
           </div>
           <span className={cn("shrink-0 text-xs font-medium", getStatusColor(status))}>
-            {status.charAt(0).toUpperCase() + status.slice(1)}
+            {status === "preparing" && totalFiles && processedFiles !== undefined
+              ? `Preparing (${processedFiles}/${totalFiles})`
+              : status.charAt(0).toUpperCase() + status.slice(1)}
           </span>
         </div>
 

@@ -90,6 +90,8 @@ function RouteComponent() {
     status: mapStatus(t.status, t.type),
     type: t.type,
     path: t.path,
+    totalFiles: t.totalFiles,
+    processedFiles: t.transferedFiles,
   }));
 
   const activeUploads = transfers.filter(
