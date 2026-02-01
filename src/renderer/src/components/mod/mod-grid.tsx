@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { ModCard } from "./mod-card";
@@ -7,6 +7,9 @@ import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { useFilteredMods } from "@renderer/hooks/use-filtered-mods";
 import { useModGroup } from "@renderer/hooks/use-mod-data";
 import { toast } from "sonner";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { chunk } from "es-toolkit";
+import { ModInfo } from "@renderer/types/mod";
 
 interface ModGridProps {
   isDragging?: boolean;
@@ -25,62 +28,145 @@ export function ModGrid({ isDragging }: ModGridProps) {
   const mods = useFilteredMods(activeGroup?.mods || [], searchQuery);
   const isLoading = !activeGroup && !!selectedGroup;
 
-  useEffect(() => {
-    if (scrollAreaRef.current) {
-      const viewport = scrollAreaRef.current.querySelector("[data-radix-scroll-area-viewport]");
-      if (viewport) {
-        viewport.scrollTop = 0;
-      }
-    }
-  }, [selectedGroup]);
+  const [columnCount, setColumnCount] = useState(1);
 
-  const handleToggleKeyUpdate = (
-    modPath: string,
-    iniFileName: string,
-    sectionName: string,
-    variable: string,
-    value: string,
-  ) => {
-    if (!value.trim()) {
-      toast.error("값을 입력해주세요.");
-      return;
+  useEffect(() => {
+    if (!scrollAreaRef.current) return;
+
+    const viewport = scrollAreaRef.current.querySelector("[data-radix-scroll-area-viewport]");
+    if (!viewport) return;
+
+    const updateColumns = () => {
+      const width = viewport.clientWidth;
+      if (width < 800) setColumnCount(1);
+      else if (width < 1200) setColumnCount(2);
+      else if (width < 1600) setColumnCount(3);
+      else if (width < 2000) setColumnCount(4);
+      else if (width < 2400) setColumnCount(5);
+      else if (width < 2800) setColumnCount(6);
+      else setColumnCount(7);
+    };
+
+    updateColumns();
+    const observer = new ResizeObserver(updateColumns);
+    observer.observe(viewport);
+
+    return () => observer.disconnect();
+  }, [scrollAreaRef.current]);
+
+  const rows = useMemo(() => chunk(mods, columnCount), [mods, columnCount]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () =>
+      scrollAreaRef.current?.querySelector("[data-radix-scroll-area-viewport]") || null,
+    estimateSize: useCallback(() => 400 + 12, []), // card height (400) + gap (12)
+    overscan: 5,
+  });
+
+  useEffect(() => {
+    if (rowVirtualizer) {
+      rowVirtualizer.scrollToOffset(0);
     }
-    updateToggleKeyMutation.mutate({
-      modPath,
-      iniFileName,
-      sectionName,
-      variable,
-      value,
-    });
-  };
+  }, [selectedGroup, rowVirtualizer]);
+
+  const handleToggle = useCallback(
+    (mod: ModInfo) => {
+      toggleModMutation.mutate(mod);
+    },
+    [toggleModMutation.mutate],
+  );
+
+  const handleToggleKeyUpdate = useCallback(
+    (
+      modPath: string,
+      iniFileName: string,
+      sectionName: string,
+      variable: string,
+      value: string,
+    ) => {
+      if (!value.trim()) {
+        toast.error("값을 입력해주세요.");
+        return;
+      }
+      updateToggleKeyMutation.mutate({
+        modPath,
+        iniFileName,
+        sectionName,
+        variable,
+        value,
+      });
+    },
+    [updateToggleKeyMutation.mutate],
+  );
 
   return (
     <ScrollArea ref={scrollAreaRef} className="flex-1 overflow-y-auto">
-      <div className="relative">
-        <div className="gap-3 p-3 grid grid-cols-1 min-[1000px]:grid-cols-2 min-[1500px]:grid-cols-3 min-[2000px]:grid-cols-4 min-[2500px]:grid-cols-5 min-[3000px]:grid-cols-6 min-[3500px]:grid-cols-7">
-          {isLoading
-            ? Array.from({ length: 12 }).map((_, index) => (
-                <div key={index} className="flex flex-col space-y-3 rounded-lg border p-4">
-                  <Skeleton className="h-48 w-full rounded-md" />
-                  <div className="space-y-2">
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-4 w-1/2" />
-                  </div>
-                  <div className="flex gap-2">
-                    <Skeleton className="h-9 flex-1" />
-                    <Skeleton className="h-9 w-9" />
+      <div className="relative w-full p-3">
+        {isLoading ? (
+          <div
+            className="grid gap-3"
+            style={{
+              gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+            }}
+          >
+            {Array.from({ length: 12 }).map((_, index) => (
+              <div key={index} className="flex flex-col space-y-3 rounded-lg border p-4">
+                <Skeleton className="h-48 w-full rounded-md" />
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
+                </div>
+                <div className="flex gap-2">
+                  <Skeleton className="h-9 flex-1" />
+                  <Skeleton className="h-9 w-9" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div
+            style={{
+              height: `${rowVirtualizer.getTotalSize()}px`,
+              width: "100%",
+              position: "relative",
+            }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const rowMods = rows[virtualRow.index];
+              return (
+                <div
+                  key={virtualRow.key}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: `${virtualRow.size}px`,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                  className="grid gap-3"
+                >
+                  <div
+                    className="grid gap-3 w-full"
+                    style={{
+                      gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+                    }}
+                  >
+                    {rowMods.map((mod) => (
+                      <ModCard
+                        key={mod.path}
+                        mod={mod}
+                        onToggle={handleToggle}
+                        onToggleKeyUpdate={handleToggleKeyUpdate}
+                      />
+                    ))}
                   </div>
                 </div>
-              ))
-            : mods.map((mod) => (
-                <ModCard
-                  key={mod.path}
-                  mod={mod}
-                  onToggle={(m) => toggleModMutation.mutate(m)}
-                  onToggleKeyUpdate={handleToggleKeyUpdate}
-                />
-              ))}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </ScrollArea>
   );

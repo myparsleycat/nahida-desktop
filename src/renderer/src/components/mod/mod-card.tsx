@@ -6,6 +6,7 @@ import {
   TerminalSquareIcon,
   ClipboardIcon,
 } from "lucide-react";
+import React, { memo } from "react";
 import { Preview } from "./preview";
 import { Input } from "@renderer/components/ui/input";
 import {
@@ -70,7 +71,7 @@ const getToggleInputColorClass = (isEnabled: boolean) => {
   }
 };
 
-export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
+export const ModCard = memo(function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
   const { queryClient } = useRouteContext({ from: "/mod/" });
   const selectedGroup = useModStore((s) => s.selectedGroup);
   const selectedGroupPath = selectedGroup?.path;
@@ -225,7 +226,7 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
       </div>
     </div>
   );
-}
+});
 
 function ModPreview({ mod, onPaste }: { mod: ModInfo; onPaste: (e: React.MouseEvent) => void }) {
   const { queryClient } = useRouteContext({ from: "/mod/" });
