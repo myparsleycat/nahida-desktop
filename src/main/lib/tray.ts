@@ -24,12 +24,7 @@ export class TrayManager {
                 label: "Setting",
                 type: "normal",
                 click: async () => {
-                    const loggedIn = await this.desktop.service.auth.isLoggedIn();
-                    if (loggedIn) {
-                        this.desktop.window.setting.createSettingWindow();
-                    } else {
-                        this.desktop.window.auth.createLoginWindow();
-                    }
+                    this.desktop.window.setting.focus();
                 },
             },
             { type: "separator" },
@@ -44,12 +39,7 @@ export class TrayManager {
         this.tray.setToolTip("Nahida Desktop");
         this.tray.setContextMenu(contextMenu);
         this.tray.on("click", async () => {
-            const loggedIn = await this.desktop.service.auth.isLoggedIn();
-            if (loggedIn) {
-                this.desktop.window.main.createMainWindow();
-            } else {
-                this.desktop.window.auth.createLoginWindow();
-            }
+            this.desktop.window.main.focus();
         });
     }
 }

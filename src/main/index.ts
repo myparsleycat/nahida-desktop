@@ -214,13 +214,13 @@ app.whenReady().then(async () => {
 
     await desktop.init();
 
-    const loggedIn = await desktop.service.auth.isLoggedIn();
-    if (loggedIn) {
-        desktop.lib.tray.createTray();
-        await desktop.window.main.createMainWindow();
-    } else {
-        await desktop.window.auth.createLoginWindow();
-    }
+    // const loggedIn = await desktop.service.auth.isLoggedIn();
+    // if (loggedIn) {
+    desktop.lib.tray.createTray();
+    await desktop.window.main.createMainWindow();
+    // } else {
+    //     await desktop.window.auth.createLoginWindow();
+    // }
 
     // app.on('activate', async () => {
     //     // On macOS it's common to re-create a window in the app when the

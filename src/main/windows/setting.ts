@@ -6,6 +6,7 @@ import type { NahidaDesktop } from "@main/index";
 import { getDefaultWebPreferences } from "./utils";
 import { fileURLToPath } from "node:url";
 import { openExternal } from "@main/services/util";
+import { focus } from "./utils";
 
 export class SettingWindow {
     private readonly desktop: NahidaDesktop;
@@ -16,11 +17,18 @@ export class SettingWindow {
         this.window = null;
     }
 
+    public focus() {
+        if (!this.window) {
+            this.createSettingWindow();
+        } else {
+            focus(this.window);
+        }
+    }
+
     async createSettingWindow() {
-        if (this.window && !this.window.isDestroyed()) {
-            this.window.show();
-            this.window.focus();
-            return;
+        if (this.window) {
+            focus(this.window);
+            return this.window;
         }
 
         this.window = new BrowserWindow({
@@ -71,6 +79,8 @@ export class SettingWindow {
                 },
             );
         }
+
+        return this.window;
     }
 }
 

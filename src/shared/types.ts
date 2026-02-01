@@ -221,6 +221,8 @@ export type IpcEvents = {
     "mod:update-game": () => void;
     "mod:update-mods": () => void;
     "mod:update-settings": () => void;
+
+    "auth:update": (session: Session | null) => void;
 };
 
 const akashaModIdGet = eden.akasha.content({ id: "" }).get;
