@@ -14,7 +14,7 @@ import PQueue from "p-queue";
 import ky from "ky";
 import { appVersion } from "@main/const";
 
-const CHUNK_SIZE = 500;
+const CHUNK_SIZE = 100;
 
 export type FilesComponent = {
     FID: string;
