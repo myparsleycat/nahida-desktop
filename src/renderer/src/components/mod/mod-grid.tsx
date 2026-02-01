@@ -57,9 +57,10 @@ export function ModGrid({ isDragging }: ModGridProps) {
   }, [scrollAreaRef.current]);
 
   const rows = useMemo(() => chunk(mods, columnCount), [mods, columnCount]);
+  const isVirtualizationEnabled = mods.length >= 30;
 
   const rowVirtualizer = useVirtualizer({
-    count: rows.length,
+    count: isVirtualizationEnabled ? rows.length : 0,
     getScrollElement: () =>
       scrollAreaRef.current?.querySelector("[data-radix-scroll-area-viewport]") || null,
     estimateSize: useCallback(() => 400 + 12, []), // card height (400) + gap (12)
@@ -67,10 +68,14 @@ export function ModGrid({ isDragging }: ModGridProps) {
   });
 
   useEffect(() => {
-    if (rowVirtualizer) {
+    const viewport = scrollAreaRef.current?.querySelector("[data-radix-scroll-area-viewport]");
+    if (viewport) {
+      viewport.scrollTop = 0;
+    }
+    if (isVirtualizationEnabled && rowVirtualizer) {
       rowVirtualizer.scrollToOffset(0);
     }
-  }, [selectedGroupPath, searchQuery, rowVirtualizer]);
+  }, [selectedGroupPath, searchQuery, rowVirtualizer, isVirtualizationEnabled]);
 
   const handleToggle = useCallback(
     (mod: ModInfo) => {
@@ -103,76 +108,95 @@ export function ModGrid({ isDragging }: ModGridProps) {
   );
 
   return (
-    <ScrollArea ref={scrollAreaRef} className="flex-1 overflow-y-auto">
-      <div className="relative w-full p-3">
-        {showSkeleton ? (
-          <div
-            className="grid gap-3"
-            style={{
-              gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
-            }}
-          >
-            {Array.from({ length: 12 }).map((_, index) => (
-              <div key={index} className="flex flex-col space-y-3 rounded-lg border p-4">
-                <Skeleton className="h-48 w-full rounded-md" />
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-4 w-1/2" />
-                </div>
-                <div className="flex gap-2">
-                  <Skeleton className="h-9 flex-1" />
-                  <Skeleton className="h-9 w-9" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div
-            style={{
-              height: `${rowVirtualizer.getTotalSize()}px`,
-              width: "100%",
-              position: "relative",
-            }}
-          >
-            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const rowMods = rows[virtualRow.index];
-              if (!rowMods) return null;
-
-              return (
-                <div
-                  key={virtualRow.key}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: `${virtualRow.size}px`,
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
-                  className="grid gap-3"
-                >
-                  <div
-                    className="grid gap-3 w-full"
-                    style={{
-                      gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
-                    }}
-                  >
-                    {rowMods.map((mod) => (
-                      <ModCard
-                        key={mod.path}
-                        mod={mod}
-                        selectedGroupPath={selectedGroupPath}
-                        onToggle={handleToggle}
-                        onToggleKeyUpdate={handleToggleKeyUpdate}
-                      />
-                    ))}
+    <div ref={scrollAreaRef} className="flex-1 min-h-0">
+      <ScrollArea className="h-full overflow-y-auto">
+        <div className="relative w-full p-3">
+          {showSkeleton ? (
+            <div
+              className="grid gap-3"
+              style={{
+                gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+              }}
+            >
+              {Array.from({ length: 12 }).map((_, index) => (
+                <div key={index} className="flex flex-col space-y-3 rounded-lg border p-4">
+                  <Skeleton className="h-48 w-full rounded-md" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-4 w-1/2" />
+                  </div>
+                  <div className="flex gap-2">
+                    <Skeleton className="h-9 flex-1" />
+                    <Skeleton className="h-9 w-9" />
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </ScrollArea>
+              ))}
+            </div>
+          ) : !isVirtualizationEnabled ? (
+            <div
+              className="grid gap-3"
+              style={{
+                gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+              }}
+            >
+              {mods.map((mod) => (
+                <ModCard
+                  key={mod.path}
+                  mod={mod}
+                  selectedGroupPath={selectedGroupPath}
+                  onToggle={handleToggle}
+                  onToggleKeyUpdate={handleToggleKeyUpdate}
+                />
+              ))}
+            </div>
+          ) : (
+            <div
+              style={{
+                height: `${rowVirtualizer.getTotalSize()}px`,
+                width: "100%",
+                position: "relative",
+              }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const rowMods = rows[virtualRow.index];
+                if (!rowMods) return null;
+
+                return (
+                  <div
+                    key={virtualRow.key}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: `${virtualRow.size}px`,
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                    className="grid gap-3"
+                  >
+                    <div
+                      className="grid gap-3 w-full"
+                      style={{
+                        gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+                      }}
+                    >
+                      {rowMods.map((mod) => (
+                        <ModCard
+                          key={mod.path}
+                          mod={mod}
+                          selectedGroupPath={selectedGroupPath}
+                          onToggle={handleToggle}
+                          onToggleKeyUpdate={handleToggleKeyUpdate}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+    </div>
   );
 }
