@@ -452,7 +452,7 @@ class FileDownloadTask {
         try {
             const token = await this.desktop.service.auth.getToken();
 
-            if (isSmallFile && currentConcurrency && currentConcurrency() < 6) {
+            if (currentConcurrency && currentConcurrency() < 6) {
                 speedCheckTimeout = this.startSpeedMonitor(
                     file.name,
                     () => currentBytes,
