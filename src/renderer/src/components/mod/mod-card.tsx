@@ -32,7 +32,6 @@ import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Separator } from "@renderer/components/ui/separator";
 import { Button } from "@renderer/components/ui/button";
 import { useRouteContext } from "@tanstack/react-router";
-import { useModStore } from "@renderer/store/mod";
 import { toast } from "sonner";
 
 interface ModCardProps {
@@ -228,7 +227,7 @@ export const ModCard = memo(function ModCard({
         </div>
       </div>
 
-      <div className="flex flex-row h-[calc(100%-2.5rem)] space-x-1.5">
+      <div className="flex flex-row h-[calc(100%-2rem)] space-x-2">
         <ModPreview mod={mod} selectedGroupPath={selectedGroupPath} onPaste={handlePaste} />
 
         {mod.inis.length > 0 && (
@@ -354,10 +353,7 @@ function ModIniList({
                           <span className="text-sm">key:</span>
                           <Input
                             key={`key-${toggleKey.sectionName}-${toggleKey.key}`}
-                            className={cn(
-                              "h-7 text-sm border-white/30",
-                              getToggleInputColorClass(mod.isEnabled),
-                            )}
+                            className={cn("h-7 text-sm", getToggleInputColorClass(mod.isEnabled))}
                             defaultValue={toggleKey.key}
                             onClick={(e) => e.stopPropagation()}
                             onBlur={(e) => {
@@ -380,7 +376,7 @@ function ModIniList({
                           <span className="text-sm">back:</span>
                           <Input
                             key={`back-${toggleKey.sectionName}-${toggleKey.back}`}
-                            className={cn("h-6 text-sm", getToggleInputColorClass(mod.isEnabled))}
+                            className={cn("h-7 text-sm", getToggleInputColorClass(mod.isEnabled))}
                             defaultValue={toggleKey.back}
                             onClick={(e) => e.stopPropagation()}
                             onBlur={(e) => {
