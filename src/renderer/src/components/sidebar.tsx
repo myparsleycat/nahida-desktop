@@ -19,6 +19,7 @@ export function Sidebar({ className }: { className?: string }) {
   const navi = useNavigate();
   const location = useLocation();
   const appStatus = useGlobalStore((state) => state.appStatus);
+  const session = useGlobalStore((state) => state.session);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -48,71 +49,75 @@ export function Sidebar({ className }: { className?: string }) {
             </TooltipContent>
           </Tooltip>
 
-          <Tooltip disableHoverableContent={true}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onPointerDown={handlePointerDown}
-                onClick={() => {
-                  const lastDriveId = viewStore.getState().lastDriveId;
-                  navi({
-                    to: "/drive/drive/$id",
-                    params: {
-                      id: lastDriveId,
-                    },
-                  });
-                }}
-                onDoubleClick={() => {
-                  navi({
-                    to: "/drive/drive/$id",
-                    params: {
-                      id: "root",
-                    },
-                  });
-                }}
-              >
-                <HardDriveIcon className={cn(iconSize)} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right" hideWhenDetached={true}>
-              드라이브
-            </TooltipContent>
-          </Tooltip>
+          {session && (
+            <>
+              <Tooltip disableHoverableContent={true}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onPointerDown={handlePointerDown}
+                    onClick={() => {
+                      const lastDriveId = viewStore.getState().lastDriveId;
+                      navi({
+                        to: "/drive/drive/$id",
+                        params: {
+                          id: lastDriveId,
+                        },
+                      });
+                    }}
+                    onDoubleClick={() => {
+                      navi({
+                        to: "/drive/drive/$id",
+                        params: {
+                          id: "root",
+                        },
+                      });
+                    }}
+                  >
+                    <HardDriveIcon className={cn(iconSize)} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right" hideWhenDetached={true}>
+                  드라이브
+                </TooltipContent>
+              </Tooltip>
 
-          <Tooltip disableHoverableContent={true}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onPointerDown={handlePointerDown}
-                onClick={() => {
-                  const lastShareId = viewStore.getState().lastShareId;
-                  navi({
-                    to: "/drive/share/$id",
-                    params: {
-                      id: lastShareId,
-                    },
-                  });
-                }}
-                onDoubleClick={() => {
-                  navi({
-                    to: "/drive/share/$id",
-                    params: {
-                      id: "share",
-                    },
-                  });
-                }}
-              >
-                <Share2Icon className={cn(iconSize)} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right" hideWhenDetached={true}>
-              공유 드라이브
-            </TooltipContent>
-          </Tooltip>
+              <Tooltip disableHoverableContent={true}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onPointerDown={handlePointerDown}
+                    onClick={() => {
+                      const lastShareId = viewStore.getState().lastShareId;
+                      navi({
+                        to: "/drive/share/$id",
+                        params: {
+                          id: lastShareId,
+                        },
+                      });
+                    }}
+                    onDoubleClick={() => {
+                      navi({
+                        to: "/drive/share/$id",
+                        params: {
+                          id: "share",
+                        },
+                      });
+                    }}
+                  >
+                    <Share2Icon className={cn(iconSize)} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right" hideWhenDetached={true}>
+                  공유 드라이브
+                </TooltipContent>
+              </Tooltip>
 
-          <Separator orientation="horizontal" />
+              <Separator orientation="horizontal" />
+            </>
+          )}
 
           <Tooltip disableHoverableContent={true}>
             <TooltipTrigger asChild>

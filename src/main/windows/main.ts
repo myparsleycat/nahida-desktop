@@ -19,11 +19,19 @@ export class MainWindow {
     }
 
     public focus() {
-        if (!this.window) return;
-        focus(this.window);
+        if (!this.window) {
+            this.createMainWindow();
+        } else {
+            focus(this.window);
+        }
     }
 
     async createMainWindow() {
+        if (this.window) {
+            focus(this.window);
+            return this.window;
+        }
+
         const savedBounds = await this.desktop.setting.getBounds();
         let bounds = savedBounds;
 

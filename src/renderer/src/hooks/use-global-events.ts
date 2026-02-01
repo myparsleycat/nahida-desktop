@@ -1,11 +1,13 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useGlobalStore } from "../store/global";
 
 export function useGlobalEvents(
     onPathSelectorModeSelect?: (data: { selectionId: string; suggestedName?: string }) => void,
 ) {
     const navi = useNavigate();
+    const setSession = useGlobalStore((state) => state.setSession);
     const [listeners, setListeners] = useState<Map<string, () => void>>(new Map());
 
     const removeAllListeners = () => {
@@ -32,6 +34,11 @@ export function useGlobalEvents(
             }
         });
         setListeners(new Map(listeners.set("pathSelector:modeSelect", removePathSelectorListener)));
+
+        const removeAuthListener = window.api.on("auth:update", (session) => {
+            setSession(session);
+        });
+        setListeners(new Map(listeners.set("auth:update", removeAuthListener)));
 
         return () => {
             removeAllListeners();

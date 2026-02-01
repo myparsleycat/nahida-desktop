@@ -6,16 +6,22 @@ import { useGlobalEvents } from "@renderer/hooks/use-global-events";
 import { PathSelectorDialog } from "@renderer/components/path-selector-dialog";
 import { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet, useLocation } from "@tanstack/react-router";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useGlobalStore } from "@renderer/store/global";
 
 function RootComponent() {
   const location = useLocation();
   const setAppStatus = useGlobalStore((state) => state.setAppStatus);
+  const setSession = useGlobalStore((state) => state.setSession);
 
-  window.api.invoke("util:getAppStatus").then((appStatus) => {
-    setAppStatus(appStatus);
-  });
+  useEffect(() => {
+    window.api.invoke("util:getAppStatus").then((appStatus) => {
+      setAppStatus(appStatus);
+    });
+    window.api.invoke("auth:getSession").then((session) => {
+      setSession(session);
+    });
+  }, []);
 
   const [pathSelectorData, setPathSelectorData] = useState<{
     selectionId: string;

@@ -12,6 +12,8 @@ export const IPC_EVENT_CHANNELS = [
     "mod:update-game",
     "mod:update-mods",
     "mod:update-settings",
+
+    "auth:update",
 ] as const;
 
 export const IPC_HANDLER_CHANNELS = [

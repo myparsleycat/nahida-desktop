@@ -130,6 +130,9 @@ export class Auth {
 
                         this.desktop.logger.info("Login successful: Session saved.", "Auth");
 
+                        const session = await this.getSession();
+                        this.desktop.ipc.broadcast("auth:update", session);
+
                         if (!this.desktop.lib.tray.tray) {
                             this.desktop.lib.tray.createTray();
                         }
@@ -164,8 +167,9 @@ export class Auth {
         }
 
         await this.removeToken();
-        closeAllWindows();
-        this.desktop.window.auth.createLoginWindow();
+        this.desktop.ipc.broadcast("auth:update", null);
+        // closeAllWindows();
+        // this.desktop.window.auth.createLoginWindow();
     }
 }
 
