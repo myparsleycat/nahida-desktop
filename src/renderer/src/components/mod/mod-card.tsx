@@ -6,7 +6,7 @@ import {
   TerminalSquareIcon,
   ClipboardIcon,
 } from "lucide-react";
-import React, { memo } from "react";
+import { memo, useRef } from "react";
 import { Preview } from "./preview";
 import { Input } from "@renderer/components/ui/input";
 import {
@@ -79,6 +79,7 @@ export const ModCard = memo(function ModCard({
   onToggleKeyUpdate,
 }: ModCardProps) {
   const { queryClient } = useRouteContext({ from: "/mod/" });
+  const mouseDownTargetRef = useRef<EventTarget | null>(null);
 
   const handlePaste = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -164,7 +165,16 @@ export const ModCard = memo(function ModCard({
         "rounded-sm overflow-hidden border cursor-pointer shadow-lg p-1 h-[400px]",
         getModColorClass(mod.isEnabled),
       )}
-      onClick={() => onToggle(mod)}
+      onMouseDown={(e) => {
+        mouseDownTargetRef.current = e.target;
+      }}
+      onClick={() => {
+        const target = mouseDownTargetRef.current as HTMLElement;
+        if (target && (target.tagName === "INPUT" || target.closest("button"))) {
+          return;
+        }
+        onToggle(mod);
+      }}
       draggable={false}
     >
       <div className="flex items-center justify-between pb-1">
