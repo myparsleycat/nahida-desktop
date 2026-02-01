@@ -42,6 +42,8 @@ interface ModInfo {
     isEnabled: boolean;
     toggleKeys: ToggleKey[];
     preview?: string;
+    mtime: number;
+    size: number;
     inis: {
         name: string;
         path: string;
@@ -300,24 +302,66 @@ export class ModManager {
                 onlyFiles: true,
                 caseSensitiveMatch: false,
                 dot: true,
-            })) as string[];
+                stats: true,
+            })) as any[];
 
-            const iniFiles = files.filter(
-                (f) => f.toLowerCase().endsWith(".ini") && !f.toLowerCase().startsWith("disabled"),
+            let maxMtime = 0;
+
+            for (const file of files) {
+                if (file.stats.mtimeMs > maxMtime) {
+                    maxMtime = file.stats.mtimeMs;
+                }
+            }
+
+            const mtime = maxMtime || (await fse.stat(modPath)).mtimeMs;
+            const size = await this.desktop.lib.fs.getFolderSize(modPath);
+
+            const collator = new Intl.Collator(undefined, {
+                numeric: true,
+                sensitivity: "base",
+            });
+
+            const rawIniFiles = files
+                .map((f) => f.name)
+                .filter(
+                    (f) =>
+                        f.toLowerCase().endsWith(".ini") && !f.toLowerCase().startsWith("disabled"),
+                );
+
+            const iniData = await Promise.all(
+                rawIniFiles.map(async (iniFile) => {
+                    const iniPath = path.join(modPath, iniFile);
+                    const toggleKeys = await this.parseIni(iniPath);
+                    toggleKeys.sort((a, b) => {
+                        if (a.key && !b.key) return -1;
+                        if (!a.key && b.key) return 1;
+                        return 0;
+                    });
+                    return {
+                        name: iniFile,
+                        path: iniPath,
+                        toggleKeys,
+                        hasToggleKey: toggleKeys.some((tk) => !!tk.key),
+                    };
+                }),
             );
 
-            const toggleKeysPromises = iniFiles.map((iniFile) => {
-                const iniPath = path.join(modPath, iniFile);
-                return this.parseIni(iniPath);
+            iniData.sort((a, b) => {
+                if (a.hasToggleKey && !b.hasToggleKey) return -1;
+                if (!a.hasToggleKey && b.hasToggleKey) return 1;
+                return collator.compare(a.name, b.name);
             });
-            const toggleKeysResults = await Promise.all(toggleKeysPromises);
-            const toggleKeys = toggleKeysResults.flat();
 
-            const preview = await this.findPreview(modPath, files);
+            const toggleKeys = iniData.flatMap((d) => d.toggleKeys);
 
-            const inis = iniFiles.map((iniFile) => ({
-                name: iniFile,
-                path: path.join(modPath, iniFile),
+            const preview = await this.findPreview(
+                modPath,
+                files.map((f) => f.path),
+            );
+
+            const inis = iniData.map((d) => ({
+                name: d.name,
+                path: d.path,
             }));
 
             return {
@@ -326,6 +370,8 @@ export class ModManager {
                 isEnabled,
                 toggleKeys,
                 preview: preview || undefined,
+                mtime,
+                size,
                 inis,
             };
         } catch (error) {

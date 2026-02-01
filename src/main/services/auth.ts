@@ -59,19 +59,12 @@ export class Auth {
 
         const url = `${BACKEND_URL}/api/auth/get-session`;
         const resp = await fetcher(url);
-        if (!resp.ok) {
+        const data = await resp.text();
+        if (data === "null") {
             await this.startLogout();
             return null;
         }
-        const data = await resp.json();
-        validate(data, {
-            session: Optional({ id: String }),
-        });
-        if (!data.session) {
-            await this.startLogout();
-            return null;
-        }
-        return SessionSchema.parse(data);
+        return SessionSchema.parse(JSON.parse(data));
     }
 
     public async isLoggedIn() {

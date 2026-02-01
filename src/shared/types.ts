@@ -17,6 +17,15 @@ export interface AppStatus {
     isDev: boolean;
 }
 
+export interface ProxySettings {
+    type: "disabled" | "https" | "socks5";
+    host?: string;
+    port?: string;
+    requiresAuth?: boolean;
+    username?: string;
+    password?: string;
+}
+
 interface ToastData {
     description?: string;
 }
@@ -38,6 +47,8 @@ export interface ModInfo {
     isEnabled: boolean;
     toggleKeys: ToggleKey[];
     preview?: string;
+    mtime: number;
+    size: number;
     inis: {
         name: string;
         path: string;
@@ -83,10 +94,16 @@ export type IpcHandlers = {
     "setting:general:getCheckBackgroundUpdates": () => boolean;
     "setting:general:setCheckBackgroundUpdates": (enabled: boolean) => void;
 
+    "setting:net:getProxy": () => Promise<ProxySettings>;
+    "setting:net:setProxy": (settings: ProxySettings) => Promise<void>;
     "setting:mod:getDeleteArchiveAfterExtract": () => boolean;
     "setting:mod:setDeleteArchiveAfterExtract": (enabled: boolean) => void;
     "setting:mod:getMoveFolderInsteadOfCopy": () => boolean;
     "setting:mod:setMoveFolderInsteadOfCopy": (enabled: boolean) => void;
+    "setting:mod:getVirtualizationEnabled": () => Promise<boolean>;
+    "setting:mod:setVirtualizationEnabled": (enabled: boolean) => Promise<void>;
+    "setting:mod:getVirtualizationThreshold": () => Promise<number>;
+    "setting:mod:setVirtualizationThreshold": (threshold: number) => Promise<void>;
 
     "window:closeWindow": (window: string) => void;
     "window:openReport": () => void;
@@ -202,6 +219,7 @@ export type IpcEvents = {
 
     "mod:update-game": () => void;
     "mod:update-mods": () => void;
+    "mod:update-settings": () => void;
 };
 
 const akashaModIdGet = eden.akasha.content({ id: "" }).get;

@@ -14,6 +14,9 @@ importers:
       '@electron-toolkit/utils':
         specifier: ^4.0.0
         version: 4.0.0(electron@40.1.0)
+      '@formkit/auto-animate':
+        specifier: ^0.9.0
+        version: 0.9.0
       '@hono/node-server':
         specifier: ^1.19.9
         version: 1.19.9(hono@4.11.7)
@@ -29,9 +32,6 @@ importers:
       cbor-x:
         specifier: ^1.6.0
         version: 1.6.0
-      chokidar:
-        specifier: ^5.0.0
-        version: 5.0.0
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
@@ -145,14 +145,14 @@ importers:
         specifier: ^5.90.20
         version: 5.90.20(react@19.2.4)
       '@tanstack/react-router':
-        specifier: ^1.157.16
-        version: 1.157.16(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        specifier: ^1.157.18
+        version: 1.157.18(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@tanstack/react-virtual':
         specifier: ^3.13.18
         version: 3.13.18(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@tanstack/router-plugin':
-        specifier: ^1.157.16
-        version: 1.157.16(@tanstack/react-router@1.157.16(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(rolldown-vite@7.3.1(@types/node@25.1.0)(esbuild@0.25.12)(jiti@2.6.1)(tsx@4.21.0))
+        specifier: ^1.157.18
+        version: 1.157.18(@tanstack/react-router@1.157.18(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(rolldown-vite@7.3.1(@types/node@25.1.0)(esbuild@0.25.12)(jiti@2.6.1)(tsx@4.21.0))
       '@types/auto-launch':
         specifier: ^5.0.5
         version: 5.0.5
@@ -217,8 +217,8 @@ importers:
         specifier: ^40.1.0
         version: 40.1.0
       electron-builder:
-        specifier: ^26.4.0
-        version: 26.4.0(electron-builder-squirrel-windows@26.4.0)
+        specifier: ^26.7.0
+        version: 26.7.0(electron-builder-squirrel-windows@26.4.0)
       electron-vite:
         specifier: ^5.0.0
         version: 5.0.0(rolldown-vite@7.3.1(@types/node@25.1.0)(esbuild@0.25.12)(jiti@2.6.1)(tsx@4.21.0))
@@ -292,8 +292,8 @@ importers:
         specifier: npm:rolldown-vite@latest
         version: rolldown-vite@7.3.1(@types/node@25.1.0)(esbuild@0.25.12)(jiti@2.6.1)(tsx@4.21.0)
       zustand:
-        specifier: ^5.0.10
-        version: 5.0.10(@types/react@19.2.10)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
+        specifier: ^5.0.11
+        version: 5.0.11(@types/react@19.2.10)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
 
 packages:
 
@@ -476,6 +476,10 @@ packages:
     resolution: {integrity: sha512-Qkzpg2s9GnVV2I2BjRksUi43U5e6+zaQMcjoJy0C+C5oxaKl+fmckGDQFtRpZpZV0NQekuZZ+tGz7EA9TVnQtQ==}
     engines: {node: '>=12'}
 
+  '@electron/get@3.1.0':
+    resolution: {integrity: sha512-F+nKc0xW+kVbBRhFzaMgPy3KwmuNTYX1fx6+FxxoSnNgwYX6LD7AKBTWkU0MQ6IBoe7dz069CNkR673sPAgkCQ==}
+    engines: {node: '>=14'}
+
   '@electron/notarize@2.5.0':
     resolution: {integrity: sha512-jNT8nwH1f9X5GEITXaQ8IF/KdskvIkOFfB2CvwumsveVidzpSc+mvhhTMdAGSYF3O+Nq49lJ7y+ssODRXu06+A==}
     engines: {node: '>= 10.0.0'}
@@ -487,6 +491,11 @@ packages:
 
   '@electron/rebuild@4.0.1':
     resolution: {integrity: sha512-iMGXb6Ib7H/Q3v+BKZJoETgF9g6KMNZVbsO4b7Dmpgb5qTFqyFTzqW9F3TOSHdybv2vKYKzSS9OiZL+dcJb+1Q==}
+    engines: {node: '>=22.12.0'}
+    hasBin: true
+
+  '@electron/rebuild@4.0.3':
+    resolution: {integrity: sha512-u9vpTHRMkOYCs/1FLiSVAFZ7FbjsXK+bQuzviJZa+lG7BHZl1nz52/IcGvwa3sk80/fc3llutBkbCq10Vh8WQA==}
     engines: {node: '>=22.12.0'}
     hasBin: true
 
@@ -1017,6 +1026,9 @@ packages:
 
   '@floating-ui/utils@0.2.10':
     resolution: {integrity: sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ==}
+
+  '@formkit/auto-animate@0.9.0':
+    resolution: {integrity: sha512-VhP4zEAacXS3dfTpJpJ88QdLqMTcabMg0jwpOSxZ/VzfQVfl3GkZSCZThhGC5uhq/TxPHPzW0dzr4H9Bb1OgKA==}
 
   '@hono/node-server@1.19.9':
     resolution: {integrity: sha512-vHL6w3ecZsky+8P5MD+eFfaGTyCeOHUIFYMGpQGbrBTSmNNoxv0if69rEZ5giu36weC5saFuznL411gRX7bJDw==}
@@ -2085,8 +2097,8 @@ packages:
     peerDependencies:
       react: ^18 || ^19
 
-  '@tanstack/react-router@1.157.16':
-    resolution: {integrity: sha512-xwFQa7S7dhBhm3aJYwU79cITEYgAKSrcL6wokaROIvl2JyIeazn8jueWqUPJzFjv+QF6Q8euKRlKUEyb5q2ymg==}
+  '@tanstack/react-router@1.157.18':
+    resolution: {integrity: sha512-qs//HcVhEZ0K2/Sqejol0vOWaFIh4EoYTQQix9FhHOyWvdUpGoTJS0+g/qxEnZZm7r9QNOrnyrYZ5CDAqnII6g==}
     engines: {node: '>=12'}
     peerDependencies:
       react: '>=18.0.0 || >=19.0.0'
@@ -2104,20 +2116,20 @@ packages:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
-  '@tanstack/router-core@1.157.16':
-    resolution: {integrity: sha512-eJuVgM7KZYTTr4uPorbUzUflmljMVcaX2g6VvhITLnHmg9SBx9RAgtQ1HmT+72mzyIbRSlQ1q0fY/m+of/fosA==}
+  '@tanstack/router-core@1.157.18':
+    resolution: {integrity: sha512-jGkyA3EEE01Sf6d4goi//poxQNb/Odc/GzpjZSW2zwG+wcXm9hEzcI6vU2IxhAU0dvvwQyQgtU1HXTcXQ/Xg4A==}
     engines: {node: '>=12'}
 
-  '@tanstack/router-generator@1.157.16':
-    resolution: {integrity: sha512-Ae2M00VTFjjED7glSCi/mMLENRzhEym6NgjoOx7UVNbCC/rLU/5ASDe5VIlDa8QLEqP5Pj088Gi51gjmRuICvQ==}
+  '@tanstack/router-generator@1.157.18':
+    resolution: {integrity: sha512-t6nZdaX+pYWaudwg5Yasu/o8IAK8FPc4Jwq+rZpyaCgeZn895Vc407hxoRss40/hK1jk03b8x349+b1JekiSqA==}
     engines: {node: '>=12'}
 
-  '@tanstack/router-plugin@1.157.16':
-    resolution: {integrity: sha512-YQg7L06xyCJAYyrEJNZGAnDL8oChILU+G/eSDIwEfcWn5iLk+47x1Gcdxr82++47PWmOPhzuTo8edDQXWs7kAA==}
+  '@tanstack/router-plugin@1.157.18':
+    resolution: {integrity: sha512-1UrRnIhD4Ar0PpXwzIkxD8nfjzmO7oYRh4CkSUO+Xc6aD5poNB62aUWPp3vS5jnXDNSk0vr+N4QAPebjPKw0Hw==}
     engines: {node: '>=12'}
     peerDependencies:
       '@rsbuild/core': '>=1.0.2'
-      '@tanstack/react-router': ^1.157.16
+      '@tanstack/react-router': ^1.157.18
       vite: '>=5.0.0 || >=6.0.0 || >=7.0.0'
       vite-plugin-solid: ^2.11.10
       webpack: '>=5.92.0'
@@ -2384,6 +2396,13 @@ packages:
       dmg-builder: 26.4.0
       electron-builder-squirrel-windows: 26.4.0
 
+  app-builder-lib@26.7.0:
+    resolution: {integrity: sha512-/UgCD8VrO79Wv8aBNpjMfsS1pIUfIPURoRn0Ik6tMe5avdZF+vQgl/juJgipcMmH3YS0BD573lCdCHyoi84USg==}
+    engines: {node: '>=14.0.0'}
+    peerDependencies:
+      dmg-builder: 26.7.0
+      electron-builder-squirrel-windows: 26.7.0
+
   applescript@1.0.0:
     resolution: {integrity: sha512-yvtNHdWvtbYEiIazXAdp/NY+BBb65/DAseqlNiJQjOx9DynuzOYDbVLBJvuc0ve0VL9x6B3OHF6eH52y9hCBtQ==}
 
@@ -2493,6 +2512,9 @@ packages:
   builder-util@26.3.4:
     resolution: {integrity: sha512-aRn88mYMktHxzdqDMF6Ayj0rKoX+ZogJ75Ck7RrIqbY/ad0HBvnS2xA4uHfzrGr5D2aLL3vU6OBEH4p0KMV2XQ==}
 
+  builder-util@26.4.1:
+    resolution: {integrity: sha512-FlgH43XZ50w3UtS1RVGDWOz8v9qMXPC7upMtKMtBEnYdt1OVoS61NYhKm/4x+cIaWqJTXua0+VVPI+fSPGXNIw==}
+
   cac@6.7.14:
     resolution: {integrity: sha512-b6Ilus+c3RrdDk+JhLKUAQfzzgLEPy6wcXqS7f/xe1EETvsDP6GORG7SFuOs6cID5YkqchW/LXZbX5bc8j7ZcQ==}
     engines: {node: '>=8'}
@@ -2534,10 +2556,6 @@ packages:
   chokidar@3.6.0:
     resolution: {integrity: sha512-7VT13fmjotKpGipCW9JEQAusEPE+Ei8nl6/g4FBAmIm0GOOLMua9NDDo/DWp0ZAxCr3cPq5ZpBqmPAQgDda2Pw==}
     engines: {node: '>= 8.10.0'}
-
-  chokidar@5.0.0:
-    resolution: {integrity: sha512-TQMmc3w+5AxjpL8iIiwebF73dRDF4fBIieAqGn9RGCWaEVwQ6Fb2cGe31Yns0RRIzii5goJ1Y7xbMwo1TxMplw==}
-    engines: {node: '>= 20.19.0'}
 
   chownr@1.1.4:
     resolution: {integrity: sha512-jJ0bqzaylmJtVnNgzTeSOs8DPavpbYgEr/b0YL8/2GO3xJEhInFmhKMUnEJQjZumK7KXGFhUy89PrsJWlakBVg==}
@@ -2709,8 +2727,8 @@ packages:
   dir-compare@4.2.0:
     resolution: {integrity: sha512-2xMCmOoMrdQIPHdsTawECdNPwlVFB9zGcz3kuhmBO6U3oU+UQjsue0i8ayLKpgBcm+hcXPMVSGUN9d+pvJ6+VQ==}
 
-  dmg-builder@26.4.0:
-    resolution: {integrity: sha512-ce4Ogns4VMeisIuCSK0C62umG0lFy012jd8LMZ6w/veHUeX4fqfDrGe+HTWALAEwK6JwKP+dhPvizhArSOsFbg==}
+  dmg-builder@26.7.0:
+    resolution: {integrity: sha512-uOOBA3f+kW3o4KpSoMQ6SNpdXU7WtxlJRb9vCZgOvqhTz4b3GjcoWKstdisizNZLsylhTMv8TLHFPFW0Uxsj/g==}
 
   dmg-license@1.0.11:
     resolution: {integrity: sha512-ZdzmqwKmECOWJpqefloC5OJy1+WZBBse5+MR88z9g9Zn4VY+WYUkAyojmhzJckH5YbbZGcYIuGAkY5/Ys5OM2Q==}
@@ -2854,8 +2872,8 @@ packages:
   electron-builder-squirrel-windows@26.4.0:
     resolution: {integrity: sha512-7dvalY38xBzWNaoOJ4sqy2aGIEpl2S1gLPkkB0MHu1Hu5xKQ82il1mKSFlXs6fLpXUso/NmyjdHGlSHDRoG8/w==}
 
-  electron-builder@26.4.0:
-    resolution: {integrity: sha512-FCUqvdq2AULL+Db2SUGgjOYTbrgkPxZtCjqIZGnjH9p29pTWyesQqBIfvQBKa6ewqde87aWl49n/WyI/NyUBog==}
+  electron-builder@26.7.0:
+    resolution: {integrity: sha512-LoXbCvSFxLesPneQ/fM7FB4OheIDA2tjqCdUkKlObV5ZKGhYgi5VHPHO/6UUOUodAlg7SrkPx7BZJPby+Vrtbg==}
     engines: {node: '>=14.0.0'}
     hasBin: true
 
@@ -2868,6 +2886,9 @@ packages:
 
   electron-publish@26.3.4:
     resolution: {integrity: sha512-5/ouDPb73SkKuay2EXisPG60LTFTMNHWo2WLrK5GDphnWK9UC+yzYrzVeydj078Yk4WUXi0+TaaZsNd6Zt5k/A==}
+
+  electron-publish@26.6.0:
+    resolution: {integrity: sha512-LsyHMMqbvJ2vsOvuWJ19OezgF2ANdCiHpIucDHNiLhuI+/F3eW98ouzWSRmXXi82ZOPZXC07jnIravY4YYwCLQ==}
 
   electron-to-chromium@1.5.279:
     resolution: {integrity: sha512-0bblUU5UNdOt5G7XqGiJtpZMONma6WAfq9vsFmtn9x1+joAObr6x1chfqyxFSDCAFwFhCQDrqeAr6MYdpwJ9Hg==}
@@ -4116,6 +4137,9 @@ packages:
     resolution: {integrity: sha512-y+WKFlBR8BGXnsNlIHFGPZmyDf3DFMoLhaflAnyZgV6rG6xu+JwesTo2Q9R6XwYmtmwAFCkAk3e35jEdoeh/3g==}
     engines: {node: '>=10'}
 
+  proper-lockfile@4.1.2:
+    resolution: {integrity: sha512-TjNPblN4BwAWMXU8s9AEz4JmQxnD1NNL7bNOY/AKUzyamc379FWASUhc/K1pL2noVb+XmZKLL68cjzLsiOAMaA==}
+
   pump@3.0.3:
     resolution: {integrity: sha512-todwxLMY7/heScKmntwQG8CXVkWUOdYxIvY2s0VWAAMh/nd8SoYiRaKjlr7+iCs984f2P8zvrfWcDDYVb73NfA==}
 
@@ -4226,10 +4250,6 @@ packages:
   readdirp@3.6.0:
     resolution: {integrity: sha512-hOS089on8RduqdbhvQ5Z37A0ESjsqz6qnRcffsMU3495FuTdqSm+7bhJ29JvIOsBDEEnan5DPu9t3To9VRlMzA==}
     engines: {node: '>=8.10.0'}
-
-  readdirp@5.0.0:
-    resolution: {integrity: sha512-9u/XQ1pvrQtYyMpZe7DXKv2p5CNvyVwzUB6uhLAnQwHMSgKMBR62lc7AHljaeteeHXn11XTAaLLUVZYVZyuRBQ==}
-    engines: {node: '>= 20.19.0'}
 
   real-require@0.2.0:
     resolution: {integrity: sha512-57frrGM/OCTLqLOAh0mhVA9VBMHd+9U7Zb2THMGdBUoZVOtGbJzjxsYGDJ3A9AYYCP4hn6y1TVbaOfzWtm5GFg==}
@@ -4818,8 +4838,8 @@ packages:
   zod@4.3.6:
     resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
 
-  zustand@5.0.10:
-    resolution: {integrity: sha512-U1AiltS1O9hSy3rul+Ub82ut2fqIAefiSuwECWt6jlMVUGejvf+5omLcRBSzqbRagSM3hQZbtzdeRc6QVScXTg==}
+  zustand@5.0.11:
+    resolution: {integrity: sha512-fdZY+dk7zn/vbWNCYmzZULHRrss0jx5pPFiOuMZ/5HJN6Yv3u+1Wswy/4MpZEkEGhtNH+pwxZB8OKgUBPzYAGg==}
     engines: {node: '>=12.20.0'}
     peerDependencies:
       '@types/react': '>=18.0.0'
@@ -5036,6 +5056,20 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@electron/get@3.1.0':
+    dependencies:
+      debug: 4.4.3
+      env-paths: 2.2.1
+      fs-extra: 8.1.0
+      got: 11.8.6
+      progress: 2.0.3
+      semver: 6.3.1
+      sumchecker: 3.0.1
+    optionalDependencies:
+      global-agent: 3.0.0
+    transitivePeerDependencies:
+      - supports-color
+
   '@electron/notarize@2.5.0':
     dependencies:
       debug: 4.4.3
@@ -5070,6 +5104,24 @@ snapshots:
       read-binary-file-arch: 1.0.6
       semver: 7.7.3
       tar: 6.2.1
+      yargs: 17.7.2
+    transitivePeerDependencies:
+      - supports-color
+
+  '@electron/rebuild@4.0.3':
+    dependencies:
+      '@malept/cross-spawn-promise': 2.0.0
+      debug: 4.4.3
+      detect-libc: 2.1.2
+      got: 11.8.6
+      graceful-fs: 4.2.11
+      node-abi: 4.26.0
+      node-api-version: 0.2.1
+      node-gyp: 11.5.0
+      ora: 5.4.1
+      read-binary-file-arch: 1.0.6
+      semver: 7.7.3
+      tar: 7.5.7
       yargs: 17.7.2
     transitivePeerDependencies:
       - supports-color
@@ -5411,6 +5463,8 @@ snapshots:
       react-dom: 19.2.4(react@19.2.4)
 
   '@floating-ui/utils@0.2.10': {}
+
+  '@formkit/auto-animate@0.9.0': {}
 
   '@hono/node-server@1.19.9(hono@4.11.7)':
     dependencies:
@@ -6460,11 +6514,11 @@ snapshots:
       '@tanstack/query-core': 5.90.20
       react: 19.2.4
 
-  '@tanstack/react-router@1.157.16(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+  '@tanstack/react-router@1.157.18(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
     dependencies:
       '@tanstack/history': 1.154.14
       '@tanstack/react-store': 0.8.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      '@tanstack/router-core': 1.157.16
+      '@tanstack/router-core': 1.157.18
       isbot: 5.1.34
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
@@ -6484,7 +6538,7 @@ snapshots:
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
 
-  '@tanstack/router-core@1.157.16':
+  '@tanstack/router-core@1.157.18':
     dependencies:
       '@tanstack/history': 1.154.14
       '@tanstack/store': 0.8.0
@@ -6494,9 +6548,9 @@ snapshots:
       tiny-invariant: 1.3.3
       tiny-warning: 1.0.3
 
-  '@tanstack/router-generator@1.157.16':
+  '@tanstack/router-generator@1.157.18':
     dependencies:
-      '@tanstack/router-core': 1.157.16
+      '@tanstack/router-core': 1.157.18
       '@tanstack/router-utils': 1.154.7
       '@tanstack/virtual-file-routes': 1.154.7
       prettier: 3.8.1
@@ -6507,7 +6561,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@tanstack/router-plugin@1.157.16(@tanstack/react-router@1.157.16(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(rolldown-vite@7.3.1(@types/node@25.1.0)(esbuild@0.25.12)(jiti@2.6.1)(tsx@4.21.0))':
+  '@tanstack/router-plugin@1.157.18(@tanstack/react-router@1.157.18(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(rolldown-vite@7.3.1(@types/node@25.1.0)(esbuild@0.25.12)(jiti@2.6.1)(tsx@4.21.0))':
     dependencies:
       '@babel/core': 7.28.6
       '@babel/plugin-syntax-jsx': 7.28.6(@babel/core@7.28.6)
@@ -6515,8 +6569,8 @@ snapshots:
       '@babel/template': 7.28.6
       '@babel/traverse': 7.28.6
       '@babel/types': 7.28.6
-      '@tanstack/router-core': 1.157.16
-      '@tanstack/router-generator': 1.157.16
+      '@tanstack/router-core': 1.157.18
+      '@tanstack/router-generator': 1.157.18
       '@tanstack/router-utils': 1.154.7
       '@tanstack/virtual-file-routes': 1.154.7
       babel-dead-code-elimination: 1.0.12
@@ -6524,7 +6578,7 @@ snapshots:
       unplugin: 2.3.11
       zod: 3.25.76
     optionalDependencies:
-      '@tanstack/react-router': 1.157.16(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@tanstack/react-router': 1.157.18(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       vite: rolldown-vite@7.3.1(@types/node@25.1.0)(esbuild@0.25.12)(jiti@2.6.1)(tsx@4.21.0)
     transitivePeerDependencies:
       - supports-color
@@ -6826,7 +6880,7 @@ snapshots:
 
   app-builder-bin@5.0.0-alpha.12: {}
 
-  app-builder-lib@26.4.0(dmg-builder@26.4.0)(electron-builder-squirrel-windows@26.4.0):
+  app-builder-lib@26.4.0(dmg-builder@26.7.0)(electron-builder-squirrel-windows@26.4.0):
     dependencies:
       '@develar/schema-utils': 2.6.5
       '@electron/asar': 3.4.1
@@ -6843,11 +6897,11 @@ snapshots:
       chromium-pickle-js: 0.2.0
       ci-info: 4.3.1
       debug: 4.4.3
-      dmg-builder: 26.4.0(electron-builder-squirrel-windows@26.4.0)
+      dmg-builder: 26.7.0(electron-builder-squirrel-windows@26.4.0)
       dotenv: 16.6.1
       dotenv-expand: 11.0.7
       ejs: 3.1.10
-      electron-builder-squirrel-windows: 26.4.0(dmg-builder@26.4.0)
+      electron-builder-squirrel-windows: 26.4.0(dmg-builder@26.7.0)
       electron-publish: 26.3.4
       fs-extra: 10.1.0
       hosted-git-info: 4.1.0
@@ -6861,6 +6915,49 @@ snapshots:
       resedit: 1.7.2
       semver: 7.7.3
       tar: 6.2.1
+      temp-file: 3.4.0
+      tiny-async-pool: 1.3.0
+      which: 5.0.0
+    transitivePeerDependencies:
+      - supports-color
+
+  app-builder-lib@26.7.0(dmg-builder@26.7.0)(electron-builder-squirrel-windows@26.4.0):
+    dependencies:
+      '@develar/schema-utils': 2.6.5
+      '@electron/asar': 3.4.1
+      '@electron/fuses': 1.8.0
+      '@electron/get': 3.1.0
+      '@electron/notarize': 2.5.0
+      '@electron/osx-sign': 1.3.3
+      '@electron/rebuild': 4.0.3
+      '@electron/universal': 2.0.3
+      '@malept/flatpak-bundler': 0.4.0
+      '@types/fs-extra': 9.0.13
+      async-exit-hook: 2.0.1
+      builder-util: 26.4.1
+      builder-util-runtime: 9.5.1
+      chromium-pickle-js: 0.2.0
+      ci-info: 4.3.1
+      debug: 4.4.3
+      dmg-builder: 26.7.0(electron-builder-squirrel-windows@26.4.0)
+      dotenv: 16.6.1
+      dotenv-expand: 11.0.7
+      ejs: 3.1.10
+      electron-builder-squirrel-windows: 26.4.0(dmg-builder@26.7.0)
+      electron-publish: 26.6.0
+      fs-extra: 10.1.0
+      hosted-git-info: 4.1.0
+      isbinaryfile: 5.0.7
+      jiti: 2.6.1
+      js-yaml: 4.1.1
+      json5: 2.2.3
+      lazy-val: 1.0.5
+      minimatch: 10.1.1
+      plist: 3.1.0
+      proper-lockfile: 4.1.2
+      resedit: 1.7.2
+      semver: 7.7.3
+      tar: 7.5.7
       temp-file: 3.4.0
       tiny-async-pool: 1.3.0
       which: 5.0.0
@@ -7000,6 +7097,27 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  builder-util@26.4.1:
+    dependencies:
+      7zip-bin: 5.2.0
+      '@types/debug': 4.1.12
+      app-builder-bin: 5.0.0-alpha.12
+      builder-util-runtime: 9.5.1
+      chalk: 4.1.2
+      cross-spawn: 7.0.6
+      debug: 4.4.3
+      fs-extra: 10.1.0
+      http-proxy-agent: 7.0.2
+      https-proxy-agent: 7.0.6
+      js-yaml: 4.1.1
+      sanitize-filename: 1.6.3
+      source-map-support: 0.5.21
+      stat-mode: 1.0.0
+      temp-file: 3.4.0
+      tiny-async-pool: 1.3.0
+    transitivePeerDependencies:
+      - supports-color
+
   cac@6.7.14: {}
 
   cacache@19.0.1:
@@ -7070,10 +7188,6 @@ snapshots:
       readdirp: 3.6.0
     optionalDependencies:
       fsevents: 2.3.3
-
-  chokidar@5.0.0:
-    dependencies:
-      readdirp: 5.0.0
 
   chownr@1.1.4: {}
 
@@ -7215,10 +7329,10 @@ snapshots:
       minimatch: 3.1.2
       p-limit: 3.1.0
 
-  dmg-builder@26.4.0(electron-builder-squirrel-windows@26.4.0):
+  dmg-builder@26.7.0(electron-builder-squirrel-windows@26.4.0):
     dependencies:
-      app-builder-lib: 26.4.0(dmg-builder@26.4.0)(electron-builder-squirrel-windows@26.4.0)
-      builder-util: 26.3.4
+      app-builder-lib: 26.7.0(dmg-builder@26.7.0)(electron-builder-squirrel-windows@26.4.0)
+      builder-util: 26.4.1
       fs-extra: 10.1.0
       iconv-lite: 0.6.3
       js-yaml: 4.1.1
@@ -7292,23 +7406,23 @@ snapshots:
     dependencies:
       jake: 10.9.4
 
-  electron-builder-squirrel-windows@26.4.0(dmg-builder@26.4.0):
+  electron-builder-squirrel-windows@26.4.0(dmg-builder@26.7.0):
     dependencies:
-      app-builder-lib: 26.4.0(dmg-builder@26.4.0)(electron-builder-squirrel-windows@26.4.0)
+      app-builder-lib: 26.4.0(dmg-builder@26.7.0)(electron-builder-squirrel-windows@26.4.0)
       builder-util: 26.3.4
       electron-winstaller: 5.4.0
     transitivePeerDependencies:
       - dmg-builder
       - supports-color
 
-  electron-builder@26.4.0(electron-builder-squirrel-windows@26.4.0):
+  electron-builder@26.7.0(electron-builder-squirrel-windows@26.4.0):
     dependencies:
-      app-builder-lib: 26.4.0(dmg-builder@26.4.0)(electron-builder-squirrel-windows@26.4.0)
-      builder-util: 26.3.4
+      app-builder-lib: 26.7.0(dmg-builder@26.7.0)(electron-builder-squirrel-windows@26.4.0)
+      builder-util: 26.4.1
       builder-util-runtime: 9.5.1
       chalk: 4.1.2
       ci-info: 4.3.1
-      dmg-builder: 26.4.0(electron-builder-squirrel-windows@26.4.0)
+      dmg-builder: 26.7.0(electron-builder-squirrel-windows@26.4.0)
       fs-extra: 10.1.0
       lazy-val: 1.0.5
       simple-update-notifier: 2.0.0
@@ -7327,6 +7441,19 @@ snapshots:
     dependencies:
       '@types/fs-extra': 9.0.13
       builder-util: 26.3.4
+      builder-util-runtime: 9.5.1
+      chalk: 4.1.2
+      form-data: 4.0.5
+      fs-extra: 10.1.0
+      lazy-val: 1.0.5
+      mime: 2.6.0
+    transitivePeerDependencies:
+      - supports-color
+
+  electron-publish@26.6.0:
+    dependencies:
+      '@types/fs-extra': 9.0.13
+      builder-util: 26.4.1
       builder-util-runtime: 9.5.1
       chalk: 4.1.2
       form-data: 4.0.5
@@ -8614,6 +8741,12 @@ snapshots:
       err-code: 2.0.3
       retry: 0.12.0
 
+  proper-lockfile@4.1.2:
+    dependencies:
+      graceful-fs: 4.2.11
+      retry: 0.12.0
+      signal-exit: 3.0.7
+
   pump@3.0.3:
     dependencies:
       end-of-stream: 1.4.5
@@ -8766,8 +8899,6 @@ snapshots:
   readdirp@3.6.0:
     dependencies:
       picomatch: 2.3.1
-
-  readdirp@5.0.0: {}
 
   real-require@0.2.0: {}
 
@@ -9311,7 +9442,7 @@ snapshots:
 
   zod@4.3.6: {}
 
-  zustand@5.0.10(@types/react@19.2.10)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4)):
+  zustand@5.0.11(@types/react@19.2.10)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4)):
     optionalDependencies:
       '@types/react': 19.2.10
       react: 19.2.4

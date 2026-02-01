@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { useEffect } from "react";
 import { useGlobalStore } from "@renderer/store/global";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
+import { Button } from "@renderer/components/ui/button";
 
 export const Route = createFileRoute("/setting")({
   component: RouteComponent,
@@ -21,6 +23,8 @@ function RouteComponent() {
   const location = useLocation();
   const navi = useNavigate();
   const appStatus = useGlobalStore((state) => state.appStatus);
+
+  const [anim1] = useAutoAnimate({ duration: 100 });
 
   useEffect(() => {
     if (location.pathname === "/setting") {
@@ -35,7 +39,7 @@ function RouteComponent() {
     // { icon: RefreshCw, label: "동기화", path: "/setting/sync" },
     // { icon: Database, label: "백업", path: "/setting/bak" },
     // { icon: Folder, label: "공간", path: "/setting/space" },
-    // { icon: Globe, label: "네트워크", path: "/setting/net" },
+    { icon: Globe, label: "네트워크", path: "/setting/net" },
     // { icon: Bell, label: "알림", path: "/setting/noti" },
   ];
 
@@ -44,12 +48,12 @@ function RouteComponent() {
       <Titlebar title={{ text: "설정", position: "center" }} />
 
       <nav className="border-b">
-        <div className="flex items-center justify-center gap-8 px-4 py-4">
+        <div className="flex items-center justify-center gap-1 p-3">
           {navItems.map((item, index) => (
-            <Link
+            <button
               key={index}
-              to={item.path}
-              className={`flex flex-col items-center gap-2 transition-colors ${
+              onClick={() => navi({ to: item.path })}
+              className={`flex flex-col items-center gap-2 transition-colors size-14 ${
                 location.pathname === item.path
                   ? "text-foreground"
                   : "text-muted-foreground hover:text-foreground"
@@ -57,12 +61,12 @@ function RouteComponent() {
             >
               <item.icon className="h-6 w-6" />
               <span className="text-sm">{item.label}</span>
-            </Link>
+            </button>
           ))}
         </div>
       </nav>
 
-      <div className="flex-1 flex flex-col p-2">
+      <div className="flex-1 flex flex-col p-2" ref={anim1}>
         <Outlet />
       </div>
 

@@ -2,8 +2,12 @@ import { useMemo } from "react";
 import type { ModInfo } from "@shared/types";
 import { disassemble, getChoseong } from "es-hangul";
 import { getSearchScore } from "@renderer/lib/sejong";
+import { useModStore } from "@renderer/store/mod";
 
 export function useFilteredMods(mods: ModInfo[], searchQuery: string) {
+    const sortType = useModStore((s) => s.sortType);
+    const sortOrder = useModStore((s) => s.sortOrder);
+
     return useMemo(() => {
         const scoredMods = mods.map((m) => {
             if (!searchQuery) return { mod: m, score: 0 };
@@ -27,11 +31,25 @@ export function useFilteredMods(mods: ModInfo[], searchQuery: string) {
                 if (a.mod.isEnabled !== b.mod.isEnabled) {
                     return a.mod.isEnabled ? -1 : 1;
                 }
+
                 if (searchQuery && a.score !== b.score) {
                     return b.score - a.score;
                 }
-                return a.mod.name.localeCompare(b.mod.name);
+
+                let comparison = 0;
+                if (sortType === "name") {
+                    comparison = a.mod.name.localeCompare(b.mod.name, undefined, {
+                        numeric: true,
+                        sensitivity: "base",
+                    });
+                } else if (sortType === "date") {
+                    comparison = a.mod.mtime - b.mod.mtime;
+                } else if (sortType === "size") {
+                    comparison = a.mod.size - b.mod.size;
+                }
+
+                return sortOrder === "asc" ? comparison : -comparison;
             })
             .map((sm) => sm.mod);
-    }, [mods, searchQuery]);
+    }, [mods, searchQuery, sortType, sortOrder]);
 }

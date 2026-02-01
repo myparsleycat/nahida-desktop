@@ -6,6 +6,7 @@ import {
   TerminalSquareIcon,
   ClipboardIcon,
 } from "lucide-react";
+import { memo, useRef } from "react";
 import { Preview } from "./preview";
 import { Input } from "@renderer/components/ui/input";
 import {
@@ -31,11 +32,13 @@ import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Separator } from "@renderer/components/ui/separator";
 import { Button } from "@renderer/components/ui/button";
 import { useRouteContext } from "@tanstack/react-router";
-import { useModStore } from "@renderer/store/mod";
 import { toast } from "sonner";
+import { formatDate, formatSize } from "@shared/utils";
+import { Badge } from "@renderer/components/ui/badge";
 
 interface ModCardProps {
   mod: ModInfo;
+  selectedGroupPath?: string;
   onToggle: (mod: ModInfo) => void;
   onToggleKeyUpdate: (
     modPath: string,
@@ -48,32 +51,36 @@ interface ModCardProps {
 
 const getModColorClass = (isEnabled: boolean) => {
   if (isEnabled) {
-    return "dark:bg-[#0d430d] bg-[#048117]";
+    return "dark:bg-[#0d430d] bg-[#6aad6a]";
   } else {
-    return "dark:bg-[#58151b] bg-[#af2938]";
+    return "dark:bg-[#58151b] bg-[#f1afb4]";
   }
 };
 
 const getToggleBoxColorClass = (isEnabled: boolean) => {
   if (isEnabled) {
-    return "dark:bg-[#0f4d0f] bg-[#008a1c]";
+    return "dark:bg-[#0f4d0f]/80 bg-[#72b172]/80";
   } else {
-    return "dark:bg-[#63181e] bg-[#781d26]";
+    return "dark:bg-[#612127]/80 bg-[#f2b3b8]/80";
   }
 };
 
 const getToggleInputColorClass = (isEnabled: boolean) => {
   if (isEnabled) {
-    return "dark:bg-[#115a11] bg-[#00941e]";
+    return "dark:bg-[#115a11] bg-[#d5e8d5]";
   } else {
-    return "dark:bg-[#731c23] bg-[#781d26]";
+    return "dark:bg-[#6a2e34] bg-[#fbe8ea]";
   }
 };
 
-export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
+export const ModCard = memo(function ModCard({
+  mod,
+  selectedGroupPath,
+  onToggle,
+  onToggleKeyUpdate,
+}: ModCardProps) {
   const { queryClient } = useRouteContext({ from: "/mod/" });
-  const selectedGroup = useModStore((s) => s.selectedGroup);
-  const selectedGroupPath = selectedGroup?.path;
+  const mouseDownTargetRef = useRef<EventTarget | null>(null);
 
   const handlePaste = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -156,12 +163,28 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
   return (
     <div
       className={cn(
-        "rounded-sm overflow-hidden border cursor-pointer shadow-lg p-1 h-[400px]",
+        "rounded-sm overflow-hidden border-border/75 cursor-pointer p-1 h-[400px] relative hover:shadow-lg transition-shadow duration-150",
         getModColorClass(mod.isEnabled),
       )}
-      onClick={() => onToggle(mod)}
+      onMouseDown={(e) => {
+        mouseDownTargetRef.current = e.target;
+      }}
+      onClick={() => {
+        const target = mouseDownTargetRef.current as HTMLElement;
+        if (target && (target.tagName === "INPUT" || target.closest("button"))) {
+          return;
+        }
+        onToggle(mod);
+      }}
+      draggable={false}
     >
-      <div className="flex items-center justify-between pb-1">
+      {mod.preview && mod.preview.match(/\.(jpeg|jpg|gif|png|webp|bmp)$/i) && (
+        <div className="absolute inset-0 z-0 blur-xl scale-110 pointer-events-none opacity-25">
+          <img src={`local://${mod.preview}`} alt="preview" className="w-full h-full object-fill" />
+        </div>
+      )}
+
+      <div className="flex items-center justify-between pb-1 relative z-10">
         <span className="text-sm truncate font-semibold">
           {mod.name.replace(/disabled/gi, "").trim()}
         </span>
@@ -212,8 +235,8 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
         </div>
       </div>
 
-      <div className="flex flex-row h-[calc(100%-2.5rem)] space-x-1.5">
-        <ModPreview mod={mod} onPaste={handlePaste} />
+      <div className="flex flex-row h-[calc(100%-2rem)] space-x-2 relative z-10">
+        <ModPreview mod={mod} selectedGroupPath={selectedGroupPath} onPaste={handlePaste} />
 
         {mod.inis.length > 0 && (
           <>
@@ -222,13 +245,29 @@ export function ModCard({ mod, onToggle, onToggleKeyUpdate }: ModCardProps) {
           </>
         )}
       </div>
+
+      <div className="absolute left-1 bottom-1 flex flex-col space-y-1 z-10">
+        <Badge className="bg-background/15 backdrop-blur text-foreground text-xs h-5">
+          {formatSize(mod.size)}
+        </Badge>
+        <Badge className="bg-background/15 backdrop-blur text-foreground text-xs h-5">
+          {formatDate(new Date(mod.mtime), "ko")}
+        </Badge>
+      </div>
     </div>
   );
-}
+});
 
-function ModPreview({ mod, onPaste }: { mod: ModInfo; onPaste: (e: React.MouseEvent) => void }) {
+function ModPreview({
+  mod,
+  selectedGroupPath,
+  onPaste,
+}: {
+  mod: ModInfo;
+  selectedGroupPath?: string;
+  onPaste: (e: React.MouseEvent) => void;
+}) {
   const { queryClient } = useRouteContext({ from: "/mod/" });
-  const selectedGroup = useModStore((s) => s.selectedGroup);
 
   const previewContent = (
     <Preview
@@ -260,7 +299,7 @@ function ModPreview({ mod, onPaste }: { mod: ModInfo; onPaste: (e: React.MouseEv
       error: "삭제 실패",
     });
     promise.then(() => {
-      queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroup?.path] });
+      queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
     });
   };
 
@@ -297,95 +336,108 @@ function ModIniList({
   return (
     <ScrollArea className="w-[160px] flex flex-col gap-2 overflow-y-auto">
       <div
-        className={cn("p-1.5 rounded space-y-2 w-[160px]", getToggleBoxColorClass(mod.isEnabled))}
+        className={cn(
+          "p-1.5 rounded space-y-2 w-[160px]",
+          // getToggleBoxColorClass(mod.isEnabled)
+          "backdrop-blur-xl bg-background/10 dark:bg-background/10",
+        )}
       >
         {mod.inis.map((ini, iniIdx) => {
           const iniToggleKeys = mod.toggleKeys.filter((tk) => tk.iniFileName === ini.name);
 
           return (
-            <div key={iniIdx} className="space-y-1">
-              <div className="flex items-center justify-between gap-1">
-                <p className="text-xs truncate opacity-80 whitespace-normal" title={ini.name}>
-                  {ini.name}
-                </p>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-7 shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    window.api.invoke("util:openPath", ini.path);
-                  }}
-                >
-                  <FileCogIcon />
-                </Button>
+            <>
+              <div key={iniIdx} className="space-y-1">
+                <div className="flex items-center justify-between gap-1">
+                  <p className="text-xs truncate opacity-80 whitespace-normal" title={ini.name}>
+                    {ini.name}
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.api.invoke("util:openPath", ini.path);
+                    }}
+                  >
+                    <FileCogIcon />
+                  </Button>
+                </div>
+
+                {iniToggleKeys.length > 0 && (
+                  <div className="space-y-2.5">
+                    {iniToggleKeys.map((toggleKey, idx) => (
+                      <div key={idx} className="space-y-1">
+                        <span className="text-sm">{toggleKey.sectionName}</span>
+                        {toggleKey.key && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-sm">key:</span>
+                            <Input
+                              key={`key-${toggleKey.sectionName}-${toggleKey.key}`}
+                              className={cn(
+                                "h-7 text-sm  shadow",
+                                // getToggleInputColorClass(mod.isEnabled),
+                                "bg-background/10 dark:bg-background/10 backdrop-blur-xl",
+                              )}
+                              defaultValue={toggleKey.key}
+                              onClick={(e) => e.stopPropagation()}
+                              onBlur={(e) => {
+                                const newValue = e.target.value;
+                                if (newValue !== toggleKey.key) {
+                                  onToggleKeyUpdate(
+                                    mod.path,
+                                    toggleKey.iniFileName,
+                                    toggleKey.sectionName,
+                                    "key",
+                                    newValue,
+                                  );
+                                }
+                              }}
+                            />
+                          </div>
+                        )}
+                        {toggleKey.back && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-sm">back:</span>
+                            <Input
+                              key={`back-${toggleKey.sectionName}-${toggleKey.back}`}
+                              className={cn(
+                                "h-7 text-sm  shadow",
+                                // getToggleInputColorClass(mod.isEnabled),
+                                "bg-background/10 dark:bg-background/10 backdrop-blur-xl",
+                              )}
+                              defaultValue={toggleKey.back}
+                              onClick={(e) => e.stopPropagation()}
+                              onBlur={(e) => {
+                                const newValue = e.target.value;
+                                if (newValue !== toggleKey.back) {
+                                  onToggleKeyUpdate(
+                                    mod.path,
+                                    toggleKey.iniFileName,
+                                    toggleKey.sectionName,
+                                    "back",
+                                    newValue,
+                                  );
+                                }
+                              }}
+                            />
+                          </div>
+                        )}
+                        {toggleKey.variable && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-sm">variable:</span>
+                            <span className="text-sm">{toggleKey.values.length}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {iniToggleKeys.length > 0 && (
-                <div className="space-y-1 pt-1">
-                  {iniToggleKeys.map((toggleKey, idx) => (
-                    <div key={idx} className="space-y-1">
-                      <span className="text-sm">{toggleKey.sectionName}</span>
-                      {toggleKey.key && (
-                        <div className="flex items-center gap-1">
-                          <span className="text-sm">key:</span>
-                          <Input
-                            key={`key-${toggleKey.sectionName}-${toggleKey.key}`}
-                            className={cn(
-                              "h-7 text-sm border-white/30",
-                              getToggleInputColorClass(mod.isEnabled),
-                            )}
-                            defaultValue={toggleKey.key}
-                            onClick={(e) => e.stopPropagation()}
-                            onBlur={(e) => {
-                              const newValue = e.target.value;
-                              if (newValue !== toggleKey.key) {
-                                onToggleKeyUpdate(
-                                  mod.path,
-                                  toggleKey.iniFileName,
-                                  toggleKey.sectionName,
-                                  "key",
-                                  newValue,
-                                );
-                              }
-                            }}
-                          />
-                        </div>
-                      )}
-                      {toggleKey.back && (
-                        <div className="flex items-center gap-1">
-                          <span className="text-sm">back:</span>
-                          <Input
-                            key={`back-${toggleKey.sectionName}-${toggleKey.back}`}
-                            className={cn("h-6 text-sm", getToggleInputColorClass(mod.isEnabled))}
-                            defaultValue={toggleKey.back}
-                            onClick={(e) => e.stopPropagation()}
-                            onBlur={(e) => {
-                              const newValue = e.target.value;
-                              if (newValue !== toggleKey.back) {
-                                onToggleKeyUpdate(
-                                  mod.path,
-                                  toggleKey.iniFileName,
-                                  toggleKey.sectionName,
-                                  "back",
-                                  newValue,
-                                );
-                              }
-                            }}
-                          />
-                        </div>
-                      )}
-                      {toggleKey.variable && (
-                        <div className="flex items-center gap-1">
-                          <span className="text-sm">variable:</span>
-                          <span className="text-sm">{toggleKey.values.length}</span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+              {iniIdx < mod.inis.length - 1 && <Separator />}
+            </>
           );
         })}
       </div>

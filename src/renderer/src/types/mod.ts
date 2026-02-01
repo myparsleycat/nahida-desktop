@@ -15,6 +15,8 @@ export interface ModInfo {
     isEnabled: boolean;
     toggleKeys: ToggleKey[];
     preview?: string;
+    mtime: number;
+    size: number;
     inis: {
         name: string;
         path: string;

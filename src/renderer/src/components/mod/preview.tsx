@@ -79,7 +79,7 @@ export function Preview({
         objectFit === "cover" ? "object-cover" : "object-contain",
         className,
       )}
-      loading="lazy"
+      loading="eager"
       decoding="async"
     />
   );

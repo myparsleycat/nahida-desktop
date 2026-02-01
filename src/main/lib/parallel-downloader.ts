@@ -4,6 +4,7 @@ import { retry } from "es-toolkit";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { appVersion } from "@main/const";
+import { getAgent } from "@main/internal/fetcher";
 
 export interface ParallelDownloadOptions {
     url: string;
@@ -15,6 +16,7 @@ export interface ParallelDownloadOptions {
     onProgress?: (bytes: number) => void;
     chunkSize?: number;
     maxChunks?: number;
+    agent?: any;
 }
 
 export class ParallelDownloader {
@@ -40,6 +42,8 @@ export class ParallelDownloader {
                 headers,
                 timeout: 10000,
                 throwHttpErrors: false,
+                // @ts-expect-error
+                dispatcher: await getAgent(),
             });
 
             const acceptRanges = response.headers.get("Accept-Ranges");
@@ -84,6 +88,7 @@ export class ParallelDownloader {
         chunkPath: string;
         signal?: AbortSignal;
         onProgress?: (bytes: number) => void;
+        agent?: any;
     }): Promise<void> {
         let lastTransferredBytes = 0;
 
@@ -110,6 +115,8 @@ export class ParallelDownloader {
                     }
                 }
             },
+            // @ts-expect-error
+            dispatcher: agent,
         });
 
         if (!response.ok && response.status !== 206) {
@@ -166,7 +173,8 @@ export class ParallelDownloader {
     }
 
     public async download(options: ParallelDownloadOptions): Promise<void> {
-        const { url, savePath, fileSize, token, headers, signal, onProgress, maxChunks } = options;
+        const { url, savePath, fileSize, token, headers, signal, onProgress, maxChunks, agent } =
+            options;
         const targetPath = `${savePath}.ntmp`;
 
         let chunkCount: number;
@@ -212,6 +220,7 @@ export class ParallelDownloader {
                         chunkPath,
                         signal,
                         onProgress,
+                        agent,
                     }),
                 {
                     retries: 2,

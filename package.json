@@ -1,6 +1,6 @@
 {
     "name": "nahida-desktop",
-    "version": "1.8.0",
+    "version": "1.9.0",
     "description": "Native app for nahida.live",
     "main": "./out/main/index.js",
     "author": "nahida.live",
@@ -27,12 +27,12 @@
     "dependencies": {
         "@electron-toolkit/preload": "^3.0.2",
         "@electron-toolkit/utils": "^4.0.0",
+        "@formkit/auto-animate": "^0.9.0",
         "@hono/node-server": "^1.19.9",
         "@hono/zod-validator": "^0.7.6",
         "auto-launch": "^5.0.6",
         "better-sqlite3": "^12.6.2",
         "cbor-x": "^1.6.0",
-        "chokidar": "^5.0.0",
         "date-fns": "^4.1.0",
         "drizzle-orm": "^0.45.1",
         "electron-log": "^5.4.3",
@@ -72,9 +72,9 @@
         "@tailwindcss/vite": "^4.1.18",
         "@tanstack/react-form": "^1.28.0",
         "@tanstack/react-query": "^5.90.20",
-        "@tanstack/react-router": "^1.157.16",
+        "@tanstack/react-router": "^1.157.18",
         "@tanstack/react-virtual": "^3.13.18",
-        "@tanstack/router-plugin": "^1.157.16",
+        "@tanstack/router-plugin": "^1.157.18",
         "@types/auto-launch": "^5.0.5",
         "@types/better-sqlite3": "^7.6.13",
         "@types/electron-progressbar": "^2.2.0",
@@ -96,7 +96,7 @@
         "dotenv": "^17.2.3",
         "drizzle-kit": "^0.31.8",
         "electron": "^40.1.0",
-        "electron-builder": "^26.4.0",
+        "electron-builder": "^26.7.0",
         "electron-vite": "^5.0.0",
         "eslint": "^9.39.2",
         "eslint-config-prettier": "^10.1.8",
@@ -121,7 +121,7 @@
         "typescript": "^5.9.3",
         "typescript-eslint": "^8.54.0",
         "vite": "npm:rolldown-vite@latest",
-        "zustand": "^5.0.10"
+        "zustand": "^5.0.11"
     },
     "pnpm": {
         "onlyBuiltDependencies": [

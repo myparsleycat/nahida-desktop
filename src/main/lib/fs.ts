@@ -1,6 +1,7 @@
 import fse from "fs-extra";
 import path from "node:path";
 import { NahidaDesktop } from "..";
+import fg from "fast-glob";
 
 export interface FileNode {
     name: string;
@@ -107,6 +108,26 @@ export class FS {
         }
 
         return this.flattenNodes(nodes);
+    }
+
+    public async getFolderSize(path: string) {
+        let totalSize = 0;
+
+        try {
+            const entries = await fg(["**/*"], {
+                cwd: path,
+                stats: true,
+                dot: true,
+                onlyFiles: true,
+                absolute: true,
+            });
+
+            totalSize = entries.reduce((acc, entry) => acc + (entry.stats?.size ?? 0), 0);
+        } catch (error) {
+            this.desktop.logger.error(error, "FS:getFolderSize");
+        }
+
+        return totalSize;
     }
 
     private flattenNodes(nodes: FileNode[]): string[] {

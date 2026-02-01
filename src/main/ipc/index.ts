@@ -38,4 +38,10 @@ export class IPC {
     ) {
         window.webContents.send(channel, ...args);
     }
+
+    public broadcast<K extends keyof IpcEvents>(channel: K, ...args: Parameters<IpcEvents[K]>) {
+        BrowserWindow.getAllWindows().forEach((win) => {
+            win.webContents.send(channel, ...args);
+        });
+    }
 }
