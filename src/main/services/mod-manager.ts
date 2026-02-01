@@ -356,7 +356,7 @@ export class ModManager {
 
             const preview = await this.findPreview(
                 modPath,
-                files.map((f) => f.name),
+                files.map((f) => f.path),
             );
 
             const inis = iniData.map((d) => ({
