@@ -288,7 +288,11 @@ export class DriveService {
             fullPath: f.fullPath,
         }));
 
-        const hashedFiles = await this.upload.calculateHashes(dummyFiles as any);
+        const hashedFiles = await this.upload.calculateHashes(dummyFiles as any, (count) => {
+            this.desktop.service.transfer.updateTransfer(pid, {
+                transferedFiles: count,
+            });
+        });
         const fileHashes: Record<string, string> = {};
         hashedFiles.forEach((f) => {
             fileHashes[f.FID] = f.sha256;

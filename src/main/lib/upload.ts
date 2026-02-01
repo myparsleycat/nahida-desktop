@@ -454,7 +454,9 @@ export class UploadLib {
         );
     }
 
-    public async calculateHashes(files: ParentIdFiles[]) {
+    public async calculateHashes(files: ParentIdFiles[], onProgress?: (count: number) => void) {
+        let processedCount = 0;
+        let lastUpdate = 0;
         const optimalWorkerCount = Math.min(files.length, os.cpus().length);
         const workers = this.createSha256WorkerPool(optimalWorkerCount);
         const chunks: ParentIdFiles[][] = Array(optimalWorkerCount)
@@ -472,6 +474,13 @@ export class UploadLib {
                     worker.on("message", (message: any) => {
                         if (message.type === "complete") {
                             resolve(new Map(message.hashes));
+                        } else if (message.type === "progress") {
+                            processedCount++;
+                            const now = Date.now();
+                            if (now - lastUpdate >= 100 || processedCount === files.length) {
+                                lastUpdate = now;
+                                onProgress?.(processedCount);
+                            }
                         } else if (message.type === "error") {
                             reject(new Error(message.error));
                         }
@@ -708,7 +717,10 @@ export class UploadLib {
         initialTransferedSize?: number;
     }) {
         try {
-            this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
+            this.desktop.service.transfer.updateTransfer(pid, {
+                status: "preparing",
+                transferedFiles: 0,
+            });
 
             const createdDirs = await this.desktop.service.drive.post.dirs(
                 params.destId,
@@ -732,7 +744,11 @@ export class UploadLib {
             } else if (processedFiles && processedFiles.length === parentIdProcessedFiles.length) {
                 finalFiles = processedFiles;
             } else {
-                finalFiles = await this.calculateHashes(parentIdProcessedFiles);
+                finalFiles = await this.calculateHashes(parentIdProcessedFiles, (count) => {
+                    this.desktop.service.transfer.updateTransfer(pid, {
+                        transferedFiles: count,
+                    });
+                });
                 const transfer = this.desktop.service.transfer.getTransferByPID(pid);
                 if (transfer && transfer.restartParams) {
                     transfer.restartParams = {
@@ -755,6 +771,7 @@ export class UploadLib {
             let currentUploadedCount = alreadyUploadedCount;
 
             this.desktop.service.transfer.updateTransfer(pid, {
+                status: "progress",
                 transferedSize: currentUploadedBytes,
                 transferedFiles: currentUploadedCount,
             });

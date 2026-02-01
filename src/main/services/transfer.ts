@@ -276,12 +276,7 @@ export class TransferService {
             this.checkSettingAndChangePowerSaveBlock();
             this.emitUpdate();
         } else {
-            const throttledEmit = this.throttledEmits.get(pid);
-            if (throttledEmit) {
-                throttledEmit();
-            } else {
-                this.emitUpdate();
-            }
+            this.emitUpdate();
         }
     }
 
