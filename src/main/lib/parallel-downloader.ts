@@ -16,7 +16,6 @@ export interface ParallelDownloadOptions {
     onProgress?: (bytes: number) => void;
     chunkSize?: number;
     maxChunks?: number;
-    agent?: any;
 }
 
 export class ParallelDownloader {
@@ -88,7 +87,6 @@ export class ParallelDownloader {
         chunkPath: string;
         signal?: AbortSignal;
         onProgress?: (bytes: number) => void;
-        agent?: any;
     }): Promise<void> {
         let lastTransferredBytes = 0;
 
@@ -116,7 +114,7 @@ export class ParallelDownloader {
                 }
             },
             // @ts-expect-error
-            dispatcher: agent,
+            dispatcher: await getAgent(),
         });
 
         if (!response.ok && response.status !== 206) {
@@ -173,8 +171,7 @@ export class ParallelDownloader {
     }
 
     public async download(options: ParallelDownloadOptions): Promise<void> {
-        const { url, savePath, fileSize, token, headers, signal, onProgress, maxChunks, agent } =
-            options;
+        const { url, savePath, fileSize, token, headers, signal, onProgress, maxChunks } = options;
         const targetPath = `${savePath}.ntmp`;
 
         let chunkCount: number;
@@ -220,7 +217,6 @@ export class ParallelDownloader {
                         chunkPath,
                         signal,
                         onProgress,
-                        agent,
                     }),
                 {
                     retries: 2,
