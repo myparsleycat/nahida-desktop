@@ -671,7 +671,6 @@ export class UploadLib {
                             if (onProgress) {
                                 onProgress({
                                     bytes,
-                                    fileId: file.FID,
                                     isServerDeduplicated: false,
                                 });
                             }
@@ -793,6 +792,7 @@ export class UploadLib {
 
             let currentUploadedBytes = initialTransferedSize ?? alreadyUploadedBytes;
             let currentUploadedCount = alreadyUploadedCount;
+            let lastUpdate = 0;
 
             const updateUI = () => {
                 this.desktop.service.transfer.updateTransfer(pid, {
@@ -816,7 +816,11 @@ export class UploadLib {
                             currentUploadedCount++;
                         }
                         currentUploadedBytes += progress.bytes;
-                        updateUI();
+                        const now = Date.now();
+                        if (progress.fileId || now - lastUpdate >= 100) {
+                            updateUI();
+                            lastUpdate = now;
+                        }
                     },
                     signal: abortController.signal,
                     pid,
