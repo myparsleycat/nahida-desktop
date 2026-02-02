@@ -268,7 +268,6 @@ class FileDownloadTask {
                 signal,
                 maxChunks: 8,
                 onProgress,
-                agent: await getAgent(),
             });
             return true;
         } catch (err: any) {
