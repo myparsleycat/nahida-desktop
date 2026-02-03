@@ -22,7 +22,7 @@
         "build:win": "rimraf dist && pnpm run build && electron-builder --win",
         "build:mac": "rimraf dist && electron-vite build && electron-builder --mac",
         "build:linux": "rimraf dist && electron-vite build && electron-builder --linux",
-        "release": "pnpm run build && electron-builder --win"
+        "release": "pnpm run build:win"
     },
     "dependencies": {
         "@electron-toolkit/preload": "^3.0.2",
