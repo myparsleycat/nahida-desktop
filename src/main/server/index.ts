@@ -1,50 +1,57 @@
 import { Hono } from "hono";
+import { serve } from "@hono/node-server";
+import { createNodeWebSocket } from "@hono/node-ws";
 import { cors } from "hono/cors";
 import { zValidator } from "@hono/zod-validator";
 import { decode } from "cbor-x";
 import { desktop } from "..";
 import { z } from "zod";
+import { isArrayBuffer } from "node:util/types";
+import { appVersion } from "@main/const";
 
-const downloadFromLiveModFormSchema = z.object({
+const uploadTypes = z.enum(["live", "gb", "hui"]);
+
+const liveData = z.object({
+    type: uploadTypes,
     id: z.string(),
-    data: z.file(),
+    data: z.object({
+        root: z.object({
+            id: z.string(),
+            parentId: z.string().nullable(),
+            name: z.string(),
+        }),
+        files: z.array(
+            z.object({
+                id: z.string(),
+                fileId: z.string(),
+                parentId: z.string().nullable(),
+                name: z.string(),
+                size: z.number(),
+                compAlg: z.enum(["gzip", "zstd"]).nullable(),
+                url: z.string(),
+            }),
+        ),
+        dirs: z.array(
+            z.object({
+                id: z.string(),
+                parentId: z.string().nullable(),
+                name: z.string(),
+            }),
+        ),
+        totalBytes: z.number(),
+    }),
     suggestedName: z.string().optional(),
 });
 
-const downloadMetadataSchema = z.object({
-    root: z.object({
-        id: z.string(),
-        parentId: z.string().nullable(),
-        name: z.string(),
-    }),
-    files: z.array(
-        z.object({
-            id: z.string(),
-            fileId: z.string(),
-            parentId: z.string().nullable(),
-            name: z.string(),
-            size: z.number(),
-            compAlg: z.enum(["gzip", "zstd"]).nullable(),
-            url: z.string(),
-        }),
-    ),
-    dirs: z.array(
-        z.object({
-            id: z.string(),
-            parentId: z.string().nullable(),
-            name: z.string(),
-        }),
-    ),
-    totalBytes: z.number(),
-});
-
-const downloadFromGBFormSchema = z.object({
+const gbData = z.object({
+    type: uploadTypes,
     title: z.string(),
     fileUrl: z.string(),
     previewUrl: z.string().optional().nullable(),
 });
 
-const downloadFromHuiFormSchema = z.object({
+const huiData = z.object({
+    type: uploadTypes,
     title: z.string(),
     fileUrl: z.string(),
 });
@@ -55,29 +62,59 @@ export const app = new Hono()
         desktop.logger.error(err, "HonoServer");
         return ctx.text("Custom Error Message", 500);
     })
-    .post(
-        "/download-from-live-mod",
-        zValidator("form", downloadFromLiveModFormSchema),
-        async (ctx) => {
-            const { id, data, suggestedName } = ctx.req.valid("form");
-
-            const arrbuf = await data.arrayBuffer();
-            const decoded = decode(new Uint8Array(arrbuf));
-
-            const metadata = downloadMetadataSchema.parse(decoded);
-            await desktop.service.drive.fn.startDownload({ id, data: metadata, suggestedName });
-
-            return ctx.newResponse(null, 204);
-        },
-    )
-    .post("/download-from-gb", zValidator("json", downloadFromGBFormSchema), async (ctx) => {
-        const { title, fileUrl, previewUrl } = ctx.req.valid("json");
-        desktop.lib.customDownloader.GBDownloader({ title, fileUrl, previewUrl });
-        return ctx.newResponse(null, 204);
-    })
-    .post("/download-from-hui", zValidator("json", downloadFromHuiFormSchema), async (ctx) => {
-        const { title, fileUrl } = ctx.req.valid("json");
-        desktop.lib.customDownloader.HuiDownloader({ title, fileUrl });
-        return ctx.newResponse(null, 204);
+    .get("/version", async (ctx) => {
+        return ctx.text(appVersion);
     })
     .get("/ping", (ctx) => ctx.text("pong"));
+
+const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
+
+app.get(
+    "/ws",
+    upgradeWebSocket(async (c) => {
+        return {
+            onMessage: async (event, ws) => {
+                if (!event.data) {
+                    ws.send("invalid data");
+                    return;
+                } else if (!isArrayBuffer(event.data)) {
+                    ws.send("invalid data");
+                    return;
+                }
+
+                const decoded = decode(new Uint8Array(event.data));
+
+                if (decoded.type === "live") {
+                    const { id, data, suggestedName } = liveData.parse(decoded);
+                    await desktop.service.drive.fn.startDownload({
+                        id,
+                        data,
+                        suggestedName,
+                    });
+                } else if (decoded.type === "gb") {
+                    const { title, fileUrl, previewUrl } = gbData.parse(decoded);
+                    await desktop.lib.customDownloader.GBDownloader({
+                        title,
+                        fileUrl,
+                        previewUrl,
+                    });
+                } else if (decoded.type === "hui") {
+                    const { title, fileUrl } = huiData.parse(decoded);
+                    await desktop.lib.customDownloader.HuiDownloader({ title, fileUrl });
+                }
+
+                ws.send("download started");
+            },
+            onClose: () => {},
+        };
+    }),
+);
+
+export async function startServer() {
+    const server = serve({
+        fetch: app.fetch,
+        port: 1027,
+    });
+
+    injectWebSocket(server);
+}
