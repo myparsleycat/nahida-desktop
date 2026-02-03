@@ -2,6 +2,7 @@ import { parentPort, workerData } from "worker_threads";
 import { decode } from "cbor-x";
 import ky from "ky";
 import { decompress } from "fzstd";
+import { getHeaders } from "@main/internal/fetcher";
 
 const port = parentPort;
 if (!port) throw new Error("IllegalState");
@@ -40,10 +41,12 @@ port.on("message", async () => {
     try {
         const resp = await ky.get(url, {
             headers: {
+                ...(await getHeaders(url)),
                 Accept: "text/event-stream",
-                ...(token && { Authorization: `Bearer ${token}` }),
             },
             credentials: "include",
+            // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
+            dispatcher: await getAgent(),
         });
 
         const reader = resp.body?.getReader();
@@ -79,8 +82,7 @@ port.on("message", async () => {
                     try {
                         switch (eventType) {
                             case "dirs": {
-                                const dirsChunk =
-                                    await processStreamedData(eventData);
+                                const dirsChunk = await processStreamedData(eventData);
                                 port.postMessage({
                                     type: "dirs",
                                     payload: dirsChunk,
@@ -88,8 +90,7 @@ port.on("message", async () => {
                                 break;
                             }
                             case "files": {
-                                const filesChunk =
-                                    await processStreamedData(eventData);
+                                const filesChunk = await processStreamedData(eventData);
                                 port.postMessage({
                                     type: "files",
                                     payload: filesChunk,
@@ -113,9 +114,7 @@ port.on("message", async () => {
                                 const data = JSON.parse(eventData);
                                 port.postMessage({
                                     type: "error",
-                                    payload:
-                                        data.message ||
-                                        "An unknown server error occurred",
+                                    payload: data.message || "An unknown server error occurred",
                                 });
                                 await reader.cancel();
                                 return;

@@ -56,8 +56,18 @@ export async function getAgent() {
     return cachedAgent;
 }
 
-export async function fetcher(url: string, options?: RequestInit) {
+export async function getHeaders(url: string) {
     const token = await desktop.service.auth.getToken();
+    const prefixs = ["http://localhost", "https://api.nahida.live"];
+    const isNHD = prefixs.some((prefix) => url.startsWith(prefix));
+    return {
+        ...(token && isNHD && { Authorization: `Bearer ${token}` }),
+        Origin: "https://nahida.live",
+        "User-Agent": `Nahida Desktop/${appVersion}`,
+    };
+}
+
+export async function fetcher(url: string, options?: RequestInit) {
     const prefixs = ["http://localhost", "https://api.nahida.live"];
     const isNHD = prefixs.some((prefix) => url.startsWith(prefix));
 
@@ -65,8 +75,7 @@ export async function fetcher(url: string, options?: RequestInit) {
         ...options,
         headers: {
             ...options?.headers,
-            ...(token && isNHD && { Authorization: `Bearer ${token}` }),
-            "User-Agent": `Nahida Desktop/${appVersion}`,
+            ...(await getHeaders(url)),
         },
         // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
         dispatcher: await getAgent(),

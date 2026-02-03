@@ -13,7 +13,7 @@ import PQueue from "p-queue";
 import ky from "ky";
 import { appVersion } from "@main/const";
 import { ParallelDownloader } from "./parallel-downloader";
-import { getAgent } from "@main/internal/fetcher";
+import { getAgent, getHeaders } from "@main/internal/fetcher";
 
 export type DownloadParams = {
     type: "download";
@@ -253,10 +253,7 @@ class FileDownloadTask {
             return false;
         }
 
-        const token = await this.desktop.service.auth.getToken();
-        if (!token) return false;
-
-        const supportsRange = await this.parallelDownloader.checkRangeSupport(file.url, token);
+        const supportsRange = await this.parallelDownloader.checkRangeSupport(file.url);
         if (!supportsRange) return false;
 
         try {
@@ -264,7 +261,6 @@ class FileDownloadTask {
                 url: file.url,
                 savePath: filePath,
                 fileSize: file.size,
-                token,
                 signal,
                 maxChunks: 8,
                 onProgress,
@@ -291,8 +287,7 @@ class FileDownloadTask {
         await retry(
             async () => {
                 if (signal.aborted) return;
-                const token = await this.desktop.service.auth.getToken();
-                await this.performDownload(file, targetPath, token, signal, onProgress);
+                await this.performDownload(file, targetPath, signal, onProgress);
 
                 if (!isSmallFile && !signal.aborted) {
                     await this.desktop.lib.fs.rename(targetPath, filePath);
@@ -313,16 +308,12 @@ class FileDownloadTask {
     private async performDownload(
         file: DownloadMetadata["files"][0],
         targetPath: string,
-        token: string | null,
         signal: AbortSignal,
         onProgress?: (bytes: number) => void,
     ): Promise<void> {
         let lastTransferredBytes = 0;
         const response = await ky(file.url, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-                "User-Agent": `Nahida Desktop/${appVersion}`,
-            },
+            headers: await getHeaders(file.url),
             signal,
             throwHttpErrors: false,
             timeout: 100000,
@@ -449,8 +440,6 @@ class FileDownloadTask {
         let currentBytes = 0;
 
         try {
-            const token = await this.desktop.service.auth.getToken();
-
             if (currentConcurrency && currentConcurrency() < 6) {
                 speedCheckTimeout = this.startSpeedMonitor(
                     file.name,
@@ -463,7 +452,7 @@ class FileDownloadTask {
                 );
             }
 
-            await this.performDownload(file, targetPath, token, combinedSignal, (bytes) => {
+            await this.performDownload(file, targetPath, combinedSignal, (bytes) => {
                 currentBytes += bytes;
                 onProgress?.(bytes);
             });

@@ -13,6 +13,7 @@ import { fileTypeFromBuffer } from "file-type/node";
 import PQueue from "p-queue";
 import ky from "ky";
 import { appVersion } from "@main/const";
+import { getHeaders } from "@main/internal/fetcher";
 
 const CHUNK_SIZE = 100;
 
@@ -319,10 +320,7 @@ export class UploadLib {
 
         const response = await ky.post(uploadUrl, {
             body: formData,
-            headers: {
-                Authorization: `Bearer ${token}`,
-                "User-Agent": `Nahida Desktop/${appVersion}`,
-            },
+            headers: await getHeaders(uploadUrl),
             signal,
             throwHttpErrors: false,
             timeout: 100000,
@@ -335,6 +333,8 @@ export class UploadLib {
                     }
                 }
             },
+            // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
+            dispatcher: await getAgent(),
         });
 
         return response;
