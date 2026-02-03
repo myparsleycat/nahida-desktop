@@ -30,15 +30,25 @@ const TransferItemActions = memo(
     onResume,
     onCancel,
     onRetry,
+    failedFiles,
   }: Pick<
     TransferItemProps,
-    "id" | "status" | "type" | "path" | "onPause" | "onResume" | "onCancel" | "onRetry"
+    | "id"
+    | "status"
+    | "type"
+    | "path"
+    | "onPause"
+    | "onResume"
+    | "onCancel"
+    | "onRetry"
+    | "failedFiles"
   >) => {
     const isActive = status === "uploading" || status === "downloading";
     const isPaused = status === "paused";
     const isQueued = status === "queued";
     const isFailed = status === "failed";
     const isCompleted = status === "completed";
+    const hasFailedFiles = (failedFiles || 0) > 0;
 
     return (
       <div className="flex shrink-0 items-center gap-1">
@@ -92,6 +102,9 @@ const TransferItemActions = memo(
               <DropdownMenuItem onClick={() => onCancel?.(id)}>취소</DropdownMenuItem>
             )}
             {isFailed && <DropdownMenuItem onClick={() => onRetry?.(id)}>재시작</DropdownMenuItem>}
+            {!isFailed && hasFailedFiles && (
+              <DropdownMenuItem onClick={() => onRetry?.(id)}>실패한 파일 재시도</DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={() => onCancel?.(id)}>전송에서 제거</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -128,6 +141,7 @@ export const TransferItem = memo((props: TransferItemProps) => {
     onRetry,
     totalFiles,
     processedFiles,
+    failedFiles,
   } = props;
 
   const [isHovered, setIsHovered] = useState(false);
@@ -184,8 +198,14 @@ export const TransferItem = memo((props: TransferItemProps) => {
                 </span>
               )}
               {isCompleted && <span className="text-success shrink-0 whitespace-nowrap">완료</span>}
-              {isFailed && (
-                <span className="text-destructive shrink-0 whitespace-nowrap">실패</span>
+              {failedFiles && failedFiles > 0 ? (
+                <span className="text-destructive shrink-0 whitespace-nowrap">
+                  {failedFiles}개 실패
+                </span>
+              ) : (
+                isFailed && (
+                  <span className="text-destructive shrink-0 whitespace-nowrap">실패</span>
+                )
               )}
             </div>
             <span className="shrink-0 whitespace-nowrap">{progress.toFixed(2)}%</span>
@@ -202,6 +222,7 @@ export const TransferItem = memo((props: TransferItemProps) => {
         onResume={onResume}
         onCancel={onCancel}
         onRetry={onRetry}
+        failedFiles={failedFiles}
       />
     </div>
   );

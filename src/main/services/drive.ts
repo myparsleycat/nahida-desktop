@@ -521,8 +521,8 @@ export class DriveService {
                 params,
                 data: currentTransfer.data,
                 abort: newAbort,
-                initialTransferedSize: currentTransfer.transferedSize,
-                initialTransferedFiles: currentTransfer.transferedFiles,
+                initialTransferedSize: 0,
+                initialTransferedFiles: 0,
             });
         }
     }

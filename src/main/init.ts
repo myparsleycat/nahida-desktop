@@ -1,12 +1,9 @@
 import { InitDB, db } from "@main/internal/db";
 import { app, protocol } from "electron";
-
-import { app as server } from "./server";
-import { serve } from "@hono/node-server";
 import { setting } from "./internal/db/schema";
-
 import { NahidaProtocolHandler } from "./internal/protocol";
 import { NahidaDesktop } from "./index";
+import { startServer } from "./server";
 
 export async function startInit(desktop: NahidaDesktop) {
     if (desktop.initialized) return;
@@ -30,11 +27,7 @@ export async function startInit(desktop: NahidaDesktop) {
 
     // make server
     try {
-        serve({
-            fetch: server.fetch,
-            port: 1027,
-        });
-        desktop.logger.info("server started on port 1027", "Server");
+        await startServer();
     } catch (error) {
         desktop.logger.error(`Failed to start server on port 1027: ${error}`, "Server");
         throw error;
