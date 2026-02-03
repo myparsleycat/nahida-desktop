@@ -11,7 +11,7 @@ declare global {
             invoke<T extends keyof IpcHandlers>(
                 channel: T,
                 ...args: Parameters<IpcHandlers[T]>
-            ): Promise<ReturnType<IpcHandlers[T]>>;
+            ): Promise<Awaited<ReturnType<IpcHandlers[T]>>>;
             send<T extends keyof IpcHandlers>(
                 channel: T,
                 ...args: Parameters<IpcHandlers[T]>

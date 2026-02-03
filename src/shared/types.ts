@@ -80,126 +80,86 @@ export interface PathMetadata {
 }
 
 export type IpcHandlers = {
-    ping: () => string;
-
-    "setting:general:getRunOnStartup": () => boolean;
-    "setting:general:setRunOnStartup": (enabled: boolean) => void;
-    "setting:general:getMoveTransferPageWhenStartTransfer": () => boolean;
-    "setting:general:setMoveTransferPageWhenStartTransfer": (enabled: boolean) => void;
-    "setting:general:getPowerSaveBlockInTransfer": () => boolean;
-    "setting:general:setPowerSaveBlockInTransfer": (enabled: boolean) => void;
-    "setting:general:getDefaultStartPage": () => string | null;
-    "setting:general:setDefaultStartPage": (page: string | null) => void;
-    "setting:general:checkUpdate": () => void;
-    "setting:general:getCheckBackgroundUpdates": () => boolean;
-    "setting:general:setCheckBackgroundUpdates": (enabled: boolean) => void;
-
-    "setting:net:getProxy": () => Promise<ProxySettings>;
-    "setting:net:setProxy": (settings: ProxySettings) => Promise<void>;
-    "setting:mod:getDeleteArchiveAfterExtract": () => boolean;
-    "setting:mod:setDeleteArchiveAfterExtract": (enabled: boolean) => void;
-    "setting:mod:getMoveFolderInsteadOfCopy": () => boolean;
-    "setting:mod:setMoveFolderInsteadOfCopy": (enabled: boolean) => void;
-    "setting:mod:getVirtualizationEnabled": () => Promise<boolean>;
-    "setting:mod:setVirtualizationEnabled": (enabled: boolean) => Promise<void>;
-    "setting:mod:getVirtualizationThreshold": () => Promise<number>;
-    "setting:mod:setVirtualizationThreshold": (threshold: number) => Promise<void>;
-
-    "window:closeWindow": (window: string) => void;
-    "window:openReport": () => void;
-    "window:openSetting": () => void;
-
-    "auth:isLoggedIn": () => boolean;
-    "auth:startLogin": () => void;
-    "auth:startLogout": () => void;
-    "auth:getSession": () => Session | null;
-
-    "util:getAppStatus": () => AppStatus;
-    "util:showModal": (opt: MessageBoxOptions) => ShowModalReturnValue;
-    "util:openExternal": (url: string, opt?: OpenExternalOptions) => void;
-    "util:copyStr": (str: string) => void;
-    "util:get:language": () => "en" | "ko" | "zh";
-    "util:openPath": (path: string) => void;
-    "util:fs:trash": (path: string) => void;
-    "util:openCmd": (path: string) => void;
-    "util:getClipboardFiles": () => string[];
-    "util:fs:metadata": (path: string) => Promise<PathMetadata>;
-    "util:showOpenDialog": (options: OpenDialogOptions) => Promise<OpenDialogReturnValue>;
-
-    "drive:get:item": (itemId: string) => ModIdGetResp;
-    "drive:patch:rename": (
-        itemId: string,
-        name: string,
-    ) => ReturnType<typeof desktop.service.drive.patch.rename>;
-    "drive:post:dir": (
-        parentId: string,
-        name: string,
-    ) => ReturnType<typeof desktop.service.drive.post.dir>;
-    "drive:delete:items": (ids: string[]) => void;
-    "drive:fn:startDownload": ({
-        id,
-        suggestedName,
-    }: {
-        id: string;
-        suggestedName?: string;
-    }) => void;
-    "drive:fn:startUpload": (destId: string, paths: string[]) => void;
-
-    "transfer:list": () => TransferWithoutData[];
-    "transfer:cancel": (pid: string) => void;
-    "transfer:pause": (pid: string) => void;
-    "transfer:resume": (pid: string) => void;
-    "transfer:retry": (pid: string) => void;
-    "transfer:pause-all": () => void;
-    "transfer:resume-all": () => void;
-    "transfer:clear": () => void;
-
-    "mod:selectFolder": (game: string) => string | null;
-    "mod:getGamePath": (game: string) => string | null;
-    "mod:getGames": () => GameConfig[];
-    "mod:addGame": (game: string, path: string) => void;
-    "mod:removeGame": (game: string) => void;
-    "mod:pickFolder": () => string | null;
-
-    "mod:getCharacters": (game: string) => FolderGroup[];
-    "mod:getMods": (groupPath: string) => FolderGroup;
-    "mod:toggle": (modPath: string) => string;
-    "mod:exclusiveToggle": (modPath: string) => string;
-    "mod:updateToggleKey": (
-        modPath: string,
-        iniFileName: string,
-        sectionName: string,
-        variable: string,
-        value: string,
-    ) => void;
-    "mod:getPresets": (game: string) => Preset[];
-    "mod:createPreset": (game: string, name: string) => Preset;
-    "mod:applyPreset": (presetId: string) => void;
-    "mod:deletePreset": (presetId: string) => void;
-    "mod:updatePresetName": (presetId: string, newName: string) => void;
-    "mod:getLastGame": () => string | null;
-    "mod:setLastGame": (game: string) => void;
-    "mod:extractArchive": (archivePath: string, groupPath: string) => void;
-    "mod:copyFolder": (folderPath: string, groupPath: string) => void;
-    "mod:enableAll": (groupPath: string) => void;
-    "mod:disableAll": (groupPath: string) => void;
-    "mod:pastePreview": (modPath: string, data: string, type: "url" | "base64" | "path") => void;
-    "mod:watchGame": (game: string) => void;
-    "mod:watchCharacter": (characterPath: string) => void;
-
-    "pathSelector:selectFolderPath": (selectionId: string) => void;
-    "pathSelector:selectModManagerPath": (
-        selectionId: string,
-        path: string,
-        fileName?: string,
-    ) => void;
-    "pathSelector:cancel": (selectionId: string) => void;
-
-    "logger:log": (
-        level: "info" | "debug" | "warn" | "error" | "trace" | "fatal",
-        object: unknown,
-        where?: string,
-    ) => void;
+    // IPC_HANDLERS_START
+    "auth:getSession": (...args: Parameters<typeof desktop.service.auth.getSession>) => ReturnType<typeof desktop.service.auth.getSession>;
+    "auth:isLoggedIn": (...args: Parameters<typeof desktop.service.auth.isLoggedIn>) => ReturnType<typeof desktop.service.auth.isLoggedIn>;
+    "auth:startLogin": (...args: Parameters<typeof desktop.service.auth.startLogin>) => ReturnType<typeof desktop.service.auth.startLogin>;
+    "auth:startLogout": (...args: Parameters<typeof desktop.service.auth.startLogout>) => ReturnType<typeof desktop.service.auth.startLogout>;
+    "drive:delete:items": (...args: Parameters<typeof desktop.service.drive.delete.items>) => ReturnType<typeof desktop.service.drive.delete.items>;
+    "drive:fn:startDownload": (...args: Parameters<typeof desktop.service.drive.fn.startDownload>) => ReturnType<typeof desktop.service.drive.fn.startDownload>;
+    "drive:fn:startUpload": (...args: Parameters<typeof desktop.service.drive.fn.startUpload>) => ReturnType<typeof desktop.service.drive.fn.startUpload>;
+    "drive:get:item": (...args: Parameters<typeof desktop.service.drive.get.item>) => ReturnType<typeof desktop.service.drive.get.item>;
+    "drive:patch:rename": (...args: Parameters<typeof desktop.service.drive.patch.rename>) => ReturnType<typeof desktop.service.drive.patch.rename>;
+    "drive:post:dir": (...args: Parameters<typeof desktop.service.drive.post.dir>) => ReturnType<typeof desktop.service.drive.post.dir>;
+    "mod:addGame": (...args: Parameters<typeof desktop.service.mod.fn.addGame>) => ReturnType<typeof desktop.service.mod.fn.addGame>;
+    "mod:applyPreset": (...args: Parameters<typeof desktop.service.mod.fn.applyPreset>) => ReturnType<typeof desktop.service.mod.fn.applyPreset>;
+    "mod:copyFolder": (...args: any[]) => any;
+    "mod:createPreset": (...args: Parameters<typeof desktop.service.mod.fn.createPreset>) => ReturnType<typeof desktop.service.mod.fn.createPreset>;
+    "mod:deletePreset": (...args: Parameters<typeof desktop.service.mod.fn.deletePreset>) => ReturnType<typeof desktop.service.mod.fn.deletePreset>;
+    "mod:disableAll": (...args: Parameters<typeof desktop.service.mod.fn.disableAll>) => ReturnType<typeof desktop.service.mod.fn.disableAll>;
+    "mod:enableAll": (...args: Parameters<typeof desktop.service.mod.fn.enableAll>) => ReturnType<typeof desktop.service.mod.fn.enableAll>;
+    "mod:exclusiveToggle": (...args: Parameters<typeof desktop.service.mod.fn.exclusiveToggle>) => ReturnType<typeof desktop.service.mod.fn.exclusiveToggle>;
+    "mod:extractArchive": (...args: Parameters<typeof desktop.service.mod.fn.extractArchiveToGroup>) => ReturnType<typeof desktop.service.mod.fn.extractArchiveToGroup>;
+    "mod:getCharacters": (...args: Parameters<typeof desktop.service.mod.get.characters>) => ReturnType<typeof desktop.service.mod.get.characters>;
+    "mod:getGamePath": (...args: Parameters<typeof desktop.service.mod.get.gamePath>) => ReturnType<typeof desktop.service.mod.get.gamePath>;
+    "mod:getGames": (...args: Parameters<typeof desktop.service.mod.get.games>) => ReturnType<typeof desktop.service.mod.get.games>;
+    "mod:getLastGame": (...args: Parameters<typeof desktop.service.mod.get.lastGame>) => ReturnType<typeof desktop.service.mod.get.lastGame>;
+    "mod:getMods": (...args: Parameters<typeof desktop.service.mod.get.mods>) => ReturnType<typeof desktop.service.mod.get.mods>;
+    "mod:getPresets": (...args: Parameters<typeof desktop.service.mod.get.presets>) => ReturnType<typeof desktop.service.mod.get.presets>;
+    "mod:pastePreview": (...args: Parameters<typeof desktop.service.mod.fn.pastePreview>) => ReturnType<typeof desktop.service.mod.fn.pastePreview>;
+    "mod:pickFolder": (...args: any[]) => any;
+    "mod:removeGame": (...args: Parameters<typeof desktop.service.mod.fn.removeGame>) => ReturnType<typeof desktop.service.mod.fn.removeGame>;
+    "mod:selectFolder": (...args: any[]) => any;
+    "mod:setLastGame": (...args: Parameters<typeof desktop.service.mod.fn.setLastGame>) => ReturnType<typeof desktop.service.mod.fn.setLastGame>;
+    "mod:toggle": (...args: Parameters<typeof desktop.service.mod.fn.toggle>) => ReturnType<typeof desktop.service.mod.fn.toggle>;
+    "mod:updatePresetName": (...args: Parameters<typeof desktop.service.mod.fn.updatePresetName>) => ReturnType<typeof desktop.service.mod.fn.updatePresetName>;
+    "mod:updateToggleKey": (...args: any[]) => any;
+    "mod:watchCharacter": (...args: Parameters<typeof desktop.service.mod.watchCharacter>) => ReturnType<typeof desktop.service.mod.watchCharacter>;
+    "mod:watchGame": (...args: Parameters<typeof desktop.service.mod.watchGame>) => ReturnType<typeof desktop.service.mod.watchGame>;
+    "pathSelector:cancel": (...args: Parameters<typeof desktop.lib.pathSelector.cancelSelection>) => ReturnType<typeof desktop.lib.pathSelector.cancelSelection>;
+    "pathSelector:selectFolderPath": (...args: Parameters<typeof desktop.lib.pathSelector.selectFolderPath>) => ReturnType<typeof desktop.lib.pathSelector.selectFolderPath>;
+    "pathSelector:selectModManagerPath": (...args: Parameters<typeof desktop.lib.pathSelector.selectModManagerPath>) => ReturnType<typeof desktop.lib.pathSelector.selectModManagerPath>;
+    "setting:general:checkUpdate": (...args: Parameters<typeof desktop.setting.general.checkUpdate>) => ReturnType<typeof desktop.setting.general.checkUpdate>;
+    "setting:general:getCheckBackgroundUpdates": (...args: Parameters<typeof desktop.setting.general.getCheckBackgroundUpdates>) => ReturnType<typeof desktop.setting.general.getCheckBackgroundUpdates>;
+    "setting:general:getDefaultStartPage": (...args: Parameters<typeof desktop.setting.general.getDefaultStartPage>) => ReturnType<typeof desktop.setting.general.getDefaultStartPage>;
+    "setting:general:getMoveTransferPageWhenStartTransfer": (...args: Parameters<typeof desktop.setting.general.getMoveTransferPageWhenStartTransfer>) => ReturnType<typeof desktop.setting.general.getMoveTransferPageWhenStartTransfer>;
+    "setting:general:getPowerSaveBlockInTransfer": (...args: Parameters<typeof desktop.setting.general.getPowerSaveBlockInTransfer>) => ReturnType<typeof desktop.setting.general.getPowerSaveBlockInTransfer>;
+    "setting:general:getRunOnStartup": (...args: Parameters<typeof desktop.setting.general.getRunOnStartup>) => ReturnType<typeof desktop.setting.general.getRunOnStartup>;
+    "setting:general:setCheckBackgroundUpdates": (...args: Parameters<typeof desktop.setting.general.setCheckBackgroundUpdates>) => ReturnType<typeof desktop.setting.general.setCheckBackgroundUpdates>;
+    "setting:general:setDefaultStartPage": (...args: Parameters<typeof desktop.setting.general.setDefaultStartPage>) => ReturnType<typeof desktop.setting.general.setDefaultStartPage>;
+    "setting:general:setMoveTransferPageWhenStartTransfer": (...args: Parameters<typeof desktop.setting.general.setMoveTransferPageWhenStartTransfer>) => ReturnType<typeof desktop.setting.general.setMoveTransferPageWhenStartTransfer>;
+    "setting:general:setPowerSaveBlockInTransfer": (...args: Parameters<typeof desktop.setting.general.setPowerSaveBlockInTransfer>) => ReturnType<typeof desktop.setting.general.setPowerSaveBlockInTransfer>;
+    "setting:general:setRunOnStartup": (...args: Parameters<typeof desktop.setting.general.setRunOnStartup>) => ReturnType<typeof desktop.setting.general.setRunOnStartup>;
+    "setting:mod:getDeleteArchiveAfterExtract": (...args: Parameters<typeof desktop.setting.mod.getDeleteArchiveAfterExtract>) => ReturnType<typeof desktop.setting.mod.getDeleteArchiveAfterExtract>;
+    "setting:mod:getMoveFolderInsteadOfCopy": (...args: Parameters<typeof desktop.setting.mod.getMoveFolderInsteadOfCopy>) => ReturnType<typeof desktop.setting.mod.getMoveFolderInsteadOfCopy>;
+    "setting:mod:getVirtualizationEnabled": (...args: Parameters<typeof desktop.setting.mod.getVirtualizationEnabled>) => ReturnType<typeof desktop.setting.mod.getVirtualizationEnabled>;
+    "setting:mod:getVirtualizationThreshold": (...args: Parameters<typeof desktop.setting.mod.getVirtualizationThreshold>) => ReturnType<typeof desktop.setting.mod.getVirtualizationThreshold>;
+    "setting:mod:setDeleteArchiveAfterExtract": (...args: any[]) => any;
+    "setting:mod:setMoveFolderInsteadOfCopy": (...args: any[]) => any;
+    "setting:mod:setVirtualizationEnabled": (...args: any[]) => any;
+    "setting:mod:setVirtualizationThreshold": (...args: any[]) => any;
+    "setting:net:getProxy": (...args: Parameters<typeof desktop.setting.net.getProxy>) => ReturnType<typeof desktop.setting.net.getProxy>;
+    "setting:net:setProxy": (...args: Parameters<typeof desktop.setting.net.setProxy>) => ReturnType<typeof desktop.setting.net.setProxy>;
+    "transfer:cancel": (...args: Parameters<typeof desktop.service.transfer.cancelTransfer>) => ReturnType<typeof desktop.service.transfer.cancelTransfer>;
+    "transfer:clear": (...args: any[]) => any;
+    "transfer:list": (...args: Parameters<typeof desktop.service.transfer.getAllTransfer>) => ReturnType<typeof desktop.service.transfer.getAllTransfer>;
+    "transfer:pause": (...args: any[]) => any;
+    "transfer:pause-all": (...args: any[]) => any;
+    "transfer:resume": (...args: any[]) => any;
+    "transfer:resume-all": (...args: any[]) => any;
+    "transfer:retry": (...args: any[]) => any;
+    "util:copyStr": (...args: Parameters<typeof import("@main/services/util").copyStr>) => ReturnType<typeof import("@main/services/util").copyStr>;
+    "util:fs:metadata": (...args: Parameters<typeof import("@main/services/util").getPathMetadata>) => ReturnType<typeof import("@main/services/util").getPathMetadata>;
+    "util:fs:trash": (...args: Parameters<typeof import("@main/services/util").trash>) => ReturnType<typeof import("@main/services/util").trash>;
+    "util:getAppStatus": (...args: Parameters<typeof import("@main/services/util").getAppStatus>) => ReturnType<typeof import("@main/services/util").getAppStatus>;
+    "util:getClipboardFiles": (...args: Parameters<typeof import("@main/services/util").getClipboardFiles>) => ReturnType<typeof import("@main/services/util").getClipboardFiles>;
+    "util:openCmd": (...args: Parameters<typeof import("@main/services/util").openCmd>) => ReturnType<typeof import("@main/services/util").openCmd>;
+    "util:openExternal": (...args: Parameters<typeof import("@main/services/util").openExternal>) => ReturnType<typeof import("@main/services/util").openExternal>;
+    "util:openPath": (...args: Parameters<typeof import("@main/services/util").openPath>) => ReturnType<typeof import("@main/services/util").openPath>;
+    "util:showModal": (...args: Parameters<typeof import("@main/services/util").showModal>) => ReturnType<typeof import("@main/services/util").showModal>;
+    "util:showOpenDialog": (...args: Parameters<typeof import("@main/services/util").showOpenDialog>) => ReturnType<typeof import("@main/services/util").showOpenDialog>;
+    "window:openSetting": (...args: any[]) => any;
+    // IPC_HANDLERS_END
 };
 
 export interface GameConfig {
