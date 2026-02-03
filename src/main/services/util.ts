@@ -10,7 +10,7 @@ import {
     clipboard,
     OpenDialogOptions,
 } from "electron";
-import { app } from "electron/main";
+import { app } from "electron";
 import fse from "fs-extra";
 import { desktop } from "..";
 
