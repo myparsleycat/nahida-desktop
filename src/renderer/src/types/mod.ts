@@ -1,8 +1,8 @@
 export interface ToggleKey {
     sectionName: string;
     iniFileName: string;
-    key?: string;
-    back?: string;
+    key?: string[];
+    back?: string[];
     type?: string;
     variable: string;
     values: string[];

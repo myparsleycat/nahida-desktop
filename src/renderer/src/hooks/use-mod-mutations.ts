@@ -110,7 +110,7 @@ export function useModMutations() {
             iniFileName: string;
             sectionName: string;
             variable: string;
-            value: string;
+            values: string[];
         }) => {
             await window.api.invoke(
                 "mod:updateToggleKey",
@@ -118,7 +118,7 @@ export function useModMutations() {
                 params.iniFileName,
                 params.sectionName,
                 params.variable,
-                params.value,
+                params.values,
             );
             const currentGroupPath = selectedGroup?.path;
             if (currentGroupPath) {

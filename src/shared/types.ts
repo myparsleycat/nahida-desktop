@@ -33,8 +33,8 @@ interface ToastData {
 export interface ToggleKey {
     sectionName: string;
     iniFileName: string;
-    key?: string;
-    back?: string;
+    key?: string[];
+    back?: string[];
     type?: string;
     variable: string;
     values: string[];
@@ -170,7 +170,7 @@ export type IpcHandlers = {
         iniFileName: string,
         sectionName: string,
         variable: string,
-        value: string,
+        values: string[],
     ) => void;
     "mod:getPresets": (game: string) => Preset[];
     "mod:createPreset": (game: string, name: string) => Preset;

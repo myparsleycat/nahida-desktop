@@ -77,14 +77,14 @@ export function registerModHandlers(desktop: NahidaDesktop) {
             iniFileName: string,
             sectionName: string,
             variable: string,
-            value: string,
+            values: string[],
         ) => {
             const iniPath = require("path").join(modPath, iniFileName);
             return await desktop.service.mod.fn.updateToggleKey(
                 iniPath,
                 sectionName,
                 variable,
-                value,
+                values,
             );
         },
     );

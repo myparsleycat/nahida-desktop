@@ -102,18 +102,14 @@ export function ModGrid({ isDragging }: ModGridProps) {
       iniFileName: string,
       sectionName: string,
       variable: string,
-      value: string,
+      values: string[],
     ) => {
-      if (!value.trim()) {
-        toast.error("값을 입력해주세요.");
-        return;
-      }
       updateToggleKeyMutation.mutate({
         modPath,
         iniFileName,
         sectionName,
         variable,
-        value,
+        values,
       });
     },
     [updateToggleKeyMutation.mutate],

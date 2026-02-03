@@ -28,8 +28,8 @@ const MOD_FILE_GLOB = `**/*.{${MOD_FILE_EXTENSIONS.map((e) => e.slice(1)).join("
 interface ToggleKey {
     sectionName: string;
     iniFileName: string;
-    key?: string;
-    back?: string;
+    key?: string[];
+    back?: string[];
     type?: string;
     variable: string;
     values: string[];
@@ -162,7 +162,17 @@ export class ModManager {
                 if (currentSection && line.includes("=")) {
                     const [key, ...valueParts] = line.split("=");
                     const value = valueParts.join("=").trim();
-                    sectionData[key.trim()] = value;
+                    const trimmedKey = key.trim();
+
+                    if (sectionData[trimmedKey]) {
+                        if (Array.isArray(sectionData[trimmedKey])) {
+                            sectionData[trimmedKey].push(value);
+                        } else {
+                            sectionData[trimmedKey] = [sectionData[trimmedKey], value];
+                        }
+                    } else {
+                        sectionData[trimmedKey] = value;
+                    }
                 }
             }
 
@@ -194,9 +204,16 @@ export class ModManager {
 
         if (values.length < 2) return null;
 
-        const getCaseInsensitive = (obj: any, target: string) => {
+        const getCaseInsensitive = (obj: any, target: string): string[] | undefined => {
             const key = Object.keys(obj).find((k) => k.toLowerCase() === target.toLowerCase());
-            return key ? obj[key] : undefined;
+            if (!key) return undefined;
+            const val = obj[key];
+            return Array.isArray(val) ? val : [val];
+        };
+
+        const getSingleValue = (obj: any, target: string): string | undefined => {
+            const val = getCaseInsensitive(obj, target);
+            return val ? val[0] : undefined;
         };
 
         return {
@@ -204,7 +221,7 @@ export class ModManager {
             iniFileName,
             key: getCaseInsensitive(data, "key"),
             back: getCaseInsensitive(data, "back"),
-            type: getCaseInsensitive(data, "type"),
+            type: getSingleValue(data, "type"),
             variable,
             values,
             currentValue: values[0],
@@ -635,7 +652,7 @@ export class ModManager {
             iniPath: string,
             sectionName: string,
             variable: string,
-            value: string,
+            values: string[],
         ): Promise<void> => {
             try {
                 const content = await fse.readFile(iniPath, "utf-8");
@@ -644,31 +661,49 @@ export class ModManager {
 
                 let currentSection: string | null = null;
                 let updated = false;
+                let insideTargetSection = false;
+                let insertedNewValues = false;
 
                 for (let line of lines) {
                     const trimmedLine = line.trim();
 
                     if (trimmedLine.startsWith("[") && trimmedLine.endsWith("]")) {
+                        if (insideTargetSection && !insertedNewValues && values.length > 0) {
+                            values.forEach((v) => newLines.push(`${variable} = ${v}`));
+                            insertedNewValues = true;
+                            updated = true;
+                        }
+
                         currentSection = trimmedLine.slice(1, -1);
+                        insideTargetSection =
+                            currentSection?.toLowerCase() === sectionName.toLowerCase();
                         newLines.push(line);
                         continue;
                     }
 
-                    const lowerLine = trimmedLine.toLowerCase();
-                    const lowerVar = variable.toLowerCase();
-                    const isVariableLine =
-                        lowerLine.startsWith(lowerVar + " =") ||
-                        lowerLine.startsWith(lowerVar + "=");
+                    if (insideTargetSection) {
+                        const lowerLine = trimmedLine.toLowerCase();
+                        const lowerVar = variable.toLowerCase();
+                        const isVariableLine =
+                            lowerLine.startsWith(lowerVar + " =") ||
+                            lowerLine.startsWith(lowerVar + "=");
 
-                    if (
-                        currentSection?.toLowerCase() === sectionName.toLowerCase() &&
-                        isVariableLine
-                    ) {
-                        newLines.push(`${variable} = ${value}`);
-                        updated = true;
-                    } else {
-                        newLines.push(line);
+                        if (isVariableLine) {
+                            if (!insertedNewValues) {
+                                values.forEach((v) => newLines.push(`${variable} = ${v}`));
+                                insertedNewValues = true;
+                                updated = true;
+                            }
+                            continue;
+                        }
                     }
+
+                    newLines.push(line);
+                }
+
+                if (insideTargetSection && !insertedNewValues && values.length > 0) {
+                    values.forEach((v) => newLines.push(`${variable} = ${v}`));
+                    updated = true;
                 }
 
                 if (updated) {
