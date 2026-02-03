@@ -4,7 +4,7 @@ import { retry } from "es-toolkit";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { appVersion } from "@main/const";
-import { getAgent } from "@main/internal/fetcher";
+import { getAgent, getHeaders } from "@main/internal/fetcher";
 
 export interface ParallelDownloadOptions {
     url: string;
@@ -28,17 +28,10 @@ export class ParallelDownloader {
         },
     ) {}
 
-    public async checkRangeSupport(url: string, token?: string): Promise<boolean> {
+    public async checkRangeSupport(url: string): Promise<boolean> {
         try {
-            const headers: Record<string, string> = {
-                "User-Agent": `Nahida Desktop/${appVersion}`,
-            };
-            if (token) {
-                headers["Authorization"] = `Bearer ${token}`;
-            }
-
             const response = await ky.head(url, {
-                headers,
+                headers: await getHeaders(url),
                 timeout: 10000,
                 throwHttpErrors: false,
                 // @ts-expect-error
@@ -71,7 +64,6 @@ export class ParallelDownloader {
 
     private async downloadChunk({
         url,
-        token,
         headers,
         start,
         end,
@@ -80,7 +72,6 @@ export class ParallelDownloader {
         onProgress,
     }: {
         url: string;
-        token?: string;
         headers?: Record<string, string>;
         start: number;
         end: number;
@@ -91,16 +82,15 @@ export class ParallelDownloader {
         let lastTransferredBytes = 0;
 
         const requestHeaders: Record<string, string> = {
-            "User-Agent": `Nahida Desktop/${appVersion}`,
             Range: `bytes=${start}-${end}`,
             ...headers,
         };
-        if (token) {
-            requestHeaders["Authorization"] = `Bearer ${token}`;
-        }
 
         const response = await ky(url, {
-            headers: requestHeaders,
+            headers: {
+                ...(await getHeaders(url)),
+                ...requestHeaders,
+            },
             signal,
             throwHttpErrors: false,
             timeout: 100000,
@@ -171,7 +161,7 @@ export class ParallelDownloader {
     }
 
     public async download(options: ParallelDownloadOptions): Promise<void> {
-        const { url, savePath, fileSize, token, headers, signal, onProgress, maxChunks } = options;
+        const { url, savePath, fileSize, headers, signal, onProgress, maxChunks } = options;
         const targetPath = `${savePath}.ntmp`;
 
         let chunkCount: number;
@@ -210,7 +200,6 @@ export class ParallelDownloader {
                 () =>
                     this.downloadChunk({
                         url,
-                        token,
                         headers,
                         start,
                         end,

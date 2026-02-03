@@ -8,6 +8,7 @@ import { TransferData } from "@shared/types";
 import { throttle } from "es-toolkit";
 import path from "node:path";
 import { Notification } from "electron";
+import { getAgent, getHeaders } from "@main/internal/fetcher";
 
 export class CustomDownloader {
     public desktop: NahidaDesktop;
@@ -56,6 +57,9 @@ export class CustomDownloader {
                         }
                     }
                 },
+                headers: await getHeaders(url),
+                // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
+                dispatcher: await getAgent(),
             });
             if (!resp.ok) {
                 throw new Error(`Failed to download file: ${resp.statusText}`);
@@ -232,6 +236,9 @@ export class CustomDownloader {
         const resp = await ky.head(fileUrl, {
             redirect: "follow",
             throwHttpErrors: false,
+            headers: await getHeaders(fileUrl),
+            // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
+            dispatcher: await getAgent(),
         });
         if (!resp.ok) {
             throw new Error(`Failed to get real file URL: ${resp.statusText}`);

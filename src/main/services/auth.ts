@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@main/internal/db";
 import { setting } from "@main/internal/db/schema";
 import { BACKEND_URL } from "@shared/const";
-import { fetcher } from "@main/internal/fetcher";
+import { fetcher, getAgent, getHeaders } from "@main/internal/fetcher";
 import { SessionSchema } from "@shared/schemas/auth";
 import ky from "ky";
 import { Nullable, Optional, validate } from "valdex";
@@ -80,9 +80,9 @@ export class Auth {
         const iWantToLoginResp = await ky(iWantToLoginUrl, {
             credentials: "include",
             throwHttpErrors: false,
-            headers: {
-                "User-Agent": `Nahida Desktop/${appVersion}`,
-            },
+            headers: await getHeaders(iWantToLoginUrl),
+            // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
+            dispatcher: await getAgent(),
         });
 
         if (!iWantToLoginResp.ok) {
@@ -100,9 +100,9 @@ export class Auth {
 
         const resp = await ky(data.stateResponse, {
             throwHttpErrors: false,
-            headers: {
-                "User-Agent": `Nahida Desktop/${appVersion}`,
-            },
+            headers: await getHeaders(data.stateResponse),
+            // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
+            dispatcher: await getAgent(),
         });
 
         if (!resp.body) {
