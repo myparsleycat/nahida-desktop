@@ -408,7 +408,7 @@ export class DriveService {
         await this.desktop.service.transfer.createTransfer({
             pid,
             type: "download",
-            data: { root: { id: "", parentId: null, name: "Loading" }, files: [], dirs: [] },
+            data: { root: { id: "", parentId: null, name: "Loading..." }, files: [], dirs: [] },
             abortController,
             name: "Preparing Download...",
             restartParams,
