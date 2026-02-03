@@ -50,7 +50,6 @@ class DownloadStreamer {
         const worker = createSseWorker({
             workerData: {
                 url: url.toString(),
-                appVersion: appVersion,
                 token,
             },
         });
