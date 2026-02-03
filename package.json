@@ -18,11 +18,12 @@
         "dev": "pnpm run db:generate && pnpm run go:build && electron-vite dev",
         "build": "pnpm run db:generate && pnpm run go:build && electron-vite build",
         "postinstall": "electron-builder install-app-deps",
-        "build:unpack": "rimraf dist && pnpm run build && electron-builder --dir",
-        "build:win": "rimraf dist && pnpm run build && electron-builder --win",
-        "build:mac": "rimraf dist && electron-vite build && electron-builder --mac",
-        "build:linux": "rimraf dist && electron-vite build && electron-builder --linux",
-        "release": "pnpm run build && electron-builder --win"
+        "clean": "rimraf dist",
+        "build:unpack": "pnpm run clean && pnpm run build && electron-builder --dir",
+        "build:win": "pnpm run clean && pnpm run build && electron-builder --win",
+        "build:mac": "pnpm run clean && electron-vite build && electron-builder --mac",
+        "build:linux": "pnpm run clean && electron-vite build && electron-builder --linux",
+        "release": "pnpm run clean && pnpm run build && electron-builder --win"
     },
     "dependencies": {
         "@electron-toolkit/preload": "^3.0.2",
