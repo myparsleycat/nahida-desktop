@@ -669,7 +669,11 @@ export class DownloadLib {
                 onProgress,
                 currentConcurrency: () => this.fileQueue.pending,
             });
-        } catch (err) {
+        } catch (err: any) {
+            if (abort.signal.aborted || err.name === "AbortError") {
+                return;
+            }
+            this.desktop.service.transfer.markFileFailed(pid, file.id);
             this.desktop.logger.error(err, `DownloadLib:executeDownload:${file.name}`);
         }
     }

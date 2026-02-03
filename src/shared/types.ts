@@ -300,6 +300,7 @@ export interface Transfer {
     name: string;
     totalFiles: number;
     transferedFiles: number;
+    failedFiles: number;
     path?: string;
 }
 export type TransferWithoutData = Omit<Transfer, "data">;

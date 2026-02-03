@@ -28,6 +28,7 @@ export interface TransferItemProps {
     onRetry?: (id: string) => void;
     totalFiles?: number;
     processedFiles?: number;
+    failedFiles?: number;
 }
 
 export interface TransferStatsProps {

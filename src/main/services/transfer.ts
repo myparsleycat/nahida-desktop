@@ -97,6 +97,14 @@ export class TransferService {
         return transfer.completedFileUuids.size;
     }
 
+    public markFileFailed(pid: string, fileUuid: string) {
+        const transfer = this.transfers.find((t) => t.pid === pid);
+        if (!transfer) return;
+
+        transfer.failedFiles = (transfer.failedFiles || 0) + 1;
+        this.emitUpdate();
+    }
+
     public async createTransfer({
         pid,
         type,
@@ -134,6 +142,7 @@ export class TransferService {
             name,
             totalFiles: data.files.length,
             transferedFiles: 0,
+            failedFiles: 0,
             restartParams,
             completedFileUuids: new Set(),
             path,
@@ -225,6 +234,7 @@ export class TransferService {
             transfer.status = "pending";
         }
 
+        transfer.failedFiles = 0;
         this.emitUpdate();
         this.processQueue();
     }
@@ -362,6 +372,7 @@ export class TransferService {
             transfer.sessionStartBytes = 0;
             transfer.speedSamples = [];
             transfer.transferedFiles = 0;
+            transfer.failedFiles = 0;
             this.emitUpdate();
         }
     }
