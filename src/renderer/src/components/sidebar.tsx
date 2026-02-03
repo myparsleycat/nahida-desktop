@@ -138,23 +138,43 @@ export function Sidebar({ className }: { className?: string }) {
           </Tooltip>
 
           {appStatus?.isDev && (
-            <Tooltip disableHoverableContent={true}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onPointerDown={handlePointerDown}
-                  onClick={() => {
-                    navi({ to: "/backup" });
-                  }}
-                >
-                  <DatabaseBackupIcon className={cn(iconSize)} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right" hideWhenDetached={true}>
-                백업
-              </TooltipContent>
-            </Tooltip>
+            <>
+              <Tooltip disableHoverableContent={true}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onPointerDown={handlePointerDown}
+                    onClick={() => {
+                      navi({ to: "/backup" });
+                    }}
+                  >
+                    <DatabaseBackupIcon className={cn(iconSize)} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right" hideWhenDetached={true}>
+                  백업
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip disableHoverableContent={true}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onPointerDown={handlePointerDown}
+                    onClick={() => {
+                      navi({ to: "/xxmi" });
+                    }}
+                  >
+                    <DatabaseBackupIcon className={cn(iconSize)} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right" hideWhenDetached={true}>
+                  XXMI
+                </TooltipContent>
+              </Tooltip>
+            </>
           )}
 
           <Separator orientation="horizontal" />
