@@ -2,15 +2,7 @@ import { parentPort, workerData } from "worker_threads";
 import { decode } from "cbor-x";
 import ky from "ky";
 import { decompress } from "fzstd";
-import { Agent, Pool } from "undici";
-
-const agent = new Agent({
-    factory(origin, options) {
-        return new Pool(origin, {
-            allowH2: true,
-        });
-    },
-});
+import { getHeaders } from "@main/internal/fetcher";
 
 const port = parentPort;
 if (!port) throw new Error("IllegalState");
@@ -44,19 +36,17 @@ const processStreamedData = async (jsonString: string) => {
 };
 
 port.on("message", async () => {
-    const { url, appVersion, token } = workerData;
+    const { url, token } = workerData;
 
     try {
         const resp = await ky.get(url, {
             headers: {
-                Origin: "https://nahida.live",
-                "User-Agent": `Nahida Desktop/${appVersion}`,
-                Authorization: `Bearer ${token}`,
+                ...(await getHeaders(url)),
                 Accept: "text/event-stream",
             },
             credentials: "include",
             // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
-            dispatcher: agent,
+            dispatcher: await getAgent(),
         });
 
         const reader = resp.body?.getReader();
