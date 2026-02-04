@@ -86,8 +86,10 @@ export class Setting {
             });
 
             if (!qr) {
-                await db.insert(setting).values({ key: "language", value: "ko" });
-                return "ko";
+                const systemLocale = app.getSystemLocale();
+                const language = systemLocale.split("-")[0];
+                await db.insert(setting).values({ key: "language", value: language });
+                return language;
             }
 
             return qr.value;
