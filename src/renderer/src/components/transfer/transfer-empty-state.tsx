@@ -1,5 +1,6 @@
 import { ArrowUpFromLine, ArrowDownToLine, Filter } from "lucide-react";
 import { TransferTabType } from "./types";
+import { useTranslation } from "react-i18next";
 
 interface TransferEmptyStateProps {
   activeTab: TransferTabType;
@@ -7,6 +8,8 @@ interface TransferEmptyStateProps {
 }
 
 export function TransferEmptyState({ activeTab, hasSearchQuery }: TransferEmptyStateProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-12 text-center w-full max-w-full">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
@@ -18,7 +21,9 @@ export function TransferEmptyState({ activeTab, hasSearchQuery }: TransferEmptyS
           <Filter className="h-6 w-6 text-muted-foreground" />
         )}
       </div>
-      <p className="mt-4 text-sm font-medium text-foreground">진행중인 전송이 없습니다</p>
+      <p className="mt-4 text-sm font-medium text-foreground">
+        {t("page.transfer.empty_state.all_tabs")}
+      </p>
     </div>
   );
 }

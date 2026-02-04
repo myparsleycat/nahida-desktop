@@ -10,6 +10,7 @@ import {
 import { FolderOpen, Grid3x3 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useModStore } from "@renderer/store/mod";
+import { useTranslation } from "react-i18next";
 
 interface PathSelectorDialogProps {
   open: boolean;
@@ -24,6 +25,7 @@ export function PathSelectorDialog({
   selectionId,
   suggestedName,
 }: PathSelectorDialogProps) {
+  const { t } = useTranslation();
   const navi = useNavigate();
   const setDownloadMode = useModStore((s) => s.setDownloadMode);
 
@@ -48,9 +50,9 @@ export function PathSelectorDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent onOpenAutoFocus={(e) => e.preventDefault()} showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>경로 선택</DialogTitle>
+          <DialogTitle>{t("components.path-selector-dialog.title")}</DialogTitle>
           <DialogDescription>
-            {suggestedName && `"${suggestedName}" `}를 어떤 방식으로 다운로드 할지 선택하세요
+            {t("components.path-selector-dialog.description", { name: suggestedName })}
           </DialogDescription>
         </DialogHeader>
 
@@ -62,10 +64,12 @@ export function PathSelectorDialog({
           >
             <Grid3x3 className="size-8" />
             <div className="flex flex-col items-center text-center">
-              <span className="font-semibold">모드 매니저</span>
+              <span className="font-semibold">
+                {t("components.path-selector-dialog.mod_manager.title")}
+              </span>
               <div className="flex flex-col items-center text-center text-xs text-muted-foreground">
-                <span>모드 매니저에서</span>
-                <span>캐릭터 폴더를 선택합니다</span>
+                <span>{t("components.path-selector-dialog.mod_manager.description.0")}</span>
+                <span>{t("components.path-selector-dialog.mod_manager.description.1")}</span>
               </div>
             </div>
           </Button>
@@ -77,10 +81,12 @@ export function PathSelectorDialog({
           >
             <FolderOpen className="size-8" />
             <div className="flex flex-col items-center text-center">
-              <span className="font-semibold">경로 선택</span>
+              <span className="font-semibold">
+                {t("components.path-selector-dialog.explorer.title")}
+              </span>
               <div className="flex flex-col items-center text-center text-xs text-muted-foreground">
-                <span>파일 탐색기에서</span>
-                <span>폴더를 선택합니다</span>
+                <span>{t("components.path-selector-dialog.explorer.description.0")}</span>
+                <span>{t("components.path-selector-dialog.explorer.description.1")}</span>
               </div>
             </div>
           </Button>
@@ -88,7 +94,7 @@ export function PathSelectorDialog({
 
         <DialogFooter>
           <Button variant="ghost" onClick={handleCancel}>
-            취소
+            {t("g.cancel")}
           </Button>
         </DialogFooter>
       </DialogContent>

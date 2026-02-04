@@ -8,11 +8,13 @@ import { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet, useLocation } from "@tanstack/react-router";
 import { useState, useCallback, useEffect } from "react";
 import { useGlobalStore } from "@renderer/store/global";
+import { useTranslation } from "react-i18next";
 
 function RootComponent() {
   const location = useLocation();
   const setAppStatus = useGlobalStore((state) => state.setAppStatus);
   const setSession = useGlobalStore((state) => state.setSession);
+  const { i18n } = useTranslation();
 
   useEffect(() => {
     window.api.invoke("util:getAppStatus").then((appStatus) => {
@@ -21,7 +23,10 @@ function RootComponent() {
     window.api.invoke("auth:getSession").then((session) => {
       setSession(session);
     });
-  }, []);
+    window.api.invoke("setting:general:getLanguage").then((language) => {
+      if (language) i18n.changeLanguage(language);
+    });
+  }, [i18n]);
 
   const [pathSelectorData, setPathSelectorData] = useState<{
     selectionId: string;

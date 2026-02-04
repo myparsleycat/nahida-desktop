@@ -14,10 +14,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { Separator } from "./ui/separator";
 import { viewStore } from "@renderer/store/drive";
 import { useGlobalStore } from "@renderer/store/global";
+import { useTranslation } from "react-i18next";
 
 export function Sidebar({ className }: { className?: string }) {
   const navi = useNavigate();
-  const location = useLocation();
+  const { t } = useTranslation();
   const appStatus = useGlobalStore((state) => state.appStatus);
   const session = useGlobalStore((state) => state.session);
 
@@ -45,7 +46,7 @@ export function Sidebar({ className }: { className?: string }) {
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right" hideWhenDetached={true}>
-              전송
+              {t("page.transfer.title")}
             </TooltipContent>
           </Tooltip>
 
@@ -79,7 +80,7 @@ export function Sidebar({ className }: { className?: string }) {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="right" hideWhenDetached={true}>
-                  드라이브
+                  {t("page.drive.title")}
                 </TooltipContent>
               </Tooltip>
 
@@ -111,7 +112,7 @@ export function Sidebar({ className }: { className?: string }) {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="right" hideWhenDetached={true}>
-                  공유 드라이브
+                  {t("page.share_drive.title")}
                 </TooltipContent>
               </Tooltip>
 
@@ -133,7 +134,7 @@ export function Sidebar({ className }: { className?: string }) {
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right" hideWhenDetached={true}>
-              모드
+              {t("page.mod.title")}
             </TooltipContent>
           </Tooltip>
 
@@ -153,7 +154,7 @@ export function Sidebar({ className }: { className?: string }) {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="right" hideWhenDetached={true}>
-                  백업
+                  {t("page.backup.title")}
                 </TooltipContent>
               </Tooltip>
 
@@ -193,7 +194,7 @@ export function Sidebar({ className }: { className?: string }) {
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right" hideWhenDetached={true}>
-              설정
+              {t("page.setting.title")}
             </TooltipContent>
           </Tooltip>
         </div>

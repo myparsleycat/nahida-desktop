@@ -80,8 +80,8 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
     const isSharePath = location.pathname.startsWith("/drive/share");
 
     const rootItem = isSharePath
-      ? { id: "share", name: "공유 드라이브", parentId: null }
-      : { id: "root", name: t("drive.ui.drive"), parentId: null };
+      ? { id: "share", name: t("page.drive.share_drive"), parentId: null }
+      : { id: "root", name: t("page.drive.title"), parentId: null };
 
     return [rootItem, ...ancestors];
   }, [ancestors, t, location.pathname]);
@@ -181,7 +181,7 @@ export function AkashaHeadButtons(props: AkashaHeadButtonsProps) {
         <SearchIcon className="size-4 absolute left-2 text-muted-foreground" />
         <Input
           className="pl-7 w-50 h-9 dark:bg-transparent"
-          placeholder={t("drive.ui.search_in_dir_placeholder")}
+          placeholder={t("page.drive.head_buttons.search_in_dir_placeholder")}
           value={searchInDirQuery}
           onChange={(e) => setSearchInDirQuery(e.target.value)}
           onFocus={() => setFocusSearchInputState(true)}
@@ -216,14 +216,14 @@ export function AkashaHeadButtons(props: AkashaHeadButtonsProps) {
           <DropdownMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
             <DropdownMenuItem onClick={handleDownload}>
               <DownloadIcon className="mr-2 h-4 w-4" />
-              {t("g.download")}
+              {t("page.drive.head_buttons.dropdown_menu.download")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
         <DropdownMenu>
           <DropdownMenuTrigger className={buttonVariants({ variant: "ghost" })}>
-            {t("g.make_new")}
+            {t("page.drive.head_buttons.dropdown_menu.make_new.title")}
           </DropdownMenuTrigger>
           <DropdownMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
             <DropdownMenuItem
@@ -231,17 +231,17 @@ export function AkashaHeadButtons(props: AkashaHeadButtonsProps) {
               onClick={() => dialog.setOpen("createDirDialog", true)}
             >
               <FolderIcon size={20} />
-              {t("drive.ui.new_dir")}
+              {t("page.drive.head_buttons.dropdown_menu.make_new.new_dir")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem className="gap-3 cursor-pointer">
                 <UploadIcon size={20} />
-                {t("drive.upload_dir")}
+                {t("page.drive.head_buttons.dropdown_menu.make_new.upload_dir")}
               </DropdownMenuItem>
               <DropdownMenuItem className="gap-3 cursor-pointer">
                 <UploadIcon size={20} />
-                {t("drive.upload_file")}
+                {t("page.drive.head_buttons.dropdown_menu.make_new.upload_file")}
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>
@@ -302,7 +302,7 @@ function ContextMenuContentSnippet() {
                 }}
               >
                 <MousePointer2Icon size={18} />
-                {t("drive.ui.context_menu.open")}
+                {t("page.drive.context_menu.open")}
               </ContextMenuItem>
               <ContextMenuSeparator />
             </>
@@ -331,7 +331,7 @@ function ContextMenuContentSnippet() {
             }
           >
             <DownloadIcon size={18} />
-            {t("drive.ui.context_menu.download")}
+            {t("page.drive.context_menu.download")}
           </ContextMenuItem>
           <ContextMenuSeparator />
 
@@ -374,7 +374,7 @@ function ContextMenuContentSnippet() {
             }
           >
             <SquarePenIcon size={18} />
-            {t("drive.ui.rename")}
+            {t("page.drive.context_menu.rename")}
           </ContextMenuItem>
 
           <ContextMenuSeparator />
@@ -393,7 +393,7 @@ function ContextMenuContentSnippet() {
 
       <ContextMenuItem className="gap-x-2 text-red-500" onClick={handleTrashBtn}>
         <Trash2Icon size={18} />
-        {t("drive.ui.trash")}
+        {t("page.drive.context_menu.trash")}
       </ContextMenuItem>
     </>
   ) : (
@@ -402,7 +402,7 @@ function ContextMenuContentSnippet() {
       onClick={() => dialog.setOpen("createDirDialog", true)}
     >
       <FolderIcon size={18} />
-      {t("drive.ui.new_dir")}
+      {t("page.drive.context_menu.new_dir")}
     </ContextMenuItem>
   );
 }
@@ -476,7 +476,9 @@ function ListHead() {
                 sortType.startsWith("NAME") ? "text-primary" : "text-muted-foreground",
               )}
             >
-              <p className="dragselect-start-disallowed whitespace-nowrap">{t("drive.ui.name")}</p>
+              <p className="dragselect-start-disallowed whitespace-nowrap">
+                {t("page.drive.list_head.name")}
+              </p>
               {sortType === "NAME:DESC" && <ArrowDownIcon size="16" />}
               {sortType === "NAME:ASC" && <ArrowUpIcon size="16" />}
             </div>
@@ -494,7 +496,9 @@ function ListHead() {
                 sortType.startsWith("SIZE") ? "text-primary" : "text-muted-foreground",
               )}
             >
-              <p className="dragselect-start-disallowed whitespace-nowrap">{t("drive.ui.size")}</p>
+              <p className="dragselect-start-disallowed whitespace-nowrap">
+                {t("page.drive.list_head.size")}
+              </p>
               {sortType === "SIZE:DESC" && <ArrowDownIcon size="16" />}
               {sortType === "SIZE:ASC" && <ArrowUpIcon size="16" />}
             </div>
@@ -512,7 +516,9 @@ function ListHead() {
                 sortType.startsWith("DATE") ? "text-primary" : "text-muted-foreground",
               )}
             >
-              <p className="dragselect-start-disallowed whitespace-nowrap">{t("drive.ui.date")}</p>
+              <p className="dragselect-start-disallowed whitespace-nowrap">
+                {t("page.drive.list_head.date")}
+              </p>
               {sortType === "DATE:DESC" && <ArrowDownIcon size="16" />}
               {sortType === "DATE:ASC" && <ArrowUpIcon size="16" />}
             </div>
