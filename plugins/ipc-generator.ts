@@ -113,29 +113,38 @@ function generateIpc(options: IpcGeneratorOptions) {
     const sortedChannelNames = Array.from(channels.keys()).sort();
 
     // update ipc-spec.ts
-    let specContent = readFileSync(specFile, "utf-8");
-    const specReplacement = sortedChannelNames.map((c) => `    "${c}",`).join("\n");
-    specContent = specContent.replace(
+    const specContent = readFileSync(specFile, "utf-8");
+    const specEol = specContent.includes("\r\n") ? "\r\n" : "\n";
+    const specReplacement = sortedChannelNames.map((c) => `    "${c}",`).join(specEol);
+    const newSpecContent = specContent.replace(
         /(\/\/ IPC_HANDLERS_START).*?(\/\/ IPC_HANDLERS_END)/s,
-        `$1\n${specReplacement}\n    $2`,
+        `$1${specEol}${specReplacement}${specEol}    $2`,
     );
-    writeFileSync(specFile, specContent);
+
+    if (newSpecContent !== specContent) {
+        writeFileSync(specFile, newSpecContent);
+        console.log(`[IPC Gen] Updated ${specFile}`);
+    }
 
     // update types.ts
-    let typesContent = readFileSync(typesFile, "utf-8");
+    const typesContent = readFileSync(typesFile, "utf-8");
+    const typesEol = typesContent.includes("\r\n") ? "\r\n" : "\n";
     const typesReplacement = sortedChannelNames
         .map((c) => {
             const type = channels.get(c);
             const quote = c.includes(":") ? '"' : "";
             return `    ${quote}${c}${quote}: ${type};`;
         })
-        .join("\n");
-    typesContent = typesContent.replace(
+        .join(typesEol);
+    const newTypesContent = typesContent.replace(
         /(\/\/ IPC_HANDLERS_START).*?(\/\/ IPC_HANDLERS_END)/s,
-        `$1\n${typesReplacement}\n    $2`,
+        `$1${typesEol}${typesReplacement}${typesEol}    $2`,
     );
-    writeFileSync(typesFile, typesContent);
-    console.log("[IPC Gen] Synchronized IPC handlers and types.");
+
+    if (newTypesContent !== typesContent) {
+        writeFileSync(typesFile, newTypesContent);
+        console.log(`[IPC Gen] Updated ${typesFile}`);
+    }
 }
 
 export const ipcGeneratorPlugin = (): Plugin => {
