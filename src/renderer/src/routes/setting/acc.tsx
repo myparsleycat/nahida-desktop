@@ -2,7 +2,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@renderer/components/ui/ava
 import { Button } from "@renderer/components/ui/button";
 import { Card, CardContent } from "@renderer/components/ui/card";
 import { useGlobalStore } from "@renderer/store/global";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/setting/acc")({
   component: RouteComponent,
@@ -10,13 +11,17 @@ export const Route = createFileRoute("/setting/acc")({
 
 function RouteComponent() {
   const session = useGlobalStore((state) => state.session);
-  const navi = useNavigate();
+  const { t } = useTranslation();
 
   if (!session) {
     return (
       <main className="flex-1 flex flex-col mx-auto p-4 space-y-6 w-full select-none items-center justify-center h-full">
-        <p className="text-muted-foreground mb-4">로그인이 필요합니다.</p>
-        <Button onClick={() => window.api.invoke("auth:startLogin")}>로그인</Button>
+        <p className="text-muted-foreground mb-4">
+          {t("page.setting.acc.not_logged_in.description")}
+        </p>
+        <Button onClick={() => window.api.invoke("auth:startLogin")}>
+          {t("page.setting.acc.not_logged_in.login")}
+        </Button>
       </main>
     );
   }
@@ -42,7 +47,7 @@ function RouteComponent() {
               variant="secondary"
               onClick={() => window.api.invoke("util:openExternal", `https://nahida.live/u`)}
             >
-              내 계정
+              {t("page.setting.acc.my_account")}
             </Button>
           </div>
         </CardContent>
@@ -57,7 +62,7 @@ function RouteComponent() {
             });
           }}
         >
-          로그아웃
+          {t("page.setting.acc.logout")}
         </Button>
       </div>
     </main>

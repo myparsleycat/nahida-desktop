@@ -107,7 +107,7 @@ function RouteComponent() {
   if (!query.data && query.isFetching) {
     return (
       <>
-        <Titlebar title={{ text: "드라이브", position: "center" }} />
+        <Titlebar title={{ text: t("page.drive.title"), position: "center" }} />
         <Center>
           <AliceLoader />
         </Center>
@@ -116,7 +116,7 @@ function RouteComponent() {
   } else if (query.isError) {
     return (
       <>
-        <Titlebar title={{ text: "드라이브", position: "center" }} />
+        <Titlebar title={{ text: t("page.drive.title"), position: "center" }} />
         <Center>
           <ServerCrash />
         </Center>
@@ -127,7 +127,7 @@ function RouteComponent() {
   if (query.data) {
     return (
       <>
-        <Titlebar title={{ text: "드라이브", position: "center" }} />
+        <Titlebar title={{ text: t("page.drive.title"), position: "center" }} />
 
         <div className="w-full h-full flex flex-col select-none">
           <div className="w-full h-12 flex flex-row items-center p-2 border-b select-none">

@@ -20,12 +20,15 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/setting/net")({
   component: RouteComponent,
 });
 
 function RouteComponent() {
+  const { t } = useTranslation();
+
   const [proxyType, setProxyType] = useState("disabled");
   const [host, setHost] = useState("");
   const [port, setPort] = useState("");
@@ -36,7 +39,7 @@ function RouteComponent() {
   const [parent, _enableAnimations] = useAutoAnimate();
 
   useEffect(() => {
-    window.electron.ipcRenderer.invoke("setting:net:getProxy").then((settings) => {
+    window.api.invoke("setting:net:getProxy").then((settings) => {
       if (settings) {
         setProxyType(settings.type);
         setHost(settings.host || "");
@@ -49,7 +52,7 @@ function RouteComponent() {
   }, []);
 
   const handleSave = async () => {
-    await window.electron.ipcRenderer.invoke("setting:net:setProxy", {
+    await window.api.invoke("setting:net:setProxy", {
       type: proxyType,
       host,
       port,
@@ -57,7 +60,7 @@ function RouteComponent() {
       username: requiresAuth ? username : undefined,
       password: requiresAuth ? password : undefined,
     });
-    toast.success("프록시 설정이 저장되었습니다.");
+    toast.success(t("page.setting.net.proxy.saved"));
   };
 
   return (
@@ -65,13 +68,13 @@ function RouteComponent() {
       <Card className="w-full">
         <CardContent className="space-y-4" ref={parent}>
           <div className="space-y-2">
-            <Label htmlFor="proxy-type">프록시 유형</Label>
+            <Label htmlFor="proxy-type">{t("page.setting.net.proxy.type")}</Label>
             <Select value={proxyType} onValueChange={setProxyType}>
               <SelectTrigger id="proxy-type">
                 <SelectValue placeholder="Select proxy type" />
               </SelectTrigger>
               <SelectContent position="popper">
-                <SelectItem value="disabled">사용 안 함</SelectItem>
+                <SelectItem value="disabled">{t("page.setting.net.proxy.disabled")}</SelectItem>
                 <SelectItem value="https">HTTPS</SelectItem>
                 <SelectItem value="socks5">SOCKS5</SelectItem>
               </SelectContent>
@@ -80,7 +83,7 @@ function RouteComponent() {
 
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2 space-y-2">
-              <Label htmlFor="host">호스트</Label>
+              <Label htmlFor="host">{t("page.setting.net.proxy.host")}</Label>
               <Input
                 id="host"
                 placeholder="proxy.example.com"
@@ -90,7 +93,7 @@ function RouteComponent() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="port">포트</Label>
+              <Label htmlFor="port">{t("page.setting.net.proxy.port")}</Label>
               <Input
                 id="port"
                 placeholder="8080"
@@ -109,14 +112,14 @@ function RouteComponent() {
               disabled={proxyType === "disabled"}
             />
             <Label htmlFor="requires-auth" className="cursor-pointer font-normal">
-              프록시 서버가 암호를 요구함
+              {t("page.setting.net.proxy.requiresAuth")}
             </Label>
           </div>
 
           {requiresAuth && (
             <div className="space-y-4 pt-2 border-t">
               <div className="space-y-2 pt-4">
-                <Label htmlFor="username">사용자 이름</Label>
+                <Label htmlFor="username">{t("page.setting.net.proxy.username")}</Label>
                 <Input
                   id="username"
                   value={username}
@@ -125,7 +128,7 @@ function RouteComponent() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">암호</Label>
+                <Label htmlFor="password">{t("page.setting.net.proxy.password")}</Label>
                 <Input
                   id="password"
                   type="password"
@@ -139,7 +142,7 @@ function RouteComponent() {
 
           <div className="flex justify-end">
             <Button className="mt-4" onClick={handleSave}>
-              저장
+              {t("page.setting.net.proxy.save")}
             </Button>
           </div>
         </CardContent>

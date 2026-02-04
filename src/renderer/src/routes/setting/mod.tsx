@@ -8,12 +8,14 @@ import { Separator } from "@renderer/components/ui/separator";
 import { Switch } from "@renderer/components/ui/switch";
 import { Input } from "@renderer/components/ui/input";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/setting/mod")({
   component: RouteComponent,
 });
 
 function RouteComponent() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [deleteArchiveAfterExtract, setDeleteArchiveAfterExtract] = useState(false);
   const [moveFolderInsteadOfCopy, setMoveFolderInsteadOfCopy] = useState(false);
@@ -107,14 +109,18 @@ function RouteComponent() {
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium">모드 관리</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {t("page.setting.mod.mod_management.title")}
+            </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col space-y-4">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <span className="text-sm font-medium">압축 해제 후 삭제</span>
+                <span className="text-sm font-medium">
+                  {t("page.setting.mod.mod_management.deleteArchiveAfterExtract")}
+                </span>
                 <p className="text-sm text-muted-foreground">
-                  압축 파일을 모드 폴더에 해제한 후 원본 압축 파일을 삭제합니다
+                  {t("page.setting.mod.mod_management.deleteArchiveAfterExtractDescription")}
                 </p>
               </div>
               <Switch
@@ -127,9 +133,11 @@ function RouteComponent() {
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <span className="text-sm font-medium">폴더 복사 대신 이동</span>
+                <span className="text-sm font-medium">
+                  {t("page.setting.mod.mod_management.moveFolderInsteadOfCopy")}
+                </span>
                 <p className="text-sm text-muted-foreground">
-                  폴더를 모드 폴더에 드롭할 때 복사하지 않고 이동합니다 (원본 삭제)
+                  {t("page.setting.mod.mod_management.moveFolderInsteadOfCopyDescription")}
                 </p>
               </div>
               <Switch checked={moveFolderInsteadOfCopy} onCheckedChange={handleMoveFolderChange} />
@@ -139,14 +147,18 @@ function RouteComponent() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium">모드 그리드 가상화</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {t("page.setting.mod.mod_grid_virtualization.title")}
+            </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col space-y-4" ref={anim1}>
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <span className="text-sm font-bold">가상화 사용</span>
+                <span className="text-sm font-bold">
+                  {t("page.setting.mod.mod_grid_virtualization.useVirtualization")}
+                </span>
                 <p className="text-xs text-muted-foreground">
-                  모드 개수가 많을 때 성능을 위해 모드 그리드에 가상화를 적용합니다
+                  {t("page.setting.mod.mod_grid_virtualization.useVirtualizationDescription")}
                 </p>
               </div>
               <Switch
@@ -158,9 +170,13 @@ function RouteComponent() {
             {virtualizationEnabled && (
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <span className="text-sm font-bold">기준 모드 개수</span>
+                  <span className="text-sm font-bold">
+                    {t("page.setting.mod.mod_grid_virtualization.virtualizationThreshold")}
+                  </span>
                   <p className="text-xs text-muted-foreground">
-                    설정한 개수 이상의 모드가 있을 때 가상화를 적용합니다
+                    {t(
+                      "page.setting.mod.mod_grid_virtualization.virtualizationThresholdDescription",
+                    )}
                   </p>
                 </div>
 

@@ -10,6 +10,14 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         return await d.setting.general.setRunOnStartup(enabled);
     });
 
+    rh("setting:general:getLanguage", async () => {
+        return await d.setting.general.getLanguage();
+    });
+
+    rh("setting:general:setLanguage", async (language) => {
+        return await d.setting.general.setLanguage(language);
+    });
+
     rh("setting:general:getMoveTransferPageWhenStartTransfer", async () => {
         return await d.setting.general.getMoveTransferPageWhenStartTransfer();
     });

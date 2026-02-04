@@ -7,6 +7,7 @@ import { TransferStats } from "@renderer/components/transfer/transfer-stats";
 import type { TransferItemProps } from "@renderer/components/transfer/types";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Titlebar } from "@renderer/components/titlebar";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/transfer")({
   component: RouteComponent,
@@ -37,6 +38,8 @@ function mapStatus(
 }
 
 function RouteComponent() {
+  const { t } = useTranslation();
+
   const [transfers, setTransfers] = useState<TransferWithoutData[]>([]);
 
   useEffect(() => {
@@ -117,7 +120,7 @@ function RouteComponent() {
 
   return (
     <>
-      <Titlebar title={{ text: "전송", position: "center" }} />
+      <Titlebar title={{ text: t("page.transfer.title"), position: "center" }} />
       <ScrollArea className="h-full w-full max-w-full">
         <div className="bg-background w-full min-w-0 max-w-[100vw] overflow-x-hidden">
           <main className="mx-auto px-4 py-6 w-full min-w-0 max-w-full">

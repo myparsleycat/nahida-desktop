@@ -19,6 +19,7 @@ import {
 import { cn } from "@renderer/lib/utils";
 import { TransferItemProps } from "./types";
 import { getFileIcon, getStatusColor } from "./utils";
+import { useTranslation } from "react-i18next";
 
 const TransferItemActions = memo(
   ({
@@ -143,6 +144,7 @@ export const TransferItem = memo((props: TransferItemProps) => {
     processedFiles,
     failedFiles,
   } = props;
+  const { t } = useTranslation();
 
   const [isHovered, setIsHovered] = useState(false);
   const isActive = status === "uploading" || status === "downloading";
@@ -194,17 +196,23 @@ export const TransferItem = memo((props: TransferItemProps) => {
               )}
               {(isActive || isPaused) && timeRemaining && (
                 <span className="truncate whitespace-nowrap hidden sm:inline">
-                  {timeRemaining} 남음
+                  {t("page.transfer.item.time_remaining", { time: timeRemaining })}
                 </span>
               )}
-              {isCompleted && <span className="text-success shrink-0 whitespace-nowrap">완료</span>}
+              {isCompleted && (
+                <span className="text-success shrink-0 whitespace-nowrap">
+                  {t("page.transfer.item.completed")}
+                </span>
+              )}
               {failedFiles && failedFiles > 0 ? (
                 <span className="text-destructive shrink-0 whitespace-nowrap">
-                  {failedFiles}개 실패
+                  {t("page.transfer.item.failed_files", { count: failedFiles })}
                 </span>
               ) : (
                 isFailed && (
-                  <span className="text-destructive shrink-0 whitespace-nowrap">실패</span>
+                  <span className="text-destructive shrink-0 whitespace-nowrap">
+                    {t("page.transfer.item.failed")}
+                  </span>
                 )
               )}
             </div>

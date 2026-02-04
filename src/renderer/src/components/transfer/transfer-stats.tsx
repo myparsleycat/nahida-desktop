@@ -2,6 +2,7 @@ import React from "react";
 import { ArrowUpFromLine, ArrowDownToLine, HardDrive, Clock } from "lucide-react";
 import { cn } from "@renderer/lib/utils";
 import { TransferStatsProps } from "./types";
+import { useTranslation } from "react-i18next";
 
 interface StatCardProps {
   icon: React.ReactNode;
@@ -37,26 +38,28 @@ export function TransferStats({
   totalTransferred,
   activeTransfers,
 }: TransferStatsProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="grid grid-cols-4 gap-3 lg:grid-cols-4 min-w-0 w-full">
       <StatCard
         icon={<ArrowUpFromLine className="h-5 w-5 text-success" />}
-        label="업로드"
+        label={t('page.transfer.stats_label.upload')}
         value={uploadSpeed}
       />
       <StatCard
         icon={<ArrowDownToLine className="h-5 w-5 text-info" />}
-        label="다운로드"
+        label={t('page.transfer.stats_label.download')}
         value={downloadSpeed}
       />
       <StatCard
         icon={<HardDrive className="h-5 w-5 text-muted-foreground" />}
-        label="전체 전송량"
+        label={t('page.transfer.stats_label.total_transferred')}
         value={totalTransferred}
       />
       <StatCard
         icon={<Clock className="h-5 w-5 text-warning" />}
-        label="진행중인 전송"
+        label={t('page.transfer.stats_label.active_transfers')}
         value={activeTransfers.toString()}
       />
     </div>
