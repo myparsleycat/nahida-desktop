@@ -2,7 +2,7 @@ import { NahidaDesktop } from "..";
 import { eden2url } from "@main/client";
 import { nanoid } from "nanoid";
 import createSseWorker from "@main/worker/drive/sse.worker?nodeWorker";
-import { TransferData } from "@shared/types";
+import { TransferData } from "@shared/types.gen";
 import path from "node:path";
 import fse from "fs-extra";
 import { pipeline } from "node:stream/promises";
@@ -50,6 +50,7 @@ class DownloadStreamer {
         const worker = createSseWorker({
             workerData: {
                 url: url.toString(),
+                appVersion,
                 token,
             },
         });

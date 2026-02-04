@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { ModInfo } from "@shared/types";
+import type { ModInfo } from "@shared/types.gen";
 import { disassemble, getChoseong } from "es-hangul";
 import { getSearchScore } from "@renderer/lib/sejong";
 import { useModStore } from "@renderer/store/mod";

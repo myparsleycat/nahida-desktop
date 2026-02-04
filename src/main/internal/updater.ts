@@ -35,7 +35,7 @@ export class Updater {
             if (this.isManualCheck) {
                 new Notification({
                     title: "Nahida Desktop",
-                    body: "업데이트 확인중...",
+                    body: "Checking for update...",
                 }).show();
             }
         });
@@ -64,8 +64,8 @@ export class Updater {
                 this.showUpdateDialog(updateInfo);
             } else {
                 const notification = new Notification({
-                    title: "Nahida Desktop 업데이트 가능",
-                    body: `새로운 버전 v${updateInfo.version}이(가) 출시되었습니다. 클릭하여 설치를 시작하세요.`,
+                    title: "Nahida Desktop Update Available",
+                    body: `New version v${updateInfo.version} is available. Click to start installation.`,
                 });
                 notification.on("click", () => {
                     this.showUpdateDialog(updateInfo);
@@ -83,7 +83,7 @@ export class Updater {
             if (this.isManualCheck) {
                 new Notification({
                     title: "Nahida Desktop",
-                    body: "지금은 업데이트가 없습니다",
+                    body: "No update available",
                 }).show();
             }
         });
@@ -101,7 +101,7 @@ export class Updater {
                 .showMessageBox({
                     type: "info",
                     title: "Update",
-                    message: "새로운 버전이 다운로드 되었습니다. 다시 시작할까요?",
+                    message: "New version has been downloaded. Restart to apply?",
                     buttons: ["Yes", "No"],
                 })
                 .then((result) => {
@@ -144,9 +144,9 @@ export class Updater {
             .showMessageBox({
                 type: "info",
                 title: `New Update Available: v${updateInfo.version}`,
-                message: "새로운 버전으로 업데이트 할 수 있습니다. 지금 진행할까요?",
+                message: "New version is available. Do you want to update now?",
                 detail: convert(String(updateInfo.releaseNotes)),
-                buttons: ["확인", "나중에 진행"],
+                buttons: ["Yes", "No"],
             })
             .then((result) => {
                 const { response } = result;

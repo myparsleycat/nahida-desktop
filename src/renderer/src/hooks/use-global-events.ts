@@ -2,6 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useGlobalStore } from "../store/global";
+import { useTranslation } from "react-i18next";
 
 export function useGlobalEvents(
     onPathSelectorModeSelect?: (data: { selectionId: string; suggestedName?: string }) => void,
@@ -9,6 +10,7 @@ export function useGlobalEvents(
     const navi = useNavigate();
     const setSession = useGlobalStore((state) => state.setSession);
     const [listeners, setListeners] = useState<Map<string, () => void>>(new Map());
+    const { i18n } = useTranslation();
 
     const removeAllListeners = () => {
         listeners.forEach((listener) => listener());
@@ -39,6 +41,11 @@ export function useGlobalEvents(
             setSession(session);
         });
         setListeners(new Map(listeners.set("auth:update", removeAuthListener)));
+
+        const removeLanguageListener = window.api.on("language:update", (language) => {
+            i18n.changeLanguage(language);
+        });
+        setListeners(new Map(listeners.set("language:update", removeLanguageListener)));
 
         return () => {
             removeAllListeners();

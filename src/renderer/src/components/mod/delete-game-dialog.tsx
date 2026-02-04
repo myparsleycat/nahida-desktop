@@ -10,8 +10,10 @@ import {
 } from "@renderer/components/ui/alert-dialog";
 import { useModStore } from "@renderer/store/mod";
 import { useGameMutations } from "@renderer/hooks/use-mod-mutations";
+import { useTranslation } from "react-i18next";
 
 export function DeleteGameDialog() {
+  const { t } = useTranslation();
   const isOpen = useModStore((s) => s.isDeleteGameDialogOpen);
   const setIsOpen = useModStore((s) => s.setIsDeleteGameDialogOpen);
   const selectedGame = useModStore((s) => s.selectedGame);
@@ -22,14 +24,13 @@ export function DeleteGameDialog() {
     <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>게임 삭제</AlertDialogTitle>
+          <AlertDialogTitle>{t("page.mod.dialog.delete-game.title")}</AlertDialogTitle>
           <AlertDialogDescription>
-            정말로 "{selectedGame}" 게임을 삭제하시겠습니까? 이 작업은 되돌릴 수 없으며, 해당 게임의
-            프리셋 정보도 함께 삭제됩니다.
+            {t("page.mod.dialog.delete-game.description", { name: selectedGame })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>취소</AlertDialogCancel>
+          <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             onClick={() => {
@@ -38,7 +39,7 @@ export function DeleteGameDialog() {
               }
             }}
           >
-            삭제
+            {t("g.delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

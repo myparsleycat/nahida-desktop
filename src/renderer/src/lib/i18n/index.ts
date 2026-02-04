@@ -1,9 +1,9 @@
-import i18n from "i18next";
+import i18n, { InitOptions } from "i18next";
 import { initReactI18next } from "react-i18next";
-import LanguageDetector from "i18next-browser-languagedetector";
 import enTranslation from "./locales/en.json";
 import koTranslation from "./locales/ko.json";
 import zhTranslation from "./locales/zh.json";
+import jaTranslation from "./locales/ja.json";
 
 const resources = {
     en: {
@@ -15,20 +15,22 @@ const resources = {
     zh: {
         translation: zhTranslation,
     },
+    ja: {
+        translation: jaTranslation,
+    },
 };
 
-i18n.use(LanguageDetector)
-    .use(initReactI18next)
-    .init({
-        resources,
-        fallbackLng: "en",
-        detection: {
-            order: ["navigator"],
-            caches: [],
-        },
-        interpolation: {
-            escapeValue: false,
-        },
-    });
+i18n.use(initReactI18next).init({
+    debug: false,
+    fallbackLng: "en",
+    interpolation: {
+        escapeValue: false,
+    },
+    resources,
+    defaultNS: "translation",
+    react: {
+        useSuspense: true,
+    },
+} as InitOptions);
 
 export default i18n;

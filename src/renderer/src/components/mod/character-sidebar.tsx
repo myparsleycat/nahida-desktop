@@ -2,13 +2,14 @@ import { Search } from "lucide-react";
 import { Input } from "@renderer/components/ui/input";
 import { ScrollArea } from "../ui/scroll-area";
 import type { FolderGroup } from "@renderer/types/mod";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react";
 import { filter } from "es-toolkit/compat";
 
 import { useModStore } from "@renderer/store/mod";
 import { CharacterSidebarItem, CharacterSidebarItemSkeleton } from "./character-sidebar-item";
 import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
+import { useTranslation } from "react-i18next";
 
 interface CharacterSidebarProps {
   groups: FolderGroup[];
@@ -16,7 +17,13 @@ interface CharacterSidebarProps {
   onModDrop: (files: File[], groupPath: string, options?: { allowImages?: boolean }) => void;
 }
 
-export function CharacterSidebar({ groups, isLoading = false, onModDrop }: CharacterSidebarProps) {
+export const CharacterSidebar = memo(function CharacterSidebar({
+  groups,
+  isLoading = false,
+  onModDrop,
+}: CharacterSidebarProps) {
+  const { t } = useTranslation();
+
   const selectedGroup = useModStore((s) => s.selectedGroup);
   const setSelectedGroup = useModStore((s) => s.setSelectedGroup);
   const [searchTerm, setSearchTerm] = useState("");
@@ -25,32 +32,50 @@ export function CharacterSidebar({ groups, isLoading = false, onModDrop }: Chara
 
   // const [anim1, setAnim1Enabled] = useAutoAnimate({ duration: 150 });
 
-  const filteredGroups = filter(groups, (group) =>
-    group.name.toLowerCase().includes(searchTerm.toLowerCase()),
+  const filteredGroups = useMemo(
+    () => filter(groups, (group) => group.name.toLowerCase().includes(searchTerm.toLowerCase())),
+    [groups, searchTerm],
   );
 
-  const handleSelect = (group: FolderGroup, resetSearch: boolean) => {
-    setSelectedGroup(group);
+  const handleSelect = useCallback(
+    (group: FolderGroup, resetSearch: boolean) => {
+      setSelectedGroup(group);
 
-    if (searchTerm) {
-      setTimeout(() => {
-        const element = itemRefs.current.get(group.name);
-        if (element) {
-          element.scrollIntoView({
-            behavior: "auto",
-            block: "center",
-          });
-        }
-      }, 0);
-      if (resetSearch) setSearchTerm("");
-    }
-  };
+      if (searchTerm) {
+        setTimeout(() => {
+          const element = itemRefs.current.get(group.name);
+          if (element) {
+            element.scrollIntoView({
+              behavior: "auto",
+              block: "center",
+            });
+          }
+        }, 0);
+        if (resetSearch) setSearchTerm("");
+      }
+    },
+    [searchTerm, setSelectedGroup, setSearchTerm],
+  );
 
   useEffect(() => {
     if (searchTerm && filteredGroups.length === 1) {
       handleSelect(filteredGroups[0], false);
     }
   }, [searchTerm, filteredGroups]);
+
+  const handleItemClick = useCallback(
+    (group: FolderGroup) => {
+      handleSelect(group, true);
+    },
+    [handleSelect],
+  );
+
+  const handleItemDrop = useCallback(
+    (group: FolderGroup, files: File[]) => {
+      onModDrop(files, group.path, { allowImages: true });
+    },
+    [onModDrop],
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -60,7 +85,7 @@ export function CharacterSidebar({ groups, isLoading = false, onModDrop }: Chara
           <Input
             id="character-search-input"
             className="h-8 pr-8 text-sm"
-            placeholder="검색..."
+            placeholder={t("g.search")}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -79,18 +104,15 @@ export function CharacterSidebar({ groups, isLoading = false, onModDrop }: Chara
             : filteredGroups.map((group) => (
                 <CharacterSidebarItem
                   key={group.name}
-                  ref={(el) => {
-                    if (el) itemRefs.current.set(group.name, el);
-                    else itemRefs.current.delete(group.name);
-                  }}
+                  itemRefs={itemRefs}
                   group={group}
                   isSelected={selectedGroup?.name === group.name}
-                  onClick={() => handleSelect(group, true)}
-                  onDrop={(files) => onModDrop(files, group.path, { allowImages: true })}
+                  onClick={handleItemClick}
+                  onDrop={handleItemDrop}
                 />
               ))}
         </div>
       </ScrollArea>
     </div>
   );
-}
+});

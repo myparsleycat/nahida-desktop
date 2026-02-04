@@ -1,11 +1,8 @@
 import { NahidaDesktop } from "..";
 import path from "node:path";
 import fse from "fs-extra";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { app } from "electron";
-
-const execFileAsync = promisify(execFile);
+import { GoProcess } from "../lib/go-process";
 
 export class ArchiveService {
     private readonly desktop: NahidaDesktop;
@@ -14,7 +11,11 @@ export class ArchiveService {
         this.desktop = desktop;
     }
 
-    async extract(archivePath: string, targetDir: string) {
+    async extract(
+        archivePath: string,
+        targetDir: string,
+        onProgress?: (percent: number, message: string) => void,
+    ): Promise<string> {
         await fse.ensureDir(targetDir);
 
         const extractorPath = this.getExtractorPath();
@@ -25,33 +26,25 @@ export class ArchiveService {
             );
         }
 
+        const goProcess = new GoProcess({
+            path: extractorPath,
+            args: [archivePath, targetDir],
+        });
+
+        if (onProgress) {
+            goProcess.on("progress", (payload: { percent: number; message: string }) => {
+                onProgress(payload.percent, payload.message);
+            });
+        }
+
         try {
-            const { stdout, stderr } = await execFileAsync(
-                extractorPath,
-                [archivePath, targetDir],
-                {
-                    maxBuffer: 10 * 1024 * 1024,
-                },
-            );
-
-            if (stderr && stderr.trim()) {
-                try {
-                    const errorData = JSON.parse(stderr);
-                    throw new Error(`Extraction failed: ${errorData.message || errorData.error}`);
-                } catch {
-                    throw new Error(`Extraction failed: ${stderr}`);
-                }
-            }
-
-            return stdout.trim();
+            const result = await goProcess.start();
+            return result as string;
         } catch (error: any) {
             if (error.code === "ENOENT") {
                 throw new Error(`Extractor binary not found: ${extractorPath}`);
             }
-            if (error.message && error.message.includes("Extraction failed:")) {
-                throw error;
-            }
-            throw new Error(`Failed to extract archive: ${error.message}`);
+            throw new Error(`Extraction failed: ${error.message}`);
         }
     }
 

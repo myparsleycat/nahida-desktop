@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { FolderGroup, ModInfo } from "@shared/types";
+import type { FolderGroup, ModInfo } from "@shared/types.gen";
 import { toast } from "sonner";
 import { useModStore } from "@renderer/store/mod";
 

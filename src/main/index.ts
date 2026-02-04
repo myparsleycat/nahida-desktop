@@ -23,11 +23,11 @@ import Compressor from "./lib/compressor";
 import TransferService from "./services/transfer";
 import ModManager from "./services/mod-manager";
 import ArchiveService from "./services/archive";
-import { pathToFileURL } from "node:url";
 import CustomDownloader from "./lib/custom-downloader";
 import { PathSelector } from "./lib/path-selector";
 import Watcher from "./lib/watcher";
 import { registerProtocal } from "./protocals";
+import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
 
 if (IS_ELECTRON) {
     // Needs to be here, otherwise Chromium's FileSystemAccess API won't work. Waiting for the electron team to fix it.
@@ -186,6 +186,12 @@ app.whenReady().then(async () => {
         desktop.logger.warn("앱이 이미 실행중임");
         app.quit();
         return;
+    }
+
+    if (!app.isPackaged) {
+        installExtension(REACT_DEVELOPER_TOOLS)
+            .then((ext) => console.log(`Added Extension: ${ext.name}`))
+            .catch((err) => console.log("An error occurred: ", err));
     }
 
     app.on("second-instance", (_event, commandLine, _workingDirectory) => {

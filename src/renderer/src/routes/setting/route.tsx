@@ -14,12 +14,14 @@ import { useEffect } from "react";
 import { useGlobalStore } from "@renderer/store/global";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { Button } from "@renderer/components/ui/button";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/setting")({
   component: RouteComponent,
 });
 
 function RouteComponent() {
+  const { t } = useTranslation();
   const location = useLocation();
   const navi = useNavigate();
   const appStatus = useGlobalStore((state) => state.appStatus);
@@ -33,19 +35,19 @@ function RouteComponent() {
   }, [location.pathname]);
 
   const navItems = [
-    { icon: Settings, label: "일반", path: "/setting/gen" },
-    { icon: GamepadIcon, label: "모드", path: "/setting/mod" },
-    { icon: User, label: "계정", path: "/setting/acc" },
+    { icon: Settings, label: t("page.setting.tabs.general"), path: "/setting/gen" },
+    { icon: GamepadIcon, label: t("page.setting.tabs.mod"), path: "/setting/mod" },
+    { icon: User, label: t("page.setting.tabs.account"), path: "/setting/acc" },
     // { icon: RefreshCw, label: "동기화", path: "/setting/sync" },
     // { icon: Database, label: "백업", path: "/setting/bak" },
     // { icon: Folder, label: "공간", path: "/setting/space" },
-    { icon: Globe, label: "네트워크", path: "/setting/net" },
+    { icon: Globe, label: t("page.setting.tabs.network"), path: "/setting/net" },
     // { icon: Bell, label: "알림", path: "/setting/noti" },
   ];
 
   return (
     <div className="flex flex-col h-full relative">
-      <Titlebar title={{ text: "설정", position: "center" }} />
+      <Titlebar title={{ text: t("page.setting.title"), position: "center" }} />
 
       <nav className="border-b">
         <div className="flex items-center justify-center gap-1 p-3">

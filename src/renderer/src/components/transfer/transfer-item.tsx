@@ -19,6 +19,7 @@ import {
 import { cn } from "@renderer/lib/utils";
 import { TransferItemProps } from "./types";
 import { getFileIcon, getStatusColor } from "./utils";
+import { useTranslation } from "react-i18next";
 
 const TransferItemActions = memo(
   ({
@@ -43,6 +44,8 @@ const TransferItemActions = memo(
     | "onRetry"
     | "failedFiles"
   >) => {
+    const { t } = useTranslation();
+
     const isActive = status === "uploading" || status === "downloading";
     const isPaused = status === "paused";
     const isQueued = status === "queued";
@@ -99,13 +102,23 @@ const TransferItemActions = memo(
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             {!isCompleted && !isFailed && (
-              <DropdownMenuItem onClick={() => onCancel?.(id)}>취소</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onCancel?.(id)}>
+                {t("page.transfer.item.dropdown_menu.cancel")}
+              </DropdownMenuItem>
             )}
-            {isFailed && <DropdownMenuItem onClick={() => onRetry?.(id)}>재시작</DropdownMenuItem>}
+            {isFailed && (
+              <DropdownMenuItem onClick={() => onRetry?.(id)}>
+                {t("page.transfer.item.dropdown_menu.retry")}
+              </DropdownMenuItem>
+            )}
             {!isFailed && hasFailedFiles && (
-              <DropdownMenuItem onClick={() => onRetry?.(id)}>실패한 파일 재시도</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onRetry?.(id)}>
+                {t("page.transfer.item.dropdown_menu.retry_failed_files")}
+              </DropdownMenuItem>
             )}
-            <DropdownMenuItem onClick={() => onCancel?.(id)}>전송에서 제거</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onCancel?.(id)}>
+              {t("page.transfer.item.dropdown_menu.remove_from_transfer")}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -143,6 +156,7 @@ export const TransferItem = memo((props: TransferItemProps) => {
     processedFiles,
     failedFiles,
   } = props;
+  const { t } = useTranslation();
 
   const [isHovered, setIsHovered] = useState(false);
   const isActive = status === "uploading" || status === "downloading";
@@ -194,17 +208,23 @@ export const TransferItem = memo((props: TransferItemProps) => {
               )}
               {(isActive || isPaused) && timeRemaining && (
                 <span className="truncate whitespace-nowrap hidden sm:inline">
-                  {timeRemaining} 남음
+                  {t("page.transfer.item.time_remaining", { time: timeRemaining })}
                 </span>
               )}
-              {isCompleted && <span className="text-success shrink-0 whitespace-nowrap">완료</span>}
+              {isCompleted && (
+                <span className="text-success shrink-0 whitespace-nowrap">
+                  {t("page.transfer.item.completed")}
+                </span>
+              )}
               {failedFiles && failedFiles > 0 ? (
                 <span className="text-destructive shrink-0 whitespace-nowrap">
-                  {failedFiles}개 실패
+                  {t("page.transfer.item.failed_files", { count: failedFiles })}
                 </span>
               ) : (
                 isFailed && (
-                  <span className="text-destructive shrink-0 whitespace-nowrap">실패</span>
+                  <span className="text-destructive shrink-0 whitespace-nowrap">
+                    {t("page.transfer.item.failed")}
+                  </span>
                 )
               )}
             </div>

@@ -1,4 +1,4 @@
-import { IpcHandlers, IpcEvents } from "@shared/types";
+import { IpcHandlers, IpcEvents } from "@shared/types.gen";
 
 export function invoke<K extends keyof IpcHandlers>(
     channel: K,
@@ -7,9 +7,6 @@ export function invoke<K extends keyof IpcHandlers>(
     return (window as any).api.invoke(channel, ...args);
 }
 
-export function on<K extends keyof IpcEvents>(
-    channel: K,
-    listener: IpcEvents[K],
-): () => void {
+export function on<K extends keyof IpcEvents>(channel: K, listener: IpcEvents[K]): () => void {
     return (window as any).api.on(channel, listener);
 }

@@ -23,7 +23,7 @@ export function ModGrid({ isDragging }: ModGridProps) {
   const searchQuery = useModStore((s) => s.searchQuery);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  const [parent] = useAutoAnimate({ duration: 150 });
+  // const [parent] = useAutoAnimate({ duration: 150 });
 
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
   const { data: activeGroup, isPlaceholderData, isPending } = useModGroup(selectedGroupPath);
@@ -150,7 +150,7 @@ export function ModGrid({ isDragging }: ModGridProps) {
               style={{
                 gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
               }}
-              ref={parent}
+              // ref={parent}
             >
               {mods.map((mod) => (
                 <ModCard

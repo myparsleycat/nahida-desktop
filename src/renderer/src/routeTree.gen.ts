@@ -12,11 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TransferRouteImport } from './routes/transfer'
 import { Route as ReportRouteImport } from './routes/report'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as XxmiRouteRouteImport } from './routes/xxmi/route'
 import { Route as SettingRouteRouteImport } from './routes/setting/route'
 import { Route as BackupRouteRouteImport } from './routes/backup/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ModIndexRouteImport } from './routes/mod/index'
 import { Route as BackupIndexRouteImport } from './routes/backup/index'
+import { Route as XxmiGimiRouteImport } from './routes/xxmi/gimi'
 import { Route as SettingSyncRouteImport } from './routes/setting/sync'
 import { Route as SettingSpaceRouteImport } from './routes/setting/space'
 import { Route as SettingNotiRouteImport } from './routes/setting/noti'
@@ -43,6 +45,11 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const XxmiRouteRoute = XxmiRouteRouteImport.update({
+  id: '/xxmi',
+  path: '/xxmi',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingRouteRoute = SettingRouteRouteImport.update({
   id: '/setting',
   path: '/setting',
@@ -67,6 +74,11 @@ const BackupIndexRoute = BackupIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => BackupRouteRoute,
+} as any)
+const XxmiGimiRoute = XxmiGimiRouteImport.update({
+  id: '/gimi',
+  path: '/gimi',
+  getParentRoute: () => XxmiRouteRoute,
 } as any)
 const SettingSyncRoute = SettingSyncRouteImport.update({
   id: '/sync',
@@ -123,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/backup': typeof BackupRouteRouteWithChildren
   '/setting': typeof SettingRouteRouteWithChildren
+  '/xxmi': typeof XxmiRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/report': typeof ReportRoute
   '/transfer': typeof TransferRoute
@@ -134,6 +147,7 @@ export interface FileRoutesByFullPath {
   '/setting/noti': typeof SettingNotiRoute
   '/setting/space': typeof SettingSpaceRoute
   '/setting/sync': typeof SettingSyncRoute
+  '/xxmi/gimi': typeof XxmiGimiRoute
   '/backup/': typeof BackupIndexRoute
   '/mod/': typeof ModIndexRoute
   '/drive/drive/$id': typeof DriveDriveIdRoute
@@ -142,6 +156,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/setting': typeof SettingRouteRouteWithChildren
+  '/xxmi': typeof XxmiRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/report': typeof ReportRoute
   '/transfer': typeof TransferRoute
@@ -153,6 +168,7 @@ export interface FileRoutesByTo {
   '/setting/noti': typeof SettingNotiRoute
   '/setting/space': typeof SettingSpaceRoute
   '/setting/sync': typeof SettingSyncRoute
+  '/xxmi/gimi': typeof XxmiGimiRoute
   '/backup': typeof BackupIndexRoute
   '/mod': typeof ModIndexRoute
   '/drive/drive/$id': typeof DriveDriveIdRoute
@@ -163,6 +179,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/backup': typeof BackupRouteRouteWithChildren
   '/setting': typeof SettingRouteRouteWithChildren
+  '/xxmi': typeof XxmiRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/report': typeof ReportRoute
   '/transfer': typeof TransferRoute
@@ -174,6 +191,7 @@ export interface FileRoutesById {
   '/setting/noti': typeof SettingNotiRoute
   '/setting/space': typeof SettingSpaceRoute
   '/setting/sync': typeof SettingSyncRoute
+  '/xxmi/gimi': typeof XxmiGimiRoute
   '/backup/': typeof BackupIndexRoute
   '/mod/': typeof ModIndexRoute
   '/drive/drive/$id': typeof DriveDriveIdRoute
@@ -185,6 +203,7 @@ export interface FileRouteTypes {
     | '/'
     | '/backup'
     | '/setting'
+    | '/xxmi'
     | '/auth'
     | '/report'
     | '/transfer'
@@ -196,6 +215,7 @@ export interface FileRouteTypes {
     | '/setting/noti'
     | '/setting/space'
     | '/setting/sync'
+    | '/xxmi/gimi'
     | '/backup/'
     | '/mod/'
     | '/drive/drive/$id'
@@ -204,6 +224,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/setting'
+    | '/xxmi'
     | '/auth'
     | '/report'
     | '/transfer'
@@ -215,6 +236,7 @@ export interface FileRouteTypes {
     | '/setting/noti'
     | '/setting/space'
     | '/setting/sync'
+    | '/xxmi/gimi'
     | '/backup'
     | '/mod'
     | '/drive/drive/$id'
@@ -224,6 +246,7 @@ export interface FileRouteTypes {
     | '/'
     | '/backup'
     | '/setting'
+    | '/xxmi'
     | '/auth'
     | '/report'
     | '/transfer'
@@ -235,6 +258,7 @@ export interface FileRouteTypes {
     | '/setting/noti'
     | '/setting/space'
     | '/setting/sync'
+    | '/xxmi/gimi'
     | '/backup/'
     | '/mod/'
     | '/drive/drive/$id'
@@ -245,6 +269,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BackupRouteRoute: typeof BackupRouteRouteWithChildren
   SettingRouteRoute: typeof SettingRouteRouteWithChildren
+  XxmiRouteRoute: typeof XxmiRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ReportRoute: typeof ReportRoute
   TransferRoute: typeof TransferRoute
@@ -274,6 +299,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/xxmi': {
+      id: '/xxmi'
+      path: '/xxmi'
+      fullPath: '/xxmi'
+      preLoaderRoute: typeof XxmiRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/setting': {
@@ -310,6 +342,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/backup/'
       preLoaderRoute: typeof BackupIndexRouteImport
       parentRoute: typeof BackupRouteRoute
+    }
+    '/xxmi/gimi': {
+      id: '/xxmi/gimi'
+      path: '/gimi'
+      fullPath: '/xxmi/gimi'
+      preLoaderRoute: typeof XxmiGimiRouteImport
+      parentRoute: typeof XxmiRouteRoute
     }
     '/setting/sync': {
       id: '/setting/sync'
@@ -422,10 +461,23 @@ const SettingRouteRouteWithChildren = SettingRouteRoute._addFileChildren(
   SettingRouteRouteChildren,
 )
 
+interface XxmiRouteRouteChildren {
+  XxmiGimiRoute: typeof XxmiGimiRoute
+}
+
+const XxmiRouteRouteChildren: XxmiRouteRouteChildren = {
+  XxmiGimiRoute: XxmiGimiRoute,
+}
+
+const XxmiRouteRouteWithChildren = XxmiRouteRoute._addFileChildren(
+  XxmiRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BackupRouteRoute: BackupRouteRouteWithChildren,
   SettingRouteRoute: SettingRouteRouteWithChildren,
+  XxmiRouteRoute: XxmiRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ReportRoute: ReportRoute,
   TransferRoute: TransferRoute,

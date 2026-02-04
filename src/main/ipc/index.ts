@@ -9,7 +9,7 @@ import { registerTransferHandlers } from "./handlers/transfer";
 import { registerModHandlers } from "./handlers/mod";
 import { registerLoggerHandlers } from "./handlers/logger";
 import { registerPathSelectorHandlers } from "./handlers/path-selector";
-import { IpcEvents } from "@shared/types";
+import { IpcEvents } from "@shared/types.gen";
 
 export class IPC {
     private d: NahidaDesktop;

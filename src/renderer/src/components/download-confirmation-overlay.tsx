@@ -5,8 +5,11 @@ import { useState, useEffect } from "react";
 import { useModStore } from "@renderer/store/mod";
 import { toast } from "sonner";
 import { Logger } from "@renderer/lib/logger";
+import { useTranslation } from "react-i18next";
 
 export function DownloadConfirmationOverlay() {
+  const { t } = useTranslation();
+
   const downloadMode = useModStore((s) => s.downloadMode);
   const setDownloadMode = useModStore((s) => s.setDownloadMode);
   const selectedGroup = useModStore((s) => s.selectedGroup);
@@ -69,39 +72,47 @@ export function DownloadConfirmationOverlay() {
         <div className="space-y-4">
           <div className="flex items-start justify-between">
             <div>
-              <h3 className="text-lg font-semibold">다운로드 확인</h3>
-              <p className="text-sm text-muted-foreground mt-1">다운로드할 위치를 선택하세요</p>
+              <h3 className="text-lg font-semibold">
+                {t("components.download-confirmation-overlay.title")}
+              </h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                {t("components.download-confirmation-overlay.description")}
+              </p>
             </div>
           </div>
 
           {suggestedName && (
             <div className="space-y-1">
-              <p className="text-sm font-medium">파일 이름:</p>
+              <p className="text-sm font-medium">
+                {t("components.download-confirmation-overlay.file_name")}
+              </p>
               <Input
                 value={fileName}
                 onChange={(e) => setFileName(e.target.value)}
-                placeholder="파일 이름을 입력하세요"
+                placeholder={t("components.download-confirmation-overlay.file_name_placeholder")}
                 className="w-full"
               />
             </div>
           )}
 
           <div className="space-y-1">
-            <p className="text-sm font-medium">다운로드 위치:</p>
+            <p className="text-sm font-medium">
+              {t("components.download-confirmation-overlay.download_location")}
+            </p>
             {selectedGroupName ? (
               <p className="text-sm text-muted-foreground bg-muted px-3 py-2 rounded">
                 {selectedGroupName}
               </p>
             ) : (
               <p className="text-sm text-muted-foreground italic">
-                좌측에서 캐릭터 폴더를 선택하세요
+                {t("components.download-confirmation-overlay.need_select_character_folder")}
               </p>
             )}
           </div>
 
           <div className="flex gap-2 pt-2">
             <Button variant="outline" onClick={handleCancel} className="flex-1">
-              취소
+              {t("g.cancel")}
             </Button>
             <Button
               onClick={handleConfirm}
@@ -109,7 +120,7 @@ export function DownloadConfirmationOverlay() {
               className="flex-1"
             >
               <Download className="size-4 mr-2" />
-              다운로드
+              {t("g.select")}
             </Button>
           </div>
         </div>

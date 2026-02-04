@@ -1,0 +1,272 @@
+{
+    "g": {
+        "search": "検索",
+        "name": "名前",
+        "date": "日付",
+        "size": "サイズ",
+        "cancel": "キャンセル",
+        "confirm": "確認",
+        "select": "選択",
+        "apply": "適用",
+        "delete": "削除",
+        "add": "追加",
+        "create": "作成"
+    },
+    "page": {
+        "transfer": {
+            "title": "転送",
+            "stats_label": {
+                "upload": "アップロード",
+                "download": "ダウンロード",
+                "total_transferred": "総転送量",
+                "active_transfers": "進行中の転送"
+            },
+            "toolbar": {
+                "all": "すべて",
+                "upload": "アップロード",
+                "download": "ダウンロード"
+            },
+            "empty_state": {
+                "all_tabs": "転送履歴がありません",
+                "uploading": "アップロード中のファイルはありません",
+                "downloading": "ダウンロード中のファイルはありません",
+                "completed": "完了した転送はありません",
+                "failed": "失敗した転送はありません",
+                "paused": "一時停止中の転送はありません",
+                "search_results": "検索結果がありません"
+            },
+            "item": {
+                "uploading": "アップロード中",
+                "downloading": "ダウンロード中",
+                "completed": "完了",
+                "failed": "失敗",
+                "paused": "一時停止",
+                "time_remaining": "残り {{time}}",
+                "time_elapsed": "経過 {{time}}",
+                "failed_files": "{{count}}個 失敗",
+                "dropdown_menu": {
+                    "cancel": "キャンセル",
+                    "retry": "再試行",
+                    "retry_failed_files": "失敗したファイルを再試行",
+                    "remove_from_transfer": "転送から削除"
+                }
+            }
+        },
+        "drive": {
+            "title": "ドライブ",
+            "share_drive": "共有ドライブ",
+            "no_contents_section_message": {
+                "0": "このフォルダーにはファイルやフォルダーがありません",
+                "1": "ここにファイルやフォルダーをドラッグしてアップロード",
+                "1": "ファイルやフォルダをここにドラッグしてアップロード"
+            },
+            "head_buttons": {
+                "search_in_dir_placeholder": "このフォルダー内を検索...",
+                "dropdown_menu": {
+                    "download": "ダウンロード",
+                    "make_new": {
+                        "title": "新規作成",
+                        "new_dir": "フォルダー作成",
+                        "upload_dir": "フォルダーをアップロード",
+                        "upload_file": "ファイルをアップロード"
+                    }
+                }
+            },
+            "list_head": {
+                "name": "名前",
+                "date": "更新日時",
+                "size": "サイズ"
+            },
+            "context_menu": {
+                "open": "開く",
+                "download": "ダウンロード",
+                "rename": "名前を変更",
+                "trash": "ゴミ箱",
+                "new_dir": "フォルダー作成"
+            },
+            "dialog": {
+                "create_dir": {
+                    "title": "フォルダー作成",
+                    "name_input_placeholder": "フォルダー名",
+                    "#": {
+                        "0": "ディレクトリ名の形式が無効です",
+                        "1": "ディレクトリを作成するパス情報の取得に失敗しました",
+                        "2": "同じ名前のフォルダーが既に存在します。",
+                        "toast-promise": {
+                            "loading": "ディレクトリを作成しています...",
+                            "success": "ディレクトリが作成されました"
+                        }
+                    }
+                },
+                "rename": {
+                    "title": "名前を変更",
+                    "name_input_placeholder": "新しい名前",
+                    "extension": "拡張子",
+                    "#": {
+                        "0": "名前は空にできません",
+                        "1": "ディレクトリ名の形式が無効です",
+                        "toast-promise": {
+                            "loading": "名前を変更しています...",
+                            "success": "名前が変更されました。"
+                        }
+                    }
+                }
+            }
+        },
+        "share_drive": {
+            "title": "共有ドライブ"
+        },
+        "mod": {
+            "title": "MODマネージャー",
+            "dad_section": {
+                "title": "{{name}}に追加",
+                "description": "圧縮ファイルは自動的に解凍されます"
+            },
+            "all_enabled": "すべて有効化",
+            "all_disabled": "すべて無効化",
+            "content-header": {
+                "all_enabled": "すべてのMODが有効になりました",
+                "all_disabled": "すべてのMODが無効になりました"
+            },
+            "character-sidebar": {
+                "add-to-character": "{{name}}に追加"
+            },
+            "dialog": {
+                "add-game": {
+                    "title": "ゲーム追加",
+                    "name_input_placeholder": "ゲーム名 (例: 原神)",
+                    "path_input_placeholder": "MODフォルダーのパス",
+                    "#": {
+                        "0": "ゲーム名を入力してください",
+                        "1": "MODフォルダーのパスを選択してください"
+                    }
+                },
+                "preset-management": {
+                    "description": "このプリセットには {{length}} 個のMODが保存されています。"
+                },
+                "delete-game": {
+                    "title": "ゲーム削除",
+                    "description": "本当に '{{name}}' を削除しますか？この操作は元に戻せず、該当ゲームのプリセットも一緒に削除されます。"
+                },
+                "add-preset": {
+                    "title": "新規プリセット作成",
+                    "#": {
+                        "0": "プリセット名を入力してください"
+                    }
+                }
+            }
+        },
+        "setting": {
+            "title": "設定",
+            "tabs": {
+                "general": "一般",
+                "mod": "MOD",
+                "account": "アカウント",
+                "network": "ネットワーク"
+            },
+            "gen": {
+                "application": {
+                    "title": "アプリケーション",
+                    "runOnStartup": "ログイン時に実行",
+                    "runOnStartupDescription": "システム起動時にアプリを自動的に実行します。",
+                    "checkBackgroundUpdates": "バックグラウンド更新確認",
+                    "checkBackgroundUpdatesDescription": "バックグラウンドで更新を確認します。",
+                    "checkUpdate": "更新確認",
+                    "autoUpdate": "自動更新",
+                    "autoUpdateDescription": "更新確認後、自動的にインストールします (準備中)"
+                },
+                "language": {
+                    "title": "言語",
+                    "select": "言語選択"
+                },
+                "theme": {
+                    "title": "テーマ",
+                    "select": "テーマ選択",
+                    "light": "ライト",
+                    "dark": "ダーク",
+                    "system": "システムデフォルト"
+                },
+                "startPage": {
+                    "title": "開始ページ",
+                    "select": "開始ページ選択"
+                },
+                "other": {
+                    "title": "その他",
+                    "moveTransferPageWhenStartTransfer": "転送開始時にページ移動",
+                    "moveTransferPageWhenStartTransferDescription": "ファイル転送が始まると自動的に転送管理ページへ移動します。",
+                    "powerSaveBlockInTransfer": "スリープモード防止",
+                    "powerSaveBlockInTransferDescription": "転送または同期中はシステムが待機状態になるのを防ぎます。"
+                }
+            },
+            "mod": {
+                "title": "MOD",
+                "mod_management": {
+                    "title": "MOD管理",
+                    "deleteArchiveAfterExtract": "解凍後に削除",
+                    "deleteArchiveAfterExtractDescription": "圧縮ファイルをMODフォルダーに解凍した後、元の圧縮ファイルを削除します",
+                    "moveFolderInsteadOfCopy": "コピーの代わりに移動",
+                    "moveFolderInsteadOfCopyDescription": "フォルダーをMODフォルダーにドロップする際、コピーせずに移動します (元ファイル削除)"
+                },
+                "mod_grid_virtualization": {
+                    "title": "MODグリッド仮想化",
+                    "useVirtualization": "仮想化を使用",
+                    "useVirtualizationDescription": "MODリストが多い場合、仮想化を使用してパフォーマンスを向上させます",
+                    "virtualizationThreshold": "基準MOD数",
+                    "virtualizationThresholdDescription": "設定した個数以上のMODがある場合、仮想化を適用します"
+                }
+            },
+            "acc": {
+                "title": "アカウント",
+                "not_logged_in": {
+                    "description": "ログインが必要です。",
+                    "login": "ログイン"
+                },
+                "my_account": "マイアカウント",
+                "logout": "ログアウト"
+            },
+            "net": {
+                "title": "ネットワーク",
+                "proxy": {
+                    "title": "プロキシ設定",
+                    "type": "プロキシタイプ",
+                    "disabled": "使用しない",
+                    "host": "ホスト",
+                    "port": "ポート",
+                    "requiresAuth": "プロキシサーバーがパスワードを要求",
+                    "username": "ユーザー名",
+                    "password": "パスワード",
+                    "save": "保存",
+                    "saved": "プロキシ設定が保存されました。"
+                }
+            }
+        }
+    },
+    "components": {
+        "path-selector-dialog": {
+            "title": "パス選択",
+            "description": "{{name}} をダウンロードする方法を選択してください",
+            "mod_manager": {
+                "title": "MODマネージャー",
+                "description": {
+                    "0": "MODマネージャーから",
+                    "1": "キャラクターフォルダーを選択します"
+                }
+            },
+            "explorer": {
+                "title": "パス選択",
+                "description": {
+                    "0": "エクスプローラーから",
+                    "1": "フォルダーを選択します"
+                }
+            }
+        },
+        "download-confirmation-overlay": {
+            "title": "ダウンロード確認",
+            "description": "ダウンロード先を選択してください",
+            "file_name": "ファイル名",
+            "file_name_placeholder": "ファイル名を入力してください",
+            "download_location": "ダウンロード先",
+            "need_select_character_folder": "左側でキャラクターフォルダーを選択してください"
+        }
+    }
+}

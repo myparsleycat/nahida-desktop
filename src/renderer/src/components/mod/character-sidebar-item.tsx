@@ -1,20 +1,33 @@
 import { cn } from "@renderer/lib/utils";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import type { FolderGroup } from "@renderer/types/mod";
-import { forwardRef, useState } from "react";
+import { useState, memo, useRef, useEffect } from "react";
 
 import { Preview } from "./preview";
+import { useTranslation } from "react-i18next";
 
 interface CharacterSidebarItemProps {
   group: FolderGroup;
   isSelected: boolean;
-  onClick: () => void;
-  onDrop: (files: File[]) => void;
+  onClick: (group: FolderGroup) => void;
+  onDrop: (group: FolderGroup, files: File[]) => void;
+  itemRefs: React.MutableRefObject<Map<string, HTMLButtonElement>>;
 }
 
-export const CharacterSidebarItem = forwardRef<HTMLButtonElement, CharacterSidebarItemProps>(
-  ({ group, isSelected, onClick, onDrop }, ref) => {
+export const CharacterSidebarItem = memo(
+  ({ group, isSelected, onClick, onDrop, itemRefs }: CharacterSidebarItemProps) => {
+    const { t } = useTranslation();
     const [isDragOver, setIsDragOver] = useState(false);
+    const ref = useRef<HTMLButtonElement>(null);
+
+    useEffect(() => {
+      if (ref.current) {
+        itemRefs.current.set(group.name, ref.current);
+      }
+      return () => {
+        itemRefs.current.delete(group.name);
+      };
+    }, [group.name, itemRefs]);
 
     const handleDragEnter = (e: React.DragEvent) => {
       if (e.dataTransfer?.types.includes("Files")) {
@@ -54,7 +67,7 @@ export const CharacterSidebarItem = forwardRef<HTMLButtonElement, CharacterSideb
         setIsDragOver(false);
         const files = Array.from(e.dataTransfer.files);
         if (files.length > 0) {
-          onDrop(files);
+          onDrop(group, files);
         }
       }
     };
@@ -62,7 +75,7 @@ export const CharacterSidebarItem = forwardRef<HTMLButtonElement, CharacterSideb
     return (
       <button
         ref={ref}
-        onClick={onClick}
+        onClick={() => onClick(group)}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
@@ -75,7 +88,9 @@ export const CharacterSidebarItem = forwardRef<HTMLButtonElement, CharacterSideb
       >
         {isDragOver && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm border-2 border-dashed border-primary pointer-events-none">
-            <span className="text-sm font-bold">이 캐릭터에 추가</span>
+            <span className="text-sm font-bold">
+              {t("page.mod.character-sidebar.add-to-character", { name: group.name })}
+            </span>
           </div>
         )}
         <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 overflow-hidden bg-muted">

@@ -21,6 +21,7 @@ import {
 } from "@renderer/components/ui/dropdown-menu";
 import { cn } from "@renderer/lib/utils";
 import { TransferTabType, TransferStatus } from "./types";
+import { useTranslation } from "react-i18next";
 
 interface TransferToolbarProps {
   activeTab: TransferTabType;
@@ -54,6 +55,8 @@ export function TransferToolbar({
   onResumeAll,
   onClearCompleted,
 }: TransferToolbarProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex flex-col gap-4 w-full max-w-full min-w-0">
       <div className="flex flex-col gap-4 w-full max-w-full min-w-0 sm:flex-row sm:items-center sm:justify-between sm:flex-wrap">
@@ -64,21 +67,21 @@ export function TransferToolbar({
         >
           <TabsList className="bg-secondary w-full sm:w-auto h-auto flex-wrap justify-start">
             <TabsTrigger value="all" className="gap-2 flex-1 sm:flex-none">
-              전체
+              {t("page.transfer.toolbar.all")}
               <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
                 {counts.total}
               </Badge>
             </TabsTrigger>
             <TabsTrigger value="uploads" className="gap-2 flex-1 sm:flex-none">
               <ArrowUpFromLine className="h-4 w-4" />
-              업로드
+              {t("page.transfer.toolbar.upload")}
               <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
                 {counts.uploads}
               </Badge>
             </TabsTrigger>
             <TabsTrigger value="downloads" className="gap-2 flex-1 sm:flex-none">
               <ArrowDownToLine className="h-4 w-4" />
-              다운로드
+              {t("page.transfer.toolbar.download")}
               <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
                 {counts.downloads}
               </Badge>
@@ -121,7 +124,7 @@ export function TransferToolbar({
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="검색..."
+            placeholder={t("g.search")}
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             className="pl-9 w-full min-w-0"

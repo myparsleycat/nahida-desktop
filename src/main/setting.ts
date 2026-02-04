@@ -80,6 +80,31 @@ export class Setting {
             }
         },
 
+        getLanguage: async () => {
+            const qr = await db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "language"),
+            });
+
+            if (!qr) {
+                await db.insert(setting).values({ key: "language", value: "ko" });
+                return "ko";
+            }
+
+            return qr.value;
+        },
+
+        setLanguage: async (language: string) => {
+            await db
+                .insert(setting)
+                .values({ key: "language", value: language })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: language },
+                });
+
+            this.desktop.ipc.broadcast("language:update", language);
+        },
+
         getMoveTransferPageWhenStartTransfer: async () => {
             const qr = await db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "moveTransferPageWhenStartTransfer"),

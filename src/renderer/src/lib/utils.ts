@@ -1,7 +1,7 @@
 import { SortType } from "@renderer/types";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { Content } from "@shared/types";
+import { Content } from "@shared/types.gen";
 
 export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));

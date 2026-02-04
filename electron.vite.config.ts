@@ -3,6 +3,7 @@ import { defineConfig } from "electron-vite";
 import react from "@vitejs/plugin-react";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import tailwindcss from "@tailwindcss/vite";
+import { ipcGeneratorPlugin } from "./plugins/ipc-generator";
 
 import { visualizer } from "rollup-plugin-visualizer";
 
@@ -18,6 +19,7 @@ export default defineConfig({
             },
         },
         plugins: [
+            ipcGeneratorPlugin(),
             // visualizer({
             //     filename: "dist/stats-main.html",
             //     open: true,
