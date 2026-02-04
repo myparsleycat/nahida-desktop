@@ -80,7 +80,7 @@ function RouteComponent() {
 
   return (
     <>
-      <Titlebar title={{ text: t("mod.title"), position: "center" }} />
+      <Titlebar title={{ text: t("page.mod.title"), position: "center" }} />
 
       <div className="flex-1 flex overflow-hidden h-full">
         <ModSidebar />
