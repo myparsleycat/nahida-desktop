@@ -8,6 +8,11 @@
                 "total_transferred": "전체 전송량",
                 "active_transfers": "진행중인 전송"
             },
+            "toolbar": {
+                "all": "전체",
+                "upload": "업로드",
+                "download": "다운로드"
+            },
             "empty_state": {
                 "all_tabs": "전송 기록이 없습니다",
                 "uploading": "업로드 중인 파일이 없습니다",
