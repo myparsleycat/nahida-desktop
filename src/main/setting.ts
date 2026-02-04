@@ -87,7 +87,9 @@ export class Setting {
 
             if (!qr) {
                 const systemLocale = app.getSystemLocale();
-                const language = systemLocale.split("-")[0];
+                const language = ["ko", "en", "ja", "zh"].includes(systemLocale.split("-")[0])
+                    ? systemLocale.split("-")[0]
+                    : "en";
                 await db.insert(setting).values({ key: "language", value: language });
                 return language;
             }
