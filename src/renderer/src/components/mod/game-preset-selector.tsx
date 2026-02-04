@@ -14,7 +14,7 @@ import { AddGameDialog } from "./add-game-dialog";
 import { CreatePresetDialog } from "./create-preset-dialog";
 import { useModStore } from "@renderer/store/mod";
 import { usePresets } from "@renderer/hooks/use-mod-data";
-import { useEffect } from "react";
+import { useEffect, memo } from "react";
 
 interface GamePresetSelectorProps {
   games: GameConfig[];
@@ -23,7 +23,7 @@ interface GamePresetSelectorProps {
   onAddGame: (name: string, path: string) => void;
 }
 
-export function GamePresetSelector({
+export const GamePresetSelector = memo(function GamePresetSelector({
   games,
   onDeleteGameClick,
   onBrowseFolder,
@@ -114,4 +114,4 @@ export function GamePresetSelector({
       </div>
     </div>
   );
-}
+});

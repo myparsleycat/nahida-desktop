@@ -2,7 +2,7 @@ import { Search } from "lucide-react";
 import { Input } from "@renderer/components/ui/input";
 import { ScrollArea } from "../ui/scroll-area";
 import type { FolderGroup } from "@renderer/types/mod";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react";
 import { filter } from "es-toolkit/compat";
 
 import { useModStore } from "@renderer/store/mod";
@@ -17,7 +17,11 @@ interface CharacterSidebarProps {
   onModDrop: (files: File[], groupPath: string, options?: { allowImages?: boolean }) => void;
 }
 
-export function CharacterSidebar({ groups, isLoading = false, onModDrop }: CharacterSidebarProps) {
+export const CharacterSidebar = memo(function CharacterSidebar({
+  groups,
+  isLoading = false,
+  onModDrop,
+}: CharacterSidebarProps) {
   const { t } = useTranslation();
 
   const selectedGroup = useModStore((s) => s.selectedGroup);
@@ -28,32 +32,50 @@ export function CharacterSidebar({ groups, isLoading = false, onModDrop }: Chara
 
   // const [anim1, setAnim1Enabled] = useAutoAnimate({ duration: 150 });
 
-  const filteredGroups = filter(groups, (group) =>
-    group.name.toLowerCase().includes(searchTerm.toLowerCase()),
+  const filteredGroups = useMemo(
+    () => filter(groups, (group) => group.name.toLowerCase().includes(searchTerm.toLowerCase())),
+    [groups, searchTerm],
   );
 
-  const handleSelect = (group: FolderGroup, resetSearch: boolean) => {
-    setSelectedGroup(group);
+  const handleSelect = useCallback(
+    (group: FolderGroup, resetSearch: boolean) => {
+      setSelectedGroup(group);
 
-    if (searchTerm) {
-      setTimeout(() => {
-        const element = itemRefs.current.get(group.name);
-        if (element) {
-          element.scrollIntoView({
-            behavior: "auto",
-            block: "center",
-          });
-        }
-      }, 0);
-      if (resetSearch) setSearchTerm("");
-    }
-  };
+      if (searchTerm) {
+        setTimeout(() => {
+          const element = itemRefs.current.get(group.name);
+          if (element) {
+            element.scrollIntoView({
+              behavior: "auto",
+              block: "center",
+            });
+          }
+        }, 0);
+        if (resetSearch) setSearchTerm("");
+      }
+    },
+    [searchTerm, setSelectedGroup, setSearchTerm],
+  );
 
   useEffect(() => {
     if (searchTerm && filteredGroups.length === 1) {
       handleSelect(filteredGroups[0], false);
     }
   }, [searchTerm, filteredGroups]);
+
+  const handleItemClick = useCallback(
+    (group: FolderGroup) => {
+      handleSelect(group, true);
+    },
+    [handleSelect],
+  );
+
+  const handleItemDrop = useCallback(
+    (group: FolderGroup, files: File[]) => {
+      onModDrop(files, group.path, { allowImages: true });
+    },
+    [onModDrop],
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -88,12 +110,12 @@ export function CharacterSidebar({ groups, isLoading = false, onModDrop }: Chara
                   }}
                   group={group}
                   isSelected={selectedGroup?.name === group.name}
-                  onClick={() => handleSelect(group, true)}
-                  onDrop={(files) => onModDrop(files, group.path, { allowImages: true })}
+                  onClick={handleItemClick}
+                  onDrop={handleItemDrop}
                 />
               ))}
         </div>
       </ScrollArea>
     </div>
   );
-}
+});

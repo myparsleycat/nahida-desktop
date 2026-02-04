@@ -5,6 +5,7 @@ import { useGames, useCharacters } from "@renderer/hooks/use-mod-data";
 import { useGameMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModDragDrop } from "@renderer/hooks/use-mod-drag-drop";
 import { useRouteContext } from "@tanstack/react-router";
+import { useCallback } from "react";
 
 export default function ModSidebar() {
   const { queryClient } = useRouteContext({ from: "/mod/" });
@@ -17,20 +18,27 @@ export default function ModSidebar() {
   const { data: games = [] } = useGames();
   const { data: characters = [], isPlaceholderData, isPending } = useCharacters(selectedGame);
 
-  const handleFilesDrop = useModDragDrop(
-    selectedGroup?.path,
-    queryClient,
-    selectedGame || "",
-  ).handleFilesDrop;
+  const { handleFilesDrop } = useModDragDrop(selectedGroup?.path, queryClient, selectedGame || "");
 
-  const handleBrowseFolder = async () => {
+  const handleBrowseFolder = useCallback(async () => {
     const path = await window.api.invoke("mod:pickFolder");
     if (path) {
       setNewGamePath(path);
     }
-  };
+  }, [setNewGamePath]);
 
   const { addGameMutation } = useGameMutations();
+
+  const handleDeleteGameClick = useCallback(() => {
+    setIsDeleteGameDialogOpen(true);
+  }, [setIsDeleteGameDialogOpen]);
+
+  const handleAddGame = useCallback(
+    (name: string, path: string) => {
+      addGameMutation.mutate({ name, path });
+    },
+    [addGameMutation],
+  );
 
   return (
     <div className="border-r h-full flex flex-col w-64 z-20">
@@ -44,9 +52,9 @@ export default function ModSidebar() {
 
       <GamePresetSelector
         games={games}
-        onDeleteGameClick={() => setIsDeleteGameDialogOpen(true)}
+        onDeleteGameClick={handleDeleteGameClick}
         onBrowseFolder={handleBrowseFolder}
-        onAddGame={(name, path) => addGameMutation.mutate({ name, path })}
+        onAddGame={handleAddGame}
       />
     </div>
   );
