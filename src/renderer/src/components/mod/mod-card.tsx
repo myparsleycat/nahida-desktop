@@ -182,7 +182,10 @@ export const ModCard = memo(function ModCard({
       draggable={false}
     >
       {mod.preview && mod.preview.match(/\.(jpeg|jpg|gif|png|webp|bmp)$/i) && (
-        <div className="absolute inset-0 z-0 blur-xl scale-110 pointer-events-none opacity-25">
+        <div
+          className="absolute inset-0 z-0 blur-lg scale-110 pointer-events-none opacity-25"
+          style={{ transform: "translateZ(0)", willChange: "filter" }}
+        >
           <img src={`local://${mod.preview}`} alt="preview" className="w-full h-full object-fill" />
         </div>
       )}
@@ -250,11 +253,17 @@ export const ModCard = memo(function ModCard({
       </div>
 
       <div className="absolute left-1 bottom-1 flex flex-col space-y-1 z-10">
-        <Badge className="bg-background/35 backdrop-blur-lg text-foreground text-xs h-5 flex items-center gap-1.5">
+        <Badge
+          className="bg-background/35 backdrop-blur text-foreground text-xs h-5 flex items-center gap-1.5"
+          style={{ transform: "translateZ(0)", willChange: "backdrop-filter" }}
+        >
           <FolderIcon />
           {formatSize(mod.size)}
         </Badge>
-        <Badge className="bg-background/35 backdrop-blur-lg text-foreground text-xs h-5 flex items-center gap-1.5">
+        <Badge
+          className="bg-background/35 backdrop-blur text-foreground text-xs h-5 flex items-center gap-1.5"
+          style={{ transform: "translateZ(0)", willChange: "backdrop-filter" }}
+        >
           <CalendarIcon />
           {formatDate(new Date(mod.mtime), "ko")}
         </Badge>
@@ -354,6 +363,7 @@ function ModIniList({
           // getToggleBoxColorClass(mod.isEnabled)
           "backdrop-blur-xl bg-background/10 dark:bg-background/10",
         )}
+        style={{ transform: "translateZ(0)", willChange: "backdrop-filter" }}
       >
         {mod.inis.map((ini, iniIdx) => {
           const iniToggleKeys = ini.toggleKeys;
@@ -393,6 +403,7 @@ function ModIniList({
                                 // getToggleInputColorClass(mod.isEnabled),
                                 "bg-background/10 dark:bg-background/10 backdrop-blur-xl",
                               )}
+                              style={{ transform: "translateZ(0)", willChange: "backdrop-filter" }}
                               defaultValue={toggleKey.key}
                               onClick={(e) => e.stopPropagation()}
                               onBlur={(e) => {
@@ -420,6 +431,7 @@ function ModIniList({
                                 // getToggleInputColorClass(mod.isEnabled),
                                 "bg-background/10 dark:bg-background/10 backdrop-blur-xl",
                               )}
+                              style={{ transform: "translateZ(0)", willChange: "backdrop-filter" }}
                               defaultValue={toggleKey.back}
                               onClick={(e) => e.stopPropagation()}
                               onBlur={(e) => {
