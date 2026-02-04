@@ -1,5 +1,5 @@
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import type { FolderGroup, Preset, GameConfig } from "@shared/types";
+import type { FolderGroup, Preset, GameConfig } from "@shared/types.gen";
 
 export function useGames() {
     return useQuery<GameConfig[]>({

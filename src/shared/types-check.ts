@@ -1,5 +1,5 @@
-import { IpcHandlers, IpcEvents } from "./types";
-import { IPC_HANDLER_CHANNELS, IPC_EVENT_CHANNELS } from "./ipc-spec";
+import { IpcHandlers, IpcEvents } from "./types.gen";
+import { IPC_HANDLER_CHANNELS, IPC_EVENT_CHANNELS } from "./ipc-spec.gen";
 
 type AssertEmpty<T extends never> = T;
 

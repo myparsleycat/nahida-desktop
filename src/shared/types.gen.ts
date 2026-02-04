@@ -1,11 +1,4 @@
-import {
-    MessageBoxOptions,
-    OpenDialogOptions,
-    OpenDialogReturnValue,
-    OpenExternalOptions,
-} from "electron";
 import { Session } from "./schemas/auth";
-import type { ShowModalReturnValue } from "@main/services/util";
 import { eden } from "@main/client";
 import { Treaty } from "@elysiajs/eden";
 import { desktop } from "@main/index";

@@ -1,6 +1,6 @@
 import { formatSize, formatTime } from "@shared/utils";
 import { createFileRoute } from "@tanstack/react-router";
-import { Transfer, TransferWithoutData } from "@shared/types";
+import { Transfer, TransferWithoutData } from "@shared/types.gen";
 import { useEffect, useState, useCallback } from "react";
 import { TransferList } from "@renderer/components/transfer/transfer-list";
 import { TransferStats } from "@renderer/components/transfer/transfer-stats";

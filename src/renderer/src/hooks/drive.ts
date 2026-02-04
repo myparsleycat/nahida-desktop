@@ -1,6 +1,6 @@
 import { useDragStore } from "@renderer/store/drive";
 import { useRouteContext } from "@tanstack/react-router";
-import { Content } from "@shared/types";
+import { Content } from "@shared/types.gen";
 import { toast } from "sonner";
 import { compact } from "es-toolkit";
 

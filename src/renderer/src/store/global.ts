@@ -1,5 +1,5 @@
 import { createStore, useStore } from "zustand";
-import type { AppStatus } from "@shared/types";
+import type { AppStatus } from "@shared/types.gen";
 
 import type { Session } from "@shared/schemas/auth";
 

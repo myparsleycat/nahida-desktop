@@ -150,8 +150,8 @@ function generateIpc(options: IpcGeneratorOptions) {
 export const ipcGeneratorPlugin = (): Plugin => {
     const options = {
         handlerDir: resolve("src/main/ipc/handlers"),
-        specFile: resolve("src/shared/ipc-spec.ts"),
-        typesFile: resolve("src/shared/types.ts"),
+        specFile: resolve("src/shared/ipc-spec.gen.ts"),
+        typesFile: resolve("src/shared/types.gen.ts"),
     };
 
     return {

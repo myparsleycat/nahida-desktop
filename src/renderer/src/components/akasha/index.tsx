@@ -54,7 +54,7 @@ import {
 } from "@renderer/store/drive";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { useMutation } from "@tanstack/react-query";
-import { Content } from "@shared/types";
+import { Content } from "@shared/types.gen";
 import { formatDate, formatSize, getRandInt } from "@shared/utils";
 import validator from "validator";
 

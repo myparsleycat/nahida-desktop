@@ -1,5 +1,5 @@
 import isDev from "@main/internal/isDev";
-import type { AppStatus, PathMetadata } from "@shared/types";
+import type { AppStatus, PathMetadata } from "@shared/types.gen";
 import { spawn } from "child_process";
 import {
     dialog,

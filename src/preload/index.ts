@@ -2,7 +2,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { webUtils } from "electron";
-import { IPC_EVENT_CHANNELS, IPC_HANDLER_CHANNELS } from "@/shared/ipc-spec";
+import { IPC_EVENT_CHANNELS, IPC_HANDLER_CHANNELS } from "@shared/ipc-spec.gen";
 
 const api = {
     invoke: (channel: string, ...args: any[]) => {

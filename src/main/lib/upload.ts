@@ -1,6 +1,6 @@
 import { NahidaDesktop } from "..";
 import { nanoid } from "nanoid";
-import { Content } from "@shared/types";
+import { Content } from "@shared/types.gen";
 import { chunk, compact, flatten, groupBy, orderBy, sumBy, retry } from "es-toolkit";
 import path from "node:path";
 import fg from "fast-glob";

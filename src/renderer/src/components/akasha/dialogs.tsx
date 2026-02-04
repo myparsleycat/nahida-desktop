@@ -58,7 +58,7 @@ import {
 import { DiscordIcon } from "@renderer/components/icon";
 import { Center, Random1619 } from "@renderer/components/common";
 import { useDialogStore, useSelectionStore } from "@renderer/store/drive";
-import { Content } from "@shared/types";
+import { Content } from "@shared/types.gen";
 import { t } from "i18next";
 
 export const ValidateName = (name: string) => {

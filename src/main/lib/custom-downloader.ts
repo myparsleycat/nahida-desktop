@@ -4,7 +4,7 @@ import ky from "ky";
 import fse from "fs-extra";
 import { pipeline } from "node:stream/promises";
 import { nanoid } from "nanoid";
-import { TransferData } from "@shared/types";
+import { TransferData } from "@shared/types.gen";
 import { throttle } from "es-toolkit";
 import path from "node:path";
 import { Notification } from "electron";

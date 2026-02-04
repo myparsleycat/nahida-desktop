@@ -1,5 +1,5 @@
 import { LayoutType, SortType } from "@renderer/types";
-import { Content } from "@shared/types";
+import { Content } from "@shared/types.gen";
 import { useNavigate } from "@tanstack/react-router";
 import { createStore, useStore } from "zustand";
 

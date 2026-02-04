@@ -1,5 +1,5 @@
 import { ElectronAPI } from "@electron-toolkit/preload";
-import { IpcHandlers, IpcEvents } from "../shared/types";
+import { IpcHandlers, IpcEvents } from "../shared/types.gen";
 
 declare global {
     interface Window {
