@@ -181,7 +181,7 @@ function RouteComponent() {
             <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
               <SelectItem value="/transfer">{t("page.transfer.title")}</SelectItem>
               <SelectItem value="/drive/drive/root">{t("page.drive.title")}</SelectItem>
-              <SelectItem value="/drive/share/root">{t("page.share.title")}</SelectItem>
+              <SelectItem value="/drive/share/root">{t("page.share_drive.title")}</SelectItem>
               <SelectItem value="/mod">{t("page.mod.title")}</SelectItem>
             </SelectContent>
           </Select>

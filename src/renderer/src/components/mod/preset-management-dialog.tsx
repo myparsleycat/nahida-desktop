@@ -9,8 +9,10 @@ import {
 } from "@renderer/components/ui/dialog";
 import { useModStore } from "@renderer/store/mod";
 import { usePresetMutations } from "@renderer/hooks/use-mod-mutations";
+import { useTranslation } from "react-i18next";
 
 export function PresetManagementDialog() {
+  const { t } = useTranslation();
   const isOpen = useModStore((s) => s.isSelectedPresetDialogOpen);
   const setIsOpen = useModStore((s) => s.setIsSelectedPresetDialogOpen);
   const selectedPreset = useModStore((s) => s.selectedPreset);
@@ -25,7 +27,9 @@ export function PresetManagementDialog() {
         </DialogHeader>
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            이 프리셋에는 {selectedPreset?.mods.length || 0}개의 모드가 저장되어 있습니다.
+            {t("page.mod.dialog.preset-management.description", {
+              length: selectedPreset?.mods.length || 0,
+            })}
           </p>
         </div>
         <DialogFooter className="flex justify-between">
@@ -33,14 +37,14 @@ export function PresetManagementDialog() {
             variant="destructive"
             onClick={() => selectedPreset && deletePresetMutation.mutate(selectedPreset.id)}
           >
-            삭제
+            {t("g.delete")}
           </Button>
           <div className="flex gap-2">
             <DialogClose asChild>
-              <Button variant="outline">취소</Button>
+              <Button variant="outline">{t("g.cancel")}</Button>
             </DialogClose>
             <Button onClick={() => selectedPreset && applyPresetMutation.mutate(selectedPreset.id)}>
-              적용
+              {t("g.apply")}
             </Button>
           </div>
         </DialogFooter>

@@ -6,7 +6,10 @@
         "size": "크기",
         "cancel": "취소",
         "confirm": "확인",
-        "select": "선택"
+        "select": "선택",
+        "apply": "적용",
+        "delete": "삭제",
+        "add": "추가"
     },
     "page": {
         "transfer": {
@@ -105,6 +108,40 @@
                             "success": "이름이 변경되었습니다."
                         }
                     }
+                }
+            }
+        },
+        "share_drive": {
+            "title": "공유 드라이브"
+        },
+        "mod": {
+            "title": "모드 매니저",
+            "dad_section": {
+                "title": "{{name}}에 추가",
+                "description": "압축 파일은 자동으로 압축 해제됩니다"
+            },
+            "all_enabled": "모두 활성화",
+            "all_disabled": "모두 비활성화",
+            "content-header": {
+                "all_enabled": "모든 모드가 활성화되었습니다",
+                "all_disabled": "모든 모드가 비활성화되었습니다"
+            },
+            "dialog": {
+                "add-game": {
+                    "title": "게임 추가",
+                    "name_input_placeholder": "게임 이름 (예: 원공노)",
+                    "path_input_placeholder": "모드 폴더 경로",
+                    "#": {
+                        "0": "게임 이름을 입력해주세요",
+                        "1": "모드 폴더 경로를 선택해주세요"
+                    }
+                },
+                "preset-management": {
+                    "description": "이 프리셋에는 {{length}}개의 모드가 저장되어 있습니다."
+                },
+                "delete-game": {
+                    "title": "게임 삭제",
+                    "description": "정말로 '{{name}}'을 삭제할까요? 이 작업은 되돌릴 수 없으며, 해당 게임의 프리셋도 함께 삭제됩니다."
                 }
             }
         },

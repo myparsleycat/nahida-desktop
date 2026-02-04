@@ -55,9 +55,9 @@ export function ContentHeader() {
     try {
       await window.api.invoke("mod:enableAll", groupPath);
       queryClient.invalidateQueries({ queryKey: ["modGroup", groupPath] });
-      toast.success("모든 모드가 활성화되었습니다.");
-    } catch (error) {
-      toast.error("모드 활성화에 실패했습니다.");
+      toast.success(t("page.mod.content-header.all_enabled"));
+    } catch (error: any) {
+      toast.error(error.message);
       console.error(error);
     }
   };
@@ -68,9 +68,9 @@ export function ContentHeader() {
     try {
       await window.api.invoke("mod:disableAll", groupPath);
       queryClient.invalidateQueries({ queryKey: ["modGroup", groupPath] });
-      toast.success("모든 모드가 비활성화되었습니다.");
-    } catch (error) {
-      toast.error("모드 비활성화에 실패했습니다.");
+      toast.success(t("page.mod.content-header.all_disabled"));
+    } catch (error: any) {
+      toast.error(error.message);
       console.error(error);
     }
   };
@@ -134,9 +134,9 @@ export function ContentHeader() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">
-              <SelectItem value="name">이름</SelectItem>
-              <SelectItem value="date">날짜</SelectItem>
-              <SelectItem value="size">크기</SelectItem>
+              <SelectItem value="name">{t("g.name")}</SelectItem>
+              <SelectItem value="date">{t("g.date")}</SelectItem>
+              <SelectItem value="size">{t("g.size")}</SelectItem>
             </SelectContent>
           </Select>
 
@@ -168,8 +168,12 @@ export function ContentHeader() {
           </DropdownMenuTrigger>
           <DropdownMenuContent>
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={handleEnableAll}>전체 활성화</DropdownMenuItem>
-              <DropdownMenuItem onClick={handleDisableAll}>전체 비활성화</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleEnableAll}>
+                {t("page.mod.all_enabled")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleDisableAll}>
+                {t("page.mod.all_disabled")}
+              </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
