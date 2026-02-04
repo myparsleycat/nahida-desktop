@@ -100,7 +100,7 @@ export function RenameDialog() {
       >
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>{t("drive.ui.rename")}</DialogTitle>
+            <DialogTitle>{t("page.drive.dialog.rename.title")}</DialogTitle>
           </DialogHeader>
           <form
             className="flex flex-col space-y-4"
@@ -113,7 +113,7 @@ export function RenameDialog() {
 
               const name = formData.get("name") as string;
               if (!name || typeof name !== "string" || name.trim() === "") {
-                toast.warning(t("#.RenameItem.0"));
+                toast.warning(t("page.drive.dialog.rename.#.rename.0"));
                 return;
               }
 
@@ -123,7 +123,7 @@ export function RenameDialog() {
 
               const validate_result = ValidateName(rename);
               if (validate_result) {
-                return toast.warning(t("#.RenameItem.1"), {
+                return toast.warning(t("page.drive.dialog.rename.#.rename.1"), {
                   description: validate_result,
                 });
               }
@@ -134,11 +134,11 @@ export function RenameDialog() {
               });
 
               toast.promise(renamePromise, {
-                loading: t("#.RenameItem.toast-promise.loading"),
+                loading: t("page.drive.dialog.rename.#.toast-promise.loading"),
                 success: async () => {
                   await queryClient.invalidateQueries();
                   dialog.setOpen("renameDialog", false);
-                  return t("#.RenameItem.toast-promise.success");
+                  return t("page.drive.dialog.rename.#.toast-promise.success");
                 },
                 error: (e: any) => e.message,
               });
@@ -151,7 +151,7 @@ export function RenameDialog() {
                   "focus:outline-2 focus:-outline-offset-2 focus:outline-black/25 focus:dark:outline-white/25",
                 )}
                 name="name"
-                placeholder="이름"
+                placeholder={t("page.drive.dialog.rename.name_input_placeholder")}
                 maxLength={200}
                 required
                 defaultValue={
@@ -171,7 +171,7 @@ export function RenameDialog() {
                     "focus:outline-2 focus:-outline-offset-2 focus:outline-black/25 focus:dark:outline-white/25",
                   )}
                   name="ext"
-                  placeholder="확장자"
+                  placeholder={t("page.drive.dialog.rename.extension")}
                   maxLength={50}
                   defaultValue={
                     selection.selectedItems.length === 1 &&
@@ -195,7 +195,7 @@ export function RenameDialog() {
                 {t("g.cancel")}
               </Button>
               <Button type="submit" disabled={mutation.isPending}>
-                {t("drive.ui.rename")}
+                {t("g.confirm")}
               </Button>
             </div>
           </form>
@@ -231,19 +231,19 @@ export function NewDirectoryDialog({ contents }: { contents: Content[] }) {
 
     const validate_result = ValidateName(name);
     if (validate_result) {
-      return toast.warning(t("#.CreateDir.0"), {
+      return toast.warning(t("page.drive.dialog.create_dir.#.0"), {
         description: validate_result,
       });
     }
 
     if (contents.some((item) => item.isDir && item.name === name)) {
-      return toast.warning(t("#.CreateDir.2"));
+      return toast.warning(t("page.drive.dialog.create_dir.#.2"));
     }
 
     await mutation
       .mutateAsync(name)
       .then(async () => {
-        toast.success(t("#.CreateDir.toast-promise.success"));
+        toast.success(t("page.drive.dialog.create_dir.#.toast-promise.success"));
         dialog.setOpen("createDirDialog", false);
         await queryClient.invalidateQueries();
       })
@@ -259,10 +259,15 @@ export function NewDirectoryDialog({ contents }: { contents: Content[] }) {
     >
       <DialogContent aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle>{t("drive.ui.new_dir")}</DialogTitle>
+          <DialogTitle>{t("page.drive.dialog.create_dir.title")}</DialogTitle>
         </DialogHeader>
         <form className="flex flex-col space-y-4" autoComplete="off" onSubmit={handleSubmit}>
-          <Input name="name" placeholder="이름" maxLength={255} required />
+          <Input
+            name="name"
+            placeholder={t("page.drive.dialog.create_dir.name_input_placeholder")}
+            maxLength={255}
+            required
+          />
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
             <Button
               type="button"
@@ -276,7 +281,7 @@ export function NewDirectoryDialog({ contents }: { contents: Content[] }) {
             </Button>
             <Button type="submit" className="flex items-center gap-2">
               {mutation.isPending && <Loader2Icon />}
-              {t("drive.ui.new_dir")}
+              {t("g.confirm")}
             </Button>
           </div>
         </form>

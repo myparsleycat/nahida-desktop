@@ -9,6 +9,7 @@ import { useModStore } from "@renderer/store/mod";
 import { CharacterSidebarItem, CharacterSidebarItemSkeleton } from "./character-sidebar-item";
 import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
+import { useTranslation } from "react-i18next";
 
 interface CharacterSidebarProps {
   groups: FolderGroup[];
@@ -17,6 +18,8 @@ interface CharacterSidebarProps {
 }
 
 export function CharacterSidebar({ groups, isLoading = false, onModDrop }: CharacterSidebarProps) {
+  const { t } = useTranslation();
+
   const selectedGroup = useModStore((s) => s.selectedGroup);
   const setSelectedGroup = useModStore((s) => s.setSelectedGroup);
   const [searchTerm, setSearchTerm] = useState("");
@@ -60,7 +63,7 @@ export function CharacterSidebar({ groups, isLoading = false, onModDrop }: Chara
           <Input
             id="character-search-input"
             className="h-8 pr-8 text-sm"
-            placeholder="검색..."
+            placeholder={t("g.search")}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />

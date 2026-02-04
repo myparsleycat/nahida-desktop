@@ -1,4 +1,13 @@
 {
+    "g": {
+        "search": "검색",
+        "name": "이름",
+        "date": "날짜",
+        "size": "크기",
+        "cancel": "취소",
+        "confirm": "확인",
+        "select": "선택"
+    },
     "page": {
         "transfer": {
             "title": "전송",
@@ -30,11 +39,74 @@
                 "paused": "일시정지",
                 "time_remaining": "{{time}} 남음",
                 "time_elapsed": "{{time}} 경과",
-                "failed_files": "{{count}}개 실패"
+                "failed_files": "{{count}}개 실패",
+                "dropdown_menu": {
+                    "cancel": "취소",
+                    "retry": "다시 시도",
+                    "retry_failed_files": "실패한 파일 재시도",
+                    "remove_from_transfer": "전송에서 제거"
+                }
             }
         },
         "drive": {
-            "title": "드라이브"
+            "title": "드라이브",
+            "share_drive": "공유 드라이브",
+            "no_contents_section_message": {
+                "0": "이 폴더에 파일이나 폴더가 없습니다",
+                "1": "여기로 파일이나 폴더를 드래그 해 업로드하세요"
+            },
+            "head_buttons": {
+                "search_in_dir_placeholder": "이 폴더에서 검색...",
+                "dropdown_menu": {
+                    "download": "다운로드",
+                    "make_new": {
+                        "title": "새로 만들기",
+                        "new_dir": "폴더 생성",
+                        "upload_dir": "폴더 업로드",
+                        "upload_file": "파일 업로드"
+                    }
+                }
+            },
+            "list_head": {
+                "name": "이름",
+                "date": "수정한 날짜",
+                "size": "크기"
+            },
+            "context_menu": {
+                "open": "열기",
+                "download": "다운로드",
+                "rename": "이름 바꾸기",
+                "trash": "휴지통",
+                "new_dir": "폴더 생성"
+            },
+            "dialog": {
+                "create_dir": {
+                    "title": "폴더 생성",
+                    "name_input_placeholder": "폴더 이름",
+                    "#": {
+                        "0": "디렉토리 이름 형식이 유효하지 않습니다",
+                        "1": "디렉토리를 생성할 경로의 정보를 가져오는데 실패했어요",
+                        "2": "동일한 이름의 폴더가 이미 존재합니다.",
+                        "toast-promise": {
+                            "loading": "디렉토리를 생성하고 있습니다...",
+                            "success": "디렉토리가 생성되었습니다"
+                        }
+                    }
+                },
+                "rename": {
+                    "title": "이름 바꾸기",
+                    "name_input_placeholder": "새 이름",
+                    "extension": "확장자",
+                    "#": {
+                        "0": "이름은 비워둘 수 없습니다",
+                        "1": "디렉토리 이름 형식이 유효하지 않습니다",
+                        "toast-promise": {
+                            "loading": "이름을 변경하고 있습니다...",
+                            "success": "이름이 변경되었습니다."
+                        }
+                    }
+                }
+            }
         },
         "setting": {
             "title": "설정",
@@ -119,6 +191,34 @@
                     "saved": "프록시 설정이 저장되었습니다."
                 }
             }
+        }
+    },
+    "components": {
+        "path-selector-dialog": {
+            "title": "경로 선택",
+            "description": "{{name}} 를 어떤 방식으로 다운로드 할지 선택하세요",
+            "mod_manager": {
+                "title": "모드 매니저",
+                "description": {
+                    "0": "모드 매니저에서",
+                    "1": "캐릭터 폴더를 선택합니다"
+                }
+            },
+            "explorer": {
+                "title": "경로 선택",
+                "description": {
+                    "0": "파일 탐색기에서",
+                    "1": "폴더를 선택합니다"
+                }
+            }
+        },
+        "download-confirmation-overlay": {
+            "title": "다운로드 확인",
+            "description": "다운로드할 위치를 선택하세요",
+            "file_name": "파일 이름",
+            "file_name_placeholder": "파일 이름을 입력하세요",
+            "download_location": "다운로드 위치",
+            "need_select_character_folder": "좌측에서 캐릭터 폴더를 선택하세요"
         }
     }
 }

@@ -44,6 +44,8 @@ const TransferItemActions = memo(
     | "onRetry"
     | "failedFiles"
   >) => {
+    const { t } = useTranslation();
+
     const isActive = status === "uploading" || status === "downloading";
     const isPaused = status === "paused";
     const isQueued = status === "queued";
@@ -100,13 +102,23 @@ const TransferItemActions = memo(
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             {!isCompleted && !isFailed && (
-              <DropdownMenuItem onClick={() => onCancel?.(id)}>취소</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onCancel?.(id)}>
+                {t("page.transfer.item.dropdown_menu.cancel")}
+              </DropdownMenuItem>
             )}
-            {isFailed && <DropdownMenuItem onClick={() => onRetry?.(id)}>재시작</DropdownMenuItem>}
+            {isFailed && (
+              <DropdownMenuItem onClick={() => onRetry?.(id)}>
+                {t("page.transfer.item.dropdown_menu.retry")}
+              </DropdownMenuItem>
+            )}
             {!isFailed && hasFailedFiles && (
-              <DropdownMenuItem onClick={() => onRetry?.(id)}>실패한 파일 재시도</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onRetry?.(id)}>
+                {t("page.transfer.item.dropdown_menu.retry_failed_files")}
+              </DropdownMenuItem>
             )}
-            <DropdownMenuItem onClick={() => onCancel?.(id)}>전송에서 제거</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onCancel?.(id)}>
+              {t("page.transfer.item.dropdown_menu.remove_from_transfer")}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 

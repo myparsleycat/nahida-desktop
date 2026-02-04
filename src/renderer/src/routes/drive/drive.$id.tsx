@@ -173,10 +173,10 @@ function RouteComponent() {
                       <FolderIcon size="80" />
                     </div>
                     <p className="text-lg text-center mt-4">
-                      {t("drive.ui.no_contents_section_message.0")}
+                      {t("page.drive.no_contents_section_message.0")}
                     </p>
                     <p className="text-muted-foreground text-center">
-                      {t("drive.ui.no_contents_section_message.1")}
+                      {t("page.drive.no_contents_section_message.1")}
                     </p>
                   </Center>
                 ) : query.isFetching && sortedContents.length === 0 ? (

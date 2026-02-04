@@ -31,8 +31,11 @@ import { Separator } from "@renderer/components/ui/separator";
 import { useModStore } from "@renderer/store/mod";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 export function ContentHeader() {
+  const { t } = useTranslation();
+
   const searchValue = useModStore((s) => s.searchQuery);
   const onSearchChange = useModStore((s) => s.setSearchQuery);
   const selectedGroup = useModStore((s) => s.selectedGroup);
@@ -116,7 +119,7 @@ export function ContentHeader() {
           <Input
             id="mod-search-input"
             className="h-8 pr-8 text-sm"
-            placeholder="검색..."
+            placeholder={t("g.search")}
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
           />
