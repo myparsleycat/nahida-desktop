@@ -187,3 +187,21 @@ body {
     -ms-user-select: none;
     user-select: none;
 }
+
+.scroll-area::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.scroll-area::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.scroll-area::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.scroll-area::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
