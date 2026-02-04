@@ -9,7 +9,8 @@
         "select": "Select",
         "apply": "Apply",
         "delete": "Delete",
-        "add": "Add"
+        "add": "Add",
+        "create": "Create"
     },
     "page": {
         "transfer": {
@@ -111,6 +112,9 @@
                 }
             }
         },
+        "share_drive": {
+            "title": "Share Drive"
+        },
         "mod": {
             "title": "Mod Manager",
             "dad_section": {
@@ -122,6 +126,9 @@
             "content-header": {
                 "all_enabled": "All mods enabled",
                 "all_disabled": "All mods disabled"
+            },
+            "character-sidebar": {
+                "add-to-character": "Add to {{name}}"
             },
             "dialog": {
                 "add-game": {
@@ -139,6 +146,16 @@
                 "delete-game": {
                     "title": "Delete Game",
                     "description": "Are you sure you want to delete '{{name}}'? This action cannot be undone, and the game's presets will also be deleted."
+                },
+                "delete-mod": {
+                    "title": "Are you sure you want to delete this mod?",
+                    "description": "Deleted mods can be restored from the recycle bin."
+                },
+                "add-preset": {
+                    "title": "Create New Preset",
+                    "#": {
+                        "0": "Please enter a preset name"
+                    }
                 }
             }
         },

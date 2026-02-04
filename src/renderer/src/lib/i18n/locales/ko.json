@@ -9,7 +9,8 @@
         "select": "선택",
         "apply": "적용",
         "delete": "삭제",
-        "add": "추가"
+        "add": "추가",
+        "create": "생성"
     },
     "page": {
         "transfer": {
@@ -126,6 +127,9 @@
                 "all_enabled": "모든 모드가 활성화되었습니다",
                 "all_disabled": "모든 모드가 비활성화되었습니다"
             },
+            "character-sidebar": {
+                "add-to-character": "{{name}}에 추가"
+            },
             "dialog": {
                 "add-game": {
                     "title": "게임 추가",
@@ -142,6 +146,12 @@
                 "delete-game": {
                     "title": "게임 삭제",
                     "description": "정말로 '{{name}}'을 삭제할까요? 이 작업은 되돌릴 수 없으며, 해당 게임의 프리셋도 함께 삭제됩니다."
+                },
+                "add-preset": {
+                    "title": "새 프리셋 생성",
+                    "#": {
+                        "0": "프리셋 이름을 입력해주세요"
+                    }
                 }
             }
         },

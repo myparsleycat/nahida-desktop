@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/u
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -146,10 +147,12 @@ function RouteComponent() {
               <SelectValue placeholder={t("page.setting.gen.language.select")} />
             </SelectTrigger>
             <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
-              <SelectItem value="ko">한국어</SelectItem>
-              <SelectItem value="en">English</SelectItem>
-              <SelectItem value="ja">日本語</SelectItem>
-              <SelectItem value="zh">中文</SelectItem>
+              <SelectGroup>
+                <SelectItem value="ko">한국어</SelectItem>
+                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="ja">日本語</SelectItem>
+                <SelectItem value="zh">中文</SelectItem>
+              </SelectGroup>
             </SelectContent>
           </Select>
         </div>
@@ -160,9 +163,11 @@ function RouteComponent() {
               <SelectValue placeholder={t("page.setting.gen.theme.select")} />
             </SelectTrigger>
             <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
-              <SelectItem value="system">{t("page.setting.gen.theme.system")}</SelectItem>
-              <SelectItem value="light">{t("page.setting.gen.theme.light")}</SelectItem>
-              <SelectItem value="dark">{t("page.setting.gen.theme.dark")}</SelectItem>
+              <SelectGroup>
+                <SelectItem value="system">{t("page.setting.gen.theme.system")}</SelectItem>
+                <SelectItem value="light">{t("page.setting.gen.theme.light")}</SelectItem>
+                <SelectItem value="dark">{t("page.setting.gen.theme.dark")}</SelectItem>
+              </SelectGroup>
             </SelectContent>
           </Select>
         </div>
@@ -179,10 +184,12 @@ function RouteComponent() {
               <SelectValue placeholder={t("page.setting.gen.startPage.select")} />
             </SelectTrigger>
             <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
-              <SelectItem value="/transfer">{t("page.transfer.title")}</SelectItem>
-              <SelectItem value="/drive/drive/root">{t("page.drive.title")}</SelectItem>
-              <SelectItem value="/drive/share/root">{t("page.share_drive.title")}</SelectItem>
-              <SelectItem value="/mod">{t("page.mod.title")}</SelectItem>
+              <SelectGroup>
+                <SelectItem value="/transfer">{t("page.transfer.title")}</SelectItem>
+                <SelectItem value="/drive/drive/root">{t("page.drive.title")}</SelectItem>
+                <SelectItem value="/drive/share/root">{t("page.share_drive.title")}</SelectItem>
+                <SelectItem value="/mod">{t("page.mod.title")}</SelectItem>
+              </SelectGroup>
             </SelectContent>
           </Select>
         </div>

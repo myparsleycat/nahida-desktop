@@ -9,7 +9,8 @@
         "select": "选择",
         "apply": "应用",
         "delete": "删除",
-        "add": "添加"
+        "add": "添加",
+        "create": "创建"
     },
     "page": {
         "transfer": {
@@ -111,6 +112,9 @@
                 }
             }
         },
+        "share_drive": {
+            "title": "共享驱动器"
+        },
         "mod": {
             "title": "模组管理器",
             "dad_section": {
@@ -122,6 +126,9 @@
             "content-header": {
                 "all_enabled": "所有模组已启用",
                 "all_disabled": "所有模组已禁用"
+            },
+            "character-sidebar": {
+                "add-to-character": "添加到 {{name}}"
             },
             "dialog": {
                 "add-game": {
@@ -139,6 +146,12 @@
                 "delete-game": {
                     "title": "删除游戏",
                     "description": "确定要删除 '{{name}}' 吗？此操作无法撤销，该游戏的预设也将一并删除。"
+                },
+                "add-preset": {
+                    "title": "新建预设",
+                    "#": {
+                        "0": "请输入预设名称"
+                    }
                 }
             }
         },

@@ -13,12 +13,14 @@ import { LoaderIcon, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useModStore } from "@renderer/store/mod";
 import { usePresetMutations } from "@renderer/hooks/use-mod-mutations";
+import { useTranslation } from "react-i18next";
 
 interface CreatePresetDialogProps {
   disabled?: boolean;
 }
 
 export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps) {
+  const { t } = useTranslation();
   const isOpen = useModStore((s) => s.isPresetDialogOpen);
   const setIsOpen = useModStore((s) => s.setIsPresetDialogOpen);
   const newPresetName = useModStore((s) => s.newPresetName);
@@ -28,7 +30,7 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
 
   const handleCreate = () => {
     if (!newPresetName.trim()) {
-      toast.error("프리셋 이름을 입력해주세요.");
+      toast.warning(t("page.mod.dialog.add-preset.#.0"));
       return;
     }
     createPresetMutation.mutate();
@@ -43,22 +45,22 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
       </DialogTrigger>
       <DialogContent className="w-100" aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle>새 프리셋 생성</DialogTitle>
+          <DialogTitle>{t("page.mod.dialog.add-preset.title")}</DialogTitle>
         </DialogHeader>
         <div>
           <Input
-            placeholder="프리셋 이름"
+            placeholder={t("g.name")}
             value={newPresetName}
             onChange={(e) => setNewPresetName(e.target.value)}
           />
         </div>
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline">취소</Button>
+            <Button variant="outline">{t("g.cancel")}</Button>
           </DialogClose>
           <Button onClick={handleCreate} disabled={createPresetMutation.isPending}>
             {createPresetMutation.isPending && <LoaderIcon className="animate-spin size-4" />}
-            프리셋 생성
+            {t("g.create")}
           </Button>
         </DialogFooter>
       </DialogContent>

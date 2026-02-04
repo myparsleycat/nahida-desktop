@@ -9,7 +9,8 @@
         "select": "選択",
         "apply": "適用",
         "delete": "削除",
-        "add": "追加"
+        "add": "追加",
+        "create": "作成"
     },
     "page": {
         "transfer": {
@@ -112,6 +113,9 @@
                 }
             }
         },
+        "share_drive": {
+            "title": "共有ドライブ"
+        },
         "mod": {
             "title": "MODマネージャー",
             "dad_section": {
@@ -123,6 +127,9 @@
             "content-header": {
                 "all_enabled": "すべてのMODが有効になりました",
                 "all_disabled": "すべてのMODが無効になりました"
+            },
+            "character-sidebar": {
+                "add-to-character": "{{name}}に追加"
             },
             "dialog": {
                 "add-game": {
@@ -140,6 +147,12 @@
                 "delete-game": {
                     "title": "ゲーム削除",
                     "description": "本当に '{{name}}' を削除しますか？この操作は元に戻せず、該当ゲームのプリセットも一緒に削除されます。"
+                },
+                "add-preset": {
+                    "title": "新規プリセット作成",
+                    "#": {
+                        "0": "プリセット名を入力してください"
+                    }
                 }
             }
         },

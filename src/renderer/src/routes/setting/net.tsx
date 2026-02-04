@@ -12,6 +12,7 @@ import { Label } from "@renderer/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -73,10 +74,12 @@ function RouteComponent() {
               <SelectTrigger id="proxy-type">
                 <SelectValue placeholder="Select proxy type" />
               </SelectTrigger>
-              <SelectContent position="popper">
-                <SelectItem value="disabled">{t("page.setting.net.proxy.disabled")}</SelectItem>
-                <SelectItem value="https">HTTPS</SelectItem>
-                <SelectItem value="socks5">SOCKS5</SelectItem>
+              <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
+                <SelectGroup>
+                  <SelectItem value="disabled">{t("page.setting.net.proxy.disabled")}</SelectItem>
+                  <SelectItem value="https">HTTPS</SelectItem>
+                  <SelectItem value="socks5">SOCKS5</SelectItem>
+                </SelectGroup>
               </SelectContent>
             </Select>
           </div>

@@ -22,6 +22,7 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -133,10 +134,12 @@ export function ContentHeader() {
             <SelectTrigger className="w-[80px]">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent position="popper">
-              <SelectItem value="name">{t("g.name")}</SelectItem>
-              <SelectItem value="date">{t("g.date")}</SelectItem>
-              <SelectItem value="size">{t("g.size")}</SelectItem>
+            <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
+              <SelectGroup>
+                <SelectItem value="name">{t("g.name")}</SelectItem>
+                <SelectItem value="date">{t("g.date")}</SelectItem>
+                <SelectItem value="size">{t("g.size")}</SelectItem>
+              </SelectGroup>
             </SelectContent>
           </Select>
 
