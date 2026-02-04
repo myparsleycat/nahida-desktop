@@ -28,6 +28,7 @@ export default function ModSidebar() {
   }, [setNewGamePath]);
 
   const { addGameMutation } = useGameMutations();
+  const { mutate: addGame } = addGameMutation;
 
   const handleDeleteGameClick = useCallback(() => {
     setIsDeleteGameDialogOpen(true);
@@ -35,9 +36,9 @@ export default function ModSidebar() {
 
   const handleAddGame = useCallback(
     (name: string, path: string) => {
-      addGameMutation.mutate({ name, path });
+      addGame({ name, path });
     },
-    [addGameMutation],
+    [addGame],
   );
 
   return (

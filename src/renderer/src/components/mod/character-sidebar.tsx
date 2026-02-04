@@ -104,10 +104,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
             : filteredGroups.map((group) => (
                 <CharacterSidebarItem
                   key={group.name}
-                  ref={(el) => {
-                    if (el) itemRefs.current.set(group.name, el);
-                    else itemRefs.current.delete(group.name);
-                  }}
+                  itemRefs={itemRefs}
                   group={group}
                   isSelected={selectedGroup?.name === group.name}
                   onClick={handleItemClick}
