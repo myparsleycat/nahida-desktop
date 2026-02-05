@@ -1,33 +1,13 @@
 import { treaty } from "@elysiajs/eden";
 import type { App } from "@backend/index";
 import { BACKEND_URL } from "@shared/const";
-import ky from "ky";
 import { isEmpty } from "es-toolkit/compat";
 import { desktop } from "./index";
-import { appVersion } from "@main/const";
-
-const fetcher = async (url: string | Request | URL, init?: RequestInit) => {
-    const headers = new Headers(init?.headers);
-
-    const token = await desktop.service.auth.getToken();
-
-    headers.set("User-Agent", `Nahida Desktop/${appVersion}`);
-    headers.set("Authorization", `Bearer ${token}`);
-
-    return ky(url, {
-        ...init,
-        headers,
-        throwHttpErrors: false,
-        timeout: 100000, // 100sec cloudflare 524 limit
-        retry: {
-            limit: 2,
-        },
-    });
-};
+import { fetcher } from "@main/internal/fetcher";
 
 export const eden = treaty<App>(BACKEND_URL, {
     fetcher: (async (input: URL | RequestInfo, init: RequestInit | undefined) => {
-        let response = await fetcher(input, init);
+        let response = await fetcher(input.toString(), init);
 
         if (response.status === 401) {
             await desktop.service.auth.startLogout();
@@ -42,8 +22,8 @@ export type Eden = typeof eden;
 type EdenProxy = {
     [K in string]: EdenProxy;
 } & ((args?: Record<string, any>) => EdenProxy) & {
-    url: (options?: { query?: Record<string, any> }) => string;
-};
+        url: (options?: { query?: Record<string, any> }) => string;
+    };
 
 function createProxy(pathSegments: string[] = []): EdenProxy {
     const handler: ProxyHandler<any> = {
@@ -76,7 +56,7 @@ function createProxy(pathSegments: string[] = []): EdenProxy {
         },
     };
 
-    const target = () => { };
+    const target = () => {};
     return new Proxy(target, handler) as unknown as EdenProxy;
 }
 
