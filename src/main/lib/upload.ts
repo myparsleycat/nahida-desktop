@@ -12,8 +12,7 @@ import fse from "fs-extra";
 import { fileTypeFromBuffer } from "file-type/node";
 import PQueue from "p-queue";
 import ky from "ky";
-import { appVersion } from "@main/const";
-import { getHeaders } from "@main/internal/fetcher";
+import { getHeaders, getAgent } from "@main/internal/fetcher";
 
 const CHUNK_SIZE = 100;
 
