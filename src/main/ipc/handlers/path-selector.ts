@@ -1,19 +1,16 @@
-import { ipcMain } from "electron";
+import { rh } from "@main/ipc/helper";
 import { desktop } from "@main/index";
 
 export function registerPathSelectorHandlers() {
-    ipcMain.handle("pathSelector:selectFolderPath", async (_event, selectionId) => {
+    rh("pathSelector:selectFolderPath", async (selectionId) => {
         return desktop.lib.pathSelector.selectFolderPath(selectionId);
     });
 
-    ipcMain.handle(
-        "pathSelector:selectModManagerPath",
-        async (_event, selectionId, path, fileName) => {
-            return desktop.lib.pathSelector.selectModManagerPath(selectionId, path, fileName);
-        },
-    );
+    rh("pathSelector:selectModManagerPath", async (selectionId, path, fileName) => {
+        return desktop.lib.pathSelector.selectModManagerPath(selectionId, path, fileName);
+    });
 
-    ipcMain.handle("pathSelector:cancel", async (_event, selectionId) => {
+    rh("pathSelector:cancel", async (selectionId) => {
         return desktop.lib.pathSelector.cancelSelection(selectionId);
     });
 }

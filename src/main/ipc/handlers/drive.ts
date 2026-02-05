@@ -22,7 +22,7 @@ export function registerDriveHandlers(d: NahidaDesktop) {
         return await d.service.drive.fn.startDownload({ id, suggestedName });
     });
 
-    rh("drive:fn:startUpload", async (destId, paths) => {
+    rh("drive:fn:startUpload", async ({ destId, paths }) => {
         return d.service.drive.fn.startUpload({ destId, paths });
     });
 }
