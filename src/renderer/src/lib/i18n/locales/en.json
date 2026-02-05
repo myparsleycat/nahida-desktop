@@ -219,6 +219,8 @@
                 },
                 "gameFolderCompression": {
                     "title": "Transparent Compression",
+                    "enableFeature": "Enable Game Folder Compression Feature",
+                    "enableFeatureDescription": "Enables the game folder compression tool (compact.exe). If disabled, the tool will not be used at all.",
                     "useCompression": "Use game folder compression",
                     "useCompressionDescription": "Transparently compress game folders to save disk space. (Uses Windows Compact, monitors and compresses new files in real-time)"
                 }

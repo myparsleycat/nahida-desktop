@@ -12,9 +12,8 @@ import {
 } from "lucide-react";
 import { useEffect } from "react";
 import { useGlobalStore } from "@renderer/store/global";
-import { useAutoAnimate } from "@formkit/auto-animate/react";
-import { Button } from "@renderer/components/ui/button";
 import { useTranslation } from "react-i18next";
+import { ScrollArea } from "@renderer/components/ui/scroll-area";
 
 export const Route = createFileRoute("/setting")({
   component: RouteComponent,
@@ -25,8 +24,6 @@ function RouteComponent() {
   const location = useLocation();
   const navi = useNavigate();
   const appStatus = useGlobalStore((state) => state.appStatus);
-
-  const [anim1] = useAutoAnimate({ duration: 100 });
 
   useEffect(() => {
     if (location.pathname === "/setting") {
@@ -68,9 +65,11 @@ function RouteComponent() {
         </div>
       </nav>
 
-      <div className="flex-1 flex flex-col p-2" ref={anim1}>
-        <Outlet />
-      </div>
+      <ScrollArea className="overflow-y-auto">
+        <div className="flex-1 flex flex-col p-2 overflow-hidden">
+          <Outlet />
+        </div>
+      </ScrollArea>
 
       <div className="absolute bottom-4 right-4 pointer-events-none">
         <span className="text-xs text-muted-foreground">v{appStatus?.version}</span>

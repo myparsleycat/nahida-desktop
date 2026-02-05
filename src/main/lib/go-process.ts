@@ -88,6 +88,12 @@ export class GoProcess extends EventEmitter {
                     break;
                 case "log":
                     this.emit("log", msg.payload);
+                    if (
+                        typeof msg.payload === "string" &&
+                        msg.payload.toLowerCase().includes("process ready")
+                    ) {
+                        resolve(msg.payload);
+                    }
                     break;
                 default:
                     this.emit(msg.type, msg.payload);

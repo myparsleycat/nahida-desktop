@@ -248,6 +248,40 @@ export class Setting {
                 this.desktop.lib.compact.updateCompression();
             }
         },
+
+        getGameFolderCompressionFeatureEnabled: async () => {
+            const qr = await db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "gameFolderCompressionFeatureEnabled"),
+            });
+
+            if (!qr) {
+                await db
+                    .insert(setting)
+                    .values({ key: "gameFolderCompressionFeatureEnabled", value: "false" });
+                return false;
+            }
+
+            return qr.value === "true";
+        },
+
+        setGameFolderCompressionFeatureEnabled: async (enabled: boolean) => {
+            await db
+                .insert(setting)
+                .values({ key: "gameFolderCompressionFeatureEnabled", value: String(enabled) })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(enabled) },
+                });
+
+            this.desktop.ipc.broadcast("setting:update", {
+                key: "gameFolderCompressionFeatureEnabled",
+                value: enabled,
+            });
+
+            if (this.desktop.lib && this.desktop.lib.compact) {
+                this.desktop.lib.compact.updateFeature();
+            }
+        },
     };
 
     mod = {

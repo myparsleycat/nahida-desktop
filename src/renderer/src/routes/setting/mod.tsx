@@ -22,6 +22,8 @@ function RouteComponent() {
   const [virtualizationEnabled, setVirtualizationEnabled] = useState(true);
   const [virtualizationThreshold, setVirtualizationThreshold] = useState(30);
   const [gameFolderCompressionEnabled, setGameFolderCompressionEnabled] = useState(false);
+  const [gameFolderCompressionFeatureEnabled, setGameFolderCompressionFeatureEnabled] =
+    useState(false);
   const [compressionProgress, setCompressionProgress] = useState<{
     message: string;
     processedFiles: number;
@@ -63,12 +65,16 @@ function RouteComponent() {
         const compressionEnabled = await window.api.invoke(
           "setting:general:getGameFolderCompressionEnabled",
         );
+        const featureEnabled = await window.api.invoke(
+          "setting:general:getGameFolderCompressionFeatureEnabled",
+        );
 
         setDeleteArchiveAfterExtract(deleteArchive);
         setMoveFolderInsteadOfCopy(moveFolder);
         setVirtualizationEnabled(vEnabled);
         setVirtualizationThreshold(vThreshold);
         setGameFolderCompressionEnabled(compressionEnabled);
+        setGameFolderCompressionFeatureEnabled(featureEnabled);
       } catch (error) {
         Logger.error(error, "ModSettings:loadSettings");
         toast.error("설정을 불러오는데 실패했습니다.");
@@ -128,11 +134,20 @@ function RouteComponent() {
     }
   };
 
+  const handleFeatureChange = async (checked: boolean) => {
+    try {
+      await window.api.invoke("setting:general:setGameFolderCompressionFeatureEnabled", checked);
+      setGameFolderCompressionFeatureEnabled(checked);
+    } catch (error) {
+      Logger.error(error, "ModSettings:handleFeatureChange");
+      toast.error("설정 저장에 실패했습니다.");
+    }
+  };
+
   const handleCompressionChange = async (checked: boolean) => {
     try {
       await window.api.invoke("setting:general:setGameFolderCompressionEnabled", checked);
       setGameFolderCompressionEnabled(checked);
-      toast.success(checked ? "압축 기능이 활성화되었습니다." : "압축 기능이 비활성화되었습니다.");
     } catch (error) {
       Logger.error(error, "ModSettings:handleCompressionChange");
       toast.error("설정 저장에 실패했습니다.");
@@ -246,21 +261,35 @@ function RouteComponent() {
               {t("page.setting.mod.gameFolderCompression.title")}
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col space-y-4">
+          <CardContent className="flex flex-col space-y-4" ref={anim1}>
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <span className="text-sm font-medium">
-                  {t("page.setting.mod.gameFolderCompression.useCompression")}
+                  {t("page.setting.mod.gameFolderCompression.enableFeature")}
                 </span>
-                <p className="text-sm text-muted-foreground">
-                  {t("page.setting.mod.gameFolderCompression.useCompressionDescription")}
-                </p>
               </div>
               <Switch
-                checked={gameFolderCompressionEnabled}
-                onCheckedChange={handleCompressionChange}
+                checked={gameFolderCompressionFeatureEnabled}
+                onCheckedChange={handleFeatureChange}
               />
             </div>
+
+            {gameFolderCompressionFeatureEnabled && (
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <span className="text-sm font-medium">
+                    {t("page.setting.mod.gameFolderCompression.useCompression")}
+                  </span>
+                  <p className="text-sm text-muted-foreground">
+                    {t("page.setting.mod.gameFolderCompression.useCompressionDescription")}
+                  </p>
+                </div>
+                <Switch
+                  checked={gameFolderCompressionEnabled}
+                  onCheckedChange={handleCompressionChange}
+                />
+              </div>
+            )}
 
             {compressionProgress && (
               <div
