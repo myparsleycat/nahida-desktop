@@ -32,6 +32,11 @@ const (
 		windows.FILE_NOTIFY_CHANGE_CREATION
 )
 
+var globalWofInfo = wofCompressionInfo{
+	Algorithm: algorithmXpress8k,
+	Flags:     0,
+}
+
 type Command struct {
 	Type  string   `json:"type"`
 	Paths []string `json:"paths"`
@@ -42,11 +47,17 @@ type ProgressPayload struct {
 	ProcessedFiles uint64 `json:"processedFiles"`
 	SkippedFiles   uint64 `json:"skippedFiles"`
 	ErrorFiles     uint64 `json:"errorFiles"`
+	TotalFiles     uint64 `json:"totalFiles"`
 }
 
 type wofCompressionInfo struct {
 	Algorithm uint32
 	Flags     uint32
+}
+
+type FileTask struct {
+	PathStr string
+	PathPtr *uint16
 }
 
 type IPC struct {
@@ -75,12 +86,22 @@ func (ipc *IPC) Log(text string) {
 	ipc.Emit("log", text)
 }
 
-func (ipc *IPC) Progress(msg string, stats *Stats) {
+func (ipc *IPC) Progress(msg string, stats *Stats, total uint64) {
+	processed := atomic.LoadUint64(&stats.Processed)
+	skipped := atomic.LoadUint64(&stats.Skipped)
+	errors := atomic.LoadUint64(&stats.Errors)
+
+	currentTotal := total
+	if currentTotal < processed+skipped+errors {
+		currentTotal = processed + skipped + errors
+	}
+
 	ipc.Emit("progress", ProgressPayload{
 		Message:        msg,
-		ProcessedFiles: atomic.LoadUint64(&stats.Processed),
-		SkippedFiles:   atomic.LoadUint64(&stats.Skipped),
-		ErrorFiles:     atomic.LoadUint64(&stats.Errors),
+		ProcessedFiles: processed,
+		SkippedFiles:   skipped,
+		ErrorFiles:     errors,
+		TotalFiles:     currentTotal,
 	})
 }
 
@@ -99,11 +120,7 @@ func NewWofService() *WofService {
 	}
 }
 
-func (w *WofService) IsCompressed(path string) bool {
-	pathPtr, err := windows.UTF16PtrFromString(path)
-	if err != nil {
-		return false
-	}
+func (w *WofService) IsCompressedDirect(pathPtr *uint16) bool {
 	var isExternal int32
 	var provider uint32
 	var info wofCompressionInfo
@@ -119,16 +136,12 @@ func (w *WofService) IsCompressed(path string) bool {
 	return ret == 0 && isExternal != 0
 }
 
-func (w *WofService) Compress(file *os.File) error {
-	info := wofCompressionInfo{
-		Algorithm: algorithmXpress8k,
-		Flags:     0,
-	}
+func (w *WofService) CompressHandle(handle windows.Handle) error {
 	ret, _, _ := w.procSetLoc.Call(
-		uintptr(windows.Handle(file.Fd())),
+		uintptr(handle),
 		uintptr(wofProviderFile),
-		uintptr(unsafe.Pointer(&info)),
-		uintptr(unsafe.Sizeof(info)),
+		uintptr(unsafe.Pointer(&globalWofInfo)),
+		uintptr(unsafe.Sizeof(globalWofInfo)),
 	)
 	if ret != 0 {
 		return fmt.Errorf("wof error code: %d", ret)
@@ -136,11 +149,7 @@ func (w *WofService) Compress(file *os.File) error {
 	return nil
 }
 
-func (w *WofService) Decompress(path string) error {
-	pathPtr, err := windows.UTF16PtrFromString(path)
-	if err != nil {
-		return err
-	}
+func (w *WofService) DecompressDirect(pathPtr *uint16) error {
 	handle, err := windows.CreateFile(
 		pathPtr,
 		windows.GENERIC_READ|windows.GENERIC_WRITE,
@@ -164,7 +173,7 @@ func (w *WofService) Decompress(path string) error {
 	)
 	if err != nil {
 		var errno syscall.Errno
-		if errors.As(err, &errno) && errno == 313 {
+		if errors.As(err, &errno) && (errno == 313 || errno == syscall.ERROR_HANDLE_EOF) {
 			return nil
 		}
 		if strings.Contains(err.Error(), "externally backed") {
@@ -191,7 +200,6 @@ type App struct {
 	currentCancel context.CancelFunc
 	stopChannels  []chan struct{}
 	watcherQueue  chan string
-	wg            sync.WaitGroup
 }
 
 func NewApp() *App {
@@ -199,7 +207,7 @@ func NewApp() *App {
 		ipc: NewIPC(),
 		wof: NewWofService(),
 		allowedExts: map[string]bool{
-			".ini": true, ".dds": true, ".ib": true, ".vb": true, ".txt": true,
+			".ib": true, ".vb": true, ".buf": true, ".dds": true,
 		},
 	}
 }
@@ -216,7 +224,7 @@ func (app *App) IsAllowed(path string) bool {
 
 func (app *App) Run() {
 	scanner := bufio.NewScanner(os.Stdin)
-	app.ipc.Log("Compact process started (Refactored)")
+	app.ipc.Log("Compact process ready (Native Optimized)")
 
 	for scanner.Scan() {
 		var cmd Command
@@ -234,10 +242,10 @@ func (app *App) Run() {
 		switch cmd.Type {
 		case "compress":
 			app.StopWatchers()
-			go app.runCompressionMode(ctx, cmd.Paths)
+			go app.runPipeline(ctx, cmd.Paths, "compress")
 		case "decompress":
 			app.StopWatchers()
-			go app.runDecompressionMode(ctx, cmd.Paths)
+			go app.runPipeline(ctx, cmd.Paths, "decompress")
 		case "stop":
 			app.StopWatchers()
 			app.ipc.Log("Stopped")
@@ -269,68 +277,96 @@ func (app *App) StopWatchers() {
 }
 
 func getWorkersCount() int {
-	workers := runtime.NumCPU() / 2
+	workers := runtime.NumCPU()
 	if workers < 1 {
 		workers = 1
 	}
 	return workers
 }
 
-func (app *App) runCompressionMode(ctx context.Context, paths []string) {
+func (app *App) runPipeline(ctx context.Context, paths []string, mode string) {
 	workers := getWorkersCount()
-	app.ipc.Log(fmt.Sprintf("[Mode: Compression] Workers: %d", workers))
-
+	app.ipc.Log(fmt.Sprintf("[Mode: %s] Pipeline Workers: %d (Native Ptr)", mode, workers))
 	app.ResetStats()
-	app.processBatch(ctx, paths, workers, app.compressFile, "Scanning & Compressing")
 
-	if ctx.Err() == nil {
-		app.startWatcher(ctx, paths, workers)
-	}
-}
+	chanScan := make(chan FileTask, 1000)
+	chanTask := make(chan FileTask, 1000)
 
-func (app *App) runDecompressionMode(ctx context.Context, paths []string) {
-	workers := getWorkersCount()
-	app.ipc.Log(fmt.Sprintf("[Mode: Decompression] Workers: %d", workers))
-
-	app.ResetStats()
-	app.processBatch(ctx, paths, workers, app.decompressFile, "Decompressing")
-}
-
-func (app *App) processBatch(ctx context.Context, paths []string, workers int, task func(string), label string) {
-	jobs := make(chan string, 500)
-	batchDone := make(chan struct{})
-	var wg sync.WaitGroup
+	var wgFilter sync.WaitGroup
+	var wgWorker sync.WaitGroup
 
 	for i := 0; i < workers; i++ {
-		wg.Add(1)
+		wgWorker.Add(1)
 		go func() {
-			defer wg.Done()
-			for p := range jobs {
+			defer wgWorker.Done()
+			for task := range chanTask {
 				if ctx.Err() != nil {
 					return
 				}
-				task(p)
+				if mode == "compress" {
+					app.compressFileNative(task)
+				} else {
+					app.decompressFileNative(task)
+				}
 			}
 		}()
 	}
 
+	for i := 0; i < workers; i++ {
+		wgFilter.Add(1)
+		go func() {
+			defer wgFilter.Done()
+			for task := range chanScan {
+				if ctx.Err() != nil {
+					return
+				}
+
+				attrs, err := windows.GetFileAttributes(task.PathPtr)
+				if err != nil {
+					continue
+				}
+
+				isReparse := (attrs & windows.FILE_ATTRIBUTE_REPARSE_POINT) != 0
+
+				if mode == "compress" {
+					if !isReparse {
+						chanTask <- task
+					} else {
+						atomic.AddUint64(&app.stats.Skipped, 1)
+					}
+				} else {
+					if !isReparse {
+						atomic.AddUint64(&app.stats.Skipped, 1)
+						continue
+					}
+					if app.wof.IsCompressedDirect(task.PathPtr) {
+						chanTask <- task
+					} else {
+						atomic.AddUint64(&app.stats.Skipped, 1)
+					}
+				}
+			}
+		}()
+	}
+
+	doneStats := make(chan struct{})
 	go func() {
-		ticker := time.NewTicker(1500 * time.Millisecond)
+		ticker := time.NewTicker(1000 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-batchDone:
+			case <-doneStats:
 				return
 			case <-ticker.C:
-				app.ipc.Progress(label+"...", &app.stats)
+				app.ipc.Progress(strings.Title(mode)+"ing...", &app.stats, 0)
 			}
 		}
 	}()
 
 	go func() {
-		defer close(jobs)
+		defer close(chanScan)
 		for _, root := range paths {
 			if ctx.Err() != nil {
 				return
@@ -339,21 +375,68 @@ func (app *App) processBatch(ctx context.Context, paths []string, workers int, t
 				if ctx.Err() != nil {
 					return filepath.SkipAll
 				}
-				if err == nil && !d.IsDir() && app.IsAllowed(p) {
-					select {
-					case jobs <- p:
-					case <-ctx.Done():
-						return filepath.SkipAll
-					}
+				if err != nil || d.IsDir() {
+					return nil
+				}
+
+				if !app.IsAllowed(p) {
+					return nil
+				}
+				info, err := d.Info()
+				if err != nil || info.Size() < 4096 {
+					return nil
+				}
+
+				ptr, err := windows.UTF16PtrFromString(p)
+				if err == nil {
+					chanScan <- FileTask{PathStr: p, PathPtr: ptr}
 				}
 				return nil
 			})
 		}
 	}()
 
-	wg.Wait()
-	close(batchDone)
-	app.ipc.Progress(label+" Done", &app.stats)
+	wgFilter.Wait()
+	close(chanTask)
+	wgWorker.Wait()
+
+	close(doneStats)
+	app.ipc.Progress("Done", &app.stats, 0)
+
+	if mode == "compress" && ctx.Err() == nil {
+		app.startWatcher(ctx, paths, workers)
+	}
+}
+
+func (app *App) compressFileNative(task FileTask) {
+	handle, err := windows.CreateFile(
+		task.PathPtr,
+		windows.GENERIC_READ|windows.GENERIC_WRITE,
+		windows.FILE_SHARE_READ,
+		nil,
+		windows.OPEN_EXISTING,
+		0,
+		0,
+	)
+	if err != nil {
+		atomic.AddUint64(&app.stats.Errors, 1)
+		return
+	}
+	defer windows.CloseHandle(handle)
+
+	if err := app.wof.CompressHandle(handle); err == nil {
+		atomic.AddUint64(&app.stats.Processed, 1)
+	} else {
+		atomic.AddUint64(&app.stats.Errors, 1)
+	}
+}
+
+func (app *App) decompressFileNative(task FileTask) {
+	if err := app.wof.DecompressDirect(task.PathPtr); err != nil {
+		atomic.AddUint64(&app.stats.Errors, 1)
+	} else {
+		atomic.AddUint64(&app.stats.Processed, 1)
+	}
 }
 
 func (app *App) startWatcher(ctx context.Context, paths []string, workers int) {
@@ -458,69 +541,45 @@ func (app *App) processWatchBuffer(buf []byte, root string) {
 	}
 }
 
-func (app *App) compressFile(path string) {
-	fi, err := os.Stat(path)
-	if err != nil || fi.Size() < 4096 {
-		atomic.AddUint64(&app.stats.Skipped, 1)
-		return
-	}
-	if app.wof.IsCompressed(path) {
-		atomic.AddUint64(&app.stats.Skipped, 1)
-		return
-	}
-
-	f, err := os.OpenFile(path, os.O_RDWR, 0)
-	if err != nil {
-		atomic.AddUint64(&app.stats.Skipped, 1)
-		return
-	}
-	defer f.Close()
-
-	if err := app.wof.Compress(f); err == nil {
-		atomic.AddUint64(&app.stats.Processed, 1)
-	} else {
-		atomic.AddUint64(&app.stats.Errors, 1)
-	}
-}
-
 func (app *App) compressWithRetry(ctx context.Context, path string) {
+	pathPtr, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return
+	}
+
 	for i := 0; i < 5; i++ {
 		if ctx.Err() != nil {
 			return
 		}
 
-		fi, err := os.Stat(path)
-		if err != nil || fi.Size() < 4096 {
-			if os.IsNotExist(err) {
+		attrs, err := windows.GetFileAttributes(pathPtr)
+		if err == nil {
+			if (attrs & windows.FILE_ATTRIBUTE_DIRECTORY) != 0 {
 				return
 			}
-		} else if !app.wof.IsCompressed(path) {
-			f, err := os.OpenFile(path, os.O_RDWR, 0)
-			if err == nil {
-				if app.wof.Compress(f) == nil {
-					atomic.AddUint64(&app.stats.Processed, 1)
-					app.ipc.Progress("Auto Compressed: "+filepath.Base(path), &app.stats)
-					f.Close()
-					return
+
+			if !app.wof.IsCompressedDirect(pathPtr) {
+				handle, err := windows.CreateFile(
+					pathPtr,
+					windows.GENERIC_READ|windows.GENERIC_WRITE,
+					windows.FILE_SHARE_READ,
+					nil,
+					windows.OPEN_EXISTING,
+					0,
+					0,
+				)
+				if err == nil {
+					if app.wof.CompressHandle(handle) == nil {
+						atomic.AddUint64(&app.stats.Processed, 1)
+						app.ipc.Progress("Auto: "+filepath.Base(path), &app.stats, 0)
+						windows.CloseHandle(handle)
+						return
+					}
+					windows.CloseHandle(handle)
 				}
-				f.Close()
 			}
-		} else {
-			return
 		}
 		time.Sleep(time.Duration(1<<i) * 200 * time.Millisecond)
-	}
-}
-
-func (app *App) decompressFile(path string) {
-	if !app.wof.IsCompressed(path) {
-		atomic.AddUint64(&app.stats.Skipped, 1)
-		return
-	}
-	if err := app.wof.Decompress(path); err != nil {
-		atomic.AddUint64(&app.stats.Errors, 1)
-	} else {
-		atomic.AddUint64(&app.stats.Processed, 1)
 	}
 }
 
