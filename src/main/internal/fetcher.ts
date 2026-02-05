@@ -77,6 +77,10 @@ export async function fetcher(url: string, options?: RequestInit) {
             ...options?.headers,
             ...(await getHeaders(url)),
         },
+        timeout: 100000,
+        retry: {
+            limit: 2,
+        },
         // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
         dispatcher: await getAgent(),
         hooks: {
@@ -85,6 +89,25 @@ export async function fetcher(url: string, options?: RequestInit) {
                     if (resp.status === 401 && isNHD) {
                         await desktop.service.auth.getSession();
                     }
+                },
+
+                (_request, _options, response) => {
+                    if (response.status === 524) {
+                        return new Response("cloudflare timeout. but it's ok", { status: 200 });
+                    } else {
+                        return response;
+                    }
+                },
+            ],
+
+            beforeError: [
+                async (error) => {
+                    const { response } = error;
+                    if (response && response.status === 524) {
+                        return error;
+                    }
+
+                    return error;
                 },
             ],
         },

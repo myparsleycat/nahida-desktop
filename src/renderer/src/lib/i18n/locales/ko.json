@@ -212,6 +212,11 @@
                     "useVirtualizationDescription": "모드 목록이 많을 때 가상화하여 성능을 향상시킵니다",
                     "virtualizationThreshold": "기준 모드 개수",
                     "virtualizationThresholdDescription": "설정한 개수 이상의 모드가 있을 때 가상화를 적용합니다"
+                },
+                "gameFolderCompression": {
+                    "title": "압축",
+                    "useCompression": "게임 폴더 압축 사용",
+                    "useCompressionDescription": "게임 폴더를 압축하여 디스크 공간을 절약합니다."
                 }
             },
             "acc": {

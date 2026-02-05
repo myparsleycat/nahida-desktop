@@ -44,7 +44,7 @@ export function useDrag() {
         const files = Array.from(e.dataTransfer.files);
         const paths = compact(files.map((file) => window.webUtils.getPathForFile(file)));
 
-        await window.api.invoke("drive:fn:startUpload", itemId, paths);
+        await window.api.invoke("drive:fn:startUpload", { destId: itemId, paths });
     };
 
     return {

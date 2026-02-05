@@ -4,6 +4,7 @@ import {
   GamepadIcon,
   HardDriveIcon,
   HomeIcon,
+  PackageIcon,
   SettingsIcon,
   Share2Icon,
 } from "lucide-react";
@@ -147,14 +148,14 @@ export function Sidebar({ className }: { className?: string }) {
                     size="icon"
                     onPointerDown={handlePointerDown}
                     onClick={() => {
-                      navi({ to: "/backup" });
+                      navi({ to: "/xxmi" });
                     }}
                   >
-                    <DatabaseBackupIcon className={cn(iconSize)} />
+                    <PackageIcon className={cn(iconSize)} />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="right" hideWhenDetached={true}>
-                  {t("page.backup.title")}
+                  XXMI
                 </TooltipContent>
               </Tooltip>
 
@@ -165,14 +166,14 @@ export function Sidebar({ className }: { className?: string }) {
                     size="icon"
                     onPointerDown={handlePointerDown}
                     onClick={() => {
-                      navi({ to: "/xxmi" });
+                      navi({ to: "/backup" });
                     }}
                   >
                     <DatabaseBackupIcon className={cn(iconSize)} />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="right" hideWhenDetached={true}>
-                  XXMI
+                  {t("page.backup.title")}
                 </TooltipContent>
               </Tooltip>
             </>

@@ -86,8 +86,12 @@ export class Setting {
             });
 
             if (!qr) {
-                await db.insert(setting).values({ key: "language", value: "ko" });
-                return "ko";
+                const systemLocale = app.getSystemLocale();
+                const language = ["ko", "en", "ja", "zh"].includes(systemLocale.split("-")[0])
+                    ? systemLocale.split("-")[0]
+                    : "en";
+                await db.insert(setting).values({ key: "language", value: language });
+                return language;
             }
 
             return qr.value;
@@ -209,6 +213,40 @@ export class Setting {
                     target: setting.key,
                     set: { value: String(enabled) },
                 });
+        },
+
+        getGameFolderCompressionEnabled: async () => {
+            const qr = await db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "gameFolderCompressionEnabled"),
+            });
+
+            if (!qr) {
+                await db
+                    .insert(setting)
+                    .values({ key: "gameFolderCompressionEnabled", value: "false" });
+                return false;
+            }
+
+            return qr.value === "true";
+        },
+
+        setGameFolderCompressionEnabled: async (enabled: boolean) => {
+            await db
+                .insert(setting)
+                .values({ key: "gameFolderCompressionEnabled", value: String(enabled) })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(enabled) },
+                });
+
+            this.desktop.ipc.broadcast("setting:update", {
+                key: "gameFolderCompressionEnabled",
+                value: enabled,
+            });
+
+            if (this.desktop.lib && this.desktop.lib.compact) {
+                this.desktop.lib.compact.updateCompression();
+            }
         },
     };
 
