@@ -103,4 +103,10 @@ export class GoProcess extends EventEmitter {
             this.process.kill();
         }
     }
+
+    public write(data: string) {
+        if (this.process && this.process.stdin) {
+            this.process.stdin.write(data);
+        }
+    }
 }

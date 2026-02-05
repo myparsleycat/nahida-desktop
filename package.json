@@ -7,7 +7,8 @@
     "homepage": "https://nahida.live",
     "scripts": {
         "go:build:extractor": "cd build/extractor && go mod tidy && go build -o extractor.exe",
-        "go:build": "pnpm run go:build:extractor",
+        "go:build:compact": "cd build/compact && go mod tidy && go build -o compact.exe",
+        "go:build": "pnpm run go:build:extractor && pnpm run go:build:compact",
         "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
         "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
         "typecheck": "pnpm run typecheck:node && pnpm run typecheck:web",
@@ -52,6 +53,7 @@
         "fzstd": "^0.1.1",
         "hono": "^4.11.7",
         "html-to-text": "^9.0.5",
+        "koffi": "^2.15.1",
         "ky": "^1.14.3",
         "nanoid": "^5.1.6",
         "p-limit": "^7.3.0",

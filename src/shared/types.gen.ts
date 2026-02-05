@@ -115,12 +115,14 @@ export type IpcHandlers = {
     "setting:general:checkUpdate": (...args: Parameters<typeof desktop.setting.general.checkUpdate>) => ReturnType<typeof desktop.setting.general.checkUpdate>;
     "setting:general:getCheckBackgroundUpdates": (...args: Parameters<typeof desktop.setting.general.getCheckBackgroundUpdates>) => ReturnType<typeof desktop.setting.general.getCheckBackgroundUpdates>;
     "setting:general:getDefaultStartPage": (...args: Parameters<typeof desktop.setting.general.getDefaultStartPage>) => ReturnType<typeof desktop.setting.general.getDefaultStartPage>;
+    "setting:general:getGameFolderCompressionEnabled": (...args: Parameters<typeof desktop.setting.general.getGameFolderCompressionEnabled>) => ReturnType<typeof desktop.setting.general.getGameFolderCompressionEnabled>;
     "setting:general:getLanguage": (...args: Parameters<typeof desktop.setting.general.getLanguage>) => ReturnType<typeof desktop.setting.general.getLanguage>;
     "setting:general:getMoveTransferPageWhenStartTransfer": (...args: Parameters<typeof desktop.setting.general.getMoveTransferPageWhenStartTransfer>) => ReturnType<typeof desktop.setting.general.getMoveTransferPageWhenStartTransfer>;
     "setting:general:getPowerSaveBlockInTransfer": (...args: Parameters<typeof desktop.setting.general.getPowerSaveBlockInTransfer>) => ReturnType<typeof desktop.setting.general.getPowerSaveBlockInTransfer>;
     "setting:general:getRunOnStartup": (...args: Parameters<typeof desktop.setting.general.getRunOnStartup>) => ReturnType<typeof desktop.setting.general.getRunOnStartup>;
     "setting:general:setCheckBackgroundUpdates": (...args: Parameters<typeof desktop.setting.general.setCheckBackgroundUpdates>) => ReturnType<typeof desktop.setting.general.setCheckBackgroundUpdates>;
     "setting:general:setDefaultStartPage": (...args: Parameters<typeof desktop.setting.general.setDefaultStartPage>) => ReturnType<typeof desktop.setting.general.setDefaultStartPage>;
+    "setting:general:setGameFolderCompressionEnabled": (...args: Parameters<typeof desktop.setting.general.setGameFolderCompressionEnabled>) => ReturnType<typeof desktop.setting.general.setGameFolderCompressionEnabled>;
     "setting:general:setLanguage": (...args: Parameters<typeof desktop.setting.general.setLanguage>) => ReturnType<typeof desktop.setting.general.setLanguage>;
     "setting:general:setMoveTransferPageWhenStartTransfer": (...args: Parameters<typeof desktop.setting.general.setMoveTransferPageWhenStartTransfer>) => ReturnType<typeof desktop.setting.general.setMoveTransferPageWhenStartTransfer>;
     "setting:general:setPowerSaveBlockInTransfer": (...args: Parameters<typeof desktop.setting.general.setPowerSaveBlockInTransfer>) => ReturnType<typeof desktop.setting.general.setPowerSaveBlockInTransfer>;
@@ -179,7 +181,16 @@ export type IpcEvents = {
     "mod:update-settings": () => void;
 
     "auth:update": (session: Session | null) => void;
+    "setting:update": (data: { key: string; value: any }) => void;
+    "compact:log": (message: string) => void;
+    "compact:progress": (payload: {
+        message: string;
+        processedFiles: number;
+        skippedFiles: number;
+        errorFiles: number;
+    }) => void;
 };
+
 
 const akashaModIdGet = eden.akasha.content({ id: "" }).get;
 export type ModIdGetResp = Treaty.Data<typeof akashaModIdGet>;

@@ -214,6 +214,40 @@ export class Setting {
                     set: { value: String(enabled) },
                 });
         },
+
+        getGameFolderCompressionEnabled: async () => {
+            const qr = await db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "gameFolderCompressionEnabled"),
+            });
+
+            if (!qr) {
+                await db
+                    .insert(setting)
+                    .values({ key: "gameFolderCompressionEnabled", value: "false" });
+                return false;
+            }
+
+            return qr.value === "true";
+        },
+
+        setGameFolderCompressionEnabled: async (enabled: boolean) => {
+            await db
+                .insert(setting)
+                .values({ key: "gameFolderCompressionEnabled", value: String(enabled) })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(enabled) },
+                });
+
+            this.desktop.ipc.broadcast("setting:update", {
+                key: "gameFolderCompressionEnabled",
+                value: enabled,
+            });
+
+            if (this.desktop.lib && this.desktop.lib.compact) {
+                this.desktop.lib.compact.updateCompression();
+            }
+        },
     };
 
     mod = {

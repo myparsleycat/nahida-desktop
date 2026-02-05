@@ -216,6 +216,11 @@
                     "useVirtualizationDescription": "Use virtualization to improve performance when there are many mods",
                     "virtualizationThreshold": "Mod count threshold",
                     "virtualizationThresholdDescription": "Apply virtualization when there are more mods than the set count"
+                },
+                "gameFolderCompression": {
+                    "title": "Transparent Compression",
+                    "useCompression": "Use game folder compression",
+                    "useCompressionDescription": "Transparently compress game folders to save disk space. (Uses Windows Compact, monitors and compresses new files in real-time)"
                 }
             },
             "acc": {

@@ -26,6 +26,9 @@ import ArchiveService from "./services/archive";
 import CustomDownloader from "./lib/custom-downloader";
 import { PathSelector } from "./lib/path-selector";
 import Watcher from "./lib/watcher";
+
+import { CompactService } from "./lib/compact";
+
 import { registerProtocal } from "./protocals";
 import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
 
@@ -64,6 +67,8 @@ export class NahidaDesktop {
         customDownloader: CustomDownloader;
         pathSelector: PathSelector;
         watcher: Watcher;
+
+        compact: CompactService;
     };
 
     public service: {
@@ -94,7 +99,10 @@ export class NahidaDesktop {
             customDownloader: new CustomDownloader(this),
             pathSelector: new PathSelector(this),
             watcher: new Watcher(this),
+
+            compact: new CompactService(this),
         };
+
         this.service = {
             auth: new Auth(this),
             drive: new DriveService(this),
@@ -134,6 +142,9 @@ export class NahidaDesktop {
         }
 
         await this.updateProxy();
+
+        // Initialize Compact Service
+        await this.lib.compact.initialize();
     }
 
     public async updateProxy() {
