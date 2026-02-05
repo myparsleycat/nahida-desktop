@@ -8,6 +8,6 @@ export function rh<K extends keyof IpcHandlers>(
     ) => ReturnType<IpcHandlers[K]> | Promise<ReturnType<IpcHandlers[K]>>,
 ) {
     ipcMain.handle(channel, (_event, ...args) => {
-        return handler(...(args as any));
+        return handler(...(args as Parameters<IpcHandlers[K]>));
     });
 }
