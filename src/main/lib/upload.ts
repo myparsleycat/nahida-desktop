@@ -791,7 +791,6 @@ export class UploadLib {
 
             let currentUploadedBytes = initialTransferedSize ?? alreadyUploadedBytes;
             let currentUploadedCount = alreadyUploadedCount;
-            let lastUpdate = 0;
 
             const updateUI = () => {
                 this.desktop.service.transfer.updateTransfer(pid, {
@@ -803,7 +802,7 @@ export class UploadLib {
 
             updateUI();
 
-            const heartbeat = setInterval(updateUI, 1000);
+            const heartbeat = setInterval(updateUI, 500);
 
             try {
                 await this.filesUpload({
@@ -815,11 +814,6 @@ export class UploadLib {
                             currentUploadedCount++;
                         }
                         currentUploadedBytes += progress.bytes;
-                        const now = Date.now();
-                        if (progress.fileId || now - lastUpdate >= 100) {
-                            updateUI();
-                            lastUpdate = now;
-                        }
                     },
                     signal: abortController.signal,
                     pid,

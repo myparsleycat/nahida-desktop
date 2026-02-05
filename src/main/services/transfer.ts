@@ -250,11 +250,14 @@ export class TransferService {
 
         if (updates.transferedSize !== undefined && transfer.status === "progress") {
             const now = Date.now();
+            const lastSample = transfer.speedSamples[transfer.speedSamples.length - 1];
 
-            transfer.speedSamples.push({
-                timestamp: now,
-                bytes: transfer.transferedSize,
-            });
+            if (!lastSample || lastSample.bytes !== transfer.transferedSize) {
+                transfer.speedSamples.push({
+                    timestamp: now,
+                    bytes: transfer.transferedSize,
+                });
+            }
 
             const SAMPLE_WINDOW_MS = 5000; // 5 seconds
             const cutoffTime = now - SAMPLE_WINDOW_MS;
@@ -277,6 +280,9 @@ export class TransferService {
                         transfer.eta = Math.ceil(remaining / transfer.speed);
                     }
                 }
+            } else {
+                transfer.speed = 0;
+                transfer.eta = 0;
             }
 
             transfer.progress = Math.min(100, (transfer.transferedSize / transfer.totalSize) * 100);
@@ -286,7 +292,12 @@ export class TransferService {
             this.checkSettingAndChangePowerSaveBlock();
             this.emitUpdate();
         } else {
-            this.emitUpdate();
+            const throttledEmit = this.throttledEmits.get(pid);
+            if (throttledEmit) {
+                throttledEmit();
+            } else {
+                this.emitUpdate();
+            }
         }
     }
 
