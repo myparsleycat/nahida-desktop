@@ -1,13 +1,17 @@
 package main
 
 import (
+	"archive/zip"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"extractor/ipc"
 
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 	"golift.io/xtractr"
 )
 
@@ -59,16 +63,72 @@ func extractArchive(archivePath, outputDir string) (string, error) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	xfile := &xtractr.XFile{
-		FilePath:  absArchive,
-		OutputDir: tempDir,
-		FileMode:  0644,
-		DirMode:   0755,
+	extracted := false
+	if r, err := zip.OpenReader(absArchive); err == nil {
+		extracted = true
+		defer r.Close()
+
+		totalFiles := len(r.File)
+		for i, f := range r.File {
+			name := f.Name
+			if f.Flags&0x800 == 0 {
+				decoder := simplifiedchinese.GBK.NewDecoder()
+				if decoded, _, err := transform.String(decoder, f.Name); err == nil {
+					name = decoded
+				}
+			}
+
+			percent := float64(i) / float64(totalFiles) * 100
+			ipc.SendProgress(percent, fmt.Sprintf("Extracting %s", name))
+
+			fpath := filepath.Join(tempDir, name)
+
+			if !strings.HasPrefix(filepath.Clean(fpath), filepath.Clean(tempDir)) {
+				continue
+			}
+
+			if f.FileInfo().IsDir() {
+				os.MkdirAll(fpath, 0755)
+				continue
+			}
+
+			if err := os.MkdirAll(filepath.Dir(fpath), 0755); err != nil {
+				return "", fmt.Errorf("failed to create directory: %v", err)
+			}
+
+			rc, err := f.Open()
+			if err != nil {
+				return "", fmt.Errorf("failed to open file in zip: %v", err)
+			}
+
+			outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+			if err != nil {
+				rc.Close()
+				return "", fmt.Errorf("failed to create output file: %v", err)
+			}
+
+			_, err = io.Copy(outFile, rc)
+			outFile.Close()
+			rc.Close()
+
+			if err != nil {
+				return "", fmt.Errorf("failed to copy file content: %v", err)
+			}
+		}
 	}
 
-	_, _, _, err = xtractr.ExtractFile(xfile)
-	if err != nil {
-		return "", fmt.Errorf("extraction failed: %v", err)
+	if !extracted {
+		xfile := &xtractr.XFile{
+			FilePath:  absArchive,
+			OutputDir: tempDir,
+			FileMode:  0644,
+			DirMode:   0755,
+		}
+
+		_, _, _, err = xtractr.ExtractFile(xfile)
+		if err != nil {
+			return "", fmt.Errorf("extraction failed: %v", err)
+		}
 	}
 
 	entries, err := os.ReadDir(tempDir)
