@@ -24,6 +24,7 @@ export const IPC_HANDLER_CHANNELS = [
     "auth:startLogin",
     "auth:startLogout",
     "drive:delete:items",
+    "drive:fn:moveMany",
     "drive:fn:startDownload",
     "drive:fn:startUpload",
     "drive:get:item",
