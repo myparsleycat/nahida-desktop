@@ -25,4 +25,8 @@ export function registerDriveHandlers(d: NahidaDesktop) {
     rh("drive:fn:startUpload", async ({ destId, paths }) => {
         return d.service.drive.fn.startUpload({ destId, paths });
     });
+
+    rh("drive:fn:moveMany", async ({ ids, destId }) => {
+        return d.service.drive.fn.moveMany({ ids, destId });
+    });
 }

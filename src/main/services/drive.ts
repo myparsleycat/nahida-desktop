@@ -217,6 +217,15 @@ export class DriveService {
         retryTransfer: async (pid: string) => {
             return this.fn.resumeTransfer(pid);
         },
+
+        moveMany: async ({ ids, destId }: { ids: string[]; destId: string }) => {
+            const { data, error } = await eden.akasha.content.move_many.post({
+                uuids: ids,
+                current: destId,
+                target: destId,
+            });
+            return { data, error };
+        },
     };
 
     private async selectUploadPaths(paths?: string[]): Promise<string[] | null> {

@@ -689,16 +689,17 @@ interface HandlerProviderProps {
   queryData: any;
   children: React.ReactNode;
   sortedContents: Content[];
+  currentId: string;
 }
 
 export function HandlerProvider(props: HandlerProviderProps) {
-  const { children, sortedContents, queryData } = props;
+  const { queryClient } = useRouteContext({ from: "__root__" });
+  const { children, sortedContents, queryData, currentId } = props;
   const navi = useNavigate();
   const dialog = useDialogStore();
   const { selectedItems, setSelectedItems, setLastSelectedIdx, copyOrCuts, setCopyOrCuts } =
     useSelectionStore();
   const isfocusSearchInput = useViewStore((s) => s.isfocusSearchInput);
-  const location = useLocation();
 
   const searchBuffer = useRef("");
   const searchTimeout = useRef<number | undefined>(undefined);
@@ -844,9 +845,34 @@ export function HandlerProvider(props: HandlerProviderProps) {
         }
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+      if ((e.ctrlKey || e.metaKey) && e.key === "v") {
         e.preventDefault();
-        dialog.searchCommand.open = !dialog.searchCommand.open;
+        if (copyOrCuts.action && copyOrCuts.items.length > 0) {
+          if (copyOrCuts.action === "cut") {
+            const itemsToMove = [...copyOrCuts.items];
+
+            setCopyOrCuts(null, []);
+
+            const promise = window.api.invoke("drive:fn:moveMany", {
+              ids: itemsToMove.map((item) => item.id),
+              destId: currentId,
+            });
+
+            toast.promise(promise, {
+              loading: "File moving...",
+              success: () => {
+                queryClient.invalidateQueries({
+                  queryKey: ["drive", "drive", currentId],
+                });
+                queryClient.invalidateQueries({
+                  queryKey: ["drive", "share", currentId],
+                });
+                return "File moved successfully";
+              },
+              error: (err: any) => `File moving failed: ${err.message}`,
+            });
+          }
+        }
       }
     },
     [

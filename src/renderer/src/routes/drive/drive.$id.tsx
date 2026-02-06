@@ -148,7 +148,7 @@ function RouteComponent() {
             onDrop={(e) => onDrop(e, id)}
           >
             <ContextMenuProvider>
-              <HandlerProvider queryData={query} sortedContents={sortedContents}>
+              <HandlerProvider queryData={query} sortedContents={sortedContents} currentId={id}>
                 {sortedContents.length > 0 ? (
                   <ScrollArea className="flex-1 flex flex-col h-full">
                     <>

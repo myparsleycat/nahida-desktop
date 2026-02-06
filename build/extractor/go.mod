@@ -1,8 +1,13 @@
 module extractor
 
-go 1.21
+go 1.24.0
 
-require golift.io/xtractr v0.2.2
+toolchain go1.24.1
+
+require (
+	golang.org/x/text v0.33.0
+	golift.io/xtractr v0.2.2
+)
 
 require (
 	github.com/andybalholm/brotli v1.0.5 // indirect
@@ -18,5 +23,4 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.17 // indirect
 	github.com/ulikunitz/xz v0.5.11 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
-	golang.org/x/text v0.8.0 // indirect
 )

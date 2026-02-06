@@ -287,7 +287,11 @@ export function useContentMenu(sortedContents?: Content[]) {
     };
 
     const handleItemRightClick = async (e: React.MouseEvent, item: Content) => {
-        if (selection.selectedItems.length <= 1) {
+        const isAlreadySelected = selection.selectedItems.some(
+            (selected) => selected.id === item.id,
+        );
+
+        if (!isAlreadySelected) {
             selection.setSelectedItems([item]);
         }
     };
