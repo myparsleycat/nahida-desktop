@@ -58,12 +58,24 @@ export function Preview({
 
   if (isVideo) {
     return (
-      <VideoCanvas
-        ref={videoRef}
+      // <VideoCanvas
+      //   ref={videoRef}
+      //   src={`local://${path}`}
+      //   className={cn("w-full h-full", className)}
+      //   objectFit={objectFit}
+      //   playing={isPlaying}
+      //   muted
+      //   loop
+      // />
+
+      <video
         src={`local://${path}`}
-        className={cn("w-full h-full", className)}
-        objectFit={objectFit}
-        playing={isPlaying}
+        className={cn(
+          "w-full h-full",
+          objectFit === "cover" ? "object-cover" : "object-contain",
+          className,
+        )}
+        autoPlay
         muted
         loop
       />

@@ -1,15 +1,5 @@
-import {
-  ImageIcon,
-  FolderIcon,
-  FileCogIcon,
-  TrashIcon,
-  TerminalSquareIcon,
-  ClipboardIcon,
-  CalendarIcon,
-} from "lucide-react";
+import { FolderIcon, TrashIcon, TerminalSquareIcon, CalendarIcon } from "lucide-react";
 import { memo, useRef } from "react";
-import { Preview } from "./preview";
-import { Input } from "@renderer/components/ui/input";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,15 +11,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@renderer/components/ui/alert-dialog";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@renderer/components/ui/context-menu";
 import type { ModInfo } from "@renderer/types/mod";
 import { cn } from "@renderer/lib/utils";
-import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Separator } from "@renderer/components/ui/separator";
 import { Button } from "@renderer/components/ui/button";
 import { useRouteContext } from "@tanstack/react-router";
@@ -37,6 +20,9 @@ import { toast } from "sonner";
 import { formatDate, formatSize } from "@shared/utils";
 import { Badge } from "@renderer/components/ui/badge";
 import { useTranslation } from "react-i18next";
+import { getModColorClass } from "./utils";
+import { ModIniList } from "./mod-ini-list";
+import { ModPreviewContainer } from "./mod-preview-container";
 
 interface ModCardProps {
   mod: ModInfo;
@@ -50,30 +36,6 @@ interface ModCardProps {
     value: string,
   ) => void;
 }
-
-const getModColorClass = (isEnabled: boolean) => {
-  if (isEnabled) {
-    return "dark:bg-[#0d430d] bg-[#6aad6a]";
-  } else {
-    return "dark:bg-[#58151b] bg-[#f1afb4]";
-  }
-};
-
-const getToggleBoxColorClass = (isEnabled: boolean) => {
-  if (isEnabled) {
-    return "dark:bg-[#0f4d0f]/80 bg-[#72b172]/80";
-  } else {
-    return "dark:bg-[#612127]/80 bg-[#f2b3b8]/80";
-  }
-};
-
-const getToggleInputColorClass = (isEnabled: boolean) => {
-  if (isEnabled) {
-    return "dark:bg-[#115a11] bg-[#d5e8d5]";
-  } else {
-    return "dark:bg-[#6a2e34] bg-[#fbe8ea]";
-  }
-};
 
 export const ModCard = memo(function ModCard({
   mod,
@@ -242,7 +204,11 @@ export const ModCard = memo(function ModCard({
       </div>
 
       <div className="flex flex-row h-[calc(100%-2rem)] space-x-2 relative z-10">
-        <ModPreview mod={mod} selectedGroupPath={selectedGroupPath} onPaste={handlePaste} />
+        <ModPreviewContainer
+          mod={mod}
+          selectedGroupPath={selectedGroupPath}
+          onPaste={handlePaste}
+        />
 
         {mod.inis.length > 0 && (
           <>
@@ -271,201 +237,3 @@ export const ModCard = memo(function ModCard({
     </div>
   );
 });
-
-function ModPreview({
-  mod,
-  selectedGroupPath,
-  onPaste,
-}: {
-  mod: ModInfo;
-  selectedGroupPath?: string;
-  onPaste: (e: React.MouseEvent) => void;
-}) {
-  const { queryClient } = useRouteContext({ from: "/mod/" });
-
-  const previewContent = (
-    <Preview
-      path={mod.preview}
-      alt={mod.name}
-      objectFit="contain"
-      className="absolute inset-0"
-      fallback={
-        <div className="flex flex-col items-center justify-center gap-2">
-          <ImageIcon className="w-12 h-12 text-muted-foreground/50" />
-          <div className="flex flex-col items-center gap-1">
-            <span className="text-sm text-muted-foreground">No Preview</span>
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onPaste}>
-              <ClipboardIcon className="w-3 h-3" />
-              Paste
-            </Button>
-          </div>
-        </div>
-      }
-    />
-  );
-
-  const handleDelete = () => {
-    if (!mod.preview) return;
-    const promise = window.api.invoke("util:fs:trash", mod.preview);
-    toast.promise(promise, {
-      loading: "휴지통으로 이동 중...",
-      success: "삭제 완료",
-      error: "삭제 실패",
-    });
-    promise.then(() => {
-      queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
-    });
-  };
-
-  return (
-    <div className="flex-1 p-2 flex items-center justify-center relative overflow-hidden">
-      {mod.preview ? (
-        <ContextMenu>
-          <ContextMenuTrigger>{previewContent}</ContextMenuTrigger>
-          <ContextMenuContent onClick={(e) => e.stopPropagation()}>
-            <ContextMenuItem
-              onClick={() => {
-                window.api.invoke("util:openExternal", mod.preview!).catch((error) => {
-                  toast.error("Failed to open external", {
-                    description: error.message,
-                  });
-                });
-              }}
-            >
-              <ImageIcon />
-              뷰어로 열기
-            </ContextMenuItem>
-            <ContextMenuItem onClick={handleDelete}>
-              <TrashIcon />
-              프리뷰 삭제
-            </ContextMenuItem>
-          </ContextMenuContent>
-        </ContextMenu>
-      ) : (
-        previewContent
-      )}
-    </div>
-  );
-}
-
-function ModIniList({
-  mod,
-  onToggleKeyUpdate,
-}: {
-  mod: ModInfo;
-  onToggleKeyUpdate: ModCardProps["onToggleKeyUpdate"];
-}) {
-  return (
-    <ScrollArea className="w-[160px] flex flex-col gap-2 overflow-y-auto">
-      <div
-        className={cn(
-          "p-1.5 rounded space-y-2 w-[160px]",
-          // getToggleBoxColorClass(mod.isEnabled)
-          "backdrop-blur-xl bg-background/10 dark:bg-background/10",
-        )}
-        style={{ transform: "translateZ(0)", willChange: "backdrop-filter" }}
-      >
-        {mod.inis.map((ini, iniIdx) => {
-          const iniToggleKeys = ini.toggleKeys;
-
-          return (
-            <>
-              <div key={iniIdx} className="space-y-1">
-                <div className="flex items-center justify-between gap-1">
-                  <p className="text-xs truncate opacity-80 whitespace-normal" title={ini.name}>
-                    {ini.name}
-                  </p>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-7 shrink-0"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      window.api.invoke("util:openPath", ini.path);
-                    }}
-                  >
-                    <FileCogIcon />
-                  </Button>
-                </div>
-
-                {iniToggleKeys.length > 0 && (
-                  <div className="space-y-2.5">
-                    {iniToggleKeys.map((toggleKey, idx) => (
-                      <div key={idx} className="space-y-1">
-                        <span className="text-sm">{toggleKey.sectionName}</span>
-                        {toggleKey.key && (
-                          <div className="flex items-center gap-1">
-                            <span className="text-sm">key:</span>
-                            <Input
-                              key={`key-${toggleKey.sectionName}-${toggleKey.key}`}
-                              className={cn(
-                                "h-7 text-sm  shadow",
-                                // getToggleInputColorClass(mod.isEnabled),
-                                "bg-background/10 dark:bg-background/10 backdrop-blur-xl",
-                              )}
-                              style={{ transform: "translateZ(0)", willChange: "backdrop-filter" }}
-                              defaultValue={toggleKey.key}
-                              onClick={(e) => e.stopPropagation()}
-                              onBlur={(e) => {
-                                const newValue = e.target.value;
-                                if (newValue !== toggleKey.key) {
-                                  onToggleKeyUpdate(
-                                    mod.path,
-                                    toggleKey.iniFileName,
-                                    toggleKey.sectionName,
-                                    "key",
-                                    newValue,
-                                  );
-                                }
-                              }}
-                            />
-                          </div>
-                        )}
-                        {toggleKey.back && (
-                          <div className="flex items-center gap-1">
-                            <span className="text-sm">back:</span>
-                            <Input
-                              key={`back-${toggleKey.sectionName}-${toggleKey.back}`}
-                              className={cn(
-                                "h-7 text-sm  shadow",
-                                // getToggleInputColorClass(mod.isEnabled),
-                                "bg-background/10 dark:bg-background/10 backdrop-blur-xl",
-                              )}
-                              style={{ transform: "translateZ(0)", willChange: "backdrop-filter" }}
-                              defaultValue={toggleKey.back}
-                              onClick={(e) => e.stopPropagation()}
-                              onBlur={(e) => {
-                                const newValue = e.target.value;
-                                if (newValue !== toggleKey.back) {
-                                  onToggleKeyUpdate(
-                                    mod.path,
-                                    toggleKey.iniFileName,
-                                    toggleKey.sectionName,
-                                    "back",
-                                    newValue,
-                                  );
-                                }
-                              }}
-                            />
-                          </div>
-                        )}
-                        {toggleKey.variable && (
-                          <div className="flex items-center gap-1">
-                            <span className="text-sm">variable:</span>
-                            <span className="text-sm">{toggleKey.values.length}</span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {iniIdx < mod.inis.length - 1 && <Separator />}
-            </>
-          );
-        })}
-      </div>
-    </ScrollArea>
-  );
-}

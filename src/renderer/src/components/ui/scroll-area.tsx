@@ -42,6 +42,7 @@ function ScrollBar({
         className,
       )}
       {...props}
+      onClick={(e) => e.stopPropagation()}
     >
       <ScrollAreaPrimitive.ScrollAreaThumb
         data-slot="scroll-area-thumb"

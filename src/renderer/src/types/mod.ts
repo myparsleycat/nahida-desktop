@@ -9,6 +9,12 @@ export interface ToggleKey {
     currentValue?: string;
 }
 
+export interface ModIni {
+    name: string;
+    path: string;
+    toggleKeys: ToggleKey[];
+}
+
 export interface ModInfo {
     name: string;
     path: string;
