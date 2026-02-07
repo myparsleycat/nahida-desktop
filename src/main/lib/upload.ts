@@ -94,9 +94,12 @@ export class UploadLib {
             ".mp4",
             ".webm",
             ".blend",
+            ".pck",
         ];
 
-        const allowedExt = defaultAllowedExt.concat(additionalExt);
+        const allowedExt = defaultAllowedExt.concat(
+            additionalExt.map((ext) => (ext.startsWith(".") ? ext : `.${ext}`)),
+        );
         return allowedExt.some((ext) => name.toLowerCase().endsWith(ext.toLowerCase()));
     }
 
