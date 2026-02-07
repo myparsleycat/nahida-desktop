@@ -27,9 +27,13 @@ export function formatKeyLabel(key: string) {
         VK_APPS: "Menu",
 
         VK_UP: "↑",
+        UP: "↑",
         VK_DOWN: "↓",
+        DOWN: "↓",
         VK_LEFT: "←",
+        LEFT: "←",
         VK_RIGHT: "→",
+        RIGHT: "→",
         VK_HOME: "Home",
         VK_END: "End",
         VK_PRIOR: "PgUp",
@@ -114,7 +118,12 @@ export function getBaseKey(keyString: string): string | null {
     ]);
     for (const part of parts) {
         if (!modifiers.has(part.toLowerCase())) {
-            return part;
+            const lowerPart = part.toLowerCase();
+            if (lowerPart === "up") return "vk_up";
+            if (lowerPart === "down") return "vk_down";
+            if (lowerPart === "left") return "vk_left";
+            if (lowerPart === "right") return "vk_right";
+            return lowerPart;
         }
     }
     return null;
