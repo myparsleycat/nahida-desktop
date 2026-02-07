@@ -94,9 +94,12 @@ export class UploadLib {
             ".mp4",
             ".webm",
             ".blend",
+            ".pck",
         ];
 
-        const allowedExt = defaultAllowedExt.concat(additionalExt);
+        const allowedExt = defaultAllowedExt.concat(
+            additionalExt.map((ext) => (ext.startsWith(".") ? ext : `.${ext}`)),
+        );
         return allowedExt.some((ext) => name.toLowerCase().endsWith(ext.toLowerCase()));
     }
 
@@ -837,10 +840,27 @@ export class UploadLib {
         }
     }
 
-    public async prepareUpload(paths: string[], items: Content[]) {
-        const files = await this.collectFiles(paths, [".blend"]);
+    public async prepareUpload(paths: string[], children: Content[]) {
+        const files = await this.collectFiles(paths);
 
         const directories = await this.collectDirectories(paths);
+
+        const rootDirectories = directories.filter((dir) => dir.parentPath === "");
+        for (const rootDir of rootDirectories) {
+            const baseName = rootDir.name;
+            let newName = baseName;
+            let counter = 2;
+
+            while (children.some((child) => child.name === newName)) {
+                newName = `${baseName} (${counter})`;
+                counter++;
+            }
+
+            if (newName !== baseName) {
+                rootDir.name = newName;
+            }
+        }
+
         let processName = paths.length === 1 ? path.basename(paths[0]) : "";
         if (!processName) {
             const folderNames = orderBy(directories, [(dir) => dir.name], ["desc"]).map(
@@ -850,10 +870,6 @@ export class UploadLib {
                 folderNames.length > 0
                     ? `${folderNames[0]} 외 ${paths.length - 1}개`
                     : `${path.basename(paths[0])} 외 ${paths.length - 1}개`;
-        }
-
-        if (items.some((child) => child.name === processName)) {
-            throw new Error("업로드하려는 대상과 동일한 이름을 가진 폴더/파일이 있습니다");
         }
 
         const pid = nanoid();

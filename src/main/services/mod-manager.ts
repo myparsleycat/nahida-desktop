@@ -672,7 +672,18 @@ export class ModManager {
                 }
 
                 if (updated) {
-                    await fse.writeFile(iniPath, newLines.join("\n"), "utf-8");
+                    const newContent = newLines.join("\n");
+                    try {
+                        await fse.chmod(iniPath, 0o666);
+                        await fse.writeFile(iniPath, newContent, "utf-8");
+                    } catch (error: any) {
+                        if (error.code === "EPERM" || error.code === "EACCES") {
+                            await fse.unlink(iniPath);
+                            await fse.writeFile(iniPath, newContent, "utf-8");
+                        } else {
+                            throw error;
+                        }
+                    }
                 }
             } catch (error) {
                 this.desktop.logger.error(error, `Mod:updateToggleKey:${iniPath}`);
