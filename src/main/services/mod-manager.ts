@@ -8,6 +8,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../internal/db";
 import { gamePaths, modPresets, setting } from "../internal/db/schema";
 import { nanoid } from "nanoid";
+import type { FolderGroup, ModInfo, Preset, ToggleKey } from "@shared/types.gen";
 
 const PREVIEW_EXTENSIONS = [
     ".png",
@@ -24,46 +25,6 @@ const PREVIEW_EXTENSIONS = [
 ];
 const MOD_FILE_EXTENSIONS = [".ini", ...PREVIEW_EXTENSIONS];
 const MOD_FILE_GLOB = `**/*.{${MOD_FILE_EXTENSIONS.map((e) => e.slice(1)).join(",")}}`;
-
-interface ToggleKey {
-    sectionName: string;
-    iniFileName: string;
-    key?: string;
-    back?: string;
-    type?: string;
-    variable: string;
-    values: string[];
-    currentValue?: string;
-}
-
-interface ModInfo {
-    name: string;
-    path: string;
-    isEnabled: boolean;
-    preview?: string;
-    mtime: number;
-    size: number;
-    inis: {
-        name: string;
-        path: string;
-        toggleKeys: ToggleKey[];
-    }[];
-}
-
-interface FolderGroup {
-    name: string;
-    path: string;
-    mods: ModInfo[];
-    preview?: string;
-    modCount?: number;
-}
-
-interface Preset {
-    id: string;
-    game: string;
-    name: string;
-    mods: string[];
-}
 
 export class ModManager {
     private desktop: NahidaDesktop;
@@ -506,7 +467,7 @@ export class ModManager {
                     throw new Error(`ALREADY_EXISTS:${newFolderName}`);
                 } catch (error: any) {
                     if (error.code === "ENOENT") {
-                        await fse.rename(modPath, newPath);
+                        await this.desktop.lib.fs.rename(modPath, newPath);
                         return newPath;
                     }
                     throw error;
@@ -529,7 +490,7 @@ export class ModManager {
                     throw new Error(`ALREADY_EXISTS:${newFolderName}`);
                 } catch (error: any) {
                     if (error.code === "ENOENT") {
-                        await fse.rename(modPath, newPath);
+                        await this.desktop.lib.fs.rename(modPath, newPath);
                         return newPath;
                     }
                     throw error;
