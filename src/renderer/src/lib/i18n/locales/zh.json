@@ -10,7 +10,8 @@
         "apply": "应用",
         "delete": "删除",
         "add": "添加",
-        "create": "创建"
+        "create": "创建",
+        "unknown": "未知"
     },
     "page": {
         "transfer": {
@@ -151,6 +152,15 @@
                     "title": "新建预设",
                     "#": {
                         "0": "请输入预设名称"
+                    }
+                }
+            },
+            "hooks": {
+                "use-mod-mutations": {
+                    "toggle-mutation": {
+                        "0": "{{name}} 文件夹已存在",
+                        "1": "文件夹被锁定，无法修改",
+                        "2": "修改模组状态失败"
                     }
                 }
             }

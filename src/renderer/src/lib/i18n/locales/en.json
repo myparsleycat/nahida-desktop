@@ -10,7 +10,8 @@
         "apply": "Apply",
         "delete": "Delete",
         "add": "Add",
-        "create": "Create"
+        "create": "Create",
+        "unknown": "Unknown"
     },
     "page": {
         "transfer": {
@@ -155,6 +156,15 @@
                     "title": "Create New Preset",
                     "#": {
                         "0": "Please enter a preset name"
+                    }
+                }
+            },
+            "hooks": {
+                "use-mod-mutations": {
+                    "toggle-mutation": {
+                        "0": "The {{name}} folder already exists",
+                        "1": "The folder is locked and cannot be modified",
+                        "2": "Failed to change mod status"
                     }
                 }
             }

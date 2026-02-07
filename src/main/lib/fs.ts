@@ -1,3 +1,4 @@
+import fsp from "node:fs/promises";
 import fse from "fs-extra";
 import path from "node:path";
 import { NahidaDesktop } from "..";
@@ -41,7 +42,7 @@ export class FS {
     }
 
     public async rename(oldPath: fse.PathLike, newPath: fse.PathLike) {
-        await fse.rename(oldPath, newPath);
+        await fsp.rename(oldPath as string, newPath as string);
     }
 
     public async ensureDir(path: string, options?: number | fse.EnsureOptions | undefined) {

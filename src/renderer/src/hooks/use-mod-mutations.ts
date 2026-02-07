@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { FolderGroup, ModInfo } from "@shared/types.gen";
 import { toast } from "sonner";
 import { useModStore } from "@renderer/store/mod";
+import { useTranslation } from "react-i18next";
 
 export function useGameMutations() {
     const queryClient = useQueryClient();
@@ -35,6 +36,7 @@ export function useGameMutations() {
 }
 
 export function useModMutations() {
+    const { t } = useTranslation();
     const queryClient = useQueryClient();
     const selectedGroup = useModStore((s) => s.selectedGroup);
 
@@ -58,10 +60,16 @@ export function useModMutations() {
             } catch (error: any) {
                 const errorMessage = error.message || "";
                 if (errorMessage.includes("ALREADY_EXISTS")) {
-                    const folderName = errorMessage.split("ALREADY_EXISTS:")[1] || "알 수 없는";
-                    toast.error(`이미 "${folderName}" 폴더가 존재합니다.`);
+                    const folderName = errorMessage.split("ALREADY_EXISTS:")[1] || t("g.unknown");
+                    toast.error(
+                        t("page.mod.hooks.use-mod-mutations.toggle-mutation.0", {
+                            name: folderName,
+                        }),
+                    );
+                } else if (errorMessage.includes("EBUSY")) {
+                    toast.error(t("page.mod.hooks.use-mod-mutations.toggle-mutation.1"));
                 } else {
-                    toast.error("모드 상태 변경에 실패했습니다.");
+                    toast.error(t("page.mod.hooks.use-mod-mutations.toggle-mutation.2"));
                 }
                 throw error;
             }
@@ -89,10 +97,16 @@ export function useModMutations() {
             } catch (error: any) {
                 const errorMessage = error.message || "";
                 if (errorMessage.includes("ALREADY_EXISTS")) {
-                    const folderName = errorMessage.split("ALREADY_EXISTS:")[1] || "알 수 없는";
-                    toast.error(`이미 "${folderName}" 폴더가 존재합니다.`);
+                    const folderName = errorMessage.split("ALREADY_EXISTS:")[1] || t("g.unknown");
+                    toast.error(
+                        t("page.mod.hooks.use-mod-mutations.toggle-mutation.0", {
+                            name: folderName,
+                        }),
+                    );
+                } else if (errorMessage.includes("EBUSY")) {
+                    toast.error(t("page.mod.hooks.use-mod-mutations.toggle-mutation.1"));
                 } else {
-                    toast.error("모드 상태 변경에 실패했습니다.");
+                    toast.error(t("page.mod.hooks.use-mod-mutations.toggle-mutation.2"));
                 }
                 throw error;
             }
