@@ -16,10 +16,16 @@ files:
     - "!node_modules/.pnpm/@cbor-extract+cbor-extract-linux-x64@*/**/*"
 # asar: false
 extraResources:
-    - from: build/extractor/extractor.exe
+    - from: build/extractor
+      to: extractor
+      filter:
+          - extractor.exe
     # - from: build/watcher/watcher.exe
     - from: build/watchman-v2025.02.24.00-windows
-    - from: build/compact/compact.exe
+    - from: build/compact
+      to: compact
+      filter:
+          - compact.exe
 asarUnpack:
     - resources/**
 win:

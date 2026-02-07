@@ -50,7 +50,7 @@ export class ArchiveService {
 
     private getExtractorPath(): string {
         if (app.isPackaged) {
-            return path.join(app.getAppPath(), "..", "extractor.exe");
+            return path.join(app.getAppPath(), "..", "extractor", "extractor.exe");
         }
         return path.join(app.getAppPath(), "build", "extractor", "extractor.exe");
     }
