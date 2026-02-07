@@ -16,6 +16,8 @@ export function KeyRecorder({ defaultValue, otherKeys, onSave }: KeyRecorderProp
   const containerRef = useRef<HTMLDivElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
   const manualRef = useRef<HTMLDivElement>(null);
+  const saveButtonRef = useRef<HTMLButtonElement>(null);
+  const enterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const displayKeys = value
     .split(" ")
@@ -24,12 +26,12 @@ export function KeyRecorder({ defaultValue, otherKeys, onSave }: KeyRecorderProp
 
   useEffect(() => {
     containerRef.current?.focus();
+    return () => {
+      if (enterTimerRef.current) clearTimeout(enterTimerRef.current);
+    };
   }, []);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-
+  const recordKey = (e: React.KeyboardEvent | KeyboardEvent) => {
     const basicMapped = mapKeyboardEventToInternal(e);
     if (!basicMapped) return;
 
@@ -44,6 +46,41 @@ export function KeyRecorder({ defaultValue, otherKeys, onSave }: KeyRecorderProp
 
     if (finalMapped) {
       setValue(finalMapped);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (e.key === "Enter") {
+      if (!e.repeat) {
+        enterTimerRef.current = setTimeout(() => {
+          saveButtonRef.current?.click();
+          enterTimerRef.current = null;
+        }, 500);
+      }
+      return;
+    }
+
+    if (enterTimerRef.current) {
+      clearTimeout(enterTimerRef.current);
+      enterTimerRef.current = null;
+    }
+
+    recordKey(e);
+  };
+
+  const handleKeyUp = (e: React.KeyboardEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (e.key === "Enter") {
+      if (enterTimerRef.current) {
+        clearTimeout(enterTimerRef.current);
+        enterTimerRef.current = null;
+        recordKey(e);
+      }
     }
   };
 
@@ -66,6 +103,7 @@ export function KeyRecorder({ defaultValue, otherKeys, onSave }: KeyRecorderProp
         className="flex items-center justify-center p-6 border border-dashed rounded-md bg-muted/30 focus:bg-accent/30 focus:border-solid outline-none transition-all cursor-pointer min-h-[100px]"
         tabIndex={0}
         onKeyDown={handleKeyDown}
+        onKeyUp={handleKeyUp}
         onBlur={handleBlur}
       >
         {displayKeys.length > 0 ? (
@@ -95,7 +133,9 @@ export function KeyRecorder({ defaultValue, otherKeys, onSave }: KeyRecorderProp
             <Button variant="ghost">Cancel</Button>
           </DialogClose>
           <DialogClose asChild>
-            <Button onClick={() => onSave(value)}>Save</Button>
+            <Button ref={saveButtonRef} onClick={() => onSave(value)}>
+              Save
+            </Button>
           </DialogClose>
         </DialogFooter>
       </div>
