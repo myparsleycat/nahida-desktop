@@ -17,7 +17,7 @@ export class CompactService {
 
     public async initialize() {
         if (app.isPackaged) {
-            this.binPath = path.join(process.resourcesPath, "compact.exe");
+            this.binPath = path.join(process.resourcesPath, "compact", "compact.exe");
         } else {
             this.binPath = path.join(app.getAppPath(), "build", "compact", "compact.exe");
         }
