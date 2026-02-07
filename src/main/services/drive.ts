@@ -8,6 +8,10 @@ import Upload, { DirectoriesComponent, UploadParams } from "@main/lib/upload";
 import { nanoid } from "nanoid";
 import { retry } from "es-toolkit";
 import { windowsReservedNameRegex } from "filename-reserved-regex";
+import type { Treaty } from "@elysiajs/eden";
+
+const Fn = eden.akasha.content({ id: "" }).get;
+type DriveItem = Treaty.Data<typeof Fn>;
 
 export const gzipAsync = promisify(gzip);
 export const gunzipAsync = promisify(gunzip);
@@ -36,7 +40,7 @@ export class DriveService {
     }
 
     get = {
-        item: async (itemId: string): Promise<any> => {
+        item: async (itemId: string): Promise<DriveItem> => {
             const { data, error } = await eden.akasha.content({ id: itemId }).get();
 
             if (error) {
@@ -123,7 +127,11 @@ export class DriveService {
             const selectedPaths = await this.selectUploadPaths(paths);
             if (!selectedPaths) return;
 
-            const preparation = await this.upload.prepareUpload(selectedPaths, []);
+            const existing = await this.get.item(destId);
+            const preparation = await this.upload.prepareUpload(
+                selectedPaths,
+                existing.children ?? [],
+            );
             if (preparation.files.length < 1) {
                 throw new Error("업로드 가능한 파일이 없습니다");
             }
