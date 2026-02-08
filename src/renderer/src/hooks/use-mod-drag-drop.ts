@@ -6,7 +6,16 @@ import path from "path-browserify";
 import { useModStore, modStore } from "@renderer/store/mod";
 
 const SUPPORTED_ARCHIVE_EXTENSIONS = [".zip", ".rar", ".7z"];
-const SUPPORTED_IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"];
+const SUPPORTED_IMAGE_EXTENSIONS = [
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".avif",
+    ".avifs",
+    ".gif",
+    ".bmp",
+];
 
 export function useModDragDrop(
     groupPath: string | undefined,

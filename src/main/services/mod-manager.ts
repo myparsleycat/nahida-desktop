@@ -16,6 +16,8 @@ const PREVIEW_EXTENSIONS = [
     ".jpeg",
     ".gif",
     ".webp",
+    ".avif",
+    ".avifs",
     ".bmp",
     ".mp4",
     ".webm",
