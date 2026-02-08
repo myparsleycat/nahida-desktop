@@ -1,0 +1,19 @@
+{
+    "name": "ini-parser",
+    "version": "0.1.0",
+    "main": "index.js",
+    "napi": {
+        "name": "ini-parser",
+        "triples": {
+            "defaults": true,
+            "additional": []
+        }
+    },
+    "scripts": {
+        "build": "napi build --platform --release",
+        "build:debug": "napi build --platform"
+    },
+    "devDependencies": {
+        "@napi-rs/cli": "^2.18.0"
+    }
+}

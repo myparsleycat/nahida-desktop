@@ -85,7 +85,7 @@ export class ArchiveService {
         if (app.isPackaged) {
             return path.join(app.getAppPath(), "..", "lib", `extractor.${ext}`);
         }
-        return path.join(app.getAppPath(), "build", "extractor", `extractor.${ext}`);
+        return path.join(app.getAppPath(), "native", "extractor", `extractor.${ext}`);
     }
 }
 

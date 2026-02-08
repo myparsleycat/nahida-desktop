@@ -81,6 +81,8 @@ typedef struct { void *data; GoInt len; GoInt cap; } GoSlice;
 
 #endif
 
+/* End of boilerplate cgo prologue.  */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
