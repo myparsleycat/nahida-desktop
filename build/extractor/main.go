@@ -1,52 +1,78 @@
 package main
 
+/*
+#include <stdlib.h>
+
+typedef void (*ProgressCallback)(double, char*);
+
+static void callCallback(ProgressCallback cb, double percent, char* msg) {
+	if (cb) {
+		cb(percent, msg);
+	}
+}
+*/
+import "C"
+
 import (
 	"archive/zip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"extractor/ipc"
+	"unsafe"
 
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
 	"golift.io/xtractr"
 )
 
-func main() {
-	if len(os.Args) != 3 {
-		ipc.SendError("InvalidArguments", "Usage: extractor <archive-path> <output-dir>")
-		os.Exit(1)
-	}
-
-	archivePath := os.Args[1]
-	outputDir := os.Args[2]
-
-	if _, err := os.Stat(archivePath); os.IsNotExist(err) {
-		ipc.SendError("FileNotFound", fmt.Sprintf("Archive file not found: %s", archivePath))
-		os.Exit(1)
-	}
-
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		ipc.SendError("DirectoryCreationFailed", fmt.Sprintf("Failed to create output directory: %v", err))
-		os.Exit(1)
-	}
-
-	ipc.SendProgress(0, "Starting extraction...")
-
-	resultPath, err := extractArchive(archivePath, outputDir)
-	if err != nil {
-		ipc.SendError("ExtractionFailed", err.Error())
-		os.Exit(1)
-	}
-
-	ipc.SendSuccess(resultPath)
-	os.Exit(0)
+//export FreeString
+func FreeString(str *C.char) {
+	C.free(unsafe.Pointer(str))
 }
 
-func extractArchive(archivePath, outputDir string) (string, error) {
+type ExtractorResult struct {
+	Success bool   `json:"success"`
+	Data    string `json:"data"`
+}
+
+//export ExtractArchive
+func ExtractArchive(archivePath *C.char, outputDir *C.char, cb C.ProgressCallback) *C.char {
+	goArchivePath := C.GoString(archivePath)
+	goOutputDir := C.GoString(outputDir)
+
+	invokeCallback := func(percent float64, msg string) {
+		cMsg := C.CString(msg)
+		defer C.free(unsafe.Pointer(cMsg))
+		C.callCallback(cb, C.double(percent), cMsg)
+	}
+
+	res := ExtractorResult{Success: false}
+
+	if _, err := os.Stat(goArchivePath); os.IsNotExist(err) {
+		res.Data = fmt.Sprintf("Archive file not found: %s", goArchivePath)
+	} else if err := os.MkdirAll(goOutputDir, 0755); err != nil {
+		res.Data = fmt.Sprintf("Failed to create output directory: %v", err)
+	} else {
+		invokeCallback(0, "Starting extraction...")
+		finalPath, err := extractArchive(goArchivePath, goOutputDir, invokeCallback)
+		if err != nil {
+			res.Data = err.Error()
+		} else {
+			res.Success = true
+			res.Data = finalPath
+		}
+	}
+
+	jsonBytes, _ := json.Marshal(res)
+	return C.CString(string(jsonBytes))
+}
+
+func main() {}
+
+func extractArchive(archivePath, outputDir string, onProgress func(float64, string)) (string, error) {
 	absArchive, err := filepath.Abs(archivePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to get absolute archive path: %v", err)
@@ -79,7 +105,7 @@ func extractArchive(archivePath, outputDir string) (string, error) {
 			}
 
 			percent := float64(i) / float64(totalFiles) * 100
-			ipc.SendProgress(percent, fmt.Sprintf("Extracting %s", name))
+			onProgress(percent, fmt.Sprintf("Extracting %s", name))
 
 			fpath := filepath.Join(tempDir, name)
 

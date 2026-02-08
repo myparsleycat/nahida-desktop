@@ -17,13 +17,16 @@ files:
 # asar: false
 extraResources:
     - from: build/extractor
-      to: extractor
+      to: lib
       filter:
-          - extractor.exe
-    # - from: build/watcher/watcher.exe
+          - extractor.dll
+    - from: build/ini-parser/build/Release
+      to: lib
+      filter:
+          - ini_parser.dll
     - from: build/watchman-v2025.02.24.00-windows
     - from: build/compact
-      to: compact
+      to: lib
       filter:
           - compact.exe
 asarUnpack:
