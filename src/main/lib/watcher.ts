@@ -6,7 +6,7 @@ import isDev from "@main/internal/isDev";
 import { app } from "electron";
 
 const watchmanBinaryPath = app.isPackaged
-    ? path.join(app.getAppPath(), "..", "watchman", "watchman.exe")
+    ? path.join(app.getAppPath(), "..", "lib", "watchman.exe")
     : path.join(
           app.getAppPath(),
           "build",

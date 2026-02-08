@@ -1,14 +1,15 @@
 {
     "name": "nahida-desktop",
-    "version": "1.19.0",
+    "version": "1.20.0",
     "description": "Native app for nahida.live",
     "main": "./out/main/index.js",
     "author": "nahida.live",
     "homepage": "https://nahida.live",
     "scripts": {
-        "go:build:extractor": "cd build/extractor && go mod tidy && go build -ldflags=\"-s -w\" -o extractor.exe",
+        "go:build:extractor": "cd build/extractor && go mod tidy && go build -buildmode=c-shared -ldflags=\"-s -w\" -o extractor.dll",
         "go:build:compact": "cd build/compact && go mod tidy && go build -ldflags=\"-s -w\" -o compact.exe",
-        "go:build": "pnpm run go:build:extractor && pnpm run go:build:compact",
+        "build:ini-parser": "cd build/ini-parser && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release",
+        "go:build": "pnpm run go:build:extractor && pnpm run go:build:compact && pnpm run build:ini-parser",
         "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
         "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
         "typecheck": "pnpm run typecheck:node && pnpm run typecheck:web",

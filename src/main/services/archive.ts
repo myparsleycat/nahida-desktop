@@ -2,7 +2,13 @@ import { NahidaDesktop } from "..";
 import path from "node:path";
 import fse from "fs-extra";
 import { app } from "electron";
-import { GoProcess } from "../lib/go-process";
+import koffi from "koffi";
+
+try {
+    koffi.proto("void ProgressCallback(double percent, const char* message)");
+} catch (e) {
+    // ignore duplicate type error
+}
 
 export class ArchiveService {
     private readonly desktop: NahidaDesktop;
@@ -22,37 +28,64 @@ export class ArchiveService {
 
         if (!fse.existsSync(extractorPath)) {
             throw new Error(
-                `Extractor binary not found at: ${extractorPath}. Please ensure the application is built correctly.`,
+                `Extractor library not found at: ${extractorPath}. Please ensure the application is built correctly.`,
             );
         }
 
-        const goProcess = new GoProcess({
-            path: extractorPath,
-            args: [archivePath, targetDir],
-        });
+        return new Promise<string>((resolve, reject) => {
+            try {
+                const lib = koffi.load(extractorPath);
 
-        if (onProgress) {
-            goProcess.on("progress", (payload: { percent: number; message: string }) => {
-                onProgress(payload.percent, payload.message);
-            });
-        }
+                const ExtractArchive = lib.func(
+                    "const char* ExtractArchive(const char* archive, const char* output, ProgressCallback* cb)",
+                );
 
-        try {
-            const result = await goProcess.start();
-            return result as string;
-        } catch (error: any) {
-            if (error.code === "ENOENT") {
-                throw new Error(`Extractor binary not found: ${extractorPath}`);
+                const callback = koffi.register((percent, message) => {
+                    if (onProgress) {
+                        onProgress(percent, message);
+                    }
+                }, koffi.pointer("ProgressCallback"));
+
+                ExtractArchive.async(archivePath, targetDir, callback, (err, res) => {
+                    koffi.unregister(callback);
+                    lib.unload();
+
+                    if (err) {
+                        reject(new Error(`FFI Call Failed: ${err.message}`));
+                        return;
+                    }
+
+                    if (res) {
+                        try {
+                            const result = JSON.parse(res);
+                            if (result.success) {
+                                resolve(result.data);
+                            } else {
+                                reject(new Error(result.data));
+                            }
+                        } catch (parseError: any) {
+                            reject(
+                                new Error(
+                                    `Failed to parse extractor result: ${parseError.message}`,
+                                ),
+                            );
+                        }
+                    } else {
+                        reject(new Error("Extraction returned empty result"));
+                    }
+                });
+            } catch (error: any) {
+                reject(new Error(`Failed to initiate extraction: ${error.message}`));
             }
-            throw new Error(`Extraction failed: ${error.message}`);
-        }
+        });
     }
 
     private getExtractorPath(): string {
+        const ext = "dll";
         if (app.isPackaged) {
-            return path.join(app.getAppPath(), "..", "extractor", "extractor.exe");
+            return path.join(app.getAppPath(), "..", "lib", `extractor.${ext}`);
         }
-        return path.join(app.getAppPath(), "build", "extractor", "extractor.exe");
+        return path.join(app.getAppPath(), "build", "extractor", `extractor.${ext}`);
     }
 }
 

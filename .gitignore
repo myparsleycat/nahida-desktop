@@ -8,3 +8,5 @@ out
 build/extractor/*.exe
 build/watcher/*.exe
 build/compact/*.exe
+build/ini-parser/build
+build/ini-parser/*.bak

@@ -1,6 +1,8 @@
 import { NahidaDesktop } from "..";
 import { trim } from "es-toolkit";
 import path from "path";
+import { app } from "electron";
+import koffi from "koffi";
 
 import fse from "fs-extra";
 import fg from "fast-glob";
@@ -16,6 +18,8 @@ const PREVIEW_EXTENSIONS = [
     ".jpeg",
     ".gif",
     ".webp",
+    ".avif",
+    ".avifs",
     ".bmp",
     ".mp4",
     ".webm",
@@ -90,86 +94,35 @@ export class ModManager {
         }
     }
 
-    private async parseIni(iniPath: string): Promise<ToggleKey[]> {
-        try {
-            const iniFileName = path.basename(iniPath);
-            const content = await fse.readFile(iniPath, "utf-8");
-            const toggleKeys: ToggleKey[] = [];
-            const lines = content.split("\n");
-
-            let currentSection: string | null = null;
-            let sectionData: any = {};
-
-            for (let line of lines) {
-                line = line.trim();
-
-                if (line.startsWith("[") && line.endsWith("]")) {
-                    if (currentSection && currentSection.toLowerCase().startsWith("key")) {
-                        const toggleKey = this.extractToggleKey(
-                            currentSection,
-                            sectionData,
-                            iniFileName,
-                        );
-                        if (toggleKey) {
-                            toggleKeys.push(toggleKey);
-                        }
-                    }
-
-                    currentSection = line.slice(1, -1);
-                    sectionData = {};
-                    continue;
-                }
-
-                if (currentSection && line.includes("=")) {
-                    const [key, ...valueParts] = line.split("=");
-                    const value = valueParts.join("=").trim();
-                    sectionData[key.trim()] = value;
-                }
-            }
-
-            if (currentSection && currentSection.toLowerCase().startsWith("key")) {
-                const toggleKey = this.extractToggleKey(currentSection, sectionData, iniFileName);
-                if (toggleKey) {
-                    toggleKeys.push(toggleKey);
-                }
-            }
-
-            return toggleKeys;
-        } catch (error) {
-            this.desktop.logger.error(error, `Mod:parseIni:${iniPath}`);
-            return [];
+    private getIniParserLibraryPath(): string {
+        const ext = "dll";
+        if (app.isPackaged) {
+            return path.join(app.getAppPath(), "..", "lib", `ini_parser.${ext}`);
         }
+        return path.join(
+            app.getAppPath(),
+            "build",
+            "ini-parser",
+            "build",
+            "Release",
+            `ini_parser.${ext}`,
+        );
     }
 
-    private extractToggleKey(
-        sectionName: string,
-        data: any,
-        iniFileName: string,
-    ): ToggleKey | null {
-        const entries = Object.entries(data);
-        const variableEntry = entries.find(([key]) => key.startsWith("$"));
-        if (!variableEntry) return null;
-
-        const [variable, valuesStr] = variableEntry;
-        const values = (valuesStr as string).split(",").map((v) => v.trim());
-
-        if (values.length < 2) return null;
-
-        const getCaseInsensitive = (obj: any, target: string) => {
-            const key = Object.keys(obj).find((k) => k.toLowerCase() === target.toLowerCase());
-            return key ? obj[key] : undefined;
-        };
-
-        return {
-            sectionName,
-            iniFileName,
-            key: getCaseInsensitive(data, "key"),
-            back: getCaseInsensitive(data, "back"),
-            type: getCaseInsensitive(data, "type"),
-            variable,
-            values,
-            currentValue: values[0],
-        };
+    private parseInisNative(paths: string[]): any[] {
+        const libPath = this.getIniParserLibraryPath();
+        try {
+            const lib = koffi.load(libPath);
+            const ProcessIniFiles = lib.func("const char* ProcessIniFiles(const char*)");
+            const resultStr = ProcessIniFiles(JSON.stringify(paths));
+            lib.unload();
+            const result = JSON.parse(resultStr);
+            if (result.error) throw new Error(result.error);
+            return result;
+        } catch (error) {
+            this.desktop.logger.error(error, "Mod:parseInisNative");
+            return [];
+        }
     }
 
     private async findPreview(modPath: string, files?: string[]): Promise<string | null> {
@@ -258,7 +211,7 @@ export class ModManager {
             const folderName = path.basename(modPath);
             const isEnabled = this.isModEnabled(folderName);
 
-            const files = await fg(MOD_FILE_GLOB, {
+            const allFiles = await fg("**/*", {
                 cwd: modPath,
                 onlyFiles: true,
                 caseSensitiveMatch: false,
@@ -267,17 +220,28 @@ export class ModManager {
             });
 
             let maxMtime = 0;
+            let totalSize = 0;
+            const files: typeof allFiles = [];
 
-            for (const file of files) {
+            const relevantExtensions = new Set(MOD_FILE_EXTENSIONS.map((e) => e.toLowerCase()));
+
+            for (const file of allFiles) {
                 if (!file.stats) continue;
+
+                totalSize += file.stats.size;
 
                 if (file.stats.mtimeMs > maxMtime) {
                     maxMtime = file.stats.mtimeMs;
                 }
+
+                const ext = path.extname(file.path).toLowerCase();
+                if (relevantExtensions.has(ext)) {
+                    files.push(file);
+                }
             }
 
             const mtime = maxMtime || (await fse.stat(modPath)).mtimeMs;
-            const size = await this.desktop.lib.fs.getFolderSize(modPath);
+            const size = totalSize;
 
             const collator = new Intl.Collator(undefined, {
                 numeric: true,
@@ -291,23 +255,15 @@ export class ModManager {
                         f.toLowerCase().endsWith(".ini") && !f.toLowerCase().startsWith("disabled"),
                 );
 
-            const iniData = await Promise.all(
-                rawIniFiles.map(async (iniFile) => {
-                    const iniPath = path.join(modPath, iniFile);
-                    const toggleKeys = await this.parseIni(iniPath);
-                    toggleKeys.sort((a, b) => {
-                        if (a.key && !b.key) return -1;
-                        if (!a.key && b.key) return 1;
-                        return 0;
-                    });
-                    return {
-                        name: iniFile,
-                        path: iniPath,
-                        toggleKeys,
-                        hasToggleKey: toggleKeys.some((tk) => !!tk.key),
-                    };
-                }),
-            );
+            const absoluteIniPaths = rawIniFiles.map((f) => path.join(modPath, f));
+            const nativeResults = this.parseInisNative(absoluteIniPaths);
+
+            const iniData = nativeResults.map((r: any, index: number) => ({
+                name: rawIniFiles[index],
+                path: r.path,
+                toggleKeys: r.toggleKeys,
+                hasToggleKey: r.hasToggleKey,
+            }));
 
             iniData.sort((a, b) => {
                 if (a.hasToggleKey && !b.hasToggleKey) return -1;
