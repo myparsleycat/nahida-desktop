@@ -2,6 +2,7 @@ import isDev from "@main/internal/isDev";
 import type { AppStatus, PathMetadata } from "@shared/types.gen";
 import { spawn } from "child_process";
 import {
+    app,
     dialog,
     shell,
     type OpenExternalOptions,
@@ -10,7 +11,6 @@ import {
     clipboard,
     OpenDialogOptions,
 } from "electron";
-import { app } from "electron/main";
 import fse from "fs-extra";
 import { desktop } from "..";
 

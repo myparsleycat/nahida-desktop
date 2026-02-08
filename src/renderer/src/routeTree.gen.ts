@@ -16,6 +16,7 @@ import { Route as XxmiRouteRouteImport } from './routes/xxmi/route'
 import { Route as SettingRouteRouteImport } from './routes/setting/route'
 import { Route as BackupRouteRouteImport } from './routes/backup/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as OverlayIndexRouteImport } from './routes/overlay/index'
 import { Route as ModIndexRouteImport } from './routes/mod/index'
 import { Route as BackupIndexRouteImport } from './routes/backup/index'
 import { Route as XxmiGimiRouteImport } from './routes/xxmi/gimi'
@@ -63,6 +64,11 @@ const BackupRouteRoute = BackupRouteRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OverlayIndexRoute = OverlayIndexRouteImport.update({
+  id: '/overlay/',
+  path: '/overlay/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ModIndexRoute = ModIndexRouteImport.update({
@@ -150,6 +156,7 @@ export interface FileRoutesByFullPath {
   '/xxmi/gimi': typeof XxmiGimiRoute
   '/backup/': typeof BackupIndexRoute
   '/mod/': typeof ModIndexRoute
+  '/overlay/': typeof OverlayIndexRoute
   '/drive/drive/$id': typeof DriveDriveIdRoute
   '/drive/share/$id': typeof DriveShareIdRoute
 }
@@ -171,6 +178,7 @@ export interface FileRoutesByTo {
   '/xxmi/gimi': typeof XxmiGimiRoute
   '/backup': typeof BackupIndexRoute
   '/mod': typeof ModIndexRoute
+  '/overlay': typeof OverlayIndexRoute
   '/drive/drive/$id': typeof DriveDriveIdRoute
   '/drive/share/$id': typeof DriveShareIdRoute
 }
@@ -194,6 +202,7 @@ export interface FileRoutesById {
   '/xxmi/gimi': typeof XxmiGimiRoute
   '/backup/': typeof BackupIndexRoute
   '/mod/': typeof ModIndexRoute
+  '/overlay/': typeof OverlayIndexRoute
   '/drive/drive/$id': typeof DriveDriveIdRoute
   '/drive/share/$id': typeof DriveShareIdRoute
 }
@@ -218,6 +227,7 @@ export interface FileRouteTypes {
     | '/xxmi/gimi'
     | '/backup/'
     | '/mod/'
+    | '/overlay/'
     | '/drive/drive/$id'
     | '/drive/share/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -239,6 +249,7 @@ export interface FileRouteTypes {
     | '/xxmi/gimi'
     | '/backup'
     | '/mod'
+    | '/overlay'
     | '/drive/drive/$id'
     | '/drive/share/$id'
   id:
@@ -261,6 +272,7 @@ export interface FileRouteTypes {
     | '/xxmi/gimi'
     | '/backup/'
     | '/mod/'
+    | '/overlay/'
     | '/drive/drive/$id'
     | '/drive/share/$id'
   fileRoutesById: FileRoutesById
@@ -274,6 +286,7 @@ export interface RootRouteChildren {
   ReportRoute: typeof ReportRoute
   TransferRoute: typeof TransferRoute
   ModIndexRoute: typeof ModIndexRoute
+  OverlayIndexRoute: typeof OverlayIndexRoute
   DriveDriveIdRoute: typeof DriveDriveIdRoute
   DriveShareIdRoute: typeof DriveShareIdRoute
 }
@@ -327,6 +340,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/overlay/': {
+      id: '/overlay/'
+      path: '/overlay'
+      fullPath: '/overlay/'
+      preLoaderRoute: typeof OverlayIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mod/': {
@@ -482,6 +502,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReportRoute: ReportRoute,
   TransferRoute: TransferRoute,
   ModIndexRoute: ModIndexRoute,
+  OverlayIndexRoute: OverlayIndexRoute,
   DriveDriveIdRoute: DriveDriveIdRoute,
   DriveShareIdRoute: DriveShareIdRoute,
 }

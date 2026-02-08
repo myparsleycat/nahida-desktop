@@ -24,6 +24,10 @@ extraResources:
       to: lib
       filter:
           - ini_parser.dll
+    - from: build/process-monitor/build/Release
+      to: lib
+      filter:
+          - process_monitor.dll
     - from: build/watchman-v2025.02.24.00-windows
     - from: build/compact
       to: lib
@@ -33,6 +37,7 @@ asarUnpack:
     - resources/**
 win:
     executableName: Nahida Desktop
+    requestedExecutionLevel: requireAdministrator
 nsis:
     artifactName: Nahida Desktop Setup ${version}.${ext}
     shortcutName: ${productName}

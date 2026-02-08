@@ -28,6 +28,7 @@ import { PathSelector } from "./lib/path-selector";
 import Watcher from "./lib/watcher";
 
 import { CompactService } from "./lib/compact";
+import { OverlayManager } from "./overlay/manager";
 
 import { registerProtocal } from "./protocals";
 import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
@@ -79,6 +80,8 @@ export class NahidaDesktop {
         archive: ArchiveService;
     };
 
+    public overlay: OverlayManager;
+
     public constructor() {
         this.userAgent = `Nahida Desktop/${app.getVersion()}`;
         this.setting = new Setting(this);
@@ -110,6 +113,7 @@ export class NahidaDesktop {
             mod: new ModManager(this),
             archive: new ArchiveService(this),
         };
+        this.overlay = new OverlayManager();
     }
 
     public async init() {
@@ -145,6 +149,9 @@ export class NahidaDesktop {
 
         // Initialize Compact Service
         await this.lib.compact.initialize();
+
+        // Start Overlay Monitoring
+        await this.overlay.startMonitoring();
     }
 
     public async updateProxy() {

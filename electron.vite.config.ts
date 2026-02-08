@@ -27,9 +27,13 @@ export default defineConfig({
             //     brotliSize: true,
             // }),
         ],
+        build: {
+            sourcemap: false,
+        },
     },
     preload: {
         build: {
+            sourcemap: false,
             rollupOptions: {
                 external: ["electron"],
             },
