@@ -146,26 +146,29 @@ export class ModManager {
         data: any,
         iniFileName: string,
     ): ToggleKey | null {
-        const entries = Object.entries(data);
-        const variableEntry = entries.find(([key]) => key.startsWith("$"));
-        if (!variableEntry) return null;
-
-        const [variable, valuesStr] = variableEntry;
-        const values = (valuesStr as string).split(",").map((v) => v.trim());
-
-        if (values.length < 2) return null;
-
         const getCaseInsensitive = (obj: any, target: string) => {
             const key = Object.keys(obj).find((k) => k.toLowerCase() === target.toLowerCase());
             return key ? obj[key] : undefined;
         };
+
+        const entries = Object.entries(data);
+        const variableEntry = entries.find(([key]) => key.startsWith("$")) as
+            | [string, string]
+            | undefined;
+        if (!variableEntry) return null;
+
+        const [variable, valuesStr] = variableEntry;
+        const values = valuesStr.split(",").map((v) => v.trim());
+        const type = getCaseInsensitive(data, "type");
+
+        if (values.length < 2 && type?.toLowerCase() !== "hold") return null;
 
         return {
             sectionName,
             iniFileName,
             key: getCaseInsensitive(data, "key"),
             back: getCaseInsensitive(data, "back"),
-            type: getCaseInsensitive(data, "type"),
+            type,
             variable,
             values,
             currentValue: values[0],
