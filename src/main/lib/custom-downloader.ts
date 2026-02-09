@@ -100,7 +100,8 @@ export class CustomDownloader {
 
         const realFileUrl = resp.url;
         const fileSize = Number(resp.headers.get("Content-Length"));
-        const suggestedFileName = realFileUrl.split("/").pop() || _title;
+        const fileName = realFileUrl.split("/").pop()?.split("?")[0] || "";
+        const suggestedFileName = this.desktop.lib.fs.sanitizeWindowsFilename(fileName);
 
         const result =
             await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(suggestedFileName);
@@ -173,6 +174,7 @@ export class CustomDownloader {
                     savePath,
                     extractedPath,
                 );
+                console.log("finalPath", finalPath);
                 await fse.rm(savePath, { force: true });
 
                 let previewPromise: Promise<void> | null = null;

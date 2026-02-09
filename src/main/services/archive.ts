@@ -17,13 +17,13 @@ export class ArchiveService {
         await fse.ensureDir(targetDir);
 
         try {
-            await extractArchive(archivePath, targetDir);
+            const extractedPath = await extractArchive(archivePath, targetDir);
 
             if (_onProgress) {
                 _onProgress(100, "Extraction complete");
             }
 
-            return targetDir;
+            return extractedPath;
         } catch (error: any) {
             throw new Error(`Failed to extract archive: ${error.message}`);
         }
