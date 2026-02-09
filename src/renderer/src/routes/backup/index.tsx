@@ -35,7 +35,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@renderer/components/ui/dialog"
+} from "@renderer/components/ui/dialog";
 import { Label } from "@renderer/components/ui/label";
 import { useQuery } from "@tanstack/react-query";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
@@ -119,24 +119,24 @@ function RouteComponent() {
 
   const [localPath, setLocalPath] = useState("");
   const [selectCloudPathDialogOpen, setSelectCloudPathDialogOpen] = useState(false);
-  const [currentId, setCurrentId] = useState<string>('root');
+  const [currentId, setCurrentId] = useState<string>("root");
   const [cloudPath, setCloudPath] = useState("");
   const [selectedItemId, setSelectedItemId] = useState<string>("");
 
   const cloudQuery = useQuery({
-    queryKey: ['test-nnn', currentId],
+    queryKey: ["test-nnn", currentId],
     queryFn: async () => {
-      return await window.api.invoke('drive:get:item', currentId);
+      return await window.api.invoke("drive:get:item", currentId);
     },
     enabled: selectCloudPathDialogOpen,
-  })
+  });
 
   useEffect(() => {
     if (!selectCloudPathDialogOpen) {
-      setCurrentId('root')
-      setSelectedItemId('')
+      setCurrentId("root");
+      setSelectedItemId("");
     }
-  }, [selectCloudPathDialogOpen])
+  }, [selectCloudPathDialogOpen]);
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -195,7 +195,9 @@ function RouteComponent() {
                       <Button
                         variant="outline"
                         onClick={async () => {
-                          const result = await window.api.invoke('util:showOpenDialog', { properties: ["openDirectory"] });
+                          const result = await window.api.invoke("util:showOpenDialog", {
+                            properties: ["openDirectory"],
+                          });
                           if (result.canceled) return;
                           setLocalPath(result.filePaths[0]);
                         }}
@@ -228,14 +230,18 @@ function RouteComponent() {
                                 <Loader2 className="h-6 w-6 animate-spin" />
                               </div>
                             )}
-                            {cloudQuery.isError && <div className="flex flex-1 items-center justify-center text-destructive">에러가 발생했습니다.</div>}
+                            {cloudQuery.isError && (
+                              <div className="flex flex-1 items-center justify-center text-destructive">
+                                에러가 발생했습니다.
+                              </div>
+                            )}
 
                             {cloudQuery.data && (
                               <div className="flex flex-col flex-1 min-h-0 w-full overflow-hidden">
                                 <div className="flex flex-wrap items-center gap-y-1 py-2 text-sm shrink-0 w-full">
                                   <span
                                     className="cursor-pointer hover:underline text-muted-foreground hover:text-foreground shrink-0"
-                                    onClick={() => setCurrentId('root')}
+                                    onClick={() => setCurrentId("root")}
                                   >
                                     드라이브
                                   </span>
@@ -245,7 +251,7 @@ function RouteComponent() {
                                       <span
                                         className="cursor-pointer hover:underline truncate max-w-[120px]"
                                         onClick={() => {
-                                          setCurrentId(item.id)
+                                          setCurrentId(item.id);
                                         }}
                                       >
                                         {item.name}
@@ -261,24 +267,26 @@ function RouteComponent() {
                                         className={cn(
                                           "p-2 hover:bg-secondary rounded-lg cursor-pointer transition-colors grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2",
                                           selectedItemId === item.id && "bg-secondary",
-                                          !item.isDir && "text-muted-foreground"
+                                          !item.isDir && "text-muted-foreground",
                                         )}
                                         key={item.id}
                                         onClick={() => {
                                           if (!item.isDir) return;
-                                          setSelectedItemId(item.id)
+                                          setSelectedItemId(item.id);
                                         }}
                                         onDoubleClick={() => {
                                           if (!item.isDir) return;
-                                          setCurrentId(item.id)
+                                          setCurrentId(item.id);
                                         }}
                                       >
                                         <div className="flex shrink-0">
-                                          {item.isDir ? <FolderIcon className="h-4 w-4" /> : <FileIcon className="h-4 w-4" />}
+                                          {item.isDir ? (
+                                            <FolderIcon className="h-4 w-4" />
+                                          ) : (
+                                            <FileIcon className="h-4 w-4" />
+                                          )}
                                         </div>
-                                        <span className="truncate block">
-                                          {item.name}
-                                        </span>
+                                        <span className="truncate block">{item.name}</span>
                                       </div>
                                     ))}
                                   </div>
@@ -293,7 +301,9 @@ function RouteComponent() {
                               <Button
                                 disabled={!selectedItemId}
                                 onClick={() => {
-                                  const cloudPath = '/' + cloudQuery.data?.ancestors.map((item) => item.name).join("/")
+                                  const cloudPath =
+                                    "/" +
+                                    cloudQuery.data?.ancestors.map((item) => item.name).join("/");
                                   setCloudPath(cloudPath);
                                   setSelectCloudPathDialogOpen(false);
                                 }}
@@ -401,6 +411,6 @@ function RouteComponent() {
           </div>
         )}
       </div>
-    </div >
+    </div>
   );
 }

@@ -46,10 +46,7 @@ export function PreviewModal(props: Props) {
         dialog.setOpen("previewDialog", v);
       }}
     >
-      <DialogTrigger
-        className={props.className}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <DialogTrigger className={props.className} onClick={(e) => e.stopPropagation()}>
         {hasVideo ? (
           <video
             src={props.preview.video?.default}

@@ -71,9 +71,10 @@
         "zod": "^4.3.6"
     },
     "devDependencies": {
-        "@napi-rs/cli": "^3.0.0",
+        "@biomejs/biome": "2.3.14",
         "@electron-toolkit/tsconfig": "^2.0.0",
         "@elysiajs/eden": "^1.4.6",
+        "@napi-rs/cli": "^3.0.0",
         "@radix-ui/react-avatar": "^1.1.11",
         "@radix-ui/react-slot": "^1.2.4",
         "@tailwindcss/vite": "^4.1.18",
