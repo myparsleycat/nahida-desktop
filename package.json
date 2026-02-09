@@ -6,9 +6,9 @@
     "author": "nahida.live",
     "homepage": "https://nahida.live",
     "scripts": {
-        "build:extractor": "cd build/extractor && go mod tidy && go build -buildmode=c-shared -ldflags=\"-s -w\" -o extractor.dll",
+        "build:extractor": "cd native/extractor && pnpm install && pnpm run build",
+        "build:parser": "cd native/ini-parser && pnpm install && pnpm run build",
         "build:compact": "cd build/compact && go mod tidy && go build -ldflags=\"-s -w\" -o compact.exe",
-        "build:parser": "cd native/ini-parser && napi build --platform --release && copy index.manual.d.ts index.d.ts",
         "build:native": "pnpm run build:extractor && pnpm run build:compact && pnpm run build:parser",
         "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
         "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",

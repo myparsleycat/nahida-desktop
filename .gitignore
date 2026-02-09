@@ -11,6 +11,8 @@ native/compact/*.exe
 native/ini-parser/build
 native/ini-parser/target
 native/ini-parser/*.node
+native/extractor/target
+native/extractor/*.node
 native/process-monitor
 
 *.gen.ts

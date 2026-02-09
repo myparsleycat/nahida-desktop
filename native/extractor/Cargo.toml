@@ -2,7 +2,7 @@
 [package]
 authors = ["LongYinan <lynweklm@gmail.com>"]
 edition = "2021"
-name = "ini_parser"
+name = "extractor"
 version = "0.1.0"
 
 [lib]
@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 [dependencies]
 napi = "3.0.0"
 napi-derive = "3.0.0"
-rayon = "1.10.0"
+compress-tools = "0.15.1"
 
 [build-dependencies]
 napi-build = "2"
