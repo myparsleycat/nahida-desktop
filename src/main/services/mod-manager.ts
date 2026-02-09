@@ -10,25 +10,7 @@ import { gamePaths, modPresets, setting } from "../internal/db/schema";
 import { nanoid } from "nanoid";
 
 import type { FolderGroup, ModInfo, Preset, ToggleKey } from "@shared/types.gen";
-import { processIniFiles, getCharactersFolder } from "@native/native-mod";
-
-const PREVIEW_EXTENSIONS = [
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".gif",
-    ".webp",
-    ".avif",
-    ".avifs",
-    ".bmp",
-    ".mp4",
-    ".webm",
-    ".avi",
-    ".mkv",
-    ".mov",
-];
-const MOD_FILE_EXTENSIONS = [".ini", ...PREVIEW_EXTENSIONS];
-const MOD_FILE_GLOB = `**/*.{${MOD_FILE_EXTENSIONS.map((e) => e.slice(1)).join(",")}}`;
+import { getCharactersFolder, getMods } from "@native/native-mod";
 
 export class ModManager {
     private desktop: NahidaDesktop;
@@ -94,187 +76,6 @@ export class ModManager {
         }
     }
 
-    private parseInis(paths: string[]): any[] {
-        try {
-            return processIniFiles(paths);
-        } catch (error) {
-            this.desktop.logger.error(error, "Mod:parseInis");
-            return [];
-        }
-    }
-
-    private async findPreview(modPath: string, files?: string[]): Promise<string | null> {
-        try {
-            if (!files) {
-                files = await fg(
-                    PREVIEW_EXTENSIONS.map((ext) => `**/*${ext}`),
-                    {
-                        cwd: modPath,
-                        onlyFiles: true,
-                        caseSensitiveMatch: false,
-                        dot: true,
-                    },
-                );
-            }
-
-            const imageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"];
-            const videoExtensions = [".mp4", ".webm", ".avi", ".mkv", ".mov"];
-            const excludedKeywords = ["normal", "light", "material", "diffuse"];
-
-            const isExcludedFile = (file: string): boolean => {
-                const lowerFilename = path.basename(file).toLowerCase();
-                if (lowerFilename.includes("preview")) return false;
-                return excludedKeywords.some((keyword) => lowerFilename.includes(keyword));
-            };
-
-            const getScore = (file: string): number => {
-                const lowerFile = file.toLowerCase();
-                const filename = path.basename(lowerFile);
-                const isRoot = !file.includes("/") && !file.includes("\\");
-                const isVideo = videoExtensions.some((ext) => lowerFile.endsWith(ext));
-
-                let score = 0;
-
-                if (filename.startsWith("preview")) {
-                    score += 1000;
-                } else if (filename.includes("preview")) {
-                    score += 500;
-                }
-
-                if (isRoot) score += 200;
-
-                if (isVideo) score += 10;
-
-                return score;
-            };
-
-            const isMediaFile = (file: string): boolean => {
-                const lowerFile = file.toLowerCase();
-                return (
-                    imageExtensions.some((ext) => lowerFile.endsWith(ext)) ||
-                    videoExtensions.some((ext) => lowerFile.endsWith(ext))
-                );
-            };
-
-            const candidateFiles = files.filter(
-                (file) => isMediaFile(file) && !isExcludedFile(file),
-            );
-
-            if (candidateFiles.length === 0) return null;
-
-            candidateFiles.sort((a, b) => {
-                const scoreA = getScore(a);
-                const scoreB = getScore(b);
-
-                if (scoreA !== scoreB) {
-                    return scoreB - scoreA;
-                }
-
-                return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
-            });
-
-            return path.join(modPath, candidateFiles[0]);
-        } catch (error) {
-            this.desktop.logger.error(error, `Mod:findPreview:${modPath}`);
-            return null;
-        }
-    }
-
-    private isModEnabled(folderName: string): boolean {
-        return !/^disabled\s+/i.test(folderName);
-    }
-
-    private async scanModFolder(modPath: string): Promise<ModInfo | null> {
-        try {
-            const folderName = path.basename(modPath);
-            const isEnabled = this.isModEnabled(folderName);
-
-            const allFiles = await fg("**/*", {
-                cwd: modPath,
-                onlyFiles: true,
-                caseSensitiveMatch: false,
-                dot: true,
-                stats: true,
-            });
-
-            let maxMtime = 0;
-            let totalSize = 0;
-            const files: typeof allFiles = [];
-
-            const relevantExtensions = new Set(MOD_FILE_EXTENSIONS.map((e) => e.toLowerCase()));
-
-            for (const file of allFiles) {
-                if (!file.stats) continue;
-
-                totalSize += file.stats.size;
-
-                if (file.stats.mtimeMs > maxMtime) {
-                    maxMtime = file.stats.mtimeMs;
-                }
-
-                const ext = path.extname(file.path).toLowerCase();
-                if (relevantExtensions.has(ext)) {
-                    files.push(file);
-                }
-            }
-
-            const mtime = maxMtime || (await fse.stat(modPath)).mtimeMs;
-            const size = totalSize;
-
-            const collator = new Intl.Collator(undefined, {
-                numeric: true,
-                sensitivity: "base",
-            });
-
-            const rawIniFiles = files
-                .map((f) => f.path)
-                .filter(
-                    (f) =>
-                        f.toLowerCase().endsWith(".ini") && !f.toLowerCase().startsWith("disabled"),
-                );
-
-            const absoluteIniPaths = rawIniFiles.map((f) => path.join(modPath, f));
-            const results = this.parseInis(absoluteIniPaths);
-
-            const iniData = results.map((r: any, index: number) => ({
-                name: rawIniFiles[index],
-                path: r.path,
-                toggleKeys: r.toggleKeys,
-                hasToggleKey: r.hasToggleKey,
-            }));
-
-            iniData.sort((a, b) => {
-                if (a.hasToggleKey && !b.hasToggleKey) return -1;
-                if (!a.hasToggleKey && b.hasToggleKey) return 1;
-                return collator.compare(a.name, b.name);
-            });
-
-            const preview = await this.findPreview(
-                modPath,
-                files.map((f) => f.path),
-            );
-
-            const inis = iniData.map((d) => ({
-                name: d.name,
-                path: d.path,
-                toggleKeys: d.toggleKeys,
-            }));
-
-            return {
-                name: folderName,
-                path: modPath,
-                isEnabled,
-                preview: preview || undefined,
-                mtime,
-                size,
-                inis,
-            };
-        } catch (error) {
-            this.desktop.logger.error(error, `Mod:scanModFolder:${modPath}`);
-            return null;
-        }
-    }
-
     get = {
         gamePath: async (game: string): Promise<string | null> => {
             const result = await db.query.gamePaths.findFirst({
@@ -283,14 +84,17 @@ export class ModManager {
             return result?.modFolderPath || null;
         },
 
-        characters: async (game: string): Promise<FolderGroup[]> => {
+        characters: async (game: string, searchModPreview?: boolean): Promise<FolderGroup[]> => {
             const modFolderPath = await this.get.gamePath(game);
             if (!modFolderPath) {
                 throw new Error(`No mod folder path set for ${game}`);
             }
 
+            const shouldFallback =
+                searchModPreview ?? (await this.desktop.setting.mod.getSearchModPreview());
+
             try {
-                return getCharactersFolder(modFolderPath);
+                return getCharactersFolder(modFolderPath, shouldFallback);
             } catch (error) {
                 this.desktop.logger.error(error, `Mod:characters:${game}`);
                 throw error;
@@ -299,31 +103,7 @@ export class ModManager {
 
         mods: async (groupPath: string): Promise<FolderGroup> => {
             try {
-                const groupName = path.basename(groupPath);
-                const modFolders = await fg("*", {
-                    cwd: groupPath,
-                    onlyDirectories: true,
-                });
-
-                const modsPromises = modFolders.map((modFolderName) => {
-                    const modPath = path.join(groupPath, modFolderName);
-                    return this.scanModFolder(modPath);
-                });
-
-                const [mods, preview] = await Promise.all([
-                    Promise.all(modsPromises),
-                    this.findPreview(groupPath),
-                ]);
-
-                const validMods = mods.filter((m): m is ModInfo => m !== null);
-
-                return {
-                    name: groupName,
-                    path: groupPath,
-                    mods: validMods,
-                    preview: preview || undefined,
-                    modCount: validMods.length,
-                };
+                return getMods(groupPath);
             } catch (error) {
                 this.desktop.logger.error(error, `Mod:mods:${groupPath}`);
                 throw error;

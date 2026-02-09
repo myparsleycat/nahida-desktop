@@ -8,7 +8,9 @@ export interface FolderGroup {
   modCount: number
 }
 
-export declare function getCharactersFolder(modFolderPath: string): Array<FolderGroup>
+export declare function getCharactersFolder(modFolderPath: string, fallbackToModPreview?: boolean | undefined | null): Array<FolderGroup>
+
+export declare function getMods(groupPath: string): FolderGroup
 
 export interface IniResult {
   name: string

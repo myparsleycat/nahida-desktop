@@ -577,4 +577,5 @@ if (!nativeBinding) {
 
 module.exports = nativeBinding.default
 module.exports.getCharactersFolder = nativeBinding.default.getCharactersFolder
+module.exports.getMods = nativeBinding.default.getMods
 module.exports.processIniFiles = nativeBinding.default.processIniFiles
