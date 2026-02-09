@@ -8,9 +8,7 @@ import { DB_FILE_NAME } from "../const";
 import * as schema from "./schema";
 
 const isDev = !app.isPackaged;
-export const dbPath = isDev
-    ? DB_FILE_NAME
-    : path.join(app.getPath("userData"), "data.db");
+export const dbPath = isDev ? DB_FILE_NAME : path.join(app.getPath("userData"), "data.db");
 
 const sqlite = new Database(dbPath);
 export const db = drizzle(sqlite, { schema });

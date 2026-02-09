@@ -71,7 +71,7 @@ function RouteComponent() {
         </div>
       </ScrollArea>
 
-      <div className="absolute bottom-4 right-4 pointer-events-none">
+      <div className="absolute top-0 right-2 pointer-events-none">
         <span className="text-xs text-muted-foreground">v{appStatus?.version}</span>
       </div>
     </div>

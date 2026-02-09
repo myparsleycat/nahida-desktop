@@ -24,6 +24,7 @@ function RouteComponent() {
   const [gameFolderCompressionEnabled, setGameFolderCompressionEnabled] = useState(false);
   const [gameFolderCompressionFeatureEnabled, setGameFolderCompressionFeatureEnabled] =
     useState(false);
+  const [searchModPreview, setSearchModPreview] = useState(true);
   const [compressionProgress, setCompressionProgress] = useState<{
     message: string;
     processedFiles: number;
@@ -60,6 +61,7 @@ function RouteComponent() {
       try {
         const deleteArchive = await window.api.invoke("setting:mod:getDeleteArchiveAfterExtract");
         const moveFolder = await window.api.invoke("setting:mod:getMoveFolderInsteadOfCopy");
+        const searchPreview = await window.api.invoke("setting:mod:getSearchModPreview");
         const vEnabled = await window.api.invoke("setting:mod:getVirtualizationEnabled");
         const vThreshold = await window.api.invoke("setting:mod:getVirtualizationThreshold");
         const compressionEnabled = await window.api.invoke(
@@ -71,6 +73,7 @@ function RouteComponent() {
 
         setDeleteArchiveAfterExtract(deleteArchive);
         setMoveFolderInsteadOfCopy(moveFolder);
+        setSearchModPreview(searchPreview);
         setVirtualizationEnabled(vEnabled);
         setVirtualizationThreshold(vThreshold);
         setGameFolderCompressionEnabled(compressionEnabled);
@@ -102,6 +105,16 @@ function RouteComponent() {
       setMoveFolderInsteadOfCopy(checked);
     } catch (error) {
       Logger.error(error, "ModSettings:handleMoveFolderChange");
+      toast.error("설정 저장에 실패했습니다.");
+    }
+  };
+
+  const handleSearchModPreviewChange = async (checked: boolean) => {
+    try {
+      await window.api.invoke("setting:mod:setSearchModPreview", checked);
+      setSearchModPreview(checked);
+    } catch (error) {
+      Logger.error(error, "ModSettings:handleSearchModPreviewChange");
       toast.error("설정 저장에 실패했습니다.");
     }
   };
@@ -199,6 +212,20 @@ function RouteComponent() {
                 </p>
               </div>
               <Switch checked={moveFolderInsteadOfCopy} onCheckedChange={handleMoveFolderChange} />
+            </div>
+
+            <Separator />
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <span className="text-sm font-medium">
+                  {t("page.setting.mod.mod_management.searchModPreview")}
+                </span>
+                <p className="text-sm text-muted-foreground">
+                  {t("page.setting.mod.mod_management.searchModPreviewDescription")}
+                </p>
+              </div>
+              <Switch checked={searchModPreview} onCheckedChange={handleSearchModPreviewChange} />
             </div>
           </CardContent>
         </Card>

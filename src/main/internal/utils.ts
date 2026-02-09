@@ -12,9 +12,7 @@ export async function promiseAllChunked<T>(
     const results: T[] = [];
 
     for (let i = 0; i < promises.length; i += chunkSize) {
-        const chunkResults = await Promise.all(
-            promises.slice(i, i + chunkSize),
-        );
+        const chunkResults = await Promise.all(promises.slice(i, i + chunkSize));
 
         results.push(...chunkResults);
     }
@@ -46,10 +44,7 @@ export async function isPortInUse(port: number): Promise<boolean> {
     });
 }
 
-export function canStartServerOnIPAndPort(
-    ip: string,
-    port: number,
-): Promise<boolean> {
+export function canStartServerOnIPAndPort(ip: string, port: number): Promise<boolean> {
     return new Promise((resolve) => {
         const server = net.createServer();
 
@@ -69,10 +64,7 @@ export function canStartServerOnIPAndPort(
     });
 }
 
-export async function execCommand(
-    command: string,
-    trimStdOut: boolean = true,
-): Promise<string> {
+export async function execCommand(command: string, trimStdOut: boolean = true): Promise<string> {
     return new Promise((resolve, reject) => {
         exec(
             command,
@@ -123,10 +115,7 @@ export async function isProcessRunning(processName: string): Promise<boolean> {
 
         if (process.platform === "win32") {
             command = `tasklist /FI "IMAGENAME eq ${processName}"`;
-        } else if (
-            process.platform === "darwin" ||
-            process.platform === "linux"
-        ) {
+        } else if (process.platform === "darwin" || process.platform === "linux") {
             command = `pgrep -f ${processName}`;
         } else {
             reject(false);
@@ -179,13 +168,7 @@ export function parseByteRange(
     const start = parseInt(startStr, 10);
     const end = endStr ? parseInt(endStr, 10) : totalLength - 1;
 
-    if (
-        isNaN(start) ||
-        isNaN(end) ||
-        start < 0 ||
-        end >= totalLength ||
-        start > end
-    ) {
+    if (isNaN(start) || isNaN(end) || start < 0 || end >= totalLength || start > end) {
         return null;
     }
 
@@ -230,9 +213,7 @@ export async function getDiskType(filePath: string): Promise<DriveInfo | null> {
     }*/
 }
 
-export async function getDiskTypeWindows(
-    filePath: string,
-): Promise<DriveInfo | null> {
+export async function getDiskTypeWindows(filePath: string): Promise<DriveInfo | null> {
     const driveLetter = pathModule.parse(filePath).root.split("\\").join("");
     const command = `wmic logicaldisk where "DeviceID='${driveLetter}'" get DriveType`;
 
@@ -258,31 +239,23 @@ export async function getDiskTypeWindows(
     };
 }
 
-export async function getDiskTypeMacOS(
-    filePath: string,
-): Promise<DriveInfo | null> {
+export async function getDiskTypeMacOS(filePath: string): Promise<DriveInfo | null> {
     try {
-        const mountOutput = await execCommand(
-            `df "${filePath}" | tail -1 | awk '{print $1}'`,
-        );
+        const mountOutput = await execCommand(`df "${filePath}" | tail -1 | awk '{print $1}'`);
 
         if (!mountOutput || mountOutput.length <= 0) {
             return null;
         }
 
         const volumePath = mountOutput.trim();
-        const stdout = await execCommand(
-            `diskutil info -plist "${volumePath}"`,
-        );
+        const stdout = await execCommand(`diskutil info -plist "${volumePath}"`);
 
         if (stdout.length <= 0) {
             return null;
         }
 
         const lines = stdout.split("\n");
-        const internalKeyIndex = lines.findIndex((line) =>
-            line.includes("<key>Internal</key>"),
-        );
+        const internalKeyIndex = lines.findIndex((line) => line.includes("<key>Internal</key>"));
 
         if (internalKeyIndex === -1) {
             return null;
@@ -306,9 +279,7 @@ export async function getDiskTypeMacOS(
     }
 }
 
-export async function getDiskTypeLinux(
-    filePath: string,
-): Promise<DriveInfo | null> {
+export async function getDiskTypeLinux(filePath: string): Promise<DriveInfo | null> {
     try {
         const stdout = await execCommand(
             "lsblk -o NAME,TYPE,MOUNTPOINT,FSTYPE,MODEL,SERIAL,SIZE,STATE,ROTA --json",
@@ -344,10 +315,7 @@ export async function getDiskTypeLinux(
     }
 }
 
-export function findLinuxDiskByPath(
-    drives: LinuxDrive[],
-    filePath: string,
-): LinuxDrive | null {
+export function findLinuxDiskByPath(drives: LinuxDrive[], filePath: string): LinuxDrive | null {
     for (const drive of drives) {
         if (drive.mountpoint && filePath.startsWith(drive.mountpoint)) {
             return drive;
@@ -376,9 +344,7 @@ export async function getLocalDirectorySize(path: string): Promise<{
     }>(async (resolve, reject) => {
         try {
             let didError = false;
-            let didErrorErr: Error = new Error(
-                "Could not read local directory.",
-            );
+            let didErrorErr: Error = new Error("Could not read local directory.");
             let size = 0;
             let items = 0;
             const stream = FastGlob.stream("**/*", {

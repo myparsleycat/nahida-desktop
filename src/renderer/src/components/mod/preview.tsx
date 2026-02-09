@@ -19,7 +19,7 @@ export function Preview({
   fallback,
   allowPlay = true,
 }: PreviewProps) {
-  const videoRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
@@ -52,32 +52,40 @@ export function Preview({
     };
   }, [path, allowPlay]);
 
+  useEffect(() => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.play().catch(() => {});
+      } else {
+        videoRef.current.pause();
+      }
+    }
+  }, [isPlaying]);
+
   if (!path) return <>{fallback}</>;
 
   const isVideo = path.toLowerCase().match(/\.(mp4|webm|avi|mkv|mov)$/);
 
+  const commonStyles: React.CSSProperties = {
+    imageRendering: "-webkit-optimize-contrast",
+    transform: "translateZ(0)",
+    backfaceVisibility: "hidden",
+  };
+
   if (isVideo) {
     return (
-      // <VideoCanvas
-      //   ref={videoRef}
-      //   src={`local://${path}`}
-      //   className={cn("w-full h-full", className)}
-      //   objectFit={objectFit}
-      //   playing={isPlaying}
-      //   muted
-      //   loop
-      // />
-
       <video
+        ref={videoRef}
         src={`local://${path}`}
         className={cn(
           "w-full h-full",
           objectFit === "cover" ? "object-cover" : "object-contain",
           className,
         )}
-        autoPlay
+        style={commonStyles}
         muted
         loop
+        playsInline
       />
     );
   }
@@ -91,6 +99,7 @@ export function Preview({
         objectFit === "cover" ? "object-cover" : "object-contain",
         className,
       )}
+      style={commonStyles}
       loading="eager"
       decoding="async"
     />

@@ -44,22 +44,22 @@ export function TransferStats({
     <div className="grid grid-cols-4 gap-3 lg:grid-cols-4 min-w-0 w-full">
       <StatCard
         icon={<ArrowUpFromLine className="h-5 w-5 text-success" />}
-        label={t('page.transfer.stats_label.upload')}
+        label={t("page.transfer.stats_label.upload")}
         value={uploadSpeed}
       />
       <StatCard
         icon={<ArrowDownToLine className="h-5 w-5 text-info" />}
-        label={t('page.transfer.stats_label.download')}
+        label={t("page.transfer.stats_label.download")}
         value={downloadSpeed}
       />
       <StatCard
         icon={<HardDrive className="h-5 w-5 text-muted-foreground" />}
-        label={t('page.transfer.stats_label.total_transferred')}
+        label={t("page.transfer.stats_label.total_transferred")}
         value={totalTransferred}
       />
       <StatCard
         icon={<Clock className="h-5 w-5 text-warning" />}
-        label={t('page.transfer.stats_label.active_transfers')}
+        label={t("page.transfer.stats_label.active_transfers")}
         value={activeTransfers.toString()}
       />
     </div>

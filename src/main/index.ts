@@ -31,6 +31,7 @@ import { CompactService } from "./lib/compact";
 
 import { registerProtocal } from "./protocals";
 import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
+import { NativeLib } from "./lib/native";
 
 if (IS_ELECTRON) {
     // Needs to be here, otherwise Chromium's FileSystemAccess API won't work. Waiting for the electron team to fix it.
@@ -67,7 +68,7 @@ export class NahidaDesktop {
         customDownloader: CustomDownloader;
         pathSelector: PathSelector;
         watcher: Watcher;
-
+        native: NativeLib;
         compact: CompactService;
     };
 
@@ -99,7 +100,7 @@ export class NahidaDesktop {
             customDownloader: new CustomDownloader(this),
             pathSelector: new PathSelector(this),
             watcher: new Watcher(this),
-
+            native: new NativeLib(this),
             compact: new CompactService(this),
         };
 
@@ -220,7 +221,7 @@ app.whenReady().then(async () => {
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.nahida");
 
-    registerProtocal();
+    registerProtocal(desktop);
 
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.

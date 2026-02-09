@@ -204,7 +204,10 @@
                     "moveTransferPageWhenStartTransfer": "开始传输时跳转页面",
                     "moveTransferPageWhenStartTransferDescription": "文件传输开始时自动跳转到传输管理页面。",
                     "powerSaveBlockInTransfer": "防止休眠",
-                    "powerSaveBlockInTransferDescription": "传输或同步进行时防止系统进入待机状态。"
+                    "powerSaveBlockInTransferDescription": "传输或同步进行时防止系统进入待机状态。",
+                    "imageCacheTitle": "图像缓存",
+                    "imageCacheDescription": "清理预览图像缓存",
+                    "imageCacheClear": "清除缓存"
                 }
             },
             "mod": {
@@ -214,7 +217,9 @@
                     "deleteArchiveAfterExtract": "解压后删除压缩包",
                     "deleteArchiveAfterExtractDescription": "将压缩文件解压到模组文件夹后删除源文件",
                     "moveFolderInsteadOfCopy": "移动文件夹而非复制",
-                    "moveFolderInsteadOfCopyDescription": "将文件夹拖入模组文件夹时进行移动而非复制 (删除源文件)"
+                    "moveFolderInsteadOfCopyDescription": "将文件夹拖入模组文件夹时进行移动而非复制 (删除源文件)",
+                    "searchModPreview": "在子文件夹中搜索模组预览",
+                    "searchModPreviewDescription": "如果角色文件夹中没有预览图像，则在模组文件夹内部搜索预览图像。"
                 },
                 "performance": {
                     "title": "性能",

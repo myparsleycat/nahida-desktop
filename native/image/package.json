@@ -1,0 +1,55 @@
+{
+  "name": "image",
+  "version": "1.0.0",
+  "description": "Template project for writing node package with napi-rs",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/napi-rs/package-template.git"
+  },
+  "license": "MIT",
+  "browser": "browser.js",
+  "keywords": [
+    "napi-rs",
+    "NAPI",
+    "N-API",
+    "Rust",
+    "node-addon",
+    "node-addon-api"
+  ],
+  "files": [
+    "index.d.ts",
+    "index.js",
+    "browser.js"
+  ],
+  "napi": {
+    "binaryName": "image",
+    "targets": [
+      "x86_64-pc-windows-msvc"
+    ]
+  },
+  "engines": {
+    "node": ">= 12.22.0 < 13 || >= 14.17.0 < 15 || >= 15.12.0 < 16 || >= 16.0.0"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "scripts": {
+    "build": "napi build --platform --release"
+  },
+  "devDependencies": {
+    "@emnapi/core": "^1.5.0",
+    "@emnapi/runtime": "^1.5.0",
+    "@napi-rs/cli": "^3.2.0",
+    "@oxc-node/core": "^0.0.35",
+    "@taplo/cli": "^0.7.0",
+    "@tybys/wasm-util": "^0.10.0",
+    "ava": "^6.4.1",
+    "chalk": "^5.6.2",
+    "npm-run-all2": "^8.0.4",
+    "oxlint": "^1.14.0",
+    "tinybench": "^6.0.0",
+    "typescript": "^5.9.2"
+  }
+}

@@ -1,0 +1,24 @@
+
+[package]
+authors = ["LongYinan <lynweklm@gmail.com>"]
+edition = "2021"
+name = "native-mod"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+alphanumeric-sort = "1.5.5"
+glob = "0.3.3"
+napi = "3.0.0"
+napi-derive = "3.0.0"
+rayon = "1.10.0"
+walkdir = "2.5.0"
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+lto = true
+strip = "symbols"

@@ -47,8 +47,8 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return result.filePaths[0];
     });
 
-    rh("mod:getCharacters", async (game: string) => {
-        return await desktop.service.mod.get.characters(game);
+    rh("mod:getCharacters", async (game: string, searchModPreview?: boolean) => {
+        return await desktop.service.mod.get.characters(game, searchModPreview);
     });
 
     rh("mod:getMods", async (groupPath: string) => {
@@ -112,6 +112,10 @@ export function registerModHandlers(desktop: NahidaDesktop) {
 
     rh("mod:getLastGame", async () => {
         return await desktop.service.mod.get.lastGame();
+    });
+
+    rh("mod:getPreviousFocusedGame", async () => {
+        return await desktop.service.mod.get.previousFocusedGame();
     });
 
     rh("mod:setLastGame", async (game: string) => {

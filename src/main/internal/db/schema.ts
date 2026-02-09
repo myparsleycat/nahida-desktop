@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { blob, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const setting = sqliteTable("setting", {
     key: text().primaryKey(),
@@ -17,4 +17,10 @@ export const modPresets = sqliteTable("mod_presets", {
         .references(() => gamePaths.game),
     name: text().notNull().unique(),
     mods: text().notNull(),
+});
+
+export const imageCache = sqliteTable("image_cache", {
+    hash: text().primaryKey(),
+    image: blob({ mode: "buffer" }).notNull(),
+    size: integer().notNull(),
 });

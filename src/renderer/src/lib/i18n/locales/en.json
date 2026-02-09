@@ -208,7 +208,10 @@
                     "moveTransferPageWhenStartTransfer": "Go to transfer page on start",
                     "moveTransferPageWhenStartTransferDescription": "Automatically move to the transfer management page when a file transfer starts.",
                     "powerSaveBlockInTransfer": "Prevent sleep mode",
-                    "powerSaveBlockInTransferDescription": "Prevent the system from entering sleep mode while transfer or sync is in progress."
+                    "powerSaveBlockInTransferDescription": "Prevent the system from entering sleep mode while transfer or sync is in progress.",
+                    "imageCacheTitle": "Image Cache",
+                    "imageCacheDescription": "Clears the preview image cache",
+                    "imageCacheClear": "Clear Cache"
                 }
             },
             "mod": {
@@ -218,7 +221,9 @@
                     "deleteArchiveAfterExtract": "Delete archive after extraction",
                     "deleteArchiveAfterExtractDescription": "Delete the original archive file after extracting it to the mod folder",
                     "moveFolderInsteadOfCopy": "Move folder instead of copy",
-                    "moveFolderInsteadOfCopyDescription": "Move instead of copy when dropping a folder into the mod folder (deletes original)"
+                    "moveFolderInsteadOfCopyDescription": "Move instead of copy when dropping a folder into the mod folder (deletes original)",
+                    "searchModPreview": "Search Preview in Subfolders",
+                    "searchModPreviewDescription": "If no preview image exists in the character folder, search for preview images inside mod folders."
                 },
                 "performance": {
                     "title": "Performance",

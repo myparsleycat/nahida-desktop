@@ -70,6 +70,14 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         return await d.setting.general.setGameFolderCompressionFeatureEnabled(enabled);
     });
 
+    rh("setting:general:getImageCacheSize", async () => {
+        return await d.setting.general.getImageCacheSize();
+    });
+
+    rh("setting:general:clearImageCache", async () => {
+        return await d.setting.general.clearImageCache();
+    });
+
     rh("setting:mod:getDeleteArchiveAfterExtract", async () => {
         return await d.setting.mod.getDeleteArchiveAfterExtract();
     });
@@ -103,6 +111,15 @@ export function registerSettingHandlers(d: NahidaDesktop) {
 
     rh("setting:mod:setVirtualizationThreshold", async (threshold) => {
         await d.setting.mod.setVirtualizationThreshold(threshold);
+        d.ipc.broadcast("mod:update-settings");
+    });
+
+    rh("setting:mod:getSearchModPreview", async () => {
+        return await d.setting.mod.getSearchModPreview();
+    });
+
+    rh("setting:mod:setSearchModPreview", async (enabled) => {
+        await d.setting.mod.setSearchModPreview(enabled);
         d.ipc.broadcast("mod:update-settings");
     });
 

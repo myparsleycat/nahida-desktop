@@ -10,10 +10,7 @@ interface TitlebarProps {
   };
 }
 
-const WINDOW_CONFIG: Record<
-  string,
-  { hideMinimize?: boolean; hideMaximize?: boolean }
-> = {
+const WINDOW_CONFIG: Record<string, { hideMinimize?: boolean; hideMaximize?: boolean }> = {
   "/report": { hideMinimize: true, hideMaximize: true },
   "/setting": { hideMinimize: false, hideMaximize: true },
   "/auth": { hideMinimize: false, hideMaximize: true },
@@ -24,8 +21,7 @@ export function Titlebar({ title }: TitlebarProps) {
 
   const configEntry = find(
     Object.entries(WINDOW_CONFIG),
-    ([route]) =>
-      location.pathname === route || location.pathname.startsWith(`${route}/`),
+    ([route]) => location.pathname === route || location.pathname.startsWith(`${route}/`),
   );
 
   const { hideMinimize, hideMaximize } = configEntry?.[1] || {};

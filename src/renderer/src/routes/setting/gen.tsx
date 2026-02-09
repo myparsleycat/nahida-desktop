@@ -14,6 +14,7 @@ import { Separator } from "@renderer/components/ui/separator";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { formatSize } from "@shared/utils";
 
 export const Route = createFileRoute("/setting/gen")({
   component: RouteComponent,
@@ -30,6 +31,7 @@ function RouteComponent() {
   const [moveTransferPageWhenStartTransfer, setMoveTransferPageWhenStartTransfer] = useState(false);
   const [powerSaveBlockInTransfer, setPowerSaveBlockInTransfer] = useState(false);
   const [defaultStartPage, setDefaultStartPage] = useState<string>("/mod");
+  const [imageCacheSize, setImageCacheSize] = useState<number>(0);
 
   useEffect(() => {
     window.api.invoke("setting:general:getRunOnStartup").then((val: boolean) => {
@@ -58,6 +60,10 @@ function RouteComponent() {
 
     window.api.invoke("setting:general:getDefaultStartPage").then((val: string | null) => {
       setDefaultStartPage(val || "/mod");
+    });
+
+    window.api.invoke("setting:general:getImageCacheSize").then((val: number) => {
+      setImageCacheSize(val);
     });
   }, []);
 
@@ -102,7 +108,6 @@ function RouteComponent() {
             <div className="flex items-center gap-4">
               <Button
                 variant="secondary"
-                size="sm"
                 onClick={() => window.api.invoke("setting:general:checkUpdate")}
               >
                 {t("page.setting.gen.application.checkUpdate")}
@@ -133,67 +138,71 @@ function RouteComponent() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-3 gap-3">
-        <div className="space-y-3">
-          <label className="text-sm font-medium">{t("page.setting.gen.language.title")}</label>
-          <Select
-            value={language}
-            onValueChange={(val) => {
-              setLanguage(val);
-              window.api.invoke("setting:general:setLanguage", val);
-            }}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder={t("page.setting.gen.language.select")} />
-            </SelectTrigger>
-            <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
-              <SelectGroup>
-                <SelectItem value="ko">한국어</SelectItem>
-                <SelectItem value="en">English</SelectItem>
-                <SelectItem value="ja">日本語</SelectItem>
-                <SelectItem value="zh">中文</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-3">
-          <label className="text-sm font-medium">{t("page.setting.gen.theme.title")}</label>
-          <Select value={theme} onValueChange={(v) => setTheme(v as Theme)}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder={t("page.setting.gen.theme.select")} />
-            </SelectTrigger>
-            <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
-              <SelectGroup>
-                <SelectItem value="system">{t("page.setting.gen.theme.system")}</SelectItem>
-                <SelectItem value="light">{t("page.setting.gen.theme.light")}</SelectItem>
-                <SelectItem value="dark">{t("page.setting.gen.theme.dark")}</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-3">
-          <label className="text-sm font-medium">{t("page.setting.gen.startPage.title")}</label>
-          <Select
-            value={defaultStartPage}
-            onValueChange={(v) => {
-              setDefaultStartPage(v);
-              window.api.invoke("setting:general:setDefaultStartPage", v);
-            }}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder={t("page.setting.gen.startPage.select")} />
-            </SelectTrigger>
-            <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
-              <SelectGroup>
-                <SelectItem value="/transfer">{t("page.transfer.title")}</SelectItem>
-                <SelectItem value="/drive/drive/root">{t("page.drive.title")}</SelectItem>
-                <SelectItem value="/drive/share/root">{t("page.share_drive.title")}</SelectItem>
-                <SelectItem value="/mod">{t("page.mod.title")}</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      <Card>
+        <CardContent>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-3">
+              <label className="text-sm font-medium">{t("page.setting.gen.language.title")}</label>
+              <Select
+                value={language}
+                onValueChange={(val) => {
+                  setLanguage(val);
+                  window.api.invoke("setting:general:setLanguage", val);
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={t("page.setting.gen.language.select")} />
+                </SelectTrigger>
+                <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
+                  <SelectGroup>
+                    <SelectItem value="ko">한국어</SelectItem>
+                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="ja">日本語</SelectItem>
+                    <SelectItem value="zh">中文</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-3">
+              <label className="text-sm font-medium">{t("page.setting.gen.theme.title")}</label>
+              <Select value={theme} onValueChange={(v) => setTheme(v as Theme)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={t("page.setting.gen.theme.select")} />
+                </SelectTrigger>
+                <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
+                  <SelectGroup>
+                    <SelectItem value="system">{t("page.setting.gen.theme.system")}</SelectItem>
+                    <SelectItem value="light">{t("page.setting.gen.theme.light")}</SelectItem>
+                    <SelectItem value="dark">{t("page.setting.gen.theme.dark")}</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-3">
+              <label className="text-sm font-medium">{t("page.setting.gen.startPage.title")}</label>
+              <Select
+                value={defaultStartPage}
+                onValueChange={(v) => {
+                  setDefaultStartPage(v);
+                  window.api.invoke("setting:general:setDefaultStartPage", v);
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={t("page.setting.gen.startPage.select")} />
+                </SelectTrigger>
+                <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
+                  <SelectGroup>
+                    <SelectItem value="/transfer">{t("page.transfer.title")}</SelectItem>
+                    <SelectItem value="/drive/drive/root">{t("page.drive.title")}</SelectItem>
+                    <SelectItem value="/drive/share/root">{t("page.share_drive.title")}</SelectItem>
+                    <SelectItem value="/mod">{t("page.mod.title")}</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -236,6 +245,34 @@ function RouteComponent() {
                 window.api.invoke("setting:general:setPowerSaveBlockInTransfer", val);
               }}
             />
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-sm font-medium">
+                {t("page.setting.gen.other.imageCacheTitle")}
+              </span>
+              <p className="text-xs text-muted-foreground">
+                {t("page.setting.gen.other.imageCacheDescription")}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <p className="text-sm">{formatSize(imageCacheSize)}</p>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  window.api.invoke("setting:general:clearImageCache").then(() => {
+                    window.api.invoke("setting:general:getImageCacheSize").then((size) => {
+                      setImageCacheSize(size);
+                    });
+                  });
+                }}
+              >
+                {t("page.setting.gen.other.imageCacheClear")}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

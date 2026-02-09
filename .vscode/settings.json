@@ -1,7 +1,9 @@
 {
     "cmake.ignoreCMakeListsMissing": true,
     "rust-analyzer.linkedProjects": [
-        "native/ini-parser/Cargo.toml",
-        "native/extractor/Cargo.toml"
+        "native/native-mod/Cargo.toml",
+        "native/extractor/Cargo.toml",
+        "native/native-util/Cargo.toml",
+        "native/image/Cargo.toml"
     ]
 }

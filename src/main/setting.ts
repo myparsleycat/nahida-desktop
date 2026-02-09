@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, sum } from "drizzle-orm";
 import { db } from "@main/internal/db";
-import { setting } from "@main/internal/db/schema";
+import { imageCache, setting } from "@main/internal/db/schema";
 import AutoLaunch from "auto-launch";
 import { app } from "electron";
 import type { NahidaDesktop } from "@main/index";
@@ -282,6 +282,15 @@ export class Setting {
                 this.desktop.lib.compact.updateFeature();
             }
         },
+
+        getImageCacheSize: async () => {
+            const [result] = await db.select({ totalSize: sum(imageCache.size) }).from(imageCache);
+            return Number(result?.totalSize || 0);
+        },
+
+        clearImageCache: async () => {
+            await db.delete(imageCache);
+        },
     };
 
     mod = {
@@ -382,6 +391,29 @@ export class Setting {
                 .onConflictDoUpdate({
                     target: setting.key,
                     set: { value: String(threshold) },
+                });
+        },
+
+        getSearchModPreview: async () => {
+            const qr = await db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "mod_search_mod_preview"),
+            });
+
+            if (!qr) {
+                await db.insert(setting).values({ key: "mod_search_mod_preview", value: "false" });
+                return false;
+            }
+
+            return qr.value === "true";
+        },
+
+        setSearchModPreview: async (enabled: boolean) => {
+            await db
+                .insert(setting)
+                .values({ key: "mod_search_mod_preview", value: String(enabled) })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(enabled) },
                 });
         },
     };
