@@ -28,9 +28,9 @@ export class LocalProtocol {
 
         const fileType = await fileTypeFromFile(fullPath);
 
-        const convertImageFormat = ["jpeg", "png", "webp"];
+        const convertImageMime = ["image/jpeg", "image/png", "image/webp"];
 
-        if (fileType?.mime.startsWith("image") && convertImageFormat.includes(fileType.mime)) {
+        if (fileType && convertImageMime.includes(fileType.mime)) {
             const imgHash = await desktop.lib.utils.getFileHash(fullPath);
             const cachedImg = await db.query.imageCache.findFirst({
                 where: (t, { eq }) => eq(t.hash, imgHash),
@@ -44,7 +44,7 @@ export class LocalProtocol {
                 const resizedImg = convertImage(fullPath, {
                     width: 500,
                     height: 500,
-                    quality: 80,
+                    quality: 70,
                     format: "webp",
                 });
                 if (!resizedImg) {
@@ -55,6 +55,7 @@ export class LocalProtocol {
                 await db.insert(imageCache).values({
                     hash: imgHash,
                     image: resizedImg,
+                    size: resizedImg.length,
                 });
                 return new Response(blob);
             }

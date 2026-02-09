@@ -204,7 +204,10 @@
                     "moveTransferPageWhenStartTransfer": "开始传输时跳转页面",
                     "moveTransferPageWhenStartTransferDescription": "文件传输开始时自动跳转到传输管理页面。",
                     "powerSaveBlockInTransfer": "防止休眠",
-                    "powerSaveBlockInTransferDescription": "传输或同步进行时防止系统进入待机状态。"
+                    "powerSaveBlockInTransferDescription": "传输或同步进行时防止系统进入待机状态。",
+                    "imageCacheTitle": "图像缓存",
+                    "imageCacheDescription": "清理预览图像缓存",
+                    "imageCacheClear": "清除缓存"
                 }
             },
             "mod": {

@@ -70,6 +70,14 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         return await d.setting.general.setGameFolderCompressionFeatureEnabled(enabled);
     });
 
+    rh("setting:general:getImageCacheSize", async () => {
+        return await d.setting.general.getImageCacheSize();
+    });
+
+    rh("setting:general:clearImageCache", async () => {
+        return await d.setting.general.clearImageCache();
+    });
+
     rh("setting:mod:getDeleteArchiveAfterExtract", async () => {
         return await d.setting.mod.getDeleteArchiveAfterExtract();
     });

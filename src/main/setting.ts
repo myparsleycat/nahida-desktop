@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, sum } from "drizzle-orm";
 import { db } from "@main/internal/db";
-import { setting } from "@main/internal/db/schema";
+import { imageCache, setting } from "@main/internal/db/schema";
 import AutoLaunch from "auto-launch";
 import { app } from "electron";
 import type { NahidaDesktop } from "@main/index";
@@ -281,6 +281,15 @@ export class Setting {
             if (this.desktop.lib && this.desktop.lib.compact) {
                 this.desktop.lib.compact.updateFeature();
             }
+        },
+
+        getImageCacheSize: async () => {
+            const [result] = await db.select({ totalSize: sum(imageCache.size) }).from(imageCache);
+            return Number(result?.totalSize || 0);
+        },
+
+        clearImageCache: async () => {
+            await db.delete(imageCache);
         },
     };
 

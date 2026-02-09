@@ -22,4 +22,5 @@ export const modPresets = sqliteTable("mod_presets", {
 export const imageCache = sqliteTable("image_cache", {
     hash: text().primaryKey(),
     image: blob({ mode: "buffer" }).notNull(),
+    size: integer().notNull(),
 });

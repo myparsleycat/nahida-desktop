@@ -204,7 +204,10 @@
                     "moveTransferPageWhenStartTransfer": "전송 시작 시 페이지 이동",
                     "moveTransferPageWhenStartTransferDescription": "파일 전송이 시작되면 자동으로 전송 관리 페이지로 이동합니다.",
                     "powerSaveBlockInTransfer": "절전 모드 방지",
-                    "powerSaveBlockInTransferDescription": "전송 또는 동기화가 진행 중일 때 시스템이 대기 상태로 들어가는 것을 막습니다."
+                    "powerSaveBlockInTransferDescription": "전송 또는 동기화가 진행 중일 때 시스템이 대기 상태로 들어가는 것을 막습니다.",
+                    "imageCacheTitle": "이미지 캐시",
+                    "imageCacheDescription": "프리뷰 이미지 캐시를 정리합니다",
+                    "imageCacheClear": "캐시 정리"
                 }
             },
             "mod": {
