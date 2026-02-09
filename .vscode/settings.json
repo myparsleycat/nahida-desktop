@@ -3,6 +3,7 @@
     "rust-analyzer.linkedProjects": [
         "native/native-mod/Cargo.toml",
         "native/extractor/Cargo.toml",
-        "native/native-util/Cargo.toml"
+        "native/native-util/Cargo.toml",
+        "native/image/Cargo.toml"
     ]
 }

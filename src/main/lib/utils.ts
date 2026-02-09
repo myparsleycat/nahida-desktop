@@ -1,5 +1,7 @@
 import { powerSaveBlocker } from "electron";
 import { NahidaDesktop } from "..";
+import fse from "fs-extra";
+import crypto from "crypto";
 
 export class Utils {
     private desktop: NahidaDesktop;
@@ -24,6 +26,11 @@ export class Utils {
         } else {
             throw new Error("Invalid arguments");
         }
+    }
+
+    public async getFileHash(path: string) {
+        const file = await fse.readFile(path);
+        return crypto.createHash("sha256").update(file).digest("hex");
     }
 }
 
