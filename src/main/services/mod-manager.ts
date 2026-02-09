@@ -10,7 +10,7 @@ import { gamePaths, modPresets, setting } from "../internal/db/schema";
 import { nanoid } from "nanoid";
 
 import type { FolderGroup, ModInfo, Preset, ToggleKey } from "@shared/types.gen";
-import { processIniFiles } from "@native/ini-parser";
+import { processIniFiles, getCharactersFolder } from "@native/native-mod";
 
 const PREVIEW_EXTENSIONS = [
     ".png",
@@ -290,32 +290,7 @@ export class ModManager {
             }
 
             try {
-                const groupFolders = await fg("*", {
-                    cwd: modFolderPath,
-                    onlyDirectories: true,
-                });
-
-                const groups = await Promise.all(
-                    groupFolders.map(async (groupFolderName) => {
-                        const groupPath = path.join(modFolderPath, groupFolderName);
-                        const modFolders = await fg("*", {
-                            cwd: groupPath,
-                            onlyDirectories: true,
-                        });
-
-                        const preview = await this.findPreview(groupPath);
-
-                        return {
-                            name: groupFolderName,
-                            path: groupPath,
-                            mods: [],
-                            preview: preview || undefined,
-                            modCount: modFolders.length,
-                        };
-                    }),
-                );
-
-                return groups;
+                return getCharactersFolder(modFolderPath);
             } catch (error) {
                 this.desktop.logger.error(error, `Mod:characters:${game}`);
                 throw error;
@@ -377,6 +352,57 @@ export class ModManager {
                 where: eq(setting.key, "last_game"),
             });
             return result?.value || null;
+        },
+
+        previousFocusedGame: async (): Promise<string | null> => {
+            try {
+                const currentPid = process.pid;
+
+                let currentProcessName = this.desktop.lib.native.getProcessName(currentPid);
+                if (currentProcessName) currentProcessName = currentProcessName.toLowerCase();
+
+                const previousPids = this.desktop.lib.native.getPreviousPids(currentPid);
+                if (previousPids.length === 0) return null;
+
+                const games = await this.get.games();
+
+                const genshinCase = ["원신", "genshin", "gimi"];
+                const starrailCase = ["스타레일", "붕스", "열차", "starrail", "srmi"];
+                const zenlessCase = ["젠레스", "젠존제", "찢", "zzz", "zenless", "zzmi"];
+                const wuwaCase = ["명조", "묑조", "wuwa", "wuthering", "wwmi"];
+                const endfieldCase = ["엔드필드", "엔필", "endfield", "efmi"];
+
+                const allCases = [genshinCase, starrailCase, zenlessCase, wuwaCase, endfieldCase];
+
+                for (const pid of previousPids) {
+                    const processName = this.desktop.lib.native.getProcessName(pid);
+                    if (!processName) continue;
+
+                    const lowerProcessName = processName.toLowerCase();
+
+                    if (currentProcessName && lowerProcessName.includes(currentProcessName))
+                        continue;
+                    if (lowerProcessName.includes("explorer")) continue;
+
+                    for (const gameCase of allCases) {
+                        const isGameProcess = gameCase.some((k) => lowerProcessName.includes(k));
+
+                        if (isGameProcess) {
+                            const matchedGame = games.find((g) => {
+                                const lowerGame = g.game.toLowerCase();
+                                return gameCase.some((k) => lowerGame.includes(k));
+                            });
+
+                            if (matchedGame) return matchedGame.game;
+                        }
+                    }
+                }
+
+                return null;
+            } catch (error) {
+                this.desktop.logger.error(error, "Mod:previousFocusedGame");
+                return null;
+            }
         },
     };
 

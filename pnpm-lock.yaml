@@ -110,6 +110,9 @@ importers:
       pino:
         specifier: ^10.3.0
         version: 10.3.0
+      ps-list:
+        specifier: ^9.0.0
+        version: 9.0.0
       rotating-file-stream:
         specifier: ^3.2.8
         version: 3.2.8
@@ -4696,6 +4699,10 @@ packages:
 
   proper-lockfile@4.1.2:
     resolution: {integrity: sha512-TjNPblN4BwAWMXU8s9AEz4JmQxnD1NNL7bNOY/AKUzyamc379FWASUhc/K1pL2noVb+XmZKLL68cjzLsiOAMaA==}
+
+  ps-list@9.0.0:
+    resolution: {integrity: sha512-lxMEoIL/BQlk2KunFzxwUPwMvjFH7x7cmvzSLsSHpyMXl9FFfLUlfKrYwFc4wx/ZaIxxuXC4n8rjQ1CX/tkXVQ==}
+    engines: {node: '>=20'}
 
   pump@3.0.3:
     resolution: {integrity: sha512-todwxLMY7/heScKmntwQG8CXVkWUOdYxIvY2s0VWAAMh/nd8SoYiRaKjlr7+iCs984f2P8zvrfWcDDYVb73NfA==}
@@ -9663,6 +9670,8 @@ snapshots:
       graceful-fs: 4.2.11
       retry: 0.12.0
       signal-exit: 3.0.7
+
+  ps-list@9.0.0: {}
 
   pump@3.0.3:
     dependencies:

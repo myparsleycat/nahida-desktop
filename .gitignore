@@ -8,11 +8,10 @@ out
 native/extractor/*.exe
 native/watcher/*.exe
 native/compact/*.exe
-native/ini-parser/build
-native/ini-parser/target
-native/ini-parser/*.node
+native/native-mod/build
+native/native-mod/target
+native/native-mod/*.node
 native/extractor/target
 native/extractor/*.node
-native/process-monitor
 
 *.gen.ts

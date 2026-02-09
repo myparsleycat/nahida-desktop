@@ -1,5 +1,5 @@
 {
-  "name": "ini-parser",
+  "name": "native-mod",
   "version": "1.0.0",
   "description": "Template project for writing node package with napi-rs",
   "main": "index.js",
@@ -23,7 +23,7 @@
     "browser.js"
   ],
   "napi": {
-    "binaryName": "ini-parser",
+    "binaryName": "native-mod",
     "targets": [
       "x86_64-pc-windows-msvc"
     ]

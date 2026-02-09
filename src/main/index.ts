@@ -31,6 +31,7 @@ import { CompactService } from "./lib/compact";
 
 import { registerProtocal } from "./protocals";
 import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
+import { NativeLib } from "./lib/native";
 
 if (IS_ELECTRON) {
     // Needs to be here, otherwise Chromium's FileSystemAccess API won't work. Waiting for the electron team to fix it.
@@ -67,7 +68,7 @@ export class NahidaDesktop {
         customDownloader: CustomDownloader;
         pathSelector: PathSelector;
         watcher: Watcher;
-
+        native: NativeLib;
         compact: CompactService;
     };
 
@@ -99,7 +100,7 @@ export class NahidaDesktop {
             customDownloader: new CustomDownloader(this),
             pathSelector: new PathSelector(this),
             watcher: new Watcher(this),
-
+            native: new NativeLib(this),
             compact: new CompactService(this),
         };
 

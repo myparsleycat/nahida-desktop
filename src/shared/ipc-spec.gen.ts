@@ -45,6 +45,7 @@ export const IPC_HANDLER_CHANNELS = [
     "mod:getLastGame",
     "mod:getMods",
     "mod:getPresets",
+    "mod:getPreviousFocusedGame",
     "mod:pastePreview",
     "mod:pickFolder",
     "mod:removeGame",

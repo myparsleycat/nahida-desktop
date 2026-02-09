@@ -114,6 +114,10 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return await desktop.service.mod.get.lastGame();
     });
 
+    rh("mod:getPreviousFocusedGame", async () => {
+        return await desktop.service.mod.get.previousFocusedGame();
+    });
+
     rh("mod:setLastGame", async (game: string) => {
         return await desktop.service.mod.fn.setLastGame(game);
     });

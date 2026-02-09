@@ -100,6 +100,7 @@ export type IpcHandlers = {
     "mod:getLastGame": (...args: Parameters<typeof desktop.service.mod.get.lastGame>) => ReturnType<typeof desktop.service.mod.get.lastGame>;
     "mod:getMods": (...args: Parameters<typeof desktop.service.mod.get.mods>) => ReturnType<typeof desktop.service.mod.get.mods>;
     "mod:getPresets": (...args: Parameters<typeof desktop.service.mod.get.presets>) => ReturnType<typeof desktop.service.mod.get.presets>;
+    "mod:getPreviousFocusedGame": (...args: Parameters<typeof desktop.service.mod.get.previousFocusedGame>) => ReturnType<typeof desktop.service.mod.get.previousFocusedGame>;
     "mod:pastePreview": (...args: Parameters<typeof desktop.service.mod.fn.pastePreview>) => ReturnType<typeof desktop.service.mod.fn.pastePreview>;
     "mod:pickFolder": (...args: any[]) => any;
     "mod:removeGame": (...args: Parameters<typeof desktop.service.mod.fn.removeGame>) => ReturnType<typeof desktop.service.mod.fn.removeGame>;

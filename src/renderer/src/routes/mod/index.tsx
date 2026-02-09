@@ -5,7 +5,7 @@ import { DeleteGameDialog } from "@renderer/components/mod/delete-game-dialog";
 import { PresetManagementDialog } from "@renderer/components/mod/preset-management-dialog";
 import { Titlebar } from "@renderer/components/titlebar";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useRef, useEffect } from "react";
 import { useModStore } from "@renderer/store/mod";
 import { useGames, useCharacters } from "@renderer/hooks/use-mod-data";
 import {
@@ -44,14 +44,32 @@ function RouteComponent() {
   const { isDragging, handleDragEnter, handleDragLeave, handleDragOver, handleDrop } =
     useModDragDrop(selectedGroupData?.path, queryClient, selectedGame || "");
 
+  const isInitialized = useRef(false);
   useEffect(() => {
     const initGame = async () => {
-      const lastGame = await window.api.invoke("mod:getLastGame");
-      if (lastGame && games.find((g) => g.game === lastGame)) {
-        setSelectedGame(lastGame);
+      console.log("[RouteComponent] initGame starting...");
+      try {
+        const focusedGame = await window.api.invoke("mod:getPreviousFocusedGame");
+        console.log("[RouteComponent] focusedGame:", focusedGame);
+        if (focusedGame && games.find((g) => g.game === focusedGame)) {
+          setSelectedGame(focusedGame);
+          return;
+        }
+
+        if (!selectedGame) {
+          const lastGame = await window.api.invoke("mod:getLastGame");
+          console.log("[RouteComponent] lastGame fallback:", lastGame);
+          if (lastGame && games.find((g) => g.game === lastGame)) {
+            setSelectedGame(lastGame);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to initialize game selection", error);
       }
     };
-    if (games.length > 0 && !selectedGame) {
+
+    if (games.length > 0 && !isInitialized.current) {
+      isInitialized.current = true;
       initGame();
     }
   }, [games, selectedGame, setSelectedGame]);
