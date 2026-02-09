@@ -82,6 +82,10 @@ class DownloadStreamer {
         }
 
         for await (const chunk of stream) {
+            if (signal.aborted) {
+                throw new Error("Download cancelled");
+            }
+
             switch (chunk.event) {
                 case "dirs": {
                     const dirsChunk = await this.parseStreamedData(chunk.data);
