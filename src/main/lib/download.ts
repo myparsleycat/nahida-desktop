@@ -12,7 +12,7 @@ import ky from "ky";
 import { ParallelDownloader } from "./parallel-downloader";
 import { decompress } from "fzstd";
 import { decode } from "cbor-x";
-import { getHeaders } from "@main/internal/fetcher";
+import { getHeaders, getAgent } from "@main/internal/fetcher";
 import { TransferData } from "@shared/types.gen";
 
 export type DownloadParams = {
