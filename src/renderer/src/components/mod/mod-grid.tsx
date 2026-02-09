@@ -72,7 +72,8 @@ export function ModGrid({ isDragging }: ModGridProps) {
     getScrollElement: () =>
       scrollAreaRef.current?.querySelector("[data-radix-scroll-area-viewport]") || null,
     estimateSize: useCallback(() => 400 + 12, []), // card height (400) + gap (12)
-    overscan: 5,
+    overscan: 10,
+    measureElement: (element) => element?.getBoundingClientRect().height,
   });
 
   useEffect(() => {
@@ -177,6 +178,7 @@ export function ModGrid({ isDragging }: ModGridProps) {
                 return (
                   <div
                     key={virtualRow.key}
+                    data-index={virtualRow.index}
                     style={{
                       position: "absolute",
                       top: 0,

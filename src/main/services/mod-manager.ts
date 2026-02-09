@@ -1,8 +1,6 @@
 import { NahidaDesktop } from "..";
 import { trim } from "es-toolkit";
 import path from "path";
-import { app } from "electron";
-import koffi from "koffi";
 
 import fse from "fs-extra";
 import fg from "fast-glob";
@@ -10,7 +8,9 @@ import { eq } from "drizzle-orm";
 import { db } from "../internal/db";
 import { gamePaths, modPresets, setting } from "../internal/db/schema";
 import { nanoid } from "nanoid";
+
 import type { FolderGroup, ModInfo, Preset, ToggleKey } from "@shared/types.gen";
+import { processIniFiles } from "@native/ini-parser";
 
 const PREVIEW_EXTENSIONS = [
     ".png",
@@ -94,33 +94,11 @@ export class ModManager {
         }
     }
 
-    private getIniParserLibraryPath(): string {
-        const ext = "dll";
-        if (app.isPackaged) {
-            return path.join(app.getAppPath(), "..", "lib", `ini_parser.${ext}`);
-        }
-        return path.join(
-            app.getAppPath(),
-            "build",
-            "ini-parser",
-            "build",
-            "Release",
-            `ini_parser.${ext}`,
-        );
-    }
-
-    private parseInisNative(paths: string[]): any[] {
-        const libPath = this.getIniParserLibraryPath();
+    private parseInis(paths: string[]): any[] {
         try {
-            const lib = koffi.load(libPath);
-            const ProcessIniFiles = lib.func("const char* ProcessIniFiles(const char*)");
-            const resultStr = ProcessIniFiles(JSON.stringify(paths));
-            lib.unload();
-            const result = JSON.parse(resultStr);
-            if (result.error) throw new Error(result.error);
-            return result;
+            return processIniFiles(paths);
         } catch (error) {
-            this.desktop.logger.error(error, "Mod:parseInisNative");
+            this.desktop.logger.error(error, "Mod:parseInis");
             return [];
         }
     }
@@ -256,9 +234,9 @@ export class ModManager {
                 );
 
             const absoluteIniPaths = rawIniFiles.map((f) => path.join(modPath, f));
-            const nativeResults = this.parseInisNative(absoluteIniPaths);
+            const results = this.parseInis(absoluteIniPaths);
 
-            const iniData = nativeResults.map((r: any, index: number) => ({
+            const iniData = results.map((r: any, index: number) => ({
                 name: rawIniFiles[index],
                 path: r.path,
                 toggleKeys: r.toggleKeys,

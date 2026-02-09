@@ -1,14 +1,6 @@
 import { NahidaDesktop } from "..";
-import path from "node:path";
 import fse from "fs-extra";
-import { app } from "electron";
-import koffi from "koffi";
-
-try {
-    koffi.proto("void ProgressCallback(double percent, const char* message)");
-} catch (e) {
-    // ignore duplicate type error
-}
+import { extractArchive } from "@native/extractor";
 
 export class ArchiveService {
     private readonly desktop: NahidaDesktop;
@@ -20,72 +12,21 @@ export class ArchiveService {
     async extract(
         archivePath: string,
         targetDir: string,
-        onProgress?: (percent: number, message: string) => void,
+        _onProgress?: (percent: number, message: string) => void,
     ): Promise<string> {
         await fse.ensureDir(targetDir);
 
-        const extractorPath = this.getExtractorPath();
+        try {
+            const extractedPath = await extractArchive(archivePath, targetDir);
 
-        if (!fse.existsSync(extractorPath)) {
-            throw new Error(
-                `Extractor library not found at: ${extractorPath}. Please ensure the application is built correctly.`,
-            );
-        }
-
-        return new Promise<string>((resolve, reject) => {
-            try {
-                const lib = koffi.load(extractorPath);
-
-                const ExtractArchive = lib.func(
-                    "const char* ExtractArchive(const char* archive, const char* output, ProgressCallback* cb)",
-                );
-
-                const callback = koffi.register((percent, message) => {
-                    if (onProgress) {
-                        onProgress(percent, message);
-                    }
-                }, koffi.pointer("ProgressCallback"));
-
-                ExtractArchive.async(archivePath, targetDir, callback, (err, res) => {
-                    koffi.unregister(callback);
-                    lib.unload();
-
-                    if (err) {
-                        reject(new Error(`FFI Call Failed: ${err.message}`));
-                        return;
-                    }
-
-                    if (res) {
-                        try {
-                            const result = JSON.parse(res);
-                            if (result.success) {
-                                resolve(result.data);
-                            } else {
-                                reject(new Error(result.data));
-                            }
-                        } catch (parseError: any) {
-                            reject(
-                                new Error(
-                                    `Failed to parse extractor result: ${parseError.message}`,
-                                ),
-                            );
-                        }
-                    } else {
-                        reject(new Error("Extraction returned empty result"));
-                    }
-                });
-            } catch (error: any) {
-                reject(new Error(`Failed to initiate extraction: ${error.message}`));
+            if (_onProgress) {
+                _onProgress(100, "Extraction complete");
             }
-        });
-    }
 
-    private getExtractorPath(): string {
-        const ext = "dll";
-        if (app.isPackaged) {
-            return path.join(app.getAppPath(), "..", "lib", `extractor.${ext}`);
+            return extractedPath;
+        } catch (error: any) {
+            throw new Error(`Failed to extract archive: ${error.message}`);
         }
-        return path.join(app.getAppPath(), "build", "extractor", `extractor.${ext}`);
     }
 }
 

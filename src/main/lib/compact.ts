@@ -19,7 +19,7 @@ export class CompactService {
         if (app.isPackaged) {
             this.binPath = path.join(process.resourcesPath, "compact", "compact.exe");
         } else {
-            this.binPath = path.join(app.getAppPath(), "build", "compact", "compact.exe");
+            this.binPath = path.join(app.getAppPath(), "native", "compact", "compact.exe");
         }
 
         this.isFeatureEnabled =

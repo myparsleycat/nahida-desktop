@@ -216,12 +216,18 @@
                     "moveFolderInsteadOfCopy": "移动文件夹而非复制",
                     "moveFolderInsteadOfCopyDescription": "将文件夹拖入模组文件夹时进行移动而非复制 (删除源文件)"
                 },
-                "mod_grid_virtualization": {
-                    "title": "模组列表虚拟化",
-                    "useVirtualization": "使用虚拟化",
-                    "useVirtualizationDescription": "模组数量较多时使用虚拟化以提高性能",
-                    "virtualizationThreshold": "模组数量阈值",
-                    "virtualizationThresholdDescription": "模组数量超过设定值时应用虚拟化"
+                "performance": {
+                    "title": "性能",
+                    "backdrop-blur": {
+                        "title": "使用模糊效果",
+                        "description": "浏览模组时出现性能问题，请禁用此选项。"
+                    },
+                    "virtualization": {
+                        "title": "使用虚拟化",
+                        "description": "通过虚拟化模组列表来提升性能。",
+                        "threshold": "阈值模组数量",
+                        "thresholdDescription": "模组数量超过设定值时应用虚拟化"
+                    }
                 }
             },
             "acc": {

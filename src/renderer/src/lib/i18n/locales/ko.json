@@ -216,12 +216,18 @@
                     "moveFolderInsteadOfCopy": "폴더 복사 대신 이동",
                     "moveFolderInsteadOfCopyDescription": "폴더를 모드 폴더에 드롭할 때 복사하지 않고 이동합니다 (원본 삭제)"
                 },
-                "mod_grid_virtualization": {
-                    "title": "모드 그리드 가상화",
-                    "useVirtualization": "가상화 사용",
-                    "useVirtualizationDescription": "모드 목록이 많을 때 가상화하여 성능을 향상시킵니다",
-                    "virtualizationThreshold": "기준 모드 개수",
-                    "virtualizationThresholdDescription": "설정한 개수 이상의 모드가 있을 때 가상화를 적용합니다"
+                "performance": {
+                    "title": "성능",
+                    "backdrop-blur": {
+                        "title": "블러 사용",
+                        "description": "모드 탐색시 성능 문제가 발생하는 경우 이 옵션을 해제하세요"
+                    },
+                    "virtualization": {
+                        "title": "가상화 사용",
+                        "description": "모드 목록을 가상화하여 성능을 향상시킵니다",
+                        "threshold": "기준 모드 개수",
+                        "thresholdDescription": "설정한 개수 이상의 모드가 있을 때 가상화를 적용합니다"
+                    }
                 },
                 "gameFolderCompression": {
                     "title": "압축",

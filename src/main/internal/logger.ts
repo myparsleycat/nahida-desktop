@@ -3,6 +3,7 @@ import pino, { type Logger as PinoLogger } from "pino";
 import fse from "fs-extra";
 import { createStream } from "rotating-file-stream";
 import { app } from "electron";
+import { is } from "@electron-toolkit/utils";
 
 export async function nahidaLogsPath(): Promise<string> {
     const configPath = pathModule.join(app.getPath("userData"), "logs");
@@ -83,7 +84,7 @@ export class Logger {
                     await this.waitForPino();
                 }
 
-                const log = `${where ? `[${where}] ` : ""}${
+                const logContent = `${where ? `[${where}] ` : ""}${
                     typeof object !== "undefined"
                         ? typeof object === "string" || typeof object === "number"
                             ? object
@@ -91,24 +92,37 @@ export class Logger {
                         : ""
                 }`;
 
+                if (is.dev) {
+                    const consoleArgs = where ? [`[${where}]`, object] : [object];
+                    if (level === "error" || level === "fatal") {
+                        console.error(...consoleArgs);
+                    } else if (level === "warn") {
+                        console.warn(...consoleArgs);
+                    } else if (level === "debug" || level === "trace") {
+                        console.debug(...consoleArgs);
+                    } else {
+                        console.log(...consoleArgs);
+                    }
+                }
+
                 if (level === "info") {
-                    this.logger?.info(log);
+                    this.logger?.info(logContent);
                 } else if (level === "debug") {
-                    this.logger?.debug(log);
+                    this.logger?.debug(logContent);
                 } else if (level === "error") {
-                    this.logger?.error(log);
+                    this.logger?.error(logContent);
 
                     if (object instanceof Error) {
                         this.logger?.error(object);
                     }
                 } else if (level === "warn") {
-                    this.logger?.warn(log);
+                    this.logger?.warn(logContent);
                 } else if (level === "trace") {
-                    this.logger?.trace(log);
+                    this.logger?.trace(logContent);
                 } else if (level === "fatal") {
-                    this.logger?.fatal(log);
+                    this.logger?.fatal(logContent);
                 } else {
-                    this.logger?.info(log);
+                    this.logger?.info(logContent);
                 }
             } catch (e) {
                 console.error(e);

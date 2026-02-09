@@ -5,12 +5,13 @@ import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { ipcGeneratorPlugin } from "./plugins/ipc-generator";
 
-import { visualizer } from "rollup-plugin-visualizer";
+// import { visualizer } from "rollup-plugin-visualizer";
 
 export default defineConfig({
     main: {
         resolve: {
             alias: {
+                "@native": resolve("native"),
                 "@shared": resolve("src/shared"),
                 "@main": resolve("src/main"),
                 "@preload": resolve("src/preload"),
@@ -36,6 +37,7 @@ export default defineConfig({
         },
         resolve: {
             alias: {
+                "@native": resolve("native"),
                 "@shared": resolve("src/shared"),
                 "@main": resolve("src/main"),
                 "@preload": resolve("src/preload"),

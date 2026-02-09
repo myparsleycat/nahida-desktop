@@ -206,52 +206,52 @@ function RouteComponent() {
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-medium">
-              {t("page.setting.mod.mod_grid_virtualization.title")}
+              {t("page.setting.mod.performance.title")}
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col space-y-4" ref={anim1}>
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <span className="text-sm font-bold">
-                  {t("page.setting.mod.mod_grid_virtualization.useVirtualization")}
-                </span>
-                <p className="text-xs text-muted-foreground">
-                  {t("page.setting.mod.mod_grid_virtualization.useVirtualizationDescription")}
-                </p>
-              </div>
-              <Switch
-                checked={virtualizationEnabled}
-                onCheckedChange={handleVirtualizationEnabledChange}
-              />
-            </div>
-
-            {virtualizationEnabled && (
+          <CardContent className="flex flex-col space-y-2" ref={anim1}>
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <span className="text-sm font-bold">
-                    {t("page.setting.mod.mod_grid_virtualization.virtualizationThreshold")}
+                    {t("page.setting.mod.performance.virtualization.title")}
                   </span>
                   <p className="text-xs text-muted-foreground">
-                    {t(
-                      "page.setting.mod.mod_grid_virtualization.virtualizationThresholdDescription",
-                    )}
+                    {t("page.setting.mod.performance.virtualization.description")}
                   </p>
                 </div>
-
-                <Input
-                  value={virtualizationThreshold}
-                  onChange={(e) => setVirtualizationThreshold(Number(e.target.value))}
-                  onBlur={(e) => handleVirtualizationThresholdChange(Number(e.target.value))}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.currentTarget.blur();
-                    }
-                  }}
-                  className="w-20"
-                  disabled={!virtualizationEnabled}
+                <Switch
+                  checked={virtualizationEnabled}
+                  onCheckedChange={handleVirtualizationEnabledChange}
                 />
               </div>
-            )}
+
+              {virtualizationEnabled && (
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <span className="text-sm font-bold">
+                      {t("page.setting.mod.performance.virtualization.threshold")}
+                    </span>
+                    <p className="text-xs text-muted-foreground">
+                      {t("page.setting.mod.performance.virtualization.thresholdDescription")}
+                    </p>
+                  </div>
+
+                  <Input
+                    value={virtualizationThreshold}
+                    onChange={(e) => setVirtualizationThreshold(Number(e.target.value))}
+                    onBlur={(e) => handleVirtualizationThresholdChange(Number(e.target.value))}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    className="w-20"
+                    disabled={!virtualizationEnabled}
+                  />
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 
