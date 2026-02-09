@@ -220,12 +220,18 @@
                     "moveFolderInsteadOfCopy": "Move folder instead of copy",
                     "moveFolderInsteadOfCopyDescription": "Move instead of copy when dropping a folder into the mod folder (deletes original)"
                 },
-                "mod_grid_virtualization": {
-                    "title": "Mod Grid Virtualization",
-                    "useVirtualization": "Use virtualization",
-                    "useVirtualizationDescription": "Use virtualization to improve performance when there are many mods",
-                    "virtualizationThreshold": "Mod count threshold",
-                    "virtualizationThresholdDescription": "Apply virtualization when there are more mods than the set count"
+                "performance": {
+                    "title": "Performance",
+                    "backdrop-blur": {
+                        "title": "Use Blur",
+                        "description": "Disable this option if performance issues occur while exploring mods"
+                    },
+                    "virtualization": {
+                        "title": "Use Virtualization",
+                        "description": "Virtualizes the mod list to improve performance",
+                        "threshold": "Threshold Mod Count",
+                        "thresholdDescription": "Applies virtualization when the number of mods exceeds the set count"
+                    }
                 },
                 "gameFolderCompression": {
                     "title": "Transparent Compression",
