@@ -1,8 +1,6 @@
 import { NahidaDesktop } from "..";
-import { eden2url } from "@main/client";
+import { eden } from "@main/client";
 import { nanoid } from "nanoid";
-import createSseWorker from "@main/worker/drive/sse.worker?nodeWorker";
-import { TransferData } from "@shared/types.gen";
 import path from "node:path";
 import fse from "fs-extra";
 import { pipeline } from "node:stream/promises";
@@ -11,9 +9,11 @@ import { retry, throttle } from "es-toolkit";
 import { createZstdDecompress, createGunzip } from "node:zlib";
 import PQueue from "p-queue";
 import ky from "ky";
-import { appVersion } from "@main/const";
 import { ParallelDownloader } from "./parallel-downloader";
-import { getAgent, getHeaders } from "@main/internal/fetcher";
+import { decompress } from "fzstd";
+import { decode } from "cbor-x";
+import { getHeaders } from "@main/internal/fetcher";
+import { TransferData } from "@shared/types.gen";
 
 export type DownloadParams = {
     type: "download";
@@ -44,74 +44,72 @@ export type DownloadMetadata = {
 class DownloadStreamer {
     constructor(private readonly desktop: NahidaDesktop) {}
 
+    private async decompressData(str: string) {
+        const binaryString = atob(str);
+        const compressedData = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            compressedData[i] = binaryString.charCodeAt(i);
+        }
+        return decompress(compressedData);
+    }
+
+    private async parseStreamedData(data: any) {
+        if (data.compressed) {
+            const decompressed = await this.decompressData(data.data);
+            if (data.type === "cbor") {
+                return decode(decompressed);
+            }
+            const decoder = new TextDecoder();
+            return decoder.decode(decompressed);
+        }
+
+        return JSON.parse(data.data);
+    }
+
     public async fetchMetadata(uuid: string, signal: AbortSignal): Promise<DownloadMetadata> {
-        const url = eden2url.akasha.dir.download.url({ query: { uuid } });
-        const token = await this.desktop.service.auth.getToken();
-        const worker = createSseWorker({
-            workerData: {
-                url: url.toString(),
-                appVersion,
-                token,
-            },
-        });
+        const { data: stream, error } = await eden.akasha.dir.download.get({ query: { uuid } });
+        if (error) throw error;
 
-        return new Promise<DownloadMetadata>((resolve, reject) => {
-            const downloadData: Omit<DownloadMetadata, "root"> = {
-                totalBytes: 0,
-                files: [],
-                dirs: [],
-            };
-            let rootDir: DownloadMetadata["root"] | null = null;
+        const downloadData: Omit<DownloadMetadata, "root"> = {
+            totalBytes: 0,
+            files: [],
+            dirs: [],
+        };
+        let rootDir: DownloadMetadata["root"] | null = null;
 
-            const cleanup = () => {
-                worker.terminate();
-                signal.removeEventListener("abort", onAbort);
-            };
+        if (!stream || typeof stream !== "object" || !(Symbol.asyncIterator in stream)) {
+            throw new Error("Invalid stream");
+        }
 
-            const onAbort = () => {
-                cleanup();
-                reject(new Error("download aborted"));
-            };
-
-            if (signal.aborted) return onAbort();
-            signal.addEventListener("abort", onAbort, { once: true });
-
-            worker.on("message", (event) => {
-                const { type, payload } = event;
-                switch (type) {
-                    case "dirs":
-                        downloadData.dirs = downloadData.dirs.concat(payload);
-                        break;
-                    case "files":
-                        downloadData.files = downloadData.files.concat(payload);
-                        break;
-                    case "metadata":
-                        downloadData.totalBytes = payload.totalBytes;
-                        rootDir = payload.root;
-                        break;
-                    case "complete":
-                        cleanup();
-                        if (!rootDir) {
-                            return reject(
-                                new Error("Root directory information was not received."),
-                            );
-                        }
-                        resolve({ root: rootDir, ...downloadData });
-                        break;
-                    case "error":
-                        cleanup();
-                        reject(new Error(payload || "An unknown worker error occurred"));
-                        break;
+        for await (const chunk of stream) {
+            switch (chunk.event) {
+                case "dirs": {
+                    const dirsChunk = await this.parseStreamedData(chunk.data);
+                    downloadData.dirs = downloadData.dirs.concat(dirsChunk);
+                    break;
                 }
-            });
+                case "files": {
+                    const filesChunk = await this.parseStreamedData(chunk.data);
+                    downloadData.files = downloadData.files.concat(filesChunk);
+                    break;
+                }
+                case "metadata": {
+                    const metadata = chunk.data as unknown as DownloadMetadata;
+                    downloadData.totalBytes = metadata.totalBytes;
+                    rootDir = metadata.root;
+                    break;
+                }
+            }
+        }
 
-            worker.on("error", (error) => {
-                cleanup();
-                reject(error);
-            });
+        if (!rootDir) {
+            throw new Error("Root directory information was not received.");
+        }
 
-            worker.postMessage("start");
-        });
+        return {
+            root: rootDir,
+            ...downloadData,
+        };
     }
 }
 
