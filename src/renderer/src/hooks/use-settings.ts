@@ -20,3 +20,21 @@ export function useVirtualizationSettings() {
         },
     });
 }
+
+export function useSearchModPreviewSetting() {
+    const queryClient = useQueryClient();
+
+    useEffect(() => {
+        const removeListener = window.api.on("mod:update-settings", () => {
+            queryClient.invalidateQueries({ queryKey: ["settings", "mod", "searchModPreview"] });
+        });
+        return () => removeListener();
+    }, [queryClient]);
+
+    return useQuery({
+        queryKey: ["settings", "mod", "searchModPreview"],
+        queryFn: async () => {
+            return await window.api.invoke("setting:mod:getSearchModPreview");
+        },
+    });
+}

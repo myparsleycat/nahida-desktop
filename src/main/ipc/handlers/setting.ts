@@ -106,6 +106,15 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         d.ipc.broadcast("mod:update-settings");
     });
 
+    rh("setting:mod:getSearchModPreview", async () => {
+        return await d.setting.mod.getSearchModPreview();
+    });
+
+    rh("setting:mod:setSearchModPreview", async (enabled) => {
+        await d.setting.mod.setSearchModPreview(enabled);
+        d.ipc.broadcast("mod:update-settings");
+    });
+
     rh("setting:net:getProxy", async () => {
         return await d.setting.net.getProxy();
     });

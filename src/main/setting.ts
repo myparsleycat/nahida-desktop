@@ -384,6 +384,29 @@ export class Setting {
                     set: { value: String(threshold) },
                 });
         },
+
+        getSearchModPreview: async () => {
+            const qr = await db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "mod_search_mod_preview"),
+            });
+
+            if (!qr) {
+                await db.insert(setting).values({ key: "mod_search_mod_preview", value: "false" });
+                return false;
+            }
+
+            return qr.value === "true";
+        },
+
+        setSearchModPreview: async (enabled: boolean) => {
+            await db
+                .insert(setting)
+                .values({ key: "mod_search_mod_preview", value: String(enabled) })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(enabled) },
+                });
+        },
     };
 
     net = {
