@@ -27,53 +27,30 @@ pub struct IniResult {
   pub has_toggle_key: bool,
 }
 
-fn trim(s: &str) -> &str {
-  s.trim_matches(|c| c == ' ' || c == '\t' || c == '\r' || c == '\n')
-}
-
-fn iequals(a: &str, b: &str) -> bool {
-  a.eq_ignore_ascii_case(b)
-}
-
-fn istarts_with(s: &str, prefix: &str) -> bool {
-  if s.len() < prefix.len() {
-    return false;
-  }
-  s[..prefix.len()].eq_ignore_ascii_case(prefix)
-}
-
 fn get_map_value(data: &HashMap<String, String>, key: &str) -> Option<String> {
   data.get(key).cloned().filter(|s| !s.is_empty())
 }
 
-fn extract_toggle_key(
+fn process_section_data(
   section_name: &str,
   data: &HashMap<String, String>,
   ini_file_name: &str,
 ) -> Option<ToggleKey> {
-  let mut variable = String::new();
-  let mut values_str = String::new();
-  let mut found_variable = false;
-
-  for (k, v) in data {
-    if k.starts_with('$') {
-      variable = k.clone();
-      values_str = v.clone();
-      found_variable = true;
-      break;
-    }
-  }
-
-  if !found_variable {
+  if !section_name.to_lowercase().starts_with("key") {
     return None;
   }
 
-  let values: Vec<String> = values_str.split(',').map(|s| trim(s).to_string()).collect();
+  let (variable, values_str) = data.iter().find(|(k, _)| k.starts_with('$'))?;
+
+  let values: Vec<String> = values_str
+    .split(',')
+    .map(|s| s.trim().to_string())
+    .collect();
 
   let type_val = get_map_value(data, "type");
   let is_hold = type_val
     .as_deref()
-    .map(|t| iequals(t, "hold"))
+    .map(|t| t.eq_ignore_ascii_case("hold"))
     .unwrap_or(false);
 
   if values.len() < 2 && !is_hold {
@@ -88,7 +65,7 @@ fn extract_toggle_key(
     key: get_map_value(data, "key"),
     back: get_map_value(data, "back"),
     type_: type_val,
-    variable,
+    variable: variable.clone(),
     values,
     current_value,
   })
@@ -111,52 +88,45 @@ fn parse_ini(path_str: &str) -> Vec<ToggleKey> {
   let mut toggle_keys = Vec::new();
   let mut current_section = String::new();
   let mut section_data: HashMap<String, String> = HashMap::new();
-  let mut first_line = true;
-
-  let flush_section =
-    |section: &str, data: &mut HashMap<String, String>, keys: &mut Vec<ToggleKey>| {
-      if !section.is_empty() && istarts_with(section, "key") {
-        if let Some(tk) = extract_toggle_key(section, data, &ini_file_name) {
-          keys.push(tk);
-        }
-      }
-      data.clear();
-    };
 
   for line_result in reader.lines() {
-    let mut line = match line_result {
+    let line = match line_result {
       Ok(l) => l,
       Err(_) => continue,
     };
 
-    if first_line {
-      if line.starts_with("\u{FEFF}") {
-        line.remove(0);
-      }
-      first_line = false;
-    }
+    let clean_line = line.trim_start_matches('\u{FEFF}').trim();
 
-    let line_view = trim(&line);
-    if line_view.is_empty() || line_view.starts_with(';') {
+    if clean_line.is_empty() || clean_line.starts_with(';') {
       continue;
     }
 
-    if line_view.starts_with('[') && line_view.ends_with(']') {
-      flush_section(&current_section, &mut section_data, &mut toggle_keys);
-      current_section = line_view[1..line_view.len() - 1].to_string();
+    if clean_line.starts_with('[') && clean_line.ends_with(']') {
+      if !current_section.is_empty() {
+        if let Some(tk) = process_section_data(&current_section, &section_data, &ini_file_name) {
+          toggle_keys.push(tk);
+        }
+        section_data.clear();
+      }
+
+      current_section = clean_line[1..clean_line.len() - 1].to_string();
       continue;
     }
 
     if !current_section.is_empty() {
-      if let Some(eq_pos) = line_view.find('=') {
-        let key = trim(&line_view[..eq_pos]).to_lowercase();
-        let value = trim(&line_view[eq_pos + 1..]).to_string();
+      if let Some((k, v)) = clean_line.split_once('=') {
+        let key = k.trim().to_lowercase();
+        let value = v.trim().to_string();
         section_data.insert(key, value);
       }
     }
   }
 
-  flush_section(&current_section, &mut section_data, &mut toggle_keys);
+  if !current_section.is_empty() {
+    if let Some(tk) = process_section_data(&current_section, &section_data, &ini_file_name) {
+      toggle_keys.push(tk);
+    }
+  }
 
   toggle_keys
 }
