@@ -461,7 +461,7 @@ export class DriveService {
         }
 
         if (suggestedName && data.root) {
-            data.root.name = suggestedName.replace(windowsReservedNameRegex(), " ");
+            data.root.name = suggestedName.replace(windowsReservedNameRegex(), " ").trim();
         }
 
         const name = data.root?.name || "Download";
