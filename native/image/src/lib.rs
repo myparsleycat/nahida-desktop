@@ -28,8 +28,9 @@ pub struct ResizeOptions {
 }
 
 #[napi]
-pub fn convert_image(input_path: String, options: ResizeOptions) -> Result<Option<Buffer>> {
-    let path = Path::new(&input_path);
+pub async fn convert_image(input_path: String, options: ResizeOptions) -> Result<Option<Vec<u8>>> {
+    let path_str = input_path.clone();
+    let path = Path::new(&path_str);
 
     let reader = ImageReader::open(path)
         .map_err(|e| Error::from_reason(format!("Failed to open file: {}", e)))?
@@ -52,7 +53,7 @@ pub fn convert_image(input_path: String, options: ResizeOptions) -> Result<Optio
     handle_output(&resized, target_format, &options)
 }
 
-fn process_animated_gif(path: &Path, options: &ResizeOptions) -> Result<Option<Buffer>> {
+fn process_animated_gif(path: &Path, options: &ResizeOptions) -> Result<Option<Vec<u8>>> {
     let file = File::open(path).map_err(|e| Error::from_reason(e.to_string()))?;
     let reader = BufReader::new(file);
     let decoder = GifDecoder::new(reader).map_err(|e| Error::from_reason(e.to_string()))?;
@@ -93,7 +94,7 @@ fn handle_output(
     img: &DynamicImage,
     format: ImageFormat,
     options: &ResizeOptions,
-) -> Result<Option<Buffer>> {
+) -> Result<Option<Vec<u8>>> {
     let mut buffer = Vec::new();
     let mut cursor = Cursor::new(&mut buffer);
     let (w, h) = img.dimensions();
@@ -131,7 +132,7 @@ fn handle_output(
     finalize_output(buffer, options)
 }
 
-fn finalize_output(data: Vec<u8>, options: &ResizeOptions) -> Result<Option<Buffer>> {
+fn finalize_output(data: Vec<u8>, options: &ResizeOptions) -> Result<Option<Vec<u8>>> {
     if let Some(path_str) = &options.save_path {
         let path = Path::new(path_str);
         let file = File::create(path)
@@ -142,7 +143,7 @@ fn finalize_output(data: Vec<u8>, options: &ResizeOptions) -> Result<Option<Buff
             .map_err(|e| Error::from_reason(format!("File write error: {}", e)))?;
         Ok(None)
     } else {
-        Ok(Some(Buffer::from(data)))
+        Ok(Some(data))
     }
 }
 

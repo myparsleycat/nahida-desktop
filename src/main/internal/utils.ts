@@ -1,9 +1,8 @@
-import net from "net";
-import https from "https";
-import { exec } from "child_process";
-import pathModule from "path";
-import fs from "fs-extra";
+import { exec } from "node:child_process";
+import net from "node:net";
+import pathModule from "node:path";
 import FastGlob, { type Entry } from "fast-glob";
+import fs from "fs-extra";
 
 export async function promiseAllChunked<T>(
     promises: Promise<T>[],

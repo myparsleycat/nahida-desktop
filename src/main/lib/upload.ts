@@ -1,18 +1,18 @@
-import { NahidaDesktop } from "..";
-import { nanoid } from "nanoid";
-import { Content } from "@shared/types.gen";
-import { chunk, compact, flatten, groupBy, orderBy, sumBy, retry } from "es-toolkit";
-import path from "node:path";
-import fg from "fast-glob";
 import os from "node:os";
+import path from "node:path";
 import { Worker } from "node:worker_threads";
-import sha256Worker from "@main/worker/drive/sha256.worker?modulePath";
 import { eden, eden2url } from "@main/client";
-import fse from "fs-extra";
+import { getAgent, getHeaders } from "@main/internal/fetcher";
+import sha256Worker from "@main/worker/drive/sha256.worker?modulePath";
+import type { Content } from "@shared/types.gen";
+import { chunk, flatten, groupBy, orderBy, retry, sumBy } from "es-toolkit";
+import fg from "fast-glob";
 import { fileTypeFromBuffer } from "file-type/node";
-import PQueue from "p-queue";
+import fse from "fs-extra";
 import ky from "ky";
-import { getHeaders, getAgent } from "@main/internal/fetcher";
+import { nanoid } from "nanoid";
+import PQueue from "p-queue";
+import type { NahidaDesktop } from "..";
 
 const CHUNK_SIZE = 100;
 
@@ -192,7 +192,9 @@ export class UploadLib {
     }
 
     private cleanupSha256Workers(workers: Worker[]) {
-        workers.forEach((worker) => worker.terminate());
+        workers.forEach((worker) => {
+            worker.terminate();
+        });
     }
 
     private async isMediaByMagicNumbers(file: Buffer) {
@@ -302,7 +304,6 @@ export class UploadLib {
         signal?: AbortSignal;
         onProgress?: (bytes: number) => void;
     }) {
-        const token = await this.desktop.service.auth.getToken();
         const uploadUrl = eden2url.akasha.file.upload.url();
 
         const formData = new FormData();
@@ -348,6 +349,11 @@ export class UploadLib {
         onProgress?: (bytes: number) => void,
     ) {
         const { name, sha256, fullPath, form } = file;
+
+        if (!form) {
+            throw new Error("form is not defined");
+        }
+
         const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
         const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
         const maxIndex = totalChunks - 1;
@@ -371,8 +377,8 @@ export class UploadLib {
                         const response = await this.postFormData({
                             name,
                             sha256,
-                            key: form!.key,
-                            parentId: form!.parentId,
+                            key: form.key,
+                            parentId: form.parentId,
                             fileToUpload: chunkToUpload,
                             part: partToken,
                             signal,
@@ -390,7 +396,7 @@ export class UploadLib {
                     },
                     {
                         retries: 3,
-                        delay: (attempt) => Math.pow(2, attempt) * 1000,
+                        delay: (attempt) => 2 ** attempt * 1000,
                         shouldRetry: () => !signal?.aborted,
                     },
                 );
@@ -413,6 +419,11 @@ export class UploadLib {
         onProgress?: (bytes: number) => void,
     ) {
         const { name, sha256, fullPath, form } = file;
+
+        if (!form) {
+            throw new Error("form is not defined");
+        }
+
         const fileBuffer = await fse.readFile(fullPath);
         const isPreview = await this.isPreviewFile(fileBuffer, name);
 
@@ -431,8 +442,8 @@ export class UploadLib {
                 const response = await this.postFormData({
                     name,
                     sha256,
-                    key: form!.key,
-                    parentId: form!.parentId,
+                    key: form.key,
+                    parentId: form.parentId,
                     fileToUpload,
                     compAlg,
                     signal,
@@ -450,7 +461,7 @@ export class UploadLib {
             },
             {
                 retries: 3,
-                delay: (attempt) => Math.pow(2, attempt) * 1000,
+                delay: (attempt) => 2 ** attempt * 1000,
                 shouldRetry: () => !signal?.aborted,
             },
         );
@@ -473,20 +484,27 @@ export class UploadLib {
             chunks.map((chunk, workerIndex) => {
                 return new Promise<Map<string, string>>((resolve, reject) => {
                     const worker = workers[workerIndex];
-                    worker.on("message", (message: any) => {
-                        if (message.type === "complete") {
-                            resolve(new Map(message.hashes));
-                        } else if (message.type === "progress") {
-                            processedCount++;
-                            const now = Date.now();
-                            if (now - lastUpdate >= 100 || processedCount === files.length) {
-                                lastUpdate = now;
-                                onProgress?.(processedCount);
+                    worker.on(
+                        "message",
+                        (message: {
+                            type: string;
+                            hashes?: Map<string, string>;
+                            error?: string;
+                        }) => {
+                            if (message.type === "complete") {
+                                resolve(new Map(message.hashes));
+                            } else if (message.type === "progress") {
+                                processedCount++;
+                                const now = Date.now();
+                                if (now - lastUpdate >= 100 || processedCount === files.length) {
+                                    lastUpdate = now;
+                                    onProgress?.(processedCount);
+                                }
+                            } else if (message.type === "error") {
+                                reject(new Error(message.error));
                             }
-                        } else if (message.type === "error") {
-                            reject(new Error(message.error));
-                        }
-                    });
+                        },
+                    );
                     worker.on("error", reject);
                     worker.postMessage({
                         files: chunk.map((f) => ({ FID: f.FID, path: f.fullPath })),
@@ -499,7 +517,9 @@ export class UploadLib {
 
         const combinedHashes = new Map<string, string>();
         results.forEach((result) => {
-            result.forEach((hash, fid) => combinedHashes.set(fid, hash));
+            result.forEach((hash, fid) => {
+                combinedHashes.set(fid, hash);
+            });
         });
 
         return files.map((file) => {
@@ -565,7 +585,6 @@ export class UploadLib {
 
     public async filesUpload({
         files,
-        totalSize,
         onProgress,
         signal,
         pid,
@@ -609,7 +628,7 @@ export class UploadLib {
                 sha256: f.sha256,
             }));
 
-            const { data, error } = await retry(
+            const { data } = await retry(
                 async () => {
                     const result = await eden.akasha.file.create_many.post({
                         current: "",
@@ -626,7 +645,7 @@ export class UploadLib {
                 },
                 {
                     retries: 3,
-                    delay: (attempt) => Math.pow(2, attempt) * 1000,
+                    delay: (attempt) => 2 ** attempt * 1000,
                     shouldRetry: () => !signal?.aborted,
                 },
             );
@@ -725,15 +744,14 @@ export class UploadLib {
         files,
         directories,
         totalSize,
-        processName,
         abortController,
         processedFiles,
         initialTransferedSize,
     }: {
         pid: string;
         params: UploadParams;
-        files: any[];
-        directories: any[];
+        files: FilesComponent[];
+        directories: DirectoriesComponent[];
         totalSize: number;
         processName: string;
         abortController: AbortController;
@@ -760,7 +778,7 @@ export class UploadLib {
             let finalFiles: FinalFile[] = [];
             if (params.fileHashes) {
                 finalFiles = parentIdProcessedFiles.map((f) => {
-                    const hash = params.fileHashes![f.FID];
+                    const hash = params.fileHashes?.[f.FID];
                     if (!hash) {
                         throw new Error(`Hash missing for file ${f.name}`);
                     }
@@ -775,7 +793,7 @@ export class UploadLib {
                     });
                 });
                 const transfer = this.desktop.service.transfer.getTransferByPID(pid);
-                if (transfer && transfer.restartParams) {
+                if (transfer?.restartParams) {
                     transfer.restartParams = {
                         ...(transfer.restartParams as UploadParams),
                         processedFiles: finalFiles,
@@ -835,7 +853,10 @@ export class UploadLib {
         } catch (err) {
             if (abortController.signal.aborted) return;
             this.desktop.logger.error(err, "UploadLib:executeUpload");
-            this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
+            this.desktop.service.transfer.updateTransfer(pid, {
+                status: "error",
+                error: err instanceof Error ? err.message : String(err),
+            });
             throw err;
         }
     }

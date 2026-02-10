@@ -1,6 +1,6 @@
-import isDev from "@main/internal/isDev";
-import { BrowserWindow } from "electron";
 import path from "node:path";
+import isDev from "@main/internal/isDev";
+import type { BrowserWindow } from "electron";
 
 export function getDefaultWebPreferences() {
     return {

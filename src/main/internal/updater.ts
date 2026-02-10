@@ -1,10 +1,10 @@
 const { autoUpdater } = require("electron-updater");
 
-import { BrowserWindow, app, dialog, Notification } from "electron";
+import { app, BrowserWindow, dialog, Notification } from "electron";
 import ProgressBar from "electron-progressbar";
 import { convert } from "html-to-text";
+import type { NahidaDesktop } from "..";
 import isDev from "./isDev";
-import { NahidaDesktop } from "..";
 
 autoUpdater.allowDowngrade = false;
 autoUpdater.autoDownload = false;

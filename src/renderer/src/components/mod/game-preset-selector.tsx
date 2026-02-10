@@ -8,13 +8,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
-import { Trash2 } from "lucide-react";
+import { usePresets } from "@renderer/hooks/use-mod-data";
+import { useModStore } from "@renderer/store/mod";
 import type { GameConfig } from "@shared/types.gen";
+import { Trash2 } from "lucide-react";
+import { memo, useEffect } from "react";
 import { AddGameDialog } from "./add-game-dialog";
 import { CreatePresetDialog } from "./create-preset-dialog";
-import { useModStore } from "@renderer/store/mod";
-import { usePresets } from "@renderer/hooks/use-mod-data";
-import { useEffect, memo } from "react";
 
 interface GamePresetSelectorProps {
   games: GameConfig[];

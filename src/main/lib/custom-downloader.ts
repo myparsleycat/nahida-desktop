@@ -1,14 +1,14 @@
-import { NahidaDesktop } from "..";
-import { ParallelDownloader } from "./parallel-downloader";
-import ky from "ky";
-import fse from "fs-extra";
-import { pipeline } from "node:stream/promises";
-import { nanoid } from "nanoid";
-import { TransferData } from "@shared/types.gen";
-import { throttle } from "es-toolkit";
 import path from "node:path";
-import { Notification } from "electron";
+import { pipeline } from "node:stream/promises";
 import { getAgent, getHeaders } from "@main/internal/fetcher";
+import type { TransferData } from "@shared/types.gen";
+import { Notification } from "electron";
+import { throttle } from "es-toolkit";
+import fse from "fs-extra";
+import ky from "ky";
+import { nanoid } from "nanoid";
+import type { NahidaDesktop } from "..";
+import { ParallelDownloader } from "./parallel-downloader";
 
 export class CustomDownloader {
     public desktop: NahidaDesktop;
@@ -65,7 +65,7 @@ export class CustomDownloader {
                 throw new Error(`Failed to download file: ${resp.statusText}`);
             }
             try {
-                await pipeline(resp.body as any, fileStream, { signal });
+                await pipeline(resp.body as ReadableStream, fileStream, { signal });
             } catch (err) {
                 fileStream.destroy();
                 await fse.remove(savePath).catch(() => {});
@@ -80,7 +80,7 @@ export class CustomDownloader {
         previewUrl?: string | null;
     }) {
         const { title: _title, fileUrl, previewUrl } = props;
-        const title = this.desktop.lib.fs.sanitizeWindowsFilename(_title);
+        // const title = this.desktop.lib.fs.sanitizeWindowsFilename(_title);
 
         const respPromise = ky.head(fileUrl, {
             redirect: "follow",
@@ -196,26 +196,26 @@ export class CustomDownloader {
                 });
 
                 const mainWindow = this.desktop.window.main.window;
-                if (mainWindow) {
+                if (mainWindow && result.path) {
                     this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
-                        path: result.path!,
+                        path: result.path,
                         name: finalFileName,
                     });
                 }
 
-                if (previewPromise && mainWindow) {
+                if (previewPromise && mainWindow && result.path) {
                     await previewPromise;
                     this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
-                        path: result.path!,
+                        path: result.path,
                         name: finalFileName,
                         disableToast: true,
                     });
                 }
-            } catch (err: any) {
+            } catch (err) {
                 if (
                     abortController.signal.aborted ||
-                    err.name === "AbortError" ||
-                    err.message === "Aborted"
+                    (err as Error).name === "AbortError" ||
+                    (err as Error).message === "Aborted"
                 ) {
                     this.desktop.service.transfer.updateTransfer(pid, { status: "canceled" });
                 } else {
@@ -322,17 +322,17 @@ export class CustomDownloader {
                 });
 
                 const mainWindow = this.desktop.window.main.window;
-                if (mainWindow) {
+                if (mainWindow && result.path) {
                     this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
-                        path: result.path!,
+                        path: result.path,
                         name: finalFileName,
                     });
                 }
-            } catch (err: any) {
+            } catch (err) {
                 if (
                     abortController.signal.aborted ||
-                    err.name === "AbortError" ||
-                    err.message === "Aborted"
+                    (err as Error).name === "AbortError" ||
+                    (err as Error).message === "Aborted"
                 ) {
                     this.desktop.service.transfer.updateTransfer(pid, { status: "canceled" });
                 } else {

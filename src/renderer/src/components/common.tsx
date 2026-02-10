@@ -1,5 +1,4 @@
 import { cn } from "@renderer/lib/utils";
-import { ServerCrashIcon } from "lucide-react";
 import type { HTMLAttributes, ReactNode } from "react";
 
 interface CenterProps extends HTMLAttributes<HTMLDivElement> {

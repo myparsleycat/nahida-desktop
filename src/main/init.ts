@@ -1,8 +1,8 @@
-import { InitDB, db } from "@main/internal/db";
+import { db, InitDB } from "@main/internal/db";
 import { app, protocol } from "electron";
+import type { NahidaDesktop } from "./index";
 import { setting } from "./internal/db/schema";
 import { NahidaProtocolHandler } from "./internal/protocol";
-import { NahidaDesktop } from "./index";
 import { startServer } from "./server";
 
 export async function startInit(desktop: NahidaDesktop) {

@@ -1,6 +1,6 @@
-import { parentPort } from "node:worker_threads";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import { parentPort } from "node:worker_threads";
 
 const port = parentPort;
 if (!port) throw new Error("IllegalState");
@@ -39,8 +39,8 @@ port.on("message", async (e: any) => {
         }
 
         port.postMessage({ type: "complete", hashes });
-    } catch (error: any) {
-        port.postMessage({ type: "error", error: error.message });
+    } catch (error) {
+        port.postMessage({ type: "error", error: (error as Error).message });
     } finally {
         files.length = 0;
     }

@@ -1,14 +1,14 @@
+import { spawn } from "node:child_process";
 import isDev from "@main/internal/isDev";
 import type { AppStatus, PathMetadata } from "@shared/types.gen";
-import { spawn } from "child_process";
 import {
-    dialog,
-    shell,
-    type OpenExternalOptions,
-    MessageBoxOptions,
     BrowserWindow,
     clipboard,
-    OpenDialogOptions,
+    dialog,
+    type MessageBoxOptions,
+    type OpenDialogOptions,
+    type OpenExternalOptions,
+    shell,
 } from "electron";
 import { app } from "electron/main";
 import fse from "fs-extra";
@@ -113,4 +113,23 @@ export async function getPathMetadata(path: string): Promise<PathMetadata> {
 
 export async function showOpenDialog(options: OpenDialogOptions) {
     return dialog.showOpenDialog(options);
+}
+
+export async function processChunked<T>(
+    items: T[],
+    processor: (item: T) => void,
+    size = 1000,
+    signal?: AbortSignal,
+) {
+    const CHUNK_SIZE = size;
+    for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+        if (signal?.aborted) return;
+        const end = Math.min(i + CHUNK_SIZE, items.length);
+        for (let j = i; j < end; j++) {
+            processor(items[j]);
+        }
+        if (i + CHUNK_SIZE < items.length) {
+            await new Promise((resolve) => setImmediate(resolve));
+        }
+    }
 }

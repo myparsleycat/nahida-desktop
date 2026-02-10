@@ -1,11 +1,11 @@
-import { drizzle } from "drizzle-orm/better-sqlite3";
+import path from "node:path";
 import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { app } from "electron";
-import path from "node:path";
-import { setting } from "./schema";
 import { DB_FILE_NAME } from "../const";
 import * as schema from "./schema";
+import { setting } from "./schema";
 
 const isDev = !app.isPackaged;
 export const dbPath = isDev ? DB_FILE_NAME : path.join(app.getPath("userData"), "data.db");

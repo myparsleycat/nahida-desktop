@@ -1,5 +1,3 @@
-import { ReactNode } from "react";
-
 export type TransferStatus =
     | "uploading"
     | "downloading"
@@ -29,6 +27,7 @@ export interface TransferItemProps {
     totalFiles?: number;
     processedFiles?: number;
     failedFiles?: number;
+    error?: string;
 }
 
 export interface TransferStatsProps {

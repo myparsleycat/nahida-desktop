@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export function useDelayedSkeleton(isLoading: boolean, delay = 1000) {
     const [shouldShow, setShouldShow] = useState(false);

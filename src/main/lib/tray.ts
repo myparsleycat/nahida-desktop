@@ -1,6 +1,6 @@
+import type { NahidaDesktop } from "@main/index";
 import { app, Menu, Tray } from "electron";
 import icon from "../../../resources/nahida.png?asset";
-import type { NahidaDesktop } from "@main/index";
 
 export class TrayManager {
     private desktop: NahidaDesktop;

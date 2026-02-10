@@ -1,4 +1,3 @@
-import { FileCogIcon } from "lucide-react";
 import { Button, buttonVariants } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -11,8 +10,9 @@ import {
 import { Kbd } from "@renderer/components/ui/kbd";
 import { cn } from "@renderer/lib/utils";
 import type { ModInfo, ModIni, ToggleKey } from "@renderer/types/mod";
-import { formatKeyLabel } from "./utils";
+import { FileCogIcon } from "lucide-react";
 import { KeyRecorder } from "./key-recorder";
+import { formatKeyLabel } from "./utils";
 
 interface ModToggleKeyItemProps {
   modPath: string;
@@ -36,8 +36,8 @@ function KeyDisplay({ keys }: { keys: string }) {
         .split(" ")
         .map(formatKeyLabel)
         .filter((k) => k !== null)
-        .map((label, kIdx) => (
-          <Kbd key={kIdx} className="text-xs">
+        .map((label, idx) => (
+          <Kbd key={idx.toString()} className="text-xs">
             {label}
           </Kbd>
         ))}
@@ -161,7 +161,7 @@ export function ModIniItem({ mod, ini, onToggleKeyUpdate }: ModIniItemProps) {
         <div className="space-y-2.5">
           {ini.toggleKeys.map((toggleKey, idx) => (
             <ModToggleKeyItem
-              key={idx}
+              key={idx.toString()}
               modPath={mod.path}
               iniName={ini.name}
               iniPath={ini.path}

@@ -1,6 +1,6 @@
+import type { NahidaDesktop } from "@main/index";
 import { BrowserWindow, ipcMain } from "electron";
 import { rh } from "../helper";
-import type { NahidaDesktop } from "@main/index";
 
 export function registerWindowHandlers(d: NahidaDesktop) {
     rh("window:openSetting", async () => {

@@ -1,11 +1,11 @@
-import { filesize, type FilesizeOptions } from "filesize";
 import { format, formatDuration, intervalToDuration } from "date-fns";
-import { ko, enUS, zhCN } from "date-fns/locale";
+import { enUS, ko, zhCN } from "date-fns/locale";
 import { isNil } from "es-toolkit";
+import { type FilesizeOptions, filesize } from "filesize";
 
 export function formatSize(size?: number | null, options?: FilesizeOptions) {
     if (isNil(size)) return "0 B";
-    if (!isFinite(size)) return "--";
+    if (!Number.isFinite(size)) return "--";
     return filesize(size, { standard: "jedec", ...options });
 }
 
@@ -24,7 +24,7 @@ export const formatDate = (
 };
 
 export function formatTime(seconds: number): string {
-    if (!isFinite(seconds) || seconds < 0) {
+    if (!Number.isFinite(seconds) || seconds < 0) {
         return "--";
     }
 

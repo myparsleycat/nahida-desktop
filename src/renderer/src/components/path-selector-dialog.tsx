@@ -7,9 +7,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@renderer/components/ui/dialog";
-import { FolderOpen, Grid3x3 } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
 import { useModStore } from "@renderer/store/mod";
+import { useNavigate } from "@tanstack/react-router";
+import { FolderOpen, Grid3x3 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 interface PathSelectorDialogProps {

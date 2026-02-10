@@ -1,7 +1,7 @@
-import { powerSaveBlocker } from "electron";
-import { NahidaDesktop } from "..";
-import fse from "fs-extra";
 import crypto from "crypto";
+import { powerSaveBlocker } from "electron";
+import fse from "fs-extra";
+import type { NahidaDesktop } from "..";
 
 export class Utils {
     private desktop: NahidaDesktop;

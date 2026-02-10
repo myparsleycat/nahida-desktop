@@ -1,8 +1,8 @@
 import fsp from "node:fs/promises";
-import fse from "fs-extra";
 import path from "node:path";
-import { NahidaDesktop } from "..";
 import fg from "fast-glob";
+import fse from "fs-extra";
+import type { NahidaDesktop } from "..";
 
 export interface FileNode {
     name: string;
@@ -18,7 +18,6 @@ export interface ReaddirOptions {
 
 export class FS {
     private readonly desktop: NahidaDesktop;
-
     public constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
     }
@@ -57,9 +56,28 @@ export class FS {
         return fse.stat(path);
     }
 
-    public sanitizeWindowsFilename(input: string) {
-        const reservedChars = /[<>:"\/\\|?*]/g;
-        return input.replace(reservedChars, "_");
+    public sanitizeWindowsFilename(input: string, sanitizeString = " ") {
+        // biome-ignore lint/suspicious/noControlCharactersInRegex: <>
+        const regex = /[<>:"/\\|?*\u0000-\u001F]/g;
+        let sanitized = input.replace(regex, sanitizeString).trim();
+
+        sanitized = sanitized.replace(/[.]+$/, "");
+
+        if (sanitized.length === 0) {
+            sanitized = "Untitled";
+        }
+
+        return sanitized;
+    }
+
+    public sanitizePath(input: string) {
+        return input
+            .split(path.sep)
+            .map((part, index) => {
+                if (index === 0 && /^[a-zA-Z]:$/.test(part)) return part;
+                return this.sanitizeWindowsFilename(part);
+            })
+            .join(path.sep);
     }
 
     public async readdirRecursive(

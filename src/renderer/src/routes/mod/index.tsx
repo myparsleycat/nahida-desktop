@@ -1,21 +1,21 @@
-import { ContentHeader } from "@renderer/components/mod/content-header";
 import { DownloadConfirmationOverlay } from "@renderer/components/download-confirmation-overlay";
-import { ModGrid } from "@renderer/components/mod/mod-grid";
+import { ContentHeader } from "@renderer/components/mod/content-header";
 import { DeleteGameDialog } from "@renderer/components/mod/delete-game-dialog";
+import { ModGrid } from "@renderer/components/mod/mod-grid";
 import { PresetManagementDialog } from "@renderer/components/mod/preset-management-dialog";
+import ModSidebar from "@renderer/components/mod/sidebar";
 import { Titlebar } from "@renderer/components/titlebar";
-import { createFileRoute } from "@tanstack/react-router";
-import { useRef, useEffect } from "react";
-import { useModStore } from "@renderer/store/mod";
-import { useGames, useCharacters } from "@renderer/hooks/use-mod-data";
+import { useCharacters, useGames } from "@renderer/hooks/use-mod-data";
+import { useModDragDrop } from "@renderer/hooks/use-mod-drag-drop";
 import {
-  useModRefreshOnFocus,
   useDownloadCompletionHandler,
+  useModRefreshOnFocus,
   useModWatcherEvents,
 } from "@renderer/hooks/use-mod-events";
-import { useModDragDrop } from "@renderer/hooks/use-mod-drag-drop";
-import ModSidebar from "@renderer/components/mod/sidebar";
 import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
+import { useModStore } from "@renderer/store/mod";
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/mod/")({

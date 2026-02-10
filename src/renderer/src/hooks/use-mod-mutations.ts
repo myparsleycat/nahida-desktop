@@ -1,8 +1,8 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { FolderGroup, ModInfo } from "@shared/types.gen";
-import { toast } from "sonner";
 import { useModStore } from "@renderer/store/mod";
+import type { FolderGroup, ModInfo } from "@shared/types.gen";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 export function useGameMutations() {
     const queryClient = useQueryClient();
@@ -57,8 +57,8 @@ export function useModMutations() {
                     return refreshedGroup;
                 }
                 return null;
-            } catch (error: any) {
-                const errorMessage = error.message || "";
+            } catch (error) {
+                const errorMessage = (error as Error).message || "";
                 if (errorMessage.includes("ALREADY_EXISTS")) {
                     const folderName = errorMessage.split("ALREADY_EXISTS:")[1] || t("g.unknown");
                     toast.error(
@@ -94,8 +94,8 @@ export function useModMutations() {
                     return refreshedGroup;
                 }
                 return null;
-            } catch (error: any) {
-                const errorMessage = error.message || "";
+            } catch (error) {
+                const errorMessage = (error as Error).message || "";
                 if (errorMessage.includes("ALREADY_EXISTS")) {
                     const folderName = errorMessage.split("ALREADY_EXISTS:")[1] || t("g.unknown");
                     toast.error(

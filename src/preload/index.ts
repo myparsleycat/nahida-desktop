@@ -1,8 +1,7 @@
-// preload/index.ts
-import { contextBridge, ipcRenderer } from "electron";
+/** biome-ignore-all lint/suspicious/noExplicitAny: <> */
+
 import { electronAPI } from "@electron-toolkit/preload";
-import { webUtils } from "electron";
-import { IPC_EVENT_CHANNELS, IPC_HANDLER_CHANNELS } from "@shared/ipc-spec.gen";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 const api = {
     invoke: (channel: string, ...args: any[]) => {

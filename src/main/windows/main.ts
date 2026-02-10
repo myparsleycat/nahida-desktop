@@ -1,13 +1,11 @@
-import { BrowserWindow, shell, screen } from "electron";
-import path from "node:path";
-import icon from "../../../resources/nahida.png?asset";
+import { fileURLToPath } from "node:url";
 import { is } from "@electron-toolkit/utils";
 import type { NahidaDesktop } from "@main/index";
-import { getDefaultWebPreferences } from "./utils";
-import { fileURLToPath } from "node:url";
-import { debounce } from "es-toolkit";
-import { focus } from "./utils";
 import { openExternal } from "@main/services/util";
+import { BrowserWindow, screen } from "electron";
+import { debounce } from "es-toolkit";
+import icon from "../../../resources/nahida.png?asset";
+import { focus, getDefaultWebPreferences } from "./utils";
 
 export class MainWindow {
     private readonly desktop: NahidaDesktop;

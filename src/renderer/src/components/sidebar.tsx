@@ -1,21 +1,20 @@
+import { cn } from "@renderer/lib/utils";
+import { viewStore } from "@renderer/store/drive";
+import { useGlobalStore } from "@renderer/store/global";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpDownIcon,
   DatabaseBackupIcon,
   GamepadIcon,
   HardDriveIcon,
-  HomeIcon,
   PackageIcon,
   SettingsIcon,
   Share2Icon,
 } from "lucide-react";
-import { useLocation, useNavigate } from "@tanstack/react-router";
-import { cn } from "@renderer/lib/utils";
-import { Button } from "./ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
-import { Separator } from "./ui/separator";
-import { viewStore } from "@renderer/store/drive";
-import { useGlobalStore } from "@renderer/store/global";
 import { useTranslation } from "react-i18next";
+import { Button } from "./ui/button";
+import { Separator } from "./ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 export function Sidebar({ className }: { className?: string }) {
   const navi = useNavigate();

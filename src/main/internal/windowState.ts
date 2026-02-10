@@ -1,7 +1,7 @@
-import writeFileAtomic from "write-file-atomic";
+import pathModule from "node:path";
+import { app, type BrowserWindow, type Rectangle, screen } from "electron";
 import fs from "fs-extra";
-import { app, type BrowserWindow, screen, type Rectangle } from "electron";
-import pathModule from "path";
+import writeFileAtomic from "write-file-atomic";
 import { desktop } from "../index";
 
 export const WINDOW_STATE_VERSION = 1;
@@ -38,7 +38,7 @@ export class WindowState {
         );
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // biome-ignore lint/suspicious/noExplicitAny: <>
     private validateState(state: any): boolean {
         return (
             state &&

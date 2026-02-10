@@ -22,18 +22,18 @@ export class Logger {
     }
 
     public static info(object: unknown, where?: string) {
-        this.log("info", object, where);
+        Logger.log("info", object, where);
     }
 
     public static debug(object: unknown, where?: string) {
-        this.log("debug", object, where);
+        Logger.log("debug", object, where);
     }
 
     public static warn(object: unknown, where?: string) {
-        this.log("warn", object, where);
+        Logger.log("warn", object, where);
     }
 
     public static error(object: unknown, where?: string) {
-        this.log("error", object, where);
+        Logger.log("error", object, where);
     }
 }

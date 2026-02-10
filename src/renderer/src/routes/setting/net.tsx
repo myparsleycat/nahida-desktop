@@ -1,11 +1,6 @@
+import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { Button } from "@renderer/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@renderer/components/ui/card";
+import { Card, CardContent } from "@renderer/components/ui/card";
 import { Checkbox } from "@renderer/components/ui/checkbox";
 import { Input } from "@renderer/components/ui/input";
 import { Label } from "@renderer/components/ui/label";
@@ -19,9 +14,8 @@ import {
 } from "@renderer/components/ui/select";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useAutoAnimate } from "@formkit/auto-animate/react";
-import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/setting/net")({
   component: RouteComponent,

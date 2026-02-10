@@ -1,4 +1,4 @@
-import { Theme, useTheme } from "@renderer/components/theme-provider";
+import { type Theme, useTheme } from "@renderer/components/theme-provider";
 import { Button } from "@renderer/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import {
@@ -9,12 +9,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
-import { Switch } from "@renderer/components/ui/switch";
 import { Separator } from "@renderer/components/ui/separator";
-import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
-import { useTranslation } from "react-i18next";
+import { Switch } from "@renderer/components/ui/switch";
 import { formatSize } from "@shared/utils";
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/setting/gen")({
   component: RouteComponent,
@@ -142,8 +142,11 @@ function RouteComponent() {
         <CardContent>
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-3">
-              <label className="text-sm font-medium">{t("page.setting.gen.language.title")}</label>
+              <label className="text-sm font-medium" htmlFor="language">
+                {t("page.setting.gen.language.title")}
+              </label>
               <Select
+                name="language"
                 value={language}
                 onValueChange={(val) => {
                   setLanguage(val);
@@ -164,8 +167,10 @@ function RouteComponent() {
               </Select>
             </div>
             <div className="space-y-3">
-              <label className="text-sm font-medium">{t("page.setting.gen.theme.title")}</label>
-              <Select value={theme} onValueChange={(v) => setTheme(v as Theme)}>
+              <label className="text-sm font-medium" htmlFor="theme">
+                {t("page.setting.gen.theme.title")}
+              </label>
+              <Select name="theme" value={theme} onValueChange={(v) => setTheme(v as Theme)}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder={t("page.setting.gen.theme.select")} />
                 </SelectTrigger>
@@ -179,8 +184,11 @@ function RouteComponent() {
               </Select>
             </div>
             <div className="space-y-3">
-              <label className="text-sm font-medium">{t("page.setting.gen.startPage.title")}</label>
+              <label className="text-sm font-medium" htmlFor="startPage">
+                {t("page.setting.gen.startPage.title")}
+              </label>
               <Select
+                name="startPage"
                 value={defaultStartPage}
                 onValueChange={(v) => {
                   setDefaultStartPage(v);

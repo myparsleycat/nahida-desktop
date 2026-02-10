@@ -1,14 +1,14 @@
-import { ImageIcon, TrashIcon, ClipboardIcon } from "lucide-react";
-import { toast } from "sonner";
-import { useRouteContext } from "@tanstack/react-router";
+import { Button } from "@renderer/components/ui/button";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@renderer/components/ui/context-menu";
-import { Button } from "@renderer/components/ui/button";
 import type { ModInfo } from "@renderer/types/mod";
+import { useRouteContext } from "@tanstack/react-router";
+import { ClipboardIcon, ImageIcon, TrashIcon } from "lucide-react";
+import { toast } from "sonner";
 import { Preview } from "./preview";
 
 interface ModPreviewContainerProps {
@@ -62,7 +62,8 @@ export function ModPreviewContainer({ mod, selectedGroupPath, onPaste }: ModPrev
           <ContextMenuContent onClick={(e) => e.stopPropagation()}>
             <ContextMenuItem
               onClick={() => {
-                window.api.invoke("util:openExternal", mod.preview!).catch((error) => {
+                if (!mod.preview) return;
+                window.api.invoke("util:openExternal", mod.preview).catch((error) => {
                   toast.error("Failed to open external", {
                     description: error.message,
                   });

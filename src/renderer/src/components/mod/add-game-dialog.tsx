@@ -9,10 +9,10 @@ import {
   DialogTrigger,
 } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
-import { Plus, FolderOpen } from "lucide-react";
-import { toast } from "sonner";
 import { useModStore } from "@renderer/store/mod";
+import { FolderOpen, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 interface AddGameDialogProps {
   onBrowseFolder: () => void;

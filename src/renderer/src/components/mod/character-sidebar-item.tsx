@@ -1,10 +1,9 @@
-import { cn } from "@renderer/lib/utils";
 import { Skeleton } from "@renderer/components/ui/skeleton";
+import { cn } from "@renderer/lib/utils";
 import type { FolderGroup } from "@renderer/types/mod";
-import { useState, memo, useRef, useEffect } from "react";
-
-import { Preview } from "./preview";
+import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Preview } from "./preview";
 
 interface CharacterSidebarItemProps {
   group: FolderGroup;

@@ -1,5 +1,5 @@
-import { useRef, useEffect, forwardRef, useImperativeHandle, useCallback } from "react";
 import { cn } from "@renderer/lib/utils";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from "react";
 
 interface VideoCanvasProps {
   src: string;

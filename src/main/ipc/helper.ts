@@ -1,5 +1,5 @@
+import type { IpcHandlers } from "@shared/types.gen";
 import { ipcMain } from "electron";
-import { IpcHandlers } from "@shared/types.gen";
 
 export function rh<K extends keyof IpcHandlers>(
     channel: K,

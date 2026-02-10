@@ -15,18 +15,26 @@ import {
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
 import { Input } from "@renderer/components/ui/input";
+import { Skeleton } from "@renderer/components/ui/skeleton";
+import i18n from "@renderer/lib/i18n";
 import { cn } from "@renderer/lib/utils";
-import { Link, useLocation, useNavigate, useParams, useRouteContext } from "@tanstack/react-router";
+import {
+  useContentMenu,
+  useDialogStore,
+  useSelectionStore,
+  useViewStore,
+} from "@renderer/store/drive";
+import type { Content } from "@shared/types.gen";
+import { formatDate, formatSize, getRandInt } from "@shared/utils";
+import { useMutation } from "@tanstack/react-query";
+import { useLocation, useNavigate, useParams, useRouteContext } from "@tanstack/react-router";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
-  BellIcon,
   CheckIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
-  CopyIcon,
   DownloadIcon,
-  EyeIcon,
   FileIcon,
   FileTextIcon,
   FolderIcon,
@@ -34,29 +42,17 @@ import {
   ListIcon,
   LoaderIcon,
   MousePointer2Icon,
-  RotateCcwIcon,
   SearchIcon,
-  Share2Icon,
   SquarePenIcon,
   Trash2Icon,
   UploadIcon,
 } from "lucide-react";
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import type React from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { PreviewModal } from "./preview-modal";
 import { toast } from "sonner";
-import i18n from "@renderer/lib/i18n";
-import {
-  useDialogStore,
-  useSelectionStore,
-  useViewStore,
-  useContentMenu,
-} from "@renderer/store/drive";
-import { Skeleton } from "@renderer/components/ui/skeleton";
-import { useMutation } from "@tanstack/react-query";
-import { Content } from "@shared/types.gen";
-import { formatDate, formatSize, getRandInt } from "@shared/utils";
 import validator from "validator";
+import { PreviewModal } from "./preview-modal";
 
 export interface Ancestor {
   id: string;

@@ -1,17 +1,4 @@
-import {
-  Search,
-  FolderIcon,
-  Loader2Icon,
-  EllipsisIcon,
-  ArrowUpAZ,
-  ArrowDownAZ,
-  ArrowUp10,
-  ArrowDown10,
-  ArrowUpWideNarrow,
-  ArrowDownWideNarrow,
-} from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
-import { Input } from "@renderer/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
+import { Input } from "@renderer/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -28,11 +16,22 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Separator } from "@renderer/components/ui/separator";
-
 import { useModStore } from "@renderer/store/mod";
 import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import {
+  ArrowDown10,
+  ArrowDownAZ,
+  ArrowDownWideNarrow,
+  ArrowUp10,
+  ArrowUpAZ,
+  ArrowUpWideNarrow,
+  EllipsisIcon,
+  FolderIcon,
+  Loader2Icon,
+  Search,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 export function ContentHeader() {
   const { t } = useTranslation();
@@ -57,8 +56,8 @@ export function ContentHeader() {
       await window.api.invoke("mod:enableAll", groupPath);
       queryClient.invalidateQueries({ queryKey: ["modGroup", groupPath] });
       toast.success(t("page.mod.content-header.all_enabled"));
-    } catch (error: any) {
-      toast.error(error.message);
+    } catch (error) {
+      toast.error((error as Error).message);
       console.error(error);
     }
   };
@@ -70,8 +69,8 @@ export function ContentHeader() {
       await window.api.invoke("mod:disableAll", groupPath);
       queryClient.invalidateQueries({ queryKey: ["modGroup", groupPath] });
       toast.success(t("page.mod.content-header.all_disabled"));
-    } catch (error: any) {
-      toast.error(error.message);
+    } catch (error) {
+      toast.error((error as Error).message);
       console.error(error);
     }
   };

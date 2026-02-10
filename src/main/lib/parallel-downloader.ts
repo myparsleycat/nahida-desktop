@@ -1,10 +1,10 @@
+/** biome-ignore-all lint/suspicious/noExplicitAny: <> */
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { getAgent, getHeaders } from "@main/internal/fetcher";
+import { retry } from "es-toolkit";
 import fse from "fs-extra";
 import ky from "ky";
-import { retry } from "es-toolkit";
-import { pipeline } from "node:stream/promises";
-import { Readable } from "node:stream";
-import { appVersion } from "@main/const";
-import { getAgent, getHeaders } from "@main/internal/fetcher";
 
 export interface ParallelDownloadOptions {
     url: string;
@@ -51,7 +51,7 @@ export class ParallelDownloader {
         if (sizeInMB < 1) return 1;
 
         const log10 = Math.floor(Math.log10(sizeInMB));
-        const firstDigit = Math.floor(sizeInMB / Math.pow(10, log10));
+        const firstDigit = Math.floor(sizeInMB / 10 ** log10);
 
         let count = Math.max(2, firstDigit);
 
@@ -209,7 +209,7 @@ export class ParallelDownloader {
                     }),
                 {
                     retries: 2,
-                    delay: (attempt) => Math.pow(2, attempt) * 1000,
+                    delay: (attempt) => 2 ** attempt * 1000,
                     shouldRetry: (err: any) => !(err.name === "AbortError" || signal?.aborted),
                     signal,
                 },

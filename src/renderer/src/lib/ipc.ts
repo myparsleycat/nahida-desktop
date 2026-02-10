@@ -1,4 +1,5 @@
-import { IpcHandlers, IpcEvents } from "@shared/types.gen";
+/** biome-ignore-all lint/suspicious/noExplicitAny: <> */
+import type { IpcEvents, IpcHandlers } from "@shared/types.gen";
 
 export function invoke<K extends keyof IpcHandlers>(
     channel: K,

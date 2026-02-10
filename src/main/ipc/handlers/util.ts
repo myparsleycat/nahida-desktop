@@ -1,18 +1,18 @@
-import type { MessageBoxOptions, OpenExternalOptions } from "electron";
-import { rh } from "../helper";
+import type { NahidaDesktop } from "@main/index";
 import {
-    openExternal,
-    showModal,
     copyStr,
-    openPath,
-    trash,
-    openCmd,
+    getAppStatus,
     getClipboardFiles,
     getPathMetadata,
+    openCmd,
+    openExternal,
+    openPath,
+    showModal,
     showOpenDialog,
-    getAppStatus,
+    trash,
 } from "@main/services/util";
-import type { NahidaDesktop } from "@main/index";
+import type { MessageBoxOptions, OpenExternalOptions } from "electron";
+import { rh } from "../helper";
 
 export function registerUtilHandlers(_desktop: NahidaDesktop) {
     rh("util:getAppStatus", getAppStatus);

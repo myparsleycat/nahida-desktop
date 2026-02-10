@@ -1,13 +1,13 @@
 import { promisify } from "node:util";
-import { NahidaDesktop } from "..";
 import {
-    gzip,
-    gunzip,
-    zstdCompress,
-    zstdDecompress,
     brotliCompress,
     brotliDecompress,
+    gunzip,
+    gzip,
+    zstdCompress,
+    zstdDecompress,
 } from "node:zlib";
+import type { NahidaDesktop } from "..";
 
 export const gzipAsync = promisify(gzip);
 export const gunzipAsync = promisify(gunzip);

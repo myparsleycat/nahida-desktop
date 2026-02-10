@@ -1,5 +1,3 @@
-import { FolderIcon, TrashIcon, TerminalSquareIcon, CalendarIcon } from "lucide-react";
-import { memo, useRef } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,18 +9,20 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@renderer/components/ui/alert-dialog";
-import type { ModInfo } from "@renderer/types/mod";
-import { cn } from "@renderer/lib/utils";
-import { Separator } from "@renderer/components/ui/separator";
-import { Button } from "@renderer/components/ui/button";
-import { useRouteContext } from "@tanstack/react-router";
-import { toast } from "sonner";
-import { formatDate, formatSize } from "@shared/utils";
 import { Badge } from "@renderer/components/ui/badge";
+import { Button } from "@renderer/components/ui/button";
+import { Separator } from "@renderer/components/ui/separator";
+import { cn } from "@renderer/lib/utils";
+import type { ModInfo } from "@renderer/types/mod";
+import { formatDate, formatSize } from "@shared/utils";
+import { useRouteContext } from "@tanstack/react-router";
+import { CalendarIcon, FolderIcon, TerminalSquareIcon, TrashIcon } from "lucide-react";
+import { memo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { getModColorClass } from "./utils";
+import { toast } from "sonner";
 import { ModIniList } from "./mod-ini-list";
 import { ModPreviewContainer } from "./mod-preview-container";
+import { getModColorClass } from "./utils";
 
 interface ModCardProps {
   mod: ModInfo;
@@ -68,7 +68,7 @@ export const ModCard = memo(function ModCard({
       }
 
       const text = await navigator.clipboard.readText();
-      if (text && text.startsWith("http")) {
+      if (text?.startsWith("http")) {
         if (text.match(/\.(jpeg|jpg|gif|png|webp|bmp)$/i)) {
           const promise = window.api.invoke("mod:pastePreview", mod.path, text, "url");
           toast.promise(promise, {
@@ -143,7 +143,7 @@ export const ModCard = memo(function ModCard({
       }}
       draggable={false}
     >
-      {mod.preview && mod.preview.match(/\.(jpeg|jpg|gif|png|webp|bmp)$/i) && (
+      {mod.preview?.match(/\.(jpeg|jpg|gif|png|webp|bmp)$/i) && (
         <div
           className="absolute inset-0 z-0 blur-lg scale-110 pointer-events-none opacity-25"
           style={{ transform: "translateZ(0)", willChange: "filter" }}

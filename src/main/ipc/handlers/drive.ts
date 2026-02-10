@@ -1,5 +1,5 @@
-import { rh } from "@main/ipc/helper";
 import type { NahidaDesktop } from "@main/index";
+import { rh } from "@main/ipc/helper";
 
 export function registerDriveHandlers(d: NahidaDesktop) {
     rh("drive:get:item", async (itemId) => {

@@ -25,10 +25,10 @@ export function ModIniList({ mod, onToggleKeyUpdate }: ModIniListProps) {
         )}
         style={{ transform: "translateZ(0)", willChange: "backdrop-filter" }}
       >
-        {mod.inis.map((ini, iniIdx) => (
-          <div key={iniIdx}>
+        {mod.inis.map((ini, idx) => (
+          <div key={idx.toString()}>
             <ModIniItem mod={mod} ini={ini} onToggleKeyUpdate={onToggleKeyUpdate} />
-            {iniIdx < mod.inis.length - 1 && <Separator className="my-2" />}
+            {idx < mod.inis.length - 1 && <Separator className="my-2" />}
           </div>
         ))}
       </div>

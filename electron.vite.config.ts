@@ -5,6 +5,11 @@ import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { ipcGeneratorPlugin } from "./plugins/ipc-generator";
 
+const ReactCompilerConfig = { 
+  target: "19",
+  runtimeModule: 'react-compiler-runtime'
+};
+
 // import { visualizer } from "rollup-plugin-visualizer";
 
 export default defineConfig({
@@ -59,7 +64,13 @@ export default defineConfig({
                 target: "react",
                 autoCodeSplitting: true,
             }),
-            react(),
+            react({
+                babel: {
+                    plugins: [
+                        ["babel-plugin-react-compiler", ReactCompilerConfig]
+                    ]
+                }
+            }),
             tailwindcss(),
             // visualizer({
             //     filename: "dist/stats-renderer.html",

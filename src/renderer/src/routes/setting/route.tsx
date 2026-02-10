@@ -1,19 +1,10 @@
 import { Titlebar } from "@renderer/components/titlebar";
-import { createFileRoute, Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
-import {
-  Bell,
-  Database,
-  Folder,
-  Globe,
-  RefreshCw,
-  Settings,
-  User,
-  GamepadIcon,
-} from "lucide-react";
-import { useEffect } from "react";
-import { useGlobalStore } from "@renderer/store/global";
-import { useTranslation } from "react-i18next";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
+import { useGlobalStore } from "@renderer/store/global";
+import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
+import { GamepadIcon, Globe, Settings, User } from "lucide-react";
+import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/setting")({
   component: RouteComponent,
@@ -29,7 +20,7 @@ function RouteComponent() {
     if (location.pathname === "/setting") {
       navi({ to: "/setting/gen" });
     }
-  }, [location.pathname]);
+  }, [navi, location.pathname]);
 
   const navItems = [
     { icon: Settings, label: t("page.setting.tabs.general"), path: "/setting/gen" },
@@ -48,9 +39,10 @@ function RouteComponent() {
 
       <nav className="border-b">
         <div className="flex items-center justify-center gap-1 p-3">
-          {navItems.map((item, index) => (
+          {navItems.map((item) => (
             <button
-              key={index}
+              key={item.path}
+              type="button"
               onClick={() => navi({ to: item.path })}
               className={`flex flex-col items-center gap-2 transition-colors size-14 ${
                 location.pathname === item.path

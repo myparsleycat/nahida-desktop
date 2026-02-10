@@ -12,9 +12,9 @@ function RouteComponent() {
   useEffect(() => {
     window.api.invoke("setting:general:getDefaultStartPage").then((page: string | null) => {
       const targetPage = page || "/mod";
-      navi({ to: targetPage as any });
+      navi({ to: targetPage });
     });
-  }, []);
+  }, [navi]);
 
   return (
     <div className="flex flex-col min-h-screen">

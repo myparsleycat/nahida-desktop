@@ -1,8 +1,8 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useGlobalStore } from "../store/global";
-import { useTranslation } from "react-i18next";
 
 export function useGlobalEvents(
     onPathSelectorModeSelect?: (data: { selectionId: string; suggestedName?: string }) => void,
@@ -13,10 +13,13 @@ export function useGlobalEvents(
     const { i18n } = useTranslation();
 
     const removeAllListeners = () => {
-        listeners.forEach((listener) => listener());
+        listeners.forEach((listener) => {
+            listener();
+        });
         setListeners(new Map());
     };
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: <>
     useEffect(() => {
         const removeToastListener = window.api.on("fn:toast", (event, args) => {
             toast(event, {
