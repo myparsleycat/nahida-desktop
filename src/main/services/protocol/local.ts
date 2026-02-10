@@ -1,25 +1,57 @@
 import { pathToFileURL } from "node:url";
+import { Worker } from "node:worker_threads";
+import { is } from "@electron-toolkit/utils";
 import { desktop } from "@main/index";
 import { db } from "@main/internal/db";
 import { imageCache } from "@main/internal/db/schema";
-import { convertImage } from "@native/image";
+import imgWorker from "@main/worker/image.worker?modulePath";
+import { convertImage, type ResizeOptions } from "@native/image";
 import { net } from "electron";
 import { fileTypeFromFile } from "file-type/node";
+import PQueue from "p-queue";
 
 export class LocalProtocol {
-    // private readonly desktop: NahidaDesktop;
+    private imgWorker: Worker;
+    private queue: PQueue;
 
-    // constructor(desktop: NahidaDesktop) {
-    //     this.desktop = desktop;
-    // }
+    constructor() {
+        this.imgWorker = new Worker(imgWorker);
+        this.queue = new PQueue({ concurrency: 4 });
+    }
 
-    public async handle(request: Request) {
+    // biome-ignore lint/correctness/noUnusedPrivateClassMembers: <>
+    private async convertImageWithWorker(path: string, options: ResizeOptions) {
+        return new Promise<Buffer>((resolve, reject) => {
+            this.imgWorker.on(
+                "message",
+                (
+                    message:
+                        | { type: "complete"; resizedImg: Buffer }
+                        | { type: "error"; error: string },
+                ) => {
+                    if (message.type === "complete") {
+                        resolve(Buffer.from(message.resizedImg));
+                    } else if (message.type === "error") {
+                        reject(message.error);
+                    }
+                },
+            );
+
+            this.imgWorker.on("error", (error) => {
+                reject(error);
+            });
+
+            this.imgWorker.postMessage({ path, options });
+        });
+    }
+
+    public handle = async (request: Request) => {
         const url = new URL(request.url);
 
         let fullPath = decodeURIComponent(url.pathname);
 
         if (url.host) {
-            fullPath = url.host + ":" + fullPath;
+            fullPath = `${url.host}:${fullPath}`;
         }
 
         if (fullPath.startsWith("/")) {
@@ -41,20 +73,27 @@ export class LocalProtocol {
                 const blob = new Blob([imgArrayBuffer], { type: fileType.mime });
                 return new Response(blob);
             } else {
-                const resizedImg = convertImage(fullPath, {
-                    width: 500,
-                    height: 500,
-                    quality: 70,
-                    format: "webp",
-                });
+                const resizedImg = await this.queue.add(() =>
+                    convertImage(fullPath, {
+                        width: 500,
+                        height: 500,
+                        quality: 70,
+                        format: "webp",
+                    }),
+                );
+
                 if (!resizedImg) {
                     return new Response("not found", { status: 404 });
+                }
+
+                if (is.dev) {
+                    console.log("Resized image", fullPath);
                 }
 
                 const blob = new Blob([new Uint8Array(resizedImg)], { type: fileType.mime });
                 await db.insert(imageCache).values({
                     hash: imgHash,
-                    image: resizedImg,
+                    image: Buffer.from(resizedImg),
                     size: resizedImg.length,
                 });
                 return new Response(blob);
@@ -69,7 +108,7 @@ export class LocalProtocol {
                 return new Response("not found", { status: 404 });
             }
         }
-    }
+    };
 }
 
 export default LocalProtocol;

@@ -9,7 +9,7 @@ version = "0.1.0"
 crate-type = ["cdylib"]
 
 [dependencies]
-napi = "3.0.0"
+napi = { version = "3.0.0", features = ["napi4", "async"] }
 napi-derive = "3.0.0"
 image = { version = "0.25.9", features = ["default-formats"] }
 
