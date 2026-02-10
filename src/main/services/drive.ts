@@ -10,10 +10,11 @@ import Upload, {
 } from "@main/lib/upload";
 import { dialog } from "electron";
 import { retry } from "es-toolkit";
-import { windowsReservedNameRegex } from "filename-reserved-regex";
+
 import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "..";
 import type { LocalTransfer } from "./transfer";
+import { processChunked } from "./util";
 
 const Fn = eden.akasha.content({ id: "" }).get;
 type DriveItem = Treaty.Data<typeof Fn>;
@@ -169,29 +170,31 @@ export class DriveService {
             suggestedName?: string;
             targetPath?: string;
         }) => {
+            if (suggestedName) {
+                suggestedName = this.desktop.lib.fs.sanitizeWindowsFilename(suggestedName);
+            }
+
+            let savePath = targetPath;
+
+            if (!savePath) {
+                const result =
+                    await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(suggestedName);
+                if (!result.path) {
+                    this.desktop.logger.info(
+                        "Download cancelled by user selection",
+                        "Drive:Download",
+                    );
+                    return;
+                }
+                savePath = this.desktop.lib.fs.sanitizePath(result.path);
+            }
+
+            const isWritable = await this.desktop.lib.fs.isPathWritable(savePath);
+            if (!isWritable) {
+                throw new Error(`Path is not writable: ${savePath}`);
+            }
+
             try {
-                let savePath = targetPath;
-
-                if (!savePath) {
-                    const result =
-                        await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(
-                            suggestedName,
-                        );
-                    if (!result.path) {
-                        this.desktop.logger.info(
-                            "Download cancelled by user selection",
-                            "Drive:Download",
-                        );
-                        return;
-                    }
-                    savePath = result.path;
-                }
-
-                const isWritable = this.desktop.lib.fs.isPathWritable(savePath);
-                if (!isWritable) {
-                    throw new Error(`Path is not writable: ${savePath}`);
-                }
-
                 const { pid, restartParams, abortController } =
                     await this.createDownloadTransferEntry({
                         id,
@@ -460,8 +463,33 @@ export class DriveService {
             data = await this.download.getDownloadUrl(id, abortController.signal);
         }
 
-        if (suggestedName && data.root) {
-            data.root.name = suggestedName.replace(windowsReservedNameRegex(), " ").trim();
+        if (data.root) {
+            if (suggestedName) {
+                data.root.name = suggestedName;
+            }
+            data.root.name = this.desktop.lib.fs.sanitizeWindowsFilename(data.root.name);
+        }
+
+        if (data.files) {
+            await processChunked(
+                data.files,
+                (file) => {
+                    file.name = this.desktop.lib.fs.sanitizeWindowsFilename(file.name);
+                },
+                2000,
+                abortController.signal,
+            );
+        }
+
+        if (data.dirs) {
+            await processChunked(
+                data.dirs,
+                (dir) => {
+                    dir.name = this.desktop.lib.fs.sanitizeWindowsFilename(dir.name);
+                },
+                2000,
+                abortController.signal,
+            );
         }
 
         const name = data.root?.name || "Download";
