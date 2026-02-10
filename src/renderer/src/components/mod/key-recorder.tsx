@@ -1,9 +1,9 @@
-import { useRef, useEffect, useState } from "react";
 import { Button } from "@renderer/components/ui/button";
-import { Input } from "@renderer/components/ui/input";
 import { DialogClose, DialogFooter } from "@renderer/components/ui/dialog";
+import { Input } from "@renderer/components/ui/input";
 import { Kbd } from "@renderer/components/ui/kbd";
-import { formatKeyLabel, mapKeyboardEventToInternal, getBaseKey, getUsedModifiers } from "./utils";
+import { useEffect, useRef, useState } from "react";
+import { formatKeyLabel, getBaseKey, getUsedModifiers, mapKeyboardEventToInternal } from "./utils";
 
 interface KeyRecorderProps {
   defaultValue: string;
@@ -109,7 +109,7 @@ export function KeyRecorder({ defaultValue, otherKeys, onSave }: KeyRecorderProp
         {displayKeys.length > 0 ? (
           <div className="flex flex-wrap items-center justify-center gap-2">
             {displayKeys.map((label, idx) => (
-              <Kbd key={idx} className="text-sm h-8 px-2 min-w-8 bg-background/50">
+              <Kbd key={idx.toString()} className="text-sm h-8 px-2 min-w-8 bg-background/50">
                 {label}
               </Kbd>
             ))}

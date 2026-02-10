@@ -1,5 +1,5 @@
-import { LayoutType, SortType } from "@renderer/types";
-import { Content } from "@shared/types.gen";
+/** biome-ignore-all lint/suspicious/noExplicitAny: <> */
+import type { Content } from "@shared/types.gen";
 import { useNavigate } from "@tanstack/react-router";
 import { createStore, useStore } from "zustand";
 
@@ -209,7 +209,7 @@ export const dialogStore = createStore<DialogStates & DialogActions>((set, get) 
 
     resolveDialog: (dialogName, result) => {
         if (activeDialogs[dialogName]) {
-            activeDialogs[dialogName]!(result);
+            activeDialogs[dialogName]?.(result);
             activeDialogs[dialogName] = null;
         }
     },
@@ -286,7 +286,7 @@ export function useContentMenu(sortedContents?: Content[]) {
         }
     };
 
-    const handleItemRightClick = async (e: React.MouseEvent, item: Content) => {
+    const handleItemRightClick = async (_e: React.MouseEvent, item: Content) => {
         const isAlreadySelected = selection.selectedItems.some(
             (selected) => selected.id === item.id,
         );
@@ -296,7 +296,7 @@ export function useContentMenu(sortedContents?: Content[]) {
         }
     };
 
-    const handleClickOutside = (e: React.MouseEvent) => {
+    const handleClickOutside = (_e: React.MouseEvent) => {
         selection.setSelectedItems([]);
         selection.setLastSelectedIdx(null);
     };

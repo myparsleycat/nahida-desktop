@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import * as readline from "node:readline";
 
@@ -79,13 +79,14 @@ export class GoProcess extends EventEmitter {
                     this.emit("success", msg.payload);
                     resolve(msg.payload);
                     break;
-                case "error":
+                case "error": {
                     const errPayload = msg.payload as { code: string; message: string };
                     const error = new Error(errPayload.message);
                     (error as any).code = errPayload.code;
                     this.emit("error", error);
                     reject(error);
                     break;
+                }
                 case "log":
                     this.emit("log", msg.payload);
                     if (

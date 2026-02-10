@@ -1,13 +1,13 @@
+import { PathSelectorDialog } from "@renderer/components/path-selector-dialog";
 import { RootProvider } from "@renderer/components/root-provider";
 import { Sidebar } from "@renderer/components/sidebar";
 import { Titlebar } from "@renderer/components/titlebar";
 import { Toaster } from "@renderer/components/ui/sonner";
 import { useGlobalEvents } from "@renderer/hooks/use-global-events";
-import { PathSelectorDialog } from "@renderer/components/path-selector-dialog";
-import { QueryClient } from "@tanstack/react-query";
-import { createRootRouteWithContext, Outlet, useLocation } from "@tanstack/react-router";
-import { useState, useCallback, useEffect } from "react";
 import { useGlobalStore } from "@renderer/store/global";
+import type { QueryClient } from "@tanstack/react-query";
+import { createRootRouteWithContext, Outlet, useLocation } from "@tanstack/react-router";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 function RootComponent() {
@@ -26,7 +26,7 @@ function RootComponent() {
     window.api.invoke("setting:general:getLanguage").then((language) => {
       if (language) i18n.changeLanguage(language);
     });
-  }, [i18n]);
+  }, [setAppStatus, setSession, i18n]);
 
   const [pathSelectorData, setPathSelectorData] = useState<{
     selectionId: string;

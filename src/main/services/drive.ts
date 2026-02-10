@@ -1,14 +1,19 @@
-import { NahidaDesktop } from "..";
-import { eden } from "@main/client";
-import Download, { DownloadMetadata, DownloadParams } from "@main/lib/download";
-import { gunzip, gzip, zstdCompress, zstdDecompress } from "node:zlib";
 import { promisify } from "node:util";
+import { gunzip, gzip, zstdCompress, zstdDecompress } from "node:zlib";
+import type { Treaty } from "@elysiajs/eden";
+import { eden } from "@main/client";
+import Download, { type DownloadMetadata, type DownloadParams } from "@main/lib/download";
+import Upload, {
+    type DirectoriesComponent,
+    type FilesComponent,
+    type UploadParams,
+} from "@main/lib/upload";
 import { dialog } from "electron";
-import Upload, { DirectoriesComponent, UploadParams } from "@main/lib/upload";
-import { nanoid } from "nanoid";
 import { retry } from "es-toolkit";
 import { windowsReservedNameRegex } from "filename-reserved-regex";
-import type { Treaty } from "@elysiajs/eden";
+import { nanoid } from "nanoid";
+import type { NahidaDesktop } from "..";
+import type { LocalTransfer } from "./transfer";
 
 const Fn = eden.akasha.content({ id: "" }).get;
 type DriveItem = Treaty.Data<typeof Fn>;
@@ -72,7 +77,7 @@ export class DriveService {
                 },
                 {
                     retries: 3,
-                    delay: (attempt) => Math.pow(2, attempt) * 1000,
+                    delay: (attempt) => 2 ** attempt * 1000,
                     shouldRetry: () => !signal?.aborted,
                 },
             );
@@ -92,7 +97,7 @@ export class DriveService {
                 },
                 {
                     retries: 3,
-                    delay: (attempt) => Math.pow(2, attempt) * 1000,
+                    delay: (attempt) => 2 ** attempt * 1000,
                     shouldRetry: () => !signal?.aborted,
                 },
             );
@@ -270,7 +275,13 @@ export class DriveService {
     }: {
         destId: string;
         paths: string[];
-        preparation: any;
+        preparation: {
+            pid: string;
+            files: FilesComponent[];
+            directories: DirectoriesComponent[];
+            totalSize: number;
+            processName: string;
+        };
     }) {
         const { pid, files, directories, processName } = preparation;
         const restartParams: UploadParams = { type: "upload", destId, paths };
@@ -280,8 +291,8 @@ export class DriveService {
             pid,
             type: "upload",
             data: {
-                files: files.map((f: any) => ({
-                    uuid: f.FID,
+                files: files.map((f) => ({
+                    id: f.FID,
                     fileId: "",
                     parentId: f.parentPath || null,
                     name: f.name,
@@ -289,8 +300,8 @@ export class DriveService {
                     compAlg: null,
                     url: "",
                 })),
-                dirs: directories.map((d: any) => ({
-                    uuid: "",
+                dirs: directories.map((d) => ({
+                    id: "",
                     parentId: d.parentPath || null,
                     name: d.name,
                 })),
@@ -309,22 +320,27 @@ export class DriveService {
         pid,
         restartParams,
         preparation,
-        abortController,
     }: {
         pid: string;
         restartParams: UploadParams;
-        preparation: any;
+        preparation: {
+            pid: string;
+            files: FilesComponent[];
+            directories: DirectoriesComponent[];
+            totalSize: number;
+            processName: string;
+        };
         abortController: AbortController;
     }) {
-        const { files, directories, totalSize, processName } = preparation;
+        const { files, totalSize, processName } = preparation;
 
-        const dummyFiles = files.map((f: any) => ({
+        const dummyFiles = files.map((f) => ({
             ...f,
             parentId: "",
             fullPath: f.fullPath,
         }));
 
-        const hashedFiles = await this.upload.calculateHashes(dummyFiles as any, (count) => {
+        const hashedFiles = await this.upload.calculateHashes(dummyFiles, (count) => {
             this.desktop.service.transfer.updateTransfer(pid, {
                 transferedFiles: count,
             });
@@ -335,7 +351,7 @@ export class DriveService {
         });
 
         const transfer = this.desktop.service.transfer.getTransferByPID(pid);
-        if (transfer && transfer.restartParams) {
+        if (transfer?.restartParams) {
             transfer.restartParams = {
                 ...(transfer.restartParams as UploadParams),
                 fileHashes,
@@ -358,14 +374,19 @@ export class DriveService {
 
     private async executeUploadRunner({
         pid,
-        restartParams,
         preparation,
         totalSize,
         processName,
     }: {
         pid: string;
         restartParams: UploadParams;
-        preparation: any;
+        preparation: {
+            pid: string;
+            files: FilesComponent[];
+            directories: DirectoriesComponent[];
+            totalSize: number;
+            processName: string;
+        };
         totalSize: number;
         processName: string;
     }) {
@@ -385,28 +406,6 @@ export class DriveService {
             processName,
             abortController: newAbort,
         });
-    }
-
-    private async selectDownloadPath(): Promise<string | null> {
-        const window = this.desktop.window.main.window;
-        if (!window) {
-            throw new Error("main window not found");
-        }
-
-        const dialogResult = await dialog.showOpenDialog(window, {
-            properties: ["openDirectory"],
-        });
-        if (!dialogResult || dialogResult.canceled) {
-            return null;
-        }
-        const savePath = dialogResult.filePaths[0];
-
-        const isWritable = this.desktop.lib.fs.isPathWritable(savePath);
-        if (!isWritable) {
-            throw new Error("Path is not writable");
-        }
-
-        return savePath;
     }
 
     private async createDownloadTransferEntry({
@@ -487,7 +486,7 @@ export class DriveService {
     }: {
         pid: string;
         restartParams: DownloadParams;
-        data: any;
+        data: DownloadMetadata;
     }) {
         const currentTransfer = this.desktop.service.transfer.getTransferByPID(pid);
         if (!currentTransfer) return;
@@ -510,7 +509,7 @@ export class DriveService {
     }: {
         pid: string;
         params: TransferParams;
-        currentTransfer: any;
+        currentTransfer: LocalTransfer;
     }) {
         const transferNow = this.desktop.service.transfer.getTransferByPID(pid);
         if (!transferNow) return;

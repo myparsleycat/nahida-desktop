@@ -1,9 +1,8 @@
-import { NahidaDesktop } from "..";
 import path from "node:path";
-import { nanoid } from "nanoid";
-import { Client, SubscriptionResponse } from "fb-watchman";
-import isDev from "@main/internal/isDev";
 import { app } from "electron";
+import { Client, type SubscriptionResponse } from "fb-watchman";
+import { nanoid } from "nanoid";
+import type { NahidaDesktop } from "..";
 
 const watchmanBinaryPath = app.isPackaged
     ? path.join(app.getAppPath(), "..", "lib", "watchman.exe")

@@ -1,15 +1,15 @@
+import type { IpcEvents } from "@shared/types.gen";
 import { BrowserWindow } from "electron";
 import type { NahidaDesktop } from "../index";
 import { registerAuthHandlers } from "./handlers/auth";
 import { registerDriveHandlers } from "./handlers/drive";
+import { registerLoggerHandlers } from "./handlers/logger";
+import { registerModHandlers } from "./handlers/mod";
+import { registerPathSelectorHandlers } from "./handlers/path-selector";
 import { registerSettingHandlers } from "./handlers/setting";
+import { registerTransferHandlers } from "./handlers/transfer";
 import { registerUtilHandlers } from "./handlers/util";
 import { registerWindowHandlers } from "./handlers/window";
-import { registerTransferHandlers } from "./handlers/transfer";
-import { registerModHandlers } from "./handlers/mod";
-import { registerLoggerHandlers } from "./handlers/logger";
-import { registerPathSelectorHandlers } from "./handlers/path-selector";
-import { IpcEvents } from "@shared/types.gen";
 
 export class IPC {
     private d: NahidaDesktop;

@@ -1,5 +1,5 @@
-import { rh } from "@main/ipc/helper";
 import type { NahidaDesktop } from "@main/index";
+import { rh } from "@main/ipc/helper";
 
 export function registerSettingHandlers(d: NahidaDesktop) {
     rh("setting:general:getRunOnStartup", async () => {

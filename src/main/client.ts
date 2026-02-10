@@ -1,13 +1,14 @@
-import { treaty } from "@elysiajs/eden";
+/** biome-ignore-all lint/suspicious/noExplicitAny: <> */
 import type { App } from "@backend/index";
+import { treaty } from "@elysiajs/eden";
+import { fetcher } from "@main/internal/fetcher";
 import { BACKEND_URL } from "@shared/const";
 import { isEmpty } from "es-toolkit/compat";
 import { desktop } from "./index";
-import { fetcher } from "@main/internal/fetcher";
 
 export const eden = treaty<App>(BACKEND_URL, {
     fetcher: (async (input: URL | RequestInfo, init: RequestInit | undefined) => {
-        let response = await fetcher(input.toString(), init);
+        const response = await fetcher(input.toString(), init);
 
         if (response.status === 401) {
             await desktop.service.auth.startLogout();

@@ -1,7 +1,7 @@
-import { MinusIcon, MaximizeIcon, XIcon } from "lucide-react";
-import { useLocation } from "@tanstack/react-router";
 import { cn } from "@renderer/lib/utils";
+import { useLocation } from "@tanstack/react-router";
 import { find } from "es-toolkit/compat";
+import { MaximizeIcon, MinusIcon, XIcon } from "lucide-react";
 
 interface TitlebarProps {
   title?: {
@@ -51,6 +51,7 @@ export function Titlebar({ title }: TitlebarProps) {
       <div className="buttons flex h-full ml-auto z-10">
         {!hideMinimize && (
           <button
+            type="button"
             className="flex justify-center items-center px-3 hover:bg-muted duration-150 min"
             tabIndex={-1}
             onClick={() => {
@@ -63,6 +64,7 @@ export function Titlebar({ title }: TitlebarProps) {
 
         {!hideMaximize && (
           <button
+            type="button"
             className="flex justify-center items-center px-3 hover:bg-muted duration-150 max"
             tabIndex={-1}
             onClick={() => {
@@ -74,6 +76,7 @@ export function Titlebar({ title }: TitlebarProps) {
         )}
 
         <button
+          type="button"
           className="flex justify-center items-center px-3 hover:bg-red-500 duration-150 close"
           tabIndex={-1}
           onClick={() => {

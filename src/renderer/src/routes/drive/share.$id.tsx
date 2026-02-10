@@ -1,13 +1,3 @@
-import { createFileRoute, useLocation } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useViewStore, viewStore } from "@renderer/store/drive";
-import { useEffect, useMemo } from "react";
-import { commonSort } from "@renderer/lib/utils";
-import { disassemble, getChoseong } from "es-hangul";
-import { getSearchScore } from "@renderer/lib/sejong";
-import { Center, ServerCrash } from "@renderer/components/common";
-import { AliceLoader } from "@renderer/components/loaders";
-import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import {
   AkashaBreadcrumb,
   AkashaHeadButtons,
@@ -17,16 +7,26 @@ import {
   ContextMenuProvider,
   HandlerProvider,
 } from "@renderer/components/akasha";
-import { FolderIcon } from "lucide-react";
-import { useTranslation } from "react-i18next";
 import {
   NewDirectoryDialog,
   PubLinkDialog,
   RenameDialog,
 } from "@renderer/components/akasha/dialogs";
-import { useDrag } from "@renderer/hooks/drive";
+import { Center, ServerCrash } from "@renderer/components/common";
+import { AliceLoader } from "@renderer/components/loaders";
 import { Titlebar } from "@renderer/components/titlebar";
+import { ScrollArea } from "@renderer/components/ui/scroll-area";
+import { useDrag } from "@renderer/hooks/drive";
+import { getSearchScore } from "@renderer/lib/sejong";
+import { commonSort } from "@renderer/lib/utils";
+import { useViewStore, viewStore } from "@renderer/store/drive";
+import { useQuery } from "@tanstack/react-query";
+import { createFileRoute, useLocation } from "@tanstack/react-router";
+import { disassemble, getChoseong } from "es-hangul";
 import { orderBy } from "es-toolkit";
+import { FolderIcon } from "lucide-react";
+import { useEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/drive/share/$id")({
   component: RouteComponent,
@@ -48,7 +48,7 @@ function RouteComponent() {
     enabled: !!id,
     placeholderData: (prev) => prev,
     refetchIntervalInBackground: true,
-    refetchInterval: (query) => {
+    refetchInterval: () => {
       if (typeof document !== "undefined" && document.hidden) {
         return 60000 * 3; // 3분 (백그라운드)
       }
@@ -60,6 +60,7 @@ function RouteComponent() {
     },
   });
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: <>
   useEffect(() => {
     if (searchInDirQuery) {
       setSearchInDirQuery("");
@@ -75,7 +76,7 @@ function RouteComponent() {
 
   const rawContents = useMemo(() => {
     if (!query.data?.children) return [];
-    return commonSort([...query.data?.children], sortType);
+    return commonSort([...query.data.children], sortType);
   }, [query.data?.children, sortType]);
 
   const sortedContents = useMemo(() => {
@@ -137,7 +138,7 @@ function RouteComponent() {
               <div className="flex-1"></div>
             )}
 
-            <AkashaHeadButtons content={query.data.content!} />
+            {query.data.content && <AkashaHeadButtons content={query.data.content} />}
           </div>
 
           <div
@@ -151,21 +152,19 @@ function RouteComponent() {
               <HandlerProvider queryData={query} sortedContents={sortedContents} currentId={id}>
                 {sortedContents.length > 0 ? (
                   <ScrollArea className="flex-1 flex flex-col h-full">
-                    <>
-                      {layout === "list" ? (
-                        <ContentMenuList
-                          sortedContents={sortedContents}
-                          isFetching={query.isFetching}
-                          itemId={id}
-                        />
-                      ) : layout === "grid" ? (
-                        <ContentMenuGrid
-                          sortedContents={sortedContents}
-                          isFetching={query.isFetching}
-                          itemId={id}
-                        />
-                      ) : null}
-                    </>
+                    {layout === "list" ? (
+                      <ContentMenuList
+                        sortedContents={sortedContents}
+                        isFetching={query.isFetching}
+                        itemId={id}
+                      />
+                    ) : layout === "grid" ? (
+                      <ContentMenuGrid
+                        sortedContents={sortedContents}
+                        isFetching={query.isFetching}
+                        itemId={id}
+                      />
+                    ) : null}
                   </ScrollArea>
                 ) : query.isFetched && sortedContents.length < 1 ? (
                   <Center className="flex-col">

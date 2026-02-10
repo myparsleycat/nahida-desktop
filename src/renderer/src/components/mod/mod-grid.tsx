@@ -1,25 +1,23 @@
-import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
-import { ModCard } from "./mod-card";
-import { useModStore } from "@renderer/store/mod";
-import { useModMutations } from "@renderer/hooks/use-mod-mutations";
+import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
 import { useFilteredMods } from "@renderer/hooks/use-filtered-mods";
 import { useModGroup } from "@renderer/hooks/use-mod-data";
-import { toast } from "sonner";
+import { useModMutations } from "@renderer/hooks/use-mod-mutations";
+import { useVirtualizationSettings } from "@renderer/hooks/use-settings";
+import { useModStore } from "@renderer/store/mod";
+import type { ModInfo } from "@renderer/types/mod";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { chunk } from "es-toolkit";
-import { ModInfo } from "@renderer/types/mod";
-import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
-import { useAutoAnimate } from "@formkit/auto-animate/react";
-import { useVirtualizationSettings } from "@renderer/hooks/use-settings";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+import { ModCard } from "./mod-card";
 
 interface ModGridProps {
   isDragging?: boolean;
 }
 
-export function ModGrid({ isDragging }: ModGridProps) {
-  const selectedGroup = useModStore((s) => s.selectedGroup);
+export function ModGrid(_props: ModGridProps) {
   const searchQuery = useModStore((s) => s.searchQuery);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -132,7 +130,10 @@ export function ModGrid({ isDragging }: ModGridProps) {
               }}
             >
               {Array.from({ length: 12 }).map((_, index) => (
-                <div key={index} className="flex flex-col space-y-3 rounded-lg border p-4">
+                <div
+                  key={index.toString()}
+                  className="flex flex-col space-y-3 rounded-lg border p-4"
+                >
                   <Skeleton className="h-48 w-full rounded-md" />
                   <div className="space-y-2">
                     <Skeleton className="h-4 w-3/4" />

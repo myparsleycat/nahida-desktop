@@ -1,6 +1,6 @@
-import { getTopmostPid, startTracking, getPreviousPids, getProcessName } from "@native/native-util";
+import { getPreviousPids, getProcessName, getTopmostPid, startTracking } from "@native/native-util";
 import psList from "ps-list";
-import { NahidaDesktop } from "..";
+import type { NahidaDesktop } from "..";
 
 export class NativeLib {
     private desktop: NahidaDesktop;

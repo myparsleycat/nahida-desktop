@@ -8,8 +8,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@renderer/components/ui/alert-dialog";
-import { useModStore } from "@renderer/store/mod";
 import { useGameMutations } from "@renderer/hooks/use-mod-mutations";
+import { useModStore } from "@renderer/store/mod";
 import { useTranslation } from "react-i18next";
 
 export function DeleteGameDialog() {

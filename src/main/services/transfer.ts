@@ -1,8 +1,8 @@
+import type { Transfer, TransferData, TransferStatus } from "@shared/types.gen";
 import { throttle } from "es-toolkit";
-import { NahidaDesktop } from "..";
-import { Transfer, TransferData, TransferStatus } from "@shared/types.gen";
+import type { NahidaDesktop } from "..";
 
-interface LocalTransfer extends Transfer {
+export interface LocalTransfer extends Transfer {
     abortController: AbortController;
     restartParams?: any;
     completedFileUuids?: Set<string>;

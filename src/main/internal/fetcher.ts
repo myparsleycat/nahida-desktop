@@ -1,7 +1,7 @@
+import { appVersion } from "@main/const";
+import { desktop } from "@main/index";
 import ky from "ky";
 import { Agent, Pool, ProxyAgent } from "undici";
-import { desktop } from "@main/index";
-import { appVersion } from "@main/const";
 
 let cachedAgent: ProxyAgent | null = null;
 let cachedProxyHash: string = "";
@@ -16,7 +16,7 @@ export async function getAgent() {
 
     if (proxy && proxy.type !== "disabled" && proxy.host && proxy.port) {
         let url: string;
-        let token: string | undefined = undefined;
+        let token: string | undefined;
 
         if (proxy.type === "socks5") {
             const auth =

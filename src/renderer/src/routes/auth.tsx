@@ -1,10 +1,10 @@
 import { Center } from "@renderer/components/common";
 import { Titlebar } from "@renderer/components/titlebar";
 import { Button } from "@renderer/components/ui/button";
+import { Logger } from "@renderer/lib/logger";
 import { createFileRoute } from "@tanstack/react-router";
 import { Loader2Icon, LogInIcon } from "lucide-react";
 import { useState } from "react";
-import { Logger } from "@renderer/lib/logger";
 
 export const Route = createFileRoute("/auth")({
   component: RouteComponent,
@@ -24,13 +24,13 @@ function RouteComponent() {
 
     try {
       await window.api.invoke("auth:startLogin");
-    } catch (err: any) {
+    } catch (err) {
       await window.api.invoke("util:showModal", {
         type: "error",
         title: "로그인 에러",
-        message: err.message,
+        message: (err as Error).message,
       });
-      Logger.error(err, "Route:Auth:handleLogin");
+      Logger.error(err as Error, "Route:Auth:handleLogin");
     } finally {
       clearTimeout(timer);
       setLoading(false);

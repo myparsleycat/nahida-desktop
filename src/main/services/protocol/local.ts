@@ -1,10 +1,10 @@
-import { desktop, NahidaDesktop } from "@main/index";
-import { net, protocol } from "electron";
 import { pathToFileURL } from "node:url";
-import { fileTypeFromFile } from "file-type/node";
+import { desktop } from "@main/index";
 import { db } from "@main/internal/db";
-import { convertImage } from "@native/image";
 import { imageCache } from "@main/internal/db/schema";
+import { convertImage } from "@native/image";
+import { net } from "electron";
+import { fileTypeFromFile } from "file-type/node";
 
 export class LocalProtocol {
     // private readonly desktop: NahidaDesktop;
@@ -65,7 +65,7 @@ export class LocalProtocol {
             try {
                 const response = await net.fetch(fileUrl);
                 return response;
-            } catch (error) {
+            } catch {
                 return new Response("not found", { status: 404 });
             }
         }

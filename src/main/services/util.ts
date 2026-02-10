@@ -1,14 +1,14 @@
+import { spawn } from "node:child_process";
 import isDev from "@main/internal/isDev";
 import type { AppStatus, PathMetadata } from "@shared/types.gen";
-import { spawn } from "child_process";
 import {
-    dialog,
-    shell,
-    type OpenExternalOptions,
-    MessageBoxOptions,
     BrowserWindow,
     clipboard,
-    OpenDialogOptions,
+    dialog,
+    type MessageBoxOptions,
+    type OpenDialogOptions,
+    type OpenExternalOptions,
+    shell,
 } from "electron";
 import { app } from "electron/main";
 import fse from "fs-extra";

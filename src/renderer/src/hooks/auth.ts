@@ -12,5 +12,5 @@ export const isLoggedIn = () => {
             }
         };
         check();
-    }, []);
+    }, [navi]);
 };

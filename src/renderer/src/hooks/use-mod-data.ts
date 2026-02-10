@@ -1,5 +1,5 @@
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import type { FolderGroup, Preset, GameConfig } from "@shared/types.gen";
+import type { FolderGroup, GameConfig, Preset } from "@shared/types.gen";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 export function useGames() {
     return useQuery<GameConfig[]>({
@@ -20,7 +20,7 @@ export function useCharacters(selectedGame: string) {
 export function useModGroup(groupPath?: string) {
     return useQuery<FolderGroup>({
         queryKey: ["modGroup", groupPath],
-        queryFn: () => window.api.invoke("mod:getMods", groupPath!),
+        queryFn: () => window.api.invoke("mod:getMods", groupPath as string),
         enabled: !!groupPath,
         placeholderData: keepPreviousData,
     });

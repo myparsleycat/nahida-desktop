@@ -11,28 +11,39 @@
 			"src/**/*.tsx",
 			"src/**/*.js",
 			"src/**/*.jsx"
-		]
+		],
+		"ignoreUnknown": false
 	},
 	"formatter": {
 		"enabled": true,
-		"indentStyle": "space"
+		"indentStyle": "space",
+		"lineWidth": 100
 	},
 	"linter": {
-		"enabled": false,
+		"enabled": true,
 		"rules": {
-			"recommended": true
+			"recommended": true,
+			"suspicious": {
+				"noExplicitAny": "warn"
+			},
+			"correctness": {
+				"useExhaustiveDependencies": "off"
+			},
+			"a11y": "off"
 		}
 	},
 	"javascript": {
 		"formatter": {
 			"quoteStyle": "double",
-			"lineWidth": 100,
+			"semicolons": "always",
+			"trailingCommas": "all",
 			"indentWidth": 4
 		}
 	},
 	"json": {
 		"formatter": {
-			"enabled": false
+			"enabled": true,
+			"indentWidth": 2
 		}
 	},
 	"assist": {

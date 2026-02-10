@@ -1,17 +1,15 @@
-import { eq } from "drizzle-orm";
+import type { NahidaDesktop } from "@main/index";
 import { db } from "@main/internal/db";
 import { setting } from "@main/internal/db/schema";
-import { BACKEND_URL } from "@shared/const";
 import { fetcher, getAgent, getHeaders } from "@main/internal/fetcher";
-import { SessionSchema } from "@shared/schemas/auth";
-import ky from "ky";
-import { Nullable, Optional, validate } from "valdex";
-import { shell } from "electron";
-import { parseServerSentEvents } from "parse-sse";
-import { closeAllWindows, openExternal } from "./util";
 import { focus } from "@main/windows/utils";
-import type { NahidaDesktop } from "@main/index";
-import { appVersion } from "@main/const";
+import { BACKEND_URL } from "@shared/const";
+import { SessionSchema } from "@shared/schemas/auth";
+import { eq } from "drizzle-orm";
+import ky from "ky";
+import { parseServerSentEvents } from "parse-sse";
+import { Nullable, validate } from "valdex";
+import { openExternal } from "./util";
 
 export class Auth {
     private desktop: NahidaDesktop;

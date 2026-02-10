@@ -1,8 +1,8 @@
-import { app } from "electron";
 import path from "node:path";
-import { GoProcess } from "./go-process";
-import { db } from "@main/internal/db";
 import type { NahidaDesktop } from "@main/index";
+import { db } from "@main/internal/db";
+import { app } from "electron";
+import { GoProcess } from "./go-process";
 
 export class CompactService {
     private desktop: NahidaDesktop;

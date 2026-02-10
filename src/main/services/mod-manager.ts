@@ -1,16 +1,14 @@
-import { NahidaDesktop } from "..";
-import { trim } from "es-toolkit";
-import path from "path";
-
-import fse from "fs-extra";
-import fg from "fast-glob";
+import path from "node:path";
+import { getCharactersFolder, getMods } from "@native/native-mod";
+import type { FolderGroup, Preset } from "@shared/types.gen";
 import { eq } from "drizzle-orm";
+import { trim } from "es-toolkit";
+import fg from "fast-glob";
+import fse from "fs-extra";
+import { nanoid } from "nanoid";
+import type { NahidaDesktop } from "..";
 import { db } from "../internal/db";
 import { gamePaths, modPresets, setting } from "../internal/db/schema";
-import { nanoid } from "nanoid";
-
-import type { FolderGroup, ModInfo, Preset, ToggleKey } from "@shared/types.gen";
-import { getCharactersFolder, getMods } from "@native/native-mod";
 
 export class ModManager {
     private desktop: NahidaDesktop;
@@ -205,8 +203,8 @@ export class ModManager {
                 try {
                     await fse.access(newPath);
                     throw new Error(`ALREADY_EXISTS:${newFolderName}`);
-                } catch (error: any) {
-                    if (error.code === "ENOENT") {
+                } catch (error) {
+                    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
                         await this.desktop.lib.fs.rename(modPath, newPath);
                         return newPath;
                     }
@@ -228,8 +226,8 @@ export class ModManager {
                 try {
                     await fse.access(newPath);
                     throw new Error(`ALREADY_EXISTS:${newFolderName}`);
-                } catch (error: any) {
-                    if (error.code === "ENOENT") {
+                } catch (error) {
+                    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
                         await this.desktop.lib.fs.rename(modPath, newPath);
                         return newPath;
                     }
@@ -346,7 +344,7 @@ export class ModManager {
                 let currentSection: string | null = null;
                 let updated = false;
 
-                for (let line of lines) {
+                for (const line of lines) {
                     const trimmedLine = line.trim();
 
                     if (trimmedLine.startsWith("[") && trimmedLine.endsWith("]")) {
@@ -377,8 +375,11 @@ export class ModManager {
                     try {
                         await fse.chmod(iniPath, 0o666);
                         await fse.writeFile(iniPath, newContent, "utf-8");
-                    } catch (error: any) {
-                        if (error.code === "EPERM" || error.code === "EACCES") {
+                    } catch (error) {
+                        if (
+                            (error as NodeJS.ErrnoException).code === "EPERM" ||
+                            (error as NodeJS.ErrnoException).code === "EACCES"
+                        ) {
                             await fse.unlink(iniPath);
                             await fse.writeFile(iniPath, newContent, "utf-8");
                         } else {

@@ -1,9 +1,9 @@
-import pathModule from "path";
-import pino, { type Logger as PinoLogger } from "pino";
-import fse from "fs-extra";
-import { createStream } from "rotating-file-stream";
-import { app } from "electron";
+import pathModule from "node:path";
 import { is } from "@electron-toolkit/utils";
+import { app } from "electron";
+import fse from "fs-extra";
+import pino, { type Logger as PinoLogger } from "pino";
+import { createStream } from "rotating-file-stream";
 
 export async function nahidaLogsPath(): Promise<string> {
     const configPath = pathModule.join(app.getPath("userData"), "logs");

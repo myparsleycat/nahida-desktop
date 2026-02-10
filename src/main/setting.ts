@@ -1,9 +1,9 @@
-import { eq, sum } from "drizzle-orm";
+import type { NahidaDesktop } from "@main/index";
 import { db } from "@main/internal/db";
 import { imageCache, setting } from "@main/internal/db/schema";
 import AutoLaunch from "auto-launch";
+import { eq, sum } from "drizzle-orm";
 import { app } from "electron";
-import type { NahidaDesktop } from "@main/index";
 
 interface Bounds {
     x: number;
@@ -244,7 +244,7 @@ export class Setting {
                 value: enabled,
             });
 
-            if (this.desktop.lib && this.desktop.lib.compact) {
+            if (this.desktop.lib?.compact) {
                 this.desktop.lib.compact.updateCompression();
             }
         },
@@ -278,7 +278,7 @@ export class Setting {
                 value: enabled,
             });
 
-            if (this.desktop.lib && this.desktop.lib.compact) {
+            if (this.desktop.lib?.compact) {
                 this.desktop.lib.compact.updateFeature();
             }
         },
@@ -435,6 +435,7 @@ export class Setting {
             return JSON.parse(qr.value as string);
         },
 
+        // biome-ignore lint/suspicious/noExplicitAny: <>
         setProxy: async (settings: any) => {
             await db
                 .insert(setting)

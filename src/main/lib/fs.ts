@@ -1,8 +1,8 @@
 import fsp from "node:fs/promises";
-import fse from "fs-extra";
 import path from "node:path";
-import { NahidaDesktop } from "..";
 import fg from "fast-glob";
+import fse from "fs-extra";
+import type { NahidaDesktop } from "..";
 
 export interface FileNode {
     name: string;
@@ -58,7 +58,7 @@ export class FS {
     }
 
     public sanitizeWindowsFilename(input: string) {
-        const reservedChars = /[<>:"\/\\|?*]/g;
+        const reservedChars = /[<>:"/\\|?*]/g;
         return input.replace(reservedChars, "_");
     }
 

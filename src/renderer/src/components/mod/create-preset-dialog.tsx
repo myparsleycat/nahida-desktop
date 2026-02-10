@@ -9,11 +9,11 @@ import {
   DialogTrigger,
 } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
-import { LoaderIcon, Plus } from "lucide-react";
-import { toast } from "sonner";
-import { useModStore } from "@renderer/store/mod";
 import { usePresetMutations } from "@renderer/hooks/use-mod-mutations";
+import { useModStore } from "@renderer/store/mod";
+import { LoaderIcon, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 interface CreatePresetDialogProps {
   disabled?: boolean;

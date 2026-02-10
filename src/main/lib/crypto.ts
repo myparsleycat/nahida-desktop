@@ -1,5 +1,5 @@
 import { safeStorage } from "electron";
-import { NahidaDesktop } from "..";
+import type { NahidaDesktop } from "..";
 
 export class Crypto {
     private desktop: NahidaDesktop;

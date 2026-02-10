@@ -1,11 +1,7 @@
 import { useDragStore } from "@renderer/store/drive";
-import { useRouteContext } from "@tanstack/react-router";
-import { Content } from "@shared/types.gen";
-import { toast } from "sonner";
 import { compact } from "es-toolkit";
 
 export function useDrag() {
-    const { queryClient } = useRouteContext({ from: "__root__" });
     const setUploadDragging = useDragStore((s) => s.setUploadDragging);
     const setCurrentDragOver = useDragStore((s) => s.setCurrentDragOver);
 

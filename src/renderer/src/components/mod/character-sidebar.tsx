@@ -1,15 +1,13 @@
-import { Search } from "lucide-react";
 import { Input } from "@renderer/components/ui/input";
-import { ScrollArea } from "../ui/scroll-area";
-import type { FolderGroup } from "@renderer/types/mod";
-import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react";
-import { filter } from "es-toolkit/compat";
-
-import { useModStore } from "@renderer/store/mod";
-import { CharacterSidebarItem, CharacterSidebarItemSkeleton } from "./character-sidebar-item";
 import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
-import { useAutoAnimate } from "@formkit/auto-animate/react";
+import { useModStore } from "@renderer/store/mod";
+import type { FolderGroup } from "@renderer/types/mod";
+import { filter } from "es-toolkit/compat";
+import { Search } from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ScrollArea } from "../ui/scroll-area";
+import { CharacterSidebarItem, CharacterSidebarItemSkeleton } from "./character-sidebar-item";
 
 interface CharacterSidebarProps {
   groups: FolderGroup[];
@@ -99,7 +97,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
         >
           {showSkeleton
             ? Array.from({ length: 8 }).map((_, index) => (
-                <CharacterSidebarItemSkeleton key={index} />
+                <CharacterSidebarItemSkeleton key={index.toString()} />
               ))
             : filteredGroups.map((group) => (
                 <CharacterSidebarItem

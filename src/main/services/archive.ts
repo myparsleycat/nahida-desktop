@@ -1,13 +1,9 @@
-import { NahidaDesktop } from "..";
-import fse from "fs-extra";
 import { extractArchive } from "@native/extractor";
+import fse from "fs-extra";
+import type { NahidaDesktop } from "..";
 
 export class ArchiveService {
-    private readonly desktop: NahidaDesktop;
-
-    constructor(desktop: NahidaDesktop) {
-        this.desktop = desktop;
-    }
+    constructor(desktop: NahidaDesktop) {}
 
     async extract(
         archivePath: string,

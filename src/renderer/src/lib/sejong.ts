@@ -1,4 +1,4 @@
-import { disassemble, getChoseong } from "es-hangul";
+import { disassemble } from "es-hangul";
 
 const similarSoundMap = new Map([
     ["ㄱ", ["ㄲ", "ㅋ"]],

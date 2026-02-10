@@ -1,12 +1,12 @@
-import { formatSize, formatTime } from "@shared/utils";
-import { createFileRoute } from "@tanstack/react-router";
-import { Transfer, TransferWithoutData } from "@shared/types.gen";
-import { useEffect, useState, useCallback } from "react";
+import { Titlebar } from "@renderer/components/titlebar";
 import { TransferList } from "@renderer/components/transfer/transfer-list";
 import { TransferStats } from "@renderer/components/transfer/transfer-stats";
 import type { TransferItemProps } from "@renderer/components/transfer/types";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
-import { Titlebar } from "@renderer/components/titlebar";
+import type { Transfer, TransferWithoutData } from "@shared/types.gen";
+import { formatSize, formatTime } from "@shared/utils";
+import { createFileRoute } from "@tanstack/react-router";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/transfer")({

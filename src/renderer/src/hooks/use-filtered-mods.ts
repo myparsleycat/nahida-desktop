@@ -1,8 +1,8 @@
-import { useMemo } from "react";
-import type { ModInfo } from "@shared/types.gen";
-import { disassemble, getChoseong } from "es-hangul";
 import { getSearchScore } from "@renderer/lib/sejong";
 import { useModStore } from "@renderer/store/mod";
+import type { ModInfo } from "@shared/types.gen";
+import { disassemble, getChoseong } from "es-hangul";
+import { useMemo } from "react";
 
 export function useFilteredMods(mods: ModInfo[], searchQuery: string) {
     const sortType = useModStore((s) => s.sortType);

@@ -1,4 +1,4 @@
-import { FolderGroup, Preset } from "@shared/types.gen";
+import type { FolderGroup, Preset } from "@shared/types.gen";
 import { createStore, useStore } from "zustand";
 
 interface ModState {

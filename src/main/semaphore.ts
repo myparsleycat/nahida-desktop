@@ -20,7 +20,7 @@ export const Semaphore = function (this: ISemaphore, max: number) {
     }[] = [];
     let maxCount = max || 1;
 
-    const take = function (): void {
+    const take = (): void => {
         if (waiting.length > 0 && counter < maxCount) {
             counter++;
 
@@ -34,7 +34,7 @@ export const Semaphore = function (this: ISemaphore, max: number) {
         }
     };
 
-    this.acquire = function (): Promise<void> {
+    this.acquire = (): Promise<void> => {
         if (counter < maxCount) {
             counter++;
 
@@ -51,21 +51,19 @@ export const Semaphore = function (this: ISemaphore, max: number) {
         }
     };
 
-    this.release = function (): void {
+    this.release = (): void => {
         counter--;
 
         take();
     };
 
-    this.count = function (): number {
-        return counter;
-    };
+    this.count = (): number => counter;
 
-    this.setMax = function (newMax: number): void {
+    this.setMax = (newMax: number): void => {
         maxCount = newMax;
     };
 
-    this.purge = function (): number {
+    this.purge = (): number => {
         const unresolved = waiting.length;
 
         for (let i = 0; i < unresolved; i++) {

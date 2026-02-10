@@ -1,8 +1,8 @@
-import { useVirtualizer } from "@tanstack/react-virtual";
-import * as React from "react";
-import { isNil } from "es-toolkit";
-import { ScrollArea } from "./scroll-area";
 import { cn } from "@renderer/lib/utils";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { isNil } from "es-toolkit";
+import * as React from "react";
+import { ScrollArea } from "./scroll-area";
 
 interface VirtualizedScrollAreaProps<T> {
   items: T[];

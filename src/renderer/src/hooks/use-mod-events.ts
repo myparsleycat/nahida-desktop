@@ -1,5 +1,5 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 export function useModRefreshOnFocus(selectedGame: string | null, queryClient: QueryClient) {

@@ -1,14 +1,14 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
-import { Logger } from "@renderer/lib/logger";
+import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
+import { Input } from "@renderer/components/ui/input";
 import { Separator } from "@renderer/components/ui/separator";
 import { Switch } from "@renderer/components/ui/switch";
-import { Input } from "@renderer/components/ui/input";
-import { useAutoAnimate } from "@formkit/auto-animate/react";
+import { Logger } from "@renderer/lib/logger";
+import { useQueryClient } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/setting/mod")({
   component: RouteComponent,
@@ -37,6 +37,7 @@ function RouteComponent() {
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
+    // biome-ignore lint/suspicious/noExplicitAny: <payload>
     const unlisten = window.api.on("compact:progress", (payload: any) => {
       setCompressionProgress(payload);
 

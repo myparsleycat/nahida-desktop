@@ -158,9 +158,9 @@ export function mapKeyboardEventToInternal(
         return null;
     }
 
-    const simpleCtrl = e.ctrlKey ? "ctrl" : "";
-    const simpleAlt = e.altKey ? "alt" : "";
-    const simpleShift = e.shiftKey ? "shift" : "";
+    // const simpleCtrl = e.ctrlKey ? "ctrl" : "";
+    // const simpleAlt = e.altKey ? "alt" : "";
+    // const simpleShift = e.shiftKey ? "shift" : "";
 
     let mappedKey = key.toLowerCase();
     const code = e.code;

@@ -1,7 +1,6 @@
-import { createStore, useStore } from "zustand";
-import type { AppStatus } from "@shared/types.gen";
-
 import type { Session } from "@shared/schemas/auth";
+import type { AppStatus } from "@shared/types.gen";
+import { createStore, useStore } from "zustand";
 
 interface GlobalStore {
     appStatus: AppStatus | null;

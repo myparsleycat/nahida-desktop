@@ -1,37 +1,35 @@
 import os from "node:os";
 import path from "node:path";
-import { app, BrowserWindow, crashReporter, net, protocol, session } from "electron";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
-import AutoLaunch from "auto-launch";
 import { BACKEND_URL } from "@shared/const";
-import { startInit } from "./init";
-import Setting from "./setting";
-import Auth from "./services/auth";
-import { IS_ELECTRON } from "./const";
-import Updater from "./internal/updater";
-import Logger from "./internal/logger";
-import { IPC } from "./ipc";
-import MainWindow from "./windows/main";
-import LoginWindow from "./windows/login";
-import SettingWindow from "./windows/setting";
-import { DriveService } from "./services/drive";
-import { FS } from "./lib/fs";
-import Utils from "./lib/utils";
-import Tray from "./lib/tray";
-import CryptoLib from "./lib/crypto";
-import Compressor from "./lib/compressor";
-import TransferService from "./services/transfer";
-import ModManager from "./services/mod-manager";
-import ArchiveService from "./services/archive";
-import CustomDownloader from "./lib/custom-downloader";
-import { PathSelector } from "./lib/path-selector";
-import Watcher from "./lib/watcher";
-
-import { CompactService } from "./lib/compact";
-
-import { registerProtocal } from "./protocals";
+import AutoLaunch from "auto-launch";
+import { app, crashReporter, protocol, session } from "electron";
 import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
+import { IS_ELECTRON } from "./const";
+import { startInit } from "./init";
+import Logger from "./internal/logger";
+import Updater from "./internal/updater";
+import { IPC } from "./ipc";
+import { CompactService } from "./lib/compact";
+import Compressor from "./lib/compressor";
+import CryptoLib from "./lib/crypto";
+import CustomDownloader from "./lib/custom-downloader";
+import { FS } from "./lib/fs";
 import { NativeLib } from "./lib/native";
+import { PathSelector } from "./lib/path-selector";
+import Tray from "./lib/tray";
+import Utils from "./lib/utils";
+import Watcher from "./lib/watcher";
+import { registerProtocal } from "./protocals";
+import ArchiveService from "./services/archive";
+import Auth from "./services/auth";
+import { DriveService } from "./services/drive";
+import ModManager from "./services/mod-manager";
+import TransferService from "./services/transfer";
+import Setting from "./setting";
+import LoginWindow from "./windows/login";
+import MainWindow from "./windows/main";
+import SettingWindow from "./windows/setting";
 
 if (IS_ELECTRON) {
     // Needs to be here, otherwise Chromium's FileSystemAccess API won't work. Waiting for the electron team to fix it.
@@ -208,7 +206,7 @@ app.whenReady().then(async () => {
 
     app.on("second-instance", (_event, commandLine, _workingDirectory) => {
         const deepLinkUrl = commandLine.find((arg) => arg.startsWith("nahida://"));
-        if (deepLinkUrl && deepLinkUrl.startsWith("nahida://auth")) {
+        if (deepLinkUrl?.startsWith("nahida://auth")) {
             // AuthService.handleOAuth2Callback(deepLinkUrl);
         }
 

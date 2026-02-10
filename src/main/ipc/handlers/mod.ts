@@ -1,7 +1,7 @@
-import path from "path";
-import { dialog } from "electron";
+import path from "node:path";
+import type { NahidaDesktop } from "@main/index";
 import { rh } from "@main/ipc/helper";
-import { NahidaDesktop } from "@main/index";
+import { dialog } from "electron";
 
 export function registerModHandlers(desktop: NahidaDesktop) {
     rh("mod:selectFolder", async (game: string) => {

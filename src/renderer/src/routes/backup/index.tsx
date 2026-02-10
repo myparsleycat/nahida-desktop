@@ -1,45 +1,40 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
 import { Button } from "@renderer/components/ui/button";
-import { Input } from "@renderer/components/ui/input";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@renderer/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
-import {
-  Search,
-  Filter,
-  MoreHorizontal,
-  Download,
-  Trash2,
-  RefreshCw,
-  HardDrive,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
-  Plus,
-  Calendar,
-  ChevronDown,
-  FolderIcon,
-  FileIcon,
-} from "lucide-react";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@renderer/components/ui/dialog";
+import { Input } from "@renderer/components/ui/input";
 import { Label } from "@renderer/components/ui/label";
-import { useQuery } from "@tanstack/react-query";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { cn } from "@renderer/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Download,
+  FileIcon,
+  FolderIcon,
+  HardDrive,
+  Loader2,
+  MoreHorizontal,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 
 export const Route = createFileRoute("/backup/")({
   component: RouteComponent,

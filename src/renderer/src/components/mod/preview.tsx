@@ -1,6 +1,5 @@
 import { cn } from "@renderer/lib/utils";
 import { useEffect, useRef, useState } from "react";
-import { VideoCanvas } from "@renderer/components/ui/video-canvas";
 
 interface PreviewProps {
   path?: string | null;

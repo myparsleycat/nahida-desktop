@@ -1,11 +1,11 @@
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
-import { Download } from "lucide-react";
-import { useState, useEffect } from "react";
-import { useModStore } from "@renderer/store/mod";
-import { toast } from "sonner";
 import { Logger } from "@renderer/lib/logger";
+import { useModStore } from "@renderer/store/mod";
+import { Download } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 export function DownloadConfirmationOverlay() {
   const { t } = useTranslation();

@@ -1,5 +1,5 @@
-import { rh } from "@main/ipc/helper";
 import { desktop } from "@main/index";
+import { rh } from "@main/ipc/helper";
 
 export function registerPathSelectorHandlers() {
     rh("pathSelector:selectFolderPath", async (selectionId) => {

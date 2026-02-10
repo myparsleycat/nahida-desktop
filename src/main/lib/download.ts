@@ -1,19 +1,19 @@
-import { NahidaDesktop } from "..";
-import { eden } from "@main/client";
-import { nanoid } from "nanoid";
 import path from "node:path";
-import fse from "fs-extra";
-import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
-import { retry, throttle } from "es-toolkit";
-import { createZstdDecompress, createGunzip } from "node:zlib";
-import PQueue from "p-queue";
-import ky from "ky";
-import { ParallelDownloader } from "./parallel-downloader";
-import { decompress } from "fzstd";
+import { pipeline } from "node:stream/promises";
+import { createGunzip, createZstdDecompress } from "node:zlib";
+import { eden } from "@main/client";
+import { getAgent, getHeaders } from "@main/internal/fetcher";
+import type { TransferData } from "@shared/types.gen";
 import { decode } from "cbor-x";
-import { getHeaders, getAgent } from "@main/internal/fetcher";
-import { TransferData } from "@shared/types.gen";
+import { retry, throttle } from "es-toolkit";
+import fse from "fs-extra";
+import { decompress } from "fzstd";
+import ky from "ky";
+import { nanoid } from "nanoid";
+import PQueue from "p-queue";
+import type { NahidaDesktop } from "..";
+import { ParallelDownloader } from "./parallel-downloader";
 
 export type DownloadParams = {
     type: "download";
@@ -53,7 +53,7 @@ class DownloadStreamer {
         return decompress(compressedData);
     }
 
-    private async parseStreamedData(data: any) {
+    private async parseStreamedData(data) {
         if (data.compressed) {
             const decompressed = await this.decompressData(data.data);
             if (data.type === "cbor") {
@@ -139,7 +139,8 @@ class DownloadFileSystem {
 
         const stack = [root.id];
         while (stack.length > 0) {
-            const parentId = stack.pop()!;
+            const parentId = stack.pop();
+            if (!parentId) continue;
             const parentPath = pathMap.get(parentId);
             if (!parentPath) continue;
 
@@ -269,8 +270,8 @@ class FileDownloadTask {
                 onProgress,
             });
             return true;
-        } catch (err: any) {
-            if (signal.aborted || err.name === "AbortError") throw err;
+        } catch (err) {
+            if (signal.aborted || (err as Error).name === "AbortError") throw err;
             this.desktop.logger.warn(
                 `Parallel download failed for ${file.name}, falling back to regular download`,
                 "FileDownloadTask:fallback",
@@ -298,8 +299,8 @@ class FileDownloadTask {
             },
             {
                 retries: 2,
-                delay: (attempt) => Math.pow(2, attempt) * 1000,
-                shouldRetry: (err: any) => !(err.name === "AbortError" || signal.aborted),
+                delay: (attempt) => 2 ** attempt * 1000,
+                shouldRetry: (err) => !((err as Error).name === "AbortError" || signal.aborted),
                 signal,
             },
         ).catch(async (err) => {
@@ -394,9 +395,9 @@ class FileDownloadTask {
                 });
                 onComplete();
                 return;
-            } catch (err: any) {
-                if (signal.aborted || err.name === "AbortError") {
-                    if (err.message !== "Slow speed retry") {
+            } catch (err) {
+                if (signal.aborted || (err as Error).name === "AbortError") {
+                    if ((err as Error).message !== "Slow speed retry") {
                         await fse.remove(targetPath).catch(() => {});
                         throw err;
                     }
@@ -408,9 +409,7 @@ class FileDownloadTask {
                 }
 
                 await fse.remove(targetPath).catch(() => {});
-                await new Promise((resolve) =>
-                    setTimeout(resolve, Math.pow(2, retryCount + 1) * 1000),
-                );
+                await new Promise((resolve) => setTimeout(resolve, 2 ** (retryCount + 1) * 1000));
             }
         }
     }
@@ -465,7 +464,7 @@ class FileDownloadTask {
             if (!isSmallFile && !signal.aborted) {
                 await this.desktop.lib.fs.rename(targetPath, filePath);
             }
-        } catch (err: any) {
+        } catch (err) {
             if (speedCheckTimeout) clearTimeout(speedCheckTimeout);
             if (combinedSignal.aborted && abortController.signal.aborted) {
                 throw new Error("Slow speed retry");
@@ -528,7 +527,7 @@ export class DownloadLib {
         };
     }
 
-    public async prepareDownload(id: string, name: string) {
+    public async prepareDownload(id: string, _name: string) {
         const pid = nanoid();
         const abort = new AbortController();
         const getDownloadUrlsPromise = this.getDownloadUrl(id, abort.signal);
@@ -672,8 +671,8 @@ export class DownloadLib {
                 onProgress,
                 currentConcurrency: () => this.fileQueue.pending,
             });
-        } catch (err: any) {
-            if (abort.signal.aborted || err.name === "AbortError") {
+        } catch (err) {
+            if (abort.signal.aborted || (err as Error).name === "AbortError") {
                 return;
             }
             this.desktop.service.transfer.markFileFailed(pid, file.id);
