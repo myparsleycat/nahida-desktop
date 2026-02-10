@@ -1,4 +1,4 @@
-// import { StrictMode } from 'react'
+import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";
 import "@renderer/lib/i18n";
@@ -35,8 +35,10 @@ const rootElement = document.getElementById("root")!;
 if (!rootElement.innerHTML) {
   const root = ReactDOM.createRoot(rootElement);
   root.render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </StrictMode>,
   );
 }
