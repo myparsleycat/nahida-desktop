@@ -1,25 +1,26 @@
-import React, { useState, memo } from "react";
-import {
-  ArrowUpFromLine,
-  ArrowDownToLine,
-  X,
-  Pause,
-  Play,
-  MoreHorizontal,
-  FolderIcon,
-} from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
-import { Progress } from "@renderer/components/ui/progress";
+import { Dialog, DialogContent, DialogTrigger } from "@renderer/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
+import { Progress } from "@renderer/components/ui/progress";
 import { cn } from "@renderer/lib/utils";
-import { TransferItemProps } from "./types";
-import { getFileIcon, getStatusColor } from "./utils";
+import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  FolderIcon,
+  MoreHorizontal,
+  Pause,
+  Play,
+  X,
+} from "lucide-react";
+import { memo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { TransferItemProps } from "./types";
+import { getStatusColor } from "./utils";
 
 const TransferItemActions = memo(
   ({
@@ -142,7 +143,6 @@ export const TransferItem = memo((props: TransferItemProps) => {
     id,
     fileName,
     fileSize,
-    fileType,
     progress,
     speed,
     timeRemaining,
@@ -155,6 +155,7 @@ export const TransferItem = memo((props: TransferItemProps) => {
     totalFiles,
     processedFiles,
     failedFiles,
+    error,
   } = props;
   const { t } = useTranslation();
 
@@ -188,13 +189,34 @@ export const TransferItem = memo((props: TransferItemProps) => {
               {fileName}
             </span>
           </div>
-          <span className={cn("shrink-0 text-xs font-medium", getStatusColor(status))}>
-            {(status === "preparing" || status === "downloading") &&
-            totalFiles &&
-            processedFiles !== undefined
-              ? `${status.charAt(0).toUpperCase() + status.slice(1)} (${processedFiles}/${totalFiles})`
-              : status.charAt(0).toUpperCase() + status.slice(1)}
-          </span>
+          {(() => {
+            if (status === "preparing" || status === "downloading") {
+              return (
+                <span className={cn("shrink-0 text-xs font-medium", getStatusColor(status))}>
+                  {totalFiles && processedFiles !== undefined
+                    ? `${status.charAt(0).toUpperCase() + status.slice(1)} (${processedFiles}/${totalFiles})`
+                    : status.charAt(0).toUpperCase() + status.slice(1)}
+                </span>
+              );
+            } else if (status === "failed") {
+              return (
+                <Dialog>
+                  <DialogTrigger>
+                    <span className={cn("shrink-0 text-xs font-medium", getStatusColor(status))}>
+                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </span>
+                  </DialogTrigger>
+                  <DialogContent>{error}</DialogContent>
+                </Dialog>
+              );
+            } else {
+              return (
+                <span className={cn("shrink-0 text-xs font-medium", getStatusColor(status))}>
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </span>
+              );
+            }
+          })()}
         </div>
 
         <Progress value={progress} className="w-full" />

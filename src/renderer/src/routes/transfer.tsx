@@ -96,6 +96,7 @@ function RouteComponent() {
     totalFiles: t.totalFiles,
     processedFiles: t.transferedFiles,
     failedFiles: t.failedFiles,
+    error: (t as any).error,
   }));
 
   const activeUploads = transfers.filter(

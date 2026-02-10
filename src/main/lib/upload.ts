@@ -853,7 +853,10 @@ export class UploadLib {
         } catch (err) {
             if (abortController.signal.aborted) return;
             this.desktop.logger.error(err, "UploadLib:executeUpload");
-            this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
+            this.desktop.service.transfer.updateTransfer(pid, {
+                status: "error",
+                error: err instanceof Error ? err.message : String(err),
+            });
             throw err;
         }
     }

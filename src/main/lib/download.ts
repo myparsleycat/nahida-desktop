@@ -608,7 +608,10 @@ export class DownloadLib {
             this.finalizeDownload(pid, params.savePath, data.root.name);
         } catch (err) {
             if (abort.signal.aborted) return;
-            this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
+            this.desktop.service.transfer.updateTransfer(pid, {
+                status: "error",
+                error: err instanceof Error ? err.message : String(err),
+            });
             throw err;
         }
     }

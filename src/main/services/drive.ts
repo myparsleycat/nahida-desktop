@@ -150,7 +150,10 @@ export class DriveService {
             this.processUploadAsync({ pid, restartParams, preparation, abortController }).catch(
                 (err) => {
                     this.desktop.logger.error(err, "Drive:Upload:Preprocessing");
-                    this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
+                    this.desktop.service.transfer.updateTransfer(pid, {
+                        status: "error",
+                        error: err instanceof Error ? err.message : String(err),
+                    });
                 },
             );
         },
@@ -205,7 +208,10 @@ export class DriveService {
                     suggestedName,
                 }).catch((err) => {
                     this.desktop.logger.error(err, "Drive:Download:Preprocessing");
-                    this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
+                    this.desktop.service.transfer.updateTransfer(pid, {
+                        status: "error",
+                        error: err instanceof Error ? err.message : String(err),
+                    });
                 });
             } catch (error) {
                 console.error("Drive:Download:Error", error);

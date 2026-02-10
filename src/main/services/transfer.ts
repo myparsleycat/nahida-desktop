@@ -8,6 +8,7 @@ export interface LocalTransfer extends Transfer {
     completedFileUuids?: Set<string>;
     sessionStartBytes: number;
     speedSamples: Array<{ timestamp: number; bytes: number }>;
+    error?: string;
 }
 
 export class TransferService {
@@ -235,13 +236,14 @@ export class TransferService {
         }
 
         transfer.failedFiles = 0;
+        transfer.error = undefined;
         this.emitUpdate();
         this.processQueue();
     }
 
     public updateTransfer(
         pid: string,
-        updates: Partial<Omit<Transfer, "pid" | "type" | "data" | "startTime">>,
+        updates: Partial<Omit<LocalTransfer, "pid" | "type" | "data" | "startTime">>,
     ) {
         const transfer = this.transfers.find((t) => t.pid === pid);
         if (!transfer) return;
@@ -384,6 +386,7 @@ export class TransferService {
             transfer.speedSamples = [];
             transfer.transferedFiles = 0;
             transfer.failedFiles = 0;
+            transfer.error = undefined;
             this.emitUpdate();
         }
     }
