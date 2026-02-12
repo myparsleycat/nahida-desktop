@@ -1,6 +1,6 @@
 import { motion, type Variants } from "framer-motion";
 import { Loader2Icon } from "lucide-react";
-import Alice1619 from "@/renderer/src/assets/img/1619/1619-alice.gif";
+import Alice1619 from "@/renderer/assets/img/1619/1619-alice.gif";
 
 export function LoaderSpinner() {
   return <Loader2Icon size={70} className="animate-spin" />;
