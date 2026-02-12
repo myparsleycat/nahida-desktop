@@ -1,6 +1,9 @@
 import { Titlebar } from "@renderer/components/titlebar";
-import { TransferList } from "@renderer/components/transfer/transfer-list";
+import { useTransferFilter } from "@renderer/components/transfer/hooks/use-transfer-filter";
+import { TransferEmptyState } from "@renderer/components/transfer/transfer-empty-state";
+import { TransferItem } from "@renderer/components/transfer/transfer-item";
 import { TransferStats } from "@renderer/components/transfer/transfer-stats";
+import { TransferToolbar } from "@renderer/components/transfer/transfer-toolbar";
 import type { TransferItemProps } from "@renderer/components/transfer/types";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import type { Transfer, TransferWithoutData } from "@shared/types.gen";
@@ -119,36 +122,68 @@ function RouteComponent() {
 
   const totalTransferredBytes = transfers.reduce((acc, curr) => acc + curr.transferedSize, 0);
 
-  return (
-    <>
-      <Titlebar title={{ text: t("page.transfer.title"), position: "center" }} />
-      <ScrollArea className="h-full w-full max-w-full">
-        <div className="bg-background w-full min-w-0 max-w-[100vw] overflow-x-hidden">
-          <main className="mx-auto px-4 py-6 w-full min-w-0 max-w-full">
-            <div className="flex flex-col gap-6 w-full min-w-0 max-w-full">
-              <TransferStats
-                totalUploads={activeUploads}
-                totalDownloads={activeDownloads}
-                uploadSpeed={`${formatSize(totalUploadSpeed)}/s`}
-                downloadSpeed={`${formatSize(totalDownloadSpeed)}/s`}
-                totalTransferred={formatSize(totalTransferredBytes)}
-                activeTransfers={activeTransfersCount}
-              />
+  const {
+    searchQuery,
+    setSearchQuery,
+    activeTab,
+    setActiveTab,
+    statusFilter,
+    toggleStatusFilter,
+    filteredTransfers,
+    counts,
+  } = useTransferFilter({ transfers: transferItems });
 
-              <TransferList
-                transfers={transferItems}
-                onPause={handlePause}
-                onResume={handleResume}
-                onCancel={handleCancel}
-                onRetry={handleRetry}
-                onPauseAll={handlePauseAll}
-                onResumeAll={handleResumeAll}
-                onClearCompleted={handleClearCompleted}
-              />
+  return (
+    <div className="flex h-full flex-col overflow-hidden bg-background">
+      <Titlebar title={{ text: t("page.transfer.title"), position: "center" }} />
+
+      <div className="flex-none px-4 pt-4 pb-4 border-b">
+        <div className="flex flex-col gap-6">
+          <TransferStats
+            totalUploads={activeUploads}
+            totalDownloads={activeDownloads}
+            uploadSpeed={`${formatSize(totalUploadSpeed)}/s`}
+            downloadSpeed={`${formatSize(totalDownloadSpeed)}/s`}
+            totalTransferred={formatSize(totalTransferredBytes)}
+            activeTransfers={activeTransfersCount}
+          />
+          <TransferToolbar
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            counts={counts}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            statusFilter={statusFilter}
+            onToggleStatusFilter={toggleStatusFilter}
+            onPauseAll={handlePauseAll}
+            onResumeAll={handleResumeAll}
+            onClearCompleted={handleClearCompleted}
+          />
+        </div>
+      </div>
+
+      <div className="flex-1 min-h-0">
+        <ScrollArea className="h-full w-full">
+          <main className="mx-auto px-4 py-4 w-full min-w-0 max-w-full">
+            <div className="flex flex-col gap-2 w-full max-w-full min-w-0">
+              {filteredTransfers.length === 0 ? (
+                <TransferEmptyState activeTab={activeTab} hasSearchQuery={!!searchQuery} />
+              ) : (
+                filteredTransfers.map((transfer: TransferItemProps) => (
+                  <TransferItem
+                    key={transfer.id}
+                    {...transfer}
+                    onPause={handlePause}
+                    onResume={handleResume}
+                    onCancel={handleCancel}
+                    onRetry={handleRetry}
+                  />
+                ))
+              )}
             </div>
           </main>
-        </div>
-      </ScrollArea>
-    </>
+        </ScrollArea>
+      </div>
+    </div>
   );
 }
