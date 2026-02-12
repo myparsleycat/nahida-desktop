@@ -1,48 +1,18 @@
 import { pathToFileURL } from "node:url";
-import { Worker } from "node:worker_threads";
 import { is } from "@electron-toolkit/utils";
 import { desktop } from "@main/index";
 import { db } from "@main/internal/db";
 import { imageCache } from "@main/internal/db/schema";
-import imgWorker from "@main/worker/image.worker?modulePath";
-import { convertImage, type ResizeOptions } from "@native/image";
+import { convertImage } from "@native/image";
 import { net } from "electron";
 import { fileTypeFromFile } from "file-type/node";
 import PQueue from "p-queue";
 
 export class LocalProtocol {
-    private imgWorker: Worker;
     private queue: PQueue;
 
     constructor() {
-        this.imgWorker = new Worker(imgWorker);
         this.queue = new PQueue({ concurrency: 4 });
-    }
-
-    // biome-ignore lint/correctness/noUnusedPrivateClassMembers: <>
-    private async convertImageWithWorker(path: string, options: ResizeOptions) {
-        return new Promise<Buffer>((resolve, reject) => {
-            this.imgWorker.on(
-                "message",
-                (
-                    message:
-                        | { type: "complete"; resizedImg: Buffer }
-                        | { type: "error"; error: string },
-                ) => {
-                    if (message.type === "complete") {
-                        resolve(Buffer.from(message.resizedImg));
-                    } else if (message.type === "error") {
-                        reject(message.error);
-                    }
-                },
-            );
-
-            this.imgWorker.on("error", (error) => {
-                reject(error);
-            });
-
-            this.imgWorker.postMessage({ path, options });
-        });
     }
 
     public handle = async (request: Request) => {
