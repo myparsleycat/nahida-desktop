@@ -215,6 +215,8 @@ export function mapKeyboardEventToInternal(
 
     if (specialKeys[key]) {
         mappedKey = specialKeys[key];
+    } else if (specialKeys[code]) {
+        mappedKey = specialKeys[code];
     } else if (code.startsWith("Key")) {
         mappedKey = code.slice(3).toLowerCase();
     } else if (code.startsWith("Digit")) {
