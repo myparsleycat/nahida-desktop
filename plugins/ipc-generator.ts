@@ -4,12 +4,11 @@ import type { Plugin } from "vite";
 
 interface IpcGeneratorOptions {
     handlerDir: string;
-    specFile: string;
     typesFile: string;
 }
 
 function generateIpc(options: IpcGeneratorOptions) {
-    const { handlerDir, specFile, typesFile } = options;
+    const { handlerDir, typesFile } = options;
     const channels = new Map<string, string>(); // channel -> type definition
 
     let currentTypesContent = "";
@@ -112,20 +111,6 @@ function generateIpc(options: IpcGeneratorOptions) {
 
     const sortedChannelNames = Array.from(channels.keys()).sort();
 
-    // update ipc-spec.ts
-    const specContent = readFileSync(specFile, "utf-8");
-    const specEol = specContent.includes("\r\n") ? "\r\n" : "\n";
-    const specReplacement = sortedChannelNames.map((c) => `    "${c}",`).join(specEol);
-    const newSpecContent = specContent.replace(
-        /(\/\/ IPC_HANDLERS_START).*?(\/\/ IPC_HANDLERS_END)/s,
-        `$1${specEol}${specReplacement}${specEol}    $2`,
-    );
-
-    if (newSpecContent !== specContent) {
-        writeFileSync(specFile, newSpecContent);
-        console.log(`[IPC Gen] Updated ${specFile}`);
-    }
-
     // update types.ts
     const typesContent = readFileSync(typesFile, "utf-8");
     const typesEol = typesContent.includes("\r\n") ? "\r\n" : "\n";
@@ -150,7 +135,6 @@ function generateIpc(options: IpcGeneratorOptions) {
 export const ipcGeneratorPlugin = (): Plugin => {
     const options = {
         handlerDir: resolve("src/main/ipc/handlers"),
-        specFile: resolve("src/shared/ipc-spec.gen.ts"),
         typesFile: resolve("src/shared/types.gen.ts"),
     };
 
