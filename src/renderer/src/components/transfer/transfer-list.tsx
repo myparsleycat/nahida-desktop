@@ -1,9 +1,9 @@
-import React, { useCallback } from "react";
-import { TransferItem } from "./transfer-item";
-import { TransferItemProps } from "./types";
+import { useCallback } from "react";
 import { useTransferFilter } from "./hooks/use-transfer-filter";
-import { TransferToolbar } from "./transfer-toolbar";
 import { TransferEmptyState } from "./transfer-empty-state";
+import { TransferItem } from "./transfer-item";
+import { TransferToolbar } from "./transfer-toolbar";
+import type { TransferItemProps } from "./types";
 
 interface TransferListProps {
   transfers: TransferItemProps[];

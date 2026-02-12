@@ -31,7 +31,6 @@ function RouteComponent() {
     skippedFiles: number;
     errorFiles: number;
   } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
   const [anim1] = useAutoAnimate({ duration: 150 });
 
@@ -82,8 +81,6 @@ function RouteComponent() {
       } catch (error) {
         Logger.error(error, "ModSettings:loadSettings");
         toast.error("설정을 불러오는데 실패했습니다.");
-      } finally {
-        setIsLoading(false);
       }
     };
 
@@ -167,14 +164,6 @@ function RouteComponent() {
       toast.error("설정 저장에 실패했습니다.");
     }
   };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-muted-foreground">로딩 중...</p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6 p-4">
