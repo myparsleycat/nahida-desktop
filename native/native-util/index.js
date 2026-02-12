@@ -576,6 +576,7 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding.default
+module.exports.findFileAcrossDrives = nativeBinding.default.findFileAcrossDrives
 module.exports.getPreviousPids = nativeBinding.default.getPreviousPids
 module.exports.getProcessName = nativeBinding.default.getProcessName
 module.exports.getProcessWindowState = nativeBinding.default.getProcessWindowState
