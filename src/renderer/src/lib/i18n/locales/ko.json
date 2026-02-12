@@ -171,7 +171,8 @@
                 "general": "일반",
                 "mod": "모드",
                 "account": "계정",
-                "network": "네트워크"
+                "network": "네트워크",
+                "advanced": "고급"
             },
             "gen": {
                 "application": {
@@ -265,6 +266,11 @@
                     "save": "저장",
                     "saved": "프록시 설정이 저장되었습니다."
                 }
+            },
+            "adv": {
+                "title": "고급",
+                "warning_title": "주의",
+                "warning_description": "이 곳의 설정을 변경하면 앱 동작에 영향을 줄 수 있습니다."
             }
         }
     },

@@ -171,7 +171,8 @@
                 "general": "常规",
                 "mod": "模组",
                 "account": "账户",
-                "network": "网络"
+                "network": "网络",
+                "advanced": "高级设置"
             },
             "gen": {
                 "application": {
@@ -258,6 +259,11 @@
                     "save": "保存",
                     "saved": "代理设置已保存。"
                 }
+            },
+            "adv": {
+                "title": "高级设置",
+                "warning_title": "注意",
+                "warning_description": "更改此处的设置可能会影响应用行为。"
             }
         }
     },
