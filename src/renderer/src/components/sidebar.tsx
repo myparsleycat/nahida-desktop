@@ -10,6 +10,7 @@ import {
   PackageIcon,
   SettingsIcon,
   Share2Icon,
+  WrenchIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
@@ -177,6 +178,24 @@ export function Sidebar({ className }: { className?: string }) {
               </Tooltip>
             </>
           )}
+
+          <Tooltip disableHoverableContent={true}>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onPointerDown={handlePointerDown}
+                onClick={() => {
+                  navi({ to: "/tools" });
+                }}
+              >
+                <WrenchIcon className={cn(iconSize)} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right" hideWhenDetached={true}>
+              Tools
+            </TooltipContent>
+          </Tooltip>
 
           <Separator orientation="horizontal" />
 

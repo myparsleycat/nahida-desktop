@@ -25,6 +25,7 @@ import ArchiveService from "./services/archive";
 import Auth from "./services/auth";
 import { DriveService } from "./services/drive";
 import ModManager from "./services/mod-manager";
+import { Tools } from "./services/tools";
 import TransferService from "./services/transfer";
 import Setting from "./setting";
 import LoginWindow from "./windows/login";
@@ -76,6 +77,7 @@ export class NahidaDesktop {
         transfer: TransferService;
         mod: ModManager;
         archive: ArchiveService;
+        tools: Tools;
     };
 
     public constructor() {
@@ -108,6 +110,7 @@ export class NahidaDesktop {
             transfer: new TransferService(this),
             mod: new ModManager(this),
             archive: new ArchiveService(this),
+            tools: new Tools(this),
         };
     }
 
