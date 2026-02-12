@@ -122,7 +122,10 @@ function SettingRow({
             size="icon"
             variant="ghost"
             className="h-8 w-8"
-            onClick={() => setIsEditing(true)}
+            onClick={() => {
+              setValue(setting.value || "");
+              setIsEditing(true);
+            }}
           >
             <Pencil className="h-4 w-4" />
           </Button>
