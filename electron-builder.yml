@@ -26,7 +26,10 @@ extraResources:
 asarUnpack:
     - resources/**
 win:
+    cscLink: nahida-desktop.pfx
+    cscKeyPassword: password
     executableName: Nahida Desktop
+    requestedExecutionLevel: requireAdministrator
 nsis:
     artifactName: Nahida Desktop Setup ${version}.${ext}
     shortcutName: ${productName}
