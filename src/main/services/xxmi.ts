@@ -734,15 +734,18 @@ export class XXMI {
                     const title =
                         (await this.desktop.lib.native.getWindowTitle(found.pid)) || importer;
 
-                    this.desktop.logger.info(
-                        `Found running game ${importer} (${processName}, PID: ${found.pid}, Title: ${title}), attaching overlay...`,
-                        "XXMI.scanForRunningGames",
-                    );
+                    const isOverlayEnabled = await this.desktop.setting.overlay.getEnabled();
+                    if (isOverlayEnabled) {
+                        this.desktop.logger.info(
+                            `Found running game ${importer} (${processName}, PID: ${found.pid}, Title: ${title}), attaching overlay...`,
+                            "XXMI.scanForRunningGames",
+                        );
 
-                    await this.desktop.window.overlay.createOverlayWindow({
-                        title,
-                        pid: found.pid,
-                    });
+                        await this.desktop.window.overlay.createOverlayWindow({
+                            title,
+                            pid: found.pid,
+                        });
+                    }
                     break;
                 }
             }
