@@ -464,6 +464,14 @@ export class Setting {
         },
 
         set: async (key: string, value: string) => {
+            const existing = await db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, key),
+            });
+
+            if (!existing) {
+                throw new Error(`Setting key "${key}" not found.`);
+            }
+
             await db.update(setting).set({ value }).where(eq(setting.key, key));
             this.desktop.ipc.broadcast("setting:update", { key, value });
             this.desktop.ipc.broadcast("renderer:reload");
