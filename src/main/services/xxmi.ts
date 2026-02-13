@@ -316,7 +316,10 @@ export class XXMI {
         importer: string,
         config: XXMIConfig["Importers"][string],
     ): { startExePath: string; workDir: string; startArgs?: string[] } {
-        const gameFolder = config.Importer.game_folder;
+        if (!this.xxmiPath) {
+            throw new Error("XXMI Path not found");
+        }
+        const gameFolder = path.resolve(this.xxmiPath, config.Importer.game_folder);
 
         if (usesGIFPSUnlocker(config) && config.Importer.unlock_fps) {
             if (!this.xxmiPath) {
@@ -394,10 +397,11 @@ export class XXMI {
         }
 
         const processName = this.getGameProcessName(importer, config);
-        const importerFolder = path.join(this.xxmiPath, config.Importer.importer_folder);
+        const importerFolder = path.resolve(this.xxmiPath, config.Importer.importer_folder);
         const dllPath = path.join(importerFolder, "d3d11.dll");
+        const gameFolder = path.resolve(this.xxmiPath, config.Importer.game_folder);
 
-        return { config, processName, importerFolder, dllPath };
+        return { config, processName, importerFolder, dllPath, gameFolder };
     }
 
     private async deployPackageFiles(importerFolder: string) {
@@ -439,11 +443,12 @@ export class XXMI {
         config: XXMIConfig["Importers"][string],
         processName: string,
         importerFolder: string,
+        gameFolder: string,
     ) {
         await this.deployPackageFiles(importerFolder);
 
         if (usesGIFPSUnlocker(config) && config.Importer.unlock_fps) {
-            await this.configureFpsUnlocker(importer, config.Importer.game_folder, processName);
+            await this.configureFpsUnlocker(importer, gameFolder, processName);
         }
 
         await this.updateD3dxIni(importerFolder, processName);
@@ -650,15 +655,10 @@ export class XXMI {
             const dllPath = line.trim();
             if (!dllPath) continue;
 
-            let absolutePath: string;
-            if (path.isAbsolute(dllPath)) {
-                absolutePath = dllPath;
-            } else {
-                if (!this.xxmiPath) {
-                    throw new Error("XXMI Path not found");
-                }
-                absolutePath = path.join(this.xxmiPath, dllPath);
+            if (!this.xxmiPath) {
+                throw new Error("XXMI Path not found");
             }
+            const absolutePath = path.resolve(this.xxmiPath, dllPath);
 
             if (!fse.existsSync(absolutePath)) {
                 throw new Error(
@@ -680,12 +680,18 @@ export class XXMI {
         this.busy = true;
 
         try {
-            const { config, processName, importerFolder, dllPath } =
+            const { config, processName, importerFolder, dllPath, gameFolder } =
                 this.validateAndGetPaths(importer);
 
             await this.runPreLaunch(config);
 
-            await this.prepareEnvironment(importer, config, processName, importerFolder);
+            await this.prepareEnvironment(
+                importer,
+                config,
+                processName,
+                importerFolder,
+                gameFolder,
+            );
 
             const launchParams = this.getLaunchParams(importer, config);
 
