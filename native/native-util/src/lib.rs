@@ -7,12 +7,17 @@ use std::sync::{
     Arc, Mutex,
 };
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use sysinfo::Disks;
-use windows::core::PWSTR;
-use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
+use windows::core::{PCWSTR, PWSTR};
+use windows::Win32::Foundation::{CloseHandle, BOOL, HWND, LPARAM};
+use windows::Win32::System::Diagnostics::ToolHelp::{
+    CreateToolhelp32Snapshot, Process32First, Process32Next, PROCESSENTRY32, TH32CS_SNAPPROCESS,
+};
 use windows::Win32::System::Threading::{
-    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+    CreateProcessW, OpenProcess, QueryFullProcessImageNameW, TerminateProcess,
+    CREATE_NEW_PROCESS_GROUP, PROCESS_INFORMATION, PROCESS_NAME_WIN32,
+    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, STARTUPINFOW,
 };
 use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -265,4 +270,325 @@ pub async fn find_file_across_drives(
         }
         None
     })
+}
+
+pub const WAIT_RESULT_FOUND: i32 = 0;
+pub const WAIT_RESULT_NOT_FOUND: i32 = -100;
+pub const WAIT_RESULT_TIMEOUT: i32 = -200;
+pub const WAIT_RESULT_TERMINATED: i32 = -300;
+
+#[napi(object)]
+pub struct WaitResultObject {
+    pub found: i32,
+    pub not_found: i32,
+    pub timeout: i32,
+    pub terminated: i32,
+}
+
+#[napi]
+pub fn get_wait_result() -> WaitResultObject {
+    WaitResultObject {
+        found: WAIT_RESULT_FOUND,
+        not_found: WAIT_RESULT_NOT_FOUND,
+        timeout: WAIT_RESULT_TIMEOUT,
+        terminated: WAIT_RESULT_TERMINATED,
+    }
+}
+
+#[napi(object)]
+pub struct ProcessInfo {
+    pub pid: u32,
+    pub name: String,
+}
+
+#[napi(object)]
+pub struct WaitResponse {
+    pub result: i32,
+    pub pid: u32,
+}
+
+fn parse_exe_name(chars: &[u8; 260]) -> String {
+    let null_pos = chars.iter().position(|&c| c == 0).unwrap_or(260);
+    String::from_utf8_lossy(&chars[..null_pos]).to_string()
+}
+
+struct CallbackState {
+    target_pid: u32,
+    check_visibility: bool,
+    hwnds: Vec<i64>,
+}
+
+#[napi]
+pub fn get_hwnds_for_pid(pid: u32, check_visibility: bool) -> Vec<i64> {
+    let state = Box::new(Mutex::new(CallbackState {
+        target_pid: pid,
+        check_visibility,
+        hwnds: Vec::new(),
+    }));
+
+    let state_ptr = Box::into_raw(state);
+
+    unsafe {
+        let _ = EnumWindows(Some(get_hwnds_callback), LPARAM(state_ptr as isize));
+
+        let state_box = Box::from_raw(state_ptr);
+        let state_guard = state_box.lock().unwrap();
+        state_guard.hwnds.clone()
+    }
+}
+
+unsafe extern "system" fn get_hwnds_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    let state_ptr = lparam.0 as *mut Mutex<CallbackState>;
+    let state = &*state_ptr;
+
+    if let Ok(mut state_guard) = state.lock() {
+        let mut window_pid = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut window_pid));
+
+        if window_pid == state_guard.target_pid {
+            if state_guard.check_visibility {
+                let is_visible = IsWindowVisible(hwnd).as_bool();
+                let is_iconic = IsIconic(hwnd).as_bool();
+                if !is_visible || is_iconic {
+                    return BOOL(1);
+                }
+            }
+            state_guard.hwnds.push(hwnd.0 as i64);
+        }
+    }
+
+    BOOL(1)
+}
+
+#[napi]
+pub fn get_process(process_id: Option<u32>, process_name: Option<String>) -> Option<ProcessInfo> {
+    unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0).ok()?;
+        let mut pe32 = PROCESSENTRY32 {
+            dwSize: std::mem::size_of::<PROCESSENTRY32>() as u32,
+            ..Default::default()
+        };
+
+        if Process32First(snapshot, &mut pe32).is_err() {
+            let _ = CloseHandle(snapshot);
+            return None;
+        }
+
+        loop {
+            let current_name = parse_exe_name(&pe32.szExeFile);
+            let current_pid = pe32.th32ProcessID;
+
+            let mut is_match = false;
+
+            if let Some(ref name) = process_name {
+                if current_name.eq_ignore_ascii_case(name) {
+                    is_match = true;
+                }
+            }
+
+            if let Some(pid) = process_id {
+                if current_pid == pid {
+                    is_match = true;
+                }
+            }
+
+            if is_match {
+                let _ = CloseHandle(snapshot);
+                return Some(ProcessInfo {
+                    pid: current_pid,
+                    name: current_name,
+                });
+            }
+
+            if Process32Next(snapshot, &mut pe32).is_err() {
+                break;
+            }
+        }
+
+        let _ = CloseHandle(snapshot);
+        None
+    }
+}
+
+#[napi]
+pub fn kill_process(pid: u32) -> bool {
+    unsafe {
+        if let Ok(handle) = OpenProcess(PROCESS_TERMINATE, false, pid) {
+            let result = TerminateProcess(handle, 1);
+            let _ = CloseHandle(handle);
+            return result.is_ok();
+        }
+        false
+    }
+}
+
+#[napi(object)]
+pub struct WaitForProcessOptions {
+    pub process_name: String,
+    pub timeout: Option<f64>,
+    pub with_window: Option<bool>,
+    pub check_visibility: Option<bool>,
+}
+
+#[napi]
+pub async fn wait_for_process(options: WaitForProcessOptions) -> WaitResponse {
+    let process_name = options.process_name;
+    let timeout = options.timeout.unwrap_or(10.0);
+    let with_window = options.with_window.unwrap_or(false);
+    let check_visibility = options.check_visibility.unwrap_or(false);
+
+    let start_time = Instant::now();
+
+    loop {
+        let current_time = Instant::now();
+        let elapsed = current_time.duration_since(start_time).as_secs_f64();
+
+        if timeout > 0.0 && elapsed >= timeout {
+            return WaitResponse {
+                result: WAIT_RESULT_TIMEOUT,
+                pid: 0,
+            };
+        }
+
+        if let Some(process) = get_process(None, Some(process_name.clone())) {
+            let pid = process.pid;
+
+            if !with_window {
+                return WaitResponse {
+                    result: WAIT_RESULT_FOUND,
+                    pid,
+                };
+            } else {
+                let hwnds = get_hwnds_for_pid(pid, check_visibility);
+                if !hwnds.is_empty() {
+                    return WaitResponse {
+                        result: WAIT_RESULT_FOUND,
+                        pid,
+                    };
+                }
+            }
+        }
+
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+#[napi(object)]
+pub struct WaitForProcessExitOptions {
+    pub process_name: String,
+    pub timeout: Option<f64>,
+    pub kill_timeout: Option<f64>,
+}
+
+#[napi]
+pub async fn wait_for_process_exit(options: WaitForProcessExitOptions) -> WaitResponse {
+    let process_name = options.process_name;
+    let timeout = options.timeout.unwrap_or(10.0);
+    let kill_timeout = options.kill_timeout.unwrap_or(-1.0);
+
+    let start_time = Instant::now();
+
+    loop {
+        let current_time = Instant::now();
+        let elapsed = current_time.duration_since(start_time).as_secs_f64();
+
+        if timeout > 0.0 && elapsed >= timeout {
+            return WaitResponse {
+                result: WAIT_RESULT_TIMEOUT,
+                pid: 0,
+            };
+        }
+
+        if let Some(process) = get_process(None, Some(process_name.clone())) {
+            let pid = process.pid;
+
+            if kill_timeout > 0.0 && elapsed >= kill_timeout {
+                if kill_process(pid) {
+                    return WaitResponse {
+                        result: WAIT_RESULT_TERMINATED,
+                        pid,
+                    };
+                }
+            }
+        } else {
+            return WaitResponse {
+                result: WAIT_RESULT_NOT_FOUND,
+                pid: 0,
+            };
+        }
+
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+#[napi(object)]
+pub struct SpawnOptions {
+    pub exe_path: String,
+    pub args: Option<String>,
+    pub working_dir: Option<String>,
+}
+
+#[napi]
+pub fn spawn_process(options: SpawnOptions) -> napi::Result<u32> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    let mut command_line: Vec<u16>;
+
+    if let Some(args) = options.args {
+        let full_cmd = format!("\"{}\" {}", options.exe_path, args);
+        command_line = OsStr::new(&full_cmd)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+    } else {
+        command_line = OsStr::new(&options.exe_path)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+    }
+
+    let current_dir = options.working_dir.map(|dir| {
+        OsStr::new(&dir)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<u16>>()
+    });
+
+    unsafe {
+        let mut si = STARTUPINFOW::default();
+        si.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
+
+        let mut pi = PROCESS_INFORMATION::default();
+
+        let result = CreateProcessW(
+            PCWSTR::null(),
+            PWSTR(command_line.as_mut_ptr()),
+            None,
+            None,
+            false,
+            CREATE_NEW_PROCESS_GROUP,
+            None,
+            current_dir
+                .as_ref()
+                .map(|d| PCWSTR(d.as_ptr()))
+                .unwrap_or(PCWSTR::null()),
+            &si,
+            &mut pi,
+        );
+
+        if result.is_err() {
+            return Err(napi::Error::from_reason(format!(
+                "Failed to spawn process: {:?}",
+                result.err()
+            )));
+        }
+
+        let pid = pi.dwProcessId;
+
+        let _ = CloseHandle(pi.hProcess);
+        let _ = CloseHandle(pi.hThread);
+
+        Ok(pid)
+    }
 }

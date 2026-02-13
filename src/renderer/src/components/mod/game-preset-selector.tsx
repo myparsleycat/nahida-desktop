@@ -8,10 +8,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
-import { usePresets } from "@renderer/hooks/use-mod-data";
+import { useEnabledImporters, usePresets } from "@renderer/hooks/use-mod-data";
 import { useModStore } from "@renderer/store/mod";
 import type { GameConfig } from "@shared/types.gen";
-import { Trash2 } from "lucide-react";
+import { getMatchingImporter } from "@shared/xxmi-match";
+import { PlayIcon, Trash2Icon } from "lucide-react";
 import { memo, useEffect } from "react";
 import { AddGameDialog } from "./add-game-dialog";
 import { CreatePresetDialog } from "./create-preset-dialog";
@@ -37,6 +38,12 @@ export const GamePresetSelector = memo(function GamePresetSelector({
   const isSelectedPresetDialogOpen = useModStore((s) => s.isSelectedPresetDialogOpen);
 
   const { data: presets = [] } = usePresets(selectedGame);
+  const { data: enabledImporters = [] } = useEnabledImporters();
+
+  const matchedImporter = getMatchingImporter(
+    selectedGame || "",
+    enabledImporters.map((importer) => importer.key),
+  );
 
   useEffect(() => {
     if (!isSelectedPresetDialogOpen) {
@@ -52,6 +59,15 @@ export const GamePresetSelector = memo(function GamePresetSelector({
   return (
     <div className="flex flex-col items-center justify-center w-full p-2 border-t space-y-3">
       <div className="flex w-full space-x-1">
+        {matchedImporter && (
+          <Button
+            variant="outline"
+            size="icon"
+            onClickPromise={() => window.api.invoke("xxmi:startGame", matchedImporter)}
+          >
+            <PlayIcon className="size-4" />
+          </Button>
+        )}
         <Select value={selectedGame || ""} onValueChange={handleGameSelect}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Select a Game" />
@@ -75,7 +91,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
         <AddGameDialog onBrowseFolder={onBrowseFolder} onAddGame={onAddGame} />
 
         <Button variant="outline" size="icon" disabled={!selectedGame} onClick={onDeleteGameClick}>
-          <Trash2 className="size-4 text-destructive" />
+          <Trash2Icon className="size-4 text-destructive" />
         </Button>
       </div>
 

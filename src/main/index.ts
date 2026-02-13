@@ -27,6 +27,7 @@ import { DriveService } from "./services/drive";
 import ModManager from "./services/mod-manager";
 import { Tools } from "./services/tools";
 import TransferService from "./services/transfer";
+import { XXMI } from "./services/xxmi";
 import Setting from "./setting";
 import LoginWindow from "./windows/login";
 import MainWindow from "./windows/main";
@@ -78,6 +79,7 @@ export class NahidaDesktop {
         mod: ModManager;
         archive: ArchiveService;
         tools: Tools;
+        xxmi: XXMI;
     };
 
     public constructor() {
@@ -111,6 +113,7 @@ export class NahidaDesktop {
             mod: new ModManager(this),
             archive: new ArchiveService(this),
             tools: new Tools(this),
+            xxmi: new XXMI(this),
         };
     }
 

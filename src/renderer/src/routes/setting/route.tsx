@@ -2,7 +2,7 @@ import { Titlebar } from "@renderer/components/titlebar";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { useGlobalStore } from "@renderer/store/global";
 import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
-import { GamepadIcon, Globe, ServerCrash, Settings, User } from "lucide-react";
+import { GamepadIcon, Globe, PackageIcon, ServerCrash, Settings, User } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -25,13 +25,10 @@ function RouteComponent() {
   const navItems = [
     { icon: Settings, label: t("page.setting.tabs.general"), path: "/setting/gen" },
     { icon: GamepadIcon, label: t("page.setting.tabs.mod"), path: "/setting/mod" },
+    { icon: PackageIcon, label: "XXMI", path: "/setting/xxmi" },
     { icon: User, label: t("page.setting.tabs.account"), path: "/setting/acc" },
-    // { icon: RefreshCw, label: "동기화", path: "/setting/sync" },
-    // { icon: Database, label: "백업", path: "/setting/bak" },
-    // { icon: Folder, label: "공간", path: "/setting/space" },
     { icon: Globe, label: t("page.setting.tabs.network"), path: "/setting/net" },
     { icon: ServerCrash, label: t("page.setting.tabs.advanced"), path: "/setting/adv" },
-    // { icon: Bell, label: "알림", path: "/setting/noti" },
   ];
 
   return (

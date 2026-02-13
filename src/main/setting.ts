@@ -457,6 +457,7 @@ export class Setting {
         set: async (key: string, value: string) => {
             await db.update(setting).set({ value }).where(eq(setting.key, key));
             this.desktop.ipc.broadcast("setting:update", { key, value });
+            this.desktop.ipc.broadcast("renderer:reload");
         },
     };
 }

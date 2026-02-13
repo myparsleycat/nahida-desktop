@@ -2,13 +2,26 @@
 /* eslint-disable */
 export declare function findFileAcrossDrives(targetFileName: string, options?: SearchOptions | undefined | null): Promise<string | null>
 
+export declare function getHwndsForPid(pid: number, checkVisibility: boolean): Array<number>
+
 export declare function getPreviousPids(currentPid: number): Array<number>
+
+export declare function getProcess(processId?: number | undefined | null, processName?: string | undefined | null): ProcessInfo | null
 
 export declare function getProcessName(pid: number): string | null
 
 export declare function getProcessWindowState(pid: number): ProcessWindowState
 
 export declare function getTopmostPid(pids: Array<number>): number | null
+
+export declare function getWaitResult(): WaitResultObject
+
+export declare function killProcess(pid: number): boolean
+
+export interface ProcessInfo {
+  pid: number
+  name: string
+}
 
 export declare const enum ProcessWindowState {
   Open = 0,
@@ -20,4 +33,41 @@ export interface SearchOptions {
   excludeDirs?: Array<string>
 }
 
+export interface SpawnOptions {
+  exePath: string
+  args?: string
+  workingDir?: string
+}
+
+export declare function spawnProcess(options: SpawnOptions): number
+
 export declare function startTracking(): void
+
+export declare function waitForProcess(options: WaitForProcessOptions): Promise<WaitResponse>
+
+export declare function waitForProcessExit(options: WaitForProcessExitOptions): Promise<WaitResponse>
+
+export interface WaitForProcessExitOptions {
+  processName: string
+  timeout?: number
+  killTimeout?: number
+}
+
+export interface WaitForProcessOptions {
+  processName: string
+  timeout?: number
+  withWindow?: boolean
+  checkVisibility?: boolean
+}
+
+export interface WaitResponse {
+  result: number
+  pid: number
+}
+
+export interface WaitResultObject {
+  found: number
+  notFound: number
+  timeout: number
+  terminated: number
+}

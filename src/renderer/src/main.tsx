@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";
 import "@renderer/lib/i18n";
@@ -30,16 +30,29 @@ declare module "@tanstack/react-router" {
   }
 }
 
+const Root = () => {
+  const [key, setKey] = useState(0);
+
+  useEffect(() => {
+    const cleanup = window.api.on("renderer:reload", () => {
+      setKey((prev) => prev + 1);
+    });
+    return cleanup;
+  }, []);
+
+  return (
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider key={key} router={router} />
+      </QueryClientProvider>
+    </StrictMode>
+  );
+};
+
 // Render the app
 // biome-ignore lint/style/noNonNullAssertion: <>
 const rootElement = document.getElementById("root")!;
 if (!rootElement.innerHTML) {
   const root = ReactDOM.createRoot(rootElement);
-  root.render(
-    <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
-    </StrictMode>,
-  );
+  root.render(<Root />);
 }

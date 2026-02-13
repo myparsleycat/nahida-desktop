@@ -4,7 +4,9 @@
         "native/native-mod/Cargo.toml",
         "native/extractor/Cargo.toml",
         "native/native-util/Cargo.toml",
-        "native/image/Cargo.toml"
+        "native/image/Cargo.toml",
+        "native/injector/Cargo.toml",
+        "native/dll-injector/Cargo.toml"
     ],
     "editor.codeActionsOnSave": {
     "source.action.useSortedKeys.biome": "explicit",

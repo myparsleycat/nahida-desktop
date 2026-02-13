@@ -170,6 +170,13 @@ export type IpcHandlers = {
     "util:showModal": (...args: Parameters<typeof import("@main/services/util").showModal>) => ReturnType<typeof import("@main/services/util").showModal>;
     "util:showOpenDialog": (...args: Parameters<typeof import("@main/services/util").showOpenDialog>) => ReturnType<typeof import("@main/services/util").showOpenDialog>;
     "window:openSetting": (...args: any[]) => any;
+    "xxmi:findXXMIPath": (...args: Parameters<typeof desktop.service.xxmi.findXXMIPath>) => ReturnType<typeof desktop.service.xxmi.findXXMIPath>;
+    "xxmi:getEnabledImporters": (...args: Parameters<typeof desktop.service.xxmi.getEnabledImporters>) => ReturnType<typeof desktop.service.xxmi.getEnabledImporters>;
+    "xxmi:getXXMIConfig": (...args: Parameters<typeof desktop.service.xxmi.getXXMIConfig>) => ReturnType<typeof desktop.service.xxmi.getXXMIConfig>;
+    "xxmi:getXXMIData": (...args: Parameters<typeof desktop.service.xxmi.getXXMIData>) => ReturnType<typeof desktop.service.xxmi.getXXMIData>;
+    "xxmi:getXXMIPath": (...args: Parameters<typeof desktop.service.xxmi.getXXMIPath>) => ReturnType<typeof desktop.service.xxmi.getXXMIPath>;
+    "xxmi:saveXXMIPath": (...args: Parameters<typeof desktop.service.xxmi.saveXXMIPath>) => ReturnType<typeof desktop.service.xxmi.saveXXMIPath>;
+    "xxmi:startGame": (...args: Parameters<typeof desktop.service.xxmi.startGame>) => ReturnType<typeof desktop.service.xxmi.startGame>;
     // IPC_HANDLERS_END
 };
 
@@ -204,6 +211,8 @@ export type IpcEvents = {
         errorFiles: number;
     }) => void;
     "tools:progress": (message: string) => void;
+
+    "renderer:reload": () => void;
 };
 
 

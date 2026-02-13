@@ -70,13 +70,13 @@ function requireNative() {
   } else if (process.platform === 'android') {
     if (process.arch === 'arm64') {
       try {
-        return require('./util.android-arm64.node')
+        return require('./dll-injector.android-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('util-android-arm64')
-        const bindingPackageVersion = require('util-android-arm64/package.json').version
+        const binding = require('dll-injector-android-arm64')
+        const bindingPackageVersion = require('dll-injector-android-arm64/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -86,13 +86,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm') {
       try {
-        return require('./util.android-arm-eabi.node')
+        return require('./dll-injector.android-arm-eabi.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('util-android-arm-eabi')
-        const bindingPackageVersion = require('util-android-arm-eabi/package.json').version
+        const binding = require('dll-injector-android-arm-eabi')
+        const bindingPackageVersion = require('dll-injector-android-arm-eabi/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -107,13 +107,13 @@ function requireNative() {
     if (process.arch === 'x64') {
       if (process.config?.variables?.shlib_suffix === 'dll.a' || process.config?.variables?.node_target_type === 'shared_library') {
         try {
-        return require('./util.win32-x64-gnu.node')
+        return require('./dll-injector.win32-x64-gnu.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('util-win32-x64-gnu')
-        const bindingPackageVersion = require('util-win32-x64-gnu/package.json').version
+        const binding = require('dll-injector-win32-x64-gnu')
+        const bindingPackageVersion = require('dll-injector-win32-x64-gnu/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -123,13 +123,13 @@ function requireNative() {
       }
       } else {
         try {
-        return require('./util.win32-x64-msvc.node')
+        return require('./dll-injector.win32-x64-msvc.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('util-win32-x64-msvc')
-        const bindingPackageVersion = require('util-win32-x64-msvc/package.json').version
+        const binding = require('dll-injector-win32-x64-msvc')
+        const bindingPackageVersion = require('dll-injector-win32-x64-msvc/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -140,13 +140,13 @@ function requireNative() {
       }
     } else if (process.arch === 'ia32') {
       try {
-        return require('./util.win32-ia32-msvc.node')
+        return require('./dll-injector.win32-ia32-msvc.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('util-win32-ia32-msvc')
-        const bindingPackageVersion = require('util-win32-ia32-msvc/package.json').version
+        const binding = require('dll-injector-win32-ia32-msvc')
+        const bindingPackageVersion = require('dll-injector-win32-ia32-msvc/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -156,13 +156,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm64') {
       try {
-        return require('./util.win32-arm64-msvc.node')
+        return require('./dll-injector.win32-arm64-msvc.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('util-win32-arm64-msvc')
-        const bindingPackageVersion = require('util-win32-arm64-msvc/package.json').version
+        const binding = require('dll-injector-win32-arm64-msvc')
+        const bindingPackageVersion = require('dll-injector-win32-arm64-msvc/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -175,13 +175,13 @@ function requireNative() {
     }
   } else if (process.platform === 'darwin') {
     try {
-      return require('./util.darwin-universal.node')
+      return require('./dll-injector.darwin-universal.node')
     } catch (e) {
       loadErrors.push(e)
     }
     try {
-      const binding = require('util-darwin-universal')
-      const bindingPackageVersion = require('util-darwin-universal/package.json').version
+      const binding = require('dll-injector-darwin-universal')
+      const bindingPackageVersion = require('dll-injector-darwin-universal/package.json').version
       if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
         throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
       }
@@ -191,13 +191,13 @@ function requireNative() {
     }
     if (process.arch === 'x64') {
       try {
-        return require('./util.darwin-x64.node')
+        return require('./dll-injector.darwin-x64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('util-darwin-x64')
-        const bindingPackageVersion = require('util-darwin-x64/package.json').version
+        const binding = require('dll-injector-darwin-x64')
+        const bindingPackageVersion = require('dll-injector-darwin-x64/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -207,13 +207,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm64') {
       try {
-        return require('./util.darwin-arm64.node')
+        return require('./dll-injector.darwin-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('util-darwin-arm64')
-        const bindingPackageVersion = require('util-darwin-arm64/package.json').version
+        const binding = require('dll-injector-darwin-arm64')
+        const bindingPackageVersion = require('dll-injector-darwin-arm64/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -227,13 +227,13 @@ function requireNative() {
   } else if (process.platform === 'freebsd') {
     if (process.arch === 'x64') {
       try {
-        return require('./util.freebsd-x64.node')
+        return require('./dll-injector.freebsd-x64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('util-freebsd-x64')
-        const bindingPackageVersion = require('util-freebsd-x64/package.json').version
+        const binding = require('dll-injector-freebsd-x64')
+        const bindingPackageVersion = require('dll-injector-freebsd-x64/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -243,13 +243,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm64') {
       try {
-        return require('./util.freebsd-arm64.node')
+        return require('./dll-injector.freebsd-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('util-freebsd-arm64')
-        const bindingPackageVersion = require('util-freebsd-arm64/package.json').version
+        const binding = require('dll-injector-freebsd-arm64')
+        const bindingPackageVersion = require('dll-injector-freebsd-arm64/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -264,13 +264,13 @@ function requireNative() {
     if (process.arch === 'x64') {
       if (isMusl()) {
         try {
-          return require('./util.linux-x64-musl.node')
+          return require('./dll-injector.linux-x64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('util-linux-x64-musl')
-          const bindingPackageVersion = require('util-linux-x64-musl/package.json').version
+          const binding = require('dll-injector-linux-x64-musl')
+          const bindingPackageVersion = require('dll-injector-linux-x64-musl/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -280,13 +280,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./util.linux-x64-gnu.node')
+          return require('./dll-injector.linux-x64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('util-linux-x64-gnu')
-          const bindingPackageVersion = require('util-linux-x64-gnu/package.json').version
+          const binding = require('dll-injector-linux-x64-gnu')
+          const bindingPackageVersion = require('dll-injector-linux-x64-gnu/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -298,13 +298,13 @@ function requireNative() {
     } else if (process.arch === 'arm64') {
       if (isMusl()) {
         try {
-          return require('./util.linux-arm64-musl.node')
+          return require('./dll-injector.linux-arm64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('util-linux-arm64-musl')
-          const bindingPackageVersion = require('util-linux-arm64-musl/package.json').version
+          const binding = require('dll-injector-linux-arm64-musl')
+          const bindingPackageVersion = require('dll-injector-linux-arm64-musl/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -314,13 +314,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./util.linux-arm64-gnu.node')
+          return require('./dll-injector.linux-arm64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('util-linux-arm64-gnu')
-          const bindingPackageVersion = require('util-linux-arm64-gnu/package.json').version
+          const binding = require('dll-injector-linux-arm64-gnu')
+          const bindingPackageVersion = require('dll-injector-linux-arm64-gnu/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -332,13 +332,13 @@ function requireNative() {
     } else if (process.arch === 'arm') {
       if (isMusl()) {
         try {
-          return require('./util.linux-arm-musleabihf.node')
+          return require('./dll-injector.linux-arm-musleabihf.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('util-linux-arm-musleabihf')
-          const bindingPackageVersion = require('util-linux-arm-musleabihf/package.json').version
+          const binding = require('dll-injector-linux-arm-musleabihf')
+          const bindingPackageVersion = require('dll-injector-linux-arm-musleabihf/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -348,13 +348,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./util.linux-arm-gnueabihf.node')
+          return require('./dll-injector.linux-arm-gnueabihf.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('util-linux-arm-gnueabihf')
-          const bindingPackageVersion = require('util-linux-arm-gnueabihf/package.json').version
+          const binding = require('dll-injector-linux-arm-gnueabihf')
+          const bindingPackageVersion = require('dll-injector-linux-arm-gnueabihf/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -366,13 +366,13 @@ function requireNative() {
     } else if (process.arch === 'loong64') {
       if (isMusl()) {
         try {
-          return require('./util.linux-loong64-musl.node')
+          return require('./dll-injector.linux-loong64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('util-linux-loong64-musl')
-          const bindingPackageVersion = require('util-linux-loong64-musl/package.json').version
+          const binding = require('dll-injector-linux-loong64-musl')
+          const bindingPackageVersion = require('dll-injector-linux-loong64-musl/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -382,13 +382,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./util.linux-loong64-gnu.node')
+          return require('./dll-injector.linux-loong64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('util-linux-loong64-gnu')
-          const bindingPackageVersion = require('util-linux-loong64-gnu/package.json').version
+          const binding = require('dll-injector-linux-loong64-gnu')
+          const bindingPackageVersion = require('dll-injector-linux-loong64-gnu/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -400,13 +400,13 @@ function requireNative() {
     } else if (process.arch === 'riscv64') {
       if (isMusl()) {
         try {
-          return require('./util.linux-riscv64-musl.node')
+          return require('./dll-injector.linux-riscv64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('util-linux-riscv64-musl')
-          const bindingPackageVersion = require('util-linux-riscv64-musl/package.json').version
+          const binding = require('dll-injector-linux-riscv64-musl')
+          const bindingPackageVersion = require('dll-injector-linux-riscv64-musl/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -416,13 +416,13 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./util.linux-riscv64-gnu.node')
+          return require('./dll-injector.linux-riscv64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
         try {
-          const binding = require('util-linux-riscv64-gnu')
-          const bindingPackageVersion = require('util-linux-riscv64-gnu/package.json').version
+          const binding = require('dll-injector-linux-riscv64-gnu')
+          const bindingPackageVersion = require('dll-injector-linux-riscv64-gnu/package.json').version
           if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
             throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
           }
@@ -433,13 +433,13 @@ function requireNative() {
       }
     } else if (process.arch === 'ppc64') {
       try {
-        return require('./util.linux-ppc64-gnu.node')
+        return require('./dll-injector.linux-ppc64-gnu.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('util-linux-ppc64-gnu')
-        const bindingPackageVersion = require('util-linux-ppc64-gnu/package.json').version
+        const binding = require('dll-injector-linux-ppc64-gnu')
+        const bindingPackageVersion = require('dll-injector-linux-ppc64-gnu/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -449,13 +449,13 @@ function requireNative() {
       }
     } else if (process.arch === 's390x') {
       try {
-        return require('./util.linux-s390x-gnu.node')
+        return require('./dll-injector.linux-s390x-gnu.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('util-linux-s390x-gnu')
-        const bindingPackageVersion = require('util-linux-s390x-gnu/package.json').version
+        const binding = require('dll-injector-linux-s390x-gnu')
+        const bindingPackageVersion = require('dll-injector-linux-s390x-gnu/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -469,13 +469,13 @@ function requireNative() {
   } else if (process.platform === 'openharmony') {
     if (process.arch === 'arm64') {
       try {
-        return require('./util.openharmony-arm64.node')
+        return require('./dll-injector.openharmony-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('util-openharmony-arm64')
-        const bindingPackageVersion = require('util-openharmony-arm64/package.json').version
+        const binding = require('dll-injector-openharmony-arm64')
+        const bindingPackageVersion = require('dll-injector-openharmony-arm64/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -485,13 +485,13 @@ function requireNative() {
       }
     } else if (process.arch === 'x64') {
       try {
-        return require('./util.openharmony-x64.node')
+        return require('./dll-injector.openharmony-x64.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('util-openharmony-x64')
-        const bindingPackageVersion = require('util-openharmony-x64/package.json').version
+        const binding = require('dll-injector-openharmony-x64')
+        const bindingPackageVersion = require('dll-injector-openharmony-x64/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -501,13 +501,13 @@ function requireNative() {
       }
     } else if (process.arch === 'arm') {
       try {
-        return require('./util.openharmony-arm.node')
+        return require('./dll-injector.openharmony-arm.node')
       } catch (e) {
         loadErrors.push(e)
       }
       try {
-        const binding = require('util-openharmony-arm')
-        const bindingPackageVersion = require('util-openharmony-arm/package.json').version
+        const binding = require('dll-injector-openharmony-arm')
+        const bindingPackageVersion = require('dll-injector-openharmony-arm/package.json').version
         if (bindingPackageVersion !== '1.0.0' && process.env.NAPI_RS_ENFORCE_VERSION_CHECK && process.env.NAPI_RS_ENFORCE_VERSION_CHECK !== '0') {
           throw new Error(`Native binding package version mismatch, expected 1.0.0 but got ${bindingPackageVersion}. You can reinstall dependencies to fix this issue.`)
         }
@@ -529,7 +529,7 @@ if (!nativeBinding || process.env.NAPI_RS_FORCE_WASI) {
   let wasiBinding = null
   let wasiBindingError = null
   try {
-    wasiBinding = require('./util.wasi.cjs')
+    wasiBinding = require('./dll-injector.wasi.cjs')
     nativeBinding = wasiBinding
   } catch (err) {
     if (process.env.NAPI_RS_FORCE_WASI) {
@@ -538,7 +538,7 @@ if (!nativeBinding || process.env.NAPI_RS_FORCE_WASI) {
   }
   if (!nativeBinding || process.env.NAPI_RS_FORCE_WASI) {
     try {
-      wasiBinding = require('util-wasm32-wasi')
+      wasiBinding = require('dll-injector-wasm32-wasi')
       nativeBinding = wasiBinding
     } catch (err) {
       if (process.env.NAPI_RS_FORCE_WASI) {
@@ -576,17 +576,5 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding.default
-module.exports.findFileAcrossDrives = nativeBinding.default.findFileAcrossDrives
-module.exports.getHwndsForPid = nativeBinding.default.getHwndsForPid
-module.exports.getPreviousPids = nativeBinding.default.getPreviousPids
-module.exports.getProcess = nativeBinding.default.getProcess
-module.exports.getProcessName = nativeBinding.default.getProcessName
-module.exports.getProcessWindowState = nativeBinding.default.getProcessWindowState
-module.exports.getTopmostPid = nativeBinding.default.getTopmostPid
-module.exports.getWaitResult = nativeBinding.default.getWaitResult
-module.exports.killProcess = nativeBinding.default.killProcess
-module.exports.ProcessWindowState = nativeBinding.default.ProcessWindowState
-module.exports.spawnProcess = nativeBinding.default.spawnProcess
-module.exports.startTracking = nativeBinding.default.startTracking
-module.exports.waitForProcess = nativeBinding.default.waitForProcess
-module.exports.waitForProcessExit = nativeBinding.default.waitForProcessExit
+module.exports.DllInjector = nativeBinding.default.DllInjector
+module.exports.Injector = nativeBinding.default.Injector
