@@ -74,9 +74,10 @@ impl OverlayController {
     target_title: String,
     callback: ThreadsafeFunction<NativeOverlayEvent>,
   ) -> napi::Result<()> {
-    let stop_flag = self.stop_flag.clone();
-
-    stop_flag.store(false, Ordering::SeqCst);
+    let new_flag = Arc::new(AtomicBool::new(false));
+    let old_flag = std::mem::replace(&mut self.stop_flag, new_flag.clone());
+    old_flag.store(true, Ordering::SeqCst);
+    let stop_flag = new_flag;
 
     thread::spawn(move || {
       let mut target_hwnd = HWND(0);
@@ -234,9 +235,10 @@ impl OverlayController {
     target_pid: u32,
     callback: ThreadsafeFunction<NativeOverlayEvent>,
   ) -> napi::Result<()> {
-    let stop_flag = self.stop_flag.clone();
-
-    stop_flag.store(false, Ordering::SeqCst);
+    let new_flag = Arc::new(AtomicBool::new(false));
+    let old_flag = std::mem::replace(&mut self.stop_flag, new_flag.clone());
+    old_flag.store(true, Ordering::SeqCst);
+    let stop_flag = new_flag;
 
     thread::spawn(move || {
       let mut target_hwnd = HWND(0);
