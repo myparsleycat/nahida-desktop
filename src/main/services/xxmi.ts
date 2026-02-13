@@ -401,12 +401,48 @@ export class XXMI {
         return { config, processName, importerFolder, dllPath };
     }
 
+    private async deployPackageFiles(importerFolder: string) {
+        if (!this.packagePath) {
+            throw new Error("Package Path not found");
+        }
+
+        const filesToDeploy = ["d3d11.dll", "d3dcompiler_47.dll"];
+
+        for (const fileName of filesToDeploy) {
+            const sourcePath = path.join(this.packagePath, fileName);
+            const targetPath = path.join(importerFolder, fileName);
+
+            if (await fse.pathExists(targetPath)) {
+                this.desktop.logger.info(
+                    `File ${fileName} already exists in ${importerFolder}, skip deployment.`,
+                    "XXMI.deployPackageFiles",
+                );
+                continue;
+            }
+
+            if (await fse.pathExists(sourcePath)) {
+                this.desktop.logger.info(
+                    `Deploying ${fileName} to ${importerFolder}`,
+                    "XXMI.deployPackageFiles",
+                );
+                await fse.copy(sourcePath, targetPath);
+            } else {
+                this.desktop.logger.warn(
+                    `Source file ${sourcePath} not found for deployment`,
+                    "XXMI.deployPackageFiles",
+                );
+            }
+        }
+    }
+
     private async prepareEnvironment(
         importer: string,
         config: XXMIConfig["Importers"][string],
         processName: string,
         importerFolder: string,
     ) {
+        await this.deployPackageFiles(importerFolder);
+
         if (usesGIFPSUnlocker(config) && config.Importer.unlock_fps) {
             await this.configureFpsUnlocker(importer, config.Importer.game_folder, processName);
         }
@@ -448,12 +484,16 @@ export class XXMI {
                 "XXMI.startGame",
             );
 
+            const CREATE_NEW_CONSOLE = 0x00000010;
+            const CREATE_DEFAULT_ERROR_MODE = 0x04000000;
+            const processFlags = CREATE_NEW_CONSOLE | CREATE_DEFAULT_ERROR_MODE;
+
             injector.openProcess(
                 config.Importer.process_start_method,
                 launchParams.startExePath,
                 launchParams.workDir,
                 launchParams.startArgs,
-                undefined,
+                processFlags,
                 processName,
                 extra_dll_paths,
                 customLaunchCmd,
@@ -519,12 +559,16 @@ export class XXMI {
             dllPaths = [dllPath].concat(extra_dll_paths);
         }
 
+        const CREATE_NEW_CONSOLE = 0x00000010;
+        const CREATE_DEFAULT_ERROR_MODE = 0x04000000;
+        const processFlags = CREATE_NEW_CONSOLE | CREATE_DEFAULT_ERROR_MODE;
+
         injector.openProcess(
             config.Importer.process_start_method,
             launchParams.startExePath,
             launchParams.workDir,
             launchParams.startArgs,
-            undefined,
+            processFlags,
             processName,
             dllPaths,
             customLaunchCmd,
@@ -664,15 +708,23 @@ export class XXMI {
             this.desktop.logger.info(`injecting ${processName}`, "XXMI.startGame");
 
             if (useHook) {
-                await this.injectWithHook(
-                    injector,
-                    processName,
-                    dllPath,
-                    launchParams,
-                    config,
-                    customLaunchCmd,
-                    extra_dll_paths,
-                );
+                try {
+                    await this.injectWithHook(
+                        injector,
+                        processName,
+                        dllPath,
+                        launchParams,
+                        config,
+                        customLaunchCmd,
+                        extra_dll_paths,
+                    );
+                } catch (e: any) {
+                    this.desktop.logger.error(
+                        `Injection failed: ${e.message || e}`,
+                        "XXMI.startGame",
+                    );
+                    throw e; // Re-throw to be caught by outer handler
+                }
             } else {
                 await this.injectDirectly(
                     injector,
