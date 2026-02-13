@@ -16,6 +16,7 @@ import { PlayIcon, Trash2Icon } from "lucide-react";
 import { memo, useEffect } from "react";
 import { AddGameDialog } from "./add-game-dialog";
 import { CreatePresetDialog } from "./create-preset-dialog";
+import { toast } from "sonner";
 
 interface GamePresetSelectorProps {
   games: GameConfig[];
@@ -63,7 +64,9 @@ export const GamePresetSelector = memo(function GamePresetSelector({
           <Button
             variant="outline"
             size="icon"
-            onClickPromise={() => window.api.invoke("xxmi:startGame", matchedImporter)}
+            onClickPromise={() => window.api.invoke("xxmi:startGame", matchedImporter).catch((err) => {
+              toast.error(err.toString())
+            })}
           >
             <PlayIcon className="size-4" />
           </Button>
