@@ -575,7 +575,11 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-module.exports = nativeBinding.default
-module.exports.getCharactersFolder = nativeBinding.default.getCharactersFolder
-module.exports.getMods = nativeBinding.default.getMods
-module.exports.processIniFiles = nativeBinding.default.processIniFiles
+const binding = nativeBinding?.default ?? nativeBinding
+if (!binding) {
+  throw new Error('Loaded native binding has no exports')
+}
+module.exports = binding
+module.exports.getCharactersFolder = binding.getCharactersFolder
+module.exports.getMods = binding.getMods
+module.exports.processIniFiles = binding.processIniFiles

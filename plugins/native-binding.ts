@@ -17,23 +17,40 @@ function patchNativeBinding(filePath: string): void {
 
   try {
     let content = fs.readFileSync(filePath, 'utf-8')
-    let changed = false
-
-    const mainExportRegex = /(module\.exports\s*=\s*nativeBinding)(?!\.default)(?=[;\n\r]|$)/g
-    if (mainExportRegex.test(content)) {
-      content = content.replace(mainExportRegex, '$1.default')
-      changed = true
+    
+    if (content.includes('const binding = nativeBinding?.default ?? nativeBinding')) {
+      return
     }
 
-    const propExportRegex = /(= \s*nativeBinding)\.(?!default)/g
-    if (propExportRegex.test(content)) {
-      content = content.replace(propExportRegex, '$1.default.')
+    let changed = false
+
+    const mainExportRegex = /module\.exports\s*=\s*nativeBinding(?:\.default)?(?=[;\n\r]|$)/
+
+    if (mainExportRegex.test(content)) {
+      const patchBlock = `const binding = nativeBinding?.default ?? nativeBinding
+if (!binding) {
+  throw new Error('Loaded native binding has no exports')
+}
+module.exports = binding`
+
+      content = content.replace(mainExportRegex, patchBlock)
+
+      content = content.replace(
+        /module\.exports\.(\w+)\s*=\s*nativeBinding(?:\.default)?\.(\w+)/g,
+        'module.exports.$1 = binding.$2'
+      )
+
+      content = content.replace(
+        /module\.exports\.(\w+)\s*=\s*\(nativeBinding\.default\s*\?\?\s*nativeBinding\)(?:\.default)?\.(\w+)/g,
+        'module.exports.$1 = binding.$2'
+      )
+
       changed = true
     }
 
     if (changed) {
       fs.writeFileSync(filePath, content, 'utf-8')
-      console.log(`[NativeBindingPlugin] Patched ${path.relative(process.cwd(), filePath)}`)
+      console.log(`[NativeBindingPlugin] Successfully patched: ${path.relative(process.cwd(), filePath)}`)
     }
   } catch (error) {
     console.error(`[NativeBindingPlugin] Failed to patch ${filePath}:`, error)
@@ -58,7 +75,6 @@ export function nativeBindingPlugin(): Plugin {
 
       const handleFile = (file: string): void => {
         const relative = path.relative(nativeDir, file)
-        
         const parts = relative.split(path.sep)
         if (parts.length === 2 && parts[1] === 'index.js') {
            setTimeout(() => patchNativeBinding(file), 100)
