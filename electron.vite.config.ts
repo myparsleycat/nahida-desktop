@@ -34,15 +34,12 @@ export default defineConfig({
             //     gzipSize: true,
             //     brotliSize: true,
             // }),
-        ],
-        build: {
-            externalizeDeps: true
-        }
+        ]
     },
     preload: {
         build: {
             rollupOptions: {
-                external: ["electron", "ms"],
+                external: ["electron"],
             },
         },
         resolve: {

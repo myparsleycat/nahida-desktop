@@ -318,36 +318,32 @@ impl DllInjector {
     let injector_path = path_obj
       .canonicalize()
       .map_err(|e| Error::from_reason(format!("Failed to resolve injector path: {}", e)))?;
-    let injector_dir = injector_path
-      .parent()
-      .ok_or_else(|| Error::from_reason("Failed to get injector parent directory"))?;
 
-    let original_dir = std::env::current_dir()
-      .map_err(|e| Error::from_reason(format!("Failed to get current directory: {}", e)))?;
+    let lib_result =
+      unsafe { libloading::os::windows::Library::load_with_flags(&injector_path, 0x00000008) };
 
-    std::env::set_current_dir(injector_dir)
-      .map_err(|e| Error::from_reason(format!("Failed to set CWD to injector dir: {}", e)))?;
-
-    let lib_result = unsafe { Library::new(&injector_path) };
-
-    let _ = std::env::set_current_dir(original_dir);
-
-    let lib = lib_result.map_err(|e: LibLoadingError| {
-      Error::from_reason(format!("Failed to load injector library! {}", e))
-    })?;
+    let lib = lib_result
+      .map(libloading::Library::from)
+      .map_err(|e: LibLoadingError| {
+        Error::from_reason(format!(
+          "Failed to load injector library at {}: {}",
+          injector_path.display(),
+          e
+        ))
+      })?;
 
     unsafe {
       let _hook_lib: LibSymbol<HookLibraryFn> =
         lib.get(b"HookLibrary").map_err(|e: LibLoadingError| {
-          Error::from_reason(format!("Failed to setup injector library! {}", e))
+          Error::from_reason(format!("Failed to get HookLibrary symbol! {}", e))
         })?;
       let _wait_inj: LibSymbol<WaitForInjectionFn> =
         lib.get(b"WaitForInjection").map_err(|e: LibLoadingError| {
-          Error::from_reason(format!("Failed to setup injector library! {}", e))
+          Error::from_reason(format!("Failed to get WaitForInjection symbol! {}", e))
         })?;
       let _unhook_lib: LibSymbol<UnhookLibraryFn> =
         lib.get(b"UnhookLibrary").map_err(|e: LibLoadingError| {
-          Error::from_reason(format!("Failed to setup injector library! {}", e))
+          Error::from_reason(format!("Failed to get UnhookLibrary symbol! {}", e))
         })?;
     }
 
@@ -469,20 +465,20 @@ impl DllInjector {
     self.w_dll_path = Some(w_dll_path.clone());
     let w_dll_path_ptr = self.w_dll_path.as_ref().unwrap().as_ptr();
 
-    let dll_dir = resolved_path
-      .parent()
-      .ok_or_else(|| Error::from_reason("Failed to get DLL parent directory"))?;
+    // let dll_dir = resolved_path
+    //   .parent()
+    //   .ok_or_else(|| Error::from_reason("Failed to get DLL parent directory"))?;
 
-    let original_dir = std::env::current_dir()
-      .map_err(|e| Error::from_reason(format!("Failed to get current directory: {}", e)))?;
+    // let original_dir = std::env::current_dir()
+    //   .map_err(|e| Error::from_reason(format!("Failed to get current directory: {}", e)))?;
 
-    std::env::set_current_dir(dll_dir)
-      .map_err(|e| Error::from_reason(format!("Failed to set current directory: {}", e)))?;
+    // std::env::set_current_dir(dll_dir)
+    //   .map_err(|e| Error::from_reason(format!("Failed to set current directory: {}", e)))?;
 
     let result =
       unsafe { hook_library_fn(PCWSTR(w_dll_path_ptr), &mut self.hook, &mut self.mutex) };
 
-    let _ = std::env::set_current_dir(original_dir);
+    // let _ = std::env::set_current_dir(original_dir);
 
     match result {
       100 => {
