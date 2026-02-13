@@ -397,7 +397,14 @@ export class XXMI {
         }
 
         const processName = this.getGameProcessName(importer, config);
-        const importerFolder = path.resolve(this.xxmiPath, config.Importer.importer_folder);
+
+        let importerFolder: string;
+        if (path.isAbsolute(config.Importer.importer_folder)) {
+            importerFolder = config.Importer.importer_folder;
+        } else {
+            importerFolder = path.resolve(this.xxmiPath, config.Importer.importer_folder);
+        }
+
         const dllPath = path.join(importerFolder, "d3d11.dll");
         const gameFolder = path.resolve(this.xxmiPath, config.Importer.game_folder);
 
