@@ -171,8 +171,9 @@
             "tabs": {
                 "general": "一般",
                 "mod": "MOD",
-                "account": "アカウント",
-                "network": "ネットワーク"
+                "account": "ID",
+                "network": "通信",
+                "advanced": "詳細"
             },
             "gen": {
                 "application": {
@@ -259,6 +260,11 @@
                     "save": "保存",
                     "saved": "プロキシ設定が保存されました。"
                 }
+            },
+            "adv": {
+                "title": "詳細設定",
+                "warning_title": "注意",
+                "warning_description": "ここでの設定を変更すると、アプリの動作に影響を与える可能性があります。"
             }
         }
     },

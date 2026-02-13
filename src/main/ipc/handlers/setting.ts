@@ -130,4 +130,12 @@ export function registerSettingHandlers(d: NahidaDesktop) {
     rh("setting:net:setProxy", async (settings) => {
         return await d.setting.net.setProxy(settings);
     });
+
+    rh("setting:advanced:getAll", async () => {
+        return await d.setting.advanced.getAll();
+    });
+
+    rh("setting:advanced:set", async (key, value) => {
+        return await d.setting.advanced.set(key, value);
+    });
 }

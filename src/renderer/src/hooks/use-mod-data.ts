@@ -33,3 +33,10 @@ export function usePresets(selectedGame: string) {
         enabled: !!selectedGame,
     });
 }
+
+export function useEnabledImporters() {
+    return useQuery({
+        queryKey: ["enabledImporters"],
+        queryFn: () => window.api.invoke("xxmi:getEnabledImporters"),
+    });
+}

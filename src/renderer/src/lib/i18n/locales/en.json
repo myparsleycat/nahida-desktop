@@ -175,7 +175,8 @@
                 "general": "General",
                 "mod": "Mod",
                 "account": "Account",
-                "network": "Network"
+                "network": "Network",
+                "advanced": "Advanced"
             },
             "gen": {
                 "application": {
@@ -269,6 +270,11 @@
                     "save": "Save",
                     "saved": "Proxy settings saved."
                 }
+            },
+            "adv": {
+                "title": "Advanced",
+                "warning_title": "Caution",
+                "warning_description": "Changing settings here may affect app behavior."
             }
         }
     },

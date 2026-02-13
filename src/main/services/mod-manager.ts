@@ -1,6 +1,7 @@
 import path from "node:path";
 import { getCharactersFolder, getMods } from "@native/native-mod";
 import type { FolderGroup, Preset } from "@shared/types.gen";
+import { GAME_MATCH_CASES } from "@shared/xxmi-match";
 import { eq } from "drizzle-orm";
 import { trim } from "es-toolkit";
 import fg from "fast-glob";
@@ -144,14 +145,6 @@ export class ModManager {
 
                 const games = await this.get.games();
 
-                const genshinCase = ["원신", "genshin", "gimi"];
-                const starrailCase = ["스타레일", "붕스", "열차", "starrail", "srmi"];
-                const zenlessCase = ["젠레스", "젠존제", "찢", "zzz", "zenless", "zzmi"];
-                const wuwaCase = ["명조", "묑조", "wuwa", "wuthering", "wwmi"];
-                const endfieldCase = ["엔드필드", "엔필", "endfield", "efmi"];
-
-                const allCases = [genshinCase, starrailCase, zenlessCase, wuwaCase, endfieldCase];
-
                 for (const pid of previousPids) {
                     const processName = this.desktop.lib.native.getProcessName(pid);
                     if (!processName) continue;
@@ -162,13 +155,13 @@ export class ModManager {
                         continue;
                     if (lowerProcessName.includes("explorer")) continue;
 
-                    for (const gameCase of allCases) {
-                        const isGameProcess = gameCase.some((k) => lowerProcessName.includes(k));
+                    for (const [_, keywords] of Object.entries(GAME_MATCH_CASES)) {
+                        const isGameProcess = keywords.some((k) => lowerProcessName.includes(k));
 
                         if (isGameProcess) {
                             const matchedGame = games.find((g) => {
                                 const lowerGame = g.game.toLowerCase();
-                                return gameCase.some((k) => lowerGame.includes(k));
+                                return keywords.some((k) => lowerGame.includes(k));
                             });
 
                             if (matchedGame) return matchedGame.game;

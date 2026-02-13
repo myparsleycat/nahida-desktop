@@ -47,10 +47,8 @@ function RouteComponent() {
   const isInitialized = useRef(false);
   useEffect(() => {
     const initGame = async () => {
-      console.log("[RouteComponent] initGame starting...");
       try {
         const focusedGame = await window.api.invoke("mod:getPreviousFocusedGame");
-        console.log("[RouteComponent] focusedGame:", focusedGame);
         if (focusedGame && games.find((g) => g.game === focusedGame)) {
           setSelectedGame(focusedGame);
           return;
@@ -58,7 +56,6 @@ function RouteComponent() {
 
         if (!selectedGame) {
           const lastGame = await window.api.invoke("mod:getLastGame");
-          console.log("[RouteComponent] lastGame fallback:", lastGame);
           if (lastGame && games.find((g) => g.game === lastGame)) {
             setSelectedGame(lastGame);
           }

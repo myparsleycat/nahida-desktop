@@ -1,9 +1,10 @@
-import { resolve } from "path";
+import { resolve } from "node:path";
 import { defineConfig } from "electron-vite";
 import react from "@vitejs/plugin-react";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { ipcGeneratorPlugin } from "./plugins/ipc-generator";
+import { nativeBindingPlugin } from "./plugins/native-binding";
 
 const ReactCompilerConfig = { 
   target: "19",
@@ -26,13 +27,14 @@ export default defineConfig({
         },
         plugins: [
             ipcGeneratorPlugin(),
+            nativeBindingPlugin(),
             // visualizer({
             //     filename: "dist/stats-main.html",
             //     open: true,
             //     gzipSize: true,
             //     brotliSize: true,
             // }),
-        ],
+        ]
     },
     preload: {
         build: {

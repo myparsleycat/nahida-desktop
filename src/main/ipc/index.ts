@@ -11,6 +11,7 @@ import { registerToolsHandlers } from "./handlers/tools";
 import { registerTransferHandlers } from "./handlers/transfer";
 import { registerUtilHandlers } from "./handlers/util";
 import { registerWindowHandlers } from "./handlers/window";
+import { registerXXMIHandlers } from "./handlers/xxmi";
 
 export class IPC {
     private d: NahidaDesktop;
@@ -31,6 +32,7 @@ export class IPC {
         registerLoggerHandlers(this.d);
         registerPathSelectorHandlers();
         registerToolsHandlers(this.d);
+        registerXXMIHandlers(this.d);
     }
 
     public postMessageToWindow<K extends keyof IpcEvents>(

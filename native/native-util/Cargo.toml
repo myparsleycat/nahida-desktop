@@ -9,8 +9,11 @@ version = "0.1.0"
 crate-type = ["cdylib"]
 
 [dependencies]
-napi = "3.0.0"
+jwalk = "0.8.1"
+napi = { version = "3.0.0", features = ["async"] }
 napi-derive = "3.0.0"
+rayon = "1.11.0"
+sysinfo = "0.38.1"
 lazy_static = "1.4.0"
 
 [dependencies.windows]
@@ -19,7 +22,9 @@ features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_Threading",
-    "Win32_System_ProcessStatus"
+    "Win32_System_ProcessStatus",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_Security"
 ]
 
 [build-dependencies]

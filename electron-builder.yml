@@ -4,7 +4,7 @@ directories:
     buildResources: build
 files:
     - "!**/.vscode/*"
-    - "!src/*"
+    - "!src/**/*"
     - "!electron.vite.config.{js,ts,mjs,cjs}"
     - "!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}"
     - "!{.env,.env.*,.npmrc,pnpm-lock.yaml}"
@@ -14,6 +14,8 @@ files:
     - "!node_modules/.pnpm/@cbor-extract+cbor-extract-linux-arm@*/**/*"
     - "!node_modules/.pnpm/@cbor-extract+cbor-extract-linux-arm64@*/**/*"
     - "!node_modules/.pnpm/@cbor-extract+cbor-extract-linux-x64@*/**/*"
+    - "!native/**/*"
+    - "!plugins/**/*"
 # asar: false
 extraResources:
     - from: build/watchman-v2025.02.24.00-windows
@@ -24,7 +26,10 @@ extraResources:
 asarUnpack:
     - resources/**
 win:
+    cscLink: nahida-desktop.pfx
+    cscKeyPassword: password
     executableName: Nahida Desktop
+    requestedExecutionLevel: requireAdministrator
 nsis:
     artifactName: Nahida Desktop Setup ${version}.${ext}
     shortcutName: ${productName}

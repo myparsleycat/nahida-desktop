@@ -576,9 +576,17 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding.default
+module.exports.findFileAcrossDrives = nativeBinding.default.findFileAcrossDrives
+module.exports.getHwndsForPid = nativeBinding.default.getHwndsForPid
 module.exports.getPreviousPids = nativeBinding.default.getPreviousPids
+module.exports.getProcess = nativeBinding.default.getProcess
 module.exports.getProcessName = nativeBinding.default.getProcessName
 module.exports.getProcessWindowState = nativeBinding.default.getProcessWindowState
 module.exports.getTopmostPid = nativeBinding.default.getTopmostPid
+module.exports.getWaitResult = nativeBinding.default.getWaitResult
+module.exports.killProcess = nativeBinding.default.killProcess
 module.exports.ProcessWindowState = nativeBinding.default.ProcessWindowState
+module.exports.spawnProcess = nativeBinding.default.spawnProcess
 module.exports.startTracking = nativeBinding.default.startTracking
+module.exports.waitForProcess = nativeBinding.default.waitForProcess
+module.exports.waitForProcessExit = nativeBinding.default.waitForProcessExit
