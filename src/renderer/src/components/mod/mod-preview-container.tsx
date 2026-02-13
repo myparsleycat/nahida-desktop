@@ -18,7 +18,7 @@ interface ModPreviewContainerProps {
 }
 
 export function ModPreviewContainer({ mod, selectedGroupPath, onPaste }: ModPreviewContainerProps) {
-  const { queryClient } = useRouteContext({ from: "/mod/" });
+  const { queryClient } = useRouteContext({ from: "__root__" });
 
   const previewContent = (
     <Preview

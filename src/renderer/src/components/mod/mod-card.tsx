@@ -44,7 +44,7 @@ export const ModCard = memo(function ModCard({
   onToggleKeyUpdate,
 }: ModCardProps) {
   const { t } = useTranslation();
-  const { queryClient } = useRouteContext({ from: "/mod/" });
+  const { queryClient } = useRouteContext({ from: "__root__" });
   const mouseDownTargetRef = useRef<EventTarget | null>(null);
 
   const handlePaste = async (e: React.MouseEvent) => {

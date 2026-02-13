@@ -12,11 +12,12 @@ import { useEnabledImporters, usePresets } from "@renderer/hooks/use-mod-data";
 import { useModStore } from "@renderer/store/mod";
 import type { GameConfig } from "@shared/types.gen";
 import { getMatchingImporter } from "@shared/xxmi-match";
+import { useLocation } from "@tanstack/react-router";
 import { PlayIcon, Trash2Icon } from "lucide-react";
 import { memo, useEffect } from "react";
+import { toast } from "sonner";
 import { AddGameDialog } from "./add-game-dialog";
 import { CreatePresetDialog } from "./create-preset-dialog";
-import { toast } from "sonner";
 
 interface GamePresetSelectorProps {
   games: GameConfig[];
@@ -31,6 +32,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
   onBrowseFolder,
   onAddGame,
 }: GamePresetSelectorProps) {
+  const location = useLocation();
   const selectedGame = useModStore((s) => s.selectedGame);
   const setSelectedGame = useModStore((s) => s.setSelectedGame);
   const selectedPreset = useModStore((s) => s.selectedPreset);
@@ -59,44 +61,53 @@ export const GamePresetSelector = memo(function GamePresetSelector({
 
   return (
     <div className="flex flex-col items-center justify-center w-full p-2 border-t space-y-3">
-      <div className="flex w-full space-x-1">
-        {matchedImporter && (
+      {location.pathname.startsWith("/mod") && (
+        <div className="flex w-full space-x-1">
+          {matchedImporter && (
+            <Button
+              variant="outline"
+              size="icon"
+              onClickPromise={() =>
+                window.api.invoke("xxmi:startGame", matchedImporter).catch((err) => {
+                  toast.error(err.toString());
+                })
+              }
+            >
+              <PlayIcon className="size-4" />
+            </Button>
+          )}
+          <Select value={selectedGame || ""} onValueChange={handleGameSelect}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select a Game" />
+            </SelectTrigger>
+            <SelectContent
+              position="popper"
+              onCloseAutoFocus={(e) => e.preventDefault()}
+              aria-describedby={undefined}
+            >
+              <SelectGroup>
+                <SelectLabel>Games</SelectLabel>
+                {games.map((game) => (
+                  <SelectItem key={game.game} value={game.game}>
+                    {game.game}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <AddGameDialog onBrowseFolder={onBrowseFolder} onAddGame={onAddGame} />
+
           <Button
             variant="outline"
             size="icon"
-            onClickPromise={() => window.api.invoke("xxmi:startGame", matchedImporter).catch((err) => {
-              toast.error(err.toString())
-            })}
+            disabled={!selectedGame}
+            onClick={onDeleteGameClick}
           >
-            <PlayIcon className="size-4" />
+            <Trash2Icon className="size-4 text-destructive" />
           </Button>
-        )}
-        <Select value={selectedGame || ""} onValueChange={handleGameSelect}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select a Game" />
-          </SelectTrigger>
-          <SelectContent
-            position="popper"
-            onCloseAutoFocus={(e) => e.preventDefault()}
-            aria-describedby={undefined}
-          >
-            <SelectGroup>
-              <SelectLabel>Games</SelectLabel>
-              {games.map((game) => (
-                <SelectItem key={game.game} value={game.game}>
-                  {game.game}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-
-        <AddGameDialog onBrowseFolder={onBrowseFolder} onAddGame={onAddGame} />
-
-        <Button variant="outline" size="icon" disabled={!selectedGame} onClick={onDeleteGameClick}>
-          <Trash2Icon className="size-4 text-destructive" />
-        </Button>
-      </div>
+        </div>
+      )}
 
       <div className="flex w-full space-x-1">
         <Select

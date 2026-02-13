@@ -2,24 +2,25 @@
 [package]
 authors = ["LongYinan <lynweklm@gmail.com>"]
 edition = "2021"
-name = "native-mod"
+name = "overlay"
 version = "0.1.0"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-alphanumeric-sort = "1.5.5"
-glob = "0.3.3"
-napi = "3.0.0"
+napi = { version = "3.0.0", features = ["napi4", "async", "serde-json"] }
 napi-derive = "3.0.0"
-rayon = "1.10.0"
-walkdir = "2.5.0"
-windows = { version = "0.52.0", features = [
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dependencies.windows]
+version = "0.52.0"
+features = [
     "Win32_Foundation",
-    "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",
-] }
+    "Win32_Graphics_Gdi",
+]
 
 [build-dependencies]
 napi-build = "2"

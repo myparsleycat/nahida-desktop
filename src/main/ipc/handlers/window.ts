@@ -7,6 +7,10 @@ export function registerWindowHandlers(d: NahidaDesktop) {
         d.window.setting.createSettingWindow();
     });
 
+    rh("overlay:setIgnoreMouseEvents", async (ignore: boolean) => {
+        d.window.overlay.setIgnoreMouseEvents(ignore);
+    });
+
     ipcMain.on("window-control", (event, command) => {
         const win = BrowserWindow.fromWebContents(event.sender);
         if (!win) return;

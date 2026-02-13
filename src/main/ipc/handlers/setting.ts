@@ -123,6 +123,22 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         d.ipc.broadcast("mod:update-settings");
     });
 
+    rh("setting:overlay:getEnabled", async () => {
+        return await d.setting.overlay.getEnabled();
+    });
+
+    rh("setting:overlay:setEnabled", async (enabled) => {
+        await d.setting.overlay.setEnabled(enabled);
+    });
+
+    rh("setting:overlay:getToggleKey", async () => {
+        return await d.setting.overlay.getToggleKey();
+    });
+
+    rh("setting:overlay:setToggleKey", async (key) => {
+        await d.setting.overlay.setToggleKey(key);
+    });
+
     rh("setting:net:getProxy", async () => {
         return await d.setting.net.getProxy();
     });

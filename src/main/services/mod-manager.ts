@@ -1,5 +1,5 @@
 import path from "node:path";
-import { getCharactersFolder, getMods } from "@native/native-mod";
+import { getCharactersFolder, getMods, sendF10 } from "@native/native-mod";
 import type { FolderGroup, Preset } from "@shared/types.gen";
 import { GAME_MATCH_CASES } from "@shared/xxmi-match";
 import { eq } from "drizzle-orm";
@@ -175,6 +175,40 @@ export class ModManager {
                 return null;
             }
         },
+
+        gamePid: async (game: string): Promise<number | null> => {
+            try {
+                const currentPid = process.pid;
+                const previousPids = this.desktop.lib.native.getPreviousPids(currentPid);
+                if (previousPids.length === 0) return null;
+
+                const lowerGame = game.toLowerCase();
+                let matchingKeywords: string[] | undefined;
+
+                for (const [_, keywords] of Object.entries(GAME_MATCH_CASES)) {
+                    if (keywords.some((k) => lowerGame.includes(k))) {
+                        matchingKeywords = keywords;
+                        break;
+                    }
+                }
+
+                if (!matchingKeywords) return null;
+
+                for (const pid of previousPids) {
+                    const processName = this.desktop.lib.native.getProcessName(pid);
+                    if (!processName) continue;
+
+                    const lowerProcessName = processName.toLowerCase();
+                    if (matchingKeywords.some((k) => lowerProcessName.includes(k))) {
+                        return pid;
+                    }
+                }
+                return null;
+            } catch (error) {
+                this.desktop.logger.error(error, `Mod:gamePid:${game}`);
+                return null;
+            }
+        },
     };
 
     fn = {
@@ -235,11 +269,15 @@ export class ModManager {
             const folderName = path.basename(modPath);
             const isEnabled = !/^disabled\s+/i.test(folderName);
 
+            let result: string;
             if (isEnabled) {
-                return await this.fn.disable(modPath);
+                result = await this.fn.disable(modPath);
             } else {
-                return await this.fn.enable(modPath);
+                result = await this.fn.enable(modPath);
             }
+
+            // await this.fn.triggerF10(modPath);
+            return result;
         },
 
         exclusiveToggle: async (modPath: string): Promise<string> => {
@@ -271,9 +309,13 @@ export class ModManager {
                 });
 
                 await Promise.all(disablePromises);
-                return await this.fn.enable(modPath);
+                const result = await this.fn.enable(modPath);
+                // await this.fn.triggerF10(modPath);
+                return result;
             } else {
-                return await this.fn.disable(modPath);
+                const result = await this.fn.disable(modPath);
+                // await this.fn.triggerF10(modPath);
+                return result;
             }
         },
 
@@ -646,6 +688,42 @@ export class ModManager {
             } catch (error) {
                 this.desktop.logger.error(error, `Mod:pastePreview:${modPath}`);
                 throw error;
+            }
+        },
+
+        triggerF10: async (modPath: string) => {
+            try {
+                const groupPath = path.dirname(modPath);
+                const group = await this.get.mods(groupPath);
+                const activeCount = group.mods.filter((m) => m.isEnabled).length;
+
+                if (activeCount <= 1) {
+                    const games = await this.get.games();
+                    const matchedGame = games.find((g) => modPath.startsWith(g.modFolderPath));
+                    if (!matchedGame) return;
+
+                    const pid = await this.get.gamePid(matchedGame.game);
+                    if (pid) {
+                        try {
+                            const sent = sendF10(pid);
+                            if (sent) {
+                                this.desktop.logger.info(
+                                    `Sent F10 to ${matchedGame.game} (PID: ${pid})`,
+                                    "Mod:triggerF10",
+                                );
+                            } else {
+                                this.desktop.logger.warn(
+                                    `Failed to send F10 to ${matchedGame.game} (PID: ${pid})`,
+                                    "Mod:triggerF10",
+                                );
+                            }
+                        } catch (e) {
+                            this.desktop.logger.error(e, "Mod:triggerF10:native");
+                        }
+                    }
+                }
+            } catch (error) {
+                this.desktop.logger.error(error, `Mod:triggerF10:${modPath}`);
             }
         },
     };

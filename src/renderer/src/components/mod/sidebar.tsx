@@ -8,7 +8,7 @@ import { useRouteContext } from "@tanstack/react-router";
 import { useCallback } from "react";
 
 export default function ModSidebar() {
-  const { queryClient } = useRouteContext({ from: "/mod/" });
+  const { queryClient } = useRouteContext({ from: "__root__" });
 
   const selectedGame = useModStore((s) => s.selectedGame);
   const selectedGroup = useModStore((s) => s.selectedGroup);
