@@ -686,34 +686,68 @@ export class XXMI {
         return dllPaths;
     }
 
+    private monitorInterval: NodeJS.Timeout | null = null;
+
+    public startMonitor() {
+        if (this.monitorInterval) return;
+
+        this.scanForRunningGames().catch((err) => {
+            this.desktop.logger.error(`Error in game scan: ${err}`, "XXMI.monitor");
+        });
+
+        this.monitorInterval = setInterval(() => {
+            this.scanForRunningGames().catch((err) => {
+                this.desktop.logger.error(`Error in game scan: ${err}`, "XXMI.monitor");
+            });
+        }, 5000);
+    }
+
+    public stopMonitor() {
+        if (this.monitorInterval) {
+            clearInterval(this.monitorInterval);
+            this.monitorInterval = null;
+        }
+    }
+
     public async scanForRunningGames() {
         await this.init();
 
         if (this.busy || !this.xxmiConfig) return;
 
-        const importers = await this.getEnabledImporters();
-        const processList = await this.desktop.lib.native.getProcessList();
+        try {
+            const importers = await this.getEnabledImporters();
+            const processList = await this.desktop.lib.native.getProcessList();
 
-        for (const { key: importer } of importers) {
-            const config = this.xxmiConfig.Importers[importer];
-            const processName = this.getGameProcessName(importer, config);
+            for (const { key: importer } of importers) {
+                const config = this.xxmiConfig.Importers[importer];
+                const processName = this.getGameProcessName(importer, config);
 
-            const found = processList.find(
-                (p) => p.name.toLowerCase() === processName.toLowerCase(),
-            );
-
-            if (found) {
-                const title = (await this.desktop.lib.native.getWindowTitle(found.pid)) || importer;
-                this.desktop.logger.info(
-                    `Found running game ${importer} (${processName}, PID: ${found.pid}, Title: ${title}), attaching overlay...`,
-                    "XXMI.scanForRunningGames",
+                const found = processList.find(
+                    (p) => p.name.toLowerCase() === processName.toLowerCase(),
                 );
-                await this.desktop.window.overlay.createOverlayWindow({
-                    title,
-                    pid: found.pid,
-                });
-                break;
+
+                if (found) {
+                    if (this.desktop.service.overlay.currentTrackId === found.pid) {
+                        return;
+                    }
+
+                    const title =
+                        (await this.desktop.lib.native.getWindowTitle(found.pid)) || importer;
+
+                    this.desktop.logger.info(
+                        `Found running game ${importer} (${processName}, PID: ${found.pid}, Title: ${title}), attaching overlay...`,
+                        "XXMI.scanForRunningGames",
+                    );
+
+                    await this.desktop.window.overlay.createOverlayWindow({
+                        title,
+                        pid: found.pid,
+                    });
+                    break;
+                }
             }
+        } catch (error) {
+            this.desktop.logger.error(`Scan failed: ${error}`, "XXMI.scanForRunningGames");
         }
     }
 

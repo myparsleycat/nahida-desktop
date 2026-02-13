@@ -9,6 +9,11 @@ export class OverlayService extends EventEmitter {
     private readonly desktop: NahidaDesktop;
     private controller: OverlayController;
     private trackId: string | number | null = null;
+
+    public get currentTrackId() {
+        return this.trackId;
+    }
+
     public isVisible: boolean = true;
 
     constructor(desktop: NahidaDesktop) {

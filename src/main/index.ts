@@ -242,7 +242,7 @@ app.whenReady().then(async () => {
 
     await desktop.init();
 
-    await desktop.service.xxmi.scanForRunningGames();
+    desktop.service.xxmi.startMonitor();
 
     // const loggedIn = await desktop.service.auth.isLoggedIn();
     // if (loggedIn) {
