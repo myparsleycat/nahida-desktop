@@ -45,28 +45,25 @@ export class XXMI {
         }
 
         const xxmiConfigPath = path.join(this.xxmiPath, "XXMI Launcher Config.json");
-        if (!xxmiConfigPath) {
+        try {
+            const xxmiConfig = await fse.readJson(xxmiConfigPath);
+            this.xxmiConfig = XXMIConfigSchema.parse(xxmiConfig);
+            this.packagePath = path.join(this.xxmiPath, "Resources", "Packages", "XXMI");
+        } catch (error) {
+            this.desktop.logger.error(`Failed to initialize XXMI: ${error}`, "XXMI.initialize");
             this.xxmiConfig = null;
-            return;
         }
-
-        const xxmiConfig = await fse.readJson(xxmiConfigPath);
-        this.xxmiConfig = XXMIConfigSchema.parse(xxmiConfig);
-        this.packagePath = path.join(this.xxmiPath, "Resources", "Packages", "XXMI");
     }
 
     private async checkConfigFile(configPath: string) {
-        const xxmiConfig = await fse.readJson(configPath);
-        if (
-            !xxmiConfig.Launcher ||
-            !xxmiConfig.Packages ||
-            !xxmiConfig.Importers ||
-            !xxmiConfig.Security
-        ) {
+        try {
+            const xxmiConfig = await fse.readJson(configPath);
+            XXMIConfigSchema.parse(xxmiConfig);
+            return true;
+        } catch (error) {
+            this.desktop.logger.error(`Invalid XXMI config file: ${error}`, "XXMI.checkConfigFile");
             return false;
         }
-
-        return true;
     }
 
     public getXXMIConfig() {
@@ -113,8 +110,10 @@ export class XXMI {
                 set: { value: inputPath },
             });
 
-        this.initialize();
-        this.desktop.ipc.broadcast("renderer:reload");
+        await this.initialize();
+        if (this.xxmiConfig) {
+            this.desktop.ipc.broadcast("renderer:reload");
+        }
     }
 
     public async findXXMIPath() {
