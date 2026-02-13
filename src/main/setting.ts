@@ -451,7 +451,16 @@ export class Setting {
 
     advanced = {
         getAll: async () => {
-            return await db.select().from(setting);
+            const rows = await db.select().from(setting);
+            const sensitiveKeys = ["proxy", "password", "token", "secret", "credentials"];
+
+            return rows.map((row) => {
+                const isSensitive = sensitiveKeys.some((k) => row.key.toLowerCase().includes(k));
+                if (isSensitive) {
+                    return { ...row, value: "********" };
+                }
+                return row;
+            });
         },
 
         set: async (key: string, value: string) => {
