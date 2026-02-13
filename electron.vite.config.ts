@@ -1,4 +1,4 @@
-import { resolve } from "path";
+import { resolve } from "node:path";
 import { defineConfig } from "electron-vite";
 import react from "@vitejs/plugin-react";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
@@ -35,11 +35,14 @@ export default defineConfig({
             //     brotliSize: true,
             // }),
         ],
+        build: {
+            externalizeDeps: true
+        }
     },
     preload: {
         build: {
             rollupOptions: {
-                external: ["electron"],
+                external: ["electron", "ms"],
             },
         },
         resolve: {
