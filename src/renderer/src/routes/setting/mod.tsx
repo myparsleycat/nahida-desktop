@@ -25,6 +25,8 @@ function RouteComponent() {
   const [gameFolderCompressionFeatureEnabled, setGameFolderCompressionFeatureEnabled] =
     useState(false);
   const [searchModPreview, setSearchModPreview] = useState(true);
+  const [overlayEnabled, setOverlayEnabled] = useState(true);
+  const [overlayKey, setOverlayKey] = useState<string>("Alt+A");
   const [compressionProgress, setCompressionProgress] = useState<{
     message: string;
     processedFiles: number;
@@ -78,6 +80,11 @@ function RouteComponent() {
         setVirtualizationThreshold(vThreshold);
         setGameFolderCompressionEnabled(compressionEnabled);
         setGameFolderCompressionFeatureEnabled(featureEnabled);
+
+        const oEnabled = await window.api.invoke("setting:overlay:getEnabled");
+        const oKey = await window.api.invoke("setting:overlay:getToggleKey");
+        setOverlayEnabled(oEnabled);
+        setOverlayKey(oKey || "");
       } catch (error) {
         Logger.error(error, "ModSettings:loadSettings");
         toast.error("설정을 불러오는데 실패했습니다.");
@@ -161,6 +168,27 @@ function RouteComponent() {
       setGameFolderCompressionEnabled(checked);
     } catch (error) {
       Logger.error(error, "ModSettings:handleCompressionChange");
+      toast.error("설정 저장에 실패했습니다.");
+    }
+  };
+
+  const handleOverlayEnabledChange = async (checked: boolean) => {
+    try {
+      await window.api.invoke("setting:overlay:setEnabled", checked);
+      setOverlayEnabled(checked);
+    } catch (error) {
+      Logger.error(error, "ModSettings:handleOverlayEnabledChange");
+      toast.error("설정 저장에 실패했습니다.");
+    }
+  };
+
+  const handleOverlayKeyChange = async (key: string) => {
+    try {
+      await window.api.invoke("setting:overlay:setToggleKey", key);
+      setOverlayKey(key);
+      toast.success("단축키가 저장되었습니다.");
+    } catch (error) {
+      Logger.error(error, "ModSettings:handleOverlayKeyChange");
       toast.error("설정 저장에 실패했습니다.");
     }
   };
@@ -268,6 +296,65 @@ function RouteComponent() {
                   />
                 </div>
               )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">오버레이 설정</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <span className="text-sm font-medium">오버레이 활성화</span>
+                <p className="text-sm text-muted-foreground">
+                  게임 내 오버레이 기능을 활성화합니다.
+                </p>
+              </div>
+              <Switch checked={overlayEnabled} onCheckedChange={handleOverlayEnabledChange} />
+            </div>
+
+            <Separator />
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <span className="text-sm font-medium">단축키 설정</span>
+                <p className="text-sm text-muted-foreground">
+                  오버레이를 켜고 끄는 단축키를 설정합니다. 기본값: Alt+A
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={overlayKey}
+                  readOnly
+                  className="w-40 text-center font-mono uppercase caret-transparent focus:ring-2 focus:ring-primary"
+                  onKeyDown={(e) => {
+                    e.preventDefault();
+                    if (e.key === "Tab") return;
+
+                    const modifiers: string[] = [];
+                    if (e.ctrlKey) modifiers.push("Ctrl");
+                    if (e.altKey) modifiers.push("Alt");
+                    if (e.shiftKey) modifiers.push("Shift");
+                    if (e.metaKey) modifiers.push("Super");
+
+                    let key = e.key;
+                    if (["Control", "Alt", "Shift", "Meta"].includes(key)) key = "";
+                    if (key === " ") key = "Space";
+                    if (key === "ArrowUp") key = "Up";
+                    if (key === "ArrowDown") key = "Down";
+                    if (key === "ArrowLeft") key = "Left";
+                    if (key === "ArrowRight") key = "Right";
+
+                    if (key) {
+                      if (key.length === 1) key = key.toUpperCase();
+                      const shortcut = [...modifiers, key].join("+");
+                      handleOverlayKeyChange(shortcut);
+                    }
+                  }}
+                />
+              </div>
             </div>
           </CardContent>
         </Card>

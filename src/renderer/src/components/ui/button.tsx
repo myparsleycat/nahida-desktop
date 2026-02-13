@@ -70,14 +70,6 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     const isLoading = loading || isPending;
 
-    if (process.env.NODE_ENV === "development") {
-      if (asChild && (loading || onClickPromise)) {
-        console.warn(
-          "Button: Using 'asChild' with 'loading' or 'onClickPromise' will render the loader as a sibling to the child element, which may lead to unexpected layout. Consider handling the loading state within the child component instead.",
-        );
-      }
-    }
-
     const handleClick = async (event: React.MouseEvent<HTMLButtonElement>) => {
       if (onClick) {
         onClick(event);
@@ -104,14 +96,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || isLoading}
         {...props}
       >
-        {asChild ? (
-          children
-        ) : isLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-        ) : (
-          <span>{children}</span>
-        )}
-        {asChild && isLoading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+        {isLoading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+        {!isLoading && (asChild ? children : <span>{children}</span>)}
       </Comp>
     );
   },

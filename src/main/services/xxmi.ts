@@ -27,6 +27,7 @@ export class XXMI {
     private xxmiPath: string | null;
     private packagePath: string | null;
     private busy: boolean;
+    private initPromise: Promise<void> | null = null;
 
     constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
@@ -34,7 +35,13 @@ export class XXMI {
         this.xxmiConfig = null;
         this.packagePath = null;
         this.busy = false;
-        this.initialize();
+    }
+
+    public async init() {
+        if (!this.initPromise) {
+            this.initPromise = this.initialize();
+        }
+        await this.initPromise;
     }
 
     private async initialize() {
@@ -397,7 +404,14 @@ export class XXMI {
         }
 
         const processName = this.getGameProcessName(importer, config);
-        const importerFolder = path.resolve(this.xxmiPath, config.Importer.importer_folder);
+
+        let importerFolder: string;
+        if (path.isAbsolute(config.Importer.importer_folder)) {
+            importerFolder = config.Importer.importer_folder;
+        } else {
+            importerFolder = path.resolve(this.xxmiPath, config.Importer.importer_folder);
+        }
+
         const dllPath = path.join(importerFolder, "d3d11.dll");
         const gameFolder = path.resolve(this.xxmiPath, config.Importer.game_folder);
 
@@ -672,6 +686,74 @@ export class XXMI {
         return dllPaths;
     }
 
+    private monitorInterval: NodeJS.Timeout | null = null;
+
+    public startMonitor() {
+        if (this.monitorInterval) return;
+
+        this.scanForRunningGames().catch((err) => {
+            this.desktop.logger.error(`Error in game scan: ${err}`, "XXMI.monitor");
+        });
+
+        this.monitorInterval = setInterval(() => {
+            this.scanForRunningGames().catch((err) => {
+                this.desktop.logger.error(`Error in game scan: ${err}`, "XXMI.monitor");
+            });
+        }, 5000);
+    }
+
+    public stopMonitor() {
+        if (this.monitorInterval) {
+            clearInterval(this.monitorInterval);
+            this.monitorInterval = null;
+        }
+    }
+
+    public async scanForRunningGames() {
+        await this.init();
+
+        if (this.busy || !this.xxmiConfig) return;
+
+        try {
+            const importers = await this.getEnabledImporters();
+            const processList = await this.desktop.lib.native.getProcessList();
+
+            for (const { key: importer } of importers) {
+                const config = this.xxmiConfig.Importers[importer];
+                const processName = this.getGameProcessName(importer, config);
+
+                const found = processList.find(
+                    (p) => p.name.toLowerCase() === processName.toLowerCase(),
+                );
+
+                if (found) {
+                    if (this.desktop.service.overlay.currentTrackId === found.pid) {
+                        return;
+                    }
+
+                    const title =
+                        (await this.desktop.lib.native.getWindowTitle(found.pid)) || importer;
+
+                    const isOverlayEnabled = await this.desktop.setting.overlay.getEnabled();
+                    if (isOverlayEnabled) {
+                        this.desktop.logger.info(
+                            `Found running game ${importer} (${processName}, PID: ${found.pid}, Title: ${title}), attaching overlay...`,
+                            "XXMI.scanForRunningGames",
+                        );
+
+                        await this.desktop.window.overlay.createOverlayWindow({
+                            title,
+                            pid: found.pid,
+                        });
+                    }
+                    break;
+                }
+            }
+        } catch (error) {
+            this.desktop.logger.error(`Scan failed: ${error}`, "XXMI.scanForRunningGames");
+        }
+    }
+
     public async startGame(importer: string) {
         if (this.busy) {
             throw new Error("XXMI is busy");
@@ -725,9 +807,9 @@ export class XXMI {
                         customLaunchCmd,
                         extra_dll_paths,
                     );
-                } catch (e: any) {
+                } catch (e: unknown) {
                     this.desktop.logger.error(
-                        `Injection failed: ${e.message || e}`,
+                        `Injection failed: ${(e as Error).message || e}`,
                         "XXMI.startGame",
                     );
                     throw e; // Re-throw to be caught by outer handler
@@ -742,6 +824,38 @@ export class XXMI {
                     customLaunchCmd,
                     extra_dll_paths,
                 );
+            }
+
+            const list = await this.desktop.lib.native.getProcessList();
+            const found = list.find((p) => p.name.toLowerCase() === processName.toLowerCase());
+
+            if (found) {
+                // Try to get window title for a few seconds
+                let attempts = 0;
+                let title = importer;
+                while (attempts < 10) {
+                    const fetchedTitle = await this.desktop.lib.native.getWindowTitle(found.pid);
+                    if (fetchedTitle) {
+                        title = fetchedTitle;
+                        break;
+                    }
+                    await delay(1000);
+                    attempts++;
+                }
+
+                this.desktop.logger.info(
+                    `Attaching overlay to ${title} (${found.pid})`,
+                    "XXMI.startGame",
+                );
+                await this.desktop.window.overlay.createOverlayWindow({
+                    title,
+                    pid: found.pid,
+                });
+            }
+
+            const overlayWindow = this.desktop.window.overlay.window;
+            if (overlayWindow) {
+                overlayWindow.webContents.send("renderer:reload");
             }
 
             await this.runPostLoad(config);

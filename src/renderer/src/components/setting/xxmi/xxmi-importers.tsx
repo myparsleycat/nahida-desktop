@@ -4,6 +4,7 @@ import { cn } from "@renderer/lib/utils";
 import type { XXMIData } from "@renderer/routes/setting/xxmi";
 import { Loader2Icon } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 export function XXMIImporters({ xxmiData }: { xxmiData?: XXMIData }) {
   const [processingKey, setProcessingKey] = useState<string | null>(null);
@@ -19,7 +20,7 @@ export function XXMIImporters({ xxmiData }: { xxmiData?: XXMIData }) {
     try {
       await window.api.invoke("xxmi:startGame", key);
     } catch (error) {
-      console.error(error);
+      toast.error((error as Error).toString());
     } finally {
       setProcessingKey(null);
     }

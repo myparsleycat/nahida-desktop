@@ -449,6 +449,62 @@ export class Setting {
         },
     };
 
+    overlay = {
+        getEnabled: async () => {
+            const qr = await db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "overlay_enabled"),
+            });
+
+            if (!qr) {
+                await db.insert(setting).values({ key: "overlay_enabled", value: "true" });
+                return true;
+            }
+
+            return qr.value === "true";
+        },
+
+        setEnabled: async (enabled: boolean) => {
+            await db
+                .insert(setting)
+                .values({ key: "overlay_enabled", value: String(enabled) })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(enabled) },
+                });
+
+            if (this.desktop.service?.overlay) {
+                this.desktop.service.overlay.updateSettings();
+            }
+        },
+
+        getToggleKey: async () => {
+            const qr = await db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "overlay_toggle_key"),
+            });
+
+            if (!qr) {
+                await db.insert(setting).values({ key: "overlay_toggle_key", value: "Alt+A" });
+                return "Alt+A";
+            }
+
+            return qr.value;
+        },
+
+        setToggleKey: async (key: string) => {
+            await db
+                .insert(setting)
+                .values({ key: "overlay_toggle_key", value: key })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: key },
+                });
+
+            if (this.desktop.service?.overlay) {
+                this.desktop.service.overlay.updateSettings();
+            }
+        },
+    };
+
     advanced = {
         getAll: async () => {
             const rows = await db.select().from(setting);

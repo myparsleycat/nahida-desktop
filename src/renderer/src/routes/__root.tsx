@@ -28,6 +28,14 @@ function RootComponent() {
     });
   }, [setAppStatus, setSession, i18n]);
 
+  useEffect(() => {
+    if (location.pathname.startsWith("/overlay")) {
+      document.documentElement.classList.add("transparent");
+    } else {
+      document.documentElement.classList.remove("transparent");
+    }
+  }, [location.pathname]);
+
   const [pathSelectorData, setPathSelectorData] = useState<{
     selectionId: string;
     suggestedName?: string;
@@ -41,6 +49,10 @@ function RootComponent() {
   );
 
   useGlobalEvents(handlePathSelectorModeSelect);
+
+  if (location.pathname.startsWith("/overlay")) {
+    return <Outlet />;
+  }
 
   const noSidebarPath = ["/setting", "/auth"];
   const isNoSidebar = noSidebarPath.some((path) => location.pathname.startsWith(path));

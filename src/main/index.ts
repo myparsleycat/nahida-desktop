@@ -25,12 +25,14 @@ import ArchiveService from "./services/archive";
 import Auth from "./services/auth";
 import { DriveService } from "./services/drive";
 import ModManager from "./services/mod-manager";
+import OverlayService from "./services/overlay";
 import { Tools } from "./services/tools";
 import TransferService from "./services/transfer";
 import { XXMI } from "./services/xxmi";
 import Setting from "./setting";
 import LoginWindow from "./windows/login";
 import MainWindow from "./windows/main";
+import OverlayWindow from "./windows/overlay";
 import SettingWindow from "./windows/setting";
 
 if (IS_ELECTRON) {
@@ -57,6 +59,7 @@ export class NahidaDesktop {
         main: MainWindow;
         auth: LoginWindow;
         setting: SettingWindow;
+        overlay: OverlayWindow;
     };
 
     public lib: {
@@ -80,6 +83,7 @@ export class NahidaDesktop {
         archive: ArchiveService;
         tools: Tools;
         xxmi: XXMI;
+        overlay: OverlayService;
     };
 
     public constructor() {
@@ -92,6 +96,7 @@ export class NahidaDesktop {
             main: new MainWindow(this),
             auth: new LoginWindow(this),
             setting: new SettingWindow(this),
+            overlay: new OverlayWindow(this),
         };
         this.lib = {
             fs: new FS(this),
@@ -114,6 +119,7 @@ export class NahidaDesktop {
             archive: new ArchiveService(this),
             tools: new Tools(this),
             xxmi: new XXMI(this),
+            overlay: new OverlayService(this),
         };
     }
 
@@ -235,6 +241,8 @@ app.whenReady().then(async () => {
     });
 
     await desktop.init();
+
+    desktop.service.xxmi.startMonitor();
 
     // const loggedIn = await desktop.service.auth.isLoggedIn();
     // if (loggedIn) {

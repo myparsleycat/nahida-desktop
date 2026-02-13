@@ -9,7 +9,7 @@ interface CharacterSidebarItemProps {
   group: FolderGroup;
   isSelected: boolean;
   onClick: (group: FolderGroup) => void;
-  onDrop: (group: FolderGroup, files: File[]) => void;
+  onDrop?: (group: FolderGroup, files: File[]) => void;
   itemRefs: React.MutableRefObject<Map<string, HTMLButtonElement>>;
 }
 
@@ -66,7 +66,7 @@ export const CharacterSidebarItem = memo(
         setIsDragOver(false);
         const files = Array.from(e.dataTransfer.files);
         if (files.length > 0) {
-          onDrop(group, files);
+          onDrop?.(group, files);
         }
       }
     };

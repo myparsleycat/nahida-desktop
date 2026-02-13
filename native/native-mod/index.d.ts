@@ -31,6 +31,8 @@ export interface ModInfo {
 
 export declare function processIniFiles(paths: Array<string>): Array<IniResult>
 
+export declare function sendF10(pid: number): boolean
+
 export interface ToggleKey {
   sectionName: string
   iniFileName: string

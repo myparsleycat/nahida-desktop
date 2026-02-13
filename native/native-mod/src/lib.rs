@@ -7,6 +7,81 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use walkdir::WalkDir;
+use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_F10,
+};
+use windows::Win32::UI::WindowsAndMessaging::{
+    EnumWindows, GetWindowThreadProcessId, IsWindowVisible, SetForegroundWindow,
+};
+
+struct FindWindowData {
+    target_pid: u32,
+    found_hwnd: Option<HWND>,
+}
+
+unsafe extern "system" fn enum_windows_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    let data = &mut *(lparam.0 as *mut FindWindowData);
+    let mut process_id = 0;
+    GetWindowThreadProcessId(hwnd, Some(&mut process_id));
+
+    if process_id == data.target_pid && IsWindowVisible(hwnd).as_bool() {
+        data.found_hwnd = Some(hwnd);
+        return BOOL(0);
+    }
+
+    BOOL(1)
+}
+
+#[napi]
+pub fn send_f10(pid: u32) -> bool {
+    unsafe {
+        let mut data = FindWindowData {
+            target_pid: pid,
+            found_hwnd: None,
+        };
+
+        let _ = EnumWindows(
+            Some(enum_windows_callback),
+            LPARAM(&mut data as *mut _ as isize),
+        );
+
+        if let Some(hwnd) = data.found_hwnd {
+            if SetForegroundWindow(hwnd).as_bool() {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+
+                let input_down = [INPUT {
+                    r#type: INPUT_KEYBOARD,
+                    Anonymous: INPUT_0 {
+                        ki: KEYBDINPUT {
+                            wVk: VK_F10,
+                            ..Default::default()
+                        },
+                    },
+                }];
+
+                SendInput(&input_down, std::mem::size_of::<INPUT>() as i32);
+
+                std::thread::sleep(std::time::Duration::from_millis(100));
+
+                let input_up = [INPUT {
+                    r#type: INPUT_KEYBOARD,
+                    Anonymous: INPUT_0 {
+                        ki: KEYBDINPUT {
+                            wVk: VK_F10,
+                            dwFlags: KEYEVENTF_KEYUP,
+                            ..Default::default()
+                        },
+                    },
+                }];
+
+                SendInput(&input_up, std::mem::size_of::<INPUT>() as i32);
+                return true;
+            }
+        }
+    }
+    false
+}
 
 #[napi(object)]
 #[derive(Clone, Default)]
@@ -65,22 +140,24 @@ fn process_section_data(
         return None;
     }
 
-    let (variable, values_str) = data.iter().find(|(k, _)| k.starts_with('$'))?;
-
-    let values: Vec<String> = values_str
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .collect();
-
     let type_val = get_map_value(data, "type");
     let is_hold = type_val
         .as_deref()
         .map(|t| t.eq_ignore_ascii_case("hold"))
         .unwrap_or(false);
 
-    if values.len() < 2 && !is_hold {
-        return None;
-    }
+    let (variable, values) =
+        data.iter()
+            .filter(|(k, _)| k.starts_with('$'))
+            .find_map(|(k, v)| {
+                let vals: Vec<String> = v.split(',').map(|s| s.trim().to_string()).collect();
+
+                if vals.len() >= 2 || is_hold {
+                    Some((k, vals))
+                } else {
+                    None
+                }
+            })?;
 
     let current_value = values.first().cloned();
 

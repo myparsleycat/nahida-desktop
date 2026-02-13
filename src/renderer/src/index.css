@@ -121,6 +121,12 @@
     body {
         @apply bg-background text-foreground;
     }
+
+    html.transparent,
+    html.transparent body {
+        background: transparent !important;
+        background-color: transparent !important;
+    }
 }
 
 @font-face {
