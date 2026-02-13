@@ -677,6 +677,8 @@ export class XXMI {
             throw new Error("XXMI is busy");
         }
 
+        this.busy = true;
+
         try {
             const { config, processName, importerFolder, dllPath } =
                 this.validateAndGetPaths(importer);
