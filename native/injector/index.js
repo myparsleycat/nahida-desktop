@@ -575,5 +575,9 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-module.exports = nativeBinding.default
-module.exports.Injector = nativeBinding.default.Injector
+const binding = nativeBinding?.default ?? nativeBinding
+if (!binding) {
+  throw new Error('Loaded native binding has no exports')
+}
+module.exports = binding
+module.exports.Injector = binding.Injector

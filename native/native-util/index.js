@@ -575,18 +575,22 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-module.exports = nativeBinding.default
-module.exports.findFileAcrossDrives = nativeBinding.default.findFileAcrossDrives
-module.exports.getHwndsForPid = nativeBinding.default.getHwndsForPid
-module.exports.getPreviousPids = nativeBinding.default.getPreviousPids
-module.exports.getProcess = nativeBinding.default.getProcess
-module.exports.getProcessName = nativeBinding.default.getProcessName
-module.exports.getProcessWindowState = nativeBinding.default.getProcessWindowState
-module.exports.getTopmostPid = nativeBinding.default.getTopmostPid
-module.exports.getWaitResult = nativeBinding.default.getWaitResult
-module.exports.killProcess = nativeBinding.default.killProcess
-module.exports.ProcessWindowState = nativeBinding.default.ProcessWindowState
-module.exports.spawnProcess = nativeBinding.default.spawnProcess
-module.exports.startTracking = nativeBinding.default.startTracking
-module.exports.waitForProcess = nativeBinding.default.waitForProcess
-module.exports.waitForProcessExit = nativeBinding.default.waitForProcessExit
+const binding = nativeBinding?.default ?? nativeBinding
+if (!binding) {
+  throw new Error('Loaded native binding has no exports')
+}
+module.exports = binding
+module.exports.findFileAcrossDrives = binding.findFileAcrossDrives
+module.exports.getHwndsForPid = binding.getHwndsForPid
+module.exports.getPreviousPids = binding.getPreviousPids
+module.exports.getProcess = binding.getProcess
+module.exports.getProcessName = binding.getProcessName
+module.exports.getProcessWindowState = binding.getProcessWindowState
+module.exports.getTopmostPid = binding.getTopmostPid
+module.exports.getWaitResult = binding.getWaitResult
+module.exports.killProcess = binding.killProcess
+module.exports.ProcessWindowState = binding.ProcessWindowState
+module.exports.spawnProcess = binding.spawnProcess
+module.exports.startTracking = binding.startTracking
+module.exports.waitForProcess = binding.waitForProcess
+module.exports.waitForProcessExit = binding.waitForProcessExit

@@ -451,10 +451,27 @@ export class Setting {
 
     advanced = {
         getAll: async () => {
-            return await db.select().from(setting);
+            const rows = await db.select().from(setting);
+            const sensitiveKeys = ["proxy", "password", "token", "secret", "credentials"];
+
+            return rows.map((row) => {
+                const isSensitive = sensitiveKeys.some((k) => row.key.toLowerCase().includes(k));
+                if (isSensitive) {
+                    return { ...row, value: "********" };
+                }
+                return row;
+            });
         },
 
         set: async (key: string, value: string) => {
+            const existing = await db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, key),
+            });
+
+            if (!existing) {
+                throw new Error(`Setting key "${key}" not found.`);
+            }
+
             await db.update(setting).set({ value }).where(eq(setting.key, key));
             this.desktop.ipc.broadcast("setting:update", { key, value });
             this.desktop.ipc.broadcast("renderer:reload");
