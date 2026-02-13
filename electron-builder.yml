@@ -16,6 +16,7 @@ files:
     - "!node_modules/.pnpm/@cbor-extract+cbor-extract-linux-x64@*/**/*"
     - "!native/**/*"
     - "!plugins/**/*"
+    - "!local.db"
 # asar: false
 extraResources:
     - from: build/watchman-v2025.02.24.00-windows
