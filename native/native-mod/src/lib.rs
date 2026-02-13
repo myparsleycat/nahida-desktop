@@ -65,22 +65,24 @@ fn process_section_data(
         return None;
     }
 
-    let (variable, values_str) = data.iter().find(|(k, _)| k.starts_with('$'))?;
-
-    let values: Vec<String> = values_str
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .collect();
-
     let type_val = get_map_value(data, "type");
     let is_hold = type_val
         .as_deref()
         .map(|t| t.eq_ignore_ascii_case("hold"))
         .unwrap_or(false);
 
-    if values.len() < 2 && !is_hold {
-        return None;
+    let (variable, values) =
+        data.iter()
+            .filter(|(k, _)| k.starts_with('$'))
+            .find_map(|(k, v)| {
+                let vals: Vec<String> = v.split(',').map(|s| s.trim().to_string()).collect();
+
+                if vals.len() >= 2 || is_hold {
+                    Some((k, vals))
+                } else {
+                    None
     }
+            })?;
 
     let current_value = values.first().cloned();
 
