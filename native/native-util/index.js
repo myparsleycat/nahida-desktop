@@ -590,6 +590,7 @@ module.exports.getTopmostPid = binding.getTopmostPid
 module.exports.getWaitResult = binding.getWaitResult
 module.exports.killProcess = binding.killProcess
 module.exports.ProcessWindowState = binding.ProcessWindowState
+module.exports.spawnPrivilegedProcess = binding.spawnPrivilegedProcess
 module.exports.spawnProcess = binding.spawnProcess
 module.exports.startTracking = binding.startTracking
 module.exports.waitForProcess = binding.waitForProcess
