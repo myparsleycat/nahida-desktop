@@ -3,6 +3,7 @@ import { BrowserWindow } from "electron";
 import type { NahidaDesktop } from "../index";
 import { registerAuthHandlers } from "./handlers/auth";
 import { registerDriveHandlers } from "./handlers/drive";
+import { registerFixToolsManagerHandlers } from "./handlers/fix-tools-manager";
 import { registerLoggerHandlers } from "./handlers/logger";
 import { registerModHandlers } from "./handlers/mod";
 import { registerPathSelectorHandlers } from "./handlers/path-selector";
@@ -29,6 +30,7 @@ export class IPC {
         registerWindowHandlers(this.d);
         registerTransferHandlers(this.d);
         registerModHandlers(this.d);
+        registerFixToolsManagerHandlers(this.d);
         registerLoggerHandlers(this.d);
         registerPathSelectorHandlers();
         registerToolsHandlers(this.d);

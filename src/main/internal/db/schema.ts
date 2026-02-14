@@ -32,6 +32,7 @@ export const fixTool = sqliteTable("fix_tool", {
     source: text("source").notNull(),
     type: text("type", { enum: ["python", "batch"] }).notNull(),
     size: integer("size").notNull(),
+    sha256: text("sha256").notNull(),
 });
 
 export const fixToolRelations = relations(fixTool, ({ many }) => ({

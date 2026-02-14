@@ -1,77 +1,52 @@
-import { Button } from "@renderer/components/ui/button";
-import { Input } from "@renderer/components/ui/input";
-import { createFileRoute } from "@tanstack/react-router";
-import { Loader2Icon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { D3D11Builder } from "@renderer/components/tools/d3d11-builder";
+import { cn } from "@renderer/lib/utils";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/tools/")({
   component: RouteComponent,
 });
 
 function RouteComponent() {
-  const [isRunning, setIsRunning] = useState(false);
-  const [progress, setProgress] = useState("");
-  const [gimiPath, setGimiPath] = useState("");
-
-  useEffect(() => {
-    window.api.invoke("tools:getGIMIPath").then((path) => {
-      setGimiPath(path || "");
-    });
-
-    return window.api.on("tools:progress", (message) => {
-      setProgress(message);
-    });
-  }, []);
-
-  const handleBuild = async () => {
-    if (isRunning) return;
-    setIsRunning(true);
-    setProgress("Initializing...");
-    try {
-      const result = await window.api.invoke("tools:buildNewD3DDLL", {
-        gimiPath,
-      });
-      if (!result) {
-        return;
-      }
-      setProgress("빌드 성공");
-    } catch (e) {
-      console.error(e);
-      setProgress(`Error: ${e}`);
-    } finally {
-      setIsRunning(false);
-    }
-  };
+  const toolPages = [
+    {
+      name: "D3D11 Builder",
+      component: () => <D3D11Builder />,
+    },
+    {
+      name: "Fix Tool Manager",
+      path: "/tools/fix-tool-manger",
+    },
+  ];
 
   return (
-    <div className="p-4 flex justify-center">
-      <div className="w-full max-w-xl">
-        <div className="border rounded-md p-4">
-          <div className="space-y-3">
-            <div className="flex flex-col text-sm">
-              <span>d3d11.dll 빌드</span>
-              <span>새로운 d3d11.dll을 빌드합니다</span>
-            </div>
+    <div className="p-4 grid grid-cols-1 md:grid-cols-2 grid-rows-2 gap-4 h-full">
+      {toolPages.map((page) => {
+        const itemClassName = cn(
+          "p-4 border rounded-md bg-card transition-colors flex justify-center items-center size-full",
+        );
 
-            <div className="flex flex-row gap-2">
-              <Input
-                value={gimiPath}
-                onChange={(e) => {
-                  setGimiPath(e.target.value);
-                  window.api.invoke("tools:saveGIMIPath", e.target.value);
-                }}
-                placeholder="GIMI 경로 입력 (비워둘 경우 %appdata%\XXMI Launcher\GIMI 를 사용)"
-              />
-              <Button variant="outline" size="sm" disabled={isRunning} onClick={handleBuild}>
-                {isRunning && <Loader2Icon className="mr-2 animate-spin" />}
-                빌드
-              </Button>
+        if (page.component) {
+          return (
+            <div key={page.name} className={cn(itemClassName)}>
+              {page.component()}
             </div>
+          );
+        }
 
-            {progress && <div className="mt-2 text-sm text-muted-foreground">{progress}</div>}
-          </div>
-        </div>
-      </div>
+        if (page.path) {
+          return (
+            <Link
+              key={page.path}
+              to={page.path}
+              className={cn(itemClassName, "flex justify-center items-center")}
+            >
+              <h2 className="text-xl font-semibold">{page.name}</h2>
+            </Link>
+          );
+        }
+
+        return null;
+      })}
     </div>
   );
 }
