@@ -1,6 +1,5 @@
 import path from "node:path";
 import type { NahidaDesktop } from "@main/index";
-import { db } from "@main/internal/db";
 import { app } from "electron";
 import { GoProcess } from "./go-process";
 
@@ -92,32 +91,32 @@ export class CompactService {
         if (!this.isFeatureEnabled) return;
 
         this.isEnabled = await this.desktop.setting.general.getGameFolderCompressionEnabled();
-        const games = await db.query.gamePaths.findMany();
+        const games = await this.desktop.lib.db.query.gamePaths.findMany();
         const paths = games.map((g) => g.modFolderPath);
 
         if (this.isEnabled) {
             if (paths.length > 0 && this.process) {
                 this.process.write(
-                    JSON.stringify({
+                    `${JSON.stringify({
                         type: "compress",
                         paths: paths,
-                    }) + "\n",
+                    })}\n`,
                 );
             }
         } else {
             if (paths.length > 0 && this.process) {
                 this.process.write(
-                    JSON.stringify({
+                    `${JSON.stringify({
                         type: "decompress",
                         paths: paths,
-                    }) + "\n",
+                    })}\n`,
                 );
             } else if (this.process) {
                 this.process.write(
-                    JSON.stringify({
+                    `${JSON.stringify({
                         type: "stop",
                         paths: [],
-                    }) + "\n",
+                    })}\n`,
                 );
             }
         }

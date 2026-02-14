@@ -1,5 +1,4 @@
 import type { NahidaDesktop } from "@main/index";
-import { db } from "@main/internal/db";
 import { imageCache, setting } from "@main/internal/db/schema";
 import AutoLaunch from "auto-launch";
 import { eq, sum } from "drizzle-orm";
@@ -20,7 +19,7 @@ export class Setting {
     }
 
     public async getBounds() {
-        const qr = await db.query.setting.findFirst({
+        const qr = await this.desktop.lib.db.query.setting.findFirst({
             where: (t, { eq }) => eq(t.key, "bounds"),
         });
 
@@ -32,7 +31,7 @@ export class Setting {
     }
 
     public async setBounds(bounds: Bounds) {
-        await db
+        await this.desktop.lib.db
             .update(setting)
             .set({ value: JSON.stringify(bounds) })
             .where(eq(setting.key, "bounds"));
@@ -40,12 +39,14 @@ export class Setting {
 
     general = {
         getRunOnStartup: async () => {
-            const qr = await db.query.setting.findFirst({
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "runOnStartup"),
             });
 
             if (!qr) {
-                await db.insert(setting).values({ key: "runOnStartup", value: "false" });
+                await this.desktop.lib.db
+                    .insert(setting)
+                    .values({ key: "runOnStartup", value: "false" });
                 return false;
             }
 
@@ -53,16 +54,18 @@ export class Setting {
         },
 
         setRunOnStartup: async (enabled: boolean) => {
-            const current = await db.query.setting.findFirst({
+            const current = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "runOnStartup"),
             });
             if (current) {
-                await db
+                await this.desktop.lib.db
                     .update(setting)
                     .set({ value: String(enabled) })
                     .where(eq(setting.key, "runOnStartup"));
             } else {
-                await db.insert(setting).values({ key: "runOnStartup", value: String(enabled) });
+                await this.desktop.lib.db
+                    .insert(setting)
+                    .values({ key: "runOnStartup", value: String(enabled) });
             }
 
             if (app.isPackaged) {
@@ -81,7 +84,7 @@ export class Setting {
         },
 
         getLanguage: async () => {
-            const qr = await db.query.setting.findFirst({
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "language"),
             });
 
@@ -90,7 +93,9 @@ export class Setting {
                 const language = ["ko", "en", "ja", "zh"].includes(systemLocale.split("-")[0])
                     ? systemLocale.split("-")[0]
                     : "en";
-                await db.insert(setting).values({ key: "language", value: language });
+                await this.desktop.lib.db
+                    .insert(setting)
+                    .values({ key: "language", value: language });
                 return language;
             }
 
@@ -98,7 +103,7 @@ export class Setting {
         },
 
         setLanguage: async (language: string) => {
-            await db
+            await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "language", value: language })
                 .onConflictDoUpdate({
@@ -110,12 +115,12 @@ export class Setting {
         },
 
         getMoveTransferPageWhenStartTransfer: async () => {
-            const qr = await db.query.setting.findFirst({
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "moveTransferPageWhenStartTransfer"),
             });
 
             if (!qr) {
-                await db
+                await this.desktop.lib.db
                     .insert(setting)
                     .values({ key: "moveTransferPageWhenStartTransfer", value: "false" });
                 return false;
@@ -125,28 +130,28 @@ export class Setting {
         },
 
         setMoveTransferPageWhenStartTransfer: async (enabled: boolean) => {
-            const current = await db.query.setting.findFirst({
+            const current = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "moveTransferPageWhenStartTransfer"),
             });
             if (current) {
-                await db
+                await this.desktop.lib.db
                     .update(setting)
                     .set({ value: String(enabled) })
                     .where(eq(setting.key, "moveTransferPageWhenStartTransfer"));
             } else {
-                await db
+                await this.desktop.lib.db
                     .insert(setting)
                     .values({ key: "moveTransferPageWhenStartTransfer", value: String(enabled) });
             }
         },
 
         getPowerSaveBlockInTransfer: async () => {
-            const qr = await db.query.setting.findFirst({
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "powerSaveBlockInTransfer"),
             });
 
             if (!qr) {
-                await db
+                await this.desktop.lib.db
                     .insert(setting)
                     .values({ key: "powerSaveBlockInTransfer", value: "false" });
                 return false;
@@ -156,7 +161,7 @@ export class Setting {
         },
 
         setPowerSaveBlockInTransfer: async (enabled: boolean) => {
-            await db
+            await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "powerSaveBlockInTransfer", value: String(enabled) })
                 .onConflictDoUpdate({
@@ -166,12 +171,14 @@ export class Setting {
         },
 
         getDefaultStartPage: async () => {
-            const qr = await db.query.setting.findFirst({
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "defaultStartPage"),
             });
 
             if (!qr) {
-                await db.insert(setting).values({ key: "defaultStartPage", value: "/mod" });
+                await this.desktop.lib.db
+                    .insert(setting)
+                    .values({ key: "defaultStartPage", value: "/mod" });
                 return "/mod";
             }
 
@@ -179,7 +186,7 @@ export class Setting {
         },
 
         setDefaultStartPage: async (page: string | null) => {
-            await db
+            await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "defaultStartPage", value: page || "/mod" })
                 .onConflictDoUpdate({
@@ -193,12 +200,14 @@ export class Setting {
         },
 
         getCheckBackgroundUpdates: async () => {
-            const qr = await db.query.setting.findFirst({
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "checkBackgroundUpdates"),
             });
 
             if (!qr) {
-                await db.insert(setting).values({ key: "checkBackgroundUpdates", value: "true" });
+                await this.desktop.lib.db
+                    .insert(setting)
+                    .values({ key: "checkBackgroundUpdates", value: "true" });
                 return true;
             }
 
@@ -206,7 +215,7 @@ export class Setting {
         },
 
         setCheckBackgroundUpdates: async (enabled: boolean) => {
-            await db
+            await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "checkBackgroundUpdates", value: String(enabled) })
                 .onConflictDoUpdate({
@@ -216,12 +225,12 @@ export class Setting {
         },
 
         getGameFolderCompressionEnabled: async () => {
-            const qr = await db.query.setting.findFirst({
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "gameFolderCompressionEnabled"),
             });
 
             if (!qr) {
-                await db
+                await this.desktop.lib.db
                     .insert(setting)
                     .values({ key: "gameFolderCompressionEnabled", value: "false" });
                 return false;
@@ -231,7 +240,7 @@ export class Setting {
         },
 
         setGameFolderCompressionEnabled: async (enabled: boolean) => {
-            await db
+            await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "gameFolderCompressionEnabled", value: String(enabled) })
                 .onConflictDoUpdate({
@@ -250,12 +259,12 @@ export class Setting {
         },
 
         getGameFolderCompressionFeatureEnabled: async () => {
-            const qr = await db.query.setting.findFirst({
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "gameFolderCompressionFeatureEnabled"),
             });
 
             if (!qr) {
-                await db
+                await this.desktop.lib.db
                     .insert(setting)
                     .values({ key: "gameFolderCompressionFeatureEnabled", value: "false" });
                 return false;
@@ -265,7 +274,7 @@ export class Setting {
         },
 
         setGameFolderCompressionFeatureEnabled: async (enabled: boolean) => {
-            await db
+            await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "gameFolderCompressionFeatureEnabled", value: String(enabled) })
                 .onConflictDoUpdate({
@@ -284,23 +293,25 @@ export class Setting {
         },
 
         getImageCacheSize: async () => {
-            const [result] = await db.select({ totalSize: sum(imageCache.size) }).from(imageCache);
+            const [result] = await this.desktop.lib.db
+                .select({ totalSize: sum(imageCache.size) })
+                .from(imageCache);
             return Number(result?.totalSize || 0);
         },
 
         clearImageCache: async () => {
-            await db.delete(imageCache);
+            await this.desktop.lib.db.delete(imageCache);
         },
     };
 
     mod = {
         getDeleteArchiveAfterExtract: async () => {
-            const qr = await db.query.setting.findFirst({
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "mod_delete_archive_after_extract"),
             });
 
             if (!qr) {
-                await db
+                await this.desktop.lib.db
                     .insert(setting)
                     .values({ key: "mod_delete_archive_after_extract", value: "true" });
                 return true;
@@ -310,7 +321,7 @@ export class Setting {
         },
 
         setDeleteArchiveAfterExtract: async (enabled: boolean) => {
-            await db
+            await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "mod_delete_archive_after_extract", value: String(enabled) })
                 .onConflictDoUpdate({
@@ -320,12 +331,12 @@ export class Setting {
         },
 
         getMoveFolderInsteadOfCopy: async () => {
-            const qr = await db.query.setting.findFirst({
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "mod_move_folder_instead_of_copy"),
             });
 
             if (!qr) {
-                await db
+                await this.desktop.lib.db
                     .insert(setting)
                     .values({ key: "mod_move_folder_instead_of_copy", value: "true" });
                 return true;
@@ -335,7 +346,7 @@ export class Setting {
         },
 
         setMoveFolderInsteadOfCopy: async (enabled: boolean) => {
-            await db
+            await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "mod_move_folder_instead_of_copy", value: String(enabled) })
                 .onConflictDoUpdate({
@@ -345,12 +356,12 @@ export class Setting {
         },
 
         getVirtualizationEnabled: async () => {
-            const qr = await db.query.setting.findFirst({
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "mod_virtualization_enabled"),
             });
 
             if (!qr) {
-                await db
+                await this.desktop.lib.db
                     .insert(setting)
                     .values({ key: "mod_virtualization_enabled", value: "true" });
                 return true;
@@ -360,7 +371,7 @@ export class Setting {
         },
 
         setVirtualizationEnabled: async (enabled: boolean) => {
-            await db
+            await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "mod_virtualization_enabled", value: String(enabled) })
                 .onConflictDoUpdate({
@@ -370,12 +381,12 @@ export class Setting {
         },
 
         getVirtualizationThreshold: async () => {
-            const qr = await db.query.setting.findFirst({
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "mod_virtualization_threshold"),
             });
 
             if (!qr) {
-                await db
+                await this.desktop.lib.db
                     .insert(setting)
                     .values({ key: "mod_virtualization_threshold", value: "30" });
                 return 30;
@@ -385,7 +396,7 @@ export class Setting {
         },
 
         setVirtualizationThreshold: async (threshold: number) => {
-            await db
+            await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "mod_virtualization_threshold", value: String(threshold) })
                 .onConflictDoUpdate({
@@ -395,12 +406,14 @@ export class Setting {
         },
 
         getSearchModPreview: async () => {
-            const qr = await db.query.setting.findFirst({
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "mod_search_mod_preview"),
             });
 
             if (!qr) {
-                await db.insert(setting).values({ key: "mod_search_mod_preview", value: "false" });
+                await this.desktop.lib.db
+                    .insert(setting)
+                    .values({ key: "mod_search_mod_preview", value: "false" });
                 return false;
             }
 
@@ -408,7 +421,7 @@ export class Setting {
         },
 
         setSearchModPreview: async (enabled: boolean) => {
-            await db
+            await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "mod_search_mod_preview", value: String(enabled) })
                 .onConflictDoUpdate({
@@ -420,13 +433,13 @@ export class Setting {
 
     net = {
         getProxy: async () => {
-            const qr = await db.query.setting.findFirst({
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "net_proxy"),
             });
 
             if (!qr) {
                 const defaultProxy = { type: "disabled" };
-                await db
+                await this.desktop.lib.db
                     .insert(setting)
                     .values({ key: "net_proxy", value: JSON.stringify(defaultProxy) });
                 return defaultProxy;
@@ -437,7 +450,7 @@ export class Setting {
 
         // biome-ignore lint/suspicious/noExplicitAny: <>
         setProxy: async (settings: any) => {
-            await db
+            await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "net_proxy", value: JSON.stringify(settings) })
                 .onConflictDoUpdate({
@@ -451,12 +464,14 @@ export class Setting {
 
     overlay = {
         getEnabled: async () => {
-            const qr = await db.query.setting.findFirst({
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "overlay_enabled"),
             });
 
             if (!qr) {
-                await db.insert(setting).values({ key: "overlay_enabled", value: "true" });
+                await this.desktop.lib.db
+                    .insert(setting)
+                    .values({ key: "overlay_enabled", value: "true" });
                 return true;
             }
 
@@ -464,7 +479,7 @@ export class Setting {
         },
 
         setEnabled: async (enabled: boolean) => {
-            await db
+            await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "overlay_enabled", value: String(enabled) })
                 .onConflictDoUpdate({
@@ -478,12 +493,14 @@ export class Setting {
         },
 
         getToggleKey: async () => {
-            const qr = await db.query.setting.findFirst({
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "overlay_toggle_key"),
             });
 
             if (!qr) {
-                await db.insert(setting).values({ key: "overlay_toggle_key", value: "Alt+A" });
+                await this.desktop.lib.db
+                    .insert(setting)
+                    .values({ key: "overlay_toggle_key", value: "Alt+A" });
                 return "Alt+A";
             }
 
@@ -491,7 +508,7 @@ export class Setting {
         },
 
         setToggleKey: async (key: string) => {
-            await db
+            await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "overlay_toggle_key", value: key })
                 .onConflictDoUpdate({
@@ -507,7 +524,7 @@ export class Setting {
 
     advanced = {
         getAll: async () => {
-            const rows = await db.select().from(setting);
+            const rows = await this.desktop.lib.db.select().from(setting);
             const sensitiveKeys = ["proxy", "password", "token", "secret", "credentials"];
 
             return rows.map((row) => {
@@ -520,7 +537,7 @@ export class Setting {
         },
 
         set: async (key: string, value: string) => {
-            const existing = await db.query.setting.findFirst({
+            const existing = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, key),
             });
 
@@ -528,7 +545,7 @@ export class Setting {
                 throw new Error(`Setting key "${key}" not found.`);
             }
 
-            await db.update(setting).set({ value }).where(eq(setting.key, key));
+            await this.desktop.lib.db.update(setting).set({ value }).where(eq(setting.key, key));
             this.desktop.ipc.broadcast("setting:update", { key, value });
             this.desktop.ipc.broadcast("renderer:reload");
         },

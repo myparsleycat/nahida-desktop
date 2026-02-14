@@ -4,7 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
-import { db } from "@main/internal/db";
 import { setting } from "@main/internal/db/schema";
 import { getAgent } from "@main/internal/fetcher";
 import fse from "fs-extra";
@@ -23,7 +22,7 @@ export class Tools {
     }
 
     public async getGIMIPath() {
-        const result = await db.query.setting.findFirst({
+        const result = await this.desktop.lib.db.query.setting.findFirst({
             where: (t, { eq }) => eq(t.key, "savedGimiPath"),
         });
 
@@ -31,7 +30,7 @@ export class Tools {
     }
 
     public async saveGIMIPath(gimiPath: string) {
-        await db
+        await this.desktop.lib.db
             .insert(setting)
             .values({
                 key: "savedGimiPath",
