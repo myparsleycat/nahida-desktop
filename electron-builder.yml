@@ -27,8 +27,8 @@ extraResources:
 asarUnpack:
     - resources/**
 win:
-    cscLink: nahida-desktop.pfx
-    cscKeyPassword: password
+    # cscLink: nahida-desktop.pfx
+    # cscKeyPassword: password
     executableName: Nahida Desktop
 nsis:
     artifactName: Nahida Desktop Setup ${version}.${ext}
