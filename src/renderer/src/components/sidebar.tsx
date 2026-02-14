@@ -7,7 +7,6 @@ import {
   DatabaseBackupIcon,
   GamepadIcon,
   HardDriveIcon,
-  PackageIcon,
   SettingsIcon,
   Share2Icon,
   WrenchIcon,
@@ -140,43 +139,23 @@ export function Sidebar({ className }: { className?: string }) {
           </Tooltip>
 
           {appStatus?.isDev && (
-            <>
-              <Tooltip disableHoverableContent={true}>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onPointerDown={handlePointerDown}
-                    onClick={() => {
-                      navi({ to: "/xxmi" });
-                    }}
-                  >
-                    <PackageIcon className={cn(iconSize)} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right" hideWhenDetached={true}>
-                  XXMI
-                </TooltipContent>
-              </Tooltip>
-
-              <Tooltip disableHoverableContent={true}>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onPointerDown={handlePointerDown}
-                    onClick={() => {
-                      navi({ to: "/backup" });
-                    }}
-                  >
-                    <DatabaseBackupIcon className={cn(iconSize)} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right" hideWhenDetached={true}>
-                  {t("page.backup.title")}
-                </TooltipContent>
-              </Tooltip>
-            </>
+            <Tooltip disableHoverableContent={true}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onPointerDown={handlePointerDown}
+                  onClick={() => {
+                    navi({ to: "/backup" });
+                  }}
+                >
+                  <DatabaseBackupIcon className={cn(iconSize)} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right" hideWhenDetached={true}>
+                {t("page.backup.title")}
+              </TooltipContent>
+            </Tooltip>
           )}
 
           <Tooltip disableHoverableContent={true}>
