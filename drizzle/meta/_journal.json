@@ -36,6 +36,13 @@
       "when": 1770636954966,
       "tag": "0004_modern_zaran",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1771038120387,
+      "tag": "0005_big_namor",
+      "breakpoints": true
     }
   ]
 }
