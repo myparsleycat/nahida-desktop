@@ -15,14 +15,22 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32First, Process32Next, PROCESSENTRY32, TH32CS_SNAPPROCESS,
 };
 use windows::Win32::System::Threading::{
-    CreateProcessW, OpenProcess, QueryFullProcessImageNameW, TerminateProcess,
-    CREATE_NEW_PROCESS_GROUP, PROCESS_INFORMATION, PROCESS_NAME_WIN32,
-    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, STARTUPINFOW,
+    CreateProcessW, GetExitCodeProcess, OpenProcess, QueryFullProcessImageNameW, TerminateProcess,
+    WaitForSingleObject, CREATE_NEW_PROCESS_GROUP, INFINITE, PROCESS_INFORMATION,
+    PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, STARTUPINFOW,
 };
+use windows::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW};
 use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+use windows::Win32::UI::WindowsAndMessaging::SW_HIDE;
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
 };
+
+fn to_wstring(str: &str) -> Vec<u16> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    OsStr::new(str).encode_wide().chain(Some(0)).collect()
+}
 
 #[napi]
 pub enum ProcessWindowState {
@@ -590,5 +598,61 @@ pub fn spawn_process(options: SpawnOptions) -> napi::Result<u32> {
         let _ = CloseHandle(pi.hThread);
 
         Ok(pid)
+    }
+}
+
+#[napi]
+pub async fn spawn_privileged_process(
+    exe_path: String,
+    args: String,
+    working_dir: Option<String>,
+) -> napi::Result<i32> {
+    let w_exe_path = to_wstring(&exe_path);
+    let w_args = to_wstring(&args);
+    let w_working_dir = working_dir.map(|d| to_wstring(&d));
+    let w_verb = to_wstring("runas");
+
+    let mut info = SHELLEXECUTEINFOW::default();
+    info.cbSize = std::mem::size_of::<SHELLEXECUTEINFOW>() as u32;
+    info.fMask = SEE_MASK_NOCLOSEPROCESS;
+    info.lpVerb = PCWSTR(w_verb.as_ptr());
+    info.lpFile = PCWSTR(w_exe_path.as_ptr());
+    info.lpParameters = PCWSTR(w_args.as_ptr());
+    info.lpDirectory = w_working_dir
+        .as_ref()
+        .map(|d| PCWSTR(d.as_ptr()))
+        .unwrap_or(PCWSTR::null());
+    info.nShow = SW_HIDE.0 as i32;
+
+    unsafe {
+        let result = ShellExecuteExW(&mut info);
+        if result.is_err() {
+            return Err(napi::Error::from_reason(format!(
+                "ShellExecuteExW failed: {:?}",
+                result.err()
+            )));
+        }
+
+        let h_process = info.hProcess;
+        if h_process.is_invalid() {
+            return Err(napi::Error::from_reason("Failed to get process handle"));
+        }
+
+        let exit_code = thread::spawn(move || {
+            let _ = WaitForSingleObject(h_process, INFINITE);
+            let mut code = 0;
+            let _ = GetExitCodeProcess(h_process, &mut code);
+            let _ = CloseHandle(h_process);
+            code
+        });
+
+        // We can't easily join in async without a runtime awareness,
+        // but napi-rs's async functions run in a thread anyway.
+        // However, for simplicity and to match the 'wait' requirement:
+        let code = exit_code.join().map_err(|_| {
+            napi::Error::from_reason("Internal thread panic while waiting for process")
+        })?;
+
+        Ok(code as i32)
     }
 }

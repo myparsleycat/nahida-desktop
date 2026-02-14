@@ -39,6 +39,8 @@ export interface SpawnOptions {
   workingDir?: string
 }
 
+export declare function spawnPrivilegedProcess(exePath: string, args: string, workingDir?: string | undefined | null): Promise<number>
+
 export declare function spawnProcess(options: SpawnOptions): number
 
 export declare function startTracking(): void
