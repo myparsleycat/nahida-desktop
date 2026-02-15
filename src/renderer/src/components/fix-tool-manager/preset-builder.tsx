@@ -2,45 +2,51 @@ import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { cn } from "@renderer/lib/utils";
-import type { FixTool } from "@renderer/routes/tools/fix-tool-manger";
+import type { Script } from "@renderer/routes/tools/fix-tool-manger";
 import { Reorder } from "framer-motion";
 import { GripVertical, Save, X } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import execIcon from "@/renderer/assets/img/document-executable-svgrepo-com.svg";
 import pythonIcon from "@/renderer/assets/img/python-svgrepo-com.svg";
 
 interface PresetBuilderProps {
-  insertedPresetTools: FixTool[];
-  setInsertedPresetTools: (tools: FixTool[]) => void;
-  onRemoveTool: (id: string) => void;
-  onReorderTools: (tools: FixTool[]) => void;
+  insertedPresetTools: Script[];
+  setInsertedPresetTools: (tools: Script[]) => void;
+  onRemoveScript: (id: string) => void;
+  onReorderScripts: (scripts: Script[]) => void;
 }
 
 export function PresetBuilder({
   insertedPresetTools,
   setInsertedPresetTools,
-  onRemoveTool,
-  onReorderTools,
+  onRemoveScript,
+  onReorderScripts,
 }: PresetBuilderProps) {
+  const { t } = useTranslation();
   const [presetName, setPresetName] = useState("");
 
   const handleSavePreset = async () => {
     try {
       await window.api.invoke("ftm:createPreset", {
         name: presetName,
-        toolIds: insertedPresetTools.map((tool) => tool.id),
+        scriptIds: insertedPresetTools.map((script) => script.id),
       });
 
       setPresetName("");
       setInsertedPresetTools([]);
-      toast.success("프리셋이 저장되었습니다");
+      toast.success(t("page.tools.fix-tool-manager.builder.right.#.handleSavePreset.success"));
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Unknown error";
       if (msg.includes("already exists")) {
-        toast.warning("이미 존재하는 프리셋 이름입니다");
+        toast.warning(
+          t("page.tools.fix-tool-manager.builder.right.#.handleSavePreset.alreadyExists"),
+        );
       } else {
-        toast.error(msg);
+        toast.error(t("page.tools.fix-tool-manager.builder.right.#.handleSavePreset.error"), {
+          description: msg,
+        });
       }
     }
   };
@@ -50,22 +56,26 @@ export function PresetBuilder({
       <div className="flex flex-col gap-2 p-3 border-b">
         <div className="flex items-center justify-between">
           <div className="flex-1">
-            <p className="text-base font-semibold">Preset Configuration</p>
-            <p className="text-sm text-muted-foreground">Drag to reorder tools in your preset</p>
+            <p className="text-base font-semibold">
+              {t("page.tools.fix-tool-manager.builder.right.title")}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {t("page.tools.fix-tool-manager.builder.right.description")}
+            </p>
           </div>
           <Button
             onClickPromise={handleSavePreset}
             size="sm"
             disabled={!presetName.trim() || insertedPresetTools.length < 1}
           >
-            <Save className="h-4 w-4 mr-2" />
-            Save
+            <Save className="h-4 w-4" />
+            {t("g.save")}
           </Button>
         </div>
 
         <div className="flex flex-row space-x-4 items-center">
           <label htmlFor="preset-name" className="text-sm text-foreground text-nowrap">
-            Preset Name
+            {t("page.tools.fix-tool-manager.builder.right.presetName")}
           </label>
           <Input
             id="preset-name"
@@ -75,7 +85,7 @@ export function PresetBuilder({
               setPresetName(e.target.value);
             }}
             disabled={insertedPresetTools.length < 1}
-            placeholder="Enter preset name"
+            placeholder={t("page.tools.fix-tool-manager.builder.right.enterPresetName")}
           />
         </div>
       </div>
@@ -84,22 +94,24 @@ export function PresetBuilder({
         <div className="p-3">
           {insertedPresetTools.length === 0 ? (
             <div className="border-2 border-dashed border-border rounded-lg p-12 text-center">
-              <p className="text-sm text-muted-foreground">No tools added yet</p>
+              <p className="text-sm text-muted-foreground">
+                {t("page.tools.fix-tool-manager.builder.right.noScripts.title")}
+              </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Add tools from the left panel to build your preset
+                {t("page.tools.fix-tool-manager.builder.right.noScripts.description")}
               </p>
             </div>
           ) : (
             <Reorder.Group
               axis="y"
               values={insertedPresetTools}
-              onReorder={onReorderTools}
+              onReorder={onReorderScripts}
               className="flex flex-col space-y-2"
             >
-              {insertedPresetTools.map((tool, index) => (
+              {insertedPresetTools.map((script, index) => (
                 <Reorder.Item
-                  key={tool.id}
-                  value={tool}
+                  key={script.id}
+                  value={script}
                   className={cn(
                     "group grid grid-cols-[auto_1fr_auto] items-center gap-3 p-4 rounded-lg border border-border bg-card cursor-grab active:cursor-grabbing transition-colors",
                     "hover:bg-accent/30",
@@ -113,21 +125,21 @@ export function PresetBuilder({
                   </div>
 
                   <div className="flex flex-row space-x-2 items-center min-w-0">
-                    {tool.type === "python" ? (
+                    {script.type === "python" ? (
                       <img src={pythonIcon} alt="python" className="w-6 h-6" />
                     ) : (
                       <img src={execIcon} alt="python" className="w-6 h-6 dark:invert" />
                     )}
 
                     <p className="font-medium text-sm text-foreground truncate min-w-0">
-                      {tool.name}
+                      {script.name}
                     </p>
                   </div>
 
                   <Button
                     size="icon"
                     variant="outline"
-                    onClick={() => onRemoveTool(tool.id)}
+                    onClick={() => onRemoveScript(script.id)}
                     className="text-destructive hover:text-destructive pointer-events-auto"
                   >
                     <X className="h-4 w-4" />

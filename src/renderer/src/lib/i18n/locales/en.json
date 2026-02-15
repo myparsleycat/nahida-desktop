@@ -171,6 +171,39 @@
                 }
             }
         },
+        "tools": {
+            "fix-tool-manager": {
+                "presets": {},
+                "builder": {
+                    "left": {
+                        "title": "Added Scripts",
+                        "description": "Drag and drop to add scripts or click the + button to move to the right",
+                        "noScripts": {
+                            "title": "No available scripts",
+                            "description": "Drag and drop Python files (.py) or executable files (.exe) here to add"
+                        },
+                        "dropToAdd": "Drop to add"
+                    },
+                    "right": {
+                        "title": "Preset Configuration",
+                        "description": "Drag to change script order",
+                        "presetName": "Preset Name",
+                        "enterPresetName": "Please enter preset name",
+                        "noScripts": {
+                            "title": "No scripts added",
+                            "description": "Click the + button from the left list to add scripts"
+                        },
+                        "#": {
+                            "handleSavePreset": {
+                                "success": "Preset saved successfully",
+                                "error": "Failed to save preset",
+                                "alreadyExists": "Preset name already exists"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "setting": {
             "title": "Settings",
             "tabs": {

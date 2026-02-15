@@ -26,7 +26,7 @@ export const imageCache = sqliteTable("image_cache", {
     size: integer().notNull(),
 });
 
-export const fixTool = sqliteTable("fix_tool", {
+export const script = sqliteTable("script", {
     id: text("id").primaryKey(),
     name: text("name").notNull().unique(),
     source: blob("source", { mode: "buffer" }).notNull(),
@@ -35,40 +35,40 @@ export const fixTool = sqliteTable("fix_tool", {
     sha256: text("sha256").notNull(),
 });
 
-export const fixToolRelations = relations(fixTool, ({ many }) => ({
-    presets: many(fixToolPresetItem),
+export const scriptRelations = relations(script, ({ many }) => ({
+    presets: many(scriptPresetItem),
 }));
 
-export const fixToolPreset = sqliteTable("fix_tool_preset", {
+export const scriptPreset = sqliteTable("script_preset", {
     id: text("id").primaryKey(),
     name: text("name").notNull().unique(),
 });
 
-export const fixToolPresetRelations = relations(fixToolPreset, ({ many }) => ({
-    tools: many(fixToolPresetItem),
+export const scriptPresetRelations = relations(scriptPreset, ({ many }) => ({
+    scripts: many(scriptPresetItem),
 }));
 
-export const fixToolPresetItem = sqliteTable(
-    "fix_tool_preset_item",
+export const scriptPresetItem = sqliteTable(
+    "script_preset_item",
     {
         presetId: text("preset_id")
             .notNull()
-            .references(() => fixToolPreset.id, { onDelete: "cascade" }),
-        toolId: text("tool_id")
+            .references(() => scriptPreset.id, { onDelete: "cascade" }),
+        scriptId: text("script_id")
             .notNull()
-            .references(() => fixTool.id, { onDelete: "cascade" }),
+            .references(() => script.id, { onDelete: "cascade" }),
         order: integer("order").notNull(),
     },
-    (t) => [primaryKey({ columns: [t.presetId, t.toolId] })],
+    (t) => [primaryKey({ columns: [t.presetId, t.scriptId] })],
 );
 
-export const fixToolPresetItemRelations = relations(fixToolPresetItem, ({ one }) => ({
-    preset: one(fixToolPreset, {
-        fields: [fixToolPresetItem.presetId],
-        references: [fixToolPreset.id],
+export const scriptPresetItemRelations = relations(scriptPresetItem, ({ one }) => ({
+    preset: one(scriptPreset, {
+        fields: [scriptPresetItem.presetId],
+        references: [scriptPreset.id],
     }),
-    tool: one(fixTool, {
-        fields: [fixToolPresetItem.toolId],
-        references: [fixTool.id],
+    script: one(script, {
+        fields: [scriptPresetItem.scriptId],
+        references: [script.id],
     }),
 }));

@@ -2,39 +2,42 @@ import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
-import type { FixTool } from "@renderer/routes/tools/fix-tool-manger";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
+import type { Script } from "@renderer/routes/tools/fix-tool-manger";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { sortBy } from "es-toolkit";
 import { Reorder } from "framer-motion";
 import { Plus, Search, TrashIcon, Upload } from "lucide-react";
 import path from "path-browserify";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import execIcon from "@/renderer/assets/img/document-executable-svgrepo-com.svg";
 import pythonIcon from "@/renderer/assets/img/python-svgrepo-com.svg";
 
 type FixToolListProps = {
-  insertedPresetTools: FixTool[];
-  onAddTool: (tool: FixTool) => void;
+  insertedPresetTools: Script[];
+  onAddScript: (script: Script) => void;
 };
 
-export function FixToolList({ insertedPresetTools, onAddTool }: FixToolListProps) {
+export function FixToolList({ insertedPresetTools, onAddScript }: FixToolListProps) {
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: ["fix-tools"],
+    queryKey: ["scripts"],
     queryFn: async () => {
-      const tools = await window.api.invoke("ftm:getTools");
-      return sortBy(tools, ["name"]);
+      const scripts = await window.api.invoke("ftm:getScripts");
+      return sortBy(scripts, ["name"]);
     },
   });
 
-  const filteredTools = query.data?.filter(
-    (tool) =>
-      tool.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !insertedPresetTools.some((t) => t.id === tool.id),
+  const filteredScripts = query.data?.filter(
+    (script) =>
+      script.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+      !insertedPresetTools.some((t) => t.id === script.id),
   );
 
   const handleDragEnter = (e: React.DragEvent) => {
@@ -85,15 +88,15 @@ export function FixToolList({ insertedPresetTools, onAddTool }: FixToolListProps
           }
 
           try {
-            await window.api.invoke("ftm:saveTool", filePath);
+            await window.api.invoke("ftm:saveScript", filePath);
           } catch (error) {
-            console.error(`Failed to save tool: ${filePath}`, error);
+            console.error(`Failed to save script: ${filePath}`, error);
             throw error;
           }
         });
 
         await Promise.allSettled(savePromises);
-        queryClient.invalidateQueries({ queryKey: ["fix-tools"] });
+        queryClient.invalidateQueries({ queryKey: ["scripts"] });
       }
     }
   };
@@ -111,13 +114,17 @@ export function FixToolList({ insertedPresetTools, onAddTool }: FixToolListProps
       <div className="flex flex-col gap-2 p-3 border-b">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-base font-semibold">Available Fix Tools</p>
-            <p className="text-sm text-muted-foreground">Select tools to add to your preset</p>
+            <p className="text-base font-semibold">
+              {t("page.tools.fix-tool-manager.builder.left.title")}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {t("page.tools.fix-tool-manager.builder.left.description")}
+            </p>
           </div>
           {isDragOver && (
             <Badge className="animate-pulse">
               <Upload className="h-3 w-3 mr-1" />
-              Drop to Add
+              {t("page.tools.fix-tool-manager.builder.left.dropToAdd")}
             </Badge>
           )}
         </div>
@@ -126,7 +133,7 @@ export function FixToolList({ insertedPresetTools, onAddTool }: FixToolListProps
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="text"
-            placeholder="Search tools..."
+            placeholder="Search scripts..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -136,45 +143,50 @@ export function FixToolList({ insertedPresetTools, onAddTool }: FixToolListProps
 
       <ScrollArea className="flex-1 overflow-hidden">
         <div className="flex flex-col space-y-2 p-3">
-          {!filteredTools || filteredTools.length === 0 ? (
+          {!filteredScripts || filteredScripts.length === 0 ? (
             <div
               className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
                 isDragOver ? "border-primary bg-primary/10" : "border-border"
               }`}
             >
               <p className="text-sm text-muted-foreground font-medium">
-                사용할 수 있는 스크립트가 없습니다
+                {t("page.tools.fix-tool-manager.builder.left.noScripts.title")}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                파이썬 코드 또는 실행 파일을 여기로 드래그 드랍해 저장할 수 있습니다
+                {t("page.tools.fix-tool-manager.builder.left.noScripts.description")}
               </p>
             </div>
           ) : (
             <Reorder.Group
               axis="y"
-              values={filteredTools}
+              values={filteredScripts}
               className="flex flex-col space-y-2"
               onReorder={() => {}}
             >
-              {filteredTools.map((tool) => (
+              {filteredScripts.map((script) => (
                 <Reorder.Item
-                  key={tool.id}
-                  value={tool}
+                  key={script.id}
+                  value={script}
                   className="group grid grid-cols-[1fr_auto_auto] items-center gap-2 p-3 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors"
                 >
-                  <div className="flex flex-row space-x-2 items-center">
-                    {tool.type === "python" ? (
+                  <div className="flex flex-row space-x-2 items-center min-w-0">
+                    {script.type === "python" ? (
                       <img src={pythonIcon} alt="python" className="w-6 h-6" />
                     ) : (
                       <img src={execIcon} alt="python" className="w-6 h-6 dark:invert" />
                     )}
 
-                    <p className="font-medium text-sm text-foreground truncate min-w-0">
-                      {tool.name}
-                    </p>
+                    <Tooltip disableHoverableContent={true}>
+                      <TooltipTrigger className="font-medium text-sm text-foreground truncate min-w-0">
+                        {script.name}
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-wrap break-all">{script.name}</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
 
-                  <Button size="icon" variant="outline" onClick={() => onAddTool(tool)}>
+                  <Button size="icon" variant="outline" onClick={() => onAddScript(script)}>
                     <Plus className="h-4 w-4" />
                   </Button>
 
@@ -183,8 +195,8 @@ export function FixToolList({ insertedPresetTools, onAddTool }: FixToolListProps
                     variant="destructive"
                     onClick={() =>
                       window.api
-                        .invoke("ftm:deleteTool", tool.id)
-                        .then(() => queryClient.invalidateQueries({ queryKey: ["fix-tools"] }))
+                        .invoke("ftm:deleteScript", script.id)
+                        .then(() => queryClient.invalidateQueries({ queryKey: ["scripts"] }))
                         .catch((error) => {
                           toast.error(error.message);
                         })

@@ -167,6 +167,39 @@
                 }
             }
         },
+        "tools": {
+            "fix-tool-manager": {
+                "presets": {},
+                "builder": {
+                    "left": {
+                        "title": "已添加的脚本",
+                        "description": "拖放以添加脚本或点击+按钮移至右侧",
+                        "noScripts": {
+                            "title": "没有可用的脚本",
+                            "description": "可以将Python文件(.py)或可执行文件(.exe)拖放到此处添加"
+                        },
+                        "dropToAdd": "拖放以添加"
+                    },
+                    "right": {
+                        "title": "预设配置",
+                        "description": "拖动以更改脚本顺序",
+                        "presetName": "预设名称",
+                        "enterPresetName": "请输入预设名称",
+                        "noScripts": {
+                            "title": "没有添加的脚本",
+                            "description": "可以从左侧列表点击+按钮添加脚本"
+                        },
+                        "#": {
+                            "handleSavePreset": {
+                                "success": "预设已保存",
+                                "error": "预设保存失败",
+                                "alreadyExists": "预设名称已存在"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "setting": {
             "title": "设置",
             "tabs": {

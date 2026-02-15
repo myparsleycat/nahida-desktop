@@ -60,7 +60,7 @@ export const ModCardHeader = memo(function ModCardHeader({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    window.api.invoke("ftm:getTools").then(setFixTools);
+    window.api.invoke("ftm:getScripts").then(setFixTools);
     window.api.invoke("ftm:getPresets").then(setPresets);
   }, []);
 
@@ -84,7 +84,7 @@ export const ModCardHeader = memo(function ModCardHeader({
     setIsRunning(true);
     try {
       if (type === "tool") {
-        await window.api.invoke("ftm:runFixTool", id, mod.path);
+        await window.api.invoke("ftm:runScript", id, mod.path);
       } else {
         await window.api.invoke("ftm:runPreset", id, mod.path);
       }
@@ -176,7 +176,7 @@ export const ModCardHeader = memo(function ModCardHeader({
                       {tool.name}
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p className="text-wrap">{tool.name}</p>
+                      <p className="text-wrap break-all">{tool.name}</p>
                     </TooltipContent>
                   </Tooltip>
                 </DropdownMenuItem>
