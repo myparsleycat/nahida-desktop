@@ -27,6 +27,7 @@ import { registerProtocal } from "./protocals";
 import ArchiveService from "./services/archive";
 import Auth from "./services/auth";
 import { DriveService } from "./services/drive";
+import { FixToolsManager } from "./services/fix-tools-manager";
 import ModManager from "./services/mod-manager";
 import OverlayService from "./services/overlay";
 import { Tools } from "./services/tools";
@@ -87,6 +88,7 @@ export class NahidaDesktop {
         drive: DriveService;
         transfer: TransferService;
         mod: ModManager;
+        fixTools: FixToolsManager;
         archive: ArchiveService;
         tools: Tools;
         xxmi: XXMI;
@@ -123,6 +125,7 @@ export class NahidaDesktop {
             drive: new DriveService(this),
             transfer: new TransferService(this),
             mod: new ModManager(this),
+            fixTools: new FixToolsManager(this),
             archive: new ArchiveService(this),
             tools: new Tools(this),
             xxmi: new XXMI(this),

@@ -12,7 +12,8 @@
         "add": "追加",
         "create": "作成",
         "unknown": "不明",
-        "save": "保存"
+        "save": "保存",
+        "close": "閉じる"
     },
     "page": {
         "transfer": {

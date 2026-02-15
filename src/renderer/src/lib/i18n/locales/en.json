@@ -12,7 +12,8 @@
         "add": "Add",
         "create": "Create",
         "unknown": "Unknown",
-        "save": "Save"
+        "save": "Save",
+        "close": "Close"
     },
     "page": {
         "transfer": {

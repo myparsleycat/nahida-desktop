@@ -12,7 +12,8 @@
         "add": "添加",
         "create": "创建",
         "unknown": "未知",
-        "save": "保存"
+        "save": "保存",
+        "close": "关闭"
     },
     "page": {
         "transfer": {
