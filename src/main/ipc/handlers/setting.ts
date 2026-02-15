@@ -54,22 +54,6 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         return await d.setting.general.setCheckBackgroundUpdates(enabled);
     });
 
-    rh("setting:general:getGameFolderCompressionEnabled", async () => {
-        return await d.setting.general.getGameFolderCompressionEnabled();
-    });
-
-    rh("setting:general:setGameFolderCompressionEnabled", async (enabled) => {
-        return await d.setting.general.setGameFolderCompressionEnabled(enabled);
-    });
-
-    rh("setting:general:getGameFolderCompressionFeatureEnabled", async () => {
-        return await d.setting.general.getGameFolderCompressionFeatureEnabled();
-    });
-
-    rh("setting:general:setGameFolderCompressionFeatureEnabled", async (enabled) => {
-        return await d.setting.general.setGameFolderCompressionFeatureEnabled(enabled);
-    });
-
     rh("setting:general:getImageCacheSize", async () => {
         return await d.setting.general.getImageCacheSize();
     });
