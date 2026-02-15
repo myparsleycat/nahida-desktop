@@ -72,8 +72,13 @@ export class FixToolsManager {
     }
 
     public async createPreset({ name, scriptIds }: { name: string; scriptIds: string[] }) {
+        const trimmedName = name?.trim();
+        if (!trimmedName) {
+            throw new Error("Invalid preset name: name cannot be empty or only whitespace");
+        }
+
         const nameConflict = await this.desktop.lib.db.query.scriptPreset.findFirst({
-            where: eq(scriptPreset.name, name),
+            where: eq(scriptPreset.name, trimmedName),
         });
 
         if (nameConflict) throw new Error("Preset with same name already exists");
@@ -82,7 +87,7 @@ export class FixToolsManager {
         const presetId = nanoid();
 
         await this.desktop.lib.db.transaction(async (tx) => {
-            await tx.insert(scriptPreset).values({ id: presetId, name });
+            await tx.insert(scriptPreset).values({ id: presetId, name: trimmedName });
 
             const presetItems = scriptIds.map((scriptId, index) => ({
                 presetId: presetId,
