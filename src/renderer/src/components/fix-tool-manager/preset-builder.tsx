@@ -7,6 +7,8 @@ import { Reorder } from "framer-motion";
 import { GripVertical, Save, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import execIcon from "@/renderer/assets/img/document-executable-svgrepo-com.svg";
+import pythonIcon from "@/renderer/assets/img/python-svgrepo-com.svg";
 
 interface PresetBuilderProps {
   insertedPresetTools: FixTool[];
@@ -110,17 +112,23 @@ export function PresetBuilder({
                     </span>
                   </div>
 
-                  <div className="min-w-0 pointer-events-none">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-medium text-sm text-foreground truncate">{tool.name}</h3>
-                    </div>
+                  <div className="flex flex-row space-x-2 items-center min-w-0">
+                    {tool.type === "python" ? (
+                      <img src={pythonIcon} alt="python" className="w-6 h-6" />
+                    ) : (
+                      <img src={execIcon} alt="python" className="w-6 h-6 dark:invert" />
+                    )}
+
+                    <p className="font-medium text-sm text-foreground truncate min-w-0">
+                      {tool.name}
+                    </p>
                   </div>
 
                   <Button
-                    size="sm"
-                    variant="ghost"
+                    size="icon"
+                    variant="outline"
                     onClick={() => onRemoveTool(tool.id)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-destructive hover:text-destructive pointer-events-auto"
+                    className="text-destructive hover:text-destructive pointer-events-auto"
                   >
                     <X className="h-4 w-4" />
                   </Button>

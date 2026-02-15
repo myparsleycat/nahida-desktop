@@ -10,6 +10,8 @@ import { Plus, Search, TrashIcon, Upload } from "lucide-react";
 import path from "path-browserify";
 import { useState } from "react";
 import { toast } from "sonner";
+import execIcon from "@/renderer/assets/img/document-executable-svgrepo-com.svg";
+import pythonIcon from "@/renderer/assets/img/python-svgrepo-com.svg";
 
 type FixToolListProps = {
   insertedPresetTools: FixTool[];
@@ -71,16 +73,26 @@ export function FixToolList({ insertedPresetTools, onAddTool }: FixToolListProps
       e.preventDefault();
       e.stopPropagation();
       setIsDragOver(false);
+
       const files = Array.from(e.dataTransfer.files);
       if (files.length > 0) {
-        for (const file of files) {
+        const savePromises = files.map(async (file) => {
           const filePath = window.webUtils.getPathForFile(file);
-          if (!path.basename(filePath).endsWith(".py")) {
-            continue;
+          const fileName = path.basename(filePath);
+
+          if (!fileName.endsWith(".py") && !fileName.endsWith(".exe")) {
+            return;
           }
 
-          await window.api.invoke("ftm:saveTool", filePath);
-        }
+          try {
+            await window.api.invoke("ftm:saveTool", filePath);
+          } catch (error) {
+            console.error(`Failed to save tool: ${filePath}`, error);
+            throw error;
+          }
+        });
+
+        await Promise.allSettled(savePromises);
         queryClient.invalidateQueries({ queryKey: ["fix-tools"] });
       }
     }
@@ -134,7 +146,7 @@ export function FixToolList({ insertedPresetTools, onAddTool }: FixToolListProps
                 사용할 수 있는 스크립트가 없습니다
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                파이썬 코드를 여기로 드래그 드랍해 저장할 수 있습니다
+                파이썬 코드 또는 실행 파일을 여기로 드래그 드랍해 저장할 수 있습니다
               </p>
             </div>
           ) : (
@@ -150,9 +162,17 @@ export function FixToolList({ insertedPresetTools, onAddTool }: FixToolListProps
                   value={tool}
                   className="group grid grid-cols-[1fr_auto_auto] items-center gap-2 p-3 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors"
                 >
-                  <p className="font-medium text-sm text-foreground truncate min-w-0">
-                    {tool.name}
-                  </p>
+                  <div className="flex flex-row space-x-2 items-center">
+                    {tool.type === "python" ? (
+                      <img src={pythonIcon} alt="python" className="w-6 h-6" />
+                    ) : (
+                      <img src={execIcon} alt="python" className="w-6 h-6 dark:invert" />
+                    )}
+
+                    <p className="font-medium text-sm text-foreground truncate min-w-0">
+                      {tool.name}
+                    </p>
+                  </div>
 
                   <Button size="icon" variant="outline" onClick={() => onAddTool(tool)}>
                     <Plus className="h-4 w-4" />

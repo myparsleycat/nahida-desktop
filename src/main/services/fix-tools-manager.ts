@@ -25,7 +25,7 @@ export class FixToolsManager {
         const fileHash = crypto.createHash("sha256").update(fileData).digest("hex");
 
         const tool = await this.desktop.lib.db.query.fixTool.findFirst({
-            where: (t, { eq, or }) => or(eq(t.sha256, fileHash), eq(t.source, inputPath)),
+            where: (t, { eq, or }) => or(eq(t.sha256, fileHash), eq(t.name, fileName)),
         });
 
         if (tool && tool.sha256 === fileHash) {
@@ -34,8 +34,9 @@ export class FixToolsManager {
             throw new Error("already exists same name");
         }
 
-        const toolType = path.extname(inputPath).toLowerCase() === ".py" ? "python" : "batch";
-        if (toolType !== "python") {
+        const ext = path.extname(inputPath).toLowerCase();
+        const toolType = ext === ".py" ? "python" : ext === ".exe" ? "exec" : "";
+        if (toolType !== "python" && toolType !== "exec") {
             throw new Error("invalid file type");
         }
 
@@ -43,7 +44,7 @@ export class FixToolsManager {
             id: nanoid(),
             name: fileName,
             type: toolType,
-            source: fileData.toString(),
+            source: fileData,
             size: fileData.length,
             sha256: fileHash,
         });
