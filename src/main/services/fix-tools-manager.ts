@@ -127,8 +127,10 @@ export class FixToolsManager {
         const mainWindow = this.desktop.window.main.window;
         if (!mainWindow) throw new Error("Main window not found");
 
+        let prepared = false;
         try {
             const signal = this.prepareExecution(mainWindow);
+            prepared = true;
 
             const _script = await this.desktop.lib.db.query.script.findFirst({
                 where: eq(scriptTable.id, scriptId),
@@ -147,7 +149,9 @@ export class FixToolsManager {
                 `Error: ${(e as Error).message}`,
             );
         } finally {
-            this.cleanupExecution();
+            if (prepared) {
+                this.cleanupExecution();
+            }
         }
     }
 
@@ -155,8 +159,10 @@ export class FixToolsManager {
         const mainWindow = this.desktop.window.main.window;
         if (!mainWindow) throw new Error("Main window not found");
 
+        let prepared = false;
         try {
             const signal = this.prepareExecution(mainWindow);
+            prepared = true;
 
             const preset = await this.desktop.lib.db.query.scriptPreset.findFirst({
                 where: eq(scriptPreset.id, presetId),
@@ -213,7 +219,9 @@ export class FixToolsManager {
                 `Error: ${(e as Error).message}`,
             );
         } finally {
-            this.cleanupExecution();
+            if (prepared) {
+                this.cleanupExecution();
+            }
         }
     }
 
