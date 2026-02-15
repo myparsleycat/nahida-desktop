@@ -1,0 +1,1 @@
+ALTER TABLE `fix_tool` ADD `sha256` text NOT NULL;

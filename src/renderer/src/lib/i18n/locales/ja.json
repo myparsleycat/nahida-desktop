@@ -11,7 +11,9 @@
         "delete": "削除",
         "add": "追加",
         "create": "作成",
-        "unknown": "不明"
+        "unknown": "不明",
+        "save": "保存",
+        "close": "閉じる"
     },
     "page": {
         "transfer": {
@@ -166,6 +168,39 @@
                 }
             }
         },
+        "tools": {
+            "fix-tool-manager": {
+                "presets": {},
+                "builder": {
+                    "left": {
+                        "title": "追加されたスクリプト",
+                        "description": "ドラッグ&ドロップでスクリプトを追加するか、+ボタンを押して右側に移動できます",
+                        "noScripts": {
+                            "title": "利用可能なスクリプトがありません",
+                            "description": "Pythonファイル(.py)または実行ファイル(.exe)をここにドラッグ&ドロップして追加できます"
+                        },
+                        "dropToAdd": "ドロップして追加"
+                    },
+                    "right": {
+                        "title": "プリセット構成",
+                        "description": "ドラッグしてスクリプトの順序を変更できます",
+                        "presetName": "プリセット名",
+                        "enterPresetName": "プリセット名を入力してください",
+                        "noScripts": {
+                            "title": "追加されたスクリプトがありません",
+                            "description": "左側のリストから+ボタンを押してスクリプトを追加できます"
+                        },
+                        "#": {
+                            "handleSavePreset": {
+                                "success": "プリセットが保存されました",
+                                "error": "プリセットの保存に失敗しました",
+                                "alreadyExists": "既に存在するプリセット名です"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "setting": {
             "title": "設定",
             "tabs": {
@@ -234,6 +269,31 @@
                         "description": "Modリストを仮想化してパフォーマンスを向上させます。",
                         "threshold": "基準MOD数",
                         "thresholdDescription": "設定した数以上のMODがある場合に仮想化を適用します"
+                    }
+                },
+                "overlay": {
+                    "title": "オーバーレイ",
+                    "enableOverlay": "オーバーレイを有効にする",
+                    "enableOverlayDescription": "ゲーム内オーバーレイ機能を使用します",
+                    "overlayKey": "ショートカットキー",
+                    "overlayKeyDescription": "オーバーレイのオン/オフを切り替えるショートカットキーを設定します"
+                }
+            },
+            "xxmi": {
+                "xxmiPath": "XXMIパス",
+                "autoScan": "自動検索",
+                "activeImporter": "有効なImporter",
+                "fn": {
+                    "findXXMIPath": {
+                        "xxmiNotFound": "XXMIが見つかりません",
+                        "alert": {
+                            "title": "注意",
+                            "description": "自動検出されたXXMIランチャーのパスを確認してください。正常でない場合は、手動でパスを入力してください。"
+                        }
+                    },
+                    "saveXXMIPath": {
+                        "success": "XXMIパスが保存されました",
+                        "configNotFound": "指定されたパスでXXMI Launcher Config.jsonファイルが見つかりません"
                     }
                 }
             },

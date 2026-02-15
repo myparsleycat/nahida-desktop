@@ -1,4 +1,4 @@
-import { db, InitDB } from "@main/internal/db";
+import { InitDB } from "@main/internal/db";
 import { app, protocol } from "electron";
 import type { NahidaDesktop } from "./index";
 import { setting } from "./internal/db/schema";
@@ -11,20 +11,21 @@ export async function startInit(desktop: NahidaDesktop) {
     desktop.lib.native.startTracking();
 
     // init db
-    await InitDB();
+    await InitDB(desktop.lib.db);
 
     // init lang
-    const lang = await db.query.setting.findFirst({
+    const lang = await desktop.lib.db.query.setting.findFirst({
         where: (t, { eq }) => eq(t.key, "language"),
     });
     if (!lang) {
         const locale = app.getLocale();
         if (locale.startsWith("en"))
-            await db.insert(setting).values({ key: "language", value: "en" });
-        else if (locale === "ko") await db.insert(setting).values({ key: "language", value: "ko" });
+            await desktop.lib.db.insert(setting).values({ key: "language", value: "en" });
+        else if (locale === "ko")
+            await desktop.lib.db.insert(setting).values({ key: "language", value: "ko" });
         else if (locale.startsWith("zh"))
-            await db.insert(setting).values({ key: "language", value: "zh" });
-        else await db.insert(setting).values({ key: "language", value: "en" });
+            await desktop.lib.db.insert(setting).values({ key: "language", value: "zh" });
+        else await desktop.lib.db.insert(setting).values({ key: "language", value: "en" });
     }
 
     // make server

@@ -1,7 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { is } from "@electron-toolkit/utils";
-import { desktop } from "@main/index";
-import { db } from "@main/internal/db";
+import type { NahidaDesktop } from "@main/index";
 import { imageCache } from "@main/internal/db/schema";
 import { convertImage } from "@native/image";
 import { net } from "electron";
@@ -9,9 +8,11 @@ import { fileTypeFromFile } from "file-type/node";
 import PQueue from "p-queue";
 
 export class LocalProtocol {
+    private desktop: NahidaDesktop;
     private queue: PQueue;
 
-    constructor() {
+    constructor(desktop: NahidaDesktop) {
+        this.desktop = desktop;
         this.queue = new PQueue({ concurrency: 4 });
     }
 
@@ -33,8 +34,8 @@ export class LocalProtocol {
         const convertImageMime = ["image/jpeg", "image/png", "image/webp"];
 
         if (fileType && convertImageMime.includes(fileType.mime)) {
-            const imgHash = await desktop.lib.utils.getFileHash(fullPath);
-            const cachedImg = await db.query.imageCache.findFirst({
+            const imgHash = await this.desktop.lib.utils.getFileHash(fullPath);
+            const cachedImg = await this.desktop.lib.db.query.imageCache.findFirst({
                 where: (t, { eq }) => eq(t.hash, imgHash),
             });
 
@@ -61,7 +62,7 @@ export class LocalProtocol {
                 }
 
                 const blob = new Blob([new Uint8Array(resizedImg)], { type: fileType.mime });
-                await db.insert(imageCache).values({
+                await this.desktop.lib.db.insert(imageCache).values({
                     hash: imgHash,
                     image: Buffer.from(resizedImg),
                     size: resizedImg.length,

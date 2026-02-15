@@ -1,5 +1,4 @@
 import path from "node:path";
-import { db } from "@main/internal/db";
 import { setting } from "@main/internal/db/schema";
 import { findFileAcrossDrives, spawnPrivilegedProcess, waitForProcess } from "@native/native-util";
 import { WaitResult } from "@native/native-util/constants";
@@ -72,7 +71,7 @@ export class XXMI {
     }
 
     public async getXXMIPath() {
-        const path = await db.query.setting.findFirst({
+        const path = await this.desktop.lib.db.query.setting.findFirst({
             where: (t, { eq }) => eq(t.key, "xxmi.path"),
         });
 
@@ -92,7 +91,7 @@ export class XXMI {
             throw new Error("XXMI Launcher Config.json is invalid");
         }
 
-        await db
+        await this.desktop.lib.db
             .insert(setting)
             .values({
                 key: "xxmi.path",

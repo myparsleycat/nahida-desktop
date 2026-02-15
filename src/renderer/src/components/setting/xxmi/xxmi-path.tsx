@@ -5,9 +5,11 @@ import { Input } from "@renderer/components/ui/input";
 import type { XXMIData } from "@renderer/routes/setting/xxmi";
 import { InfoIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 export function XXMIPath({ xxmiData, refetch }: { xxmiData?: XXMIData; refetch: () => void }) {
+  const { t } = useTranslation();
   const [showAutoSearchAlert, setShowAutoSearchAlert] = useState(false);
   const [xxmiPath, setXXMIPath] = useState("");
 
@@ -18,14 +20,14 @@ export function XXMIPath({ xxmiData, refetch }: { xxmiData?: XXMIData; refetch: 
   const saveXXMIPath = async () => {
     try {
       await window.api.invoke("xxmi:saveXXMIPath", xxmiPath);
-      toast.success("XXMI 경로가 저장되었습니다");
+      toast.success(t("page.setting.xxmi.fn.saveXXMIPath.success"));
       setShowAutoSearchAlert(false);
       refetch();
     } catch (rawErr) {
       const err = (rawErr as Error).message;
 
       if (err.includes("XXMI Launcher Config.json not found")) {
-        toast.warning("해당 경로에서 XXMI Launcher Config.json 파일을 찾을 수 없습니다");
+        toast.warning(t("page.setting.xxmi.fn.saveXXMIPath.configNotFound"));
       }
     }
   };
@@ -33,7 +35,7 @@ export function XXMIPath({ xxmiData, refetch }: { xxmiData?: XXMIData; refetch: 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>XXMI 경로 설정</CardTitle>
+        <CardTitle>{t("page.setting.xxmi.xxmiPath")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 w-full" aria-describedby={undefined}>
         <div className="flex flex-row w-full space-x-2">
@@ -50,7 +52,7 @@ export function XXMIPath({ xxmiData, refetch }: { xxmiData?: XXMIData; refetch: 
               const path = await window.api.invoke("xxmi:findXXMIPath");
 
               if (!path) {
-                toast.error("XXMI 경로를 찾을 수 없습니다");
+                toast.error(t("page.setting.xxmi.fn.findXXMIPath.xxmiNotFound"));
                 return;
               }
 
@@ -58,22 +60,22 @@ export function XXMIPath({ xxmiData, refetch }: { xxmiData?: XXMIData; refetch: 
               setShowAutoSearchAlert(true);
             }}
           >
-            자동 탐색
+            {t("page.setting.xxmi.autoScan")}
           </Button>
         </div>
         {showAutoSearchAlert && (
           <Alert>
             <InfoIcon />
-            <AlertTitle>알림</AlertTitle>
+            <AlertTitle>{t("page.setting.xxmi.fn.findXXMIPath.alert.title")}</AlertTitle>
             <AlertDescription className="text-wrap">
-              자동 탐색된 XXMI 런처 경로를 확인하세요. 정상적이지 않다면 직접 경로를 입력해주세요.
+              {t("page.setting.xxmi.fn.findXXMIPath.alert.description")}
             </AlertDescription>
           </Alert>
         )}
       </CardContent>
       <CardFooter className="flex justify-end">
         <Button onClickPromise={saveXXMIPath} disabled={!xxmiPath}>
-          저장
+          {t("g.save")}
         </Button>
       </CardFooter>
     </Card>

@@ -1,5 +1,4 @@
 import type { NahidaDesktop } from "@main/index";
-import { db } from "@main/internal/db";
 import { setting } from "@main/internal/db/schema";
 import { fetcher, getAgent, getHeaders } from "@main/internal/fetcher";
 import { focus } from "@main/windows/utils";
@@ -29,11 +28,14 @@ export class Auth {
     public async saveToken(key: string) {
         const encryptedKey = this.desktop.lib.crypto.encryptString(key);
 
-        await db.update(setting).set({ value: encryptedKey }).where(eq(setting.key, "token"));
+        await this.desktop.lib.db
+            .update(setting)
+            .set({ value: encryptedKey })
+            .where(eq(setting.key, "token"));
     }
 
     public async getToken() {
-        const key = await db.query.setting.findFirst({
+        const key = await this.desktop.lib.db.query.setting.findFirst({
             where: eq(setting.key, "token"),
         });
         if (!key || !key.value) {
@@ -48,7 +50,10 @@ export class Auth {
     }
 
     public async removeToken() {
-        await db.update(setting).set({ value: null }).where(eq(setting.key, "token"));
+        await this.desktop.lib.db
+            .update(setting)
+            .set({ value: null })
+            .where(eq(setting.key, "token"));
     }
 
     public async getSession() {

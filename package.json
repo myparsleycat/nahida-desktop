@@ -1,6 +1,6 @@
 {
     "name": "nahida-desktop",
-    "version": "1.27.0",
+    "version": "1.28.0",
     "description": "Native app for nahida.live",
     "main": "./out/main/index.js",
     "author": "nahida.live",
@@ -8,10 +8,9 @@
     "scripts": {
         "build:extractor": "cd native/extractor && pnpm install && pnpm run build",
         "build:mod": "cd native/native-mod && pnpm install && pnpm run build",
-        "build:compact": "cd build/compact && go mod tidy && go build -ldflags=\"-s -w\" -o compact.exe",
         "build:util": "cd native/native-util && pnpm install && pnpm run build",
         "build:image": "cd native/image && pnpm install && pnpm run build",
-        "build:native": "pnpm run build:extractor && pnpm run build:compact && pnpm run build:mod && pnpm run build:util",
+        "build:native": "pnpm run build:extractor && pnpm run build:mod && pnpm run build:util",
         "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
         "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
         "typecheck": "pnpm run typecheck:node && pnpm run typecheck:web",

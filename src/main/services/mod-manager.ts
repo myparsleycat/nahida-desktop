@@ -8,11 +8,10 @@ import fg from "fast-glob";
 import fse from "fs-extra";
 import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "..";
-import { db } from "../internal/db";
 import { gamePaths, modPresets, setting } from "../internal/db/schema";
 
 export class ModManager {
-    private desktop: NahidaDesktop;
+    private readonly desktop: NahidaDesktop;
     private gameWatcherId: string | null = null;
     private characterWatcherId: string | null = null;
 
@@ -77,7 +76,7 @@ export class ModManager {
 
     get = {
         gamePath: async (game: string): Promise<string | null> => {
-            const result = await db.query.gamePaths.findFirst({
+            const result = await this.desktop.lib.db.query.gamePaths.findFirst({
                 where: eq(gamePaths.game, game),
             });
             return result?.modFolderPath || null;
@@ -110,7 +109,7 @@ export class ModManager {
         },
 
         presets: async (game: string): Promise<Preset[]> => {
-            const results = await db.query.modPresets.findMany({
+            const results = await this.desktop.lib.db.query.modPresets.findMany({
                 where: eq(modPresets.game, game),
             });
 
@@ -123,11 +122,11 @@ export class ModManager {
         },
 
         games: async () => {
-            return await db.select().from(gamePaths);
+            return await this.desktop.lib.db.select().from(gamePaths);
         },
 
         lastGame: async (): Promise<string | null> => {
-            const result = await db.query.setting.findFirst({
+            const result = await this.desktop.lib.db.query.setting.findFirst({
                 where: eq(setting.key, "last_game"),
             });
             return result?.value || null;
@@ -213,10 +212,13 @@ export class ModManager {
 
     fn = {
         setGamePath: async (game: string, modFolderPath: string) => {
-            await db.insert(gamePaths).values({ game, modFolderPath }).onConflictDoUpdate({
-                target: gamePaths.game,
-                set: { modFolderPath },
-            });
+            await this.desktop.lib.db
+                .insert(gamePaths)
+                .values({ game, modFolderPath })
+                .onConflictDoUpdate({
+                    target: gamePaths.game,
+                    set: { modFolderPath },
+                });
         },
 
         enable: async (modPath: string): Promise<string> => {
@@ -449,7 +451,7 @@ export class ModManager {
                 mods: enabledMods,
             };
 
-            await db.insert(modPresets).values({
+            await this.desktop.lib.db.insert(modPresets).values({
                 id,
                 game,
                 name,
@@ -460,7 +462,7 @@ export class ModManager {
         },
 
         applyPreset: async (presetId: string): Promise<void> => {
-            const preset = await db.query.modPresets.findFirst({
+            const preset = await this.desktop.lib.db.query.modPresets.findFirst({
                 where: eq(modPresets.id, presetId),
             });
 
@@ -519,30 +521,36 @@ export class ModManager {
         },
 
         deletePreset: async (presetId: string): Promise<void> => {
-            await db.delete(modPresets).where(eq(modPresets.id, presetId));
+            await this.desktop.lib.db.delete(modPresets).where(eq(modPresets.id, presetId));
         },
 
         updatePresetName: async (presetId: string, newName: string): Promise<void> => {
-            await db.update(modPresets).set({ name: newName }).where(eq(modPresets.id, presetId));
+            await this.desktop.lib.db
+                .update(modPresets)
+                .set({ name: newName })
+                .where(eq(modPresets.id, presetId));
         },
 
         addGame: async (game: string, modFolderPath: string) => {
             if (!game || !modFolderPath) {
                 throw new Error("Game and modFolderPath are required");
             }
-            await db.insert(gamePaths).values({ game, modFolderPath }).onConflictDoUpdate({
-                target: gamePaths.game,
-                set: { modFolderPath },
-            });
+            await this.desktop.lib.db
+                .insert(gamePaths)
+                .values({ game, modFolderPath })
+                .onConflictDoUpdate({
+                    target: gamePaths.game,
+                    set: { modFolderPath },
+                });
         },
 
         removeGame: async (game: string) => {
-            await db.delete(gamePaths).where(eq(gamePaths.game, game));
-            await db.delete(modPresets).where(eq(modPresets.game, game));
+            await this.desktop.lib.db.delete(gamePaths).where(eq(gamePaths.game, game));
+            await this.desktop.lib.db.delete(modPresets).where(eq(modPresets.game, game));
         },
 
         setLastGame: async (game: string) => {
-            await db
+            await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "last_game", value: game })
                 .onConflictDoUpdate({

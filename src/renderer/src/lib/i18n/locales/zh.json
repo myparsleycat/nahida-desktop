@@ -11,7 +11,9 @@
         "delete": "删除",
         "add": "添加",
         "create": "创建",
-        "unknown": "未知"
+        "unknown": "未知",
+        "save": "保存",
+        "close": "关闭"
     },
     "page": {
         "transfer": {
@@ -165,6 +167,39 @@
                 }
             }
         },
+        "tools": {
+            "fix-tool-manager": {
+                "presets": {},
+                "builder": {
+                    "left": {
+                        "title": "已添加的脚本",
+                        "description": "拖放以添加脚本或点击+按钮移至右侧",
+                        "noScripts": {
+                            "title": "没有可用的脚本",
+                            "description": "可以将Python文件(.py)或可执行文件(.exe)拖放到此处添加"
+                        },
+                        "dropToAdd": "拖放以添加"
+                    },
+                    "right": {
+                        "title": "预设配置",
+                        "description": "拖动以更改脚本顺序",
+                        "presetName": "预设名称",
+                        "enterPresetName": "请输入预设名称",
+                        "noScripts": {
+                            "title": "没有添加的脚本",
+                            "description": "可以从左侧列表点击+按钮添加脚本"
+                        },
+                        "#": {
+                            "handleSavePreset": {
+                                "success": "预设已保存",
+                                "error": "预设保存失败",
+                                "alreadyExists": "预设名称已存在"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "setting": {
             "title": "设置",
             "tabs": {
@@ -233,6 +268,31 @@
                         "description": "通过虚拟化模组列表来提升性能。",
                         "threshold": "阈值模组数量",
                         "thresholdDescription": "模组数量超过设定值时应用虚拟化"
+                    }
+                },
+                "overlay": {
+                    "title": "覆盖层",
+                    "enableOverlay": "启用覆盖层",
+                    "enableOverlayDescription": "使用游戏内覆盖层功能",
+                    "overlayKey": "快捷键",
+                    "overlayKeyDescription": "设置打开和关闭覆盖层的快捷键"
+                }
+            },
+            "xxmi": {
+                "xxmiPath": "XXMI路径",
+                "autoScan": "自动扫描",
+                "activeImporter": "已激活的导入器",
+                "fn": {
+                    "findXXMIPath": {
+                        "xxmiNotFound": "未找到XXMI",
+                        "alert": {
+                            "title": "注意",
+                            "description": "请确认自动检测到的XXMI启动器路径。如果不正常，请手动输入路径。"
+                        }
+                    },
+                    "saveXXMIPath": {
+                        "success": "XXMI路径已保存",
+                        "configNotFound": "在指定路径中找不到XXMI Launcher Config.json文件"
                     }
                 }
             },

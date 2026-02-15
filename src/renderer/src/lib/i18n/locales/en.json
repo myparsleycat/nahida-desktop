@@ -11,7 +11,9 @@
         "delete": "Delete",
         "add": "Add",
         "create": "Create",
-        "unknown": "Unknown"
+        "unknown": "Unknown",
+        "save": "Save",
+        "close": "Close"
     },
     "page": {
         "transfer": {
@@ -169,6 +171,39 @@
                 }
             }
         },
+        "tools": {
+            "fix-tool-manager": {
+                "presets": {},
+                "builder": {
+                    "left": {
+                        "title": "Added Scripts",
+                        "description": "Drag and drop to add scripts or click the + button to move to the right",
+                        "noScripts": {
+                            "title": "No available scripts",
+                            "description": "Drag and drop Python files (.py) or executable files (.exe) here to add"
+                        },
+                        "dropToAdd": "Drop to add"
+                    },
+                    "right": {
+                        "title": "Preset Configuration",
+                        "description": "Drag to change script order",
+                        "presetName": "Preset Name",
+                        "enterPresetName": "Please enter preset name",
+                        "noScripts": {
+                            "title": "No scripts added",
+                            "description": "Click the + button from the left list to add scripts"
+                        },
+                        "#": {
+                            "handleSavePreset": {
+                                "success": "Preset saved successfully",
+                                "error": "Failed to save preset",
+                                "alreadyExists": "Preset name already exists"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "setting": {
             "title": "Settings",
             "tabs": {
@@ -239,12 +274,30 @@
                         "thresholdDescription": "Applies virtualization when the number of mods exceeds the set count"
                     }
                 },
-                "gameFolderCompression": {
-                    "title": "Transparent Compression",
-                    "enableFeature": "Enable Game Folder Compression Feature",
-                    "enableFeatureDescription": "Enables the game folder compression tool (compact.exe). If disabled, the tool will not be used at all.",
-                    "useCompression": "Use game folder compression",
-                    "useCompressionDescription": "Transparently compress game folders to save disk space. (Uses Windows Compact, monitors and compresses new files in real-time)"
+                "overlay": {
+                    "title": "Overlay",
+                    "enableOverlay": "Enable Overlay",
+                    "enableOverlayDescription": "Use in-game overlay feature",
+                    "overlayKey": "Hotkey",
+                    "overlayKeyDescription": "Set the hotkey to toggle the overlay on and off"
+                }
+            },
+            "xxmi": {
+                "xxmiPath": "XXMI Path",
+                "autoScan": "Auto Scan",
+                "activeImporter": "Active Importer",
+                "fn": {
+                    "findXXMIPath": {
+                        "xxmiNotFound": "XXMI not found",
+                        "alert": {
+                            "title": "Warning",
+                            "description": "Please verify the auto-detected XXMI launcher path. If it seems incorrect, please enter the path manually."
+                        }
+                    },
+                    "saveXXMIPath": {
+                        "success": "XXMI path has been saved",
+                        "configNotFound": "Cannot find XXMI Launcher Config.json file in the specified path"
+                    }
                 }
             },
             "acc": {

@@ -11,7 +11,9 @@
         "delete": "삭제",
         "add": "추가",
         "create": "생성",
-        "unknown": "알 수 없는"
+        "unknown": "알 수 없는",
+        "save": "저장",
+        "close": "닫기"
     },
     "page": {
         "transfer": {
@@ -165,6 +167,39 @@
                 }
             }
         },
+        "tools": {
+            "fix-tool-manager": {
+                "presets": {},
+                "builder": {
+                    "left": {
+                        "title": "추가된 스크립트",
+                        "description": "드래그 드랍해 스크립트를 추가하거나 + 버튼을 눌러 우측으로 이동할 수 있습니다",
+                        "noScripts": {
+                            "title": "사용할 수 있는 스크립트가 없습니다",
+                            "description": "python 파일(.py) 또는 실행 파일(.exe)을 여기로 드래그 드랍해 추가할 수 있습니다"
+                        },
+                        "dropToAdd": "드롭하여 추가"
+                    },
+                    "right": {
+                        "title": "프리셋 구성",
+                        "description": "드래그해 스크립트 순서를 변경할 수 있습니다",
+                        "presetName": "프리셋 이름",
+                        "enterPresetName": "프리셋 이름을 입력해 주세요",
+                        "noScripts": {
+                            "title": "추가된 스크립트가 없습니다",
+                            "description": "왼쪽 목록에서 + 버튼을 눌러 스크립트를 추가할 수 있습니다"
+                        },
+                        "#": {
+                            "handleSavePreset": {
+                                "success": "프리셋이 저장되었습니다",
+                                "error": "프리셋 저장에 실패했습니다",
+                                "alreadyExists": "이미 존재하는 프리셋 이름입니다"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "setting": {
             "title": "설정",
             "tabs": {
@@ -235,12 +270,30 @@
                         "thresholdDescription": "설정한 개수 이상의 모드가 있을 때 가상화를 적용합니다"
                     }
                 },
-                "gameFolderCompression": {
-                    "title": "압축",
-                    "enableFeature": "활성화",
-                    "enableFeatureDescription": "게임 폴더를 압축하는 도구(compact.exe)를 활성화합니다. 꺼져 있으면 도구를 전혀 사용하지 않습니다.",
-                    "useCompression": "게임 폴더 압축 사용",
-                    "useCompressionDescription": "게임 폴더를 압축하여 디스크 공간을 절약합니다."
+                "overlay": {
+                    "title": "오버레이",
+                    "enableOverlay": "오버레이 활성화",
+                    "enableOverlayDescription": "게임 내 오버레이 기능을 사용합니다",
+                    "overlayKey": "단축키",
+                    "overlayKeyDescription": "오버레이를 켜고 끄는 단축키를 설정합니다"
+                }
+            },
+            "xxmi": {
+                "xxmiPath": "XXMI 경로",
+                "autoScan": "자동 탐색",
+                "activeImporter": "활성화된 Importer",
+                "fn": {
+                    "findXXMIPath": {
+                        "xxmiNotFound": "XXMI 를 찾을 수 없습니다",
+                        "alert": {
+                            "title": "주의",
+                            "description": "자동 탐색된 XXMI 런처 경로를 확인하세요. 정상적이지 않다면 직접 경로를 입력해주세요."
+                        }
+                    },
+                    "saveXXMIPath": {
+                        "success": "XXMI 경로가 저장되었습니다",
+                        "configNotFound": "해당 경로에서 XXMI Launcher Config.json 파일을 찾을 수 없습니다"
+                    }
                 }
             },
             "acc": {

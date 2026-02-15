@@ -3,14 +3,17 @@ import path from "node:path";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
 import { BACKEND_URL } from "@shared/const";
 import AutoLaunch from "auto-launch";
+import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
 import { app, crashReporter, protocol, session } from "electron";
 import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
 import { IS_ELECTRON } from "./const";
 import { startInit } from "./init";
+import { DB_FILE_NAME } from "./internal/const";
+import * as schema from "./internal/db/schema";
 import Logger from "./internal/logger";
 import Updater from "./internal/updater";
 import { IPC } from "./ipc";
-import { CompactService } from "./lib/compact";
 import Compressor from "./lib/compressor";
 import CryptoLib from "./lib/crypto";
 import CustomDownloader from "./lib/custom-downloader";
@@ -24,6 +27,7 @@ import { registerProtocal } from "./protocals";
 import ArchiveService from "./services/archive";
 import Auth from "./services/auth";
 import { DriveService } from "./services/drive";
+import { FixToolsManager } from "./services/fix-tools-manager";
 import ModManager from "./services/mod-manager";
 import OverlayService from "./services/overlay";
 import { Tools } from "./services/tools";
@@ -44,6 +48,10 @@ if (IS_ELECTRON) {
     app?.commandLine.appendSwitch("disable-pinch");
 }
 
+const dbPath = !app.isPackaged ? DB_FILE_NAME : path.join(app.getPath("userData"), "data.db");
+const sqlite = new Database(dbPath);
+const db = drizzle(sqlite, { schema });
+
 export class NahidaDesktop {
     public initialized: boolean = false;
     public userAgent: string;
@@ -63,6 +71,7 @@ export class NahidaDesktop {
     };
 
     public lib: {
+        db: typeof db;
         fs: FS;
         utils: Utils;
         tray: Tray;
@@ -72,7 +81,6 @@ export class NahidaDesktop {
         pathSelector: PathSelector;
         watcher: Watcher;
         native: NativeLib;
-        compact: CompactService;
     };
 
     public service: {
@@ -80,6 +88,7 @@ export class NahidaDesktop {
         drive: DriveService;
         transfer: TransferService;
         mod: ModManager;
+        fixTools: FixToolsManager;
         archive: ArchiveService;
         tools: Tools;
         xxmi: XXMI;
@@ -99,6 +108,7 @@ export class NahidaDesktop {
             overlay: new OverlayWindow(this),
         };
         this.lib = {
+            db: db,
             fs: new FS(this),
             utils: new Utils(this),
             tray: new Tray(this),
@@ -108,7 +118,6 @@ export class NahidaDesktop {
             pathSelector: new PathSelector(this),
             watcher: new Watcher(this),
             native: new NativeLib(this),
-            compact: new CompactService(this),
         };
 
         this.service = {
@@ -116,6 +125,7 @@ export class NahidaDesktop {
             drive: new DriveService(this),
             transfer: new TransferService(this),
             mod: new ModManager(this),
+            fixTools: new FixToolsManager(this),
             archive: new ArchiveService(this),
             tools: new Tools(this),
             xxmi: new XXMI(this),
@@ -153,9 +163,6 @@ export class NahidaDesktop {
         }
 
         await this.updateProxy();
-
-        // Initialize Compact Service
-        await this.lib.compact.initialize();
     }
 
     public async updateProxy() {
