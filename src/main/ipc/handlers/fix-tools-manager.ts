@@ -11,4 +11,7 @@ export function registerFixToolsManagerHandlers(d: NahidaDesktop) {
     );
     rh("ftm:deletePreset", (id) => d.service.fixTools.deletePreset(id));
     rh("ftm:runPreset", (id, destPath) => d.service.fixTools.runPreset(id, destPath));
+    rh("ftm:runFixTool", (id, destPath) => d.service.fixTools.runFixTool(id, destPath));
+    rh("ftm:cancelRun", () => d.service.fixTools.cancelRun());
+    rh("ftm:sendInput", (input) => d.service.fixTools.sendInput(input));
 }
