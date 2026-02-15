@@ -137,8 +137,13 @@ export class FixToolsManager {
             });
 
             if (!_script) throw new Error("Script not found");
-            if (!(await fse.pathExists(destPath)))
+            if (!(await fse.pathExists(destPath))) {
                 throw new Error("Destination path does not exist");
+            }
+            const stat = await fse.stat(destPath);
+            if (!stat.isDirectory()) {
+                throw new Error("Destination path is not a directory");
+            }
 
             await this._runScriptSafe(_script, destPath, mainWindow, signal);
         } catch (e) {
@@ -171,8 +176,13 @@ export class FixToolsManager {
 
             if (!preset) throw new Error("Preset not found");
             if (preset.scripts.length === 0) throw new Error("Preset has no scripts");
-            if (!(await fse.pathExists(destPath)))
+            if (!(await fse.pathExists(destPath))) {
                 throw new Error("Destination path does not exist");
+            }
+            const stat = await fse.stat(destPath);
+            if (!stat.isDirectory()) {
+                throw new Error("Destination path is not a directory");
+            }
 
             const sortedItems = sortBy(preset.scripts, ["order"]);
 
