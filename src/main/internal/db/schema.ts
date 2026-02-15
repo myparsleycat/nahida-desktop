@@ -29,8 +29,8 @@ export const imageCache = sqliteTable("image_cache", {
 export const fixTool = sqliteTable("fix_tool", {
     id: text("id").primaryKey(),
     name: text("name").notNull().unique(),
-    source: text("source").notNull(),
-    type: text("type", { enum: ["python", "batch"] }).notNull(),
+    source: blob("source", { mode: "buffer" }).notNull(),
+    type: text("type", { enum: ["python", "exec"] }).notNull(),
     size: integer("size").notNull(),
     sha256: text("sha256").notNull(),
 });
