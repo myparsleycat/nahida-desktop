@@ -97,7 +97,10 @@ export class ScriptExecutor {
         this.stderrBuffer = "";
 
         return new Promise<void>((resolve, reject) => {
+            let settled = false;
+
             if (signal?.aborted) {
+                settled = true;
                 return reject(new Error("Aborted"));
             }
 
@@ -132,30 +135,46 @@ export class ScriptExecutor {
                     }
                 }
             } catch (err) {
+                settled = true;
                 return reject(err);
             }
 
             this.currentProcess = child;
 
-            if (signal) {
-                signal.addEventListener("abort", () => {
-                    if (!this.currentProcess) return;
+            const abortHandler = () => {
+                if (settled || !this.currentProcess) return;
+                settled = true;
 
-                    try {
-                        if (process.platform === "win32" && child.pid) {
-                            spawn("taskkill", ["/pid", child.pid.toString(), "/f", "/t"]);
-                        } else {
-                            child.kill();
-                        }
-                    } catch {}
-                    reject(new Error("Aborted"));
-                });
+                try {
+                    if (process.platform === "win32" && child.pid) {
+                        spawn("taskkill", ["/pid", child.pid.toString(), "/f", "/t"]);
+                    } else {
+                        child.kill();
+                    }
+                } catch {}
+
+                this.currentProcess = null;
+                reject(new Error("Aborted"));
+            };
+
+            if (signal) {
+                signal.addEventListener("abort", abortHandler);
             }
 
             child.stdout?.on("data", (data) => this.handleStreamData(data, "stdout"));
             child.stderr?.on("data", (data) => this.handleStreamData(data, "stderr"));
 
+            const cleanup = () => {
+                if (signal) {
+                    signal.removeEventListener("abort", abortHandler);
+                }
+                this.currentProcess = null;
+            };
+
             child.on("close", (code) => {
+                if (settled) return;
+                settled = true;
+
                 const stdoutFinal = this.stdoutDecoder.decode();
                 const stderrFinal = this.stderrDecoder.decode();
 
@@ -171,7 +190,7 @@ export class ScriptExecutor {
                 finalProcess(this.stdoutBuffer, stdoutFinal);
                 finalProcess(this.stderrBuffer, stderrFinal);
 
-                this.currentProcess = null;
+                cleanup();
 
                 if (code === 0) {
                     resolve();
@@ -181,7 +200,10 @@ export class ScriptExecutor {
             });
 
             child.on("error", (err) => {
-                this.currentProcess = null;
+                if (settled) return;
+                settled = true;
+
+                cleanup();
                 reject(err);
             });
         });
