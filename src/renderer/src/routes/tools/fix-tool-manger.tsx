@@ -19,14 +19,16 @@ function RouteComponent() {
   const [insertedPresetTools, setInsertedPresetTools] = useState<Script[]>([]);
 
   const handleAddScript = (script: Script) => {
-    if (insertedPresetTools.some((t) => t.id === script.id)) {
-      return;
-    }
-    setInsertedPresetTools([...insertedPresetTools, script]);
+    setInsertedPresetTools((prev) => {
+      if (prev.some((t) => t.id === script.id)) {
+        return prev;
+      }
+      return [...prev, script];
+    });
   };
 
   const handleRemoveScript = (id: string) => {
-    setInsertedPresetTools(insertedPresetTools.filter((script) => script.id !== id));
+    setInsertedPresetTools((prev) => prev.filter((script) => script.id !== id));
   };
 
   const handleReorderScripts = (scripts: Script[]) => {
