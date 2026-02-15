@@ -14,7 +14,6 @@ import * as schema from "./internal/db/schema";
 import Logger from "./internal/logger";
 import Updater from "./internal/updater";
 import { IPC } from "./ipc";
-import { CompactService } from "./lib/compact";
 import Compressor from "./lib/compressor";
 import CryptoLib from "./lib/crypto";
 import CustomDownloader from "./lib/custom-downloader";
@@ -81,7 +80,6 @@ export class NahidaDesktop {
         pathSelector: PathSelector;
         watcher: Watcher;
         native: NativeLib;
-        compact: CompactService;
     };
 
     public service: {
@@ -118,7 +116,6 @@ export class NahidaDesktop {
             pathSelector: new PathSelector(this),
             watcher: new Watcher(this),
             native: new NativeLib(this),
-            compact: new CompactService(this),
         };
 
         this.service = {
@@ -163,9 +160,6 @@ export class NahidaDesktop {
         }
 
         await this.updateProxy();
-
-        // Initialize Compact Service
-        await this.lib.compact.initialize();
     }
 
     public async updateProxy() {

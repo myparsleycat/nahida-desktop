@@ -234,13 +234,6 @@
                         "threshold": "기준 모드 개수",
                         "thresholdDescription": "설정한 개수 이상의 모드가 있을 때 가상화를 적용합니다"
                     }
-                },
-                "gameFolderCompression": {
-                    "title": "압축",
-                    "enableFeature": "활성화",
-                    "enableFeatureDescription": "게임 폴더를 압축하는 도구(compact.exe)를 활성화합니다. 꺼져 있으면 도구를 전혀 사용하지 않습니다.",
-                    "useCompression": "게임 폴더 압축 사용",
-                    "useCompressionDescription": "게임 폴더를 압축하여 디스크 공간을 절약합니다."
                 }
             },
             "acc": {
