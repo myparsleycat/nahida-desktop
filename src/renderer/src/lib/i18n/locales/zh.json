@@ -11,7 +11,8 @@
         "delete": "删除",
         "add": "添加",
         "create": "创建",
-        "unknown": "未知"
+        "unknown": "未知",
+        "save": "保存"
     },
     "page": {
         "transfer": {
@@ -233,6 +234,31 @@
                         "description": "通过虚拟化模组列表来提升性能。",
                         "threshold": "阈值模组数量",
                         "thresholdDescription": "模组数量超过设定值时应用虚拟化"
+                    }
+                },
+                "overlay": {
+                    "title": "覆盖层",
+                    "enableOverlay": "启用覆盖层",
+                    "enableOverlayDescription": "使用游戏内覆盖层功能",
+                    "overlayKey": "快捷键",
+                    "overlayKeyDescription": "设置打开和关闭覆盖层的快捷键"
+                }
+            },
+            "xxmi": {
+                "xxmiPath": "XXMI路径",
+                "autoScan": "自动扫描",
+                "activeImporter": "已激活的导入器",
+                "fn": {
+                    "findXXMIPath": {
+                        "xxmiNotFound": "未找到XXMI",
+                        "alert": {
+                            "title": "注意",
+                            "description": "请确认自动检测到的XXMI启动器路径。如果不正常，请手动输入路径。"
+                        }
+                    },
+                    "saveXXMIPath": {
+                        "success": "XXMI路径已保存",
+                        "configNotFound": "在指定路径中找不到XXMI Launcher Config.json文件"
                     }
                 }
             },

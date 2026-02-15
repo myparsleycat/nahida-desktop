@@ -11,7 +11,8 @@
         "delete": "삭제",
         "add": "추가",
         "create": "생성",
-        "unknown": "알 수 없는"
+        "unknown": "알 수 없는",
+        "save": "저장"
     },
     "page": {
         "transfer": {
@@ -233,6 +234,31 @@
                         "description": "모드 목록을 가상화하여 성능을 향상시킵니다",
                         "threshold": "기준 모드 개수",
                         "thresholdDescription": "설정한 개수 이상의 모드가 있을 때 가상화를 적용합니다"
+                    }
+                },
+                "overlay": {
+                    "title": "오버레이",
+                    "enableOverlay": "오버레이 활성화",
+                    "enableOverlayDescription": "게임 내 오버레이 기능을 사용합니다",
+                    "overlayKey": "단축키",
+                    "overlayKeyDescription": "오버레이를 켜고 끄는 단축키를 설정합니다"
+                }
+            },
+            "xxmi": {
+                "xxmiPath": "XXMI 경로",
+                "autoScan": "자동 탐색",
+                "activeImporter": "활성화된 Importer",
+                "fn": {
+                    "findXXMIPath": {
+                        "xxmiNotFound": "XXMI 를 찾을 수 없습니다",
+                        "alert": {
+                            "title": "주의",
+                            "description": "자동 탐색된 XXMI 런처 경로를 확인하세요. 정상적이지 않다면 직접 경로를 입력해주세요."
+                        }
+                    },
+                    "saveXXMIPath": {
+                        "success": "XXMI 경로가 저장되었습니다",
+                        "configNotFound": "해당 경로에서 XXMI Launcher Config.json 파일을 찾을 수 없습니다"
                     }
                 }
             },

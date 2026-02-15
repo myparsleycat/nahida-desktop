@@ -4,9 +4,11 @@ import { cn } from "@renderer/lib/utils";
 import type { XXMIData } from "@renderer/routes/setting/xxmi";
 import { Loader2Icon } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 export function XXMIImporters({ xxmiData }: { xxmiData?: XXMIData }) {
+  const { t } = useTranslation();
   const [processingKey, setProcessingKey] = useState<string | null>(null);
 
   if (!xxmiData?.xxmiConfig) {
@@ -31,7 +33,7 @@ export function XXMIImporters({ xxmiData }: { xxmiData?: XXMIData }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>활성화된 Importer</CardTitle>
+        <CardTitle>{t("page.setting.xxmi.activeImporter")}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex flex-row space-x-2 justify-evenly">

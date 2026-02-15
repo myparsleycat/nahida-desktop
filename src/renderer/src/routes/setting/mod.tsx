@@ -243,14 +243,18 @@ function RouteComponent() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium">오버레이 설정</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {t("page.setting.mod.overlay.title")}
+            </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col space-y-4">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <span className="text-sm font-medium">오버레이 활성화</span>
+                <span className="text-sm font-medium">
+                  {t("page.setting.mod.overlay.enableOverlay")}
+                </span>
                 <p className="text-sm text-muted-foreground">
-                  게임 내 오버레이 기능을 활성화합니다.
+                  {t("page.setting.mod.overlay.enableOverlayDescription")}
                 </p>
               </div>
               <Switch checked={overlayEnabled} onCheckedChange={handleOverlayEnabledChange} />
@@ -258,18 +262,20 @@ function RouteComponent() {
 
             <Separator />
 
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between space-x-2">
               <div className="space-y-0.5">
-                <span className="text-sm font-medium">단축키 설정</span>
+                <span className="text-sm font-medium">
+                  {t("page.setting.mod.overlay.overlayKey")}
+                </span>
                 <p className="text-sm text-muted-foreground">
-                  오버레이를 켜고 끄는 단축키를 설정합니다. 기본값: Alt+A
+                  {t("page.setting.mod.overlay.overlayKeyDescription")}
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <Input
                   value={overlayKey}
                   readOnly
-                  className="w-40 text-center font-mono uppercase caret-transparent focus:ring-2 focus:ring-primary"
+                  className="w-30 text-center font-mono uppercase caret-transparent focus:ring-2 focus:ring-primary"
                   onKeyDown={(e) => {
                     e.preventDefault();
                     if (e.key === "Tab") return;
