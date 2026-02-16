@@ -55,6 +55,19 @@ export class FixToolsManager {
     }
 
     public async deleteScript(scriptId: string) {
+        const script = await this.desktop.lib.db.query.script.findFirst({
+            where: eq(scriptTable.id, scriptId),
+        });
+        if (!script) throw new Error("Script not found");
+
+        const usedInPresets = await this.desktop.lib.db.query.scriptPresetItem.findFirst({
+            where: eq(scriptPresetItem.scriptId, scriptId),
+            with: { preset: true },
+        });
+        if (usedInPresets) {
+            throw new Error(`Script is used in a preset: ${usedInPresets.preset.name}`);
+        }
+
         await this.desktop.lib.db.delete(scriptTable).where(eq(scriptTable.id, scriptId));
     }
 
