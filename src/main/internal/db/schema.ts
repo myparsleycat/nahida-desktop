@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { blob, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const setting = sqliteTable("setting", {
@@ -30,9 +30,12 @@ export const script = sqliteTable("script", {
     id: text("id").primaryKey(),
     name: text("name").notNull().unique(),
     source: blob("source", { mode: "buffer" }).notNull(),
+    isSrcZstd: integer("is_src_zstd", { mode: "boolean" }).notNull().default(false),
     type: text("type", { enum: ["python", "exec"] }).notNull(),
     size: integer("size").notNull(),
+    zstdSize: integer("zstd_size").default(sql`NULL`),
     sha256: text("sha256").notNull(),
+    zstdSha256: text("zstd_sha256").default(sql`NULL`),
 });
 
 export const scriptRelations = relations(script, ({ many }) => ({

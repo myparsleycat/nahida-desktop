@@ -44,13 +44,19 @@ export class FixToolsManager {
             throw new Error("Invalid file type (only .py or .exe allowed)");
         }
 
+        const zstdFileData = await this.desktop.lib.compressor.zstd.compress(fileData);
+        const zstdFileHash = crypto.createHash("sha256").update(zstdFileData).digest("hex");
+
         await this.desktop.lib.db.insert(scriptTable).values({
             id: nanoid(),
             name: fileName,
             type: fileType,
-            source: fileData,
+            source: zstdFileData,
+            isSrcZstd: true,
             size: fileData.length,
+            zstdSize: zstdFileData.length,
             sha256: fileHash,
+            zstdSha256: zstdFileHash,
         });
     }
 
@@ -278,7 +284,22 @@ export class FixToolsManager {
         const scriptPath = path.join(destPath, tempFileName);
 
         try {
-            await fse.writeFile(scriptPath, script.source);
+            if (script.isSrcZstd) {
+                const decomp = await this.desktop.lib.compressor.zstd.decompress(script.source);
+                await fse.writeFile(scriptPath, decomp);
+            } else {
+                const comp = await this.desktop.lib.compressor.zstd.compress(script.source);
+                await this.desktop.lib.db
+                    .update(scriptTable)
+                    .set({
+                        source: comp,
+                        isSrcZstd: true,
+                        zstdSha256: crypto.createHash("sha256").update(comp).digest("hex"),
+                        zstdSize: comp.length,
+                    })
+                    .where(eq(scriptTable.id, script.id));
+                await fse.writeFile(scriptPath, script.source);
+            }
 
             this.desktop.ipc.postMessageToWindow(
                 mainWindow,
