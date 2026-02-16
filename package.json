@@ -1,6 +1,6 @@
 {
     "name": "nahida-desktop",
-    "version": "1.28.0",
+    "version": "1.29.0",
     "description": "Native app for nahida.live",
     "main": "./out/main/index.js",
     "author": "nahida.live",
