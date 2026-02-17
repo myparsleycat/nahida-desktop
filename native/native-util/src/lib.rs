@@ -10,7 +10,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use sysinfo::Disks;
 use windows::core::{PCWSTR, PWSTR};
-use windows::Win32::Foundation::{CloseHandle, BOOL, HWND, LPARAM};
+use windows::Win32::Foundation::{CloseHandle, BOOL, HANDLE, HWND, LPARAM};
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32First, Process32Next, PROCESSENTRY32, TH32CS_SNAPPROCESS,
 };
@@ -30,6 +30,16 @@ fn to_wstring(str: &str) -> Vec<u16> {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     OsStr::new(str).encode_wide().chain(Some(0)).collect()
+}
+
+struct HandleWrapper(HANDLE);
+
+impl Drop for HandleWrapper {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = CloseHandle(self.0);
+        }
+    }
 }
 
 #[napi]
@@ -123,7 +133,7 @@ unsafe extern "system" fn enum_z_order_callback(hwnd: HWND, lparam: LPARAM) -> B
 }
 
 struct FocusTracker {
-    pub history: Vec<u32>, // Store PID history
+    pub history: Vec<u32>,
 }
 
 impl FocusTracker {
@@ -145,10 +155,18 @@ impl FocusTracker {
 
 lazy_static::lazy_static! {
     static ref TRACKER: Arc<Mutex<FocusTracker>> = Arc::new(Mutex::new(FocusTracker::new()));
+    static ref TRACKING_STARTED: AtomicBool = AtomicBool::new(false);
 }
 
 #[napi]
 pub fn start_tracking() {
+    if TRACKING_STARTED
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return;
+    }
+
     let tracker = TRACKER.clone();
     thread::spawn(move || loop {
         unsafe {
@@ -171,7 +189,6 @@ pub fn get_previous_pids(current_pid: u32) -> Vec<u32> {
     let tracker = TRACKER.lock().unwrap();
     let mut pids = Vec::new();
 
-    // Iterate backwards
     for &pid in tracker.history.iter().rev() {
         if pid != current_pid && !pids.contains(&pid) {
             pids.push(pid);
@@ -186,12 +203,16 @@ pub fn get_previous_pids(current_pid: u32) -> Vec<u32> {
 #[napi]
 pub fn get_process_name(pid: u32) -> Option<String> {
     unsafe {
-        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let handle = match OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
+            Ok(h) => HandleWrapper(h),
+            Err(_) => return None,
+        };
+
         let mut buffer = [0u16; 1024];
         let mut size = buffer.len() as u32;
 
         if QueryFullProcessImageNameW(
-            handle,
+            handle.0,
             PROCESS_NAME_WIN32,
             PWSTR(buffer.as_mut_ptr()),
             &mut size,
@@ -258,7 +279,7 @@ pub async fn find_file_across_drives(
                     if let Ok(child) = child {
                         if child.file_type().is_dir() {
                             let name = child.file_name().to_string_lossy();
-                            return !exclude_dirs.contains(&name.to_string());
+                            return !exclude_dirs.contains(name.as_ref());
                         }
                     }
                     true
@@ -371,14 +392,17 @@ unsafe extern "system" fn get_hwnds_callback(hwnd: HWND, lparam: LPARAM) -> BOOL
 #[napi]
 pub fn get_process(process_id: Option<u32>, process_name: Option<String>) -> Option<ProcessInfo> {
     unsafe {
-        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0).ok()?;
+        let snapshot = match CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) {
+            Ok(h) => HandleWrapper(h),
+            Err(_) => return None,
+        };
+
         let mut pe32 = PROCESSENTRY32 {
             dwSize: std::mem::size_of::<PROCESSENTRY32>() as u32,
             ..Default::default()
         };
 
-        if Process32First(snapshot, &mut pe32).is_err() {
-            let _ = CloseHandle(snapshot);
+        if Process32First(snapshot.0, &mut pe32).is_err() {
             return None;
         }
 
@@ -401,19 +425,16 @@ pub fn get_process(process_id: Option<u32>, process_name: Option<String>) -> Opt
             }
 
             if is_match {
-                let _ = CloseHandle(snapshot);
                 return Some(ProcessInfo {
                     pid: current_pid,
                     name: current_name,
                 });
             }
 
-            if Process32Next(snapshot, &mut pe32).is_err() {
+            if Process32Next(snapshot.0, &mut pe32).is_err() {
                 break;
             }
         }
-
-        let _ = CloseHandle(snapshot);
         None
     }
 }
@@ -422,8 +443,8 @@ pub fn get_process(process_id: Option<u32>, process_name: Option<String>) -> Opt
 pub fn kill_process(pid: u32) -> bool {
     unsafe {
         if let Ok(handle) = OpenProcess(PROCESS_TERMINATE, false, pid) {
-            let result = TerminateProcess(handle, 1);
-            let _ = CloseHandle(handle);
+            let wrapper = HandleWrapper(handle);
+            let result = TerminateProcess(wrapper.0, 1);
             return result.is_ok();
         }
         false
@@ -646,9 +667,6 @@ pub async fn spawn_privileged_process(
             code
         });
 
-        // We can't easily join in async without a runtime awareness,
-        // but napi-rs's async functions run in a thread anyway.
-        // However, for simplicity and to match the 'wait' requirement:
         let code = exit_code.join().map_err(|_| {
             napi::Error::from_reason("Internal thread panic while waiting for process")
         })?;
