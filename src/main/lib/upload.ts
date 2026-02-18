@@ -443,7 +443,11 @@ export class UploadLib {
         );
     }
 
-    public async calculateHashes(files: ParentIdFiles[], onProgress?: (count: number) => void) {
+    public async calculateHashes(
+        files: ParentIdFiles[],
+        onProgress?: (count: number) => void,
+        signal?: AbortSignal,
+    ) {
         let processedCount = 0;
         let lastUpdate = 0;
 
@@ -455,7 +459,7 @@ export class UploadLib {
 
         const promises = files.map(async (file) => {
             return piscina
-                .run({ path: file.fullPath })
+                .run({ path: file.fullPath }, { signal })
                 .then((hash: string) => {
                     processedCount++;
                     const now = Date.now();
@@ -737,11 +741,15 @@ export class UploadLib {
             } else if (processedFiles && processedFiles.length === parentIdProcessedFiles.length) {
                 finalFiles = processedFiles;
             } else {
-                finalFiles = await this.calculateHashes(parentIdProcessedFiles, (count) => {
-                    this.desktop.service.transfer.updateTransfer(pid, {
-                        transferedFiles: count,
-                    });
-                });
+                finalFiles = await this.calculateHashes(
+                    parentIdProcessedFiles,
+                    (count) => {
+                        this.desktop.service.transfer.updateTransfer(pid, {
+                            transferedFiles: count,
+                        });
+                    },
+                    abortController.signal,
+                );
                 const transfer = this.desktop.service.transfer.getTransferByPID(pid);
                 if (transfer?.restartParams) {
                     transfer.restartParams = {
