@@ -538,11 +538,13 @@ export class UploadLib {
     }
 
     public async filesUpload({
+        currentId,
         files,
         onProgress,
         signal,
         pid,
     }: {
+        currentId: string;
         files: FinalFile[];
         totalSize: number;
         onProgress?: (progress: UploadProgress) => void;
@@ -585,7 +587,7 @@ export class UploadLib {
             const { data } = await retry(
                 async () => {
                     const result = await eden.akasha.file.create_many.post({
-                        current: "",
+                        current: currentId,
                         files: fileMetadatas,
                     });
 
@@ -693,6 +695,7 @@ export class UploadLib {
     }
 
     public async executeUpload({
+        currentId,
         pid,
         params,
         files,
@@ -702,6 +705,7 @@ export class UploadLib {
         processedFiles,
         initialTransferedSize,
     }: {
+        currentId: string;
         pid: string;
         params: UploadParams;
         files: FilesComponent[];
@@ -785,6 +789,7 @@ export class UploadLib {
 
             try {
                 await this.filesUpload({
+                    currentId,
                     files: finalFiles,
                     totalSize,
                     onProgress: (progress: UploadProgress) => {
