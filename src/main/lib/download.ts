@@ -45,11 +45,7 @@ class DownloadStreamer {
     constructor(private readonly desktop: NahidaDesktop) {}
 
     private async decompressData(str: string) {
-        const binaryString = atob(str);
-        const compressedData = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-            compressedData[i] = binaryString.charCodeAt(i);
-        }
+        const compressedData = Buffer.from(str, "base64");
         return decompress(compressedData);
     }
 
@@ -89,12 +85,12 @@ class DownloadStreamer {
             switch (chunk.event) {
                 case "dirs": {
                     const dirsChunk = await this.parseStreamedData(chunk.data);
-                    downloadData.dirs = downloadData.dirs.concat(dirsChunk);
+                    downloadData.dirs.push(...dirsChunk);
                     break;
                 }
                 case "files": {
                     const filesChunk = await this.parseStreamedData(chunk.data);
-                    downloadData.files = downloadData.files.concat(filesChunk);
+                    downloadData.files.push(...filesChunk);
                     break;
                 }
                 case "metadata": {
