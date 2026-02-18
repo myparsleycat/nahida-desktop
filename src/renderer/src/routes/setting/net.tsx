@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { useSettings } from "@renderer/hooks/use-settings";
+import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -27,6 +28,7 @@ const settingsConfig = {
 
 function RouteComponent() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [parent, _enableAnimations] = useAutoAnimate();
 
   const { settings, setSettings, isLoading } = useSettings<{
@@ -61,11 +63,18 @@ function RouteComponent() {
   };
 
   const handleSave = async () => {
-    await window.api.invoke("setting:net:setProxy", {
+    const updatedProxy = {
       ...proxy,
       username: proxy.requiresAuth ? proxy.username : undefined,
       password: proxy.requiresAuth ? proxy.password : undefined,
+    };
+
+    await window.api.invoke("setting:net:setProxy", updatedProxy);
+
+    queryClient.setQueryData(["settings", settingsConfig], (old: typeof settings | undefined) => {
+      return old ? { ...old, proxy: updatedProxy } : old;
     });
+
     toast.success(t("page.setting.net.proxy.saved"));
   };
 
