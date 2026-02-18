@@ -1,17 +1,16 @@
-import os from "node:os";
 import path from "node:path";
-import { Worker } from "node:worker_threads";
 import { eden, eden2url } from "@main/client";
 import { getAgent, getHeaders } from "@main/internal/fetcher";
-import sha256Worker from "@main/worker/drive/sha256.worker?modulePath";
+import sha256PiscinaWorker from "@main/worker/drive/sha256-piscina.worker?modulePath";
 import type { Content } from "@shared/types.gen";
-import { chunk, flatten, groupBy, orderBy, retry, sumBy } from "es-toolkit";
+import { chunk, groupBy, orderBy, retry, sumBy } from "es-toolkit";
 import fg from "fast-glob";
 import { fileTypeFromBuffer } from "file-type/node";
 import fse from "fs-extra";
 import ky from "ky";
 import { nanoid } from "nanoid";
 import PQueue from "p-queue";
+import Piscina from "piscina";
 import type { NahidaDesktop } from "..";
 
 const CHUNK_SIZE = 100;
@@ -103,98 +102,75 @@ export class UploadLib {
         return allowedExt.some((ext) => name.toLowerCase().endsWith(ext.toLowerCase()));
     }
 
-    private async collectFiles(
+    private resolvePaths(p: string) {
+        const absolutePath = path.resolve(p);
+        const parentDir = path.dirname(absolutePath);
+        const rootName = path.basename(absolutePath);
+        return { absolutePath, parentDir, rootName };
+    }
+
+    private async collect(
         paths: string[],
         additionalExt: string[] = [],
-    ): Promise<FilesComponent[]> {
+    ): Promise<{ files: FilesComponent[]; directories: DirectoriesComponent[] }> {
         const results = await Promise.all(
             paths.map(async (p) => {
-                const absolutePath = path.resolve(p);
-                const parentDir = path.dirname(absolutePath);
+                const { absolutePath, parentDir, rootName } = this.resolvePaths(p);
 
                 const entries = await fg("**/*", {
                     cwd: absolutePath,
                     stats: true,
                     absolute: true,
-                    onlyFiles: true,
+                    onlyFiles: false,
                 });
 
-                return entries
-                    .filter((entry) => this.validateExt(path.basename(entry.path), additionalExt))
-                    .map((entry) => {
-                        const fullPath = entry.path.replace(/\\/g, "/");
-                        const relativeFromRoot = path
-                            .relative(parentDir, fullPath)
-                            .replace(/\\/g, "/");
-                        const name = path.basename(fullPath);
-                        const parentPath = path.dirname(relativeFromRoot).replace(/\\/g, "/");
+                const files: FilesComponent[] = [];
+                const directories: DirectoriesComponent[] = [];
 
-                        return {
-                            FID: nanoid(),
-                            path: relativeFromRoot,
-                            name: name,
-                            size: entry.stats?.size ?? 0,
-                            parentPath: parentPath === "." ? "" : parentPath,
-                            fullPath: fullPath,
-                        };
-                    });
-            }),
-        );
-
-        return flatten(results);
-    }
-
-    private async collectDirectories(paths: string[]): Promise<DirectoriesComponent[]> {
-        const results = await Promise.all(
-            paths.map(async (p) => {
-                const absolutePath = path.resolve(p);
-                const rootName = path.basename(absolutePath);
-                const parentDir = path.dirname(absolutePath);
-
-                const entries = await fg("**/*", {
-                    cwd: absolutePath,
-                    onlyDirectories: true,
-                    absolute: true,
-                });
-
-                const rootEntry = {
+                directories.push({
                     path: rootName.replace(/\\/g, "/"),
                     name: rootName,
                     parentPath: "",
-                };
-
-                const subDirs = entries.map((dirPath) => {
-                    const relativePath = path.relative(parentDir, dirPath).replace(/\\/g, "/");
-                    const name = path.basename(dirPath);
-                    const dirParentPath = path.dirname(relativePath).replace(/\\/g, "/");
-
-                    return {
-                        path: relativePath,
-                        name: name,
-                        parentPath: dirParentPath === "." ? "" : dirParentPath,
-                    };
                 });
 
-                return [rootEntry, ...subDirs];
+                for (const entry of entries) {
+                    const fullPath = entry.path.replace(/\\/g, "/");
+                    const relativePath = path.relative(parentDir, fullPath).replace(/\\/g, "/");
+                    const name = path.basename(fullPath);
+                    const parentPath = path.dirname(relativePath).replace(/\\/g, "/");
+                    const normalizedParentPath = parentPath === "." ? "" : parentPath;
+
+                    if (entry.dirent.isDirectory()) {
+                        directories.push({
+                            path: relativePath,
+                            name,
+                            parentPath: normalizedParentPath,
+                        });
+                    } else if (this.validateExt(name, additionalExt)) {
+                        files.push({
+                            FID: nanoid(),
+                            path: relativePath,
+                            name,
+                            size: entry.stats?.size ?? 0,
+                            parentPath: normalizedParentPath,
+                            fullPath,
+                        });
+                    }
+                }
+
+                return { files, directories };
             }),
         );
 
-        return flatten(results);
-    }
+        const files: FilesComponent[] = [];
+        const directories: DirectoriesComponent[] = [];
 
-    private createSha256WorkerPool(size: number) {
-        const workers: Worker[] = [];
-        for (let i = 0; i < size; i++) {
-            const worker = new Worker(sha256Worker);
-            workers.push(worker);
+        for (const result of results) {
+            files.push(...result.files);
+            directories.push(...result.directories);
         }
-        return workers;
-    }
 
-    private cleanupSha256Workers(workers: Worker[]) {
-        workers.forEach((worker) => {
-            worker.terminate();
-        });
+        return { files, directories };
     }
 
     private async isMediaByMagicNumbers(file: Buffer) {
@@ -467,66 +443,44 @@ export class UploadLib {
         );
     }
 
-    public async calculateHashes(files: ParentIdFiles[], onProgress?: (count: number) => void) {
+    public async calculateHashes(
+        files: ParentIdFiles[],
+        onProgress?: (count: number) => void,
+        signal?: AbortSignal,
+    ) {
         let processedCount = 0;
         let lastUpdate = 0;
-        const optimalWorkerCount = Math.min(files.length, os.cpus().length);
-        const workers = this.createSha256WorkerPool(optimalWorkerCount);
-        const chunks: ParentIdFiles[][] = Array(optimalWorkerCount)
-            .fill(null)
-            .map(() => []);
 
-        files.forEach((file, index) => {
-            chunks[index % optimalWorkerCount].push(file);
+        const piscina = new Piscina({
+            filename: sha256PiscinaWorker,
+            minThreads: 2,
+            idleTimeout: 3000,
         });
 
-        const results = await Promise.all(
-            chunks.map((chunk, workerIndex) => {
-                return new Promise<Map<string, string>>((resolve, reject) => {
-                    const worker = workers[workerIndex];
-                    worker.on(
-                        "message",
-                        (message: {
-                            type: string;
-                            hashes?: Map<string, string>;
-                            error?: string;
-                        }) => {
-                            if (message.type === "complete") {
-                                resolve(new Map(message.hashes));
-                            } else if (message.type === "progress") {
-                                processedCount++;
-                                const now = Date.now();
-                                if (now - lastUpdate >= 100 || processedCount === files.length) {
-                                    lastUpdate = now;
-                                    onProgress?.(processedCount);
-                                }
-                            } else if (message.type === "error") {
-                                reject(new Error(message.error));
-                            }
-                        },
-                    );
-                    worker.on("error", reject);
-                    worker.postMessage({
-                        files: chunk.map((f) => ({ FID: f.FID, path: f.fullPath })),
-                    });
+        const promises = files.map(async (file) => {
+            return piscina
+                .run({ path: file.fullPath }, { signal })
+                .then((hash: string) => {
+                    processedCount++;
+                    const now = Date.now();
+
+                    if (now - lastUpdate >= 100 || processedCount === files.length) {
+                        lastUpdate = now;
+                        onProgress?.(processedCount);
+                    }
+
+                    return { ...file, sha256: hash };
+                })
+                .catch((err) => {
+                    throw new Error(`Failed to hash ${file.name}: ${err}`);
                 });
-            }),
-        );
-
-        this.cleanupSha256Workers(workers);
-
-        const combinedHashes = new Map<string, string>();
-        results.forEach((result) => {
-            result.forEach((hash, fid) => {
-                combinedHashes.set(fid, hash);
-            });
         });
 
-        return files.map((file) => {
-            const hash = combinedHashes.get(file.FID);
-            if (!hash) throw new Error("cannot get hash from FID");
-            return { ...file, sha256: hash };
-        });
+        try {
+            return await Promise.all(promises);
+        } finally {
+            await piscina.destroy();
+        }
     }
 
     public mapFilesToParentIds(
@@ -787,11 +741,15 @@ export class UploadLib {
             } else if (processedFiles && processedFiles.length === parentIdProcessedFiles.length) {
                 finalFiles = processedFiles;
             } else {
-                finalFiles = await this.calculateHashes(parentIdProcessedFiles, (count) => {
-                    this.desktop.service.transfer.updateTransfer(pid, {
-                        transferedFiles: count,
-                    });
-                });
+                finalFiles = await this.calculateHashes(
+                    parentIdProcessedFiles,
+                    (count) => {
+                        this.desktop.service.transfer.updateTransfer(pid, {
+                            transferedFiles: count,
+                        });
+                    },
+                    abortController.signal,
+                );
                 const transfer = this.desktop.service.transfer.getTransferByPID(pid);
                 if (transfer?.restartParams) {
                     transfer.restartParams = {
@@ -862,9 +820,7 @@ export class UploadLib {
     }
 
     public async prepareUpload(paths: string[], children: Content[]) {
-        const files = await this.collectFiles(paths);
-
-        const directories = await this.collectDirectories(paths);
+        const { files, directories } = await this.collect(paths);
 
         const rootDirectories = directories.filter((dir) => dir.parentPath === "");
         for (const rootDir of rootDirectories) {

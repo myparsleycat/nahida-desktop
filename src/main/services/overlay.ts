@@ -30,22 +30,26 @@ export class OverlayService extends EventEmitter {
     private enabled = true;
 
     public async updateSettings() {
+        const oldToggleKey = this.toggleKey;
         this.enabled = await this.desktop.setting.overlay.getEnabled();
         this.toggleKey = (await this.desktop.setting.overlay.getToggleKey()) as string;
-        this.updateShortcuts();
+
+        if (oldToggleKey !== this.toggleKey) {
+            globalShortcut.unregister(oldToggleKey);
+        }
 
         if (!this.enabled && this.isVisible) {
             this.isVisible = false;
             this.emit("toggle-visible", this.isVisible);
         }
+
+        this.updateShortcuts();
     }
 
     public start(targetTitle: string) {
         if (this.trackId === targetTitle) return;
 
         this.stop();
-        this.trackId = targetTitle;
-        this.isVisible = true;
         this.trackId = targetTitle;
         this.isVisible = true;
         this.isGameFocused = false;
@@ -65,8 +69,6 @@ export class OverlayService extends EventEmitter {
         if (this.trackId === pid) return;
 
         this.stop();
-        this.trackId = pid;
-        this.isVisible = true;
         this.trackId = pid;
         this.isVisible = true;
         this.isGameFocused = false;
@@ -102,7 +104,6 @@ export class OverlayService extends EventEmitter {
 
         this.desktop.logger.info(`Stopping overlay tracker for: ${this.trackId}`, "OverlayService");
         this.controller.stop();
-        this.trackId = null;
         this.trackId = null;
         this.isGameFocused = false;
         this.isOverlayFocused = false;
@@ -153,7 +154,7 @@ export class OverlayService extends EventEmitter {
             }
         }
 
-        if (this.isGameFocused && this.isVisible && !this.isOverlayFocused) {
+        if (this.enabled && this.isGameFocused && this.isVisible && !this.isOverlayFocused) {
             for (const key of this.interactiveKeys) {
                 if (!globalShortcut.isRegistered(key)) {
                     globalShortcut.register(key, () => {

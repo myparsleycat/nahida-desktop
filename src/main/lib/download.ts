@@ -45,11 +45,7 @@ class DownloadStreamer {
     constructor(private readonly desktop: NahidaDesktop) {}
 
     private async decompressData(str: string) {
-        const binaryString = atob(str);
-        const compressedData = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-            compressedData[i] = binaryString.charCodeAt(i);
-        }
+        const compressedData = Buffer.from(str, "base64");
         return decompress(compressedData);
     }
 
@@ -89,12 +85,12 @@ class DownloadStreamer {
             switch (chunk.event) {
                 case "dirs": {
                     const dirsChunk = await this.parseStreamedData(chunk.data);
-                    downloadData.dirs = downloadData.dirs.concat(dirsChunk);
+                    downloadData.dirs.push(...dirsChunk);
                     break;
                 }
                 case "files": {
                     const filesChunk = await this.parseStreamedData(chunk.data);
-                    downloadData.files = downloadData.files.concat(filesChunk);
+                    downloadData.files.push(...filesChunk);
                     break;
                 }
                 case "metadata": {
@@ -480,15 +476,17 @@ class FileDownloadTask {
         retryCount: number,
         maxRetries: number,
     ): NodeJS.Timeout {
+        const CHECK_INTERVAL = 2000;
         const SLOW_SPEED_THRESHOLD = 500 * 1024; // 500KB/s
-        const SPEED_CHECK_DELAY = 3000;
-        const startTime = Date.now();
-        const startBytes = getCurrentBytes();
 
-        return setTimeout(() => {
-            const elapsed = (Date.now() - startTime) / 1000;
-            const transferred = getCurrentBytes() - startBytes;
-            const speed = transferred / elapsed;
+        let lastBytes = getCurrentBytes();
+
+        return setInterval(() => {
+            const currentBytes = getCurrentBytes();
+            const diff = currentBytes - lastBytes;
+            const speed = diff / (CHECK_INTERVAL / 1000);
+
+            lastBytes = currentBytes;
 
             if (speed < SLOW_SPEED_THRESHOLD && retryCount < maxRetries) {
                 this.desktop.logger.warn(
@@ -497,7 +495,7 @@ class FileDownloadTask {
                 );
                 onSlow();
             }
-        }, SPEED_CHECK_DELAY);
+        }, CHECK_INTERVAL);
     }
 }
 

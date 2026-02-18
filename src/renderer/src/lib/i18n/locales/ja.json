@@ -44,6 +44,8 @@
                 "completed": "完了",
                 "failed": "失敗",
                 "paused": "一時停止",
+                "queued": "待機中",
+                "preparing": "準備中",
                 "time_remaining": "残り {{time}}",
                 "time_elapsed": "経過 {{time}}",
                 "failed_files": "{{count}}個 失敗",

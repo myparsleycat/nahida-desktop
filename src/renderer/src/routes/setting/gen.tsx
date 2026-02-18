@@ -11,8 +11,10 @@ import {
 } from "@renderer/components/ui/select";
 import { Separator } from "@renderer/components/ui/separator";
 import { Switch } from "@renderer/components/ui/switch";
+import { useSettings } from "@renderer/hooks/use-settings";
 import { formatSize } from "@shared/utils";
 import { createFileRoute } from "@tanstack/react-router";
+import { LoaderIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -20,52 +22,41 @@ export const Route = createFileRoute("/setting/gen")({
   component: RouteComponent,
 });
 
+const settingsConfig = {
+  runOnStartup: "setting:general:getRunOnStartup",
+  language: "setting:general:getLanguage",
+  checkBackgroundUpdates: "setting:general:getCheckBackgroundUpdates",
+  moveTransferPageWhenStartTransfer: "setting:general:getMoveTransferPageWhenStartTransfer",
+  powerSaveBlockInTransfer: "setting:general:getPowerSaveBlockInTransfer",
+  defaultStartPage: "setting:general:getDefaultStartPage",
+} as const;
+
 function RouteComponent() {
   const { theme, setTheme } = useTheme();
   const { t } = useTranslation();
 
-  const [runOnStartup, setRunOnStartup] = useState(false);
-  const [language, setLanguage] = useState<string | undefined>(undefined);
-  const [checkBackgroundUpdates, setCheckBackgroundUpdates] = useState(true);
-  const [autoUpdate, setAutoUpdate] = useState(false);
-  const [moveTransferPageWhenStartTransfer, setMoveTransferPageWhenStartTransfer] = useState(false);
-  const [powerSaveBlockInTransfer, setPowerSaveBlockInTransfer] = useState(false);
-  const [defaultStartPage, setDefaultStartPage] = useState<string>("/mod");
-  const [imageCacheSize, setImageCacheSize] = useState<number>(0);
+  const { settings, update, isLoading } = useSettings<{
+    runOnStartup: boolean;
+    language: string;
+    checkBackgroundUpdates: boolean;
+    moveTransferPageWhenStartTransfer: boolean;
+    powerSaveBlockInTransfer: boolean;
+    defaultStartPage: string;
+  }>(settingsConfig);
+
+  const [imageCacheSize, setImageCacheSize] = useState<number | null>(null);
 
   useEffect(() => {
-    window.api.invoke("setting:general:getRunOnStartup").then((val: boolean) => {
-      setRunOnStartup(val);
-    });
-
-    window.api.invoke("setting:general:getLanguage").then((val) => {
-      if (val) {
-        setLanguage(val);
-      }
-    });
-
-    window.api.invoke("setting:general:getCheckBackgroundUpdates").then((val: boolean) => {
-      setCheckBackgroundUpdates(val);
-    });
-
-    window.api
-      .invoke("setting:general:getMoveTransferPageWhenStartTransfer")
-      .then((val: boolean) => {
-        setMoveTransferPageWhenStartTransfer(val);
-      });
-
-    window.api.invoke("setting:general:getPowerSaveBlockInTransfer").then((val: boolean) => {
-      setPowerSaveBlockInTransfer(val);
-    });
-
-    window.api.invoke("setting:general:getDefaultStartPage").then((val: string | null) => {
-      setDefaultStartPage(val || "/mod");
-    });
-
-    window.api.invoke("setting:general:getImageCacheSize").then((val: number) => {
-      setImageCacheSize(val);
+    window.api.invoke("setting:general:getImageCacheSize").then((size) => {
+      setImageCacheSize(size);
     });
   }, []);
+
+  const [autoUpdate, setAutoUpdate] = useState(false);
+
+  if (isLoading) {
+    return null;
+  }
 
   return (
     <main className="flex-1 flex flex-col mx-auto p-4 space-y-6 w-full select-none">
@@ -86,11 +77,10 @@ function RouteComponent() {
               </p>
             </div>
             <Switch
-              checked={runOnStartup}
-              onCheckedChange={(val) => {
-                setRunOnStartup(val);
-                window.api.invoke("setting:general:setRunOnStartup", val);
-              }}
+              checked={settings.runOnStartup}
+              onCheckedChange={(val) =>
+                update("runOnStartup", val, "setting:general:setRunOnStartup")
+              }
             />
           </div>
 
@@ -113,11 +103,10 @@ function RouteComponent() {
                 {t("page.setting.gen.application.checkUpdate")}
               </Button>
               <Switch
-                checked={checkBackgroundUpdates}
-                onCheckedChange={(val) => {
-                  setCheckBackgroundUpdates(val);
-                  window.api.invoke("setting:general:setCheckBackgroundUpdates", val);
-                }}
+                checked={settings.checkBackgroundUpdates}
+                onCheckedChange={(val) =>
+                  update("checkBackgroundUpdates", val, "setting:general:setCheckBackgroundUpdates")
+                }
               />
             </div>
           </div>
@@ -147,11 +136,8 @@ function RouteComponent() {
               </label>
               <Select
                 name="language"
-                value={language}
-                onValueChange={(val) => {
-                  setLanguage(val);
-                  window.api.invoke("setting:general:setLanguage", val);
-                }}
+                value={settings.language}
+                onValueChange={(val) => update("language", val, "setting:general:setLanguage")}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder={t("page.setting.gen.language.select")} />
@@ -189,11 +175,10 @@ function RouteComponent() {
               </label>
               <Select
                 name="startPage"
-                value={defaultStartPage}
-                onValueChange={(v) => {
-                  setDefaultStartPage(v);
-                  window.api.invoke("setting:general:setDefaultStartPage", v);
-                }}
+                value={settings.defaultStartPage}
+                onValueChange={(val) =>
+                  update("defaultStartPage", val, "setting:general:setDefaultStartPage")
+                }
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder={t("page.setting.gen.startPage.select")} />
@@ -227,11 +212,14 @@ function RouteComponent() {
               </p>
             </div>
             <Switch
-              checked={moveTransferPageWhenStartTransfer}
-              onCheckedChange={(val) => {
-                setMoveTransferPageWhenStartTransfer(val);
-                window.api.invoke("setting:general:setMoveTransferPageWhenStartTransfer", val);
-              }}
+              checked={settings.moveTransferPageWhenStartTransfer}
+              onCheckedChange={(val) =>
+                update(
+                  "moveTransferPageWhenStartTransfer",
+                  val,
+                  "setting:general:setMoveTransferPageWhenStartTransfer",
+                )
+              }
             />
           </div>
 
@@ -247,11 +235,14 @@ function RouteComponent() {
               </p>
             </div>
             <Switch
-              checked={powerSaveBlockInTransfer}
-              onCheckedChange={(val) => {
-                setPowerSaveBlockInTransfer(val);
-                window.api.invoke("setting:general:setPowerSaveBlockInTransfer", val);
-              }}
+              checked={settings.powerSaveBlockInTransfer}
+              onCheckedChange={(val) =>
+                update(
+                  "powerSaveBlockInTransfer",
+                  val,
+                  "setting:general:setPowerSaveBlockInTransfer",
+                )
+              }
             />
           </div>
 
@@ -267,10 +258,18 @@ function RouteComponent() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <p className="text-sm">{formatSize(imageCacheSize)}</p>
+              <p className="text-sm">
+                {imageCacheSize === null ? (
+                  <LoaderIcon className="size-4 animate-spin text-muted-foreground" />
+                ) : (
+                  formatSize(imageCacheSize)
+                )}
+              </p>
               <Button
                 variant="outline"
+                disabled={imageCacheSize === null}
                 onClick={() => {
+                  setImageCacheSize(null);
                   window.api.invoke("setting:general:clearImageCache").then(() => {
                     window.api.invoke("setting:general:getImageCacheSize").then((size) => {
                       setImageCacheSize(size);

@@ -12,8 +12,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
+import { useSettings } from "@renderer/hooks/use-settings";
+import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -21,40 +22,59 @@ export const Route = createFileRoute("/setting/net")({
   component: RouteComponent,
 });
 
+const settingsConfig = {
+  proxy: "setting:net:getProxy",
+} as const;
+
 function RouteComponent() {
   const { t } = useTranslation();
-
-  const [proxyType, setProxyType] = useState("disabled");
-  const [host, setHost] = useState("");
-  const [port, setPort] = useState("");
-  const [requiresAuth, setRequiresAuth] = useState(false);
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-
+  const queryClient = useQueryClient();
   const [parent, _enableAnimations] = useAutoAnimate();
 
-  useEffect(() => {
-    window.api.invoke("setting:net:getProxy").then((settings) => {
-      if (settings) {
-        setProxyType(settings.type);
-        setHost(settings.host || "");
-        setPort(settings.port || "");
-        setRequiresAuth(settings.requiresAuth || false);
-        setUsername(settings.username || "");
-        setPassword(settings.password || "");
-      }
-    });
-  }, []);
+  const { settings, setSettings, isLoading } = useSettings<{
+    proxy?: {
+      type: string;
+      host: string;
+      port: string;
+      requiresAuth: boolean;
+      username?: string;
+      password?: string;
+    };
+  }>(settingsConfig);
+
+  if (isLoading) {
+    return null;
+  }
+
+  const proxy = settings.proxy || {
+    type: "disabled",
+    host: "",
+    port: "",
+    requiresAuth: false,
+    username: "",
+    password: "",
+  };
+
+  const updateProxy = (updates: Partial<typeof proxy>) => {
+    setSettings((prev) => ({
+      ...prev,
+      proxy: { ...proxy, ...updates },
+    }));
+  };
 
   const handleSave = async () => {
-    await window.api.invoke("setting:net:setProxy", {
-      type: proxyType,
-      host,
-      port,
-      requiresAuth,
-      username: requiresAuth ? username : undefined,
-      password: requiresAuth ? password : undefined,
+    const updatedProxy = {
+      ...proxy,
+      username: proxy.requiresAuth ? proxy.username : undefined,
+      password: proxy.requiresAuth ? proxy.password : undefined,
+    };
+
+    await window.api.invoke("setting:net:setProxy", updatedProxy);
+
+    queryClient.setQueryData(["settings", settingsConfig], (old: typeof settings | undefined) => {
+      return old ? { ...old, proxy: updatedProxy } : old;
     });
+
     toast.success(t("page.setting.net.proxy.saved"));
   };
 
@@ -64,7 +84,7 @@ function RouteComponent() {
         <CardContent className="space-y-4" ref={parent}>
           <div className="space-y-2">
             <Label htmlFor="proxy-type">{t("page.setting.net.proxy.type")}</Label>
-            <Select value={proxyType} onValueChange={setProxyType}>
+            <Select value={proxy.type} onValueChange={(val) => updateProxy({ type: val })}>
               <SelectTrigger id="proxy-type">
                 <SelectValue placeholder="Select proxy type" />
               </SelectTrigger>
@@ -84,9 +104,9 @@ function RouteComponent() {
               <Input
                 id="host"
                 placeholder="proxy.example.com"
-                value={host}
-                onChange={(e) => setHost(e.target.value)}
-                disabled={proxyType === "disabled"}
+                value={proxy.host}
+                onChange={(e) => updateProxy({ host: e.target.value })}
+                disabled={proxy.type === "disabled"}
               />
             </div>
             <div className="space-y-2">
@@ -94,9 +114,9 @@ function RouteComponent() {
               <Input
                 id="port"
                 placeholder="8080"
-                value={port}
-                onChange={(e) => setPort(e.target.value)}
-                disabled={proxyType === "disabled"}
+                value={proxy.port}
+                onChange={(e) => updateProxy({ port: e.target.value })}
+                disabled={proxy.type === "disabled"}
               />
             </div>
           </div>
@@ -104,24 +124,24 @@ function RouteComponent() {
           <div className="flex items-center space-x-2 pt-2">
             <Checkbox
               id="requires-auth"
-              checked={requiresAuth}
-              onCheckedChange={(checked) => setRequiresAuth(checked === true)}
-              disabled={proxyType === "disabled"}
+              checked={proxy.requiresAuth}
+              onCheckedChange={(checked) => updateProxy({ requiresAuth: checked === true })}
+              disabled={proxy.type === "disabled"}
             />
             <Label htmlFor="requires-auth" className="cursor-pointer font-normal">
               {t("page.setting.net.proxy.requiresAuth")}
             </Label>
           </div>
 
-          {requiresAuth && (
+          {proxy.requiresAuth && (
             <div className="space-y-4 pt-2 border-t">
               <div className="space-y-2 pt-4">
                 <Label htmlFor="username">{t("page.setting.net.proxy.username")}</Label>
                 <Input
                   id="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  disabled={proxyType === "disabled"}
+                  value={proxy.username}
+                  onChange={(e) => updateProxy({ username: e.target.value })}
+                  disabled={proxy.type === "disabled"}
                 />
               </div>
               <div className="space-y-2">
@@ -129,9 +149,9 @@ function RouteComponent() {
                 <Input
                   id="password"
                   type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={proxyType === "disabled"}
+                  value={proxy.password}
+                  onChange={(e) => updateProxy({ password: e.target.value })}
+                  disabled={proxy.type === "disabled"}
                 />
               </div>
             </div>

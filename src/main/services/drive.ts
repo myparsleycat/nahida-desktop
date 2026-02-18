@@ -10,7 +10,7 @@ import Upload, {
 } from "@main/lib/upload";
 import { dialog } from "electron";
 import { retry } from "es-toolkit";
-
+import fse from "fs-extra";
 import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "..";
 import type { LocalTransfer } from "./transfer";
@@ -43,6 +43,76 @@ export class DriveService {
             throw String(error);
         }
         return data;
+    }
+
+    private balanceAndInterleaveFiles<T extends { size: number }>(
+        files: T[],
+        maxPerChunk: number = 100,
+    ): T[] {
+        if (!files || files.length === 0) return [];
+        if (maxPerChunk <= 0) throw new Error("maxPerChunk must be greater than 0");
+
+        const sortedFiles = [...files].sort((a, b) => b.size - a.size);
+
+        const chunkCount = Math.ceil(sortedFiles.length / maxPerChunk);
+
+        type Chunk = { currentSize: number; files: T[] };
+        const heap: Chunk[] = Array.from({ length: chunkCount }, () => ({
+            currentSize: 0,
+            files: [],
+        }));
+
+        const heapSwap = (i: number, j: number) => {
+            [heap[i], heap[j]] = [heap[j], heap[i]];
+        };
+
+        const heapifyDown = (start: number) => {
+            let i = start;
+            const len = heap.length;
+            while (true) {
+                const left = 2 * i + 1;
+                const right = 2 * i + 2;
+                let smallest = i;
+
+                if (left < len && heap[left].currentSize < heap[smallest].currentSize) {
+                    smallest = left;
+                }
+                if (right < len && heap[right].currentSize < heap[smallest].currentSize) {
+                    smallest = right;
+                }
+                if (smallest === i) break;
+
+                heapSwap(i, smallest);
+                i = smallest;
+            }
+        };
+
+        for (const file of sortedFiles) {
+            const targetChunk = heap[0];
+            targetChunk.files.push(file);
+            targetChunk.currentSize += file.size;
+            heapifyDown(0);
+        }
+
+        return heap
+            .filter((chunk) => chunk.files.length > 0)
+            .flatMap((chunk) => {
+                const { files: chunkFiles } = chunk;
+                const interleaved: T[] = [];
+                let left = 0;
+                let right = chunkFiles.length - 1;
+
+                while (left <= right) {
+                    interleaved.push(chunkFiles[left]);
+                    if (left !== right) {
+                        interleaved.push(chunkFiles[right]);
+                    }
+                    left++;
+                    right--;
+                }
+
+                return interleaved;
+            });
     }
 
     get = {
@@ -209,6 +279,7 @@ export class DriveService {
                     abortController,
                     data,
                     suggestedName,
+                    savePath,
                 }).catch((err) => {
                     this.desktop.logger.error(err, "Drive:Download:Preprocessing");
                     this.desktop.service.transfer.updateTransfer(pid, {
@@ -343,11 +414,13 @@ export class DriveService {
     }) {
         const { files, totalSize, processName } = preparation;
 
-        const dummyFiles = files.map((f) => ({
-            ...f,
-            parentId: "",
-            fullPath: f.fullPath,
-        }));
+        const dummyFiles = this.balanceAndInterleaveFiles(
+            files.map((f) => ({
+                ...f,
+                parentId: "",
+                fullPath: f.fullPath,
+            })),
+        );
 
         const hashedFiles = await this.upload.calculateHashes(dummyFiles, (count) => {
             this.desktop.service.transfer.updateTransfer(pid, {
@@ -451,6 +524,7 @@ export class DriveService {
         abortController,
         data,
         suggestedName,
+        savePath,
     }: {
         id: string;
         pid: string;
@@ -458,6 +532,7 @@ export class DriveService {
         abortController: AbortController;
         data?: DownloadMetadata;
         suggestedName?: string;
+        savePath: string;
     }) {
         if (!data) {
             data = await this.download.getDownloadUrl(id, abortController.signal);
@@ -467,7 +542,11 @@ export class DriveService {
             if (suggestedName) {
                 data.root.name = suggestedName;
             }
-            data.root.name = this.desktop.lib.fs.sanitizeWindowsFilename(data.root.name);
+
+            const sanitized = this.desktop.lib.fs.sanitizeWindowsFilename(data.root.name);
+
+            const entries = await fse.readdir(savePath);
+            data.root.name = this.desktop.lib.fs.getUniqueName(sanitized, entries);
         }
 
         if (data.files) {

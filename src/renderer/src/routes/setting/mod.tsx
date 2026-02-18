@@ -3,10 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/u
 import { Input } from "@renderer/components/ui/input";
 import { Separator } from "@renderer/components/ui/separator";
 import { Switch } from "@renderer/components/ui/switch";
+import { useSettings } from "@renderer/hooks/use-settings";
 import { Logger } from "@renderer/lib/logger";
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -14,81 +14,38 @@ export const Route = createFileRoute("/setting/mod")({
   component: RouteComponent,
 });
 
+const settingsConfig = {
+  deleteArchiveAfterExtract: "setting:mod:getDeleteArchiveAfterExtract",
+  moveFolderInsteadOfCopy: "setting:mod:getMoveFolderInsteadOfCopy",
+  virtualizationEnabled: "setting:mod:getVirtualizationEnabled",
+  virtualizationThreshold: "setting:mod:getVirtualizationThreshold",
+  searchModPreview: "setting:mod:getSearchModPreview",
+  overlayEnabled: "setting:overlay:getEnabled",
+  overlayKey: "setting:overlay:getToggleKey",
+} as const;
+
 function RouteComponent() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [deleteArchiveAfterExtract, setDeleteArchiveAfterExtract] = useState(false);
-  const [moveFolderInsteadOfCopy, setMoveFolderInsteadOfCopy] = useState(false);
-  const [virtualizationEnabled, setVirtualizationEnabled] = useState(true);
-  const [virtualizationThreshold, setVirtualizationThreshold] = useState(30);
-  const [searchModPreview, setSearchModPreview] = useState(true);
-  const [overlayEnabled, setOverlayEnabled] = useState(true);
-  const [overlayKey, setOverlayKey] = useState<string>("Alt+A");
-
   const [anim1] = useAutoAnimate({ duration: 150 });
 
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const deleteArchive = await window.api.invoke("setting:mod:getDeleteArchiveAfterExtract");
-        const moveFolder = await window.api.invoke("setting:mod:getMoveFolderInsteadOfCopy");
-        const searchPreview = await window.api.invoke("setting:mod:getSearchModPreview");
-        const vEnabled = await window.api.invoke("setting:mod:getVirtualizationEnabled");
-        const vThreshold = await window.api.invoke("setting:mod:getVirtualizationThreshold");
+  const { settings, update, setSettings, isLoading } = useSettings<{
+    deleteArchiveAfterExtract: boolean;
+    moveFolderInsteadOfCopy: boolean;
+    virtualizationEnabled: boolean;
+    virtualizationThreshold: number;
+    searchModPreview: boolean;
+    overlayEnabled: boolean;
+    overlayKey: string;
+  }>(settingsConfig);
 
-        setDeleteArchiveAfterExtract(deleteArchive);
-        setMoveFolderInsteadOfCopy(moveFolder);
-        setSearchModPreview(searchPreview);
-        setVirtualizationEnabled(vEnabled);
-        setVirtualizationThreshold(vThreshold);
-
-        const oEnabled = await window.api.invoke("setting:overlay:getEnabled");
-        const oKey = await window.api.invoke("setting:overlay:getToggleKey");
-        setOverlayEnabled(oEnabled);
-        setOverlayKey(oKey || "");
-      } catch (error) {
-        Logger.error(error, "ModSettings:loadSettings");
-        toast.error("설정을 불러오는데 실패했습니다.");
-      }
-    };
-
-    loadSettings();
-  }, []);
-
-  const handleDeleteArchiveChange = async (checked: boolean) => {
-    try {
-      await window.api.invoke("setting:mod:setDeleteArchiveAfterExtract", checked);
-      setDeleteArchiveAfterExtract(checked);
-    } catch (error) {
-      Logger.error(error, "ModSettings:handleDeleteArchiveChange");
-      toast.error("설정 저장에 실패했습니다.");
-    }
-  };
-
-  const handleMoveFolderChange = async (checked: boolean) => {
-    try {
-      await window.api.invoke("setting:mod:setMoveFolderInsteadOfCopy", checked);
-      setMoveFolderInsteadOfCopy(checked);
-    } catch (error) {
-      Logger.error(error, "ModSettings:handleMoveFolderChange");
-      toast.error("설정 저장에 실패했습니다.");
-    }
-  };
-
-  const handleSearchModPreviewChange = async (checked: boolean) => {
-    try {
-      await window.api.invoke("setting:mod:setSearchModPreview", checked);
-      setSearchModPreview(checked);
-    } catch (error) {
-      Logger.error(error, "ModSettings:handleSearchModPreviewChange");
-      toast.error("설정 저장에 실패했습니다.");
-    }
-  };
+  if (isLoading) {
+    return null;
+  }
 
   const handleVirtualizationEnabledChange = async (checked: boolean) => {
     try {
-      await window.api.invoke("setting:mod:setVirtualizationEnabled", checked);
-      setVirtualizationEnabled(checked);
+      await update("virtualizationEnabled", checked, "setting:mod:setVirtualizationEnabled");
       queryClient.invalidateQueries({ queryKey: ["settings", "mod", "virtualization"] });
     } catch (error) {
       Logger.error(error, "ModSettings:handleVirtualizationEnabledChange");
@@ -103,9 +60,8 @@ function RouteComponent() {
     }
 
     try {
-      await window.api.invoke("setting:mod:setVirtualizationThreshold", value);
+      await update("virtualizationThreshold", value, "setting:mod:setVirtualizationThreshold");
       toast.success("설정이 저장되었습니다.");
-      setVirtualizationThreshold(value);
       queryClient.invalidateQueries({ queryKey: ["settings", "mod", "virtualization"] });
     } catch (error) {
       Logger.error(error, "ModSettings:handleVirtualizationThresholdChange");
@@ -113,20 +69,9 @@ function RouteComponent() {
     }
   };
 
-  const handleOverlayEnabledChange = async (checked: boolean) => {
-    try {
-      await window.api.invoke("setting:overlay:setEnabled", checked);
-      setOverlayEnabled(checked);
-    } catch (error) {
-      Logger.error(error, "ModSettings:handleOverlayEnabledChange");
-      toast.error("설정 저장에 실패했습니다.");
-    }
-  };
-
   const handleOverlayKeyChange = async (key: string) => {
     try {
-      await window.api.invoke("setting:overlay:setToggleKey", key);
-      setOverlayKey(key);
+      await update("overlayKey", key, "setting:overlay:setToggleKey");
       toast.success("단축키가 저장되었습니다.");
     } catch (error) {
       Logger.error(error, "ModSettings:handleOverlayKeyChange");
@@ -154,8 +99,14 @@ function RouteComponent() {
                 </p>
               </div>
               <Switch
-                checked={deleteArchiveAfterExtract}
-                onCheckedChange={handleDeleteArchiveChange}
+                checked={settings.deleteArchiveAfterExtract}
+                onCheckedChange={(val) =>
+                  update(
+                    "deleteArchiveAfterExtract",
+                    val,
+                    "setting:mod:setDeleteArchiveAfterExtract",
+                  )
+                }
               />
             </div>
 
@@ -170,7 +121,12 @@ function RouteComponent() {
                   {t("page.setting.mod.mod_management.moveFolderInsteadOfCopyDescription")}
                 </p>
               </div>
-              <Switch checked={moveFolderInsteadOfCopy} onCheckedChange={handleMoveFolderChange} />
+              <Switch
+                checked={settings.moveFolderInsteadOfCopy}
+                onCheckedChange={(val) =>
+                  update("moveFolderInsteadOfCopy", val, "setting:mod:setMoveFolderInsteadOfCopy")
+                }
+              />
             </div>
 
             <Separator />
@@ -184,7 +140,12 @@ function RouteComponent() {
                   {t("page.setting.mod.mod_management.searchModPreviewDescription")}
                 </p>
               </div>
-              <Switch checked={searchModPreview} onCheckedChange={handleSearchModPreviewChange} />
+              <Switch
+                checked={settings.searchModPreview}
+                onCheckedChange={(val) =>
+                  update("searchModPreview", val, "setting:mod:setSearchModPreview")
+                }
+              />
             </div>
           </CardContent>
         </Card>
@@ -207,12 +168,12 @@ function RouteComponent() {
                   </p>
                 </div>
                 <Switch
-                  checked={virtualizationEnabled}
+                  checked={settings.virtualizationEnabled}
                   onCheckedChange={handleVirtualizationEnabledChange}
                 />
               </div>
 
-              {virtualizationEnabled && (
+              {settings.virtualizationEnabled && (
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <span className="text-sm font-bold">
@@ -224,8 +185,13 @@ function RouteComponent() {
                   </div>
 
                   <Input
-                    value={virtualizationThreshold}
-                    onChange={(e) => setVirtualizationThreshold(Number(e.target.value))}
+                    value={settings.virtualizationThreshold}
+                    onChange={(e) =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        virtualizationThreshold: Number(e.target.value),
+                      }))
+                    }
                     onBlur={(e) => handleVirtualizationThresholdChange(Number(e.target.value))}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
@@ -233,7 +199,7 @@ function RouteComponent() {
                       }
                     }}
                     className="w-20"
-                    disabled={!virtualizationEnabled}
+                    disabled={!settings.virtualizationEnabled}
                   />
                 </div>
               )}
@@ -257,7 +223,12 @@ function RouteComponent() {
                   {t("page.setting.mod.overlay.enableOverlayDescription")}
                 </p>
               </div>
-              <Switch checked={overlayEnabled} onCheckedChange={handleOverlayEnabledChange} />
+              <Switch
+                checked={settings.overlayEnabled}
+                onCheckedChange={(val) =>
+                  update("overlayEnabled", val, "setting:overlay:setEnabled")
+                }
+              />
             </div>
 
             <Separator />
@@ -273,7 +244,7 @@ function RouteComponent() {
               </div>
               <div className="flex items-center gap-2">
                 <Input
-                  value={overlayKey}
+                  value={settings.overlayKey || ""}
                   readOnly
                   className="w-30 text-center font-mono uppercase caret-transparent focus:ring-2 focus:ring-primary"
                   onKeyDown={(e) => {

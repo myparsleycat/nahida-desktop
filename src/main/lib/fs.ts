@@ -22,6 +22,19 @@ export class FS {
         this.desktop = desktop;
     }
 
+    public getUniqueName(name: string, existingNames: string[]) {
+        const lowerNamesSet = new Set(existingNames.map((n) => n.toLowerCase()));
+        let uniqueName = name;
+        let counter = 1;
+
+        while (lowerNamesSet.has(uniqueName.toLowerCase())) {
+            counter++;
+            uniqueName = `${name} (${counter})`;
+        }
+
+        return uniqueName;
+    }
+
     public async isPathWritable(pathStr: string) {
         try {
             await fse.access(pathStr, fse.constants.W_OK | fse.constants.R_OK);
