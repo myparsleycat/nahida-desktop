@@ -190,12 +190,12 @@ export const TransferItem = memo((props: TransferItemProps) => {
             </span>
           </div>
           {(() => {
-            if (status === "preparing" || status === "downloading") {
+            if (status === "preparing" || status === "downloading" || status === "uploading") {
               return (
                 <span className={cn("shrink-0 text-xs font-medium", getStatusColor(status))}>
                   {totalFiles && processedFiles !== undefined
-                    ? `${status.charAt(0).toUpperCase() + status.slice(1)} (${processedFiles}/${totalFiles})`
-                    : status.charAt(0).toUpperCase() + status.slice(1)}
+                    ? `${t(`page.transfer.item.${status}`)} (${processedFiles}/${totalFiles})`
+                    : t(`page.transfer.item.${status}`)}
                 </span>
               );
             } else if (status === "failed") {
@@ -203,7 +203,7 @@ export const TransferItem = memo((props: TransferItemProps) => {
                 <Dialog>
                   <DialogTrigger>
                     <span className={cn("shrink-0 text-xs font-medium", getStatusColor(status))}>
-                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                      {t(`page.transfer.item.${status}`)}
                     </span>
                   </DialogTrigger>
                   <DialogContent>{error}</DialogContent>
@@ -212,7 +212,7 @@ export const TransferItem = memo((props: TransferItemProps) => {
             } else {
               return (
                 <span className={cn("shrink-0 text-xs font-medium", getStatusColor(status))}>
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                  {t(`page.transfer.item.${status}`)}
                 </span>
               );
             }

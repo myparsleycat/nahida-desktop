@@ -44,6 +44,8 @@
                 "completed": "Completed",
                 "failed": "Failed",
                 "paused": "Paused",
+                "queued": "Queued",
+                "preparing": "Preparing",
                 "time_remaining": "{{time}} remaining",
                 "time_elapsed": "{{time}} elapsed",
                 "failed_files": "{{count}} failed",

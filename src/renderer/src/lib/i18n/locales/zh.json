@@ -44,6 +44,8 @@
                 "completed": "已完成",
                 "failed": "失败",
                 "paused": "已暂停",
+                "queued": "排队中",
+                "preparing": "准备中",
                 "time_remaining": "剩余 {{time}}",
                 "time_elapsed": "经过 {{time}}",
                 "failed_files": "{{count}} 个失败",

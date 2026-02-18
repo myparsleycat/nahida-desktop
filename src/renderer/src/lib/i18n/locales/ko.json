@@ -44,6 +44,8 @@
                 "completed": "완료",
                 "failed": "실패",
                 "paused": "일시정지",
+                "queued": "대기 중",
+                "preparing": "준비 중",
                 "time_remaining": "{{time}} 남음",
                 "time_elapsed": "{{time}} 경과",
                 "failed_files": "{{count}}개 실패",
