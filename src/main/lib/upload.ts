@@ -1,9 +1,8 @@
 import os from "node:os";
 import path from "node:path";
-import { Worker } from "node:worker_threads";
 import { eden, eden2url } from "@main/client";
 import { getAgent, getHeaders } from "@main/internal/fetcher";
-import sha256Worker from "@main/worker/drive/sha256.worker?modulePath";
+import sha256PiscinaWorker from "@main/worker/drive/sha256-piscina.worker?modulePath";
 import type { Content } from "@shared/types.gen";
 import { chunk, flatten, groupBy, orderBy, retry, sumBy } from "es-toolkit";
 import fg from "fast-glob";
@@ -12,6 +11,7 @@ import fse from "fs-extra";
 import ky from "ky";
 import { nanoid } from "nanoid";
 import PQueue from "p-queue";
+import Piscina from "piscina";
 import type { NahidaDesktop } from "..";
 
 const CHUNK_SIZE = 100;
@@ -180,21 +180,6 @@ export class UploadLib {
         );
 
         return flatten(results);
-    }
-
-    private createSha256WorkerPool(size: number) {
-        const workers: Worker[] = [];
-        for (let i = 0; i < size; i++) {
-            const worker = new Worker(sha256Worker);
-            workers.push(worker);
-        }
-        return workers;
-    }
-
-    private cleanupSha256Workers(workers: Worker[]) {
-        workers.forEach((worker) => {
-            worker.terminate();
-        });
     }
 
     private async isMediaByMagicNumbers(file: Buffer) {
@@ -470,63 +455,38 @@ export class UploadLib {
     public async calculateHashes(files: ParentIdFiles[], onProgress?: (count: number) => void) {
         let processedCount = 0;
         let lastUpdate = 0;
-        const optimalWorkerCount = Math.min(files.length, os.cpus().length);
-        const workers = this.createSha256WorkerPool(optimalWorkerCount);
-        const chunks: ParentIdFiles[][] = Array(optimalWorkerCount)
-            .fill(null)
-            .map(() => []);
 
-        files.forEach((file, index) => {
-            chunks[index % optimalWorkerCount].push(file);
+        const piscina = new Piscina({
+            filename: sha256PiscinaWorker,
+            minThreads: 1,
+            maxThreads: Math.max(1, os.cpus().length - 1),
+            idleTimeout: 3000,
         });
 
-        const results = await Promise.all(
-            chunks.map((chunk, workerIndex) => {
-                return new Promise<Map<string, string>>((resolve, reject) => {
-                    const worker = workers[workerIndex];
-                    worker.on(
-                        "message",
-                        (message: {
-                            type: string;
-                            hashes?: Map<string, string>;
-                            error?: string;
-                        }) => {
-                            if (message.type === "complete") {
-                                resolve(new Map(message.hashes));
-                            } else if (message.type === "progress") {
-                                processedCount++;
-                                const now = Date.now();
-                                if (now - lastUpdate >= 100 || processedCount === files.length) {
-                                    lastUpdate = now;
-                                    onProgress?.(processedCount);
-                                }
-                            } else if (message.type === "error") {
-                                reject(new Error(message.error));
-                            }
-                        },
-                    );
-                    worker.on("error", reject);
-                    worker.postMessage({
-                        files: chunk.map((f) => ({ FID: f.FID, path: f.fullPath })),
-                    });
+        const promises = files.map(async (file) => {
+            return piscina
+                .run({ path: file.fullPath })
+                .then((hash) => {
+                    processedCount++;
+                    const now = Date.now();
+
+                    if (now - lastUpdate >= 100 || processedCount === files.length) {
+                        lastUpdate = now;
+                        onProgress?.(processedCount);
+                    }
+
+                    return { ...file, sha256: hash as string };
+                })
+                .catch((err) => {
+                    throw new Error(`Failed to hash ${file.name}: ${err}`);
                 });
-            }),
-        );
-
-        this.cleanupSha256Workers(workers);
-
-        const combinedHashes = new Map<string, string>();
-        results.forEach((result) => {
-            result.forEach((hash, fid) => {
-                combinedHashes.set(fid, hash);
-            });
         });
 
-        return files.map((file) => {
-            const hash = combinedHashes.get(file.FID);
-            if (!hash) throw new Error("cannot get hash from FID");
-            return { ...file, sha256: hash };
-        });
+        try {
+            return await Promise.all(promises);
+        } finally {
+            await piscina.destroy();
+        }
     }
 
     public mapFilesToParentIds(
