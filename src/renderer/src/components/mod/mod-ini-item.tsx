@@ -16,13 +16,12 @@ import { formatKeyLabel } from "./utils";
 
 interface ModToggleKeyItemProps {
   modPath: string;
-  iniName: string;
   iniPath: string;
   toggleKey: ToggleKey;
   otherKeys: string[];
   onToggleKeyUpdate: (
     modPath: string,
-    iniFileName: string,
+    iniPath: string,
     sectionName: string,
     variable: string,
     value: string,
@@ -82,7 +81,7 @@ function KeySettingDialog({
 
 function ModToggleKeyItem({
   modPath,
-  iniName,
+  iniPath,
   toggleKey,
   otherKeys,
   onToggleKeyUpdate,
@@ -102,7 +101,7 @@ function ModToggleKeyItem({
           value={toggleKey.key}
           otherKeys={otherKeys}
           onSave={(newValue) =>
-            onToggleKeyUpdate(modPath, iniName, toggleKey.sectionName, "key", newValue)
+            onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "key", newValue)
           }
         />
       )}
@@ -113,7 +112,7 @@ function ModToggleKeyItem({
           value={toggleKey.back}
           otherKeys={otherKeys}
           onSave={(newValue) =>
-            onToggleKeyUpdate(modPath, iniName, toggleKey.sectionName, "back", newValue)
+            onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "back", newValue)
           }
         />
       )}
@@ -163,7 +162,6 @@ export function ModIniItem({ mod, ini, onToggleKeyUpdate }: ModIniItemProps) {
             <ModToggleKeyItem
               key={idx.toString()}
               modPath={mod.path}
-              iniName={ini.name}
               iniPath={ini.path}
               toggleKey={toggleKey}
               otherKeys={otherKeys

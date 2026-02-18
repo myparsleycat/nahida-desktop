@@ -80,7 +80,10 @@ export function registerModHandlers(desktop: NahidaDesktop) {
             variable: string,
             value: string,
         ) => {
-            const iniPath = path.join(modPath, iniFileName);
+            let iniPath = iniFileName;
+            if (!path.isAbsolute(iniFileName)) {
+                iniPath = path.join(modPath, iniFileName);
+            }
             return await desktop.service.mod.fn.updateToggleKey(
                 iniPath,
                 sectionName,
