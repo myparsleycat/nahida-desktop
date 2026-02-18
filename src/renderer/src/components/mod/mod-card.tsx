@@ -18,7 +18,7 @@ interface ModCardProps {
   onToggle: (mod: ModInfo, event?: React.MouseEvent) => void;
   onToggleKeyUpdate: (
     modPath: string,
-    iniFileName: string,
+    iniPath: string,
     sectionName: string,
     variable: string,
     value: string,
