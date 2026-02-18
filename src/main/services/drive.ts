@@ -10,7 +10,7 @@ import Upload, {
 } from "@main/lib/upload";
 import { dialog } from "electron";
 import { retry } from "es-toolkit";
-
+import fse from "fs-extra";
 import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "..";
 import type { LocalTransfer } from "./transfer";
@@ -279,6 +279,7 @@ export class DriveService {
                     abortController,
                     data,
                     suggestedName,
+                    savePath,
                 }).catch((err) => {
                     this.desktop.logger.error(err, "Drive:Download:Preprocessing");
                     this.desktop.service.transfer.updateTransfer(pid, {
@@ -523,6 +524,7 @@ export class DriveService {
         abortController,
         data,
         suggestedName,
+        savePath,
     }: {
         id: string;
         pid: string;
@@ -530,6 +532,7 @@ export class DriveService {
         abortController: AbortController;
         data?: DownloadMetadata;
         suggestedName?: string;
+        savePath: string;
     }) {
         if (!data) {
             data = await this.download.getDownloadUrl(id, abortController.signal);
@@ -539,7 +542,11 @@ export class DriveService {
             if (suggestedName) {
                 data.root.name = suggestedName;
             }
-            data.root.name = this.desktop.lib.fs.sanitizeWindowsFilename(data.root.name);
+
+            const sanitized = this.desktop.lib.fs.sanitizeWindowsFilename(data.root.name);
+
+            const entries = await fse.readdir(savePath);
+            data.root.name = this.desktop.lib.fs.getUniqueName(sanitized, entries);
         }
 
         if (data.files) {
