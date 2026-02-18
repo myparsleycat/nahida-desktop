@@ -45,6 +45,76 @@ export class DriveService {
         return data;
     }
 
+    private balanceAndInterleaveFiles<T extends { size: number }>(
+        files: T[],
+        maxPerChunk: number = 100,
+    ): T[] {
+        if (!files || files.length === 0) return [];
+        if (maxPerChunk <= 0) throw new Error("maxPerChunk must be greater than 0");
+
+        const sortedFiles = [...files].sort((a, b) => b.size - a.size);
+
+        const chunkCount = Math.ceil(sortedFiles.length / maxPerChunk);
+
+        type Chunk = { currentSize: number; files: T[] };
+        const heap: Chunk[] = Array.from({ length: chunkCount }, () => ({
+            currentSize: 0,
+            files: [],
+        }));
+
+        const heapSwap = (i: number, j: number) => {
+            [heap[i], heap[j]] = [heap[j], heap[i]];
+        };
+
+        const heapifyDown = (start: number) => {
+            let i = start;
+            const len = heap.length;
+            while (true) {
+                const left = 2 * i + 1;
+                const right = 2 * i + 2;
+                let smallest = i;
+
+                if (left < len && heap[left].currentSize < heap[smallest].currentSize) {
+                    smallest = left;
+                }
+                if (right < len && heap[right].currentSize < heap[smallest].currentSize) {
+                    smallest = right;
+                }
+                if (smallest === i) break;
+
+                heapSwap(i, smallest);
+                i = smallest;
+            }
+        };
+
+        for (const file of sortedFiles) {
+            const targetChunk = heap[0];
+            targetChunk.files.push(file);
+            targetChunk.currentSize += file.size;
+            heapifyDown(0);
+        }
+
+        return heap
+            .filter((chunk) => chunk.files.length > 0)
+            .flatMap((chunk) => {
+                const { files: chunkFiles } = chunk;
+                const interleaved: T[] = [];
+                let left = 0;
+                let right = chunkFiles.length - 1;
+
+                while (left <= right) {
+                    interleaved.push(chunkFiles[left]);
+                    if (left !== right) {
+                        interleaved.push(chunkFiles[right]);
+                    }
+                    left++;
+                    right--;
+                }
+
+                return interleaved;
+            });
+    }
+
     get = {
         item: async (itemId: string): Promise<DriveItem> => {
             const { data, error } = await eden.akasha.content({ id: itemId }).get();
@@ -343,11 +413,13 @@ export class DriveService {
     }) {
         const { files, totalSize, processName } = preparation;
 
-        const dummyFiles = files.map((f) => ({
-            ...f,
-            parentId: "",
-            fullPath: f.fullPath,
-        }));
+        const dummyFiles = this.balanceAndInterleaveFiles(
+            files.map((f) => ({
+                ...f,
+                parentId: "",
+                fullPath: f.fullPath,
+            })),
+        );
 
         const hashedFiles = await this.upload.calculateHashes(dummyFiles, (count) => {
             this.desktop.service.transfer.updateTransfer(pid, {
