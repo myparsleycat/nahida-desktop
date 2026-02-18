@@ -1,4 +1,4 @@
-import { Button, buttonVariants } from "@renderer/components/ui/button";
+import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -59,8 +59,8 @@ function KeySettingDialog({
     <Dialog>
       <DialogTrigger
         className={cn(
-          "flex flex-row items-center w-full",
-          buttonVariants({ variant: "outline" }),
+          "flex flex-row items-center w-full transition-colors",
+          "border border-white/20 space-x-1 bg-foreground/5 hover:bg-background/10 p-2 rounded-lg",
           "justify-start flex-row size-full p-1",
         )}
         onClick={(e) => e.stopPropagation()}
