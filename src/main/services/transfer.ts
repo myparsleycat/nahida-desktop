@@ -3,6 +3,7 @@ import { throttle } from "es-toolkit";
 import type { NahidaDesktop } from "..";
 
 export interface LocalTransfer extends Transfer {
+    currentId: string;
     abortController: AbortController;
     restartParams?: any;
     completedFileUuids?: Set<string>;
@@ -108,6 +109,7 @@ export class TransferService {
 
     public async createTransfer({
         pid,
+        currentId,
         type,
         data,
         abortController,
@@ -117,6 +119,7 @@ export class TransferService {
         path,
     }: {
         pid: string;
+        currentId: string;
         type: "upload" | "download";
         data: TransferData;
         abortController: AbortController;
@@ -129,6 +132,7 @@ export class TransferService {
         const transfer: LocalTransfer = {
             pid,
             type,
+            currentId,
             status: initialStatus,
             totalSize,
             transferedSize: 0,

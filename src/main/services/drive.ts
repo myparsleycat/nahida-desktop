@@ -218,15 +218,19 @@ export class DriveService {
                 preparation,
             });
 
-            this.processUploadAsync({ pid, restartParams, preparation, abortController }).catch(
-                (err) => {
-                    this.desktop.logger.error(err, "Drive:Upload:Preprocessing");
-                    this.desktop.service.transfer.updateTransfer(pid, {
-                        status: "error",
-                        error: err instanceof Error ? err.message : String(err),
-                    });
-                },
-            );
+            this.processUploadAsync({
+                pid,
+                currentId: destId,
+                restartParams,
+                preparation,
+                abortController,
+            }).catch((err) => {
+                this.desktop.logger.error(err, "Drive:Upload:Preprocessing");
+                this.desktop.service.transfer.updateTransfer(pid, {
+                    status: "error",
+                    error: err instanceof Error ? err.message : String(err),
+                });
+            });
         },
 
         startDownload: async ({
@@ -268,6 +272,7 @@ export class DriveService {
                 const { pid, restartParams, abortController } =
                     await this.createDownloadTransferEntry({
                         id,
+                        currentId: data?.root.id || "",
                         savePath,
                         suggestedName,
                     });
@@ -301,7 +306,12 @@ export class DriveService {
             const params = transfer.restartParams as TransferParams;
 
             this.desktop.service.transfer.registerRunner(pid, async () => {
-                await this.executeResumeRunner({ pid, params, currentTransfer: transfer });
+                await this.executeResumeRunner({
+                    currentId: transfer.currentId,
+                    pid,
+                    params,
+                    currentTransfer: transfer,
+                });
             });
 
             this.desktop.service.transfer.manualStart(pid);
@@ -370,6 +380,7 @@ export class DriveService {
         await this.desktop.service.transfer.createTransfer({
             pid,
             type: "upload",
+            currentId: destId,
             data: {
                 files: files.map((f) => ({
                     id: f.FID,
@@ -397,10 +408,12 @@ export class DriveService {
     }
 
     private async processUploadAsync({
+        currentId,
         pid,
         restartParams,
         preparation,
     }: {
+        currentId: string;
         pid: string;
         restartParams: UploadParams;
         preparation: {
@@ -442,6 +455,7 @@ export class DriveService {
 
         this.desktop.service.transfer.registerRunner(pid, async () => {
             await this.executeUploadRunner({
+                currentId,
                 pid,
                 restartParams,
                 preparation,
@@ -455,11 +469,13 @@ export class DriveService {
     }
 
     private async executeUploadRunner({
+        currentId,
         pid,
         preparation,
         totalSize,
         processName,
     }: {
+        currentId: string;
         pid: string;
         restartParams: UploadParams;
         preparation: {
@@ -480,6 +496,7 @@ export class DriveService {
         this.desktop.service.transfer.updateAbortController(pid, newAbort);
 
         await this.upload.executeUpload({
+            currentId,
             pid,
             params: currentParams,
             files: preparation.files,
@@ -492,10 +509,12 @@ export class DriveService {
 
     private async createDownloadTransferEntry({
         id,
+        currentId,
         savePath,
         suggestedName,
     }: {
         id: string;
+        currentId: string;
         savePath: string;
         suggestedName?: string;
     }) {
@@ -506,6 +525,7 @@ export class DriveService {
         await this.desktop.service.transfer.createTransfer({
             pid,
             type: "download",
+            currentId,
             data: { root: { id: "", parentId: null, name: "Loading..." }, files: [], dirs: [] },
             abortController,
             name: "Preparing Download...",
@@ -616,10 +636,12 @@ export class DriveService {
     }
 
     private async executeResumeRunner({
+        currentId,
         pid,
         params,
         currentTransfer,
     }: {
+        currentId: string;
         pid: string;
         params: TransferParams;
         currentTransfer: LocalTransfer;
@@ -635,6 +657,7 @@ export class DriveService {
             const { files, directories } = await this.upload.prepareUpload(params.paths, []);
 
             await this.upload.executeUpload({
+                currentId,
                 pid,
                 params,
                 files,
