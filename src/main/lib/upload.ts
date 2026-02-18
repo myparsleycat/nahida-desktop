@@ -1,10 +1,9 @@
-import os from "node:os";
 import path from "node:path";
 import { eden, eden2url } from "@main/client";
 import { getAgent, getHeaders } from "@main/internal/fetcher";
 import sha256PiscinaWorker from "@main/worker/drive/sha256-piscina.worker?modulePath";
 import type { Content } from "@shared/types.gen";
-import { chunk, flatten, groupBy, orderBy, retry, sumBy } from "es-toolkit";
+import { chunk, groupBy, orderBy, retry, sumBy } from "es-toolkit";
 import fg from "fast-glob";
 import { fileTypeFromBuffer } from "file-type/node";
 import fse from "fs-extra";
@@ -103,83 +102,75 @@ export class UploadLib {
         return allowedExt.some((ext) => name.toLowerCase().endsWith(ext.toLowerCase()));
     }
 
-    private async collectFiles(
+    private resolvePaths(p: string) {
+        const absolutePath = path.resolve(p);
+        const parentDir = path.dirname(absolutePath);
+        const rootName = path.basename(absolutePath);
+        return { absolutePath, parentDir, rootName };
+    }
+
+    private async collect(
         paths: string[],
         additionalExt: string[] = [],
-    ): Promise<FilesComponent[]> {
+    ): Promise<{ files: FilesComponent[]; directories: DirectoriesComponent[] }> {
         const results = await Promise.all(
             paths.map(async (p) => {
-                const absolutePath = path.resolve(p);
-                const parentDir = path.dirname(absolutePath);
+                const { absolutePath, parentDir, rootName } = this.resolvePaths(p);
 
                 const entries = await fg("**/*", {
                     cwd: absolutePath,
                     stats: true,
                     absolute: true,
-                    onlyFiles: true,
+                    onlyFiles: false,
                 });
 
-                return entries
-                    .filter((entry) => this.validateExt(path.basename(entry.path), additionalExt))
-                    .map((entry) => {
-                        const fullPath = entry.path.replace(/\\/g, "/");
-                        const relativeFromRoot = path
-                            .relative(parentDir, fullPath)
-                            .replace(/\\/g, "/");
-                        const name = path.basename(fullPath);
-                        const parentPath = path.dirname(relativeFromRoot).replace(/\\/g, "/");
+                const files: FilesComponent[] = [];
+                const directories: DirectoriesComponent[] = [];
 
-                        return {
-                            FID: nanoid(),
-                            path: relativeFromRoot,
-                            name: name,
-                            size: entry.stats?.size ?? 0,
-                            parentPath: parentPath === "." ? "" : parentPath,
-                            fullPath: fullPath,
-                        };
-                    });
-            }),
-        );
-
-        return flatten(results);
-    }
-
-    private async collectDirectories(paths: string[]): Promise<DirectoriesComponent[]> {
-        const results = await Promise.all(
-            paths.map(async (p) => {
-                const absolutePath = path.resolve(p);
-                const rootName = path.basename(absolutePath);
-                const parentDir = path.dirname(absolutePath);
-
-                const entries = await fg("**/*", {
-                    cwd: absolutePath,
-                    onlyDirectories: true,
-                    absolute: true,
-                });
-
-                const rootEntry = {
+                directories.push({
                     path: rootName.replace(/\\/g, "/"),
                     name: rootName,
                     parentPath: "",
-                };
-
-                const subDirs = entries.map((dirPath) => {
-                    const relativePath = path.relative(parentDir, dirPath).replace(/\\/g, "/");
-                    const name = path.basename(dirPath);
-                    const dirParentPath = path.dirname(relativePath).replace(/\\/g, "/");
-
-                    return {
-                        path: relativePath,
-                        name: name,
-                        parentPath: dirParentPath === "." ? "" : dirParentPath,
-                    };
                 });
 
-                return [rootEntry, ...subDirs];
+                for (const entry of entries) {
+                    const fullPath = entry.path.replace(/\\/g, "/");
+                    const relativePath = path.relative(parentDir, fullPath).replace(/\\/g, "/");
+                    const name = path.basename(fullPath);
+                    const parentPath = path.dirname(relativePath).replace(/\\/g, "/");
+                    const normalizedParentPath = parentPath === "." ? "" : parentPath;
+
+                    if (entry.dirent.isDirectory()) {
+                        directories.push({
+                            path: relativePath,
+                            name,
+                            parentPath: normalizedParentPath,
+                        });
+                    } else if (this.validateExt(name, additionalExt)) {
+                        files.push({
+                            FID: nanoid(),
+                            path: relativePath,
+                            name,
+                            size: entry.stats?.size ?? 0,
+                            parentPath: normalizedParentPath,
+                            fullPath,
+                        });
+                    }
+                }
+
+                return { files, directories };
             }),
         );
 
-        return flatten(results);
+        const files: FilesComponent[] = [];
+        const directories: DirectoriesComponent[] = [];
+
+        for (const result of results) {
+            files.push(...result.files);
+            directories.push(...result.directories);
+        }
+
+        return { files, directories };
     }
 
     private async isMediaByMagicNumbers(file: Buffer) {
@@ -458,15 +449,14 @@ export class UploadLib {
 
         const piscina = new Piscina({
             filename: sha256PiscinaWorker,
-            minThreads: 1,
-            maxThreads: Math.max(1, os.cpus().length - 1),
+            minThreads: 2,
             idleTimeout: 3000,
         });
 
         const promises = files.map(async (file) => {
             return piscina
                 .run({ path: file.fullPath })
-                .then((hash) => {
+                .then((hash: string) => {
                     processedCount++;
                     const now = Date.now();
 
@@ -475,7 +465,7 @@ export class UploadLib {
                         onProgress?.(processedCount);
                     }
 
-                    return { ...file, sha256: hash as string };
+                    return { ...file, sha256: hash };
                 })
                 .catch((err) => {
                     throw new Error(`Failed to hash ${file.name}: ${err}`);
@@ -822,9 +812,7 @@ export class UploadLib {
     }
 
     public async prepareUpload(paths: string[], children: Content[]) {
-        const files = await this.collectFiles(paths);
-
-        const directories = await this.collectDirectories(paths);
+        const { files, directories } = await this.collect(paths);
 
         const rootDirectories = directories.filter((dir) => dir.parentPath === "");
         for (const rootDir of rootDirectories) {
