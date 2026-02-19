@@ -331,6 +331,19 @@
                 "warning_title": "Caution",
                 "warning_description": "Changing settings here may affect app behavior."
             }
+        },
+        "report": {
+            "title": "Report Issue",
+            "reported_title": "Problem reported",
+            "report_id": "report id: {{id}}",
+            "description_label": "Please describe the problem you experienced in as much detail as possible.",
+            "fields": {
+                "title": "Title",
+                "title_placeholder": "Optional",
+                "description": "Problem Description",
+                "attach_log": "Attach log files that can help with debugging"
+            },
+            "submit": "Submit"
         }
     },
     "components": {

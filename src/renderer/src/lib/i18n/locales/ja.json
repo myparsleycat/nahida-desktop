@@ -328,6 +328,19 @@
                 "warning_title": "注意",
                 "warning_description": "ここでの設定を変更すると、アプリの動作に影響を与える可能性があります。"
             }
+        },
+        "report": {
+            "title": "問題を報告",
+            "reported_title": "問題が報告されました",
+            "report_id": "report id: {{id}}",
+            "description_label": "経験した問題をできるだけ詳しく説明してください。",
+            "fields": {
+                "title": "タイトル",
+                "title_placeholder": "任意",
+                "description": "問題の説明",
+                "attach_log": "デバッグに役立つログファイルを添付する"
+            },
+            "submit": "送信"
         }
     },
     "components": {

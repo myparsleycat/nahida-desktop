@@ -4,6 +4,7 @@ import { useGlobalStore } from "@renderer/store/global";
 import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpDownIcon,
+  BugIcon,
   DatabaseBackupIcon,
   GamepadIcon,
   HardDriveIcon,
@@ -177,6 +178,24 @@ export function Sidebar({ className }: { className?: string }) {
           </Tooltip>
 
           <Separator orientation="horizontal" />
+
+          <Tooltip disableHoverableContent={true}>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onPointerDown={handlePointerDown}
+                onClick={() => {
+                  window.api.invoke("util:openReportWindow");
+                }}
+              >
+                <BugIcon className={cn(iconSize)} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right" hideWhenDetached={true}>
+              Report
+            </TooltipContent>
+          </Tooltip>
 
           <Tooltip disableHoverableContent={true}>
             <TooltipTrigger asChild>

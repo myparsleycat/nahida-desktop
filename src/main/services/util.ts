@@ -1,5 +1,8 @@
 import { spawn } from "node:child_process";
+import path from "node:path";
+import { eden } from "@main/client";
 import isDev from "@main/internal/isDev";
+import { nahidaLogsPath } from "@main/internal/logger";
 import type { AppStatus, PathMetadata } from "@shared/types.gen";
 import {
     BrowserWindow,
@@ -132,4 +135,39 @@ export async function processChunked<T>(
             await new Promise((resolve) => setImmediate(resolve));
         }
     }
+}
+
+export async function openReportWindow() {
+    desktop.window.report.focus();
+}
+
+export async function submitReport({
+    title,
+    description,
+    submitLog,
+}: {
+    title?: string;
+    description: string;
+    submitLog: boolean;
+}) {
+    let log: File | undefined;
+    if (submitLog) {
+        const logFilePath = path.join(await nahidaLogsPath(), "desktop.log");
+        const buffer = await fse.readFile(logFilePath);
+        const arrbuf = buffer.buffer.slice(0, buffer.byteLength) as ArrayBuffer;
+        log = new File([arrbuf], "log.file");
+    }
+
+    const { data, error } = await eden.desktop["submit-report"].post({
+        title,
+        description,
+        log,
+    });
+
+    if (error) {
+        const errStr = error.value.toString();
+        throw new Error(errStr);
+    }
+
+    return data;
 }

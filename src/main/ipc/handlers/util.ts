@@ -7,8 +7,10 @@ import {
     openCmd,
     openExternal,
     openPath,
+    openReportWindow,
     showModal,
     showOpenDialog,
+    submitReport,
     trash,
 } from "@main/services/util";
 import type { MessageBoxOptions, OpenExternalOptions } from "electron";
@@ -28,4 +30,6 @@ export function registerUtilHandlers(_desktop: NahidaDesktop) {
     rh("util:getClipboardFiles", getClipboardFiles);
     rh("util:fs:metadata", getPathMetadata);
     rh("util:showOpenDialog", showOpenDialog);
+    rh("util:openReportWindow", openReportWindow);
+    rh("util:submitReport", submitReport);
 }
