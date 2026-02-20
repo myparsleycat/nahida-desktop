@@ -301,15 +301,22 @@ fn is_excluded_file(filename: &str) -> bool {
     EXCLUDED.iter().any(|&k| filename.contains(k))
 }
 
-fn find_preview(
-    mod_path: &Path,
-    pre_scanned_files: Option<&[PathBuf]>,
-    max_depth: usize,
-) -> Option<String> {
+fn find_preview(mod_path: &Path, max_depth: usize) -> Option<String> {
     let mut candidate_files: Vec<(i32, PathBuf)> = Vec::new();
     let video_extensions = ["mp4", "webm"];
 
-    let process_file = |path: PathBuf, candidate_files: &mut Vec<(i32, PathBuf)>| {
+    let walker = WalkDir::new(mod_path)
+        .max_depth(max_depth)
+        .follow_links(true)
+        .into_iter()
+        .filter_map(|e| e.ok());
+
+    for entry in walker {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+
+        let path = entry.path().to_path_buf();
         let filename_os = path.file_name().and_then(|n| n.to_str());
         let ext_os = path.extension().and_then(|e| e.to_str());
 
@@ -322,25 +329,6 @@ fn find_preview(
                 let score = get_score(&lower_filename, is_root, is_video);
                 candidate_files.push((score, path));
             }
-        }
-    };
-
-    if let Some(files) = pre_scanned_files {
-        for path in files {
-            process_file(path.clone(), &mut candidate_files);
-        }
-    } else {
-        let walker = WalkDir::new(mod_path)
-            .max_depth(max_depth)
-            .follow_links(true)
-            .into_iter()
-            .filter_map(|e| e.ok());
-
-        for entry in walker {
-            if !entry.file_type().is_file() {
-                continue;
-            }
-            process_file(entry.path().to_path_buf(), &mut candidate_files);
         }
     }
 
@@ -407,7 +395,7 @@ pub fn get_characters_folder(
                 Err(_) => 0,
             };
 
-            let preview = find_preview(group_path, None, search_depth);
+            let preview = find_preview(group_path, search_depth);
 
             FolderGroup {
                 name,
@@ -426,8 +414,11 @@ fn scan_mod_folder(mod_path: &Path) -> Option<ModInfo> {
 
     let mut total_size = 0.0;
     let mut max_mtime = 0.0;
-    let mut all_files = Vec::new();
     let mut ini_paths = Vec::new();
+
+    let mut best_preview_score = -1;
+    let mut best_preview_path: Option<String> = None;
+    let video_extensions = ["mp4", "webm"];
 
     for entry in WalkDir::new(mod_path).into_iter().filter_map(|e| e.ok()) {
         if entry.file_type().is_file() {
@@ -449,12 +440,34 @@ fn scan_mod_folder(mod_path: &Path) -> Option<ModInfo> {
 
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                 let lower_ext = ext.to_lowercase();
-                if is_media_ext(&lower_ext) || lower_ext == "ini" {
-                    all_files.push(path.clone());
-                    if lower_ext == "ini" {
-                        let fname = path.file_name().unwrap_or_default().to_string_lossy();
-                        if !fname.to_lowercase().starts_with("disabled") {
-                            ini_paths.push(path.to_string_lossy().to_string());
+
+                if lower_ext == "ini" {
+                    let fname = path.file_name().unwrap_or_default().to_string_lossy();
+                    if !fname.to_lowercase().starts_with("disabled") {
+                        ini_paths.push(path.to_string_lossy().to_string());
+                    }
+                } else if is_media_ext(&lower_ext) {
+                    if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+                        let lower_filename = filename.to_lowercase();
+                        if !is_excluded_file(&lower_filename) {
+                            let relative = path.strip_prefix(mod_path).unwrap_or(&path);
+                            let is_root = relative.components().count() == 1;
+                            let is_video = video_extensions.contains(&lower_ext.as_str());
+
+                            let score = get_score(&lower_filename, is_root, is_video);
+                            let path_str = path.to_string_lossy().to_string();
+
+                            if score > best_preview_score {
+                                best_preview_score = score;
+                                best_preview_path = Some(path_str);
+                            } else if score == best_preview_score {
+                                if let Some(ref best_path) = best_preview_path {
+                                    if compare_str(&path_str, best_path) == std::cmp::Ordering::Less
+                                    {
+                                        best_preview_path = Some(path_str);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -481,13 +494,11 @@ fn scan_mod_folder(mod_path: &Path) -> Option<ModInfo> {
         _ => compare_str(&a.name, &b.name),
     });
 
-    let preview = find_preview(mod_path, Some(&all_files), 3);
-
     Some(ModInfo {
         name: folder_name,
         path: mod_path.to_string_lossy().to_string(),
         is_enabled,
-        preview,
+        preview: best_preview_path,
         mtime: max_mtime,
         size: total_size,
         inis,
@@ -517,7 +528,7 @@ pub fn get_mods(group_path: String) -> FolderGroup {
         .filter_map(|p| scan_mod_folder(p))
         .collect();
 
-    let preview = find_preview(&group_path_buf, None, 3);
+    let preview = find_preview(&group_path_buf, 3);
     let mod_count = mods.len() as u32;
 
     FolderGroup {
