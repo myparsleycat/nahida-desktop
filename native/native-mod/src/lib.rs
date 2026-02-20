@@ -136,7 +136,7 @@ fn process_section_data(
     data: &HashMap<String, String>,
     ini_file_name: &str,
 ) -> Option<ToggleKey> {
-    if !section_name.to_lowercase().starts_with("key") {
+    if section_name.len() < 3 || !section_name[..3].eq_ignore_ascii_case("key") {
         return None;
     }
 
@@ -150,9 +150,16 @@ fn process_section_data(
         data.iter()
             .filter(|(k, _)| k.starts_with('$'))
             .find_map(|(k, v)| {
-                let vals: Vec<String> = v.split(',').map(|s| s.trim().to_string()).collect();
+                let mut iter = v.split(',').map(|s| s.trim());
+                let first = iter.next()?;
+                let second = iter.next();
 
-                if vals.len() >= 2 || is_hold {
+                if second.is_some() || is_hold {
+                    let mut vals = vec![first.to_string()];
+                    if let Some(s) = second {
+                        vals.push(s.to_string());
+                    }
+                    vals.extend(iter.map(|s| s.to_string()));
                     Some((k, vals))
                 } else {
                     None
@@ -219,7 +226,7 @@ fn parse_ini(path_str: &str) -> Vec<ToggleKey> {
 
         if !current_section.is_empty() {
             if let Some((k, v)) = clean_line.split_once('=') {
-                let key = k.trim().to_lowercase();
+                let key = k.trim().to_ascii_lowercase();
                 let value = v.trim().to_string();
                 section_data.insert(key, value);
             }
@@ -238,9 +245,9 @@ fn parse_ini(path_str: &str) -> Vec<ToggleKey> {
 #[napi]
 pub fn process_ini_files(paths: Vec<String>) -> Vec<IniResult> {
     paths
-        .par_iter()
+        .into_iter()
         .map(|path_str| {
-            let mut toggle_keys = parse_ini(path_str);
+            let mut toggle_keys = parse_ini(&path_str);
 
             toggle_keys.sort_by(|a, b| {
                 let a_has_key = a.key.is_some();
@@ -249,7 +256,7 @@ pub fn process_ini_files(paths: Vec<String>) -> Vec<IniResult> {
             });
 
             let has_toggle_key = toggle_keys.iter().any(|tk| tk.key.is_some());
-            let name = Path::new(path_str)
+            let name = Path::new(&path_str)
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("")
@@ -257,7 +264,7 @@ pub fn process_ini_files(paths: Vec<String>) -> Vec<IniResult> {
 
             IniResult {
                 name,
-                path: path_str.clone(),
+                path: path_str,
                 toggle_keys,
                 has_toggle_key,
             }
@@ -333,7 +340,7 @@ fn find_preview(mod_path: &Path, max_depth: usize) -> Option<String> {
 
         if let (Some(filename), Some(ext)) = (filename_os, ext_os) {
             if is_media_ext(ext) {
-                let lower_filename = filename.to_lowercase();
+                let lower_filename = filename.to_ascii_lowercase();
                 if !is_excluded_file(&lower_filename) {
                     let relative = path.strip_prefix(mod_path).unwrap_or(path);
                     let is_root = relative.components().count() == 1;
@@ -445,12 +452,12 @@ fn scan_mod_folder(mod_path: &Path) -> Option<ModInfo> {
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                 if ext.eq_ignore_ascii_case("ini") {
                     let fname = path.file_name().unwrap_or_default().to_string_lossy();
-                    if !fname.to_lowercase().starts_with("disabled") {
+                    if !fname.to_ascii_lowercase().starts_with("disabled") {
                         ini_paths.push(path.to_string_lossy().into_owned());
                     }
                 } else if is_media_ext(ext) {
                     if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-                        let lower_filename = filename.to_lowercase();
+                        let lower_filename = filename.to_ascii_lowercase();
                         if !is_excluded_file(&lower_filename) {
                             let relative = path.strip_prefix(mod_path).unwrap_or(path);
                             let is_root = relative.components().count() == 1;
@@ -516,8 +523,8 @@ pub fn get_mods(group_path: String) -> FolderGroup {
     let group_path_buf = PathBuf::from(&group_path);
     let group_name = group_path_buf
         .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
         .to_string();
 
     let mod_folders: Vec<PathBuf> = match fs::read_dir(&group_path_buf) {
@@ -529,12 +536,16 @@ pub fn get_mods(group_path: String) -> FolderGroup {
         Err(_) => Vec::new(),
     };
 
-    let mods: Vec<ModInfo> = mod_folders
-        .par_iter()
-        .filter_map(|p| scan_mod_folder(p))
-        .collect();
+    let (mods, preview) = rayon::join(
+        || {
+            mod_folders
+                .par_iter()
+                .filter_map(|p| scan_mod_folder(p))
+                .collect::<Vec<ModInfo>>()
+        },
+        || find_preview(&group_path_buf, 3),
+    );
 
-    let preview = find_preview(&group_path_buf, 3);
     let mod_count = mods.len() as u32;
 
     FolderGroup {
