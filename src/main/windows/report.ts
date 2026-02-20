@@ -14,9 +14,9 @@ export class ReportWindow {
         this.window = null;
     }
 
-    public focus() {
+    public async focus() {
         if (!this.window) {
-            this.createReportWindow();
+            await this.createReportWindow();
         } else {
             focus(this.window);
         }

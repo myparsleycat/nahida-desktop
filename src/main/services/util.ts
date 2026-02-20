@@ -138,7 +138,7 @@ export async function processChunked<T>(
 }
 
 export async function openReportWindow() {
-    desktop.window.report.focus();
+    await desktop.window.report.focus();
 }
 
 export async function submitReport({
