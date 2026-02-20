@@ -1,377 +1,378 @@
 {
-    "g": {
-        "search": "Search",
+  "g": {
+    "search": "Search",
+    "name": "Name",
+    "date": "Date",
+    "size": "Size",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "select": "Select",
+    "apply": "Apply",
+    "delete": "Delete",
+    "add": "Add",
+    "create": "Create",
+    "unknown": "Unknown",
+    "save": "Save",
+    "close": "Close"
+  },
+  "page": {
+    "transfer": {
+      "title": "Transfer",
+      "stats_label": {
+        "upload": "Upload",
+        "download": "Download",
+        "total_transferred": "Total Transferred",
+        "active_transfers": "Active Transfers"
+      },
+      "toolbar": {
+        "all": "All",
+        "upload": "Upload",
+        "download": "Download"
+      },
+      "empty_state": {
+        "all_tabs": "No transfer history",
+        "uploading": "No files uploading",
+        "downloading": "No files downloading",
+        "completed": "No completed transfers",
+        "failed": "No failed transfers",
+        "paused": "No paused transfers",
+        "search_results": "No search results found"
+      },
+      "item": {
+        "uploading": "Uploading",
+        "downloading": "Downloading",
+        "completed": "Completed",
+        "failed": "Failed",
+        "paused": "Paused",
+        "queued": "Queued",
+        "preparing": "Preparing",
+        "time_remaining": "{{time}} remaining",
+        "time_elapsed": "{{time}} elapsed",
+        "failed_files": "{{count}} failed",
+        "dropdown_menu": {
+          "cancel": "Cancel",
+          "retry": "Retry",
+          "retry_failed_files": "Retry failed files",
+          "remove_from_transfer": "Remove from transfer"
+        }
+      }
+    },
+    "drive": {
+      "title": "Drive",
+      "share_drive": "Shared Drive",
+      "no_contents_section_message": {
+        "0": "No files or folders in this folder",
+        "1": "Drag and drop files or folders here to upload"
+      },
+      "head_buttons": {
+        "search_in_dir_placeholder": "Search in this folder...",
+        "dropdown_menu": {
+          "download": "Download",
+          "make_new": {
+            "title": "New",
+            "new_dir": "Create folder",
+            "upload_dir": "Upload folder",
+            "upload_file": "Upload file"
+          }
+        }
+      },
+      "list_head": {
         "name": "Name",
-        "date": "Date",
-        "size": "Size",
-        "cancel": "Cancel",
-        "confirm": "Confirm",
-        "select": "Select",
-        "apply": "Apply",
-        "delete": "Delete",
-        "add": "Add",
-        "create": "Create",
-        "unknown": "Unknown",
-        "save": "Save",
-        "close": "Close"
-    },
-    "page": {
-        "transfer": {
-            "title": "Transfer",
-            "stats_label": {
-                "upload": "Upload",
-                "download": "Download",
-                "total_transferred": "Total Transferred",
-                "active_transfers": "Active Transfers"
-            },
-            "toolbar": {
-                "all": "All",
-                "upload": "Upload",
-                "download": "Download"
-            },
-            "empty_state": {
-                "all_tabs": "No transfer history",
-                "uploading": "No files uploading",
-                "downloading": "No files downloading",
-                "completed": "No completed transfers",
-                "failed": "No failed transfers",
-                "paused": "No paused transfers",
-                "search_results": "No search results found"
-            },
-            "item": {
-                "uploading": "Uploading",
-                "downloading": "Downloading",
-                "completed": "Completed",
-                "failed": "Failed",
-                "paused": "Paused",
-                "queued": "Queued",
-                "preparing": "Preparing",
-                "time_remaining": "{{time}} remaining",
-                "time_elapsed": "{{time}} elapsed",
-                "failed_files": "{{count}} failed",
-                "dropdown_menu": {
-                    "cancel": "Cancel",
-                    "retry": "Retry",
-                    "retry_failed_files": "Retry failed files",
-                    "remove_from_transfer": "Remove from transfer"
-                }
+        "date": "Date modified",
+        "size": "Size"
+      },
+      "context_menu": {
+        "open": "Open",
+        "download": "Download",
+        "rename": "Rename",
+        "trash": "Trash",
+        "new_dir": "Create folder"
+      },
+      "dialog": {
+        "create_dir": {
+          "title": "Create folder",
+          "name_input_placeholder": "Folder name",
+          "#": {
+            "0": "Invalid directory name format",
+            "1": "Failed to get path info for directory creation",
+            "2": "A folder with the same name already exists.",
+            "toast-promise": {
+              "loading": "Creating directory...",
+              "success": "Directory created"
             }
+          }
         },
-        "drive": {
-            "title": "Drive",
-            "share_drive": "Shared Drive",
-            "no_contents_section_message": {
-                "0": "No files or folders in this folder",
-                "1": "Drag and drop files or folders here to upload"
-            },
-            "head_buttons": {
-                "search_in_dir_placeholder": "Search in this folder...",
-                "dropdown_menu": {
-                    "download": "Download",
-                    "make_new": {
-                        "title": "New",
-                        "new_dir": "Create folder",
-                        "upload_dir": "Upload folder",
-                        "upload_file": "Upload file"
-                    }
-                }
-            },
-            "list_head": {
-                "name": "Name",
-                "date": "Date modified",
-                "size": "Size"
-            },
-            "context_menu": {
-                "open": "Open",
-                "download": "Download",
-                "rename": "Rename",
-                "trash": "Trash",
-                "new_dir": "Create folder"
-            },
-            "dialog": {
-                "create_dir": {
-                    "title": "Create folder",
-                    "name_input_placeholder": "Folder name",
-                    "#": {
-                        "0": "Invalid directory name format",
-                        "1": "Failed to get path info for directory creation",
-                        "2": "A folder with the same name already exists.",
-                        "toast-promise": {
-                            "loading": "Creating directory...",
-                            "success": "Directory created"
-                        }
-                    }
-                },
-                "rename": {
-                    "title": "Rename",
-                    "name_input_placeholder": "New name",
-                    "extension": "Extension",
-                    "#": {
-                        "0": "Name cannot be empty",
-                        "1": "Invalid directory name format",
-                        "toast-promise": {
-                            "loading": "Renaming...",
-                            "success": "Renamed successfully."
-                        }
-                    }
-                }
+        "rename": {
+          "title": "Rename",
+          "name_input_placeholder": "New name",
+          "extension": "Extension",
+          "#": {
+            "0": "Name cannot be empty",
+            "1": "Invalid directory name format",
+            "toast-promise": {
+              "loading": "Renaming...",
+              "success": "Renamed successfully."
             }
-        },
-        "share_drive": {
-            "title": "Share Drive"
-        },
-        "mod": {
-            "title": "Mod Manager",
-            "dad_section": {
-                "title": "Add to {{name}}",
-                "description": "Compressed files will be automatically extracted"
-            },
-            "all_enabled": "Enable all",
-            "all_disabled": "Disable all",
-            "content-header": {
-                "all_enabled": "All mods enabled",
-                "all_disabled": "All mods disabled"
-            },
-            "character-sidebar": {
-                "add-to-character": "Add to {{name}}"
-            },
-            "dialog": {
-                "add-game": {
-                    "title": "Add Game",
-                    "name_input_placeholder": "Game Name (e.g. Genshin)",
-                    "path_input_placeholder": "Mod folder path",
-                    "#": {
-                        "0": "Please enter a game name",
-                        "1": "Please select a mod folder path"
-                    }
-                },
-                "preset-management": {
-                    "description": "This preset contains {{length}} mods."
-                },
-                "delete-game": {
-                    "title": "Delete Game",
-                    "description": "Are you sure you want to delete '{{name}}'? This action cannot be undone, and the game's presets will also be deleted."
-                },
-                "delete-mod": {
-                    "title": "Are you sure you want to delete this mod?",
-                    "description": "Deleted mods can be restored from the recycle bin."
-                },
-                "add-preset": {
-                    "title": "Create New Preset",
-                    "#": {
-                        "0": "Please enter a preset name"
-                    }
-                }
-            },
-            "hooks": {
-                "use-mod-mutations": {
-                    "toggle-mutation": {
-                        "0": "The {{name}} folder already exists",
-                        "1": "The folder is locked and cannot be modified",
-                        "2": "Failed to change mod status"
-                    }
-                }
-            }
-        },
-        "tools": {
-            "fix-tool-manager": {
-                "presets": {},
-                "builder": {
-                    "left": {
-                        "title": "Added Scripts",
-                        "description": "Drag and drop to add scripts or click the + button to move to the right",
-                        "noScripts": {
-                            "title": "No available scripts",
-                            "description": "Drag and drop Python files (.py) or executable files (.exe) here to add"
-                        },
-                        "dropToAdd": "Drop to add"
-                    },
-                    "right": {
-                        "title": "Preset Configuration",
-                        "description": "Drag to change script order",
-                        "presetName": "Preset Name",
-                        "enterPresetName": "Please enter preset name",
-                        "noScripts": {
-                            "title": "No scripts added",
-                            "description": "Click the + button from the left list to add scripts"
-                        },
-                        "#": {
-                            "handleSavePreset": {
-                                "success": "Preset saved successfully",
-                                "error": "Failed to save preset",
-                                "alreadyExists": "Preset name already exists"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "setting": {
-            "title": "Settings",
-            "tabs": {
-                "general": "General",
-                "mod": "Mod",
-                "account": "Account",
-                "network": "Network",
-                "advanced": "Advanced"
-            },
-            "gen": {
-                "application": {
-                    "title": "Application",
-                    "runOnStartup": "Run on startup",
-                    "runOnStartupDescription": "Automatically launch the app when the system starts.",
-                    "checkBackgroundUpdates": "Check for updates in background",
-                    "checkBackgroundUpdatesDescription": "Check for updates in the background.",
-                    "checkUpdate": "Check for updates",
-                    "autoUpdate": "Auto update",
-                    "autoUpdateDescription": "Automatically install after checking for updates (Coming soon)"
-                },
-                "language": {
-                    "title": "Language",
-                    "select": "Select language"
-                },
-                "theme": {
-                    "title": "Theme",
-                    "select": "Select theme",
-                    "light": "Light",
-                    "dark": "Dark",
-                    "system": "System default"
-                },
-                "startPage": {
-                    "title": "Start Page",
-                    "select": "Select start page"
-                },
-                "other": {
-                    "title": "Other",
-                    "moveTransferPageWhenStartTransfer": "Go to transfer page on start",
-                    "moveTransferPageWhenStartTransferDescription": "Automatically move to the transfer management page when a file transfer starts.",
-                    "powerSaveBlockInTransfer": "Prevent sleep mode",
-                    "powerSaveBlockInTransferDescription": "Prevent the system from entering sleep mode while transfer or sync is in progress.",
-                    "imageCacheTitle": "Image Cache",
-                    "imageCacheDescription": "Clears the preview image cache",
-                    "imageCacheClear": "Clear Cache"
-                }
-            },
-            "mod": {
-                "title": "Mod",
-                "mod_management": {
-                    "title": "Mod Management",
-                    "deleteArchiveAfterExtract": "Delete archive after extraction",
-                    "deleteArchiveAfterExtractDescription": "Delete the original archive file after extracting it to the mod folder",
-                    "moveFolderInsteadOfCopy": "Move folder instead of copy",
-                    "moveFolderInsteadOfCopyDescription": "Move instead of copy when dropping a folder into the mod folder (deletes original)",
-                    "searchModPreview": "Search Preview in Subfolders",
-                    "searchModPreviewDescription": "If no preview image exists in the character folder, search for preview images inside mod folders."
-                },
-                "performance": {
-                    "title": "Performance",
-                    "backdrop-blur": {
-                        "title": "Use Blur",
-                        "description": "Disable this option if performance issues occur while exploring mods"
-                    },
-                    "virtualization": {
-                        "title": "Use Virtualization",
-                        "description": "Virtualizes the mod list to improve performance",
-                        "threshold": "Threshold Mod Count",
-                        "thresholdDescription": "Applies virtualization when the number of mods exceeds the set count"
-                    }
-                },
-                "overlay": {
-                    "title": "Overlay",
-                    "enableOverlay": "Enable Overlay",
-                    "enableOverlayDescription": "Use in-game overlay feature",
-                    "overlayKey": "Hotkey",
-                    "overlayKeyDescription": "Set the hotkey to toggle the overlay on and off"
-                }
-            },
-            "xxmi": {
-                "xxmiPath": "XXMI Path",
-                "autoScan": "Auto Scan",
-                "activeImporter": "Active Importer",
-                "fn": {
-                    "findXXMIPath": {
-                        "xxmiNotFound": "XXMI not found",
-                        "alert": {
-                            "title": "Warning",
-                            "description": "Please verify the auto-detected XXMI launcher path. If it seems incorrect, please enter the path manually."
-                        }
-                    },
-                    "saveXXMIPath": {
-                        "success": "XXMI path has been saved",
-                        "configNotFound": "Cannot find XXMI Launcher Config.json file in the specified path"
-                    }
-                }
-            },
-            "acc": {
-                "title": "Account",
-                "not_logged_in": {
-                    "description": "Login required.",
-                    "login": "Login"
-                },
-                "my_account": "My Account",
-                "logout": "Logout"
-            },
-            "net": {
-                "title": "Network",
-                "proxy": {
-                    "title": "Proxy Settings",
-                    "type": "Proxy Type",
-                    "disabled": "Disabled",
-                    "host": "Host",
-                    "port": "Port",
-                    "requiresAuth": "Proxy server requires password",
-                    "username": "Username",
-                    "password": "Password",
-                    "save": "Save",
-                    "saved": "Proxy settings saved."
-                }
-            },
-            "adv": {
-                "title": "Advanced",
-                "warning_title": "Caution",
-                "warning_description": "Changing settings here may affect app behavior."
-            }
-        },
-        "report": {
-            "title": "Report Issue",
-            "reported_title": "Problem reported",
-            "report_id": "report id: {{id}}",
-            "description_label": "Please describe the problem you experienced in as much detail as possible.",
-            "fields": {
-                "title": "Title",
-                "title_placeholder": "Optional",
-                "description": "Problem Description",
-                "attach_log": "Attach log files that can help with debugging"
-            },
-            "submit": "Submit"
+          }
         }
+      }
     },
-    "components": {
-        "path-selector-dialog": {
-            "title": "Select Path",
-            "description": "Choose how to download {{name}}",
-            "mod_manager": {
-                "title": "Mod Manager",
-                "description": {
-                    "0": "From Mod Manager",
-                    "1": "Select character folder"
-                }
-            },
-            "explorer": {
-                "title": "Select Path",
-                "description": {
-                    "0": "From File Explorer",
-                    "1": "Select folder"
-                }
-            }
+    "share_drive": {
+      "title": "Share Drive"
+    },
+    "mod": {
+      "title": "Mod Manager",
+      "dad_section": {
+        "title": "Add to {{name}}",
+        "description": "Compressed files will be automatically extracted"
+      },
+      "all_enabled": "Enable all",
+      "all_disabled": "Disable all",
+      "content-header": {
+        "all_enabled": "All mods enabled",
+        "all_disabled": "All mods disabled"
+      },
+      "character-sidebar": {
+        "add-to-character": "Add to {{name}}"
+      },
+      "dialog": {
+        "add-game": {
+          "title": "Add Game",
+          "name_input_placeholder": "Game Name (e.g. Genshin)",
+          "path_input_placeholder": "Mod folder path",
+          "#": {
+            "0": "Please enter a game name",
+            "1": "Please select a mod folder path"
+          }
         },
-        "download-confirmation-overlay": {
-            "title": "Confirm Download",
-            "description": "Select download location",
-            "file_name": "File Name",
-            "file_name_placeholder": "Enter file name",
-            "download_location": "Download Location",
-            "need_select_character_folder": "Select a character folder on the left"
+        "preset-management": {
+          "description": "This preset contains {{length}} mods."
+        },
+        "delete-game": {
+          "title": "Delete Game",
+          "description": "Are you sure you want to delete '{{name}}'? This action cannot be undone, and the game's presets will also be deleted."
+        },
+        "delete-mod": {
+          "title": "Are you sure you want to delete this mod?",
+          "description": "Deleted mods can be restored from the recycle bin."
+        },
+        "add-preset": {
+          "title": "Create New Preset",
+          "#": {
+            "0": "Please enter a preset name"
+          }
         }
+      },
+      "hooks": {
+        "use-mod-mutations": {
+          "toggle-mutation": {
+            "0": "The {{name}} folder already exists",
+            "1": "The folder is locked and cannot be modified",
+            "2": "Failed to change mod status"
+          }
+        }
+      },
+      "empty_selection": "Please select a group or character folder from the sidebar."
+    },
+    "tools": {
+      "fix-tool-manager": {
+        "presets": {},
+        "builder": {
+          "left": {
+            "title": "Added Scripts",
+            "description": "Drag and drop to add scripts or click the + button to move to the right",
+            "noScripts": {
+              "title": "No available scripts",
+              "description": "Drag and drop Python files (.py) or executable files (.exe) here to add"
+            },
+            "dropToAdd": "Drop to add"
+          },
+          "right": {
+            "title": "Preset Configuration",
+            "description": "Drag to change script order",
+            "presetName": "Preset Name",
+            "enterPresetName": "Please enter preset name",
+            "noScripts": {
+              "title": "No scripts added",
+              "description": "Click the + button from the left list to add scripts"
+            },
+            "#": {
+              "handleSavePreset": {
+                "success": "Preset saved successfully",
+                "error": "Failed to save preset",
+                "alreadyExists": "Preset name already exists"
+              }
+            }
+          }
+        }
+      }
+    },
+    "setting": {
+      "title": "Settings",
+      "tabs": {
+        "general": "General",
+        "mod": "Mod",
+        "account": "Account",
+        "network": "Network",
+        "advanced": "Advanced"
+      },
+      "gen": {
+        "application": {
+          "title": "Application",
+          "runOnStartup": "Run on startup",
+          "runOnStartupDescription": "Automatically launch the app when the system starts.",
+          "checkBackgroundUpdates": "Check for updates in background",
+          "checkBackgroundUpdatesDescription": "Check for updates in the background.",
+          "checkUpdate": "Check for updates",
+          "autoUpdate": "Auto update",
+          "autoUpdateDescription": "Automatically install after checking for updates (Coming soon)"
+        },
+        "language": {
+          "title": "Language",
+          "select": "Select language"
+        },
+        "theme": {
+          "title": "Theme",
+          "select": "Select theme",
+          "light": "Light",
+          "dark": "Dark",
+          "system": "System default"
+        },
+        "startPage": {
+          "title": "Start Page",
+          "select": "Select start page"
+        },
+        "other": {
+          "title": "Other",
+          "moveTransferPageWhenStartTransfer": "Go to transfer page on start",
+          "moveTransferPageWhenStartTransferDescription": "Automatically move to the transfer management page when a file transfer starts.",
+          "powerSaveBlockInTransfer": "Prevent sleep mode",
+          "powerSaveBlockInTransferDescription": "Prevent the system from entering sleep mode while transfer or sync is in progress.",
+          "imageCacheTitle": "Image Cache",
+          "imageCacheDescription": "Clears the preview image cache",
+          "imageCacheClear": "Clear Cache"
+        }
+      },
+      "mod": {
+        "title": "Mod",
+        "mod_management": {
+          "title": "Mod Management",
+          "deleteArchiveAfterExtract": "Delete archive after extraction",
+          "deleteArchiveAfterExtractDescription": "Delete the original archive file after extracting it to the mod folder",
+          "moveFolderInsteadOfCopy": "Move folder instead of copy",
+          "moveFolderInsteadOfCopyDescription": "Move instead of copy when dropping a folder into the mod folder (deletes original)",
+          "searchModPreview": "Search Preview in Subfolders",
+          "searchModPreviewDescription": "If no preview image exists in the character folder, search for preview images inside mod folders."
+        },
+        "performance": {
+          "title": "Performance",
+          "backdrop-blur": {
+            "title": "Use Blur",
+            "description": "Disable this option if performance issues occur while exploring mods"
+          },
+          "virtualization": {
+            "title": "Use Virtualization",
+            "description": "Virtualizes the mod list to improve performance",
+            "threshold": "Threshold Mod Count",
+            "thresholdDescription": "Applies virtualization when the number of mods exceeds the set count"
+          }
+        },
+        "overlay": {
+          "title": "Overlay",
+          "enableOverlay": "Enable Overlay",
+          "enableOverlayDescription": "Use in-game overlay feature",
+          "overlayKey": "Hotkey",
+          "overlayKeyDescription": "Set the hotkey to toggle the overlay on and off"
+        }
+      },
+      "xxmi": {
+        "xxmiPath": "XXMI Path",
+        "autoScan": "Auto Scan",
+        "activeImporter": "Active Importer",
+        "fn": {
+          "findXXMIPath": {
+            "xxmiNotFound": "XXMI not found",
+            "alert": {
+              "title": "Warning",
+              "description": "Please verify the auto-detected XXMI launcher path. If it seems incorrect, please enter the path manually."
+            }
+          },
+          "saveXXMIPath": {
+            "success": "XXMI path has been saved",
+            "configNotFound": "Cannot find XXMI Launcher Config.json file in the specified path"
+          }
+        }
+      },
+      "acc": {
+        "title": "Account",
+        "not_logged_in": {
+          "description": "Login required.",
+          "login": "Login"
+        },
+        "my_account": "My Account",
+        "logout": "Logout"
+      },
+      "net": {
+        "title": "Network",
+        "proxy": {
+          "title": "Proxy Settings",
+          "type": "Proxy Type",
+          "disabled": "Disabled",
+          "host": "Host",
+          "port": "Port",
+          "requiresAuth": "Proxy server requires password",
+          "username": "Username",
+          "password": "Password",
+          "save": "Save",
+          "saved": "Proxy settings saved."
+        }
+      },
+      "adv": {
+        "title": "Advanced",
+        "warning_title": "Caution",
+        "warning_description": "Changing settings here may affect app behavior."
+      }
+    },
+    "report": {
+      "title": "Report Issue",
+      "reported_title": "Problem reported",
+      "report_id": "report id: {{id}}",
+      "description_label": "Please describe the problem you experienced in as much detail as possible.",
+      "fields": {
+        "title": "Title",
+        "title_placeholder": "Optional",
+        "description": "Problem Description",
+        "attach_log": "Attach log files that can help with debugging"
+      },
+      "submit": "Submit"
     }
+  },
+  "components": {
+    "path-selector-dialog": {
+      "title": "Select Path",
+      "description": "Choose how to download {{name}}",
+      "mod_manager": {
+        "title": "Mod Manager",
+        "description": {
+          "0": "From Mod Manager",
+          "1": "Select character folder"
+        }
+      },
+      "explorer": {
+        "title": "Select Path",
+        "description": {
+          "0": "From File Explorer",
+          "1": "Select folder"
+        }
+      }
+    },
+    "download-confirmation-overlay": {
+      "title": "Confirm Download",
+      "description": "Select download location",
+      "file_name": "File Name",
+      "file_name_placeholder": "Enter file name",
+      "download_location": "Download Location",
+      "need_select_character_folder": "Select a character folder on the left"
+    }
+  }
 }

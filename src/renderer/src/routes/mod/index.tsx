@@ -34,7 +34,7 @@ function RouteComponent() {
 
   const { data: games = [] } = useGames();
   const { data: characters = [] } = useCharacters(selectedGame);
-  const selectedGroupData = characters.find((g) => g.name === selectedGroup?.name);
+  const selectedGroupData = selectedGroup ?? undefined;
 
   useModRefreshOnFocus(selectedGame, queryClient);
   useDownloadCompletionHandler(selectedGame, queryClient);
@@ -44,10 +44,14 @@ function RouteComponent() {
   const { isDragging, handleDragEnter, handleDragLeave, handleDragOver, handleDrop } =
     useModDragDrop(selectedGroupData?.path, queryClient, selectedGame || "");
 
+  const initExpandedGroups = useModStore((s) => s.initExpandedGroups);
+
   const isInitialized = useRef(false);
   useEffect(() => {
     const initGame = async () => {
       try {
+        initExpandedGroups();
+
         const focusedGame = await window.api.invoke("mod:getPreviousFocusedGame");
         if (focusedGame && games.find((g) => g.game === focusedGame)) {
           setSelectedGame(focusedGame);
@@ -72,9 +76,33 @@ function RouteComponent() {
   }, [games, selectedGame, setSelectedGame]);
 
   useEffect(() => {
+    if (isInitialized.current) {
+      if (games.length > 0 && !games.find((g) => g.game === selectedGame)) {
+        const nextGame = games[0].game;
+        setSelectedGame(nextGame);
+        window.api.invoke("mod:setLastGame", nextGame);
+      } else if (games.length === 0 && selectedGame !== "") {
+        setSelectedGame("");
+        window.api.invoke("mod:setLastGame", "");
+      }
+    }
+  }, [games, selectedGame, setSelectedGame]);
+
+  useEffect(() => {
     if (characters.length > 0) {
-      if (!selectedGroup || !characters.find((g) => g.name === selectedGroup.name)) {
-        setSelectedGroup(characters[0]);
+      const isSelectedInTopLevel = selectedGroup
+        ? characters.some((g) => g.path === selectedGroup.path)
+        : false;
+      const isSelectedSubOfTopLevel = selectedGroup
+        ? characters.some(
+            (g) =>
+              selectedGroup.path.startsWith(`${g.path}\\`) ||
+              selectedGroup.path.startsWith(`${g.path}/`),
+          )
+        : false;
+
+      if (selectedGroup && !isSelectedInTopLevel && !isSelectedSubOfTopLevel) {
+        setSelectedGroup(null);
       }
     } else {
       setSelectedGroup(null);

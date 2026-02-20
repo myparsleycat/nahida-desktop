@@ -30,9 +30,15 @@ interface ModState {
     setSortType: (type: "name" | "date" | "size") => void;
     sortOrder: "asc" | "desc";
     setSortOrder: (order: "asc" | "desc") => void;
+    expandedGroups: Set<string>;
+    persistentGroups: Set<string>;
+    toggleExpandedGroup: (path: string) => void;
+    togglePersistentGroup: (path: string) => void;
+    setExpandedGroup: (path: string, expanded: boolean) => void;
+    initExpandedGroups: () => Promise<void>;
 }
 
-export const modStore = createStore<ModState>((set) => ({
+export const modStore = createStore<ModState>((set, get) => ({
     selectedGame: "",
     setSelectedGame: (selectedGame) => set({ selectedGame }),
     selectedGroup: null,
@@ -62,6 +68,63 @@ export const modStore = createStore<ModState>((set) => ({
     setSortType: (sortType) => set({ sortType }),
     sortOrder: "asc",
     setSortOrder: (sortOrder) => set({ sortOrder }),
+
+    expandedGroups: new Set<string>(),
+    persistentGroups: new Set<string>(),
+
+    toggleExpandedGroup: (path) =>
+        set((state) => {
+            const next = new Set(state.expandedGroups);
+            if (next.has(path)) {
+                next.delete(path);
+            } else {
+                next.add(path);
+            }
+            return { expandedGroups: next };
+        }),
+
+    togglePersistentGroup: (path) =>
+        set((state) => {
+            const nextExpanded = new Set(state.expandedGroups);
+            const nextPersistent = new Set(state.persistentGroups);
+
+            if (nextPersistent.has(path)) {
+                nextPersistent.delete(path);
+            } else {
+                nextPersistent.add(path);
+                nextExpanded.add(path);
+            }
+
+            window.api.invoke("mod:setExpandedGroups", Array.from(nextPersistent));
+            return { expandedGroups: nextExpanded, persistentGroups: nextPersistent };
+        }),
+
+    setExpandedGroup: (path, expanded) =>
+        set((state) => {
+            const next = new Set(state.expandedGroups);
+            if (expanded) {
+                next.add(path);
+            } else {
+                next.delete(path);
+            }
+            return { expandedGroups: next };
+        }),
+
+    initExpandedGroups: async () => {
+        try {
+            const paths = await window.api.invoke("mod:getExpandedGroups");
+            if (paths && Array.isArray(paths)) {
+                const pathSet = new Set(paths);
+                set((state) => ({
+                    persistentGroups: pathSet,
+                    // 기존에 임시로 확장한 그룹들을 유지하면서 새로 불러온 영구 지정 그룹들을 병합
+                    expandedGroups: new Set([...state.expandedGroups, ...paths]),
+                }));
+            }
+        } catch (error) {
+            console.error("Failed to initialize expanded groups", error);
+        }
+    },
 }));
 
 export function useModStore<T>(selector: (state: ModState) => T): T {

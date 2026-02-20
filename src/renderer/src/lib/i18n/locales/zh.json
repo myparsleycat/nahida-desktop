@@ -1,373 +1,374 @@
 {
-    "g": {
-        "search": "搜索",
+  "g": {
+    "search": "搜索",
+    "name": "名称",
+    "date": "日期",
+    "size": "大小",
+    "cancel": "取消",
+    "confirm": "确认",
+    "select": "选择",
+    "apply": "应用",
+    "delete": "删除",
+    "add": "添加",
+    "create": "创建",
+    "unknown": "未知",
+    "save": "保存",
+    "close": "关闭"
+  },
+  "page": {
+    "transfer": {
+      "title": "传输",
+      "stats_label": {
+        "upload": "上传",
+        "download": "下载",
+        "total_transferred": "总传输量",
+        "active_transfers": "进行中的传输"
+      },
+      "toolbar": {
+        "all": "全部",
+        "upload": "上传",
+        "download": "下载"
+      },
+      "empty_state": {
+        "all_tabs": "无传输记录",
+        "uploading": "无正在上传的文件",
+        "downloading": "无正在下载的文件",
+        "completed": "无已完成的传输",
+        "failed": "无失败的传输",
+        "paused": "无暂停的传输",
+        "search_results": "未找到搜索结果"
+      },
+      "item": {
+        "uploading": "上传中",
+        "downloading": "下载中",
+        "completed": "已完成",
+        "failed": "失败",
+        "paused": "已暂停",
+        "queued": "排队中",
+        "preparing": "准备中",
+        "time_remaining": "剩余 {{time}}",
+        "time_elapsed": "经过 {{time}}",
+        "failed_files": "{{count}} 个失败",
+        "dropdown_menu": {
+          "cancel": "取消",
+          "retry": "重试",
+          "retry_failed_files": "重试失败的文件",
+          "remove_from_transfer": "从传输列表中移除"
+        }
+      }
+    },
+    "drive": {
+      "title": "云端硬盘",
+      "share_drive": "共享云端硬盘",
+      "no_contents_section_message": {
+        "0": "此文件夹中没有文件或文件夹",
+        "1": "拖放文件或文件夹到此处上传"
+      },
+      "head_buttons": {
+        "search_in_dir_placeholder": "在此文件夹中搜索...",
+        "dropdown_menu": {
+          "download": "下载",
+          "make_new": {
+            "title": "新建",
+            "new_dir": "创建文件夹",
+            "upload_dir": "上传文件夹",
+            "upload_file": "上传文件"
+          }
+        }
+      },
+      "list_head": {
         "name": "名称",
-        "date": "日期",
-        "size": "大小",
-        "cancel": "取消",
-        "confirm": "确认",
-        "select": "选择",
-        "apply": "应用",
-        "delete": "删除",
-        "add": "添加",
-        "create": "创建",
-        "unknown": "未知",
-        "save": "保存",
-        "close": "关闭"
-    },
-    "page": {
-        "transfer": {
-            "title": "传输",
-            "stats_label": {
-                "upload": "上传",
-                "download": "下载",
-                "total_transferred": "总传输量",
-                "active_transfers": "进行中的传输"
-            },
-            "toolbar": {
-                "all": "全部",
-                "upload": "上传",
-                "download": "下载"
-            },
-            "empty_state": {
-                "all_tabs": "无传输记录",
-                "uploading": "无正在上传的文件",
-                "downloading": "无正在下载的文件",
-                "completed": "无已完成的传输",
-                "failed": "无失败的传输",
-                "paused": "无暂停的传输",
-                "search_results": "未找到搜索结果"
-            },
-            "item": {
-                "uploading": "上传中",
-                "downloading": "下载中",
-                "completed": "已完成",
-                "failed": "失败",
-                "paused": "已暂停",
-                "queued": "排队中",
-                "preparing": "准备中",
-                "time_remaining": "剩余 {{time}}",
-                "time_elapsed": "经过 {{time}}",
-                "failed_files": "{{count}} 个失败",
-                "dropdown_menu": {
-                    "cancel": "取消",
-                    "retry": "重试",
-                    "retry_failed_files": "重试失败的文件",
-                    "remove_from_transfer": "从传输列表中移除"
-                }
+        "date": "修改日期",
+        "size": "大小"
+      },
+      "context_menu": {
+        "open": "打开",
+        "download": "下载",
+        "rename": "重命名",
+        "trash": "回收站",
+        "new_dir": "创建文件夹"
+      },
+      "dialog": {
+        "create_dir": {
+          "title": "创建文件夹",
+          "name_input_placeholder": "文件夹名称",
+          "#": {
+            "0": "目录名称格式无效",
+            "1": "获取创建目录的路径信息失败",
+            "2": "已存在同名文件夹。",
+            "toast-promise": {
+              "loading": "正在创建目录...",
+              "success": "目录已创建"
             }
+          }
         },
-        "drive": {
-            "title": "云端硬盘",
-            "share_drive": "共享云端硬盘",
-            "no_contents_section_message": {
-                "0": "此文件夹中没有文件或文件夹",
-                "1": "拖放文件或文件夹到此处上传"
-            },
-            "head_buttons": {
-                "search_in_dir_placeholder": "在此文件夹中搜索...",
-                "dropdown_menu": {
-                    "download": "下载",
-                    "make_new": {
-                        "title": "新建",
-                        "new_dir": "创建文件夹",
-                        "upload_dir": "上传文件夹",
-                        "upload_file": "上传文件"
-                    }
-                }
-            },
-            "list_head": {
-                "name": "名称",
-                "date": "修改日期",
-                "size": "大小"
-            },
-            "context_menu": {
-                "open": "打开",
-                "download": "下载",
-                "rename": "重命名",
-                "trash": "回收站",
-                "new_dir": "创建文件夹"
-            },
-            "dialog": {
-                "create_dir": {
-                    "title": "创建文件夹",
-                    "name_input_placeholder": "文件夹名称",
-                    "#": {
-                        "0": "目录名称格式无效",
-                        "1": "获取创建目录的路径信息失败",
-                        "2": "已存在同名文件夹。",
-                        "toast-promise": {
-                            "loading": "正在创建目录...",
-                            "success": "目录已创建"
-                        }
-                    }
-                },
-                "rename": {
-                    "title": "重命名",
-                    "name_input_placeholder": "新名称",
-                    "extension": "扩展名",
-                    "#": {
-                        "0": "名称不能为空",
-                        "1": "目录名称格式无效",
-                        "toast-promise": {
-                            "loading": "正在重命名...",
-                            "success": "重命名成功。"
-                        }
-                    }
-                }
+        "rename": {
+          "title": "重命名",
+          "name_input_placeholder": "新名称",
+          "extension": "扩展名",
+          "#": {
+            "0": "名称不能为空",
+            "1": "目录名称格式无效",
+            "toast-promise": {
+              "loading": "正在重命名...",
+              "success": "重命名成功。"
             }
-        },
-        "share_drive": {
-            "title": "共享驱动器"
-        },
-        "mod": {
-            "title": "模组管理器",
-            "dad_section": {
-                "title": "添加到 {{name}}",
-                "description": "压缩文件将自动解压"
-            },
-            "all_enabled": "全部启用",
-            "all_disabled": "全部禁用",
-            "content-header": {
-                "all_enabled": "所有模组已启用",
-                "all_disabled": "所有模组已禁用"
-            },
-            "character-sidebar": {
-                "add-to-character": "添加到 {{name}}"
-            },
-            "dialog": {
-                "add-game": {
-                    "title": "添加游戏",
-                    "name_input_placeholder": "游戏名称 (例如：原神)",
-                    "path_input_placeholder": "模组文件夹路径",
-                    "#": {
-                        "0": "请输入游戏名称",
-                        "1": "请选择模组文件夹路径"
-                    }
-                },
-                "preset-management": {
-                    "description": "此预设包含 {{length}} 个模组。"
-                },
-                "delete-game": {
-                    "title": "删除游戏",
-                    "description": "确定要删除 '{{name}}' 吗？此操作无法撤销，该游戏的预设也将一并删除。"
-                },
-                "add-preset": {
-                    "title": "新建预设",
-                    "#": {
-                        "0": "请输入预设名称"
-                    }
-                }
-            },
-            "hooks": {
-                "use-mod-mutations": {
-                    "toggle-mutation": {
-                        "0": "{{name}} 文件夹已存在",
-                        "1": "文件夹被锁定，无法修改",
-                        "2": "修改模组状态失败"
-                    }
-                }
-            }
-        },
-        "tools": {
-            "fix-tool-manager": {
-                "presets": {},
-                "builder": {
-                    "left": {
-                        "title": "已添加的脚本",
-                        "description": "拖放以添加脚本或点击+按钮移至右侧",
-                        "noScripts": {
-                            "title": "没有可用的脚本",
-                            "description": "可以将Python文件(.py)或可执行文件(.exe)拖放到此处添加"
-                        },
-                        "dropToAdd": "拖放以添加"
-                    },
-                    "right": {
-                        "title": "预设配置",
-                        "description": "拖动以更改脚本顺序",
-                        "presetName": "预设名称",
-                        "enterPresetName": "请输入预设名称",
-                        "noScripts": {
-                            "title": "没有添加的脚本",
-                            "description": "可以从左侧列表点击+按钮添加脚本"
-                        },
-                        "#": {
-                            "handleSavePreset": {
-                                "success": "预设已保存",
-                                "error": "预设保存失败",
-                                "alreadyExists": "预设名称已存在"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "setting": {
-            "title": "设置",
-            "tabs": {
-                "general": "常规",
-                "mod": "模组",
-                "account": "账户",
-                "network": "网络",
-                "advanced": "高级设置"
-            },
-            "gen": {
-                "application": {
-                    "title": "应用程序",
-                    "runOnStartup": "开机启动",
-                    "runOnStartupDescription": "系统启动时自动运行应用。",
-                    "checkBackgroundUpdates": "后台检查更新",
-                    "checkBackgroundUpdatesDescription": "在后台检查更新。",
-                    "checkUpdate": "检查更新",
-                    "autoUpdate": "自动更新",
-                    "autoUpdateDescription": "检查更新后自动安装 (即将推出)"
-                },
-                "language": {
-                    "title": "语言",
-                    "select": "选择语言"
-                },
-                "theme": {
-                    "title": "主题",
-                    "select": "选择主题",
-                    "light": "浅色",
-                    "dark": "深色",
-                    "system": "系统默认"
-                },
-                "startPage": {
-                    "title": "起始页",
-                    "select": "选择起始页"
-                },
-                "other": {
-                    "title": "其他",
-                    "moveTransferPageWhenStartTransfer": "开始传输时跳转页面",
-                    "moveTransferPageWhenStartTransferDescription": "文件传输开始时自动跳转到传输管理页面。",
-                    "powerSaveBlockInTransfer": "防止休眠",
-                    "powerSaveBlockInTransferDescription": "传输或同步进行时防止系统进入待机状态。",
-                    "imageCacheTitle": "图像缓存",
-                    "imageCacheDescription": "清理预览图像缓存",
-                    "imageCacheClear": "清除缓存"
-                }
-            },
-            "mod": {
-                "title": "模组",
-                "mod_management": {
-                    "title": "模组管理",
-                    "deleteArchiveAfterExtract": "解压后删除压缩包",
-                    "deleteArchiveAfterExtractDescription": "将压缩文件解压到模组文件夹后删除源文件",
-                    "moveFolderInsteadOfCopy": "移动文件夹而非复制",
-                    "moveFolderInsteadOfCopyDescription": "将文件夹拖入模组文件夹时进行移动而非复制 (删除源文件)",
-                    "searchModPreview": "在子文件夹中搜索模组预览",
-                    "searchModPreviewDescription": "如果角色文件夹中没有预览图像，则在模组文件夹内部搜索预览图像。"
-                },
-                "performance": {
-                    "title": "性能",
-                    "backdrop-blur": {
-                        "title": "使用模糊效果",
-                        "description": "浏览模组时出现性能问题，请禁用此选项。"
-                    },
-                    "virtualization": {
-                        "title": "使用虚拟化",
-                        "description": "通过虚拟化模组列表来提升性能。",
-                        "threshold": "阈值模组数量",
-                        "thresholdDescription": "模组数量超过设定值时应用虚拟化"
-                    }
-                },
-                "overlay": {
-                    "title": "覆盖层",
-                    "enableOverlay": "启用覆盖层",
-                    "enableOverlayDescription": "使用游戏内覆盖层功能",
-                    "overlayKey": "快捷键",
-                    "overlayKeyDescription": "设置打开和关闭覆盖层的快捷键"
-                }
-            },
-            "xxmi": {
-                "xxmiPath": "XXMI路径",
-                "autoScan": "自动扫描",
-                "activeImporter": "已激活的导入器",
-                "fn": {
-                    "findXXMIPath": {
-                        "xxmiNotFound": "未找到XXMI",
-                        "alert": {
-                            "title": "注意",
-                            "description": "请确认自动检测到的XXMI启动器路径。如果不正常，请手动输入路径。"
-                        }
-                    },
-                    "saveXXMIPath": {
-                        "success": "XXMI路径已保存",
-                        "configNotFound": "在指定路径中找不到XXMI Launcher Config.json文件"
-                    }
-                }
-            },
-            "acc": {
-                "title": "账户",
-                "not_logged_in": {
-                    "description": "需要登录。",
-                    "login": "登录"
-                },
-                "my_account": "我的账户",
-                "logout": "登出"
-            },
-            "net": {
-                "title": "网络",
-                "proxy": {
-                    "title": "代理设置",
-                    "type": "代理类型",
-                    "disabled": "不使用",
-                    "host": "主机",
-                    "port": "端口",
-                    "requiresAuth": "代理服务器需要密码",
-                    "username": "用户名",
-                    "password": "密码",
-                    "save": "保存",
-                    "saved": "代理设置已保存。"
-                }
-            },
-            "adv": {
-                "title": "高级设置",
-                "warning_title": "注意",
-                "warning_description": "更改此处的设置可能会影响应用行为。"
-            }
-        },
-        "report": {
-            "title": "报告问题",
-            "reported_title": "问题已报告",
-            "report_id": "report id: {{id}}",
-            "description_label": "请尽可能详细地说明您遇到的问题。",
-            "fields": {
-                "title": "标题",
-                "title_placeholder": "可选",
-                "description": "问题说明",
-                "attach_log": "附加有助于调试的日志文件"
-            },
-            "submit": "提交"
+          }
         }
+      }
     },
-    "components": {
-        "path-selector-dialog": {
-            "title": "选择路径",
-            "description": "选择下载 {{name}} 的方式",
-            "mod_manager": {
-                "title": "模组管理器",
-                "description": {
-                    "0": "从模组管理器",
-                    "1": "选择角色文件夹"
-                }
-            },
-            "explorer": {
-                "title": "选择路径",
-                "description": {
-                    "0": "从文件资源管理器",
-                    "1": "选择文件夹"
-                }
-            }
+    "share_drive": {
+      "title": "共享驱动器"
+    },
+    "mod": {
+      "title": "模组管理器",
+      "dad_section": {
+        "title": "添加到 {{name}}",
+        "description": "压缩文件将自动解压"
+      },
+      "all_enabled": "全部启用",
+      "all_disabled": "全部禁用",
+      "content-header": {
+        "all_enabled": "所有模组已启用",
+        "all_disabled": "所有模组已禁用"
+      },
+      "character-sidebar": {
+        "add-to-character": "添加到 {{name}}"
+      },
+      "dialog": {
+        "add-game": {
+          "title": "添加游戏",
+          "name_input_placeholder": "游戏名称 (例如：原神)",
+          "path_input_placeholder": "模组文件夹路径",
+          "#": {
+            "0": "请输入游戏名称",
+            "1": "请选择模组文件夹路径"
+          }
         },
-        "download-confirmation-overlay": {
-            "title": "确认下载",
-            "description": "选择下载位置",
-            "file_name": "文件名",
-            "file_name_placeholder": "输入文件名",
-            "download_location": "下载位置",
-            "need_select_character_folder": "请在左侧选择角色文件夹"
+        "preset-management": {
+          "description": "此预设包含 {{length}} 个模组。"
+        },
+        "delete-game": {
+          "title": "删除游戏",
+          "description": "确定要删除 '{{name}}' 吗？此操作无法撤销，该游戏的预设也将一并删除。"
+        },
+        "add-preset": {
+          "title": "新建预设",
+          "#": {
+            "0": "请输入预设名称"
+          }
         }
+      },
+      "hooks": {
+        "use-mod-mutations": {
+          "toggle-mutation": {
+            "0": "{{name}} 文件夹已存在",
+            "1": "文件夹被锁定，无法修改",
+            "2": "修改模组状态失败"
+          }
+        }
+      },
+      "empty_selection": "请从侧边栏选择群组或角色文件夹。"
+    },
+    "tools": {
+      "fix-tool-manager": {
+        "presets": {},
+        "builder": {
+          "left": {
+            "title": "已添加的脚本",
+            "description": "拖放以添加脚本或点击+按钮移至右侧",
+            "noScripts": {
+              "title": "没有可用的脚本",
+              "description": "可以将Python文件(.py)或可执行文件(.exe)拖放到此处添加"
+            },
+            "dropToAdd": "拖放以添加"
+          },
+          "right": {
+            "title": "预设配置",
+            "description": "拖动以更改脚本顺序",
+            "presetName": "预设名称",
+            "enterPresetName": "请输入预设名称",
+            "noScripts": {
+              "title": "没有添加的脚本",
+              "description": "可以从左侧列表点击+按钮添加脚本"
+            },
+            "#": {
+              "handleSavePreset": {
+                "success": "预设已保存",
+                "error": "预设保存失败",
+                "alreadyExists": "预设名称已存在"
+              }
+            }
+          }
+        }
+      }
+    },
+    "setting": {
+      "title": "设置",
+      "tabs": {
+        "general": "常规",
+        "mod": "模组",
+        "account": "账户",
+        "network": "网络",
+        "advanced": "高级设置"
+      },
+      "gen": {
+        "application": {
+          "title": "应用程序",
+          "runOnStartup": "开机启动",
+          "runOnStartupDescription": "系统启动时自动运行应用。",
+          "checkBackgroundUpdates": "后台检查更新",
+          "checkBackgroundUpdatesDescription": "在后台检查更新。",
+          "checkUpdate": "检查更新",
+          "autoUpdate": "自动更新",
+          "autoUpdateDescription": "检查更新后自动安装 (即将推出)"
+        },
+        "language": {
+          "title": "语言",
+          "select": "选择语言"
+        },
+        "theme": {
+          "title": "主题",
+          "select": "选择主题",
+          "light": "浅色",
+          "dark": "深色",
+          "system": "系统默认"
+        },
+        "startPage": {
+          "title": "起始页",
+          "select": "选择起始页"
+        },
+        "other": {
+          "title": "其他",
+          "moveTransferPageWhenStartTransfer": "开始传输时跳转页面",
+          "moveTransferPageWhenStartTransferDescription": "文件传输开始时自动跳转到传输管理页面。",
+          "powerSaveBlockInTransfer": "防止休眠",
+          "powerSaveBlockInTransferDescription": "传输或同步进行时防止系统进入待机状态。",
+          "imageCacheTitle": "图像缓存",
+          "imageCacheDescription": "清理预览图像缓存",
+          "imageCacheClear": "清除缓存"
+        }
+      },
+      "mod": {
+        "title": "模组",
+        "mod_management": {
+          "title": "模组管理",
+          "deleteArchiveAfterExtract": "解压后删除压缩包",
+          "deleteArchiveAfterExtractDescription": "将压缩文件解压到模组文件夹后删除源文件",
+          "moveFolderInsteadOfCopy": "移动文件夹而非复制",
+          "moveFolderInsteadOfCopyDescription": "将文件夹拖入模组文件夹时进行移动而非复制 (删除源文件)",
+          "searchModPreview": "在子文件夹中搜索模组预览",
+          "searchModPreviewDescription": "如果角色文件夹中没有预览图像，则在模组文件夹内部搜索预览图像。"
+        },
+        "performance": {
+          "title": "性能",
+          "backdrop-blur": {
+            "title": "使用模糊效果",
+            "description": "浏览模组时出现性能问题，请禁用此选项。"
+          },
+          "virtualization": {
+            "title": "使用虚拟化",
+            "description": "通过虚拟化模组列表来提升性能。",
+            "threshold": "阈值模组数量",
+            "thresholdDescription": "模组数量超过设定值时应用虚拟化"
+          }
+        },
+        "overlay": {
+          "title": "覆盖层",
+          "enableOverlay": "启用覆盖层",
+          "enableOverlayDescription": "使用游戏内覆盖层功能",
+          "overlayKey": "快捷键",
+          "overlayKeyDescription": "设置打开和关闭覆盖层的快捷键"
+        }
+      },
+      "xxmi": {
+        "xxmiPath": "XXMI路径",
+        "autoScan": "自动扫描",
+        "activeImporter": "已激活的导入器",
+        "fn": {
+          "findXXMIPath": {
+            "xxmiNotFound": "未找到XXMI",
+            "alert": {
+              "title": "注意",
+              "description": "请确认自动检测到的XXMI启动器路径。如果不正常，请手动输入路径。"
+            }
+          },
+          "saveXXMIPath": {
+            "success": "XXMI路径已保存",
+            "configNotFound": "在指定路径中找不到XXMI Launcher Config.json文件"
+          }
+        }
+      },
+      "acc": {
+        "title": "账户",
+        "not_logged_in": {
+          "description": "需要登录。",
+          "login": "登录"
+        },
+        "my_account": "我的账户",
+        "logout": "登出"
+      },
+      "net": {
+        "title": "网络",
+        "proxy": {
+          "title": "代理设置",
+          "type": "代理类型",
+          "disabled": "不使用",
+          "host": "主机",
+          "port": "端口",
+          "requiresAuth": "代理服务器需要密码",
+          "username": "用户名",
+          "password": "密码",
+          "save": "保存",
+          "saved": "代理设置已保存。"
+        }
+      },
+      "adv": {
+        "title": "高级设置",
+        "warning_title": "注意",
+        "warning_description": "更改此处的设置可能会影响应用行为。"
+      }
+    },
+    "report": {
+      "title": "报告问题",
+      "reported_title": "问题已报告",
+      "report_id": "report id: {{id}}",
+      "description_label": "请尽可能详细地说明您遇到的问题。",
+      "fields": {
+        "title": "标题",
+        "title_placeholder": "可选",
+        "description": "问题说明",
+        "attach_log": "附加有助于调试的日志文件"
+      },
+      "submit": "提交"
     }
+  },
+  "components": {
+    "path-selector-dialog": {
+      "title": "选择路径",
+      "description": "选择下载 {{name}} 的方式",
+      "mod_manager": {
+        "title": "模组管理器",
+        "description": {
+          "0": "从模组管理器",
+          "1": "选择角色文件夹"
+        }
+      },
+      "explorer": {
+        "title": "选择路径",
+        "description": {
+          "0": "从文件资源管理器",
+          "1": "选择文件夹"
+        }
+      }
+    },
+    "download-confirmation-overlay": {
+      "title": "确认下载",
+      "description": "选择下载位置",
+      "file_name": "文件名",
+      "file_name_placeholder": "输入文件名",
+      "download_location": "下载位置",
+      "need_select_character_folder": "请在左侧选择角色文件夹"
+    }
+  }
 }

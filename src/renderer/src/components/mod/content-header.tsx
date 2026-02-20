@@ -27,7 +27,6 @@ import {
   ArrowUpWideNarrow,
   EllipsisIcon,
   FolderIcon,
-  Loader2Icon,
   Search,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -107,11 +106,7 @@ export function ContentHeader() {
   return (
     <div className="flex items-center justify-between h-12 px-3 border-b z-20">
       <div className="flex items-center gap-3">
-        {groupName ? (
-          <h1 className="text-2xl font-semibold text-foreground">{groupName}</h1>
-        ) : (
-          <Loader2Icon className="animate-spin" />
-        )}
+        {groupName && <h1 className="text-2xl font-semibold text-foreground">{groupName}</h1>}
       </div>
 
       <div className="flex items-center gap-2">

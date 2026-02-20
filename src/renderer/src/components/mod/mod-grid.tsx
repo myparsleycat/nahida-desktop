@@ -10,6 +10,7 @@ import type { ModInfo } from "@renderer/types/mod";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { chunk } from "es-toolkit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ModCard } from "./mod-card";
 
@@ -18,6 +19,7 @@ interface ModGridProps {
 }
 
 export function ModGrid(_props: ModGridProps) {
+  const { t } = useTranslation();
   const searchQuery = useModStore((s) => s.searchQuery);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -117,6 +119,14 @@ export function ModGrid(_props: ModGridProps) {
     },
     [updateToggleKeyMutation.mutate],
   );
+
+  if (!selectedGroupPath) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground h-full min-h-0">
+        <p>{t("page.mod.empty_selection")}</p>
+      </div>
+    );
+  }
 
   return (
     <div ref={scrollAreaRef} className="flex-1 min-h-0">
