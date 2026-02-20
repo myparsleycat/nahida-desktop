@@ -172,7 +172,23 @@
           }
         }
       },
-      "empty_selection": "Please select a group or character folder from the sidebar."
+      "empty_selection": "Please select a group or character folder from the sidebar.",
+      "context-menu": {
+        "open-preview-viewer": "Open in viewer",
+        "delete-preview": "Delete preview",
+        "open-cmd": "Open CMD",
+        "open-folder": "Open folder"
+      },
+      "toast": {
+        "trash-loading": "Moving to recycle bin...",
+        "trash-success": "Deleted successfully",
+        "trash-error": "Failed to delete",
+        "value-required": "Please enter a value."
+      },
+      "log-dialog": {
+        "title": "Log",
+        "running": "Running..."
+      }
     },
     "tools": {
       "fix-tool-manager": {

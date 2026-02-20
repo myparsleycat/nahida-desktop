@@ -152,6 +152,10 @@
           "title": "게임 삭제",
           "description": "정말로 '{{name}}'을 삭제할까요? 이 작업은 되돌릴 수 없으며, 해당 게임의 프리셋도 함께 삭제됩니다."
         },
+        "delete-mod": {
+          "title": "이 모드를 삭제할까요?",
+          "description": "삭제된 모드는 휴지통에서 복원할 수 있습니다."
+        },
         "add-preset": {
           "title": "새 프리셋 생성",
           "#": {
@@ -168,7 +172,23 @@
           }
         }
       },
-      "empty_selection": "사이드바에서 그룹이나 캐릭터 폴더를 선택해주세요."
+      "empty_selection": "사이드바에서 그룹이나 캐릭터 폴더를 선택해주세요.",
+      "context-menu": {
+        "open-preview-viewer": "뷰어로 열기",
+        "delete-preview": "프리뷰 삭제",
+        "open-cmd": "CMD 열기",
+        "open-folder": "폴더 열기"
+      },
+      "toast": {
+        "trash-loading": "휴지통으로 이동 중...",
+        "trash-success": "삭제 완료",
+        "trash-error": "삭제 실패",
+        "value-required": "값을 입력해주세요."
+      },
+      "log-dialog": {
+        "title": "로그",
+        "running": "실행 중..."
+      }
     },
     "tools": {
       "fix-tool-manager": {

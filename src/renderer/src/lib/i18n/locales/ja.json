@@ -1,4 +1,4 @@
-{
+﻿{
   "g": {
     "search": "検索",
     "name": "名前",
@@ -162,6 +162,10 @@
           "title": "ゲーム削除",
           "description": "本当に '{{name}}' を削除しますか？この操作は元に戻せず、該当ゲームのプリセットも一緒に削除されます。"
         },
+        "delete-mod": {
+          "title": "このMODを削除しますか？",
+          "description": "削除されたMODはゴミ箱から復元できます。"
+        },
         "add-preset": {
           "title": "新規プリセット作成",
           "#": {
@@ -169,7 +173,23 @@
           }
         }
       },
-      "empty_selection": "サイドバーからグループまたはキャラクターフォルダを選択してください。"
+      "empty_selection": "サイドバーからグループまたはキャラクターフォルダを選択してください。",
+      "context-menu": {
+        "open-preview-viewer": "プレビュービューアーで開く",
+        "delete-preview": "プレビューを削除",
+        "open-cmd": "CMDを開く",
+        "open-folder": "フォルダーを開く"
+      },
+      "toast": {
+        "trash-loading": "ゴミ箱に移動中...",
+        "trash-success": "削除完了",
+        "trash-error": "削除失敗",
+        "value-required": "値を入力してください。"
+      },
+      "log-dialog": {
+        "title": "ログ",
+        "running": "実行中..."
+      }
     },
     "tools": {
       "fix-tool-manager": {

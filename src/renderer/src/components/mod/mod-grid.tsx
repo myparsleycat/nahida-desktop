@@ -106,7 +106,7 @@ export function ModGrid(_props: ModGridProps) {
       value: string,
     ) => {
       if (!value.trim()) {
-        toast.error("값을 입력해주세요.");
+        toast.error(t("page.mod.toast.value-required"));
         return;
       }
       updateToggleKeyMutation.mutate({

@@ -152,6 +152,10 @@
           "title": "删除游戏",
           "description": "确定要删除 '{{name}}' 吗？此操作无法撤销，该游戏的预设也将一并删除。"
         },
+        "delete-mod": {
+          "title": "确定要删除这个模组？",
+          "description": "已删除的模组可以从回收站恢复。"
+        },
         "add-preset": {
           "title": "新建预设",
           "#": {
@@ -168,7 +172,23 @@
           }
         }
       },
-      "empty_selection": "请从侧边栏选择群组或角色文件夹。"
+      "empty_selection": "请从侧边栏选择群组或角色文件夹。",
+      "context-menu": {
+        "open-preview-viewer": "用预览查看器打开",
+        "delete-preview": "删除预览",
+        "open-cmd": "打开 CMD",
+        "open-folder": "打开文件夹"
+      },
+      "toast": {
+        "trash-loading": "移动到回收站中...",
+        "trash-success": "删除成功",
+        "trash-error": "删除失败",
+        "value-required": "请输入数值。"
+      },
+      "log-dialog": {
+        "title": "日志",
+        "running": "运行中..."
+      }
     },
     "tools": {
       "fix-tool-manager": {
