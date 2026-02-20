@@ -33,7 +33,10 @@ export class LocalProtocol {
 
         const convertImageMime = ["image/jpeg", "image/png", "image/webp"];
 
-        if (fileType && convertImageMime.includes(fileType.mime)) {
+        const isOrig = url.searchParams.get("orig") === "true";
+        const fileUrl = pathToFileURL(fullPath).href;
+
+        if (!isOrig && fileType && convertImageMime.includes(fileType.mime)) {
             const imgHash = await this.desktop.lib.utils.getFileHash(fullPath);
             const cachedImg = await this.desktop.lib.db.query.imageCache.findFirst({
                 where: (t, { eq }) => eq(t.hash, imgHash),
@@ -70,8 +73,6 @@ export class LocalProtocol {
                 return new Response(blob);
             }
         } else {
-            const fileUrl = pathToFileURL(fullPath).href;
-
             try {
                 const response = await net.fetch(fileUrl);
                 return response;
