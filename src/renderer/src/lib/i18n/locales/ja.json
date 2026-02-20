@@ -143,7 +143,11 @@
         "all_disabled": "すべてのMODが無効になりました"
       },
       "character-sidebar": {
-        "add-to-character": "{{name}}に追加"
+        "add-to-character": "{{name}}に追加",
+        "collapse-subgroups": "サブフォルダーを折りたたむ",
+        "expand-subgroups": "サブフォルダーを探索",
+        "unpersist-subgroups": "サブフォルダー指定を解除",
+        "persist-subgroups": "サブフォルダーとして指定"
       },
       "dialog": {
         "add-game": {

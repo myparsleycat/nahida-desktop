@@ -133,7 +133,11 @@
         "all_disabled": "所有模组已禁用"
       },
       "character-sidebar": {
-        "add-to-character": "添加到 {{name}}"
+        "add-to-character": "添加到 {{name}}",
+        "collapse-subgroups": "折叠子文件夹",
+        "expand-subgroups": "探索子文件夹",
+        "unpersist-subgroups": "取消子文件夹指定",
+        "persist-subgroups": "指定为子文件夹"
       },
       "dialog": {
         "add-game": {

@@ -133,7 +133,11 @@
         "all_disabled": "모든 모드가 비활성화되었습니다"
       },
       "character-sidebar": {
-        "add-to-character": "{{name}}에 추가"
+        "add-to-character": "{{name}}에 추가",
+        "collapse-subgroups": "서브폴더 접기",
+        "expand-subgroups": "서브폴더로 탐색",
+        "unpersist-subgroups": "서브폴더 지정 해제",
+        "persist-subgroups": "서브폴더로 지정"
       },
       "dialog": {
         "add-game": {

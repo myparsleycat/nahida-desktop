@@ -170,12 +170,12 @@ export const CharacterSidebarItem = memo(
               {isExpanded ? (
                 <>
                   <FolderMinus className="mr-2 h-4 w-4" />
-                  {t("page.mod.character-sidebar.collapse-subgroups", "서브폴더 접기")}
+                  {t("page.mod.character-sidebar.collapse-subgroups")}
                 </>
               ) : (
                 <>
                   <FolderTree className="mr-2 h-4 w-4" />
-                  {t("page.mod.character-sidebar.expand-subgroups", "서브폴더로 탐색")}
+                  {t("page.mod.character-sidebar.expand-subgroups")}
                 </>
               )}
             </ContextMenuItem>
@@ -185,12 +185,12 @@ export const CharacterSidebarItem = memo(
             {isPersistent ? (
               <>
                 <FolderMinus className="mr-2 h-4 w-4 text-destructive" />
-                {t("page.mod.character-sidebar.unpersist-subgroups", "서브폴더 지정 해제")}
+                {t("page.mod.character-sidebar.unpersist-subgroups")}
               </>
             ) : (
               <>
                 <FolderTree className="mr-2 h-4 w-4 text-primary" />
-                {t("page.mod.character-sidebar.persist-subgroups", "서브폴더로 지정")}
+                {t("page.mod.character-sidebar.persist-subgroups")}
               </>
             )}
           </ContextMenuItem>

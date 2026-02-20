@@ -133,7 +133,11 @@
         "all_disabled": "All mods disabled"
       },
       "character-sidebar": {
-        "add-to-character": "Add to {{name}}"
+        "add-to-character": "Add to {{name}}",
+        "collapse-subgroups": "Collapse subgroups",
+        "expand-subgroups": "Expand subgroups",
+        "unpersist-subgroups": "Unpersist subgroups",
+        "persist-subgroups": "Persist subgroups"
       },
       "dialog": {
         "add-game": {
