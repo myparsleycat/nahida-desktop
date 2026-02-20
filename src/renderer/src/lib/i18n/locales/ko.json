@@ -1,360 +1,398 @@
 {
-    "g": {
-        "search": "검색",
+  "g": {
+    "search": "검색",
+    "name": "이름",
+    "date": "날짜",
+    "size": "크기",
+    "cancel": "취소",
+    "confirm": "확인",
+    "select": "선택",
+    "apply": "적용",
+    "delete": "삭제",
+    "add": "추가",
+    "create": "생성",
+    "unknown": "알 수 없는",
+    "save": "저장",
+    "close": "닫기"
+  },
+  "page": {
+    "transfer": {
+      "title": "전송",
+      "stats_label": {
+        "upload": "업로드",
+        "download": "다운로드",
+        "total_transferred": "전체 전송량",
+        "active_transfers": "진행중인 전송"
+      },
+      "toolbar": {
+        "all": "전체",
+        "upload": "업로드",
+        "download": "다운로드"
+      },
+      "empty_state": {
+        "all_tabs": "전송 기록이 없습니다",
+        "uploading": "업로드 중인 파일이 없습니다",
+        "downloading": "다운로드 중인 파일이 없습니다",
+        "completed": "완료된 전송이 없습니다",
+        "failed": "실패한 전송이 없습니다",
+        "paused": "일시정지된 전송이 없습니다",
+        "search_results": "검색 결과가 없습니다"
+      },
+      "item": {
+        "uploading": "업로드 중",
+        "downloading": "다운로드 중",
+        "completed": "완료",
+        "failed": "실패",
+        "paused": "일시정지",
+        "queued": "대기 중",
+        "preparing": "준비 중",
+        "time_remaining": "{{time}} 남음",
+        "time_elapsed": "{{time}} 경과",
+        "failed_files": "{{count}}개 실패",
+        "dropdown_menu": {
+          "cancel": "취소",
+          "retry": "다시 시도",
+          "retry_failed_files": "실패한 파일 재시도",
+          "remove_from_transfer": "전송에서 제거"
+        }
+      }
+    },
+    "drive": {
+      "title": "드라이브",
+      "share_drive": "공유 드라이브",
+      "no_contents_section_message": {
+        "0": "이 폴더에 파일이나 폴더가 없습니다",
+        "1": "여기로 파일이나 폴더를 드래그 해 업로드하세요"
+      },
+      "head_buttons": {
+        "search_in_dir_placeholder": "이 폴더에서 검색...",
+        "dropdown_menu": {
+          "download": "다운로드",
+          "make_new": {
+            "title": "새로 만들기",
+            "new_dir": "폴더 생성",
+            "upload_dir": "폴더 업로드",
+            "upload_file": "파일 업로드"
+          }
+        }
+      },
+      "list_head": {
         "name": "이름",
-        "date": "날짜",
-        "size": "크기",
-        "cancel": "취소",
-        "confirm": "확인",
-        "select": "선택",
-        "apply": "적용",
-        "delete": "삭제",
-        "add": "추가",
-        "create": "생성",
-        "unknown": "알 수 없는",
-        "save": "저장",
-        "close": "닫기"
-    },
-    "page": {
-        "transfer": {
-            "title": "전송",
-            "stats_label": {
-                "upload": "업로드",
-                "download": "다운로드",
-                "total_transferred": "전체 전송량",
-                "active_transfers": "진행중인 전송"
-            },
-            "toolbar": {
-                "all": "전체",
-                "upload": "업로드",
-                "download": "다운로드"
-            },
-            "empty_state": {
-                "all_tabs": "전송 기록이 없습니다",
-                "uploading": "업로드 중인 파일이 없습니다",
-                "downloading": "다운로드 중인 파일이 없습니다",
-                "completed": "완료된 전송이 없습니다",
-                "failed": "실패한 전송이 없습니다",
-                "paused": "일시정지된 전송이 없습니다",
-                "search_results": "검색 결과가 없습니다"
-            },
-            "item": {
-                "uploading": "업로드 중",
-                "downloading": "다운로드 중",
-                "completed": "완료",
-                "failed": "실패",
-                "paused": "일시정지",
-                "queued": "대기 중",
-                "preparing": "준비 중",
-                "time_remaining": "{{time}} 남음",
-                "time_elapsed": "{{time}} 경과",
-                "failed_files": "{{count}}개 실패",
-                "dropdown_menu": {
-                    "cancel": "취소",
-                    "retry": "다시 시도",
-                    "retry_failed_files": "실패한 파일 재시도",
-                    "remove_from_transfer": "전송에서 제거"
-                }
+        "date": "수정한 날짜",
+        "size": "크기"
+      },
+      "context_menu": {
+        "open": "열기",
+        "download": "다운로드",
+        "rename": "이름 바꾸기",
+        "trash": "휴지통",
+        "new_dir": "폴더 생성"
+      },
+      "dialog": {
+        "create_dir": {
+          "title": "폴더 생성",
+          "name_input_placeholder": "폴더 이름",
+          "#": {
+            "0": "디렉토리 이름 형식이 유효하지 않습니다",
+            "1": "디렉토리를 생성할 경로의 정보를 가져오는데 실패했어요",
+            "2": "동일한 이름의 폴더가 이미 존재합니다.",
+            "toast-promise": {
+              "loading": "디렉토리를 생성하고 있습니다...",
+              "success": "디렉토리가 생성되었습니다"
             }
+          }
         },
-        "drive": {
-            "title": "드라이브",
-            "share_drive": "공유 드라이브",
-            "no_contents_section_message": {
-                "0": "이 폴더에 파일이나 폴더가 없습니다",
-                "1": "여기로 파일이나 폴더를 드래그 해 업로드하세요"
-            },
-            "head_buttons": {
-                "search_in_dir_placeholder": "이 폴더에서 검색...",
-                "dropdown_menu": {
-                    "download": "다운로드",
-                    "make_new": {
-                        "title": "새로 만들기",
-                        "new_dir": "폴더 생성",
-                        "upload_dir": "폴더 업로드",
-                        "upload_file": "파일 업로드"
-                    }
-                }
-            },
-            "list_head": {
-                "name": "이름",
-                "date": "수정한 날짜",
-                "size": "크기"
-            },
-            "context_menu": {
-                "open": "열기",
-                "download": "다운로드",
-                "rename": "이름 바꾸기",
-                "trash": "휴지통",
-                "new_dir": "폴더 생성"
-            },
-            "dialog": {
-                "create_dir": {
-                    "title": "폴더 생성",
-                    "name_input_placeholder": "폴더 이름",
-                    "#": {
-                        "0": "디렉토리 이름 형식이 유효하지 않습니다",
-                        "1": "디렉토리를 생성할 경로의 정보를 가져오는데 실패했어요",
-                        "2": "동일한 이름의 폴더가 이미 존재합니다.",
-                        "toast-promise": {
-                            "loading": "디렉토리를 생성하고 있습니다...",
-                            "success": "디렉토리가 생성되었습니다"
-                        }
-                    }
-                },
-                "rename": {
-                    "title": "이름 바꾸기",
-                    "name_input_placeholder": "새 이름",
-                    "extension": "확장자",
-                    "#": {
-                        "0": "이름은 비워둘 수 없습니다",
-                        "1": "디렉토리 이름 형식이 유효하지 않습니다",
-                        "toast-promise": {
-                            "loading": "이름을 변경하고 있습니다...",
-                            "success": "이름이 변경되었습니다."
-                        }
-                    }
-                }
+        "rename": {
+          "title": "이름 바꾸기",
+          "name_input_placeholder": "새 이름",
+          "extension": "확장자",
+          "#": {
+            "0": "이름은 비워둘 수 없습니다",
+            "1": "디렉토리 이름 형식이 유효하지 않습니다",
+            "toast-promise": {
+              "loading": "이름을 변경하고 있습니다...",
+              "success": "이름이 변경되었습니다."
             }
-        },
-        "share_drive": {
-            "title": "공유 드라이브"
-        },
-        "mod": {
-            "title": "모드 매니저",
-            "dad_section": {
-                "title": "{{name}}에 추가",
-                "description": "압축 파일은 자동으로 압축 해제됩니다"
-            },
-            "all_enabled": "모두 활성화",
-            "all_disabled": "모두 비활성화",
-            "content-header": {
-                "all_enabled": "모든 모드가 활성화되었습니다",
-                "all_disabled": "모든 모드가 비활성화되었습니다"
-            },
-            "character-sidebar": {
-                "add-to-character": "{{name}}에 추가"
-            },
-            "dialog": {
-                "add-game": {
-                    "title": "게임 추가",
-                    "name_input_placeholder": "게임 이름 (예: 원공노)",
-                    "path_input_placeholder": "모드 폴더 경로",
-                    "#": {
-                        "0": "게임 이름을 입력해주세요",
-                        "1": "모드 폴더 경로를 선택해주세요"
-                    }
-                },
-                "preset-management": {
-                    "description": "이 프리셋에는 {{length}}개의 모드가 저장되어 있습니다."
-                },
-                "delete-game": {
-                    "title": "게임 삭제",
-                    "description": "정말로 '{{name}}'을 삭제할까요? 이 작업은 되돌릴 수 없으며, 해당 게임의 프리셋도 함께 삭제됩니다."
-                },
-                "add-preset": {
-                    "title": "새 프리셋 생성",
-                    "#": {
-                        "0": "프리셋 이름을 입력해주세요"
-                    }
-                }
-            },
-            "hooks": {
-                "use-mod-mutations": {
-                    "toggle-mutation": {
-                        "0": "이미 {{name}} 폴더가 존재합니다",
-                        "1": "폴더가 잠겨있어 변경할 수 없습니다",
-                        "2": "모드 상태 변경에 실패했습니다"
-                    }
-                }
-            }
-        },
-        "tools": {
-            "fix-tool-manager": {
-                "presets": {},
-                "builder": {
-                    "left": {
-                        "title": "추가된 스크립트",
-                        "description": "드래그 드랍해 스크립트를 추가하거나 + 버튼을 눌러 우측으로 이동할 수 있습니다",
-                        "noScripts": {
-                            "title": "사용할 수 있는 스크립트가 없습니다",
-                            "description": "python 파일(.py) 또는 실행 파일(.exe)을 여기로 드래그 드랍해 추가할 수 있습니다"
-                        },
-                        "dropToAdd": "드롭하여 추가"
-                    },
-                    "right": {
-                        "title": "프리셋 구성",
-                        "description": "드래그해 스크립트 순서를 변경할 수 있습니다",
-                        "presetName": "프리셋 이름",
-                        "enterPresetName": "프리셋 이름을 입력해 주세요",
-                        "noScripts": {
-                            "title": "추가된 스크립트가 없습니다",
-                            "description": "왼쪽 목록에서 + 버튼을 눌러 스크립트를 추가할 수 있습니다"
-                        },
-                        "#": {
-                            "handleSavePreset": {
-                                "success": "프리셋이 저장되었습니다",
-                                "error": "프리셋 저장에 실패했습니다",
-                                "alreadyExists": "이미 존재하는 프리셋 이름입니다"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "setting": {
-            "title": "설정",
-            "tabs": {
-                "general": "일반",
-                "mod": "모드",
-                "account": "계정",
-                "network": "네트워크",
-                "advanced": "고급"
-            },
-            "gen": {
-                "application": {
-                    "title": "애플리케이션",
-                    "runOnStartup": "로그인할 때 실행",
-                    "runOnStartupDescription": "시스템이 시작될 때 앱을 자동으로 실행합니다.",
-                    "checkBackgroundUpdates": "백그라운드 업데이트 확인",
-                    "checkBackgroundUpdatesDescription": "백그라운드에서 업데이트를 확인합니다.",
-                    "checkUpdate": "업데이트 확인",
-                    "autoUpdate": "자동 업데이트",
-                    "autoUpdateDescription": "업데이트를 확인한 후 자동으로 설치합니다 (준비 중)"
-                },
-                "language": {
-                    "title": "언어",
-                    "select": "언어 선택"
-                },
-                "theme": {
-                    "title": "테마",
-                    "select": "테마 선택",
-                    "light": "밝게",
-                    "dark": "어둡게",
-                    "system": "시스템 기본값"
-                },
-                "startPage": {
-                    "title": "시작 페이지",
-                    "select": "시작 페이지 선택"
-                },
-                "other": {
-                    "title": "기타",
-                    "moveTransferPageWhenStartTransfer": "전송 시작 시 페이지 이동",
-                    "moveTransferPageWhenStartTransferDescription": "파일 전송이 시작되면 자동으로 전송 관리 페이지로 이동합니다.",
-                    "powerSaveBlockInTransfer": "절전 모드 방지",
-                    "powerSaveBlockInTransferDescription": "전송 또는 동기화가 진행 중일 때 시스템이 대기 상태로 들어가는 것을 막습니다.",
-                    "imageCacheTitle": "이미지 캐시",
-                    "imageCacheDescription": "프리뷰 이미지 캐시를 정리합니다",
-                    "imageCacheClear": "캐시 정리"
-                }
-            },
-            "mod": {
-                "title": "모드",
-                "mod_management": {
-                    "title": "모드 관리",
-                    "deleteArchiveAfterExtract": "압축 해제 후 삭제",
-                    "deleteArchiveAfterExtractDescription": "압축 파일을 모드 폴더에 해제한 후 원본 압축 파일을 삭제합니다",
-                    "moveFolderInsteadOfCopy": "폴더 복사 대신 이동",
-                    "moveFolderInsteadOfCopyDescription": "폴더를 모드 폴더에 드롭할 때 복사하지 않고 이동합니다 (원본 삭제)",
-                    "searchModPreview": "하위 폴더에서 미리보기 검색",
-                    "searchModPreviewDescription": "캐릭터 폴더에 프리뷰 이미지가 없는 경우, 모드 폴더 내부에서 프리뷰 이미지를 검색합니다."
-                },
-                "performance": {
-                    "title": "성능",
-                    "backdrop-blur": {
-                        "title": "블러 사용",
-                        "description": "모드 탐색시 성능 문제가 발생하는 경우 이 옵션을 해제하세요"
-                    },
-                    "virtualization": {
-                        "title": "가상화 사용",
-                        "description": "모드 목록을 가상화하여 성능을 향상시킵니다",
-                        "threshold": "기준 모드 개수",
-                        "thresholdDescription": "설정한 개수 이상의 모드가 있을 때 가상화를 적용합니다"
-                    }
-                },
-                "overlay": {
-                    "title": "오버레이",
-                    "enableOverlay": "오버레이 활성화",
-                    "enableOverlayDescription": "게임 내 오버레이 기능을 사용합니다",
-                    "overlayKey": "단축키",
-                    "overlayKeyDescription": "오버레이를 켜고 끄는 단축키를 설정합니다"
-                }
-            },
-            "xxmi": {
-                "xxmiPath": "XXMI 경로",
-                "autoScan": "자동 탐색",
-                "activeImporter": "활성화된 Importer",
-                "fn": {
-                    "findXXMIPath": {
-                        "xxmiNotFound": "XXMI 를 찾을 수 없습니다",
-                        "alert": {
-                            "title": "주의",
-                            "description": "자동 탐색된 XXMI 런처 경로를 확인하세요. 정상적이지 않다면 직접 경로를 입력해주세요."
-                        }
-                    },
-                    "saveXXMIPath": {
-                        "success": "XXMI 경로가 저장되었습니다",
-                        "configNotFound": "해당 경로에서 XXMI Launcher Config.json 파일을 찾을 수 없습니다"
-                    }
-                }
-            },
-            "acc": {
-                "title": "계정",
-                "not_logged_in": {
-                    "description": "로그인이 필요합니다.",
-                    "login": "로그인"
-                },
-                "my_account": "내 계정",
-                "logout": "로그아웃"
-            },
-            "net": {
-                "title": "네트워크",
-                "proxy": {
-                    "title": "프록시 설정",
-                    "type": "프록시 유형",
-                    "disabled": "사용 안 함",
-                    "host": "호스트",
-                    "port": "포트",
-                    "requiresAuth": "프록시 서버가 암호를 요구함",
-                    "username": "사용자 이름",
-                    "password": "암호",
-                    "save": "저장",
-                    "saved": "프록시 설정이 저장되었습니다."
-                }
-            },
-            "adv": {
-                "title": "고급",
-                "warning_title": "주의",
-                "warning_description": "이 곳의 설정을 변경하면 앱 동작에 영향을 줄 수 있습니다."
-            }
+          }
         }
+      }
     },
-    "components": {
-        "path-selector-dialog": {
-            "title": "경로 선택",
-            "description": "{{name}} 를 어떤 방식으로 다운로드 할지 선택하세요",
-            "mod_manager": {
-                "title": "모드 매니저",
-                "description": {
-                    "0": "모드 매니저에서",
-                    "1": "캐릭터 폴더를 선택합니다"
-                }
-            },
-            "explorer": {
-                "title": "경로 선택",
-                "description": {
-                    "0": "파일 탐색기에서",
-                    "1": "폴더를 선택합니다"
-                }
-            }
+    "share_drive": {
+      "title": "공유 드라이브"
+    },
+    "mod": {
+      "title": "모드 매니저",
+      "dad_section": {
+        "title": "{{name}}에 추가",
+        "description": "압축 파일은 자동으로 압축 해제됩니다"
+      },
+      "all_enabled": "모두 활성화",
+      "all_disabled": "모두 비활성화",
+      "content-header": {
+        "all_enabled": "모든 모드가 활성화되었습니다",
+        "all_disabled": "모든 모드가 비활성화되었습니다"
+      },
+      "character-sidebar": {
+        "add-to-character": "{{name}}에 추가",
+        "collapse-subgroups": "서브폴더 접기",
+        "expand-subgroups": "서브폴더로 탐색",
+        "unpersist-subgroups": "서브폴더 지정 해제",
+        "persist-subgroups": "서브폴더로 지정"
+      },
+      "dialog": {
+        "add-game": {
+          "title": "게임 추가",
+          "name_input_placeholder": "게임 이름 (예: 원공노)",
+          "path_input_placeholder": "모드 폴더 경로",
+          "#": {
+            "0": "게임 이름을 입력해주세요",
+            "1": "모드 폴더 경로를 선택해주세요"
+          }
         },
-        "download-confirmation-overlay": {
-            "title": "다운로드 확인",
-            "description": "다운로드할 위치를 선택하세요",
-            "file_name": "파일 이름",
-            "file_name_placeholder": "파일 이름을 입력하세요",
-            "download_location": "다운로드 위치",
-            "need_select_character_folder": "좌측에서 캐릭터 폴더를 선택하세요"
+        "preset-management": {
+          "description": "이 프리셋에는 {{length}}개의 모드가 저장되어 있습니다."
+        },
+        "delete-game": {
+          "title": "게임 삭제",
+          "description": "정말로 '{{name}}'을 삭제할까요? 이 작업은 되돌릴 수 없으며, 해당 게임의 프리셋도 함께 삭제됩니다."
+        },
+        "delete-mod": {
+          "title": "이 모드를 삭제할까요?",
+          "description": "삭제된 모드는 휴지통에서 복원할 수 있습니다."
+        },
+        "add-preset": {
+          "title": "새 프리셋 생성",
+          "#": {
+            "0": "프리셋 이름을 입력해주세요"
+          }
         }
+      },
+      "hooks": {
+        "use-mod-mutations": {
+          "toggle-mutation": {
+            "0": "이미 {{name}} 폴더가 존재합니다",
+            "1": "폴더가 잠겨있어 변경할 수 없습니다",
+            "2": "모드 상태 변경에 실패했습니다"
+          }
+        }
+      },
+      "empty_selection": "사이드바에서 그룹이나 캐릭터 폴더를 선택해주세요.",
+      "context-menu": {
+        "open-preview-viewer": "뷰어로 열기",
+        "delete-preview": "프리뷰 삭제",
+        "open-cmd": "CMD 열기",
+        "open-folder": "폴더 열기"
+      },
+      "toast": {
+        "trash-loading": "휴지통으로 이동 중...",
+        "trash-success": "삭제 완료",
+        "trash-error": "삭제 실패",
+        "value-required": "값을 입력해주세요."
+      },
+      "log-dialog": {
+        "title": "로그",
+        "running": "실행 중..."
+      }
+    },
+    "tools": {
+      "fix-tool-manager": {
+        "presets": {},
+        "builder": {
+          "left": {
+            "title": "추가된 스크립트",
+            "description": "드래그 드랍해 스크립트를 추가하거나 + 버튼을 눌러 우측으로 이동할 수 있습니다",
+            "noScripts": {
+              "title": "사용할 수 있는 스크립트가 없습니다",
+              "description": "python 파일(.py) 또는 실행 파일(.exe)을 여기로 드래그 드랍해 추가할 수 있습니다"
+            },
+            "dropToAdd": "드롭하여 추가"
+          },
+          "right": {
+            "title": "프리셋 구성",
+            "description": "드래그해 스크립트 순서를 변경할 수 있습니다",
+            "presetName": "프리셋 이름",
+            "enterPresetName": "프리셋 이름을 입력해 주세요",
+            "noScripts": {
+              "title": "추가된 스크립트가 없습니다",
+              "description": "왼쪽 목록에서 + 버튼을 눌러 스크립트를 추가할 수 있습니다"
+            },
+            "#": {
+              "handleSavePreset": {
+                "success": "프리셋이 저장되었습니다",
+                "error": "프리셋 저장에 실패했습니다",
+                "alreadyExists": "이미 존재하는 프리셋 이름입니다"
+              }
+            }
+          }
+        }
+      }
+    },
+    "setting": {
+      "title": "설정",
+      "tabs": {
+        "general": "일반",
+        "mod": "모드",
+        "account": "계정",
+        "network": "네트워크",
+        "advanced": "고급"
+      },
+      "gen": {
+        "application": {
+          "title": "애플리케이션",
+          "runOnStartup": "로그인할 때 실행",
+          "runOnStartupDescription": "시스템이 시작될 때 앱을 자동으로 실행합니다.",
+          "checkBackgroundUpdates": "백그라운드 업데이트 확인",
+          "checkBackgroundUpdatesDescription": "백그라운드에서 업데이트를 확인합니다.",
+          "checkUpdate": "업데이트 확인",
+          "autoUpdate": "자동 업데이트",
+          "autoUpdateDescription": "업데이트를 확인한 후 자동으로 설치합니다 (준비 중)"
+        },
+        "language": {
+          "title": "언어",
+          "select": "언어 선택"
+        },
+        "theme": {
+          "title": "테마",
+          "select": "테마 선택",
+          "light": "밝게",
+          "dark": "어둡게",
+          "system": "시스템 기본값"
+        },
+        "startPage": {
+          "title": "시작 페이지",
+          "select": "시작 페이지 선택"
+        },
+        "other": {
+          "title": "기타",
+          "moveTransferPageWhenStartTransfer": "전송 시작 시 페이지 이동",
+          "moveTransferPageWhenStartTransferDescription": "파일 전송이 시작되면 자동으로 전송 관리 페이지로 이동합니다.",
+          "powerSaveBlockInTransfer": "절전 모드 방지",
+          "powerSaveBlockInTransferDescription": "전송 또는 동기화가 진행 중일 때 시스템이 대기 상태로 들어가는 것을 막습니다.",
+          "imageCacheTitle": "이미지 캐시",
+          "imageCacheDescription": "프리뷰 이미지 캐시를 정리합니다",
+          "imageCacheClear": "캐시 정리"
+        }
+      },
+      "mod": {
+        "title": "모드",
+        "mod_management": {
+          "title": "모드 관리",
+          "deleteArchiveAfterExtract": "압축 해제 후 삭제",
+          "deleteArchiveAfterExtractDescription": "압축 파일을 모드 폴더에 해제한 후 원본 압축 파일을 삭제합니다",
+          "moveFolderInsteadOfCopy": "폴더 복사 대신 이동",
+          "moveFolderInsteadOfCopyDescription": "폴더를 모드 폴더에 드롭할 때 복사하지 않고 이동합니다 (원본 삭제)",
+          "searchModPreview": "하위 폴더에서 미리보기 검색",
+          "searchModPreviewDescription": "캐릭터 폴더에 프리뷰 이미지가 없는 경우, 모드 폴더 내부에서 프리뷰 이미지를 검색합니다."
+        },
+        "performance": {
+          "title": "성능",
+          "backdrop-blur": {
+            "title": "블러 사용",
+            "description": "모드 탐색시 성능 문제가 발생하는 경우 이 옵션을 해제하세요"
+          },
+          "virtualization": {
+            "title": "가상화 사용",
+            "description": "모드 목록을 가상화하여 성능을 향상시킵니다",
+            "threshold": "기준 모드 개수",
+            "thresholdDescription": "설정한 개수 이상의 모드가 있을 때 가상화를 적용합니다"
+          }
+        },
+        "overlay": {
+          "title": "오버레이",
+          "enableOverlay": "오버레이 활성화",
+          "enableOverlayDescription": "게임 내 오버레이 기능을 사용합니다",
+          "overlayKey": "단축키",
+          "overlayKeyDescription": "오버레이를 켜고 끄는 단축키를 설정합니다"
+        }
+      },
+      "xxmi": {
+        "xxmiPath": "XXMI 경로",
+        "autoScan": "자동 탐색",
+        "activeImporter": "활성화된 Importer",
+        "fn": {
+          "findXXMIPath": {
+            "xxmiNotFound": "XXMI 를 찾을 수 없습니다",
+            "alert": {
+              "title": "주의",
+              "description": "자동 탐색된 XXMI 런처 경로를 확인하세요. 정상적이지 않다면 직접 경로를 입력해주세요."
+            }
+          },
+          "saveXXMIPath": {
+            "success": "XXMI 경로가 저장되었습니다",
+            "configNotFound": "해당 경로에서 XXMI Launcher Config.json 파일을 찾을 수 없습니다"
+          }
+        }
+      },
+      "acc": {
+        "title": "계정",
+        "not_logged_in": {
+          "description": "로그인이 필요합니다.",
+          "login": "로그인"
+        },
+        "my_account": "내 계정",
+        "logout": "로그아웃"
+      },
+      "net": {
+        "title": "네트워크",
+        "proxy": {
+          "title": "프록시 설정",
+          "type": "프록시 유형",
+          "disabled": "사용 안 함",
+          "host": "호스트",
+          "port": "포트",
+          "requiresAuth": "프록시 서버가 암호를 요구함",
+          "username": "사용자 이름",
+          "password": "암호",
+          "save": "저장",
+          "saved": "프록시 설정이 저장되었습니다."
+        }
+      },
+      "adv": {
+        "title": "고급",
+        "warning_title": "주의",
+        "warning_description": "이 곳의 설정을 변경하면 앱 동작에 영향을 줄 수 있습니다."
+      }
+    },
+    "report": {
+      "title": "문제 신고",
+      "reported_title": "문제가 신고되었습니다",
+      "report_id": "report id: {{id}}",
+      "description_label": "경험한 문제를 가능한 자세히 설명해주세요.",
+      "fields": {
+        "title": "제목",
+        "title_placeholder": "선택적",
+        "description": "문제 설명",
+        "attach_log": "디버그에 도움을 줄 수 있는 로그 파일 첨부"
+      },
+      "submit": "제출"
     }
+  },
+  "components": {
+    "path-selector-dialog": {
+      "title": "경로 선택",
+      "description": "{{name}} 를 어떤 방식으로 다운로드 할지 선택하세요",
+      "mod_manager": {
+        "title": "모드 매니저",
+        "description": {
+          "0": "모드 매니저에서",
+          "1": "캐릭터 폴더를 선택합니다"
+        }
+      },
+      "explorer": {
+        "title": "경로 선택",
+        "description": {
+          "0": "파일 탐색기에서",
+          "1": "폴더를 선택합니다"
+        }
+      }
+    },
+    "download-confirmation-overlay": {
+      "title": "다운로드 확인",
+      "description": "다운로드할 위치를 선택하세요",
+      "file_name": "파일 이름",
+      "file_name_placeholder": "파일 이름을 입력하세요",
+      "download_location": "다운로드 위치",
+      "need_select_character_folder": "좌측에서 캐릭터 폴더를 선택하세요"
+    }
+  }
 }

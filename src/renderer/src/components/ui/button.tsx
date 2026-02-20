@@ -41,11 +41,11 @@ const buttonVariants = cva(
   },
 );
 
-interface ButtonProps
+export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
-  loading?: boolean;
+  isLoading?: boolean;
   onClickPromise?: (event: React.MouseEvent<HTMLButtonElement>) => Promise<unknown>;
 }
 
@@ -56,7 +56,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       variant,
       size,
       asChild = false,
-      loading = false,
+      isLoading: isLoadingProp = false,
       onClickPromise,
       onClick,
       disabled,
@@ -68,14 +68,19 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const [isPending, setIsPending] = React.useState(false);
     const Comp = asChild ? Slot : "button";
 
-    const isLoading = loading || isPending;
+    const isLoading = isLoadingProp || isPending;
 
     const handleClick = async (event: React.MouseEvent<HTMLButtonElement>) => {
+      if (isLoading) {
+        event.preventDefault();
+        return;
+      }
+
       if (onClick) {
         onClick(event);
       }
 
-      if (onClickPromise && !isLoading) {
+      if (onClickPromise) {
         setIsPending(true);
         try {
           await onClickPromise(event);
@@ -96,7 +101,14 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || isLoading}
         {...props}
       >
-        {isLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : children}
+        {isLoading ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            {asChild ? children : null}
+          </>
+        ) : (
+          children
+        )}
       </Comp>
     );
   },

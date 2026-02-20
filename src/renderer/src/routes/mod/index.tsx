@@ -2,6 +2,7 @@ import { DownloadConfirmationOverlay } from "@renderer/components/download-confi
 import { ContentHeader } from "@renderer/components/mod/content-header";
 import { DeleteGameDialog } from "@renderer/components/mod/delete-game-dialog";
 import { ModGrid } from "@renderer/components/mod/mod-grid";
+import { ModList } from "@renderer/components/mod/mod-list";
 import { PresetManagementDialog } from "@renderer/components/mod/preset-management-dialog";
 import ModSidebar from "@renderer/components/mod/sidebar";
 import { Titlebar } from "@renderer/components/titlebar";
@@ -31,10 +32,11 @@ function RouteComponent() {
   const selectedGroup = useModStore((s) => s.selectedGroup);
   const setSelectedGroup = useModStore((s) => s.setSelectedGroup);
   const downloadMode = useModStore((s) => s.downloadMode);
+  const viewMode = useModStore((s) => s.viewMode);
 
   const { data: games = [] } = useGames();
   const { data: characters = [] } = useCharacters(selectedGame);
-  const selectedGroupData = characters.find((g) => g.name === selectedGroup?.name);
+  const selectedGroupData = selectedGroup ?? undefined;
 
   useModRefreshOnFocus(selectedGame, queryClient);
   useDownloadCompletionHandler(selectedGame, queryClient);
@@ -44,10 +46,14 @@ function RouteComponent() {
   const { isDragging, handleDragEnter, handleDragLeave, handleDragOver, handleDrop } =
     useModDragDrop(selectedGroupData?.path, queryClient, selectedGame || "");
 
+  const initExpandedGroups = useModStore((s) => s.initExpandedGroups);
+
   const isInitialized = useRef(false);
   useEffect(() => {
     const initGame = async () => {
       try {
+        initExpandedGroups();
+
         const focusedGame = await window.api.invoke("mod:getPreviousFocusedGame");
         if (focusedGame && games.find((g) => g.game === focusedGame)) {
           setSelectedGame(focusedGame);
@@ -72,9 +78,33 @@ function RouteComponent() {
   }, [games, selectedGame, setSelectedGame]);
 
   useEffect(() => {
+    if (isInitialized.current) {
+      if (games.length > 0 && !games.find((g) => g.game === selectedGame)) {
+        const nextGame = games[0].game;
+        setSelectedGame(nextGame);
+        window.api.invoke("mod:setLastGame", nextGame);
+      } else if (games.length === 0 && selectedGame !== "") {
+        setSelectedGame("");
+        window.api.invoke("mod:setLastGame", "");
+      }
+    }
+  }, [games, selectedGame, setSelectedGame]);
+
+  useEffect(() => {
     if (characters.length > 0) {
-      if (!selectedGroup || !characters.find((g) => g.name === selectedGroup.name)) {
-        setSelectedGroup(characters[0]);
+      const isSelectedInTopLevel = selectedGroup
+        ? characters.some((g) => g.path === selectedGroup.path)
+        : false;
+      const isSelectedSubOfTopLevel = selectedGroup
+        ? characters.some(
+            (g) =>
+              selectedGroup.path.startsWith(`${g.path}\\`) ||
+              selectedGroup.path.startsWith(`${g.path}/`),
+          )
+        : false;
+
+      if (selectedGroup && !isSelectedInTopLevel && !isSelectedSubOfTopLevel) {
+        setSelectedGroup(null);
       }
     } else {
       setSelectedGroup(null);
@@ -109,7 +139,11 @@ function RouteComponent() {
         >
           <ContentHeader />
 
-          <ModGrid isDragging={isDragging} />
+          {viewMode === "grid" ? (
+            <ModGrid isDragging={isDragging} />
+          ) : (
+            <ModList isDragging={isDragging} />
+          )}
 
           {isDragging && (
             <div className="absolute flex-1 h-full inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm border-2 border-dashed border-primary">

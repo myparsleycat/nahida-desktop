@@ -99,6 +99,20 @@ export class ModManager {
             }
         },
 
+        subGroups: async (
+            folderPath: string,
+            searchModPreview?: boolean,
+        ): Promise<FolderGroup[]> => {
+            const shouldFallback =
+                searchModPreview ?? (await this.desktop.setting.mod.getSearchModPreview());
+            try {
+                return getCharactersFolder(folderPath, shouldFallback);
+            } catch (error) {
+                this.desktop.logger.error(error, `Mod:subGroups:${folderPath}`);
+                throw error;
+            }
+        },
+
         mods: async (groupPath: string): Promise<FolderGroup> => {
             try {
                 return getMods(groupPath);
@@ -130,6 +144,18 @@ export class ModManager {
                 where: eq(setting.key, "last_game"),
             });
             return result?.value || null;
+        },
+
+        expandedGroups: async (): Promise<string[]> => {
+            const result = await this.desktop.lib.db.query.setting.findFirst({
+                where: eq(setting.key, "expanded_groups"),
+            });
+            if (!result?.value) return [];
+            try {
+                return JSON.parse(result.value) as string[];
+            } catch {
+                return [];
+            }
         },
 
         previousFocusedGame: async (): Promise<string | null> => {
@@ -556,6 +582,17 @@ export class ModManager {
                 .onConflictDoUpdate({
                     target: setting.key,
                     set: { value: game },
+                });
+        },
+
+        setExpandedGroups: async (paths: string[]) => {
+            const value = JSON.stringify(paths);
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({ key: "expanded_groups", value })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value },
                 });
         },
 

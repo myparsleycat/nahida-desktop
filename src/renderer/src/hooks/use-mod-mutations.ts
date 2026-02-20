@@ -6,7 +6,6 @@ import { toast } from "sonner";
 
 export function useGameMutations() {
     const queryClient = useQueryClient();
-    const setSelectedGame = useModStore((s) => s.setSelectedGame);
     const setNewGameName = useModStore((s) => s.setNewGameName);
     const setNewGamePath = useModStore((s) => s.setNewGamePath);
     const setIsAddGameDialogOpen = useModStore((s) => s.setIsAddGameDialogOpen);
@@ -27,7 +26,6 @@ export function useGameMutations() {
         mutationFn: (game: string) => window.api.invoke("mod:removeGame", game),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["games"] });
-            setSelectedGame("");
             toast.success("게임이 삭제되었습니다.");
         },
     });

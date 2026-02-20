@@ -14,7 +14,7 @@ const execAsync = promisify(exec);
 
 export class Tools {
     private readonly desktop: NahidaDesktop;
-    private readonly VS_EDITIONS = ["Community", "Professional", "Enterprise"];
+    private readonly VS_EDITIONS = ["Community", "Professional", "Enterprise", "Insiders"];
     private readonly VS_VERSIONS = ["2025", "2022", "18", "17"];
 
     public constructor(desktop: NahidaDesktop) {

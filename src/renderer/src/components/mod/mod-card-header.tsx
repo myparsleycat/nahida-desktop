@@ -108,9 +108,9 @@ export const ModCardHeader = memo(function ModCardHeader({
     e.stopPropagation();
     const promise = window.api.invoke("util:fs:trash", mod.path);
     toast.promise(promise, {
-      loading: "휴지통으로 이동 중...",
-      success: "삭제 완료",
-      error: "삭제 실패",
+      loading: t("page.mod.toast.trash-loading"),
+      success: t("page.mod.toast.trash-success"),
+      error: t("page.mod.toast.trash-error"),
     });
     promise.then(() => {
       queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
@@ -246,7 +246,7 @@ export const ModCardHeader = memo(function ModCardHeader({
           className="min-w-xl"
         >
           <AlertDialogHeader>
-            <AlertDialogTitle>Log</AlertDialogTitle>
+            <AlertDialogTitle>{t("page.mod.log-dialog.title")}</AlertDialogTitle>
           </AlertDialogHeader>
           <ScrollArea
             viewportRef={scrollRef}
@@ -267,7 +267,9 @@ export const ModCardHeader = memo(function ModCardHeader({
                   </div>
                 </div>
               ))}
-              {isRunning && <div className="animate-pulse text-primary">Running...</div>}
+              {isRunning && (
+                <div className="animate-pulse text-primary">{t("page.mod.log-dialog.running")}</div>
+              )}
             </div>
           </ScrollArea>
           <div className="flex gap-2">

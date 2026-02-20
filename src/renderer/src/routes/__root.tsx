@@ -54,7 +54,7 @@ function RootComponent() {
     return <Outlet />;
   }
 
-  const noSidebarPath = ["/setting", "/auth"];
+  const noSidebarPath = ["/setting", "/auth", "/report"];
   const isNoSidebar = noSidebarPath.some((path) => location.pathname.startsWith(path));
 
   return (
