@@ -27,6 +27,8 @@ import {
   ArrowUpWideNarrow,
   EllipsisIcon,
   FolderIcon,
+  LayoutGridIcon,
+  ListIcon,
   Search,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -44,6 +46,9 @@ export function ContentHeader() {
   const setSortType = useModStore((s) => s.setSortType);
   const sortOrder = useModStore((s) => s.sortOrder);
   const setSortOrder = useModStore((s) => s.setSortOrder);
+
+  const viewMode = useModStore((s) => s.viewMode);
+  const setViewMode = useModStore((s) => s.setViewMode);
 
   const groupName = selectedGroup?.name || "";
   const groupPath = selectedGroup?.path;
@@ -139,6 +144,19 @@ export function ContentHeader() {
 
           <Button variant="outline" size="icon" className="h-8 w-8" onClick={toggleSortOrder}>
             {renderSortIcon()}
+          </Button>
+
+          <Separator orientation="vertical" />
+
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 ml-1"
+            onClick={() => {
+              setViewMode(viewMode === "grid" ? "list" : "grid");
+            }}
+          >
+            {viewMode === "grid" ? <ListIcon size={16} /> : <LayoutGridIcon size={16} />}
           </Button>
         </div>
 

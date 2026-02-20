@@ -26,6 +26,8 @@ interface ModState {
     setDownloadMode: (mode: { downloadId: string; suggestedName?: string } | null) => void;
     searchQuery: string;
     setSearchQuery: (query: string) => void;
+    viewMode: "grid" | "list";
+    setViewMode: (mode: "grid" | "list") => void;
     sortType: "name" | "date" | "size";
     setSortType: (type: "name" | "date" | "size") => void;
     sortOrder: "asc" | "desc";
@@ -64,6 +66,8 @@ export const modStore = createStore<ModState>((set, get) => ({
     setDownloadMode: (downloadMode) => set({ downloadMode }),
     searchQuery: "",
     setSearchQuery: (searchQuery) => set({ searchQuery }),
+    viewMode: "grid",
+    setViewMode: (viewMode) => set({ viewMode }),
     sortType: "name",
     setSortType: (sortType) => set({ sortType }),
     sortOrder: "asc",

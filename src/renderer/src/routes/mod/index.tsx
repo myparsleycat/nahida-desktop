@@ -2,6 +2,7 @@ import { DownloadConfirmationOverlay } from "@renderer/components/download-confi
 import { ContentHeader } from "@renderer/components/mod/content-header";
 import { DeleteGameDialog } from "@renderer/components/mod/delete-game-dialog";
 import { ModGrid } from "@renderer/components/mod/mod-grid";
+import { ModList } from "@renderer/components/mod/mod-list";
 import { PresetManagementDialog } from "@renderer/components/mod/preset-management-dialog";
 import ModSidebar from "@renderer/components/mod/sidebar";
 import { Titlebar } from "@renderer/components/titlebar";
@@ -31,6 +32,7 @@ function RouteComponent() {
   const selectedGroup = useModStore((s) => s.selectedGroup);
   const setSelectedGroup = useModStore((s) => s.setSelectedGroup);
   const downloadMode = useModStore((s) => s.downloadMode);
+  const viewMode = useModStore((s) => s.viewMode);
 
   const { data: games = [] } = useGames();
   const { data: characters = [] } = useCharacters(selectedGame);
@@ -137,7 +139,11 @@ function RouteComponent() {
         >
           <ContentHeader />
 
-          <ModGrid isDragging={isDragging} />
+          {viewMode === "grid" ? (
+            <ModGrid isDragging={isDragging} />
+          ) : (
+            <ModList isDragging={isDragging} />
+          )}
 
           {isDragging && (
             <div className="absolute flex-1 h-full inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm border-2 border-dashed border-primary">
