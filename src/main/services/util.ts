@@ -153,9 +153,11 @@ export async function submitReport({
     let log: File | undefined;
     if (submitLog) {
         const logFilePath = path.join(await nahidaLogsPath(), "desktop.log");
-        const buffer = await fse.readFile(logFilePath);
-        // biome-ignore lint/suspicious/noExplicitAny: _
-        log = new File([buffer.buffer as any], "desktop.log");
+        if (await fse.pathExists(logFilePath)) {
+            const buffer = await fse.readFile(logFilePath);
+            // biome-ignore lint/suspicious/noExplicitAny: _
+            log = new File([buffer as any], "desktop.log");
+        }
     }
 
     const { data, error } = await eden.desktop["submit-report"].post({
