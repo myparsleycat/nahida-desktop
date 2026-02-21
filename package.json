@@ -8,12 +8,11 @@
     "scripts": {
         "build:dll-injector": "cd native/dll-injector && pnpm install && pnpm run build",
         "build:extractor": "cd native/extractor && pnpm install && pnpm run build",
-        "build:injector": "cd native/injector && pnpm install && pnpm run build",
         "build:native-mod": "cd native/native-mod && pnpm install && pnpm run build",
         "build:native-util": "cd native/native-util && pnpm install && pnpm run build",
         "build:native-fs": "cd native/native-fs && pnpm install && pnpm run build",
         "build:overlay": "cd native/overlay && pnpm install && pnpm run build",
-        "build:native": "pnpm run build:dll-injector && pnpm run build:extractor && pnpm run build:injector && pnpm run build:native-mod && pnpm run build:native-util && pnpm run build:native-fs && pnpm run build:overlay",
+        "build:native": "pnpm run build:dll-injector && pnpm run build:extractor && pnpm run build:native-mod && pnpm run build:native-util && pnpm run build:native-fs && pnpm run build:overlay",
         "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
         "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
         "typecheck": "pnpm run typecheck:node && pnpm run typecheck:web",

@@ -611,7 +611,8 @@ impl DllInjector {
   }
 }
 
-use injector::Injector;
+mod injector_util;
+use injector_util::Injector;
 
 fn native_inject(pid: u32, dll_path: &str) -> std::result::Result<(), String> {
   let injector = Injector::attach(pid).map_err(|e| format!("Failed to attach injector: {}", e))?;

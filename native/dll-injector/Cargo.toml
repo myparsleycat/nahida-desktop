@@ -13,7 +13,7 @@ napi-derive = "3.0.0"
 libloading = "0.8"
 sysinfo = "0.30"
 anyhow = "1.0"
-injector = { path = "../injector" }
+
 
 [dependencies.windows]
 version = "0.52"
