@@ -20,6 +20,9 @@ files:
 # asar: false
 extraResources:
     - from: build/watchman-v2025.02.24.00-windows
+    - from: "native/dll-injector/target/release"
+      filter:
+        - dll-injector.exe
 asarUnpack:
     - resources/**
     - "**/*.node"
