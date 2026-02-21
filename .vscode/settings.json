@@ -6,7 +6,8 @@
         "native/native-util/Cargo.toml",
         "native/injector/Cargo.toml",
         "native/dll-injector/Cargo.toml",
-        "native/overlay/Cargo.toml"
+        "native/overlay/Cargo.toml",
+        "native/native-fs/Cargo.toml"
     ],
     "editor.codeActionsOnSave": {
     "source.action.useSortedKeys.biome": "explicit",

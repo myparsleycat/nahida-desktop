@@ -68,49 +68,61 @@ impl Task for ExtractorTask {
             return Err(cleanup_temp(&e));
         }
 
-        let entries: Vec<PathBuf> = match fs::read_dir(&temp_folder) {
-            Ok(dir) => dir
-                .filter_map(|entry| entry.ok().map(|e| e.path()))
-                .collect(),
-            Err(e) => return Err(cleanup_temp(&e)),
-        };
+        let mut current_path = temp_folder.clone();
+        let mut target_folder_name = archive_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("extracted")
+            .to_string();
 
-        let final_path = if entries.len() == 1 && entries[0].is_dir() {
-            let extracted_folder = &entries[0];
-            let folder_name = match extracted_folder.file_name().and_then(|n| n.to_str()) {
-                Some(name) => name,
-                None => return Err(cleanup_temp(&"Failed to get folder name")),
+        loop {
+            let entries: Vec<std::fs::DirEntry> = match fs::read_dir(&current_path) {
+                Ok(dir) => dir.filter_map(|e| e.ok()).collect(),
+                Err(e) => return Err(cleanup_temp(&e)),
             };
 
-            let target_path = get_unique_folder_name(dest_path, folder_name);
+            let valid_entries: Vec<&std::fs::DirEntry> = entries
+                .iter()
+                .filter(|e| {
+                    let name = e.file_name();
+                    let lower = name.to_string_lossy().to_lowercase();
+                    !matches!(lower.as_str(), "desktop.ini" | "thumbs.db")
+                })
+                .collect();
 
-            if let Err(e) = fs::rename(extracted_folder, &target_path) {
+            if valid_entries.len() == 1 {
+                let single_entry = valid_entries[0];
+                if let Ok(file_type) = single_entry.file_type() {
+                    if file_type.is_dir() {
+                        current_path = single_entry.path();
+                        target_folder_name = single_entry.file_name().to_string_lossy().to_string();
+                        continue;
+                    }
+                }
+            }
+            break;
+        }
+
+        let target_path = get_unique_folder_name(dest_path, &target_folder_name);
+
+        if current_path != temp_folder {
+            if let Err(e) = fs::rename(&current_path, &target_path) {
                 return Err(cleanup_temp(&format!(
                     "Failed to move extracted folder: {}",
                     e
                 )));
             }
-
             let _ = fs::remove_dir_all(&temp_folder);
-
-            target_path.to_string_lossy().to_string()
         } else {
-            let archive_stem = match archive_path.file_stem().and_then(|s| s.to_str()) {
-                Some(name) => name,
-                None => return Err(cleanup_temp(&"Failed to get archive name")),
-            };
-
-            let target_path = get_unique_folder_name(dest_path, archive_stem);
-
             if let Err(e) = fs::rename(&temp_folder, &target_path) {
                 return Err(cleanup_temp(&format!(
                     "Failed to rename temp folder: {}",
                     e
                 )));
             }
+        }
 
-            target_path.to_string_lossy().to_string()
-        };
+        let final_path = target_path.to_string_lossy().to_string();
 
         Ok(final_path)
     }

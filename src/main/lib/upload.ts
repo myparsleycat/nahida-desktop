@@ -2,9 +2,9 @@ import path from "node:path";
 import { eden, eden2url } from "@main/client";
 import { getAgent, getHeaders } from "@main/internal/fetcher";
 import sha256PiscinaWorker from "@main/worker/drive/sha256-piscina.worker?modulePath";
+import { collectFiles } from "@native/native-fs";
 import type { Content } from "@shared/types.gen";
 import { chunk, groupBy, orderBy, retry, sumBy } from "es-toolkit";
-import fg from "fast-glob";
 import { fileTypeFromBuffer } from "file-type/node";
 import fse from "fs-extra";
 import ky from "ky";
@@ -66,7 +66,10 @@ export class UploadLib {
         this.desktop = desktop;
     }
 
-    private validateExt(name: string, additionalExt: string[] = []) {
+    private async collect(
+        paths: string[],
+        additionalExt: string[] = [],
+    ): Promise<{ files: FilesComponent[]; directories: DirectoriesComponent[] }> {
         const defaultAllowedExt = [
             ".buf",
             ".ib",
@@ -96,81 +99,12 @@ export class UploadLib {
             ".pck",
         ];
 
-        const allowedExt = defaultAllowedExt.concat(
-            additionalExt.map((ext) => (ext.startsWith(".") ? ext : `.${ext}`)),
-        );
-        return allowedExt.some((ext) => name.toLowerCase().endsWith(ext.toLowerCase()));
-    }
-
-    private resolvePaths(p: string) {
-        const absolutePath = path.resolve(p);
-        const parentDir = path.dirname(absolutePath);
-        const rootName = path.basename(absolutePath);
-        return { absolutePath, parentDir, rootName };
-    }
-
-    private async collect(
-        paths: string[],
-        additionalExt: string[] = [],
-    ): Promise<{ files: FilesComponent[]; directories: DirectoriesComponent[] }> {
-        const results = await Promise.all(
-            paths.map(async (p) => {
-                const { absolutePath, parentDir, rootName } = this.resolvePaths(p);
-
-                const entries = await fg("**/*", {
-                    cwd: absolutePath,
-                    stats: true,
-                    absolute: true,
-                    onlyFiles: false,
-                });
-
-                const files: FilesComponent[] = [];
-                const directories: DirectoriesComponent[] = [];
-
-                directories.push({
-                    path: rootName.replace(/\\/g, "/"),
-                    name: rootName,
-                    parentPath: "",
-                });
-
-                for (const entry of entries) {
-                    const fullPath = entry.path.replace(/\\/g, "/");
-                    const relativePath = path.relative(parentDir, fullPath).replace(/\\/g, "/");
-                    const name = path.basename(fullPath);
-                    const parentPath = path.dirname(relativePath).replace(/\\/g, "/");
-                    const normalizedParentPath = parentPath === "." ? "" : parentPath;
-
-                    if (entry.dirent.isDirectory()) {
-                        directories.push({
-                            path: relativePath,
-                            name,
-                            parentPath: normalizedParentPath,
-                        });
-                    } else if (this.validateExt(name, additionalExt)) {
-                        files.push({
-                            FID: nanoid(),
-                            path: relativePath,
-                            name,
-                            size: entry.stats?.size ?? 0,
-                            parentPath: normalizedParentPath,
-                            fullPath,
-                        });
-                    }
-                }
-
-                return { files, directories };
-            }),
-        );
-
-        const files: FilesComponent[] = [];
-        const directories: DirectoriesComponent[] = [];
-
-        for (const result of results) {
-            files.push(...result.files);
-            directories.push(...result.directories);
-        }
-
-        return { files, directories };
+        const result = collectFiles(paths, [...defaultAllowedExt, ...additionalExt]);
+        const files: FilesComponent[] = result.files.map((f) => ({
+            ...f,
+            FID: nanoid(),
+        }));
+        return { files, directories: result.directories };
     }
 
     private async isMediaByMagicNumbers(file: Buffer) {
