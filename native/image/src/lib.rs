@@ -18,6 +18,7 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
 #[napi(object)]
+#[derive(Clone)]
 pub struct ResizeOptions {
     pub width: u32,
     pub height: u32,
@@ -29,28 +30,32 @@ pub struct ResizeOptions {
 
 #[napi]
 pub async fn convert_image(input_path: String, options: ResizeOptions) -> Result<Option<Vec<u8>>> {
-    let path_str = input_path.clone();
-    let path = Path::new(&path_str);
+    tokio::task::spawn_blocking(move || -> Result<Option<Vec<u8>>> {
+        let path_str = input_path.clone();
+        let path = Path::new(&path_str);
 
-    let reader = ImageReader::open(path)
-        .map_err(|e| Error::from_reason(format!("Failed to open file: {}", e)))?
-        .with_guessed_format()
-        .map_err(|e| Error::from_reason(format!("Failed to guess format: {}", e)))?;
+        let reader = ImageReader::open(path)
+            .map_err(|e| Error::from_reason(format!("Failed to open file: {}", e)))?
+            .with_guessed_format()
+            .map_err(|e| Error::from_reason(format!("Failed to guess format: {}", e)))?;
 
-    let input_format = reader.format().unwrap_or(ImageFormat::Png);
-    let target_format = parse_format(&options.format);
+        let input_format = reader.format().unwrap_or(ImageFormat::Png);
+        let target_format = parse_format(&options.format);
 
-    if input_format == ImageFormat::Gif && target_format == ImageFormat::Gif {
-        return process_animated_gif(path, &options);
-    }
+        if input_format == ImageFormat::Gif && target_format == ImageFormat::Gif {
+            return process_animated_gif(path, &options);
+        }
 
-    let img = reader
-        .decode()
-        .map_err(|e| Error::from_reason(format!("Decode failed: {}", e)))?;
+        let img = reader
+            .decode()
+            .map_err(|e| Error::from_reason(format!("Decode failed: {}", e)))?;
 
-    let resized = img.resize(options.width, options.height, FilterType::Lanczos3);
+        let resized = img.resize(options.width, options.height, FilterType::Lanczos3);
 
-    handle_output(&resized, target_format, &options)
+        handle_output(&resized, target_format, &options)
+    })
+    .await
+    .map_err(|e| Error::from_reason(format!("Thread join error: {}", e)))?
 }
 
 fn process_animated_gif(path: &Path, options: &ResizeOptions) -> Result<Option<Vec<u8>>> {

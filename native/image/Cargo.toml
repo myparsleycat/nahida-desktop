@@ -12,6 +12,7 @@ crate-type = ["cdylib"]
 napi = { version = "3.0.0", features = ["napi4", "async"] }
 napi-derive = "3.0.0"
 image = { version = "0.25.9", features = ["default-formats"] }
+tokio = "1.49.0"
 
 [build-dependencies]
 napi-build = "2"
