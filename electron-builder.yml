@@ -22,6 +22,9 @@ extraResources:
     - from: build/watchman-v2025.02.24.00-windows
 asarUnpack:
     - resources/**
+    - "**/*.node"
+    - "node_modules/sharp"
+    - "node_modules/@img"
 win:
     # cscLink: nahida-desktop.pfx
     # cscKeyPassword: password

@@ -8,12 +8,11 @@
     "scripts": {
         "build:dll-injector": "cd native/dll-injector && pnpm install && pnpm run build",
         "build:extractor": "cd native/extractor && pnpm install && pnpm run build",
-        "build:image": "cd native/image && pnpm install && pnpm run build",
         "build:injector": "cd native/injector && pnpm install && pnpm run build",
         "build:native-mod": "cd native/native-mod && pnpm install && pnpm run build",
         "build:native-util": "cd native/native-util && pnpm install && pnpm run build",
         "build:overlay": "cd native/overlay && pnpm install && pnpm run build",
-        "build:native": "build:dll-injector && build:extractor && build:image && build:injector && build:native-mod && build:native-util && build:overlay",
+        "build:native": "build:dll-injector && build:extractor && build:injector && build:native-mod && build:native-util && build:overlay",
         "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
         "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
         "typecheck": "pnpm run typecheck:node && pnpm run typecheck:web",
@@ -71,6 +70,7 @@
         "ps-list": "^9.0.0",
         "rotating-file-stream": "^3.2.8",
         "rxjs": "^7.8.2",
+        "sharp": "^0.34.5",
         "undici": "^7.22.0",
         "valdex": "^1.0.4",
         "validator": "^13.15.26",
@@ -136,7 +136,8 @@
     "pnpm": {
         "onlyBuiltDependencies": [
             "electron",
-            "esbuild"
+            "esbuild",
+            "sharp"
         ]
     }
 }
