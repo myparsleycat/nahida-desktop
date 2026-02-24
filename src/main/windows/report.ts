@@ -33,13 +33,16 @@ export class ReportWindow {
             return;
         }
 
+        const titlebarSetting = await this.desktop.setting.general.getTitlebarStyle();
+        const isNativeTitlebar = titlebarSetting === "native";
+
         this.window = new BrowserWindow({
             title: "Report",
             width: 540,
             height: 670,
             resizable: false,
             show: false,
-            frame: false,
+            frame: isNativeTitlebar,
             maximizable: false,
             autoHideMenuBar: true,
             ...(process.platform === "linux" ? { icon } : {}),

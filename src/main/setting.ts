@@ -2,7 +2,7 @@ import type { NahidaDesktop } from "@main/index";
 import { imageCache, setting } from "@main/internal/db/schema";
 import AutoLaunch from "auto-launch";
 import { eq, sum } from "drizzle-orm";
-import { app } from "electron";
+import { app, BrowserWindow } from "electron";
 
 interface Bounds {
     x: number;
@@ -193,6 +193,38 @@ export class Setting {
                     target: setting.key,
                     set: { value: page || "/mod" },
                 });
+        },
+
+        getTitlebarStyle: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "titlebarStyle"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db
+                    .insert(setting)
+                    .values({ key: "titlebarStyle", value: "modern" });
+                return "modern";
+            }
+
+            return qr.value;
+        },
+
+        setTitlebarStyle: async (style: string) => {
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({ key: "titlebarStyle", value: style })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: style },
+                });
+
+            const windows = BrowserWindow.getAllWindows();
+            for (const window of windows) {
+                window.close();
+            }
+            await this.desktop.window.main.createMainWindow();
+            this.desktop.window.setting.focus();
         },
 
         checkUpdate: async () => {

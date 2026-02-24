@@ -37,7 +37,7 @@ function RouteComponent() {
 
   if (nid) {
     return (
-      <div className="flex h-[calc(100vh-28px)] items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <Titlebar title={{ text: t("page.report.title"), position: "center" }} />
 
         <div className="flex flex-col justify-center items-center space-y-2">
@@ -49,7 +49,7 @@ function RouteComponent() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-28px)] flex-col">
+    <div className="flex h-full flex-col">
       <Titlebar title={{ text: t("page.report.title"), position: "center" }} />
 
       <form

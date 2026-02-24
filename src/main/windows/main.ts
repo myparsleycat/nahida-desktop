@@ -50,6 +50,9 @@ export class MainWindow {
             }
         }
 
+        const titlebarSetting = await this.desktop.setting.general.getTitlebarStyle();
+        const isNativeTitlebar = titlebarSetting === "native";
+
         this.window = new BrowserWindow({
             title: "Nahida Desktop",
             x: bounds?.x || undefined,
@@ -59,7 +62,7 @@ export class MainWindow {
             minWidth: 800,
             minHeight: 600,
             show: false,
-            frame: false,
+            frame: isNativeTitlebar,
             autoHideMenuBar: true,
             ...(process.platform === "linux" ? { icon } : {}),
             webPreferences: {

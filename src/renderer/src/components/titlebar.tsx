@@ -1,4 +1,5 @@
 import { cn } from "@renderer/lib/utils";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "@tanstack/react-router";
 import { find } from "es-toolkit/compat";
 import { MaximizeIcon, MinusIcon, XIcon } from "lucide-react";
@@ -19,12 +20,19 @@ const WINDOW_CONFIG: Record<string, { hideMinimize?: boolean; hideMaximize?: boo
 export function Titlebar({ title }: TitlebarProps) {
   const location = useLocation();
 
+  const { data: titlebarStyle } = useQuery({
+    queryKey: ["settings", "general", "titlebarStyle"],
+    queryFn: async () => window.api.invoke("setting:general:getTitlebarStyle"),
+  });
+
   const configEntry = find(
     Object.entries(WINDOW_CONFIG),
     ([route]) => location.pathname === route || location.pathname.startsWith(`${route}/`),
   );
 
   const { hideMinimize, hideMaximize } = configEntry?.[1] || {};
+
+  if (titlebarStyle === "native") return null;
 
   return (
     <div className="titlebar fixed top-0 left-0 right-0 h-7 bg-background flex items-center select-none z-9999 border-b">
