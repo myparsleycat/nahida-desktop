@@ -76,6 +76,10 @@ fn helper_inject_libraries(
   pid: Option<u32>,
   timeout: i32,
 ) -> Result<i32> {
+  if process_name.is_none() && pid.is_none() {
+    return Err(anyhow!("process_name or pid must be specified"));
+  }
+
   let t = timeout;
   let time_start = Instant::now();
   let mut sys = System::new();
@@ -167,7 +171,7 @@ enum Commands {
     process_flags: Option<u32>,
     #[arg(long)]
     process_name: Option<String>,
-    #[arg(long, num_args = 1..)]
+    #[arg(long, num_args = 1.., requires = "process_name")]
     dll_paths: Option<Vec<String>>,
     #[arg(long)]
     cmd: Option<String>,
@@ -187,9 +191,9 @@ enum Commands {
   InjectLibraries {
     #[arg(long, num_args = 1..)]
     dll_paths: Vec<String>,
-    #[arg(long)]
+    #[arg(long, required_unless_present = "pid")]
     process_name: Option<String>,
-    #[arg(long)]
+    #[arg(long, required_unless_present = "process_name")]
     pid: Option<u32>,
     #[arg(long, default_value_t = 15)]
     timeout: i32,
