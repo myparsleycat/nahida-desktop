@@ -136,7 +136,7 @@ fn process_section_data(
     data: &HashMap<String, String>,
     ini_file_name: &str,
 ) -> Option<ToggleKey> {
-    if section_name.len() < 3 || !section_name[..3].eq_ignore_ascii_case("key") {
+    if !section_name.to_ascii_lowercase().starts_with("key") {
         return None;
     }
 
