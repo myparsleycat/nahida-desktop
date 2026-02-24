@@ -342,7 +342,9 @@ fn find_preview(mod_path: &Path, max_depth: usize) -> Option<String> {
             if is_media_ext(ext) {
                 let lower_filename = filename.to_ascii_lowercase();
                 if !is_excluded_file(&lower_filename) {
-                    let relative = path.strip_prefix(mod_path).unwrap_or(path);
+                    let Ok(relative) = path.strip_prefix(mod_path) else {
+                        continue;
+                    };
                     let is_root = relative.components().count() == 1;
                     let is_video =
                         ext.eq_ignore_ascii_case("mp4") || ext.eq_ignore_ascii_case("webm");
@@ -459,7 +461,9 @@ fn scan_mod_folder(mod_path: &Path) -> Option<ModInfo> {
                     if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
                         let lower_filename = filename.to_ascii_lowercase();
                         if !is_excluded_file(&lower_filename) {
-                            let relative = path.strip_prefix(mod_path).unwrap_or(path);
+                            let Ok(relative) = path.strip_prefix(mod_path) else {
+                                continue;
+                            };
                             let is_root = relative.components().count() == 1;
                             let is_video =
                                 ext.eq_ignore_ascii_case("mp4") || ext.eq_ignore_ascii_case("webm");
