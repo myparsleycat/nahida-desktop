@@ -4,8 +4,10 @@ import { Sidebar } from "@renderer/components/sidebar";
 import { Titlebar } from "@renderer/components/titlebar";
 import { Toaster } from "@renderer/components/ui/sonner";
 import { useGlobalEvents } from "@renderer/hooks/use-global-events";
+import { cn } from "@renderer/lib/utils";
 import { useGlobalStore } from "@renderer/store/global";
 import type { QueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet, useLocation } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -15,6 +17,11 @@ function RootComponent() {
   const setAppStatus = useGlobalStore((state) => state.setAppStatus);
   const setSession = useGlobalStore((state) => state.setSession);
   const { i18n } = useTranslation();
+
+  const { data: titlebarStyle } = useQuery({
+    queryKey: ["settings", "general", "titlebarStyle"],
+    queryFn: async () => window.api.invoke("setting:general:getTitlebarStyle"),
+  });
 
   useEffect(() => {
     window.api.invoke("util:getAppStatus").then((appStatus) => {
@@ -59,7 +66,7 @@ function RootComponent() {
 
   return (
     <>
-      <div className="h-7" />
+      {titlebarStyle !== "native" && <div className="h-7 shrink-0" />}
 
       <Toaster position="bottom-right" richColors />
 
@@ -72,7 +79,12 @@ function RootComponent() {
         />
       )}
 
-      <main className="flex h-[calc(100vh-28px)] w-screen overflow-hidden">
+      <main
+        className={cn(
+          "flex w-screen overflow-hidden",
+          titlebarStyle === "native" ? "h-screen" : "h-[calc(100vh-28px)]",
+        )}
+      >
         <div className="flex flex-row w-full">
           {!isNoSidebar && <Sidebar className="border-b" />}
 

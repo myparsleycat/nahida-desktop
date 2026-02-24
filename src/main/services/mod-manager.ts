@@ -600,45 +600,11 @@ export class ModManager {
             const deleteAfterExtract =
                 await this.desktop.setting.mod.getDeleteArchiveAfterExtract();
 
-            const tempDir = path.join(groupPath, `.tmp_${nanoid()}`);
-            await fse.ensureDir(tempDir);
-
             try {
-                await this.desktop.service.archive.extract(archivePath, tempDir);
-
-                let sourcePath = tempDir;
-                let targetFolderName = path.basename(archivePath, path.extname(archivePath));
-
-                let currentPath = tempDir;
-                while (true) {
-                    const items = await fse.readdir(currentPath);
-                    const validItems = items.filter((item) => {
-                        const lower = item.toLowerCase();
-                        return ![".ds_store", "__macosx", "desktop.ini", "thumbs.db"].includes(
-                            lower,
-                        );
-                    });
-
-                    if (validItems.length === 1) {
-                        const singleItemPath = path.join(currentPath, validItems[0]);
-                        const stats = await fse.stat(singleItemPath);
-                        if (stats.isDirectory()) {
-                            currentPath = singleItemPath;
-                            targetFolderName = validItems[0];
-                            continue;
-                        }
-                    }
-                    break;
-                }
-                sourcePath = currentPath;
-
-                const finalTargetPath = path.join(groupPath, targetFolderName);
-
-                if (await fse.pathExists(finalTargetPath)) {
-                    throw new Error(`ALREADY_EXISTS:${targetFolderName}`);
-                }
-
-                await fse.move(sourcePath, finalTargetPath);
+                const finalTargetPath = await this.desktop.service.archive.extract(
+                    archivePath,
+                    groupPath,
+                );
 
                 this.desktop.logger.info(
                     `Extracted archive ${archivePath} to ${finalTargetPath}`,
@@ -651,8 +617,6 @@ export class ModManager {
             } catch (error) {
                 this.desktop.logger.error(error, `Mod:extractArchiveToGroup:${archivePath}`);
                 throw error;
-            } finally {
-                await fse.remove(tempDir);
             }
         },
 

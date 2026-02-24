@@ -43,7 +43,7 @@ function RouteComponent() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-40px)]">
+    <div className="flex flex-col h-full">
       <Titlebar title={{ text: "로그인", position: "center" }} />
 
       <Center>

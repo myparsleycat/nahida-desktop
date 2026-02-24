@@ -29,6 +29,7 @@ const settingsConfig = {
   moveTransferPageWhenStartTransfer: "setting:general:getMoveTransferPageWhenStartTransfer",
   powerSaveBlockInTransfer: "setting:general:getPowerSaveBlockInTransfer",
   defaultStartPage: "setting:general:getDefaultStartPage",
+  titlebarStyle: "setting:general:getTitlebarStyle",
 } as const;
 
 function RouteComponent() {
@@ -42,6 +43,7 @@ function RouteComponent() {
     moveTransferPageWhenStartTransfer: boolean;
     powerSaveBlockInTransfer: boolean;
     defaultStartPage: string;
+    titlebarStyle: string;
   }>(settingsConfig);
 
   const [imageCacheSize, setImageCacheSize] = useState<number | null>(null);
@@ -189,6 +191,28 @@ function RouteComponent() {
                     <SelectItem value="/drive/drive/root">{t("page.drive.title")}</SelectItem>
                     <SelectItem value="/drive/share/root">{t("page.share_drive.title")}</SelectItem>
                     <SelectItem value="/mod">{t("page.mod.title")}</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-3">
+              <label className="text-sm font-medium" htmlFor="titlebarStyle">
+                타이틀바 스타일
+              </label>
+              <Select
+                name="titlebarStyle"
+                value={settings.titlebarStyle}
+                onValueChange={(val) =>
+                  update("titlebarStyle", val, "setting:general:setTitlebarStyle")
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="스타일 선택" />
+                </SelectTrigger>
+                <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
+                  <SelectGroup>
+                    <SelectItem value="modern">모던 (커스텀)</SelectItem>
+                    <SelectItem value="native">네이티브 (기본)</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>

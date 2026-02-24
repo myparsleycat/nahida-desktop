@@ -2,10 +2,10 @@ import { pathToFileURL } from "node:url";
 import { is } from "@electron-toolkit/utils";
 import type { NahidaDesktop } from "@main/index";
 import { imageCache } from "@main/internal/db/schema";
-import { convertImage } from "@native/image";
 import { net } from "electron";
 import { fileTypeFromFile } from "file-type/node";
 import PQueue from "p-queue";
+import sharp from "sharp";
 
 export class LocalProtocol {
     private desktop: NahidaDesktop;
@@ -44,16 +44,14 @@ export class LocalProtocol {
 
             if (cachedImg) {
                 const imgArrayBuffer = new Uint8Array(cachedImg.image);
-                const blob = new Blob([imgArrayBuffer], { type: fileType.mime });
+                const blob = new Blob([imgArrayBuffer], { type: "image/webp" });
                 return new Response(blob);
             } else {
                 const resizedImg = await this.queue.add(() =>
-                    convertImage(fullPath, {
-                        width: 500,
-                        height: 500,
-                        quality: 70,
-                        format: "webp",
-                    }),
+                    sharp(fullPath)
+                        .resize({ width: 500, height: 500, fit: "inside" })
+                        .webp({ quality: 70 })
+                        .toBuffer(),
                 );
 
                 if (!resizedImg) {
@@ -64,7 +62,7 @@ export class LocalProtocol {
                     console.log("Resized image", fullPath);
                 }
 
-                const blob = new Blob([new Uint8Array(resizedImg)], { type: fileType.mime });
+                const blob = new Blob([new Uint8Array(resizedImg)], { type: "image/webp" });
                 await this.desktop.lib.db.insert(imageCache).values({
                     hash: imgHash,
                     image: Buffer.from(resizedImg),

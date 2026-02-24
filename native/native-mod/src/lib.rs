@@ -136,7 +136,7 @@ fn process_section_data(
     data: &HashMap<String, String>,
     ini_file_name: &str,
 ) -> Option<ToggleKey> {
-    if !section_name.to_lowercase().starts_with("key") {
+    if !section_name.to_ascii_lowercase().starts_with("key") {
         return None;
     }
 
@@ -150,9 +150,16 @@ fn process_section_data(
         data.iter()
             .filter(|(k, _)| k.starts_with('$'))
             .find_map(|(k, v)| {
-                let vals: Vec<String> = v.split(',').map(|s| s.trim().to_string()).collect();
+                let mut iter = v.split(',').map(|s| s.trim());
+                let first = iter.next()?;
+                let second = iter.next();
 
-                if vals.len() >= 2 || is_hold {
+                if second.is_some() || is_hold {
+                    let mut vals = vec![first.to_string()];
+                    if let Some(s) = second {
+                        vals.push(s.to_string());
+                    }
+                    vals.extend(iter.map(|s| s.to_string()));
                     Some((k, vals))
                 } else {
                     None
@@ -219,7 +226,7 @@ fn parse_ini(path_str: &str) -> Vec<ToggleKey> {
 
         if !current_section.is_empty() {
             if let Some((k, v)) = clean_line.split_once('=') {
-                let key = k.trim().to_lowercase();
+                let key = k.trim().to_ascii_lowercase();
                 let value = v.trim().to_string();
                 section_data.insert(key, value);
             }
@@ -238,9 +245,9 @@ fn parse_ini(path_str: &str) -> Vec<ToggleKey> {
 #[napi]
 pub fn process_ini_files(paths: Vec<String>) -> Vec<IniResult> {
     paths
-        .par_iter()
+        .into_iter()
         .map(|path_str| {
-            let mut toggle_keys = parse_ini(path_str);
+            let mut toggle_keys = parse_ini(&path_str);
 
             toggle_keys.sort_by(|a, b| {
                 let a_has_key = a.key.is_some();
@@ -249,7 +256,7 @@ pub fn process_ini_files(paths: Vec<String>) -> Vec<IniResult> {
             });
 
             let has_toggle_key = toggle_keys.iter().any(|tk| tk.key.is_some());
-            let name = Path::new(path_str)
+            let name = Path::new(&path_str)
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("")
@@ -257,7 +264,7 @@ pub fn process_ini_files(paths: Vec<String>) -> Vec<IniResult> {
 
             IniResult {
                 name,
-                path: path_str.clone(),
+                path: path_str,
                 toggle_keys,
                 has_toggle_key,
             }
@@ -266,11 +273,22 @@ pub fn process_ini_files(paths: Vec<String>) -> Vec<IniResult> {
 }
 
 fn is_media_ext(ext: &str) -> bool {
-    match ext.to_ascii_lowercase().as_str() {
-        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "avif" | "avifs" | "mp4" | "webm"
-        | "avi" | "mkv" | "mov" => true,
-        _ => false,
-    }
+    matches!(
+        ext,
+        _ if ext.eq_ignore_ascii_case("png")
+            || ext.eq_ignore_ascii_case("jpg")
+            || ext.eq_ignore_ascii_case("jpeg")
+            || ext.eq_ignore_ascii_case("gif")
+            || ext.eq_ignore_ascii_case("webp")
+            || ext.eq_ignore_ascii_case("bmp")
+            || ext.eq_ignore_ascii_case("avif")
+            || ext.eq_ignore_ascii_case("avifs")
+            || ext.eq_ignore_ascii_case("mp4")
+            || ext.eq_ignore_ascii_case("webm")
+            || ext.eq_ignore_ascii_case("avi")
+            || ext.eq_ignore_ascii_case("mkv")
+            || ext.eq_ignore_ascii_case("mov")
+    )
 }
 
 fn get_score(filename: &str, is_root: bool, is_video: bool) -> i32 {
@@ -301,65 +319,54 @@ fn is_excluded_file(filename: &str) -> bool {
     EXCLUDED.iter().any(|&k| filename.contains(k))
 }
 
-fn find_preview(
-    mod_path: &Path,
-    pre_scanned_files: Option<&[PathBuf]>,
-    max_depth: usize,
-) -> Option<String> {
-    let mut candidate_files: Vec<(i32, PathBuf)> = Vec::new();
-    let video_extensions = ["mp4", "webm"];
+fn find_preview(mod_path: &Path, max_depth: usize) -> Option<String> {
+    let mut best_score = -1;
+    let mut best_path: Option<String> = None;
 
-    let process_file = |path: PathBuf, candidate_files: &mut Vec<(i32, PathBuf)>| {
+    let walker = WalkDir::new(mod_path)
+        .max_depth(max_depth)
+        .follow_links(true)
+        .into_iter()
+        .filter_map(|e| e.ok());
+
+    for entry in walker {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+
+        let path = entry.path();
         let filename_os = path.file_name().and_then(|n| n.to_str());
         let ext_os = path.extension().and_then(|e| e.to_str());
 
         if let (Some(filename), Some(ext)) = (filename_os, ext_os) {
-            let lower_filename = filename.to_lowercase();
-            if is_media_ext(ext) && !is_excluded_file(&lower_filename) {
-                let relative = path.strip_prefix(mod_path).unwrap_or(&path);
-                let is_root = relative.components().count() == 1;
-                let is_video = video_extensions.contains(&ext.to_lowercase().as_str());
-                let score = get_score(&lower_filename, is_root, is_video);
-                candidate_files.push((score, path));
-            }
-        }
-    };
+            if is_media_ext(ext) {
+                let lower_filename = filename.to_ascii_lowercase();
+                if !is_excluded_file(&lower_filename) {
+                    let Ok(relative) = path.strip_prefix(mod_path) else {
+                        continue;
+                    };
+                    let is_root = relative.components().count() == 1;
+                    let is_video =
+                        ext.eq_ignore_ascii_case("mp4") || ext.eq_ignore_ascii_case("webm");
+                    let score = get_score(&lower_filename, is_root, is_video);
 
-    if let Some(files) = pre_scanned_files {
-        for path in files {
-            process_file(path.clone(), &mut candidate_files);
-        }
-    } else {
-        let walker = WalkDir::new(mod_path)
-            .max_depth(max_depth)
-            .follow_links(true)
-            .into_iter()
-            .filter_map(|e| e.ok());
-
-        for entry in walker {
-            if !entry.file_type().is_file() {
-                continue;
+                    if score > best_score {
+                        best_score = score;
+                        best_path = Some(path.to_string_lossy().into_owned());
+                    } else if score == best_score {
+                        if let Some(ref best) = best_path {
+                            let path_str = path.to_string_lossy();
+                            if compare_str(path_str.as_ref(), best) == std::cmp::Ordering::Less {
+                                best_path = Some(path_str.into_owned());
+                            }
+                        }
+                    }
+                }
             }
-            process_file(entry.path().to_path_buf(), &mut candidate_files);
         }
     }
 
-    if candidate_files.is_empty() {
-        return None;
-    }
-
-    candidate_files.sort_by(|a, b| {
-        b.0.cmp(&a.0).then_with(|| {
-            compare_str(
-                a.1.to_string_lossy().as_ref(),
-                b.1.to_string_lossy().as_ref(),
-            )
-        })
-    });
-
-    candidate_files
-        .first()
-        .map(|p| p.1.to_string_lossy().to_string())
+    best_path
 }
 
 #[napi]
@@ -407,7 +414,7 @@ pub fn get_characters_folder(
                 Err(_) => 0,
             };
 
-            let preview = find_preview(group_path, None, search_depth);
+            let preview = find_preview(group_path, search_depth);
 
             FolderGroup {
                 name,
@@ -425,36 +432,57 @@ fn scan_mod_folder(mod_path: &Path) -> Option<ModInfo> {
     let is_enabled = !folder_name.to_ascii_lowercase().starts_with("disabled ");
 
     let mut total_size = 0.0;
-    let mut max_mtime = 0.0;
-    let mut all_files = Vec::new();
+    let mut max_mtime_sys = SystemTime::UNIX_EPOCH;
     let mut ini_paths = Vec::new();
+
+    let mut best_preview_score = -1;
+    let mut best_preview_path: Option<String> = None;
 
     for entry in WalkDir::new(mod_path).into_iter().filter_map(|e| e.ok()) {
         if entry.file_type().is_file() {
-            let path = entry.path().to_path_buf();
-            let metadata = entry.metadata().ok()?;
-            let size = metadata.len() as f64;
-            let mtime = metadata
-                .modified()
-                .unwrap_or(SystemTime::UNIX_EPOCH)
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs_f64()
-                * 1000.0;
+            let path = entry.path();
 
-            total_size += size;
-            if mtime > max_mtime {
-                max_mtime = mtime;
+            if let Ok(metadata) = entry.metadata() {
+                total_size += metadata.len() as f64;
+                if let Ok(mtime) = metadata.modified() {
+                    if mtime > max_mtime_sys {
+                        max_mtime_sys = mtime;
+                    }
+                }
             }
 
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                let lower_ext = ext.to_lowercase();
-                if is_media_ext(&lower_ext) || lower_ext == "ini" {
-                    all_files.push(path.clone());
-                    if lower_ext == "ini" {
-                        let fname = path.file_name().unwrap_or_default().to_string_lossy();
-                        if !fname.to_lowercase().starts_with("disabled") {
-                            ini_paths.push(path.to_string_lossy().to_string());
+                if ext.eq_ignore_ascii_case("ini") {
+                    let fname = path.file_name().unwrap_or_default().to_string_lossy();
+                    if !fname.to_ascii_lowercase().starts_with("disabled") {
+                        ini_paths.push(path.to_string_lossy().into_owned());
+                    }
+                } else if is_media_ext(ext) {
+                    if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+                        let lower_filename = filename.to_ascii_lowercase();
+                        if !is_excluded_file(&lower_filename) {
+                            let Ok(relative) = path.strip_prefix(mod_path) else {
+                                continue;
+                            };
+                            let is_root = relative.components().count() == 1;
+                            let is_video =
+                                ext.eq_ignore_ascii_case("mp4") || ext.eq_ignore_ascii_case("webm");
+
+                            let score = get_score(&lower_filename, is_root, is_video);
+
+                            if score > best_preview_score {
+                                best_preview_score = score;
+                                best_preview_path = Some(path.to_string_lossy().into_owned());
+                            } else if score == best_preview_score {
+                                if let Some(ref best_path) = best_preview_path {
+                                    let path_str = path.to_string_lossy();
+                                    if compare_str(path_str.as_ref(), best_path)
+                                        == std::cmp::Ordering::Less
+                                    {
+                                        best_preview_path = Some(path_str.into_owned());
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -462,17 +490,19 @@ fn scan_mod_folder(mod_path: &Path) -> Option<ModInfo> {
         }
     }
 
-    if max_mtime == 0.0 {
+    if max_mtime_sys == SystemTime::UNIX_EPOCH {
         if let Ok(metadata) = fs::metadata(mod_path) {
-            max_mtime = metadata
-                .modified()
-                .unwrap_or(SystemTime::UNIX_EPOCH)
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs_f64()
-                * 1000.0;
+            if let Ok(mtime) = metadata.modified() {
+                max_mtime_sys = mtime;
+            }
         }
     }
+
+    let max_mtime = max_mtime_sys
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs_f64()
+        * 1000.0;
 
     let mut inis = process_ini_files(ini_paths);
     inis.sort_by(|a, b| match (a.has_toggle_key, b.has_toggle_key) {
@@ -481,13 +511,11 @@ fn scan_mod_folder(mod_path: &Path) -> Option<ModInfo> {
         _ => compare_str(&a.name, &b.name),
     });
 
-    let preview = find_preview(mod_path, Some(&all_files), 3);
-
     Some(ModInfo {
         name: folder_name,
-        path: mod_path.to_string_lossy().to_string(),
+        path: mod_path.to_string_lossy().into_owned(),
         is_enabled,
-        preview,
+        preview: best_preview_path,
         mtime: max_mtime,
         size: total_size,
         inis,
@@ -499,8 +527,8 @@ pub fn get_mods(group_path: String) -> FolderGroup {
     let group_path_buf = PathBuf::from(&group_path);
     let group_name = group_path_buf
         .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
         .to_string();
 
     let mod_folders: Vec<PathBuf> = match fs::read_dir(&group_path_buf) {
@@ -512,12 +540,16 @@ pub fn get_mods(group_path: String) -> FolderGroup {
         Err(_) => Vec::new(),
     };
 
-    let mods: Vec<ModInfo> = mod_folders
-        .par_iter()
-        .filter_map(|p| scan_mod_folder(p))
-        .collect();
+    let (mods, preview) = rayon::join(
+        || {
+            mod_folders
+                .par_iter()
+                .filter_map(|p| scan_mod_folder(p))
+                .collect::<Vec<ModInfo>>()
+        },
+        || find_preview(&group_path_buf, 3),
+    );
 
-    let preview = find_preview(&group_path_buf, None, 3);
     let mod_count = mods.len() as u32;
 
     FolderGroup {

@@ -29,13 +29,16 @@ export class SettingWindow {
             return this.window;
         }
 
+        const titlebarSetting = await this.desktop.setting.general.getTitlebarStyle();
+        const isNativeTitlebar = titlebarSetting === "native";
+
         this.window = new BrowserWindow({
             title: "설정",
             width: 580,
             height: 740,
             resizable: false,
             show: false,
-            frame: false,
+            frame: isNativeTitlebar,
             maximizable: false,
             autoHideMenuBar: true,
             ...(process.platform === "linux" ? { icon } : {}),

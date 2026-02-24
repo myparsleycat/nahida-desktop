@@ -42,6 +42,14 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         return await d.setting.general.setDefaultStartPage(page);
     });
 
+    rh("setting:general:getTitlebarStyle", async () => {
+        return await d.setting.general.getTitlebarStyle();
+    });
+
+    rh("setting:general:setTitlebarStyle", async (style) => {
+        await d.setting.general.setTitlebarStyle(style);
+    });
+
     rh("setting:general:checkUpdate", async () => {
         return await d.setting.general.checkUpdate();
     });
