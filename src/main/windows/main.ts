@@ -99,8 +99,8 @@ export class MainWindow {
                 return;
             }
             const bounds = this.window?.getBounds();
-            if (bounds) await this.desktop.setting.setBounds(bounds);
             this.window = null;
+            if (bounds) await this.desktop.setting.setBounds(bounds);
         });
 
         this.window.webContents.setWindowOpenHandler((details) => {
