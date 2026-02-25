@@ -3,7 +3,7 @@ import { throttle } from "es-toolkit";
 import type { NahidaDesktop } from "..";
 
 export interface LocalTransfer extends Transfer {
-    currentId: string;
+    currentId?: string;
     abortController: AbortController;
     restartParams?: any;
     completedFileUuids?: Set<string>;
@@ -119,7 +119,7 @@ export class TransferService {
         path,
     }: {
         pid: string;
-        currentId: string;
+        currentId?: string;
         type: "upload" | "download";
         data: TransferData;
         abortController: AbortController;

@@ -74,6 +74,16 @@ export class ModManager {
         }
     }
 
+    private async renameWithUniqueName(modPath: string, baseFolderName: string): Promise<string> {
+        const parentPath = path.dirname(modPath);
+        const existingNames = await fse.readdir(parentPath);
+        const newFolderName = this.desktop.lib.fs.getUniqueName(baseFolderName, existingNames);
+        const newPath = path.join(parentPath, newFolderName);
+
+        await this.desktop.lib.fs.rename(modPath, newPath);
+        return newPath;
+    }
+
     get = {
         gamePath: async (game: string): Promise<string | null> => {
             const result = await this.desktop.lib.db.query.gamePaths.findFirst({
@@ -252,19 +262,8 @@ export class ModManager {
             const regex = /^disabled\s+/i;
 
             if (regex.test(folderName)) {
-                const newFolderName = trim(folderName.replace(regex, ""));
-                const newPath = path.join(path.dirname(modPath), newFolderName);
-
-                try {
-                    await fse.access(newPath);
-                    throw new Error(`ALREADY_EXISTS:${newFolderName}`);
-                } catch (error) {
-                    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-                        await this.desktop.lib.fs.rename(modPath, newPath);
-                        return newPath;
-                    }
-                    throw error;
-                }
+                const baseFolderName = trim(folderName.replace(regex, ""));
+                return this.renameWithUniqueName(modPath, baseFolderName);
             }
 
             return modPath;
@@ -275,19 +274,8 @@ export class ModManager {
             const regex = /^disabled\s+/i;
 
             if (!regex.test(folderName)) {
-                const newFolderName = `DISABLED ${folderName}`;
-                const newPath = path.join(path.dirname(modPath), newFolderName);
-
-                try {
-                    await fse.access(newPath);
-                    throw new Error(`ALREADY_EXISTS:${newFolderName}`);
-                } catch (error) {
-                    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-                        await this.desktop.lib.fs.rename(modPath, newPath);
-                        return newPath;
-                    }
-                    throw error;
-                }
+                const baseFolderName = `DISABLED ${folderName}`;
+                return this.renameWithUniqueName(modPath, baseFolderName);
             }
 
             return modPath;

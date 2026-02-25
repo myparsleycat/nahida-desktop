@@ -641,7 +641,7 @@ export class DriveService {
         params,
         currentTransfer,
     }: {
-        currentId: string;
+        currentId?: string;
         pid: string;
         params: TransferParams;
         currentTransfer: LocalTransfer;
@@ -654,6 +654,10 @@ export class DriveService {
         this.desktop.service.transfer.resetStartTime(pid);
 
         if (params.type === "upload") {
+            if (!currentId) {
+                throw new Error("currentId is required for upload");
+            }
+
             const { files, directories } = await this.upload.prepareUpload(params.paths, []);
 
             await this.upload.executeUpload({
