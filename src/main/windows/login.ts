@@ -44,7 +44,7 @@ export class LoginWindow {
             this.window?.show();
         });
 
-        this.window.on("close", () => {
+        this.window.on("closed", () => {
             this.window = null;
         });
 
