@@ -58,7 +58,7 @@ export class ReportWindow {
             this.window?.show();
         });
 
-        this.window.on("close", () => {
+        this.window.on("closed", () => {
             this.window = null;
         });
 
