@@ -1,48 +1,48 @@
 {
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "react", "jsx-a11y"],
-  "categories": {},
-  "rules": {
-    "typescript/no-explicit-any": "warn",
-    "react/exhaustive-deps": "off"
-  },
-  "overrides": [
-    {
-      "files": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.js", "src/**/*.jsx"]
-    }
-  ],
-  "settings": {
-    "jsx-a11y": {
-      "polymorphicPropName": null,
-      "components": {},
-      "attributes": {}
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "plugins": ["typescript", "react", "jsx-a11y"],
+    "categories": {},
+    "rules": {
+        "typescript/no-explicit-any": "warn",
+        "react/exhaustive-deps": "off"
     },
-    "next": {
-      "rootDir": []
+    "overrides": [
+        {
+            "files": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.js", "src/**/*.jsx"]
+        }
+    ],
+    "settings": {
+        "jsx-a11y": {
+            "polymorphicPropName": null,
+            "components": {},
+            "attributes": {}
+        },
+        "next": {
+            "rootDir": []
+        },
+        "react": {
+            "formComponents": [],
+            "linkComponents": [],
+            "version": null,
+            "componentWrapperFunctions": []
+        },
+        "jsdoc": {
+            "ignorePrivate": false,
+            "ignoreInternal": false,
+            "ignoreReplacesDocs": true,
+            "overrideReplacesDocs": true,
+            "augmentsExtendsReplacesDocs": false,
+            "implementsReplacesDocs": false,
+            "exemptDestructuredRootsFromChecks": false,
+            "tagNamePreference": {}
+        },
+        "vitest": {
+            "typecheck": false
+        }
     },
-    "react": {
-      "formComponents": [],
-      "linkComponents": [],
-      "version": null,
-      "componentWrapperFunctions": []
+    "env": {
+        "builtin": true
     },
-    "jsdoc": {
-      "ignorePrivate": false,
-      "ignoreInternal": false,
-      "ignoreReplacesDocs": true,
-      "overrideReplacesDocs": true,
-      "augmentsExtendsReplacesDocs": false,
-      "implementsReplacesDocs": false,
-      "exemptDestructuredRootsFromChecks": false,
-      "tagNamePreference": {}
-    },
-    "vitest": {
-      "typecheck": false
-    }
-  },
-  "env": {
-    "builtin": true
-  },
-  "globals": {},
-  "ignorePatterns": []
+    "globals": {},
+    "ignorePatterns": []
 }

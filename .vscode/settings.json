@@ -10,6 +10,19 @@
         "native/native-fs/Cargo.toml"
     ],
     "oxc.fmt.configPath": ".oxfmtrc.json",
+    "oxc.format.enable": true,
     "editor.defaultFormatter": "oxc.oxc-vscode",
-    "editor.formatOnSave": true
+    "editor.formatOnSave": true,
+    "[javascript]": {
+        "editor.defaultFormatter": "oxc.oxc-vscode"
+    },
+    "[typescript]": {
+        "editor.defaultFormatter": "oxc.oxc-vscode"
+    },
+    "[javascriptreact]": {
+        "editor.defaultFormatter": "oxc.oxc-vscode"
+    },
+    "[typescriptreact]": {
+        "editor.defaultFormatter": "oxc.oxc-vscode"
+    }
 }
