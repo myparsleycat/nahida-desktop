@@ -9,10 +9,7 @@
         "native/overlay/Cargo.toml",
         "native/native-fs/Cargo.toml"
     ],
-    "editor.codeActionsOnSave": {
-    "source.action.useSortedKeys.biome": "explicit",
-        "source.organizeImports.biome": "explicit",
-        "source.fixAll.biome": "explicit",
-        "source.removeUnusedImports": "explicit"
-    }
+    "oxc.fmt.configPath": ".oxfmtrc.json",
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": true
 }
