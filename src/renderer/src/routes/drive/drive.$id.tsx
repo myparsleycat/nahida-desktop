@@ -8,6 +8,7 @@ import {
   HandlerProvider,
 } from "@renderer/components/akasha";
 import {
+  ConflictNameDialog,
   NewDirectoryDialog,
   PubLinkDialog,
   RenameDialog,
@@ -189,6 +190,7 @@ function RouteComponent() {
         </div>
 
         <RenameDialog />
+        <ConflictNameDialog />
         <NewDirectoryDialog contents={sortedContents} />
         <PubLinkDialog />
       </>

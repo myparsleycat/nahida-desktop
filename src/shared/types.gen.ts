@@ -82,6 +82,7 @@ export type IpcHandlers = {
     "drive:delete:items": (...args: Parameters<typeof desktop.service.drive.delete.items>) => ReturnType<typeof desktop.service.drive.delete.items>;
     "drive:fn:moveMany": (...args: Parameters<typeof desktop.service.drive.fn.moveMany>) => ReturnType<typeof desktop.service.drive.fn.moveMany>;
     "drive:fn:startDownload": (...args: Parameters<typeof desktop.service.drive.fn.startDownload>) => ReturnType<typeof desktop.service.drive.fn.startDownload>;
+    "drive:fn:getUploadConflicts": (...args: Parameters<typeof desktop.service.drive.fn.getUploadConflicts>) => ReturnType<typeof desktop.service.drive.fn.getUploadConflicts>;
     "drive:fn:startUpload": (...args: Parameters<typeof desktop.service.drive.fn.startUpload>) => ReturnType<typeof desktop.service.drive.fn.startUpload>;
     "drive:get:item": (...args: Parameters<typeof desktop.service.drive.get.item>) => ReturnType<typeof desktop.service.drive.get.item>;
     "drive:patch:rename": (...args: Parameters<typeof desktop.service.drive.patch.rename>) => ReturnType<typeof desktop.service.drive.patch.rename>;

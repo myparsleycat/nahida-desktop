@@ -114,6 +114,16 @@
               "success": "Renamed successfully."
             }
           }
+        },
+        "conflict_name": {
+          "title": "Duplicate names found",
+          "description": "Choose how to handle {{count}} duplicate item(s).",
+          "option_suffix": "Confirm: rename as name (2) and upload",
+          "option_skip": "Cancel: skip duplicate items and upload the rest",
+          "preview_label": "Duplicates:",
+          "preview_more": "and {{count}} more",
+          "action_skip": "Skip duplicates",
+          "action_suffix": "Rename and upload"
         }
       }
     },

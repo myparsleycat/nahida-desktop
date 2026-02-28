@@ -114,6 +114,16 @@
               "success": "이름이 변경되었습니다."
             }
           }
+        },
+        "conflict_name": {
+          "title": "중복 이름 항목이 있습니다",
+          "description": "중복 {{count}}개를 어떻게 처리할지 선택해 주세요.",
+          "option_suffix": "확인: name (2) 형태로 이름 변경 후 업로드",
+          "option_skip": "취소: 중복 항목 제외 후 업로드",
+          "preview_label": "중복 항목:",
+          "preview_more": "외 {{count}}개",
+          "action_skip": "중복 건너뛰기",
+          "action_suffix": "이름 변경 업로드"
         }
       }
     },

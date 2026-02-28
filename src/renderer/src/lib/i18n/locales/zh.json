@@ -114,6 +114,16 @@
               "success": "重命名成功。"
             }
           }
+        },
+        "conflict_name": {
+          "title": "存在重名项目",
+          "description": "请选择如何处理 {{count}} 个重名项目。",
+          "option_suffix": "确认：重命名为 name (2) 后上传",
+          "option_skip": "取消：跳过重名项目，仅上传其余项目",
+          "preview_label": "重名项目：",
+          "preview_more": "另外 {{count}} 个",
+          "action_skip": "跳过重名",
+          "action_suffix": "重命名并上传"
         }
       }
     },

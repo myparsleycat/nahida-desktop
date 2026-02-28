@@ -1,4 +1,7 @@
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import { Center, Random1619 } from "@renderer/components/common";
 import { DatePicker } from "@renderer/components/date-picker";
+import { DiscordIcon } from "@renderer/components/icon";
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
 import {
   AlertDialog,
@@ -24,13 +27,25 @@ import {
 } from "@renderer/components/ui/dropdown-menu";
 import { Input } from "@renderer/components/ui/input";
 import { Label } from "@renderer/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@renderer/components/ui/select";
 import { Switch } from "@renderer/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import { cn } from "@renderer/lib/utils";
-import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import { useDialogStore, useSelectionStore } from "@renderer/store/drive";
+import { Content } from "@shared/types.gen";
+import { useForm, type AnyFieldApi } from "@tanstack/react-form";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation, useParams, useRouteContext } from "@tanstack/react-router";
 import { format } from "date-fns";
+import { t } from "i18next";
 import {
   AlertTriangleIcon,
   CopyIcon,
@@ -45,21 +60,6 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { useForm, type AnyFieldApi } from "@tanstack/react-form";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@renderer/components/ui/select";
-import { DiscordIcon } from "@renderer/components/icon";
-import { Center, Random1619 } from "@renderer/components/common";
-import { useDialogStore, useSelectionStore } from "@renderer/store/drive";
-import { Content } from "@shared/types.gen";
-import { t } from "i18next";
 
 export const ValidateName = (name: string) => {
   if (!name.trim()) {
@@ -758,6 +758,66 @@ export function EmptyTrashDialog() {
             }}
           >
             {t("drive.ui.empty_trash_dialog.1")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+export function ConflictNameDialog() {
+  const { t } = useTranslation();
+  const { conflictNameDialog, setOpen, resolveDialog } = useDialogStore();
+  const conflicts = conflictNameDialog.data?.conflicts ?? [];
+  const preview = conflicts.slice(0, 6);
+  const hiddenCount = Math.max(conflicts.length - preview.length, 0);
+
+  return (
+    <AlertDialog
+      open={conflictNameDialog.open}
+      onOpenChange={(open) => {
+        setOpen("conflictNameDialog", open);
+        if (!open) {
+          resolveDialog("conflictNameDialog", "cancel");
+        }
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("page.drive.dialog.conflict_name.title")}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t("page.drive.dialog.conflict_name.description", { count: conflicts.length })}
+            <br />
+            {t("page.drive.dialog.conflict_name.option_suffix")}
+            <br />
+            {t("page.drive.dialog.conflict_name.option_skip")}
+          </AlertDialogDescription>
+          {preview.length > 0 && (
+            <div className="w-full text-left mt-2 text-xs text-muted-foreground">
+              <p>{t("page.drive.dialog.conflict_name.preview_label")}</p>
+              <p>{preview.join(", ")}</p>
+              {hiddenCount > 0 && (
+                <p>{t("page.drive.dialog.conflict_name.preview_more", { count: hiddenCount })}</p>
+              )}
+            </div>
+          )}
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel
+            onClick={() => {
+              setOpen("conflictNameDialog", false);
+              resolveDialog("conflictNameDialog", "skip");
+            }}
+          >
+            {t("page.drive.dialog.conflict_name.action_skip")}
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              setOpen("conflictNameDialog", false);
+              resolveDialog("conflictNameDialog", "suffix");
+            }}
+          >
+            {t("page.drive.dialog.conflict_name.action_suffix")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
