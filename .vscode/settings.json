@@ -24,5 +24,9 @@
     },
     "[typescriptreact]": {
         "editor.defaultFormatter": "oxc.oxc-vscode"
-    }
+    },
+    "i18n-ally.localesPaths": [
+        "src/renderer/src/lib/i18n",
+        "src/renderer/src/lib/i18n/locales"
+    ]
 }
