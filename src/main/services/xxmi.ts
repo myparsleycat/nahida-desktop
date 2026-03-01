@@ -136,10 +136,16 @@ export class XXMI {
 
         return Object.entries(config.Importers)
             .filter(([key]) => config.Packages.packages[key]?.latest_version)
-            .map(([key]) => {
+            .map(([key, importer]) => {
                 const packageInfo = config.Packages.packages[key];
+                let importerFolder = importer.Importer.importer_folder;
+                if (!path.isAbsolute(importerFolder) && this.xxmiPath) {
+                    importerFolder = path.join(this.xxmiPath, importerFolder);
+                }
+
                 return {
                     key,
+                    importerFolder,
                     packageInfo,
                 };
             });
@@ -197,7 +203,7 @@ export class XXMI {
         if (this.busy || !this.xxmiConfig) return;
 
         try {
-            const importers = await this.getEnabledImporters();
+            const importers = this.getEnabledImporters();
             const processList = await this.desktop.lib.native.getProcessList();
 
             for (const { key: importer } of importers) {
@@ -336,19 +342,18 @@ export class XXMI {
         await this.stopPersistWatcher();
 
         const importers = this.getEnabledImporters();
-        for (const { key } of importers) {
-            const d3dxPath = path.join(this.xxmiPath, key, "d3dx_user.ini");
+        for (const importer of importers) {
+            const d3dxPath = path.join(importer.importerFolder, "d3dx_user.ini");
             if (await fse.pathExists(d3dxPath)) {
-                // Parse and cache initial content
                 const content = await fse.readFile(d3dxPath, "utf-8");
-                this.cachedD3dxUserIni.set(key, this.parseD3dxUserIni(content));
+                this.cachedD3dxUserIni.set(importer.key, this.parseD3dxUserIni(content));
 
                 const watcherId = await this.desktop.lib.watcher.createWatcher(
                     d3dxPath,
                     { compareContents: true },
                     async (eventName, changedPath) => {
                         if (eventName === "modify") {
-                            await this.handleD3dxUserIniChange(key, changedPath);
+                            await this.handleD3dxUserIniChange(importer, changedPath);
                         }
                     },
                 );
@@ -395,7 +400,10 @@ export class XXMI {
         return result;
     }
 
-    private async handleD3dxUserIniChange(importerKey: string, iniPath: string) {
+    private async handleD3dxUserIniChange(
+        importer: { key: string; importerFolder: string },
+        iniPath: string,
+    ) {
         if (!this.xxmiPath) return;
 
         try {
@@ -414,7 +422,7 @@ export class XXMI {
             );
 
             const newParsed = this.parseD3dxUserIni(content);
-            const oldParsed = this.cachedD3dxUserIni.get(importerKey) || {};
+            const oldParsed = this.cachedD3dxUserIni.get(importer.key) || {};
 
             for (const [key, newValue] of Object.entries(newParsed)) {
                 const oldValue = oldParsed[key];
@@ -425,7 +433,7 @@ export class XXMI {
                         const relIniPath = key.substring(2, lastSlashIdx);
                         const varName = key.substring(lastSlashIdx + 1);
 
-                        const targetIniPath = path.join(this.xxmiPath, importerKey, relIniPath);
+                        const targetIniPath = path.join(importer.importerFolder, relIniPath);
                         if (await fse.pathExists(targetIniPath)) {
                             await this.updateModIniPersist(targetIniPath, varName, newValue);
                         }
@@ -433,7 +441,7 @@ export class XXMI {
                 }
             }
 
-            this.cachedD3dxUserIni.set(importerKey, newParsed);
+            this.cachedD3dxUserIni.set(importer.key, newParsed);
         } catch (error) {
             this.desktop.logger.error(
                 `Error handling d3dx_user.ini change: ${error}`,
