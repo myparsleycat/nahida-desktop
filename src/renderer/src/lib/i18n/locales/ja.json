@@ -65,6 +65,9 @@
         "1": "ここにファイルやフォルダーをドラッグしてアップロード",
         "2": "ファイルやフォルダをここにドラッグしてアップロード"
       },
+      "toast": {
+        "no_uploadable_files": "アップロード可能なファイルがありません。"
+      },
       "head_buttons": {
         "search_in_dir_placeholder": "このフォルダー内を検索...",
         "dropdown_menu": {

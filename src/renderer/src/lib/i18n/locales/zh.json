@@ -64,6 +64,9 @@
         "0": "此文件夹中没有文件或文件夹",
         "1": "拖放文件或文件夹到此处上传"
       },
+      "toast": {
+        "no_uploadable_files": "没有可上传的文件。"
+      },
       "head_buttons": {
         "search_in_dir_placeholder": "在此文件夹中搜索...",
         "dropdown_menu": {

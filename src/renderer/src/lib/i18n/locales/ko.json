@@ -64,6 +64,9 @@
         "0": "이 폴더에 파일이나 폴더가 없습니다",
         "1": "여기로 파일이나 폴더를 드래그 해 업로드하세요"
       },
+      "toast": {
+        "no_uploadable_files": "업로드 가능한 파일이 없습니다."
+      },
       "head_buttons": {
         "search_in_dir_placeholder": "이 폴더에서 검색...",
         "dropdown_menu": {

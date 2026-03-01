@@ -219,7 +219,7 @@ export class DriveService {
                 conflictStrategy,
             );
             if (preparation.files.length < 1) {
-                throw new Error("업로드 가능한 파일이 없습니다");
+                throw new Error("NO_UPLOADABLE_FILES");
             }
 
             const { pid, restartParams, abortController } = await this.createUploadTransferEntry({
