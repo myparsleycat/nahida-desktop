@@ -50,12 +50,20 @@ export interface UploadProgress {
     isServerDeduplicated?: boolean;
 }
 
+export type UploadConflictStrategy = "suffix" | "skip";
+
+export interface UploadRootConflict {
+    name: string;
+    type: "file" | "directory";
+}
+
 export type UploadParams = {
     type: "upload";
     destId: string;
     paths: string[];
     processedFiles?: FinalFile[];
     fileHashes?: Record<string, string>;
+    conflictStrategy?: UploadConflictStrategy;
 };
 
 export class UploadLib {
@@ -760,21 +768,134 @@ export class UploadLib {
 
     public async prepareUpload(paths: string[], children: Content[]) {
         const { files, directories } = await this.collect(paths);
+        const conflictStrategy: UploadConflictStrategy = "suffix";
+
+        return this.prepareUploadWithStrategy(
+            files,
+            directories,
+            children,
+            conflictStrategy,
+            paths,
+        );
+    }
+
+    public async getRootNameConflicts(
+        paths: string[],
+        children: Content[],
+    ): Promise<UploadRootConflict[]> {
+        const { files, directories } = await this.collect(paths);
+        const existingNames = new Set(children.map((child) => child.name));
+        const seenRootNames = new Set<string>();
+        const conflicts: UploadRootConflict[] = [];
 
         const rootDirectories = directories.filter((dir) => dir.parentPath === "");
+        const rootFiles = files.filter((file) => file.parentPath === "");
+
         for (const rootDir of rootDirectories) {
-            const baseName = rootDir.name;
+            if (existingNames.has(rootDir.name) || seenRootNames.has(rootDir.name)) {
+                conflicts.push({ name: rootDir.name, type: "directory" });
+            }
+            seenRootNames.add(rootDir.name);
+        }
+
+        for (const rootFile of rootFiles) {
+            if (existingNames.has(rootFile.name) || seenRootNames.has(rootFile.name)) {
+                conflicts.push({ name: rootFile.name, type: "file" });
+            }
+            seenRootNames.add(rootFile.name);
+        }
+
+        return conflicts;
+    }
+
+    public async prepareUploadWithConflictStrategy(
+        paths: string[],
+        children: Content[],
+        conflictStrategy: UploadConflictStrategy,
+    ) {
+        const { files, directories } = await this.collect(paths);
+        return this.prepareUploadWithStrategy(
+            files,
+            directories,
+            children,
+            conflictStrategy,
+            paths,
+        );
+    }
+
+    private prepareUploadWithStrategy(
+        collectedFiles: FilesComponent[],
+        collectedDirectories: DirectoriesComponent[],
+        children: Content[],
+        conflictStrategy: UploadConflictStrategy,
+        paths: string[],
+    ) {
+        let files = [...collectedFiles];
+        let directories = [...collectedDirectories];
+        const existingNames = new Set(children.map((child) => child.name));
+        const skippedRootDirPaths = new Set<string>();
+        const skippedRootFilePaths = new Set<string>();
+
+        const getUniqueName = (baseName: string) => {
             let newName = baseName;
             let counter = 2;
 
-            while (children.some((child) => child.name === newName)) {
+            while (existingNames.has(newName)) {
                 newName = `${baseName} (${counter})`;
                 counter++;
             }
 
-            if (newName !== baseName) {
-                rootDir.name = newName;
+            return newName;
+        };
+
+        const rootDirectories = directories.filter((dir) => dir.parentPath === "");
+        for (const rootDir of rootDirectories) {
+            const baseName = rootDir.name;
+            if (!existingNames.has(baseName)) {
+                existingNames.add(baseName);
+                continue;
             }
+
+            if (conflictStrategy === "skip") {
+                skippedRootDirPaths.add(rootDir.path);
+                continue;
+            }
+
+            const newName = getUniqueName(baseName);
+            rootDir.name = newName;
+            existingNames.add(newName);
+        }
+
+        const rootFiles = files.filter((file) => file.parentPath === "");
+        for (const rootFile of rootFiles) {
+            const baseName = rootFile.name;
+            if (!existingNames.has(baseName)) {
+                existingNames.add(baseName);
+                continue;
+            }
+
+            if (conflictStrategy === "skip") {
+                skippedRootFilePaths.add(rootFile.path);
+                continue;
+            }
+
+            const newName = getUniqueName(baseName);
+            rootFile.name = newName;
+            existingNames.add(newName);
+        }
+
+        if (skippedRootDirPaths.size > 0) {
+            const shouldSkipByRootDir = (targetPath: string) =>
+                Array.from(skippedRootDirPaths).some(
+                    (rootPath) => targetPath === rootPath || targetPath.startsWith(`${rootPath}/`),
+                );
+
+            directories = directories.filter((dir) => !shouldSkipByRootDir(dir.path));
+            files = files.filter((file) => !shouldSkipByRootDir(file.path));
+        }
+
+        if (skippedRootFilePaths.size > 0) {
+            files = files.filter((file) => !skippedRootFilePaths.has(file.path));
         }
 
         let processName = paths.length === 1 ? path.basename(paths[0]) : "";

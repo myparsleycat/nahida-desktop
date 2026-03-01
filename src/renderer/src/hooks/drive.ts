@@ -1,4 +1,4 @@
-import { useDragStore } from "@renderer/store/drive";
+import { dialogStore, useDragStore } from "@renderer/store/drive";
 import { compact } from "es-toolkit";
 
 export function useDrag() {
@@ -40,7 +40,30 @@ export function useDrag() {
         const files = Array.from(e.dataTransfer.files);
         const paths = compact(files.map((file) => window.webUtils.getPathForFile(file)));
 
-        await window.api.invoke("drive:fn:startUpload", { destId: itemId, paths });
+        if (paths.length < 1) return;
+
+        const { selectedPaths, conflicts } = await window.api.invoke("drive:fn:getUploadConflicts", {
+            destId: itemId,
+            paths,
+        });
+
+        if (!selectedPaths || selectedPaths.length < 1) return;
+
+        let conflictStrategy: "suffix" | "skip" = "suffix";
+        if (conflicts.length > 0) {
+            const result = await dialogStore.getState().showDialog<"suffix" | "skip" | "cancel">(
+                "conflictNameDialog",
+                { conflicts },
+            );
+            if (result === "cancel") return;
+            conflictStrategy = result;
+        }
+
+        await window.api.invoke("drive:fn:startUpload", {
+            destId: itemId,
+            paths: selectedPaths,
+            conflictStrategy,
+        });
     };
 
     return {

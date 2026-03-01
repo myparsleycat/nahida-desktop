@@ -64,6 +64,9 @@
         "0": "No files or folders in this folder",
         "1": "Drag and drop files or folders here to upload"
       },
+      "toast": {
+        "no_uploadable_files": "No uploadable files found."
+      },
       "head_buttons": {
         "search_in_dir_placeholder": "Search in this folder...",
         "dropdown_menu": {
@@ -85,10 +88,15 @@
         "open": "Open",
         "download": "Download",
         "rename": "Rename",
+        "delete": "Delete",
         "trash": "Trash",
         "new_dir": "Create folder"
       },
       "dialog": {
+        "common": {
+          "invalid_dir_name": "Invalid directory name.",
+          "invalid_file_name": "Invalid file name."
+        },
         "create_dir": {
           "title": "Create folder",
           "name_input_placeholder": "Folder name",
@@ -112,6 +120,26 @@
             "toast-promise": {
               "loading": "Renaming...",
               "success": "Renamed successfully."
+            }
+          }
+        },
+        "conflict_name": {
+          "title": "There are duplicate name items",
+          "description": "Please choose how to handle {{count}} duplicates.",
+          "option_suffix": "Rename: rename in the format name (2) before uploading",
+          "option_skip": "Skip: upload after excluding duplicate items",
+          "preview_label": "Duplicate items:",
+          "preview_more": "{{count}} more",
+          "action_skip": "Skip",
+          "action_suffix": "Rename"
+        },
+        "delete_items": {
+          "title": "Delete Items",
+          "description": "Are you sure you want to permanently delete the selected items? This action cannot be undone.",
+          "action": "Delete",
+          "#": {
+            "toast": {
+              "success": "Items deleted successfully"
             }
           }
         }

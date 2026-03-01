@@ -9,10 +9,24 @@
         "native/overlay/Cargo.toml",
         "native/native-fs/Cargo.toml"
     ],
-    "editor.codeActionsOnSave": {
-    "source.action.useSortedKeys.biome": "explicit",
-        "source.organizeImports.biome": "explicit",
-        "source.fixAll.biome": "explicit",
-        "source.removeUnusedImports": "explicit"
-    }
+    "oxc.fmt.configPath": ".oxfmtrc.json",
+    "oxc.format.enable": true,
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": true,
+    "[javascript]": {
+        "editor.defaultFormatter": "oxc.oxc-vscode"
+    },
+    "[typescript]": {
+        "editor.defaultFormatter": "oxc.oxc-vscode"
+    },
+    "[javascriptreact]": {
+        "editor.defaultFormatter": "oxc.oxc-vscode"
+    },
+    "[typescriptreact]": {
+        "editor.defaultFormatter": "oxc.oxc-vscode"
+    },
+    "i18n-ally.localesPaths": [
+        "src/renderer/src/lib/i18n",
+        "src/renderer/src/lib/i18n/locales"
+    ]
 }

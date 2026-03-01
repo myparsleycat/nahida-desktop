@@ -14,16 +14,20 @@ export function registerDriveHandlers(d: NahidaDesktop) {
         return await d.service.drive.post.dir(parentId, name);
     });
 
-    rh("drive:delete:items", async (ids) => {
-        return await d.service.drive.delete.items(ids);
+    rh("drive:delete:items", async (ids, action) => {
+        return await d.service.drive.delete.items(ids, action);
     });
 
     rh("drive:fn:startDownload", async ({ id, suggestedName }) => {
         return await d.service.drive.fn.startDownload({ id, suggestedName });
     });
 
-    rh("drive:fn:startUpload", async ({ destId, paths }) => {
-        return d.service.drive.fn.startUpload({ destId, paths });
+    rh("drive:fn:startUpload", async ({ destId, paths, conflictStrategy }) => {
+        return d.service.drive.fn.startUpload({ destId, paths, conflictStrategy });
+    });
+
+    rh("drive:fn:getUploadConflicts", async ({ destId, paths }) => {
+        return d.service.drive.fn.getUploadConflicts({ destId, paths });
     });
 
     rh("drive:fn:moveMany", async ({ ids, destId }) => {

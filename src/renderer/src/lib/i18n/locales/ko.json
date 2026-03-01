@@ -64,6 +64,9 @@
         "0": "이 폴더에 파일이나 폴더가 없습니다",
         "1": "여기로 파일이나 폴더를 드래그 해 업로드하세요"
       },
+      "toast": {
+        "no_uploadable_files": "업로드 가능한 파일이 없습니다."
+      },
       "head_buttons": {
         "search_in_dir_placeholder": "이 폴더에서 검색...",
         "dropdown_menu": {
@@ -86,9 +89,14 @@
         "download": "다운로드",
         "rename": "이름 바꾸기",
         "trash": "휴지통",
-        "new_dir": "폴더 생성"
+        "new_dir": "폴더 생성",
+        "delete": "삭제"
       },
       "dialog": {
+        "common": {
+          "invalid_dir_name": "유효하지 않은 디렉토리 이름입니다.",
+          "invalid_file_name": "유효하지 않은 파일 이름입니다."
+        },
         "create_dir": {
           "title": "폴더 생성",
           "name_input_placeholder": "폴더 이름",
@@ -112,6 +120,26 @@
             "toast-promise": {
               "loading": "이름을 변경하고 있습니다...",
               "success": "이름이 변경되었습니다."
+            }
+          }
+        },
+        "conflict_name": {
+          "title": "중복 이름 항목이 있습니다",
+          "description": "중복 {{count}}개를 어떻게 처리할지 선택해 주세요.",
+          "option_suffix": "이름 변경: name (2) 형태로 이름 변경 후 업로드",
+          "option_skip": "건너뛰기: 중복 항목 제외 후 업로드",
+          "preview_label": "중복 항목:",
+          "preview_more": "외 {{count}}개",
+          "action_skip": "건너뛰기",
+          "action_suffix": "이름 변경"
+        },
+        "delete_items": {
+          "title": "항목 삭제",
+          "description": "선택한 항목을 영구 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+          "action": "삭제",
+          "#": {
+            "toast": {
+              "success": "항목이 삭제되었습니다"
             }
           }
         }

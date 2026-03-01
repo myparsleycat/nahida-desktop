@@ -8,6 +8,8 @@ import {
   HandlerProvider,
 } from "@renderer/components/akasha";
 import {
+  ConflictNameDialog,
+  DeleteItemsDialog,
   NewDirectoryDialog,
   PubLinkDialog,
   RenameDialog,
@@ -27,6 +29,7 @@ import { orderBy } from "es-toolkit";
 import { FolderIcon } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/drive/share/$id")({
   component: RouteComponent,
@@ -105,6 +108,25 @@ function RouteComponent() {
     ).map((scoredItem) => scoredItem.item);
   }, [rawContents, searchInDirQuery]);
 
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    try {
+      await onDrop(e, id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? "");
+      const code =
+        typeof error === "object" && error !== null && "code" in error
+          ? String((error as { code?: unknown }).code ?? "")
+          : "";
+
+      if (code === "NO_UPLOADABLE_FILES" || message.includes("NO_UPLOADABLE_FILES")) {
+        toast.warning(t("page.drive.toast.no_uploadable_files"));
+        return;
+      }
+
+      throw error;
+    }
+  };
+
   if (!query.data && query.isFetching) {
     return (
       <>
@@ -138,7 +160,7 @@ function RouteComponent() {
               <div className="flex-1"></div>
             )}
 
-            {query.data.content && <AkashaHeadButtons content={query.data.content} />}
+            <AkashaHeadButtons />
           </div>
 
           <div
@@ -146,7 +168,7 @@ function RouteComponent() {
             onDragEnter={onDragEnter}
             onDragLeave={onDragLeave}
             onDragOver={onDragOver}
-            onDrop={(e) => onDrop(e, id)}
+            onDrop={handleDrop}
           >
             <ContextMenuProvider>
               <HandlerProvider queryData={query} sortedContents={sortedContents} currentId={id}>
@@ -187,6 +209,8 @@ function RouteComponent() {
         </div>
 
         <RenameDialog />
+        <DeleteItemsDialog />
+        <ConflictNameDialog />
         <NewDirectoryDialog contents={sortedContents} />
         <PubLinkDialog />
       </>

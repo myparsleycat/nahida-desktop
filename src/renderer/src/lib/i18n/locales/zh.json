@@ -64,6 +64,9 @@
         "0": "此文件夹中没有文件或文件夹",
         "1": "拖放文件或文件夹到此处上传"
       },
+      "toast": {
+        "no_uploadable_files": "没有可上传的文件。"
+      },
       "head_buttons": {
         "search_in_dir_placeholder": "在此文件夹中搜索...",
         "dropdown_menu": {
@@ -86,9 +89,14 @@
         "download": "下载",
         "rename": "重命名",
         "trash": "回收站",
-        "new_dir": "创建文件夹"
+        "new_dir": "创建文件夹",
+        "delete": "删除"
       },
       "dialog": {
+        "common": {
+          "invalid_dir_name": "无效的目录名称。",
+          "invalid_file_name": "无效的文件名称。"
+        },
         "create_dir": {
           "title": "创建文件夹",
           "name_input_placeholder": "文件夹名称",
@@ -112,6 +120,26 @@
             "toast-promise": {
               "loading": "正在重命名...",
               "success": "重命名成功。"
+            }
+          }
+        },
+        "conflict_name": {
+          "title": "存在重名项目",
+          "description": "请选择如何处理这 {{count}} 个重复项。",
+          "option_suffix": "重命名：上传前按 name (2) 的格式重命名",
+          "option_skip": "跳过：排除重复项后上传",
+          "preview_label": "重复项：",
+          "preview_more": "另外还有 {{count}} 个",
+          "action_skip": "跳过",
+          "action_suffix": "重命名"
+        },
+        "delete_items": {
+          "title": "删除项目",
+          "description": "确定要永久删除所选项目吗？此操作无法撤销。",
+          "action": "删除",
+          "#": {
+            "toast": {
+              "success": "项目已删除"
             }
           }
         }

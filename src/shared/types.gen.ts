@@ -80,6 +80,7 @@ export type IpcHandlers = {
     "auth:startLogin": (...args: Parameters<typeof desktop.service.auth.startLogin>) => ReturnType<typeof desktop.service.auth.startLogin>;
     "auth:startLogout": (...args: Parameters<typeof desktop.service.auth.startLogout>) => ReturnType<typeof desktop.service.auth.startLogout>;
     "drive:delete:items": (...args: Parameters<typeof desktop.service.drive.delete.items>) => ReturnType<typeof desktop.service.drive.delete.items>;
+    "drive:fn:getUploadConflicts": (...args: Parameters<typeof desktop.service.drive.fn.getUploadConflicts>) => ReturnType<typeof desktop.service.drive.fn.getUploadConflicts>;
     "drive:fn:moveMany": (...args: Parameters<typeof desktop.service.drive.fn.moveMany>) => ReturnType<typeof desktop.service.drive.fn.moveMany>;
     "drive:fn:startDownload": (...args: Parameters<typeof desktop.service.drive.fn.startDownload>) => ReturnType<typeof desktop.service.drive.fn.startDownload>;
     "drive:fn:startUpload": (...args: Parameters<typeof desktop.service.drive.fn.startUpload>) => ReturnType<typeof desktop.service.drive.fn.startUpload>;

@@ -6,6 +6,7 @@ import Download, { type DownloadMetadata, type DownloadParams } from "@main/lib/
 import Upload, {
     type DirectoriesComponent,
     type FilesComponent,
+    type UploadConflictStrategy,
     type UploadParams,
 } from "@main/lib/upload";
 import { dialog } from "electron";
@@ -134,6 +135,8 @@ export class DriveService {
 
     post = {
         dir: async (parentId: string, name: string, signal?: AbortSignal) => {
+            this.desktop.lib.fs.assertValidWindowsFilename(name);
+
             return await retry(
                 async () => {
                     const { data, error } = await eden.akasha.dir.create_many.post({
@@ -177,6 +180,8 @@ export class DriveService {
 
     patch = {
         rename: async (itemId: string, name: string) => {
+            this.desktop.lib.fs.assertValidWindowsFilename(name);
+
             const { data, error } = await eden.akasha.content
                 .rename({ id: itemId })
                 .post({ rename: name });
@@ -188,33 +193,50 @@ export class DriveService {
     };
 
     delete = {
-        items: async (ids: string[]) => {
-            const { error } = await eden.akasha.content.trash.trash_many.post({
-                uuids: ids,
-            });
-            if (error) {
-                throw error;
+        items: async (ids: string[], action: "trash" | "delete") => {
+            if (action === "trash") {
+                const { error } = await eden.akasha.content.trash.trash_many.post({
+                    uuids: ids,
+                });
+                if (error) throw error.value;
+            } else if (action === "delete") {
+                const { error } = await eden.akasha.content.delete_many.post({
+                    uuids: ids,
+                });
+                if (error) throw error.value;
+            } else {
+                throw new Error("INVALID_ACTION");
             }
         },
     };
 
     fn = {
-        startUpload: async ({ destId, paths }: { destId: string; paths?: string[] }) => {
+        startUpload: async ({
+            destId,
+            paths,
+            conflictStrategy = "suffix",
+        }: {
+            destId: string;
+            paths?: string[];
+            conflictStrategy?: UploadConflictStrategy;
+        }) => {
             const selectedPaths = await this.selectUploadPaths(paths);
             if (!selectedPaths) return;
 
             const existing = await this.get.item(destId);
-            const preparation = await this.upload.prepareUpload(
+            const preparation = await this.upload.prepareUploadWithConflictStrategy(
                 selectedPaths,
                 existing.children ?? [],
+                conflictStrategy,
             );
             if (preparation.files.length < 1) {
-                throw new Error("업로드 가능한 파일이 없습니다");
+                throw new Error("NO_UPLOADABLE_FILES");
             }
 
             const { pid, restartParams, abortController } = await this.createUploadTransferEntry({
                 destId,
                 paths: selectedPaths,
+                conflictStrategy,
                 preparation,
             });
 
@@ -231,6 +253,24 @@ export class DriveService {
                     error: err instanceof Error ? err.message : String(err),
                 });
             });
+        },
+
+        getUploadConflicts: async ({ destId, paths }: { destId: string; paths?: string[] }) => {
+            const selectedPaths = await this.selectUploadPaths(paths);
+            if (!selectedPaths) {
+                return { selectedPaths: null, conflicts: [] as string[] };
+            }
+
+            const existing = await this.get.item(destId);
+            const conflicts = await this.upload.getRootNameConflicts(
+                selectedPaths,
+                existing.children ?? [],
+            );
+
+            return {
+                selectedPaths,
+                conflicts: conflicts.map((conflict) => conflict.name),
+            };
         },
 
         startDownload: async ({
@@ -361,10 +401,12 @@ export class DriveService {
     private async createUploadTransferEntry({
         destId,
         paths,
+        conflictStrategy,
         preparation,
     }: {
         destId: string;
         paths: string[];
+        conflictStrategy: UploadConflictStrategy;
         preparation: {
             pid: string;
             files: FilesComponent[];
@@ -374,7 +416,7 @@ export class DriveService {
         };
     }) {
         const { pid, files, directories, processName } = preparation;
-        const restartParams: UploadParams = { type: "upload", destId, paths };
+        const restartParams: UploadParams = { type: "upload", destId, paths, conflictStrategy };
         const abortController = new AbortController();
 
         await this.desktop.service.transfer.createTransfer({
@@ -658,7 +700,12 @@ export class DriveService {
                 throw new Error("currentId is required for upload");
             }
 
-            const { files, directories } = await this.upload.prepareUpload(params.paths, []);
+            const existing = await this.get.item(currentId);
+            const { files, directories } = await this.upload.prepareUploadWithConflictStrategy(
+                params.paths,
+                existing.children ?? [],
+                params.conflictStrategy ?? "suffix",
+            );
 
             await this.upload.executeUpload({
                 currentId,

@@ -70,15 +70,20 @@ interface ClearPrefixData {
     inProgress: boolean;
 }
 
+interface ConflictNameDialogData {
+    conflicts: string[];
+}
+
 interface DialogStates {
     gamebananaDialog: BaseDialogState;
     emptyTrashDialog: BaseDialogState;
+    deleteItemsDialog: BaseDialogState;
     createDirDialog: BaseDialogState;
     renameDialog: BaseDialogState;
     previewDialog: BaseDialogState;
     shareDialog: BaseDialogState & { data: { id: string } };
     searchCommand: BaseDialogState;
-    conflictNameDialog: BaseDialogState;
+    conflictNameDialog: BaseDialogState & { data: ConflictNameDialogData };
     clearPrefixDialog: BaseDialogState & { data: ClearPrefixData };
     searchDialog: BaseDialogState;
     notiDialog: BaseDialogState;
@@ -116,12 +121,13 @@ const activeDialogs: Record<DialogName, DialogResolve | null> = {} as Record<
 export const dialogStore = createStore<DialogStates & DialogActions>((set, get) => ({
     gamebananaDialog: { open: false, data: {} },
     emptyTrashDialog: { open: false, data: {} },
+    deleteItemsDialog: { open: false, data: {} },
     createDirDialog: { open: false, data: {} },
     renameDialog: { open: false, data: {} },
     previewDialog: { open: false, data: {} },
     shareDialog: { open: false, data: { id: "" } },
     searchCommand: { open: false, data: {} },
-    conflictNameDialog: { open: false, data: {} },
+    conflictNameDialog: { open: false, data: { conflicts: [] } },
     clearPrefixDialog: {
         open: false,
         data: { id: null, name: "", inProgress: false },

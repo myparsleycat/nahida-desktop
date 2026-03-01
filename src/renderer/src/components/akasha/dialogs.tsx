@@ -1,4 +1,7 @@
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import { Center, Random1619 } from "@renderer/components/common";
 import { DatePicker } from "@renderer/components/date-picker";
+import { DiscordIcon } from "@renderer/components/icon";
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
 import {
   AlertDialog,
@@ -24,13 +27,25 @@ import {
 } from "@renderer/components/ui/dropdown-menu";
 import { Input } from "@renderer/components/ui/input";
 import { Label } from "@renderer/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@renderer/components/ui/select";
 import { Switch } from "@renderer/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import { cn } from "@renderer/lib/utils";
-import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import { useDialogStore, useSelectionStore } from "@renderer/store/drive";
+import { Content } from "@shared/types.gen";
+import { useForm, type AnyFieldApi } from "@tanstack/react-form";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation, useParams, useRouteContext } from "@tanstack/react-router";
 import { format } from "date-fns";
+import { t } from "i18next";
 import {
   AlertTriangleIcon,
   CopyIcon,
@@ -45,21 +60,6 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { useForm, type AnyFieldApi } from "@tanstack/react-form";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@renderer/components/ui/select";
-import { DiscordIcon } from "@renderer/components/icon";
-import { Center, Random1619 } from "@renderer/components/common";
-import { useDialogStore, useSelectionStore } from "@renderer/store/drive";
-import { Content } from "@shared/types.gen";
-import { t } from "i18next";
 
 export const ValidateName = (name: string) => {
   if (!name.trim()) {
@@ -89,6 +89,24 @@ export function RenameDialog() {
     mutationFn: async ({ item, rename }: { item: Content; rename: string }) => {
       const data = await window.api.invoke("drive:patch:rename", item.id, rename);
       return data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
+      dialog.setOpen("renameDialog", false);
+      return t("page.drive.dialog.rename.#.toast-promise.success");
+    },
+    onError: (err) => {
+      if (err.message.includes("INVALID_WINDOWS_FILENAME")) {
+        toast.warning(
+          selection.selectedItems[0].isDir
+            ? t("page.drive.dialog.common.invalid_dir_name")
+            : t("page.drive.dialog.common.invalid_file_name"),
+        );
+      } else {
+        toast.error("Rename Error", {
+          description: err.message,
+        });
+      }
     },
   });
 
@@ -128,19 +146,9 @@ export function RenameDialog() {
                 });
               }
 
-              const renamePromise = mutation.mutateAsync({
+              return await mutation.mutateAsync({
                 item: selection.selectedItems[0],
                 rename,
-              });
-
-              toast.promise(renamePromise, {
-                loading: t("page.drive.dialog.rename.#.toast-promise.loading"),
-                success: async () => {
-                  await queryClient.invalidateQueries();
-                  dialog.setOpen("renameDialog", false);
-                  return t("page.drive.dialog.rename.#.toast-promise.success");
-                },
-                error: (e: any) => e.message,
               });
             }}
           >
@@ -213,12 +221,30 @@ export function NewDirectoryDialog({ contents }: { contents: Content[] }) {
   const { queryClient } = useRouteContext({ from: "__root__" });
   const location = useLocation();
 
-  const id = location.pathname.split("/").pop() || "";
+  const id = location.pathname.split("/").pop();
 
   const mutation = useMutation({
     mutationKey: ["akasha", "make_dir", id],
     mutationFn: async (name: string) => {
+      if (!id) {
+        toast.error("cannot get current id");
+        return;
+      }
       await window.api.invoke("drive:post:dir", id, name);
+    },
+    onSuccess: async () => {
+      toast.success(t("page.drive.dialog.create_dir.#.toast-promise.success"));
+      dialog.setOpen("createDirDialog", false);
+      await queryClient.invalidateQueries();
+    },
+    onError: (err) => {
+      if (err.message.includes("INVALID_WINDOWS_FILENAME")) {
+        toast.warning(t("page.drive.dialog.common.invalid_dir_name"));
+      } else {
+        toast.error("New Directory Error", {
+          description: err.message,
+        });
+      }
     },
   });
 
@@ -240,16 +266,7 @@ export function NewDirectoryDialog({ contents }: { contents: Content[] }) {
       return toast.warning(t("page.drive.dialog.create_dir.#.2"));
     }
 
-    await mutation
-      .mutateAsync(name)
-      .then(async () => {
-        toast.success(t("page.drive.dialog.create_dir.#.toast-promise.success"));
-        dialog.setOpen("createDirDialog", false);
-        await queryClient.invalidateQueries();
-      })
-      .catch((err) => {
-        toast.error(err.message);
-      });
+    await mutation.mutateAsync(name);
   };
 
   return (
@@ -280,7 +297,7 @@ export function NewDirectoryDialog({ contents }: { contents: Content[] }) {
               {t("g.cancel")}
             </Button>
             <Button type="submit" className="flex items-center gap-2">
-              {mutation.isPending && <Loader2Icon />}
+              {mutation.isPending && <Loader2Icon className="animate-spin" />}
               {t("g.confirm")}
             </Button>
           </div>
@@ -758,6 +775,138 @@ export function EmptyTrashDialog() {
             }}
           >
             {t("drive.ui.empty_trash_dialog.1")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+export function DeleteItemsDialog() {
+  const { t } = useTranslation();
+  const { deleteItemsDialog, setOpen } = useDialogStore();
+  const { selectedItems, setSelectedItems } = useSelectionStore();
+  const { queryClient } = useRouteContext({ from: "__root__" });
+
+  const deleteMutation = useMutation({
+    mutationKey: ["akasha", "drive", "delete-items", "delete"],
+    mutationFn: async (ids: string[]) => {
+      await window.api.invoke("drive:delete:items", ids, "delete");
+    },
+  });
+
+  const handleDelete = async () => {
+    if (selectedItems.length === 0) {
+      setOpen("deleteItemsDialog", false);
+      return;
+    }
+
+    await deleteMutation
+      .mutateAsync(selectedItems.map((item) => item.id))
+      .then(async () => {
+        toast.success(t("page.drive.dialog.delete_items.#.toast.success"));
+        setSelectedItems([]);
+        setOpen("deleteItemsDialog", false);
+        await queryClient.invalidateQueries();
+      })
+      .catch((err: string) => {
+        toast.error(err);
+      });
+  };
+
+  return (
+    <AlertDialog
+      open={deleteItemsDialog.open}
+      onOpenChange={(v) => setOpen("deleteItemsDialog", v)}
+    >
+      <AlertDialogContent
+        onEscapeKeyDown={(e) => {
+          if (deleteMutation.isPending) {
+            e.preventDefault();
+          }
+        }}
+      >
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("page.drive.dialog.delete_items.title")}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t("page.drive.dialog.delete_items.description")}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+          <AlertDialogAction onClick={handleDelete} disabled={deleteMutation.isPending}>
+            {deleteMutation.isPending && <Loader2Icon className="animate-spin" />}
+            {t("page.drive.dialog.delete_items.action")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+export function ConflictNameDialog() {
+  const { t } = useTranslation();
+  const { conflictNameDialog, setOpen, resolveDialog } = useDialogStore();
+  const conflicts = conflictNameDialog.data?.conflicts ?? [];
+  const preview = conflicts.slice(0, 6);
+  const hiddenCount = Math.max(conflicts.length - preview.length, 0);
+
+  return (
+    <AlertDialog
+      open={conflictNameDialog.open}
+      onOpenChange={(open) => {
+        setOpen("conflictNameDialog", open);
+        if (!open) {
+          resolveDialog("conflictNameDialog", "cancel");
+        }
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("page.drive.dialog.conflict_name.title")}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t("page.drive.dialog.conflict_name.description", { count: conflicts.length })}
+          </AlertDialogDescription>
+          <div className="text-sm mt-2">
+            {t("page.drive.dialog.conflict_name.option_suffix")}
+            <br />
+            {t("page.drive.dialog.conflict_name.option_skip")}
+
+            {preview.length > 0 && (
+              <div className="w-full text-left mt-2 text-xs text-muted-foreground">
+                <p>{t("page.drive.dialog.conflict_name.preview_label")}</p>
+                <p>{preview.join(", ")}</p>
+                {hiddenCount > 0 && (
+                  <p>{t("page.drive.dialog.conflict_name.preview_more", { count: hiddenCount })}</p>
+                )}
+              </div>
+            )}
+          </div>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel
+            onClick={() => {
+              setOpen("conflictNameDialog", false);
+              resolveDialog("conflictNameDialog", "cancel");
+            }}
+          >
+            {t("g.cancel")}
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              setOpen("conflictNameDialog", false);
+              resolveDialog("conflictNameDialog", "skip");
+            }}
+          >
+            {t("page.drive.dialog.conflict_name.action_skip")}
+          </AlertDialogAction>
+          <AlertDialogAction
+            onClick={() => {
+              setOpen("conflictNameDialog", false);
+              resolveDialog("conflictNameDialog", "suffix");
+            }}
+          >
+            {t("page.drive.dialog.conflict_name.action_suffix")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

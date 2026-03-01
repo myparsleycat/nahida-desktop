@@ -16,6 +16,14 @@ export interface ReaddirOptions {
     mode?: "flat" | "tree";
 }
 
+// oxlint-disable-next-line no-control-regex
+const WINDOWS_INVALID_CHARS_REGEX = /[<>:"/\\|?*\u0000-\u001F]/;
+// oxlint-disable-next-line no-control-regex
+const WINDOWS_INVALID_CHARS_REGEX_GLOBAL = /[<>:"/\\|?*\u0000-\u001F]/g;
+const WINDOWS_RESERVED_NAMES_REGEX = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i;
+const ONLY_DOTS_REGEX = /^\.+$/;
+const TRAILING_DOTS_REGEX = /[.]+$/;
+
 export class FS {
     private readonly desktop: NahidaDesktop;
     public constructor(desktop: NahidaDesktop) {
@@ -69,12 +77,42 @@ export class FS {
         return fse.stat(path);
     }
 
-    public sanitizeWindowsFilename(input: string, sanitizeString = " ") {
-        // biome-ignore lint/suspicious/noControlCharactersInRegex: <>
-        const regex = /[<>:"/\\|?*\u0000-\u001F]/g;
-        let sanitized = input.replace(regex, sanitizeString).trim();
+    public isValidWindowsFilename(name: string): boolean {
+        if (!name || name.length === 0 || name.length > 255) {
+            return false;
+        }
 
-        sanitized = sanitized.replace(/[.]+$/, "");
+        // oxlint-disable-next-line no-control-regex
+        if (WINDOWS_INVALID_CHARS_REGEX.test(name)) {
+            return false;
+        }
+
+        if (ONLY_DOTS_REGEX.test(name)) {
+            return false;
+        }
+
+        if (name.endsWith(" ") || name.endsWith(".")) {
+            return false;
+        }
+
+        if (WINDOWS_RESERVED_NAMES_REGEX.test(name)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public assertValidWindowsFilename(name: string) {
+        if (!this.isValidWindowsFilename(name)) {
+            throw new Error("INVALID_WINDOWS_FILENAME");
+        }
+    }
+
+    public sanitizeWindowsFilename(input: string, sanitizeString = " ") {
+        // oxlint-disable-next-line no-control-regex
+        let sanitized = input.replace(WINDOWS_INVALID_CHARS_REGEX_GLOBAL, sanitizeString).trim();
+
+        sanitized = sanitized.replace(TRAILING_DOTS_REGEX, "");
 
         if (sanitized.length === 0) {
             sanitized = "Untitled";

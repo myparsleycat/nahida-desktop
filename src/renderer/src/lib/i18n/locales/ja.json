@@ -65,6 +65,9 @@
         "1": "ここにファイルやフォルダーをドラッグしてアップロード",
         "2": "ファイルやフォルダをここにドラッグしてアップロード"
       },
+      "toast": {
+        "no_uploadable_files": "アップロード可能なファイルがありません。"
+      },
       "head_buttons": {
         "search_in_dir_placeholder": "このフォルダー内を検索...",
         "dropdown_menu": {
@@ -87,9 +90,14 @@
         "download": "ダウンロード",
         "rename": "名前を変更",
         "trash": "ゴミ箱",
-        "new_dir": "フォルダー作成"
+        "new_dir": "フォルダー作成",
+        "delete": "削除"
       },
       "dialog": {
+        "common": {
+          "invalid_dir_name": "無効なディレクトリ名です。",
+          "invalid_file_name": "無効なファイル名です。"
+        },
         "create_dir": {
           "title": "フォルダー作成",
           "name_input_placeholder": "フォルダー名",
@@ -113,6 +121,26 @@
             "toast-promise": {
               "loading": "名前を変更しています...",
               "success": "名前が変更されました。"
+            }
+          }
+        },
+        "conflict_name": {
+          "title": "重複した名前の項目があります",
+          "description": "重複 {{count}} 件をどのように処理するか選択してください。",
+          "option_suffix": "名前変更: name (2) の形式で名前を変更してからアップロード",
+          "option_skip": "スキップ: 重複項目を除外してアップロード",
+          "preview_label": "重複項目:",
+          "preview_more": "他 {{count}} 件",
+          "action_skip": "スキップ",
+          "action_suffix": "名前変更"
+        },
+        "delete_items": {
+          "title": "項目を削除",
+          "description": "選択した項目を完全に削除しますか？この操作は元に戻せません。",
+          "action": "削除",
+          "#": {
+            "toast": {
+              "success": "項目が削除されました"
             }
           }
         }
