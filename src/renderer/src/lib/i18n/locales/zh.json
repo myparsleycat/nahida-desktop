@@ -89,7 +89,8 @@
         "download": "下载",
         "rename": "重命名",
         "trash": "回收站",
-        "new_dir": "创建文件夹"
+        "new_dir": "创建文件夹",
+        "delete": "删除"
       },
       "dialog": {
         "create_dir": {
@@ -127,6 +128,16 @@
           "preview_more": "另外还有 {{count}} 个",
           "action_skip": "跳过",
           "action_suffix": "重命名"
+        },
+        "delete_items": {
+          "title": "删除项目",
+          "description": "确定要永久删除所选项目吗？此操作无法撤销。",
+          "action": "删除",
+          "#": {
+            "toast": {
+              "success": "项目已删除"
+            }
+          }
         }
       }
     },

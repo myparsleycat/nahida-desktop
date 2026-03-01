@@ -248,8 +248,9 @@ function ContextMenuContentSnippet() {
   const { t } = useTranslation();
   const { queryClient } = useRouteContext({ from: "__root__" });
   const location = useLocation();
+  const isSharePath = location.pathname.startsWith("/drive/share");
   const { id: itemId } = useParams({
-    from: location.pathname.startsWith("/drive/share") ? "/drive/share/$id" : "/drive/drive/$id",
+    from: isSharePath ? "/drive/share/$id" : "/drive/drive/$id",
   });
   const navi = useNavigate();
 
@@ -257,7 +258,7 @@ function ContextMenuContentSnippet() {
     mutationKey: ["akasha", "drive", "trash"],
     mutationFn: async ({ items }: { items: Content[] }) => {
       const ids = items.map((item) => item.id);
-      await window.api.invoke("drive:delete:items", ids);
+      await window.api.invoke("drive:delete:items", ids, "trash");
       return;
     },
   });
@@ -382,10 +383,22 @@ function ContextMenuContentSnippet() {
         </>
       )}
 
-      <ContextMenuItem className="gap-x-2 text-red-500" onClick={handleTrashBtn}>
-        <Trash2Icon size={18} />
-        {t("page.drive.context_menu.trash")}
-      </ContextMenuItem>
+      {isSharePath ? (
+        <ContextMenuItem className="gap-x-2 text-red-500" onClick={handleTrashBtn}>
+          <Trash2Icon size={18} />
+          {t("page.drive.context_menu.trash")}
+        </ContextMenuItem>
+      ) : (
+        <>
+          <ContextMenuItem
+            className="gap-x-2 text-red-500"
+            onClick={() => dialog.setOpen("deleteItemsDialog", true)}
+          >
+            <Trash2Icon size={18} />
+            {t("page.drive.context_menu.delete")}
+          </ContextMenuItem>
+        </>
+      )}
     </>
   ) : (
     <ContextMenuItem

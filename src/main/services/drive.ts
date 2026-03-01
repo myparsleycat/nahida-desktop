@@ -189,12 +189,19 @@ export class DriveService {
     };
 
     delete = {
-        items: async (ids: string[]) => {
-            const { error } = await eden.akasha.content.trash.trash_many.post({
-                uuids: ids,
-            });
-            if (error) {
-                throw error;
+        items: async (ids: string[], action: "trash" | "delete") => {
+            if (action === "trash") {
+                const { error } = await eden.akasha.content.trash.trash_many.post({
+                    uuids: ids,
+                });
+                if (error) throw error.value;
+            } else if (action === "delete") {
+                const { error } = await eden.akasha.content.delete_many.post({
+                    uuids: ids,
+                });
+                if (error) throw error.value;
+            } else {
+                throw new Error("INVALID_ACTION");
             }
         },
     };

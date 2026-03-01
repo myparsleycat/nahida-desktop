@@ -89,7 +89,8 @@
         "download": "다운로드",
         "rename": "이름 바꾸기",
         "trash": "휴지통",
-        "new_dir": "폴더 생성"
+        "new_dir": "폴더 생성",
+        "delete": "삭제"
       },
       "dialog": {
         "create_dir": {
@@ -127,6 +128,16 @@
           "preview_more": "외 {{count}}개",
           "action_skip": "건너뛰기",
           "action_suffix": "이름 변경"
+        },
+        "delete_items": {
+          "title": "항목 삭제",
+          "description": "선택한 항목을 영구 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+          "action": "삭제",
+          "#": {
+            "toast": {
+              "success": "항목이 삭제되었습니다"
+            }
+          }
         }
       }
     },

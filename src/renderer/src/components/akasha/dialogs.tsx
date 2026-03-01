@@ -769,6 +769,68 @@ export function EmptyTrashDialog() {
   );
 }
 
+export function DeleteItemsDialog() {
+  const { t } = useTranslation();
+  const { deleteItemsDialog, setOpen } = useDialogStore();
+  const { selectedItems, setSelectedItems } = useSelectionStore();
+  const { queryClient } = useRouteContext({ from: "__root__" });
+
+  const deleteMutation = useMutation({
+    mutationKey: ["akasha", "drive", "delete-items", "delete"],
+    mutationFn: async (ids: string[]) => {
+      await window.api.invoke("drive:delete:items", ids, "delete");
+    },
+  });
+
+  const handleDelete = async () => {
+    if (selectedItems.length === 0) {
+      setOpen("deleteItemsDialog", false);
+      return;
+    }
+
+    await deleteMutation
+      .mutateAsync(selectedItems.map((item) => item.id))
+      .then(async () => {
+        toast.success(t("page.drive.dialog.delete_items.#.toast.success"));
+        setSelectedItems([]);
+        setOpen("deleteItemsDialog", false);
+        await queryClient.invalidateQueries();
+      })
+      .catch((err: string) => {
+        toast.error(err);
+      });
+  };
+
+  return (
+    <AlertDialog
+      open={deleteItemsDialog.open}
+      onOpenChange={(v) => setOpen("deleteItemsDialog", v)}
+    >
+      <AlertDialogContent
+        onEscapeKeyDown={(e) => {
+          if (deleteMutation.isPending) {
+            e.preventDefault();
+          }
+        }}
+      >
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("page.drive.dialog.delete_items.title")}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t("page.drive.dialog.delete_items.description")}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+          <AlertDialogAction onClick={handleDelete} disabled={deleteMutation.isPending}>
+            {deleteMutation.isPending && <Loader2Icon className="animate-spin" />}
+            {t("page.drive.dialog.delete_items.action")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 export function ConflictNameDialog() {
   const { t } = useTranslation();
   const { conflictNameDialog, setOpen, resolveDialog } = useDialogStore();

@@ -90,7 +90,8 @@
         "download": "ダウンロード",
         "rename": "名前を変更",
         "trash": "ゴミ箱",
-        "new_dir": "フォルダー作成"
+        "new_dir": "フォルダー作成",
+        "delete": "削除"
       },
       "dialog": {
         "create_dir": {
@@ -128,6 +129,16 @@
           "preview_more": "他 {{count}} 件",
           "action_skip": "スキップ",
           "action_suffix": "名前変更"
+        },
+        "delete_items": {
+          "title": "項目を削除",
+          "description": "選択した項目を完全に削除しますか？この操作は元に戻せません。",
+          "action": "削除",
+          "#": {
+            "toast": {
+              "success": "項目が削除されました"
+            }
+          }
         }
       }
     },

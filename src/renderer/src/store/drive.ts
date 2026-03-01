@@ -77,6 +77,7 @@ interface ConflictNameDialogData {
 interface DialogStates {
     gamebananaDialog: BaseDialogState;
     emptyTrashDialog: BaseDialogState;
+    deleteItemsDialog: BaseDialogState;
     createDirDialog: BaseDialogState;
     renameDialog: BaseDialogState;
     previewDialog: BaseDialogState;
@@ -120,6 +121,7 @@ const activeDialogs: Record<DialogName, DialogResolve | null> = {} as Record<
 export const dialogStore = createStore<DialogStates & DialogActions>((set, get) => ({
     gamebananaDialog: { open: false, data: {} },
     emptyTrashDialog: { open: false, data: {} },
+    deleteItemsDialog: { open: false, data: {} },
     createDirDialog: { open: false, data: {} },
     renameDialog: { open: false, data: {} },
     previewDialog: { open: false, data: {} },

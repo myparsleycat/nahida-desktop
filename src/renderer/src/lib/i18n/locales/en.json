@@ -88,6 +88,7 @@
         "open": "Open",
         "download": "Download",
         "rename": "Rename",
+        "delete": "Delete",
         "trash": "Trash",
         "new_dir": "Create folder"
       },
@@ -127,6 +128,16 @@
           "preview_more": "{{count}} more",
           "action_skip": "Skip",
           "action_suffix": "Rename"
+        },
+        "delete_items": {
+          "title": "Delete Items",
+          "description": "Are you sure you want to permanently delete the selected items? This action cannot be undone.",
+          "action": "Delete",
+          "#": {
+            "toast": {
+              "success": "Items deleted successfully"
+            }
+          }
         }
       }
     },

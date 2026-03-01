@@ -9,6 +9,7 @@ import {
 } from "@renderer/components/akasha";
 import {
   ConflictNameDialog,
+  DeleteItemsDialog,
   NewDirectoryDialog,
   PubLinkDialog,
   RenameDialog,
@@ -208,6 +209,7 @@ function RouteComponent() {
         </div>
 
         <RenameDialog />
+        <DeleteItemsDialog />
         <ConflictNameDialog />
         <NewDirectoryDialog contents={sortedContents} />
         <PubLinkDialog />
