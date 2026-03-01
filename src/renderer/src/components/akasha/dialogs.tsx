@@ -284,7 +284,7 @@ export function NewDirectoryDialog({ contents }: { contents: Content[] }) {
               {t("g.cancel")}
             </Button>
             <Button type="submit" className="flex items-center gap-2">
-              {mutation.isPending && <Loader2Icon />}
+              {mutation.isPending && <Loader2Icon className="animate-spin" />}
               {t("g.confirm")}
             </Button>
           </div>
