@@ -65,7 +65,7 @@ export class XXMI {
     public async getXXMIData() {
         return {
             xxmiPath: this.xxmiPath,
-            enabledImporters: await this.getEnabledImporters(),
+            enabledImporters: this.getEnabledImporters(),
             xxmiConfig: this.xxmiConfig,
         };
     }
@@ -120,7 +120,7 @@ export class XXMI {
         return null;
     }
 
-    public async getEnabledImporters() {
+    public getEnabledImporters() {
         const config = this.xxmiConfig;
         if (!config) {
             return [];
