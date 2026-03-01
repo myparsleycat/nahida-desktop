@@ -791,30 +791,40 @@ export function ConflictNameDialog() {
           <AlertDialogTitle>{t("page.drive.dialog.conflict_name.title")}</AlertDialogTitle>
           <AlertDialogDescription>
             {t("page.drive.dialog.conflict_name.description", { count: conflicts.length })}
-            <br />
+          </AlertDialogDescription>
+          <div className="text-sm mt-2">
             {t("page.drive.dialog.conflict_name.option_suffix")}
             <br />
             {t("page.drive.dialog.conflict_name.option_skip")}
-          </AlertDialogDescription>
-          {preview.length > 0 && (
-            <div className="w-full text-left mt-2 text-xs text-muted-foreground">
-              <p>{t("page.drive.dialog.conflict_name.preview_label")}</p>
-              <p>{preview.join(", ")}</p>
-              {hiddenCount > 0 && (
-                <p>{t("page.drive.dialog.conflict_name.preview_more", { count: hiddenCount })}</p>
-              )}
-            </div>
-          )}
+
+            {preview.length > 0 && (
+              <div className="w-full text-left mt-2 text-xs text-muted-foreground">
+                <p>{t("page.drive.dialog.conflict_name.preview_label")}</p>
+                <p>{preview.join(", ")}</p>
+                {hiddenCount > 0 && (
+                  <p>{t("page.drive.dialog.conflict_name.preview_more", { count: hiddenCount })}</p>
+                )}
+              </div>
+            )}
+          </div>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel
+            onClick={() => {
+              setOpen("conflictNameDialog", false);
+              resolveDialog("conflictNameDialog", "cancel");
+            }}
+          >
+            {t("g.cancel")}
+          </AlertDialogCancel>
+          <AlertDialogAction
             onClick={() => {
               setOpen("conflictNameDialog", false);
               resolveDialog("conflictNameDialog", "skip");
             }}
           >
             {t("page.drive.dialog.conflict_name.action_skip")}
-          </AlertDialogCancel>
+          </AlertDialogAction>
           <AlertDialogAction
             onClick={() => {
               setOpen("conflictNameDialog", false);

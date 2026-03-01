@@ -117,14 +117,14 @@
           }
         },
         "conflict_name": {
-          "title": "重複名の項目があります",
-          "description": "重複 {{count}} 件の処理方法を選択してください。",
-          "option_suffix": "確認: name (2) 形式に変更してアップロード",
-          "option_skip": "キャンセル: 重複項目を除外してアップロード",
+          "title": "重複した名前の項目があります",
+          "description": "重複 {{count}} 件をどのように処理するか選択してください。",
+          "option_suffix": "名前変更: name (2) の形式で名前を変更してからアップロード",
+          "option_skip": "スキップ: 重複項目を除外してアップロード",
           "preview_label": "重複項目:",
-          "preview_more": "ほか {{count}} 件",
-          "action_skip": "重複をスキップ",
-          "action_suffix": "名前を変更してアップロード"
+          "preview_more": "他 {{count}} 件",
+          "action_skip": "スキップ",
+          "action_suffix": "名前変更"
         }
       }
     },

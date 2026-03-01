@@ -116,14 +116,14 @@
           }
         },
         "conflict_name": {
-          "title": "Duplicate names found",
-          "description": "Choose how to handle {{count}} duplicate item(s).",
-          "option_suffix": "Confirm: rename as name (2) and upload",
-          "option_skip": "Cancel: skip duplicate items and upload the rest",
-          "preview_label": "Duplicates:",
-          "preview_more": "and {{count}} more",
-          "action_skip": "Skip duplicates",
-          "action_suffix": "Rename and upload"
+          "title": "There are duplicate name items",
+          "description": "Please choose how to handle {{count}} duplicates.",
+          "option_suffix": "Rename: rename in the format name (2) before uploading",
+          "option_skip": "Skip: upload after excluding duplicate items",
+          "preview_label": "Duplicate items:",
+          "preview_more": "{{count}} more",
+          "action_skip": "Skip",
+          "action_suffix": "Rename"
         }
       }
     },
