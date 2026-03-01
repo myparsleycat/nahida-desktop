@@ -785,21 +785,24 @@ export class UploadLib {
     ): Promise<UploadRootConflict[]> {
         const { files, directories } = await this.collect(paths);
         const existingNames = new Set(children.map((child) => child.name));
+        const seenRootNames = new Set<string>();
         const conflicts: UploadRootConflict[] = [];
 
         const rootDirectories = directories.filter((dir) => dir.parentPath === "");
         const rootFiles = files.filter((file) => file.parentPath === "");
 
         for (const rootDir of rootDirectories) {
-            if (existingNames.has(rootDir.name)) {
+            if (existingNames.has(rootDir.name) || seenRootNames.has(rootDir.name)) {
                 conflicts.push({ name: rootDir.name, type: "directory" });
             }
+            seenRootNames.add(rootDir.name);
         }
 
         for (const rootFile of rootFiles) {
-            if (existingNames.has(rootFile.name)) {
+            if (existingNames.has(rootFile.name) || seenRootNames.has(rootFile.name)) {
                 conflicts.push({ name: rootFile.name, type: "file" });
             }
+            seenRootNames.add(rootFile.name);
         }
 
         return conflicts;
