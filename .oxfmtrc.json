@@ -7,7 +7,8 @@
     "singleQuote": false,
     "trailingComma": "all",
     "sortImports": {
-        "order": "asc"
+        "order": "asc",
+        "newlinesBetween": false
     },
     "overrides": [
         {
@@ -25,7 +26,7 @@
         {
             "files": ["*.json"],
             "options": {
-                "tabWidth": 2
+                "tabWidth": 4
             }
         }
     ],
