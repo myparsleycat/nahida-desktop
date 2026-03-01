@@ -33,7 +33,7 @@ export class ModManager {
                 modFolderPath,
                 { depth: 0 },
                 (event) => {
-                    if (event === "add" || event === "unlink") {
+                    if (event === "create" || event === "remove") {
                         if (this.desktop.window.main.window) {
                             this.desktop.ipc.postMessageToWindow(
                                 this.desktop.window.main.window,
@@ -59,7 +59,7 @@ export class ModManager {
                 characterPath,
                 { depth: 0 },
                 (event) => {
-                    if (event === "update" || event === "unlink") {
+                    if (event === "modify" || event === "remove") {
                         if (this.desktop.window.main.window) {
                             this.desktop.ipc.postMessageToWindow(
                                 this.desktop.window.main.window,

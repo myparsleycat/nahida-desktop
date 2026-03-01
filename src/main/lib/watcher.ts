@@ -1,91 +1,21 @@
-import path from "node:path";
-import { app } from "electron";
-import { Client, type SubscriptionResponse } from "fb-watchman";
+import { NativeWatcher, type WatchEvent } from "@native/native-fs";
 import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "..";
-
-const watchmanBinaryPath = app.isPackaged
-    ? path.join(app.getAppPath(), "..", "lib", "watchman.exe")
-    : path.join(
-          app.getAppPath(),
-          "build",
-          "watchman-v2025.02.24.00-windows",
-          "watchman",
-          "watchman.exe",
-      );
 
 interface WatcherOptions {
     recursive?: boolean;
     depth?: number;
-}
-
-interface WatchData {
-    watchRoot: string;
-    subscriptionName: string;
+    compareContents?: boolean;
+    pollIntervalMs?: number;
 }
 
 export class Watcher {
     private readonly desktop: NahidaDesktop;
-    private client: Client;
-    private pathToWatchData: Map<string, WatchData>;
-    private pathToIds: Map<string, Set<string>>;
-    private idToPath: Map<string, string>;
-    private pathToRecursive: Map<string, boolean>;
-    private callbacks: Map<string, (eventName: string, path: string) => void>;
-    private subscriptionToPath: Map<string, string>;
+    private watchers: Map<string, NativeWatcher>;
 
     constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
-        this.client = new Client({ watchmanBinaryPath });
-        this.pathToWatchData = new Map();
-        this.pathToIds = new Map();
-        this.idToPath = new Map();
-        this.pathToRecursive = new Map();
-        this.callbacks = new Map();
-        this.subscriptionToPath = new Map();
-
-        this.client.on("subscription", (resp: SubscriptionResponse) => {
-            this.handleEvents(resp);
-        });
-
-        this.client.on("error", (err: Error) => {
-            this.desktop.logger.error(err, "Watcher:watchman:error");
-        });
-    }
-
-    private handleEvents(resp: SubscriptionResponse) {
-        const subscriptionName = resp.subscription;
-        const watchedPath = this.subscriptionToPath.get(subscriptionName);
-        if (!watchedPath) return;
-
-        const ids = this.pathToIds.get(watchedPath);
-        if (!ids) return;
-
-        const isRecursive = this.pathToRecursive.get(watchedPath);
-
-        for (const file of resp.files) {
-            const fullPath = path.join(watchedPath, file.name);
-
-            if (isRecursive === false) {
-                if (path.dirname(fullPath) !== watchedPath) {
-                    continue;
-                }
-            }
-
-            let eventName: string;
-            if (file.exists === false) {
-                eventName = "unlink";
-            } else {
-                eventName = "update";
-            }
-
-            for (const id of ids) {
-                const callback = this.callbacks.get(id);
-                if (callback) {
-                    callback(eventName, fullPath);
-                }
-            }
-        }
+        this.watchers = new Map();
     }
 
     public async createWatcher(
@@ -100,106 +30,39 @@ export class Watcher {
         if (options.recursive === false) recursive = false;
         if (options.depth === 0) recursive = false;
 
-        for (const p of paths) {
-            const normalizedPath = path.resolve(p);
+        const watcher = new NativeWatcher();
 
-            if (!this.pathToIds.has(normalizedPath)) {
-                this.pathToIds.set(normalizedPath, new Set());
-                this.pathToRecursive.set(normalizedPath, recursive);
-
-                try {
-                    await this.subscribe(normalizedPath);
-                } catch (error) {
-                    this.desktop.logger.error(error, `Watcher:subscribe:${normalizedPath}`);
-                }
-            }
-            this.pathToIds.get(normalizedPath)!.add(id);
-            this.idToPath.set(id, normalizedPath);
+        try {
+            watcher.watch(
+                paths,
+                recursive,
+                {
+                    compareContents: options.compareContents,
+                    pollIntervalMs: options.pollIntervalMs,
+                },
+                (err: Error | null, event: WatchEvent) => {
+                    if (err) {
+                        this.desktop.logger.error(err, `Watcher:error:${id}`);
+                        return;
+                    }
+                    if (event) {
+                        callback(event.eventName, event.path);
+                    }
+                },
+            );
+        } catch (error) {
+            this.desktop.logger.error(error, `Watcher:subscribe:${paths}`);
         }
 
-        this.callbacks.set(id, callback);
+        this.watchers.set(id, watcher);
         return id;
     }
 
-    private subscribe(normalizedPath: string): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.client.capabilityCheck({ optional: [], required: ["relative_root"] }, (err) => {
-                if (err) return reject(err);
-
-                this.client.command(["watch-project", normalizedPath], (err, resp: any) => {
-                    if (err) return reject(err);
-
-                    if (resp.warning) {
-                        this.desktop.logger.warn(resp.warning, "Watcher:watchman:warning");
-                    }
-
-                    const watchRoot = resp.watch;
-                    const relativePath = resp.relative_path;
-
-                    this.client.command(["clock", watchRoot], (err, clockResp: any) => {
-                        if (err) return reject(err);
-
-                        const subscriptionName = `sub-${nanoid()}`;
-                        const sub: any = {
-                            fields: ["name", "size", "mtime_ms", "exists", "type", "new"],
-                            since: clockResp.clock,
-                        };
-
-                        if (relativePath) {
-                            sub.relative_root = relativePath;
-                        }
-
-                        this.client.command(
-                            ["subscribe", watchRoot, subscriptionName, sub],
-                            (err) => {
-                                if (err) return reject(err);
-
-                                this.pathToWatchData.set(normalizedPath, {
-                                    watchRoot,
-                                    subscriptionName,
-                                });
-                                this.subscriptionToPath.set(subscriptionName, normalizedPath);
-                                resolve();
-                            },
-                        );
-                    });
-                });
-            });
-        });
-    }
-
     public async removeWatcher(id: string) {
-        const callback = this.callbacks.get(id);
-        if (callback) {
-            this.callbacks.delete(id);
-            const watchedPath = this.idToPath.get(id);
-            if (watchedPath) {
-                const ids = this.pathToIds.get(watchedPath);
-                if (ids) {
-                    ids.delete(id);
-                    if (ids.size === 0) {
-                        const data = this.pathToWatchData.get(watchedPath);
-                        if (data) {
-                            this.client.command(
-                                ["unsubscribe", data.watchRoot, data.subscriptionName],
-                                (err) => {
-                                    if (err) {
-                                        this.desktop.logger.error(
-                                            err,
-                                            `Watcher:unsubscribe:${watchedPath}`,
-                                        );
-                                    }
-                                },
-                            );
-                            this.subscriptionToPath.delete(data.subscriptionName);
-                            this.pathToWatchData.delete(watchedPath);
-                        }
-                        this.pathToIds.delete(watchedPath);
-                        this.pathToRecursive.delete(watchedPath);
-                    }
-                }
-                this.idToPath.delete(id);
-            }
+        const watcher = this.watchers.get(id);
+        if (watcher) {
+            watcher.unwatch();
+            this.watchers.delete(id);
         }
     }
 }
