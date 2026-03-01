@@ -236,6 +236,7 @@ export class DriveService {
             const { pid, restartParams, abortController } = await this.createUploadTransferEntry({
                 destId,
                 paths: selectedPaths,
+                conflictStrategy,
                 preparation,
             });
 
@@ -400,10 +401,12 @@ export class DriveService {
     private async createUploadTransferEntry({
         destId,
         paths,
+        conflictStrategy,
         preparation,
     }: {
         destId: string;
         paths: string[];
+        conflictStrategy: UploadConflictStrategy;
         preparation: {
             pid: string;
             files: FilesComponent[];
@@ -413,7 +416,7 @@ export class DriveService {
         };
     }) {
         const { pid, files, directories, processName } = preparation;
-        const restartParams: UploadParams = { type: "upload", destId, paths };
+        const restartParams: UploadParams = { type: "upload", destId, paths, conflictStrategy };
         const abortController = new AbortController();
 
         await this.desktop.service.transfer.createTransfer({
@@ -697,7 +700,12 @@ export class DriveService {
                 throw new Error("currentId is required for upload");
             }
 
-            const { files, directories } = await this.upload.prepareUpload(params.paths, []);
+            const existing = await this.get.item(currentId);
+            const { files, directories } = await this.upload.prepareUploadWithConflictStrategy(
+                params.paths,
+                existing.children ?? [],
+                params.conflictStrategy ?? "suffix",
+            );
 
             await this.upload.executeUpload({
                 currentId,

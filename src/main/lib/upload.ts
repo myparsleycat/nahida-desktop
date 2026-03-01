@@ -63,6 +63,7 @@ export type UploadParams = {
     paths: string[];
     processedFiles?: FinalFile[];
     fileHashes?: Record<string, string>;
+    conflictStrategy?: UploadConflictStrategy;
 };
 
 export class UploadLib {
@@ -769,10 +770,19 @@ export class UploadLib {
         const { files, directories } = await this.collect(paths);
         const conflictStrategy: UploadConflictStrategy = "suffix";
 
-        return this.prepareUploadWithStrategy(files, directories, children, conflictStrategy, paths);
+        return this.prepareUploadWithStrategy(
+            files,
+            directories,
+            children,
+            conflictStrategy,
+            paths,
+        );
     }
 
-    public async getRootNameConflicts(paths: string[], children: Content[]): Promise<UploadRootConflict[]> {
+    public async getRootNameConflicts(
+        paths: string[],
+        children: Content[],
+    ): Promise<UploadRootConflict[]> {
         const { files, directories } = await this.collect(paths);
         const existingNames = new Set(children.map((child) => child.name));
         const conflicts: UploadRootConflict[] = [];
@@ -801,7 +811,13 @@ export class UploadLib {
         conflictStrategy: UploadConflictStrategy,
     ) {
         const { files, directories } = await this.collect(paths);
-        return this.prepareUploadWithStrategy(files, directories, children, conflictStrategy, paths);
+        return this.prepareUploadWithStrategy(
+            files,
+            directories,
+            children,
+            conflictStrategy,
+            paths,
+        );
     }
 
     private prepareUploadWithStrategy(
