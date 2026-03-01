@@ -291,6 +291,16 @@
           "title": "開始ページ",
           "select": "開始ページ選択"
         },
+        "titlebarStyle": {
+          "title": "タイトルバースタイル",
+          "select": "スタイル選択",
+          "modern": "モダン (カスタム)",
+          "native": "ネイティブ (デフォルト)"
+        },
+        "logLevel": {
+          "title": "ログレベル",
+          "select": "レベルを選択"
+        },
         "other": {
           "title": "その他",
           "moveTransferPageWhenStartTransfer": "転送開始時にページ移動",
@@ -338,6 +348,8 @@
         "xxmiPath": "XXMIパス",
         "autoScan": "自動検索",
         "activeImporter": "有効なImporter",
+        "persistToggles": "トグルの永続保存",
+        "persistTogglesDescription": "リロード時にMODのINIを変更して、トグル状態を永続的に保存します",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "XXMIが見つかりません",

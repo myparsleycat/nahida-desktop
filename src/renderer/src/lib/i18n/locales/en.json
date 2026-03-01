@@ -290,6 +290,16 @@
           "title": "Start Page",
           "select": "Select start page"
         },
+        "titlebarStyle": {
+          "title": "Titlebar Style",
+          "select": "Select Style",
+          "modern": "Modern (Custom)",
+          "native": "Native (Default)"
+        },
+        "logLevel": {
+          "title": "Log Level",
+          "select": "Select Level"
+        },
         "other": {
           "title": "Other",
           "moveTransferPageWhenStartTransfer": "Go to transfer page on start",
@@ -337,6 +347,8 @@
         "xxmiPath": "XXMI Path",
         "autoScan": "Auto Scan",
         "activeImporter": "Active Importer",
+        "persistToggles": "Persist Toggles",
+        "persistTogglesDescription": "Permanently saves toggle states by modifying the mod INI during reload",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "XXMI not found",
