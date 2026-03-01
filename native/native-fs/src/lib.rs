@@ -202,7 +202,9 @@ impl NativeWatcher {
             callback.call(Ok(tsfn_event), ThreadsafeFunctionCallMode::NonBlocking);
           }
         }
-        Err(_) => {}
+        Err(e) => {
+          callback.call(Err(napi::Error::new(napi::Status::GenericFailure, e.to_string())), ThreadsafeFunctionCallMode::NonBlocking);
+        }
       },
       config,
     )
@@ -215,13 +217,13 @@ impl NativeWatcher {
       }
 
       if depth < 0 {
-        let _ = watcher.watch(path, RecursiveMode::Recursive);
+        watcher.watch(path, RecursiveMode::Recursive).map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
       } else if depth == 0 {
-        let _ = watcher.watch(path, RecursiveMode::NonRecursive);
+        watcher.watch(path, RecursiveMode::NonRecursive).map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
       } else {
         for entry in WalkDir::new(path).max_depth(depth as usize).into_iter().filter_map(|e| e.ok()) {
           if entry.file_type().is_dir() {
-            let _ = watcher.watch(&entry.path(), RecursiveMode::NonRecursive);
+            watcher.watch(&entry.path(), RecursiveMode::NonRecursive).map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
           }
         }
       }
