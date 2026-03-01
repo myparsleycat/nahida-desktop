@@ -31,7 +31,6 @@ export class Updater {
 
     public initialize(): void {
         autoUpdater.on("checking-for-update", () => {
-            this.desktop.logger.log("info", "Checking for update");
             if (this.isManualCheck) {
                 new Notification({
                     title: "Nahida Desktop",
@@ -58,8 +57,6 @@ export class Updater {
         autoUpdater.on("update-available", (updateInfo) => {
             this.updateAvailable = true;
 
-            this.desktop.logger.log("info", "Update available");
-
             if (this.isManualCheck) {
                 this.showUpdateDialog(updateInfo);
             } else {
@@ -78,8 +75,6 @@ export class Updater {
             this.updateDownloaded = false;
             this.updateAvailable = false;
 
-            this.desktop.logger.log("info", "No update available");
-
             if (this.isManualCheck) {
                 new Notification({
                     title: "Nahida Desktop",
@@ -90,8 +85,6 @@ export class Updater {
 
         autoUpdater.on("update-downloaded", (info) => {
             this.updateDownloaded = true;
-
-            this.desktop.logger.log("info", `Update downloaded: ${JSON.stringify(info)}`);
 
             if (this.progressBar) {
                 this.progressBar.setCompleted();
@@ -112,9 +105,7 @@ export class Updater {
                 });
         });
 
-        autoUpdater.on("update-cancelled", () => {
-            this.desktop.logger.log("info", "Update cancelled");
-        });
+        autoUpdater.on("update-cancelled", () => {});
 
         clearInterval(this.interval);
 
@@ -161,13 +152,10 @@ export class Updater {
 
                     this.progressBar
                         .on("completed", () => {
-                            this.desktop.logger.log("info", `completed...`);
                             if (this.progressBar)
                                 this.progressBar.detail = "Update completed. Closing...";
                         })
-                        .on("aborted", () => {
-                            this.desktop.logger.log("info", "aborted");
-                        })
+                        .on("aborted", () => {})
                         .on("progress", (percent: number) => {
                             if (this.progressBar)
                                 this.progressBar.text = `Download Files... ${percent}%`;
@@ -189,8 +177,6 @@ export class Updater {
         }
 
         this.desktop.shouldExitOnQuit = true;
-
-        this.desktop.logger.log("info", "Installing update");
 
         app.removeAllListeners("window-all-closed");
         app.removeAllListeners("will-quit");
