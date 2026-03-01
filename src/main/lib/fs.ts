@@ -17,7 +17,9 @@ export interface ReaddirOptions {
 }
 
 // oxlint-disable-next-line no-control-regex
-const WINDOWS_INVALID_CHARS_REGEX = /[<>:"/\\|?*\u0000-\u001F]/g;
+const WINDOWS_INVALID_CHARS_REGEX = /[<>:"/\\|?*\u0000-\u001F]/;
+// oxlint-disable-next-line no-control-regex
+const WINDOWS_INVALID_CHARS_REGEX_GLOBAL = /[<>:"/\\|?*\u0000-\u001F]/g;
 const WINDOWS_RESERVED_NAMES_REGEX = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i;
 const ONLY_DOTS_REGEX = /^\.+$/;
 const TRAILING_DOTS_REGEX = /[.]+$/;
@@ -108,7 +110,7 @@ export class FS {
 
     public sanitizeWindowsFilename(input: string, sanitizeString = " ") {
         // oxlint-disable-next-line no-control-regex
-        let sanitized = input.replace(WINDOWS_INVALID_CHARS_REGEX, sanitizeString).trim();
+        let sanitized = input.replace(WINDOWS_INVALID_CHARS_REGEX_GLOBAL, sanitizeString).trim();
 
         sanitized = sanitized.replace(TRAILING_DOTS_REGEX, "");
 
