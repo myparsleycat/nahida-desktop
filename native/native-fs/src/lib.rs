@@ -141,6 +141,7 @@ pub fn collect_files(
 
 #[napi(object)]
 pub struct WatchEvent {
+  #[napi(ts_type = "\"create\" | \"modify\" | \"remove\"")]
   pub event_name: String,
   pub path: String,
 }
@@ -167,7 +168,7 @@ impl NativeWatcher {
   pub fn watch(
     &mut self,
     paths: Vec<String>,
-    recursive: bool,
+    depth: i32,
     options: Option<NativeWatcherOptions>,
     callback: ThreadsafeFunction<WatchEvent>,
   ) -> napi::Result<()> {
@@ -207,15 +208,23 @@ impl NativeWatcher {
     )
     .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
 
-    let mode = if recursive {
-      RecursiveMode::Recursive
-    } else {
-      RecursiveMode::NonRecursive
-    };
-
     for p in paths {
       let path = std::path::Path::new(&p);
-      let _ = watcher.watch(path, mode);
+      if !path.exists() {
+        continue;
+      }
+
+      if depth < 0 {
+        let _ = watcher.watch(path, RecursiveMode::Recursive);
+      } else if depth == 0 {
+        let _ = watcher.watch(path, RecursiveMode::NonRecursive);
+      } else {
+        for entry in WalkDir::new(path).max_depth(depth as usize).into_iter().filter_map(|e| e.ok()) {
+          if entry.file_type().is_dir() {
+            let _ = watcher.watch(&entry.path(), RecursiveMode::NonRecursive);
+          }
+        }
+      }
     }
 
     self.watcher = Some(watcher);

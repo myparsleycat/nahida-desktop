@@ -3,7 +3,6 @@ import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "..";
 
 interface WatcherOptions {
-    recursive?: boolean;
     depth?: number;
     compareContents?: boolean;
     pollIntervalMs?: number;
@@ -21,21 +20,19 @@ export class Watcher {
     public async createWatcher(
         dest: string | string[],
         options: WatcherOptions = {},
-        callback: (eventName: string, path: string) => void,
+        callback: (eventName: WatchEvent["eventName"], path: string) => void,
     ): Promise<string> {
         const id = nanoid();
         const paths = Array.isArray(dest) ? dest : [dest];
 
-        let recursive = true;
-        if (options.recursive === false) recursive = false;
-        if (options.depth === 0) recursive = false;
+        const depth = options.depth ?? -1;
 
         const watcher = new NativeWatcher();
 
         try {
             watcher.watch(
                 paths,
-                recursive,
+                depth,
                 {
                     compareContents: options.compareContents,
                     pollIntervalMs: options.pollIntervalMs,

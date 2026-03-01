@@ -2,7 +2,7 @@
 /* eslint-disable */
 export declare class NativeWatcher {
   constructor()
-  watch(paths: Array<string>, recursive: boolean, options: NativeWatcherOptions | undefined | null, callback: ((err: Error | null, arg: WatchEvent) => any)): void
+  watch(paths: Array<string>, depth: number, options: NativeWatcherOptions | undefined | null, callback: ((err: Error | null, arg: WatchEvent) => any)): void
   unwatch(): void
 }
 
@@ -33,6 +33,6 @@ export interface RawFileComponent {
 }
 
 export interface WatchEvent {
-  eventName: string
+  eventName: "create" | "modify" | "remove"
   path: string
 }
