@@ -213,11 +213,15 @@ export function NewDirectoryDialog({ contents }: { contents: Content[] }) {
   const { queryClient } = useRouteContext({ from: "__root__" });
   const location = useLocation();
 
-  const id = location.pathname.split("/").pop() || "";
+  const id = location.pathname.split("/").pop();
 
   const mutation = useMutation({
     mutationKey: ["akasha", "make_dir", id],
     mutationFn: async (name: string) => {
+      if (!id) {
+        toast.error("cannot get current id");
+        return;
+      }
       await window.api.invoke("drive:post:dir", id, name);
     },
   });
