@@ -465,7 +465,8 @@ export class XXMI {
                 }
 
                 if (inConstants && trimmed.startsWith("global persist $")) {
-                    const regex = new RegExp(`^global\\s+persist\\s+\\$${varName}\\s*=`);
+                    const escapedVarName = varName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                    const regex = new RegExp(`^global\\s+persist\\s+\\$${escapedVarName}\\s*=`);
                     if (regex.test(trimmed)) {
                         lines[i] = `global persist $${varName} = ${newValue}`;
                         modified = true;
