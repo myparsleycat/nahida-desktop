@@ -1,5 +1,6 @@
 import { XXMIImporters } from "@renderer/components/setting/xxmi/xxmi-importers";
 import { XXMIPath } from "@renderer/components/setting/xxmi/xxmi-path";
+import { XXMIPersist } from "@renderer/components/setting/xxmi/xxmi-persist";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 
@@ -20,6 +21,7 @@ function RouteComponent() {
   return (
     <main className="flex-1 flex flex-col mx-auto p-4 space-y-6 w-full select-none">
       <XXMIPath xxmiData={xxmiData} refetch={refetch} />
+      <XXMIPersist xxmiData={xxmiData} />
       <XXMIImporters xxmiData={xxmiData} />
     </main>
   );

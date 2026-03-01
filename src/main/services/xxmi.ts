@@ -3,7 +3,7 @@ import { setting } from "@main/internal/db/schema";
 import { findFileAcrossDrives, spawnPrivilegedProcess, waitForProcess } from "@native/native-util";
 import { WaitResult } from "@native/native-util/constants";
 import { type XXMIConfig, XXMIConfigSchema } from "@shared/schemas/xxmi";
-import { delay } from "es-toolkit";
+import { delay, retry } from "es-toolkit";
 import fse from "fs-extra";
 import type { NahidaDesktop } from "..";
 
@@ -14,6 +14,9 @@ export class XXMI {
 
     private busy: boolean;
     private initPromise: Promise<void> | null = null;
+
+    private persistWatchers: string[] = [];
+    private cachedD3dxUserIni: Map<string, Record<string, string>> = new Map();
 
     constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
@@ -41,6 +44,11 @@ export class XXMI {
         try {
             const xxmiConfig = await fse.readJson(xxmiConfigPath);
             this.xxmiConfig = XXMIConfigSchema.parse(xxmiConfig);
+
+            const persistEnabled = await this.desktop.setting.xxmi.getPersistToggles();
+            if (persistEnabled) {
+                await this.startPersistWatcher();
+            }
         } catch (error) {
             this.desktop.logger.error(`Failed to initialize XXMI: ${error}`, "XXMI.initialize");
             this.xxmiConfig = null;
@@ -316,6 +324,160 @@ export class XXMI {
             throw error;
         } finally {
             this.busy = false;
+        }
+    }
+
+    public async startPersistWatcher() {
+        if (!this.xxmiPath || !this.xxmiConfig) return;
+
+        const enabled = await this.desktop.setting.xxmi.getPersistToggles();
+        if (!enabled) return;
+
+        await this.stopPersistWatcher();
+
+        const importers = this.getEnabledImporters();
+        for (const { key } of importers) {
+            const d3dxPath = path.join(this.xxmiPath, key, "d3dx_user.ini");
+            if (await fse.pathExists(d3dxPath)) {
+                // Parse and cache initial content
+                const content = await fse.readFile(d3dxPath, "utf-8");
+                this.cachedD3dxUserIni.set(key, this.parseD3dxUserIni(content));
+
+                const watcherId = await this.desktop.lib.watcher.createWatcher(
+                    d3dxPath,
+                    { compareContents: true },
+                    async (eventName, changedPath) => {
+                        if (eventName === "modify") {
+                            await this.handleD3dxUserIniChange(key, changedPath);
+                        }
+                    },
+                );
+                this.persistWatchers.push(watcherId);
+                this.desktop.logger.info(
+                    `Started watching ${d3dxPath} for persist updates`,
+                    "XXMI.startPersistWatcher",
+                );
+            }
+        }
+    }
+
+    public async stopPersistWatcher() {
+        for (const id of this.persistWatchers) {
+            await this.desktop.lib.watcher.removeWatcher(id);
+        }
+        this.persistWatchers = [];
+        this.cachedD3dxUserIni.clear();
+    }
+
+    private parseD3dxUserIni(content: string): Record<string, string> {
+        const result: Record<string, string> = {};
+        const lines = content.split(/\r?\n/);
+        let inConstants = false;
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith(";")) continue;
+
+            if (trimmed.startsWith("[")) {
+                inConstants = trimmed === "[Constants]";
+                continue;
+            }
+
+            if (inConstants && trimmed.startsWith("$")) {
+                const parts = trimmed.split("=");
+                if (parts.length >= 2) {
+                    const key = parts[0].trim();
+                    const value = parts.slice(1).join("=").trim();
+                    result[key] = value;
+                }
+            }
+        }
+        return result;
+    }
+
+    private async handleD3dxUserIniChange(importerKey: string, iniPath: string) {
+        if (!this.xxmiPath) return;
+
+        try {
+            const content = await retry(
+                async () => {
+                    const isReadable = await this.desktop.lib.fs.isPathReadable(iniPath);
+                    if (!isReadable) {
+                        throw new Error(`Path ${iniPath} is not readable yet`);
+                    }
+                    return await fse.readFile(iniPath, "utf-8");
+                },
+                {
+                    retries: 10,
+                    delay: 200,
+                },
+            );
+
+            const newParsed = this.parseD3dxUserIni(content);
+            const oldParsed = this.cachedD3dxUserIni.get(importerKey) || {};
+
+            for (const [key, newValue] of Object.entries(newParsed)) {
+                const oldValue = oldParsed[key];
+                if (newValue !== oldValue) {
+                    const lastSlashIdx = key.lastIndexOf("\\");
+                    if (lastSlashIdx > 1) {
+                        // 1 because key starts with "$\"
+                        const relIniPath = key.substring(2, lastSlashIdx);
+                        const varName = key.substring(lastSlashIdx + 1);
+
+                        const targetIniPath = path.join(this.xxmiPath, importerKey, relIniPath);
+                        if (await fse.pathExists(targetIniPath)) {
+                            await this.updateModIniPersist(targetIniPath, varName, newValue);
+                        }
+                    }
+                }
+            }
+
+            this.cachedD3dxUserIni.set(importerKey, newParsed);
+        } catch (error) {
+            this.desktop.logger.error(
+                `Error handling d3dx_user.ini change: ${error}`,
+                "XXMI.handleD3dxUserIniChange",
+            );
+        }
+    }
+
+    private async updateModIniPersist(targetIniPath: string, varName: string, newValue: string) {
+        try {
+            const content = await fse.readFile(targetIniPath, "utf-8");
+            const lines = content.split(/\r?\n/);
+            let inConstants = false;
+            let modified = false;
+
+            for (let i = 0; i < lines.length; i++) {
+                const trimmed = lines[i].trim();
+                if (trimmed.startsWith("[")) {
+                    inConstants = trimmed === "[Constants]";
+                    continue;
+                }
+
+                if (inConstants && trimmed.startsWith("global persist $")) {
+                    const regex = new RegExp(`^global\\s+persist\\s+\\$${varName}\\s*=`);
+                    if (regex.test(trimmed)) {
+                        lines[i] = `global persist $${varName} = ${newValue}`;
+                        modified = true;
+                        break;
+                    }
+                }
+            }
+
+            if (modified) {
+                await fse.writeFile(targetIniPath, lines.join("\n"), "utf-8");
+                this.desktop.logger.info(
+                    `Updated persist variable $${varName} to ${newValue} in ${targetIniPath}`,
+                    "XXMI.updateModIniPersist",
+                );
+            }
+        } catch (error) {
+            this.desktop.logger.error(
+                `Error updating mod ini ${targetIniPath}: ${error}`,
+                "XXMI.updateModIniPersist",
+            );
         }
     }
 }

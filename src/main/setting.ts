@@ -456,6 +456,41 @@ export class Setting {
         },
     };
 
+    xxmi = {
+        getPersistToggles: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "xxmi_persist_toggles"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db
+                    .insert(setting)
+                    .values({ key: "xxmi_persist_toggles", value: "false" });
+                return false;
+            }
+
+            return qr.value === "true";
+        },
+
+        setPersistToggles: async (enabled: boolean) => {
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({ key: "xxmi_persist_toggles", value: String(enabled) })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(enabled) },
+                });
+
+            if (this.desktop.service?.xxmi) {
+                if (enabled) {
+                    this.desktop.service.xxmi.startPersistWatcher();
+                } else {
+                    this.desktop.service.xxmi.stopPersistWatcher();
+                }
+            }
+        },
+    };
+
     overlay = {
         getEnabled: async () => {
             const qr = await this.desktop.lib.db.query.setting.findFirst({
