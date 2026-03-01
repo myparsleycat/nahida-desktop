@@ -3,6 +3,7 @@ import { imageCache, setting } from "@main/internal/db/schema";
 import AutoLaunch from "auto-launch";
 import { eq, sum } from "drizzle-orm";
 import { app, BrowserWindow } from "electron";
+import { LogLevel } from "./internal/logger";
 
 interface Bounds {
     x: number;
@@ -266,6 +267,35 @@ export class Setting {
         clearImageCache: async () => {
             await this.desktop.lib.db.delete(imageCache);
         },
+
+        getLogLevel: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "logLevel"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db
+                    .insert(setting)
+                    .values({ key: "logLevel", value: "error" });
+                return "error";
+            } else if (!qr.value) {
+                return "error";
+            }
+
+            return qr.value as LogLevel;
+        },
+
+        setLogLevel: async (level: LogLevel) => {
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({ key: "logLevel", value: level })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: level },
+                });
+
+            this.desktop.logger.setLevel(level);
+        },
     };
 
     mod = {
@@ -423,6 +453,41 @@ export class Setting {
                 });
 
             await this.desktop.updateProxy();
+        },
+    };
+
+    xxmi = {
+        getPersistToggles: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "xxmi_persist_toggles"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db
+                    .insert(setting)
+                    .values({ key: "xxmi_persist_toggles", value: "false" });
+                return false;
+            }
+
+            return qr.value === "true";
+        },
+
+        setPersistToggles: async (enabled: boolean) => {
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({ key: "xxmi_persist_toggles", value: String(enabled) })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(enabled) },
+                });
+
+            if (this.desktop.service?.xxmi) {
+                if (enabled) {
+                    this.desktop.service.xxmi.startPersistWatcher();
+                } else {
+                    this.desktop.service.xxmi.stopPersistWatcher();
+                }
+            }
         },
     };
 

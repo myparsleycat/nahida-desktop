@@ -2,6 +2,8 @@
 
 use jwalk::WalkDir;
 use napi_derive::napi;
+use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
+use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 
 #[napi(object)]
 pub struct RawFileComponent {
@@ -135,4 +137,104 @@ pub fn collect_files(
     files: all_files,
     directories: all_directories,
   })
+}
+
+#[napi(object)]
+pub struct WatchEvent {
+  #[napi(ts_type = "\"create\" | \"modify\" | \"remove\"")]
+  pub event_name: String,
+  pub path: String,
+}
+
+#[napi(object)]
+pub struct NativeWatcherOptions {
+  pub poll_interval_ms: Option<u32>,
+  pub compare_contents: Option<bool>,
+}
+
+#[napi]
+pub struct NativeWatcher {
+  watcher: Option<RecommendedWatcher>,
+}
+
+#[napi]
+impl NativeWatcher {
+  #[napi(constructor)]
+  pub fn new() -> napi::Result<Self> {
+    Ok(NativeWatcher { watcher: None })
+  }
+
+  #[napi]
+  pub fn watch(
+    &mut self,
+    paths: Vec<String>,
+    depth: i32,
+    options: Option<NativeWatcherOptions>,
+    callback: ThreadsafeFunction<WatchEvent>,
+  ) -> napi::Result<()> {
+    
+    let mut config = Config::default();
+    if let Some(opts) = options {
+      if let Some(interval) = opts.poll_interval_ms {
+        config = config.with_poll_interval(std::time::Duration::from_millis(interval as u64));
+      }
+      if let Some(compare) = opts.compare_contents {
+        config = config.with_compare_contents(compare);
+      }
+    }
+
+    let mut watcher = notify::RecommendedWatcher::new(
+      move |res: notify::Result<Event>| match res {
+        Ok(event) => {
+          let event_name = match event.kind {
+            notify::EventKind::Create(_) => "create",
+            notify::EventKind::Modify(_) => "modify",
+            notify::EventKind::Remove(_) => "remove",
+            _ => return,
+          };
+
+          for path_buf in event.paths {
+            let path_str = path_buf.to_string_lossy().replace('\\', "/");
+            let tsfn_event = WatchEvent {
+              event_name: event_name.to_string(),
+              path: path_str,
+            };
+            callback.call(Ok(tsfn_event), ThreadsafeFunctionCallMode::NonBlocking);
+          }
+        }
+        Err(e) => {
+          callback.call(Err(napi::Error::new(napi::Status::GenericFailure, e.to_string())), ThreadsafeFunctionCallMode::NonBlocking);
+        }
+      },
+      config,
+    )
+    .map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
+
+    for p in paths {
+      let path = std::path::Path::new(&p);
+      if !path.exists() {
+        continue;
+      }
+
+      if depth < 0 {
+        watcher.watch(path, RecursiveMode::Recursive).map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
+      } else if depth == 0 {
+        watcher.watch(path, RecursiveMode::NonRecursive).map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
+      } else {
+        for entry in WalkDir::new(path).max_depth(depth as usize).into_iter().filter_map(|e| e.ok()) {
+          if entry.file_type().is_dir() {
+            watcher.watch(&entry.path(), RecursiveMode::NonRecursive).map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
+          }
+        }
+      }
+    }
+
+    self.watcher = Some(watcher);
+    Ok(())
+  }
+
+  #[napi]
+  pub fn unwatch(&mut self) {
+    self.watcher = None;
+  }
 }

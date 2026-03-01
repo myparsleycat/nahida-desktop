@@ -580,4 +580,5 @@ if (!binding) {
   throw new Error('Loaded native binding has no exports')
 }
 module.exports = binding
+module.exports.NativeWatcher = binding.NativeWatcher
 module.exports.collectFiles = binding.collectFiles

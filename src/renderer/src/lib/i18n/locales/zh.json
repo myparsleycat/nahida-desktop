@@ -290,6 +290,16 @@
           "title": "起始页",
           "select": "选择起始页"
         },
+        "titlebarStyle": {
+          "title": "标题栏样式",
+          "select": "选择样式",
+          "modern": "现代 (自定义)",
+          "native": "原生 (默认)"
+        },
+        "logLevel": {
+          "title": "日志级别",
+          "select": "选择级别"
+        },
         "other": {
           "title": "其他",
           "moveTransferPageWhenStartTransfer": "开始传输时跳转页面",
@@ -337,6 +347,8 @@
         "xxmiPath": "XXMI路径",
         "autoScan": "自动扫描",
         "activeImporter": "已激活的导入器",
+        "persistToggles": "持久保存切换状态",
+        "persistTogglesDescription": "在重载时修改模组 INI，以持久保存切换状态",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "未找到XXMI",

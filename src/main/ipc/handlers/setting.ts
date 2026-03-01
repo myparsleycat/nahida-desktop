@@ -70,6 +70,14 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         return await d.setting.general.clearImageCache();
     });
 
+    rh("setting:general:getLogLevel", async () => {
+        return await d.setting.general.getLogLevel();
+    });
+
+    rh("setting:general:setLogLevel", async (level) => {
+        return await d.setting.general.setLogLevel(level);
+    });
+
     rh("setting:mod:getDeleteArchiveAfterExtract", async () => {
         return await d.setting.mod.getDeleteArchiveAfterExtract();
     });
@@ -137,6 +145,14 @@ export function registerSettingHandlers(d: NahidaDesktop) {
 
     rh("setting:net:setProxy", async (settings) => {
         return await d.setting.net.setProxy(settings);
+    });
+
+    rh("setting:xxmi:getPersistToggles", async () => {
+        return await d.setting.xxmi.getPersistToggles();
+    });
+
+    rh("setting:xxmi:setPersistToggles", async (enabled) => {
+        await d.setting.xxmi.setPersistToggles(enabled);
     });
 
     rh("setting:advanced:getAll", async () => {

@@ -11,6 +11,7 @@ crate-type = ["cdylib"]
 jwalk = "0.8.1"
 napi = { version = "3.0.0", features = ["async"] }
 napi-derive = "3.0.0"
+notify = { version = "8.1.0" }
 
 [build-dependencies]
 napi-build = "2"
@@ -18,3 +19,6 @@ napi-build = "2"
 [profile.release]
 lto = true
 strip = "symbols"
+opt-level = 3
+codegen-units = 1
+panic = "unwind"

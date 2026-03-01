@@ -17,12 +17,15 @@ export async function nahidaLogsPath(): Promise<string> {
     return configPath;
 }
 
+export type LogLevel = "info" | "debug" | "warn" | "error" | "trace" | "fatal";
+
 export class Logger {
     private logger: PinoLogger | null = null;
     private dest: string | null = null;
     private isCleaning: boolean = false;
     private readonly disableLogging: boolean;
     private readonly isWorker: boolean;
+    private currentLevel: LogLevel = "error";
 
     public constructor(disableLogging: boolean = false, isWorker: boolean = false) {
         this.disableLogging = disableLogging;
@@ -38,6 +41,10 @@ export class Logger {
                 this.isWorker ? "desktop-worker.log" : "desktop.log",
             );
 
+            if (is.dev) {
+                return;
+            }
+
             this.logger = pino(
                 createStream(pathModule.basename(this.dest), {
                     size: "10M",
@@ -48,6 +55,7 @@ export class Logger {
                     path: pathModule.dirname(this.dest),
                 }),
             );
+            this.logger.level = this.currentLevel;
         } catch (e) {
             console.error(e);
         }
@@ -69,12 +77,29 @@ export class Logger {
         });
     }
 
-    public log(
-        level: "info" | "debug" | "warn" | "error" | "trace" | "fatal",
-        object?: unknown,
-        where?: string,
-    ): void {
+    public setLevel(level: LogLevel): void {
+        this.currentLevel = level;
+        if (this.logger) {
+            this.logger.level = level;
+        }
+    }
+
+    public log(level: LogLevel, object?: unknown, where?: string): void {
         if (this.isCleaning || this.disableLogging) {
+            return;
+        }
+
+        if (is.dev) {
+            const consoleArgs = where ? [`[${where}]`, object] : [object];
+            if (level === "error" || level === "fatal") {
+                console.error(...consoleArgs);
+            } else if (level === "warn") {
+                console.warn(...consoleArgs);
+            } else if (level === "debug" || level === "trace") {
+                console.debug(...consoleArgs);
+            } else {
+                console.log(...consoleArgs);
+            }
             return;
         }
 
@@ -91,19 +116,6 @@ export class Logger {
                             : JSON.stringify(object)
                         : ""
                 }`;
-
-                if (is.dev) {
-                    const consoleArgs = where ? [`[${where}]`, object] : [object];
-                    if (level === "error" || level === "fatal") {
-                        console.error(...consoleArgs);
-                    } else if (level === "warn") {
-                        console.warn(...consoleArgs);
-                    } else if (level === "debug" || level === "trace") {
-                        console.debug(...consoleArgs);
-                    } else {
-                        console.log(...consoleArgs);
-                    }
-                }
 
                 if (level === "info") {
                     this.logger?.info(logContent);

@@ -150,6 +150,9 @@ export class NahidaDesktop {
         await startInit(this);
         this.updater.initialize();
 
+        const logLevel = await this.setting.general.getLogLevel();
+        this.logger.setLevel(logLevel);
+
         if (app.isPackaged) {
             const runOnStartup = await this.setting.general.getRunOnStartup();
             const autoLaunch = new AutoLaunch({

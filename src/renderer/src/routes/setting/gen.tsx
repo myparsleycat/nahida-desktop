@@ -30,6 +30,7 @@ const settingsConfig = {
   powerSaveBlockInTransfer: "setting:general:getPowerSaveBlockInTransfer",
   defaultStartPage: "setting:general:getDefaultStartPage",
   titlebarStyle: "setting:general:getTitlebarStyle",
+  logLevel: "setting:general:getLogLevel",
 } as const;
 
 function RouteComponent() {
@@ -44,6 +45,7 @@ function RouteComponent() {
     powerSaveBlockInTransfer: boolean;
     defaultStartPage: string;
     titlebarStyle: string;
+    logLevel: string;
   }>(settingsConfig);
 
   const [imageCacheSize, setImageCacheSize] = useState<number | null>(null);
@@ -197,7 +199,7 @@ function RouteComponent() {
             </div>
             <div className="space-y-3">
               <label className="text-sm font-medium" htmlFor="titlebarStyle">
-                타이틀바 스타일
+                {t("page.setting.gen.titlebarStyle.title")}
               </label>
               <Select
                 name="titlebarStyle"
@@ -207,12 +209,40 @@ function RouteComponent() {
                 }
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="스타일 선택" />
+                  <SelectValue placeholder={t("page.setting.gen.titlebarStyle.select")} />
                 </SelectTrigger>
                 <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
                   <SelectGroup>
-                    <SelectItem value="modern">모던 (커스텀)</SelectItem>
-                    <SelectItem value="native">네이티브 (기본)</SelectItem>
+                    <SelectItem value="modern">
+                      {t("page.setting.gen.titlebarStyle.modern")}
+                    </SelectItem>
+                    <SelectItem value="native">
+                      {t("page.setting.gen.titlebarStyle.native")}
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-3">
+              <label className="text-sm font-medium" htmlFor="logLevel">
+                {t("page.setting.gen.logLevel.title")}
+              </label>
+              <Select
+                name="logLevel"
+                value={settings.logLevel}
+                onValueChange={(val) => update("logLevel", val, "setting:general:setLogLevel")}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={t("page.setting.gen.logLevel.select")} />
+                </SelectTrigger>
+                <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
+                  <SelectGroup>
+                    <SelectItem value="trace">Trace</SelectItem>
+                    <SelectItem value="debug">Debug</SelectItem>
+                    <SelectItem value="info">Info</SelectItem>
+                    <SelectItem value="warn">Warn</SelectItem>
+                    <SelectItem value="error">Error</SelectItem>
+                    <SelectItem value="fatal">Fatal</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>

@@ -25,6 +25,9 @@ features = [
 [profile.release]
 lto = true
 strip = "symbols"
+opt-level = 3
+codegen-units = 1
+panic = "unwind"
 
 [[bin]]
 name = "dll-injector"
