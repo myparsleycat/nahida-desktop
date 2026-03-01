@@ -135,6 +135,8 @@ export class DriveService {
 
     post = {
         dir: async (parentId: string, name: string, signal?: AbortSignal) => {
+            this.desktop.lib.fs.assertValidWindowsFilename(name);
+
             return await retry(
                 async () => {
                     const { data, error } = await eden.akasha.dir.create_many.post({
@@ -178,6 +180,8 @@ export class DriveService {
 
     patch = {
         rename: async (itemId: string, name: string) => {
+            this.desktop.lib.fs.assertValidWindowsFilename(name);
+
             const { data, error } = await eden.akasha.content
                 .rename({ id: itemId })
                 .post({ rename: name });

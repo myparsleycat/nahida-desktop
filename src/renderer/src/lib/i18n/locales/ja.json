@@ -94,6 +94,10 @@
         "delete": "削除"
       },
       "dialog": {
+        "common": {
+          "invalid_dir_name": "無効なディレクトリ名です。",
+          "invalid_file_name": "無効なファイル名です。"
+        },
         "create_dir": {
           "title": "フォルダー作成",
           "name_input_placeholder": "フォルダー名",

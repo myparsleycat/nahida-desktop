@@ -93,6 +93,10 @@
         "new_dir": "Create folder"
       },
       "dialog": {
+        "common": {
+          "invalid_dir_name": "Invalid directory name.",
+          "invalid_file_name": "Invalid file name."
+        },
         "create_dir": {
           "title": "Create folder",
           "name_input_placeholder": "Folder name",

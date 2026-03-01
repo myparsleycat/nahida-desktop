@@ -93,6 +93,10 @@
         "delete": "删除"
       },
       "dialog": {
+        "common": {
+          "invalid_dir_name": "无效的目录名称。",
+          "invalid_file_name": "无效的文件名称。"
+        },
         "create_dir": {
           "title": "创建文件夹",
           "name_input_placeholder": "文件夹名称",

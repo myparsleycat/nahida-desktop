@@ -90,6 +90,24 @@ export function RenameDialog() {
       const data = await window.api.invoke("drive:patch:rename", item.id, rename);
       return data;
     },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
+      dialog.setOpen("renameDialog", false);
+      return t("page.drive.dialog.rename.#.toast-promise.success");
+    },
+    onError: (err) => {
+      if (err.message.includes("INVALID_WINDOWS_FILENAME")) {
+        toast.warning(
+          selection.selectedItems[0].isDir
+            ? t("page.drive.dialog.common.invalid_dir_name")
+            : t("page.drive.dialog.common.invalid_file_name"),
+        );
+      } else {
+        toast.error("Rename Error", {
+          description: err.message,
+        });
+      }
+    },
   });
 
   if (selection.selectedItems[0]) {
@@ -128,19 +146,9 @@ export function RenameDialog() {
                 });
               }
 
-              const renamePromise = mutation.mutateAsync({
+              return await mutation.mutateAsync({
                 item: selection.selectedItems[0],
                 rename,
-              });
-
-              toast.promise(renamePromise, {
-                loading: t("page.drive.dialog.rename.#.toast-promise.loading"),
-                success: async () => {
-                  await queryClient.invalidateQueries();
-                  dialog.setOpen("renameDialog", false);
-                  return t("page.drive.dialog.rename.#.toast-promise.success");
-                },
-                error: (e: any) => e.message,
               });
             }}
           >
@@ -224,6 +232,20 @@ export function NewDirectoryDialog({ contents }: { contents: Content[] }) {
       }
       await window.api.invoke("drive:post:dir", id, name);
     },
+    onSuccess: async () => {
+      toast.success(t("page.drive.dialog.create_dir.#.toast-promise.success"));
+      dialog.setOpen("createDirDialog", false);
+      await queryClient.invalidateQueries();
+    },
+    onError: (err) => {
+      if (err.message.includes("INVALID_WINDOWS_FILENAME")) {
+        toast.warning(t("page.drive.dialog.common.invalid_dir_name"));
+      } else {
+        toast.error("New Directory Error", {
+          description: err.message,
+        });
+      }
+    },
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -244,16 +266,7 @@ export function NewDirectoryDialog({ contents }: { contents: Content[] }) {
       return toast.warning(t("page.drive.dialog.create_dir.#.2"));
     }
 
-    await mutation
-      .mutateAsync(name)
-      .then(async () => {
-        toast.success(t("page.drive.dialog.create_dir.#.toast-promise.success"));
-        dialog.setOpen("createDirDialog", false);
-        await queryClient.invalidateQueries();
-      })
-      .catch((err) => {
-        toast.error(err.message);
-      });
+    await mutation.mutateAsync(name);
   };
 
   return (
