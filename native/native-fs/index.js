@@ -575,6 +575,10 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-module.exports = nativeBinding
-module.exports.NativeWatcher = nativeBinding.NativeWatcher
-module.exports.collectFiles = nativeBinding.collectFiles
+const binding = nativeBinding?.default ?? nativeBinding
+if (!binding) {
+  throw new Error('Loaded native binding has no exports')
+}
+module.exports = binding
+module.exports.NativeWatcher = binding.NativeWatcher
+module.exports.collectFiles = binding.collectFiles
