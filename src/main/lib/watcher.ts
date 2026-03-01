@@ -47,12 +47,12 @@ export class Watcher {
                     }
                 },
             );
+            this.watchers.set(id, watcher);
+            return id;
         } catch (error) {
             this.desktop.logger.error(error, `Watcher:subscribe:${paths}`);
+            throw error;
         }
-
-        this.watchers.set(id, watcher);
-        return id;
     }
 
     public async removeWatcher(id: string) {
