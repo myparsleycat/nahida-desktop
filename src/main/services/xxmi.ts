@@ -453,6 +453,7 @@ export class XXMI {
     private async updateModIniPersist(targetIniPath: string, varName: string, newValue: string) {
         try {
             const content = await fse.readFile(targetIniPath, "utf-8");
+            const lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
             const lines = content.split(/\r?\n/);
             let inConstants = false;
             let modified = false;
@@ -476,7 +477,7 @@ export class XXMI {
             }
 
             if (modified) {
-                await fse.writeFile(targetIniPath, lines.join("\n"), "utf-8");
+                await fse.writeFile(targetIniPath, lines.join(lineEnding), "utf-8");
                 this.desktop.logger.info(
                     `Updated persist variable $${varName} to ${newValue} in ${targetIniPath}`,
                     "XXMI.updateModIniPersist",
