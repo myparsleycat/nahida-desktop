@@ -154,12 +154,7 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
   );
 }
 
-interface AkashaHeadButtonsProps {
-  content: Content;
-}
-
-export function AkashaHeadButtons(props: AkashaHeadButtonsProps) {
-  const { content } = props;
+export function AkashaHeadButtons() {
   const { t } = useTranslation();
   const dialog = useDialogStore();
 

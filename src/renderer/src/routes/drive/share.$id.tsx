@@ -139,7 +139,7 @@ function RouteComponent() {
               <div className="flex-1"></div>
             )}
 
-            {query.data.content && <AkashaHeadButtons content={query.data.content} />}
+            <AkashaHeadButtons />
           </div>
 
           <div
