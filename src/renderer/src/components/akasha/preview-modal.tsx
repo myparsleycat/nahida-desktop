@@ -1,5 +1,4 @@
-import { useDialogStore } from "@renderer/store/drive";
-import { useState } from "react";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import {
   Dialog,
   DialogContent,
@@ -7,8 +6,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@renderer/components/ui/dialog";
-import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import { useDialogStore } from "@renderer/store/drive";
 import { ContentPreview, LayoutType } from "@renderer/types";
+import { useState } from "react";
 
 interface Props {
   className?: string;
@@ -27,7 +27,7 @@ export function PreviewModal(props: Props) {
   function imgErrorHandle(e: React.SyntheticEvent) {
     if (e.currentTarget) {
       // @ts-ignore
-      e.currentTarget.src = "/puhaha.jpg";
+      e.currentTarget.src = "https://nahida.live/puhaha.jpg";
     }
   }
 
@@ -98,12 +98,14 @@ export function PreviewModal(props: Props) {
             onClick={() => setOpen(false)}
           />
         ) : (
-          <img
-            src={props.preview.img?.default}
-            draggable="false"
-            className="max-w-[85vw] max-h-[85vh] cursor-pointer"
-            onClick={() => setOpen(false)}
-          />
+          <button onClick={() => setOpen(false)}>
+            <img
+              src={props.preview.img?.default}
+              alt={props.alt}
+              draggable="false"
+              className="max-w-[85vw] max-h-[85vh]"
+            />
+          </button>
         )}
       </DialogContent>
     </Dialog>
