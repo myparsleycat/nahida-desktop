@@ -1,4 +1,5 @@
 import { D3D11Builder } from "@renderer/components/tools/d3d11-builder";
+import { TogglePersistence } from "@renderer/components/tools/toggle-persistence";
 import { cn } from "@renderer/lib/utils";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
@@ -11,6 +12,10 @@ function RouteComponent() {
     {
       name: "D3D11 Builder",
       component: () => <D3D11Builder />,
+    },
+    {
+      name: "Toggle Persistence",
+      component: () => <TogglePersistence />,
     },
     {
       name: "Fix Tool Manager",
