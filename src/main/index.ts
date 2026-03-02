@@ -138,6 +138,7 @@ export class NahidaDesktop {
 
         await startInit(this);
         this.updater.initialize();
+        await this.service.xxmi.init();
 
         const logLevel = await this.setting.general.getLogLevel();
         this.logger.setLevel(logLevel);

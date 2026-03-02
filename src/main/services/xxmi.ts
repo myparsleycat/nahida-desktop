@@ -68,6 +68,7 @@ export class XXMI {
     }
 
     public async getXXMIData() {
+        await this.init();
         return {
             xxmiPath: this.xxmiPath,
             enabledImporters: this.getEnabledImporters(),
