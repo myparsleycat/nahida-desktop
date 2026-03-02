@@ -1,4 +1,3 @@
-import { Titlebar } from "@renderer/components/titlebar";
 import { useTransferFilter } from "@renderer/components/transfer/hooks/use-transfer-filter";
 import { TransferEmptyState } from "@renderer/components/transfer/transfer-empty-state";
 import { TransferItem } from "@renderer/components/transfer/transfer-item";
@@ -6,6 +5,7 @@ import { TransferStats } from "@renderer/components/transfer/transfer-stats";
 import { TransferToolbar } from "@renderer/components/transfer/transfer-toolbar";
 import type { TransferItemProps } from "@renderer/components/transfer/types";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
+import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import type { Transfer, TransferWithoutData } from "@shared/types.gen";
 import { formatSize, formatTime } from "@shared/utils";
 import { createFileRoute } from "@tanstack/react-router";
@@ -42,6 +42,7 @@ function mapStatus(
 
 function RouteComponent() {
   const { t } = useTranslation();
+  const { Titlebar } = useTitlebar();
 
   const [transfers, setTransfers] = useState<TransferWithoutData[]>([]);
 

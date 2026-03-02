@@ -1,10 +1,10 @@
 /** biome-ignore-all lint/correctness/noChildrenProp: _ */
-import { Titlebar } from "@renderer/components/titlebar";
 import { Button } from "@renderer/components/ui/button";
 import { Checkbox } from "@renderer/components/ui/checkbox";
 import { Field, FieldGroup, FieldLabel } from "@renderer/components/ui/field";
 import { Input } from "@renderer/components/ui/input";
 import { Textarea } from "@renderer/components/ui/textarea";
+import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { useForm } from "@tanstack/react-form";
 import { createFileRoute } from "@tanstack/react-router";
 import { Loader2Icon } from "lucide-react";
@@ -17,6 +17,7 @@ export const Route = createFileRoute("/report")({
 
 function RouteComponent() {
   const { t } = useTranslation();
+  const { Titlebar } = useTitlebar();
   const [nid, setnid] = useState("");
 
   const form = useForm({

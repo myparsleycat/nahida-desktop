@@ -1,5 +1,5 @@
-import { Titlebar } from "@renderer/components/titlebar";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
+import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { useGlobalStore } from "@renderer/store/global";
 import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { GamepadIcon, Globe, PackageIcon, ServerCrash, Settings, User } from "lucide-react";
@@ -12,6 +12,7 @@ export const Route = createFileRoute("/setting")({
 
 function RouteComponent() {
   const { t } = useTranslation();
+  const { Titlebar } = useTitlebar();
   const location = useLocation();
   const navi = useNavigate();
   const appStatus = useGlobalStore((state) => state.appStatus);

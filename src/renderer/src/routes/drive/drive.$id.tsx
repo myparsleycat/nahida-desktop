@@ -16,9 +16,9 @@ import {
 } from "@renderer/components/akasha/dialogs";
 import { Center, ServerCrash } from "@renderer/components/common";
 import { AliceLoader } from "@renderer/components/loaders";
-import { Titlebar } from "@renderer/components/titlebar";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { useDrag } from "@renderer/hooks/drive";
+import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { getSearchScore } from "@renderer/lib/sejong";
 import { commonSort } from "@renderer/lib/utils";
 import { useViewStore, viewStore } from "@renderer/store/drive";
@@ -37,6 +37,7 @@ export const Route = createFileRoute("/drive/drive/$id")({
 
 function RouteComponent() {
   const { t } = useTranslation();
+  const { Titlebar } = useTitlebar();
   const { id } = Route.useParams();
   const location = useLocation();
 

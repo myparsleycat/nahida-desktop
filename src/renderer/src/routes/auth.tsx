@@ -1,6 +1,6 @@
 import { Center } from "@renderer/components/common";
-import { Titlebar } from "@renderer/components/titlebar";
 import { Button } from "@renderer/components/ui/button";
+import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { Logger } from "@renderer/lib/logger";
 import { createFileRoute } from "@tanstack/react-router";
 import { Loader2Icon, LogInIcon } from "lucide-react";
@@ -11,6 +11,7 @@ export const Route = createFileRoute("/auth")({
 });
 
 function RouteComponent() {
+  const { Titlebar } = useTitlebar();
   const [loading, setLoading] = useState(false);
   const [showStopBtn, setShowStopBtn] = useState(false);
 
