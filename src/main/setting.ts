@@ -507,6 +507,10 @@ export class Setting {
             return qr.value === "true";
         },
 
+        getPersistLogs: async () => {
+            return this.desktop.service.modTools.togglePersist.getPersistLogs();
+        },
+
         setPersistToggles: async (enabled: boolean) => {
             await this.desktop.lib.db
                 .insert(setting)

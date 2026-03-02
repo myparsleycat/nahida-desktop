@@ -164,6 +164,7 @@ export type IpcHandlers = {
     "setting:mod:setVirtualizationThreshold": (...args: any[]) => any;
     "setting:net:getProxy": (...args: Parameters<typeof desktop.setting.net.getProxy>) => ReturnType<typeof desktop.setting.net.getProxy>;
     "setting:net:setProxy": (...args: Parameters<typeof desktop.setting.net.setProxy>) => ReturnType<typeof desktop.setting.net.setProxy>;
+    "setting:xxmi:getPersistLogs": (...args: Parameters<typeof desktop.setting.xxmi.getPersistLogs>) => ReturnType<typeof desktop.setting.xxmi.getPersistLogs>;
     "setting:xxmi:getPersistToggles": (...args: Parameters<typeof desktop.setting.xxmi.getPersistToggles>) => ReturnType<typeof desktop.setting.xxmi.getPersistToggles>;
     "setting:xxmi:setPersistToggles": (...args: any[]) => any;
     "tools:buildNewD3DDLL": (...args: Parameters<typeof desktop.service.modTools.dllBuilder.buildNewD3DDLL>) => ReturnType<typeof desktop.service.modTools.dllBuilder.buildNewD3DDLL>;
@@ -231,6 +232,7 @@ export type IpcEvents = {
         skippedFiles: number;
         errorFiles: number;
     }) => void;
+    "setting:xxmi:persistLogs": (logs: string[]) => void;
     "tools:progress": (message: string) => void;
     "ftm:log": (message: string) => void;
 

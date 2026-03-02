@@ -370,6 +370,7 @@
         "activeImporter": "有効なImporter",
         "persistToggles": "トグルの永続保存",
         "persistTogglesDescription": "リロード時にMODのINIを変更して、トグル状態を永続的に保存します",
+        "persistNotFoundXXMI": "先にXXMI Launcherのパスを設定してください。",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "XXMIが見つかりません",

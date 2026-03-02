@@ -147,6 +147,10 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         await d.setting.xxmi.setPersistToggles(enabled);
     });
 
+    rh("setting:xxmi:getPersistLogs", async () => {
+        return d.setting.xxmi.getPersistLogs();
+    });
+
     rh("setting:advanced:getAll", async () => {
         return await d.setting.advanced.getAll();
     });

@@ -369,6 +369,7 @@
         "activeImporter": "已激活的导入器",
         "persistToggles": "持久保存切换状态",
         "persistTogglesDescription": "在重载时修改模组 INI，以持久保存切换状态",
+        "persistNotFoundXXMI": "请先设置 XXMI Launcher 路径。",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "未找到XXMI",

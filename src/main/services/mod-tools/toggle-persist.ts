@@ -6,6 +6,7 @@ import type { NahidaDesktop } from "@/main";
 export class TogglePersist {
     private persistWatchers: string[] = [];
     private cachedD3dxUserIni: Map<string, Record<string, string>> = new Map();
+    private persistLogs: string[] = [];
 
     constructor(private readonly desktop: NahidaDesktop) {}
 
@@ -38,20 +39,25 @@ export class TogglePersist {
                     },
                 );
                 this.persistWatchers.push(watcherId);
-                this.desktop.logger.info(
-                    `Started watching ${d3dxPath} for persist updates`,
-                    "TogglePersist.startPersistWatcher",
-                );
+                this.logInfo(`Started watching ${d3dxPath} for persist updates`);
             }
         }
     }
 
     public async stopPersistWatcher() {
+        const watcherCount = this.persistWatchers.length;
         for (const id of this.persistWatchers) {
             await this.desktop.lib.watcher.removeWatcher(id);
         }
         this.persistWatchers = [];
         this.cachedD3dxUserIni.clear();
+        if (watcherCount > 0) {
+            this.logInfo(`Stopped persist watcher (${watcherCount})`);
+        }
+    }
+
+    public getPersistLogs() {
+        return [...this.persistLogs];
     }
 
     private parseD3dxUserIni(content: string): Record<string, string> {
@@ -121,10 +127,7 @@ export class TogglePersist {
 
             this.cachedD3dxUserIni.set(importer.key, newParsed);
         } catch (error) {
-            this.desktop.logger.error(
-                `Error handling d3dx_user.ini change: ${error}`,
-                "TogglePersist.handleD3dxUserIniChange",
-            );
+            this.logError(`Error handling d3dx_user.ini change: ${error}`);
         }
     }
 
@@ -156,16 +159,31 @@ export class TogglePersist {
 
             if (modified) {
                 await fse.writeFile(targetIniPath, lines.join(lineEnding), "utf-8");
-                this.desktop.logger.info(
+                this.logInfo(
                     `Updated persist variable $${varName} to ${newValue} in ${targetIniPath}`,
-                    "TogglePersist.updateModIniPersist",
                 );
             }
         } catch (error) {
-            this.desktop.logger.error(
-                `Error updating mod ini ${targetIniPath}: ${error}`,
-                "TogglePersist.updateModIniPersist",
-            );
+            this.logError(`Error updating mod ini ${targetIniPath}: ${error}`);
         }
+    }
+
+    private addPersistLog(level: "INFO" | "ERROR", message: string) {
+        const entry = `[${new Date().toISOString()}] [${level}] ${message}`;
+        this.persistLogs.push(entry);
+        if (this.persistLogs.length > 10) {
+            this.persistLogs = this.persistLogs.slice(-10);
+        }
+        this.desktop.ipc.broadcast("setting:xxmi:persistLogs", this.getPersistLogs());
+    }
+
+    private logInfo(message: string) {
+        this.desktop.logger.info(message, "TogglePersist");
+        this.addPersistLog("INFO", message);
+    }
+
+    private logError(message: string) {
+        this.desktop.logger.error(message, "TogglePersist");
+        this.addPersistLog("ERROR", message);
     }
 }

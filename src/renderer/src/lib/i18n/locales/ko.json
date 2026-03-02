@@ -369,6 +369,7 @@
         "activeImporter": "활성화된 Importer",
         "persistToggles": "토글 영구 저장",
         "persistTogglesDescription": "리로드할 때 모드 ini를 수정해 토글 상태를 영구 저장합니다",
+        "persistNotFoundXXMI": "XXMI Launcher 경로를 먼저 설정해 주세요.",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "XXMI 를 찾을 수 없습니다",

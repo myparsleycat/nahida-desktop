@@ -369,6 +369,7 @@
         "activeImporter": "Active Importer",
         "persistToggles": "Persist Toggles",
         "persistTogglesDescription": "Permanently saves toggle states by modifying the mod INI during reload",
+        "persistNotFoundXXMI": "Please set the XXMI Launcher path first.",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "XXMI not found",
