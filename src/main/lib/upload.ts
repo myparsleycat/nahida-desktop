@@ -1,4 +1,4 @@
-import path from "node:path";
+﻿import path from "node:path";
 import { eden, eden2url } from "@main/client";
 import sha256PiscinaWorker from "@main/worker/drive/sha256-piscina.worker?modulePath";
 import { collectFiles } from "@native/native-fs";
@@ -240,7 +240,7 @@ export class UploadLib {
 
         const response = await ky.post(uploadUrl, {
             body: formData,
-            headers: await this.desktop.getHeaders(uploadUrl),
+            headers: await this.desktop.httpService.getHeaders(uploadUrl),
             signal,
             throwHttpErrors: false,
             timeout: 100000,
@@ -254,7 +254,7 @@ export class UploadLib {
                 }
             },
             // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
-            dispatcher: await this.desktop.getAgent(),
+            dispatcher: await this.desktop.httpService.getAgent(),
         });
 
         return response;

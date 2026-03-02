@@ -50,7 +50,7 @@ export class DllBuilder {
                         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
                 },
                 // @ts-expect-error
-                dispatcher: await this.desktop.getAgent(),
+                dispatcher: await this.desktop.httpService.getAgent(),
                 throwHttpErrors: false,
             });
 
@@ -221,7 +221,7 @@ export class DllBuilder {
                 Referer: "https://github.com/SpectrumQT/XXMI-Libs-Package",
             },
             // @ts-expect-error
-            dispatcher: await this.desktop.getAgent(),
+            dispatcher: await this.desktop.httpService.getAgent(),
         });
 
         if (!resp.ok) {
@@ -307,3 +307,4 @@ export class DllBuilder {
         }
     }
 }
+

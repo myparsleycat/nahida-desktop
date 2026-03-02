@@ -7,7 +7,7 @@ import { desktop } from "./index";
 
 export const eden = treaty<App>(BACKEND_URL, {
     fetcher: (async (input: URL | RequestInfo, init: RequestInit | undefined) => {
-        const response = await desktop.fetcher(input.toString(), init);
+        const response = await desktop.httpService.fetcher(input.toString(), init);
 
         if (response.status === 401) {
             await desktop.service.auth.startLogout();
@@ -61,3 +61,4 @@ function createProxy(pathSegments: string[] = []): EdenProxy {
 }
 
 export const eden2url = createProxy();
+

@@ -60,7 +60,7 @@ export class Auth {
         if (!token) return null;
 
         const url = `${BACKEND_URL}/api/auth/get-session`;
-        const resp = await this.desktop.fetcher(url);
+        const resp = await this.desktop.httpService.fetcher(url);
         const data = await resp.text();
         if (data === "null") {
             await this.startLogout();
@@ -82,9 +82,9 @@ export class Auth {
         const iWantToLoginResp = await ky(iWantToLoginUrl, {
             credentials: "include",
             throwHttpErrors: false,
-            headers: await this.desktop.getHeaders(iWantToLoginUrl),
+            headers: await this.desktop.httpService.getHeaders(iWantToLoginUrl),
             // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
-            dispatcher: await this.desktop.getAgent(),
+            dispatcher: await this.desktop.httpService.getAgent(),
         });
 
         if (!iWantToLoginResp.ok) {
@@ -102,9 +102,9 @@ export class Auth {
 
         const resp = await ky(data.stateResponse, {
             throwHttpErrors: false,
-            headers: await this.desktop.getHeaders(data.stateResponse),
+            headers: await this.desktop.httpService.getHeaders(data.stateResponse),
             // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
-            dispatcher: await this.desktop.getAgent(),
+            dispatcher: await this.desktop.httpService.getAgent(),
         });
 
         if (!resp.body) {
@@ -163,7 +163,7 @@ export class Auth {
         const token = await this.getToken();
         if (token) {
             const url = `${BACKEND_URL}/api/auth/sign-out`;
-            await this.desktop.fetcher(url, {
+            await this.desktop.httpService.fetcher(url, {
                 method: "POST",
             });
         }
@@ -176,3 +176,4 @@ export class Auth {
 }
 
 export default Auth;
+

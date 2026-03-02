@@ -108,7 +108,7 @@ export const NahidaProtocolHandler = async (desktop: NahidaDesktop, req: Request
 
                 for (let attempt = 1; attempt <= maxRetries; attempt++) {
                     try {
-                        const resp = await desktop.fetcher(imgUrl);
+                        const resp = await desktop.httpService.fetcher(imgUrl);
 
                         if (!resp.ok) {
                             return new Response(`Error`, {
@@ -148,3 +148,4 @@ async function streamToBuffer(stream: any): Promise<Buffer> {
         stream.on("end", () => resolve(Buffer.concat(chunks)));
     });
 }
+

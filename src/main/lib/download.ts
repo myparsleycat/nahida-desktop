@@ -206,8 +206,8 @@ class FileDownloadTask {
     constructor(private readonly desktop: NahidaDesktop) {
         this.parallelDownloader = new ParallelDownloader({
             logger: this.desktop.logger,
-            getAgent: () => this.desktop.getAgent(),
-            getHeaders: (url: string) => this.desktop.getHeaders(url),
+            getAgent: () => this.desktop.httpService.getAgent(),
+            getHeaders: (url: string) => this.desktop.httpService.getHeaders(url),
         });
     }
 
@@ -314,7 +314,7 @@ class FileDownloadTask {
     ): Promise<void> {
         let lastTransferredBytes = 0;
         const response = await ky(file.url, {
-            headers: await this.desktop.getHeaders(file.url),
+            headers: await this.desktop.httpService.getHeaders(file.url),
             signal,
             throwHttpErrors: false,
             timeout: 100000,
@@ -326,7 +326,7 @@ class FileDownloadTask {
                 }
             },
             // @ts-expect-error
-            dispatcher: await this.desktop.getAgent(),
+            dispatcher: await this.desktop.httpService.getAgent(),
         });
 
         if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
@@ -699,3 +699,4 @@ export class DownloadLib {
 }
 
 export default DownloadLib;
+

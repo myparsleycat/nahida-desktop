@@ -487,7 +487,7 @@ export class Setting {
                     set: { value: JSON.stringify(settings) },
                 });
 
-            await this.desktop.updateProxy();
+            await this.desktop.httpService.updateProxy();
         },
     };
 
@@ -561,3 +561,4 @@ export class Setting {
 }
 
 export default Setting;
+
