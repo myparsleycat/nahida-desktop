@@ -334,13 +334,6 @@
             "threshold": "Threshold Mod Count",
             "thresholdDescription": "Applies virtualization when the number of mods exceeds the set count"
           }
-        },
-        "overlay": {
-          "title": "Overlay",
-          "enableOverlay": "Enable Overlay",
-          "enableOverlayDescription": "Use in-game overlay feature",
-          "overlayKey": "Hotkey",
-          "overlayKeyDescription": "Set the hotkey to toggle the overlay on and off"
         }
       },
       "xxmi": {

@@ -20,8 +20,6 @@ const settingsConfig = {
   virtualizationEnabled: "setting:mod:getVirtualizationEnabled",
   virtualizationThreshold: "setting:mod:getVirtualizationThreshold",
   searchModPreview: "setting:mod:getSearchModPreview",
-  overlayEnabled: "setting:overlay:getEnabled",
-  overlayKey: "setting:overlay:getToggleKey",
 } as const;
 
 function RouteComponent() {
@@ -35,8 +33,6 @@ function RouteComponent() {
     virtualizationEnabled: boolean;
     virtualizationThreshold: number;
     searchModPreview: boolean;
-    overlayEnabled: boolean;
-    overlayKey: string;
   }>(settingsConfig);
 
   if (isLoading) {
@@ -65,16 +61,6 @@ function RouteComponent() {
       queryClient.invalidateQueries({ queryKey: ["settings", "mod", "virtualization"] });
     } catch (error) {
       Logger.error(error, "ModSettings:handleVirtualizationThresholdChange");
-      toast.error("설정 저장에 실패했습니다.");
-    }
-  };
-
-  const handleOverlayKeyChange = async (key: string) => {
-    try {
-      await update("overlayKey", key, "setting:overlay:setToggleKey");
-      toast.success("단축키가 저장되었습니다.");
-    } catch (error) {
-      Logger.error(error, "ModSettings:handleOverlayKeyChange");
       toast.error("설정 저장에 실패했습니다.");
     }
   };
@@ -203,76 +189,6 @@ function RouteComponent() {
                   />
                 </div>
               )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">
-              {t("page.setting.mod.overlay.title")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <span className="text-sm font-medium">
-                  {t("page.setting.mod.overlay.enableOverlay")}
-                </span>
-                <p className="text-sm text-muted-foreground">
-                  {t("page.setting.mod.overlay.enableOverlayDescription")}
-                </p>
-              </div>
-              <Switch
-                checked={settings.overlayEnabled}
-                onCheckedChange={(val) =>
-                  update("overlayEnabled", val, "setting:overlay:setEnabled")
-                }
-              />
-            </div>
-
-            <Separator />
-
-            <div className="flex items-center justify-between space-x-2">
-              <div className="space-y-0.5">
-                <span className="text-sm font-medium">
-                  {t("page.setting.mod.overlay.overlayKey")}
-                </span>
-                <p className="text-sm text-muted-foreground">
-                  {t("page.setting.mod.overlay.overlayKeyDescription")}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Input
-                  value={settings.overlayKey || ""}
-                  readOnly
-                  className="w-30 text-center font-mono uppercase caret-transparent focus:ring-2 focus:ring-primary"
-                  onKeyDown={(e) => {
-                    e.preventDefault();
-                    if (e.key === "Tab") return;
-
-                    const modifiers: string[] = [];
-                    if (e.ctrlKey) modifiers.push("Ctrl");
-                    if (e.altKey) modifiers.push("Alt");
-                    if (e.shiftKey) modifiers.push("Shift");
-                    if (e.metaKey) modifiers.push("Super");
-
-                    let key = e.key;
-                    if (["Control", "Alt", "Shift", "Meta"].includes(key)) key = "";
-                    if (key === " ") key = "Space";
-                    if (key === "ArrowUp") key = "Up";
-                    if (key === "ArrowDown") key = "Down";
-                    if (key === "ArrowLeft") key = "Left";
-                    if (key === "ArrowRight") key = "Right";
-
-                    if (key) {
-                      if (key.length === 1) key = key.toUpperCase();
-                      const shortcut = [...modifiers, key].join("+");
-                      handleOverlayKeyChange(shortcut);
-                    }
-                  }}
-                />
-              </div>
             </div>
           </CardContent>
         </Card>

@@ -29,14 +29,12 @@ import Auth from "./services/auth";
 import { DriveService } from "./services/drive";
 import { FixToolsManager } from "./services/fix-tools-manager";
 import ModManager from "./services/mod-manager";
-import OverlayService from "./services/overlay";
 import { Tools } from "./services/tools";
 import TransferService from "./services/transfer";
 import { XXMI } from "./services/xxmi";
 import Setting from "./setting";
 import LoginWindow from "./windows/login";
 import MainWindow from "./windows/main";
-import OverlayWindow from "./windows/overlay";
 import ReportWindow from "./windows/report";
 import SettingWindow from "./windows/setting";
 
@@ -68,10 +66,8 @@ export class NahidaDesktop {
         main: MainWindow;
         auth: LoginWindow;
         setting: SettingWindow;
-        overlay: OverlayWindow;
         report: ReportWindow;
     };
-
     public lib: {
         db: typeof db;
         fs: FS;
@@ -94,9 +90,7 @@ export class NahidaDesktop {
         archive: ArchiveService;
         tools: Tools;
         xxmi: XXMI;
-        overlay: OverlayService;
     };
-
     public constructor() {
         this.userAgent = `Nahida Desktop/${app.getVersion()}`;
         this.setting = new Setting(this);
@@ -107,7 +101,6 @@ export class NahidaDesktop {
             main: new MainWindow(this),
             auth: new LoginWindow(this),
             setting: new SettingWindow(this),
-            overlay: new OverlayWindow(this),
             report: new ReportWindow(this),
         };
         this.lib = {
@@ -132,7 +125,6 @@ export class NahidaDesktop {
             archive: new ArchiveService(this),
             tools: new Tools(this),
             xxmi: new XXMI(this),
-            overlay: new OverlayService(this),
         };
     }
 
@@ -255,10 +247,7 @@ app.whenReady().then(async () => {
 
     await desktop.init();
 
-    desktop.service.xxmi.startMonitor();
-
-    // const loggedIn = await desktop.service.auth.isLoggedIn();
-    // if (loggedIn) {
+    // const loggedIn = await desktop.service.auth.isLoggedIn();  // if (loggedIn) {
     desktop.lib.tray.createTray();
     await desktop.window.main.createMainWindow();
     // } else {

@@ -334,13 +334,6 @@
             "threshold": "阈值模组数量",
             "thresholdDescription": "模组数量超过设定值时应用虚拟化"
           }
-        },
-        "overlay": {
-          "title": "覆盖层",
-          "enableOverlay": "启用覆盖层",
-          "enableOverlayDescription": "使用游戏内覆盖层功能",
-          "overlayKey": "快捷键",
-          "overlayKeyDescription": "设置打开和关闭覆盖层的快捷键"
         }
       },
       "xxmi": {

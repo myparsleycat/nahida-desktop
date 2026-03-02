@@ -335,13 +335,6 @@
             "threshold": "基準MOD数",
             "thresholdDescription": "設定した数以上のMODがある場合に仮想化を適用します"
           }
-        },
-        "overlay": {
-          "title": "オーバーレイ",
-          "enableOverlay": "オーバーレイを有効にする",
-          "enableOverlayDescription": "ゲーム内オーバーレイ機能を使用します",
-          "overlayKey": "ショートカットキー",
-          "overlayKeyDescription": "オーバーレイのオン/オフを切り替えるショートカットキーを設定します"
         }
       },
       "xxmi": {

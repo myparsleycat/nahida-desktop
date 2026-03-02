@@ -334,13 +334,6 @@
             "threshold": "기준 모드 개수",
             "thresholdDescription": "설정한 개수 이상의 모드가 있을 때 가상화를 적용합니다"
           }
-        },
-        "overlay": {
-          "title": "오버레이",
-          "enableOverlay": "오버레이 활성화",
-          "enableOverlayDescription": "게임 내 오버레이 기능을 사용합니다",
-          "overlayKey": "단축키",
-          "overlayKeyDescription": "오버레이를 켜고 끄는 단축키를 설정합니다"
         }
       },
       "xxmi": {

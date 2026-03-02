@@ -174,74 +174,6 @@ export class XXMI {
         }
     }
 
-    private monitorInterval: NodeJS.Timeout | null = null;
-
-    public startMonitor() {
-        if (this.monitorInterval) return;
-
-        this.scanForRunningGames().catch((err) => {
-            this.desktop.logger.error(`Error in game scan: ${err}`, "XXMI.monitor");
-        });
-
-        this.monitorInterval = setInterval(() => {
-            this.scanForRunningGames().catch((err) => {
-                this.desktop.logger.error(`Error in game scan: ${err}`, "XXMI.monitor");
-            });
-        }, 5000);
-    }
-
-    public stopMonitor() {
-        if (this.monitorInterval) {
-            clearInterval(this.monitorInterval);
-            this.monitorInterval = null;
-        }
-    }
-
-    public async scanForRunningGames() {
-        await this.init();
-
-        if (this.busy || !this.xxmiConfig) return;
-
-        try {
-            const importers = this.getEnabledImporters();
-            const processList = await this.desktop.lib.native.getProcessList();
-
-            for (const { key: importer } of importers) {
-                const config = this.xxmiConfig.Importers[importer];
-                const processName = this.getGameProcessName(importer, config);
-
-                const found = processList.find(
-                    (p) => p.name.toLowerCase() === processName.toLowerCase(),
-                );
-
-                if (found) {
-                    if (this.desktop.service.overlay.currentTrackId === found.pid) {
-                        return;
-                    }
-
-                    const title =
-                        (await this.desktop.lib.native.getWindowTitle(found.pid)) || importer;
-
-                    const isOverlayEnabled = await this.desktop.setting.overlay.getEnabled();
-                    if (isOverlayEnabled) {
-                        this.desktop.logger.info(
-                            `Found running game ${importer} (${processName}, PID: ${found.pid}, Title: ${title}), attaching overlay...`,
-                            "XXMI.scanForRunningGames",
-                        );
-
-                        await this.desktop.window.overlay.createOverlayWindow({
-                            title,
-                            pid: found.pid,
-                        });
-                    }
-                    break;
-                }
-            }
-        } catch (error) {
-            this.desktop.logger.error(`Scan failed: ${error}`, "XXMI.scanForRunningGames");
-        }
-    }
-
     public async startGame(importer: string) {
         if (this.busy) {
             throw new Error("XXMI is busy");
@@ -294,36 +226,7 @@ export class XXMI {
                 );
             }
 
-            this.desktop.logger.info(
-                `Detected ${processName} (PID: ${pid}), attaching overlay...`,
-                "XXMI.startGame",
-            );
-
-            let attempts = 0;
-            let title = importer;
-            while (attempts < 10) {
-                const fetchedTitle = await this.desktop.lib.native.getWindowTitle(pid);
-                if (fetchedTitle) {
-                    title = fetchedTitle;
-                    break;
-                }
-                await delay(1000);
-                attempts++;
-            }
-
-            const isOverlayEnabled = await this.desktop.setting.overlay.getEnabled();
-            if (isOverlayEnabled) {
-                await this.desktop.window.overlay.createOverlayWindow({
-                    title,
-                    pid: pid,
-                });
-            }
-
-            const overlayWindow = this.desktop.window.overlay.window;
-            if (overlayWindow) {
-                overlayWindow.webContents.send("renderer:reload");
-            }
-
+            this.desktop.logger.info(`Detected ${processName} (PID: ${pid})`, "XXMI.startGame");
             await delay(1000);
         } catch (error) {
             this.desktop.logger.error(`Failed to start game: ${error}`, "XXMI.startGame");
