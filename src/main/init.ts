@@ -48,7 +48,7 @@ export async function startInit(desktop: NahidaDesktop) {
     }
 
     // register custom protocol
-    protocol.handle("nahida", async (req) => await NahidaProtocolHandler(req));
+    protocol.handle("nahida", async (req) => await NahidaProtocolHandler(desktop, req));
 
     desktop.initialized = true;
 }

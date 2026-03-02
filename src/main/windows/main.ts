@@ -17,7 +17,8 @@ export class MainWindow {
     }
 
     public focus() {
-        if (!this.window) {
+        if (!this.window || this.window.isDestroyed()) {
+            this.window = null;
             this.createMainWindow();
         } else {
             focus(this.window);
@@ -25,6 +26,10 @@ export class MainWindow {
     }
 
     async createMainWindow() {
+        if (this.window?.isDestroyed()) {
+            this.window = null;
+        }
+
         if (this.window) {
             focus(this.window);
             return this.window;
@@ -93,17 +98,20 @@ export class MainWindow {
         this.window.on("close", async () => {
             saveBounds.cancel();
             if (!this.window) return;
+            if (this.window.isDestroyed()) return;
             if (
                 this.window.isMaximized() ||
                 this.window.isMinimized() ||
                 this.window.isFullScreen()
-            ) {
-                this.window = null;
+            )
                 return;
-            }
-            const bounds = this.window?.getBounds();
+            const bounds = this.window.getBounds();
+            await this.desktop.setting.setBounds(bounds);
+        });
+
+        this.window.on("closed", () => {
+            saveBounds.cancel();
             this.window = null;
-            if (bounds) await this.desktop.setting.setBounds(bounds);
         });
 
         this.window.webContents.setWindowOpenHandler((details) => {

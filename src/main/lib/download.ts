@@ -3,7 +3,6 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createZstdDecompress } from "node:zlib";
 import { eden } from "@main/client";
-import { getAgent, getHeaders } from "@main/internal/fetcher";
 import type { TransferData } from "@shared/types.gen";
 import { decode } from "cbor-x";
 import { retry, throttle } from "es-toolkit";
@@ -207,6 +206,8 @@ class FileDownloadTask {
     constructor(private readonly desktop: NahidaDesktop) {
         this.parallelDownloader = new ParallelDownloader({
             logger: this.desktop.logger,
+            getAgent: () => this.desktop.httpService.getAgent(),
+            getHeaders: (url: string) => this.desktop.httpService.getHeaders(url),
         });
     }
 
@@ -313,7 +314,7 @@ class FileDownloadTask {
     ): Promise<void> {
         let lastTransferredBytes = 0;
         const response = await ky(file.url, {
-            headers: await getHeaders(file.url),
+            headers: await this.desktop.httpService.getHeaders(file.url),
             signal,
             throwHttpErrors: false,
             timeout: 100000,
@@ -325,7 +326,7 @@ class FileDownloadTask {
                 }
             },
             // @ts-expect-error
-            dispatcher: await getAgent(),
+            dispatcher: await this.desktop.httpService.getAgent(),
         });
 
         if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
@@ -698,3 +699,4 @@ export class DownloadLib {
 }
 
 export default DownloadLib;
+

@@ -223,6 +223,31 @@
       }
     },
     "tools": {
+      "d3d11_builder": {
+        "title": "构建 d3d11.dll",
+        "description": "根据所选版本构建将注入到游戏进程中的 DLL",
+        "provider": "提供方",
+        "version": "版本",
+        "loading": "加载中...",
+        "target_importer": "目标 Importer",
+        "no_importer": "没有可用的 Importer",
+        "select_importer_msg": "请选择目标 Importer。",
+        "building": "构建中",
+        "start_build": "开始构建",
+        "progress": {
+          "XXMI_INIT": "正在初始化...",
+          "XXMI_ERR_GIMI_NOT_FOUND": "未找到 Importer。",
+          "XXMI_FIND_VS": "正在查找 Visual Studio 构建工具...",
+          "XXMI_ERR_VS_NOT_FOUND": "未找到 Visual Studio 环境 (vcvars64.bat)。请确认已安装 C++ 构建工具。",
+          "XXMI_BUILDING": "正在构建 D3D11 DLL...",
+          "XXMI_ERR_DLL_NOT_FOUND": "未找到已构建的 d3d11.dll 文件。",
+          "XXMI_BUILD_SUCCESS": "d3d11.dll 已成功应用。",
+          "XXMI_ERR_BUILD_FAILED": "构建过程中发生意外错误。",
+          "XXMI_DOWNLOAD_REPO": "正在下载 XXMI 源代码...",
+          "XXMI_EXTRACT_REPO": "正在解压源代码压缩包...",
+          "XXMI_ENABLE_UNSAFE_MODE": "正在启用 Unsafe Mode..."
+        }
+      },
       "fix-tool-manager": {
         "presets": {},
         "builder": {
@@ -272,6 +297,8 @@
           "checkBackgroundUpdates": "后台检查更新",
           "checkBackgroundUpdatesDescription": "在后台检查更新。",
           "checkUpdate": "检查更新",
+          "runInBackground": "后台运行",
+          "runInBackgroundDescription": "关闭所有窗口后，应用仍在后台继续运行。",
           "autoUpdate": "自动更新",
           "autoUpdateDescription": "检查更新后自动安装 (即将推出)"
         },
@@ -334,13 +361,6 @@
             "threshold": "阈值模组数量",
             "thresholdDescription": "模组数量超过设定值时应用虚拟化"
           }
-        },
-        "overlay": {
-          "title": "覆盖层",
-          "enableOverlay": "启用覆盖层",
-          "enableOverlayDescription": "使用游戏内覆盖层功能",
-          "overlayKey": "快捷键",
-          "overlayKeyDescription": "设置打开和关闭覆盖层的快捷键"
         }
       },
       "xxmi": {
@@ -349,6 +369,7 @@
         "activeImporter": "已激活的导入器",
         "persistToggles": "持久保存切换状态",
         "persistTogglesDescription": "在重载时修改模组 INI，以持久保存切换状态",
+        "persistNotFoundXXMI": "请先设置 XXMI Launcher 路径。",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "未找到XXMI",

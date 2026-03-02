@@ -140,9 +140,10 @@ export class Setting {
                     .set({ value: String(enabled) })
                     .where(eq(setting.key, "moveTransferPageWhenStartTransfer"));
             } else {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "moveTransferPageWhenStartTransfer", value: String(enabled) });
+                await this.desktop.lib.db.insert(setting).values({
+                    key: "moveTransferPageWhenStartTransfer",
+                    value: String(enabled),
+                });
             }
         },
 
@@ -257,6 +258,31 @@ export class Setting {
                 });
         },
 
+        getRunInBackground: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "runInBackground"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db
+                    .insert(setting)
+                    .values({ key: "runInBackground", value: "true" });
+                return true;
+            }
+
+            return qr.value === "true";
+        },
+
+        setRunInBackground: async (enabled: boolean) => {
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({ key: "runInBackground", value: String(enabled) })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(enabled) },
+                });
+        },
+
         getImageCacheSize: async () => {
             const [result] = await this.desktop.lib.db
                 .select({ totalSize: sum(imageCache.size) })
@@ -317,7 +343,10 @@ export class Setting {
         setDeleteArchiveAfterExtract: async (enabled: boolean) => {
             await this.desktop.lib.db
                 .insert(setting)
-                .values({ key: "mod_delete_archive_after_extract", value: String(enabled) })
+                .values({
+                    key: "mod_delete_archive_after_extract",
+                    value: String(enabled),
+                })
                 .onConflictDoUpdate({
                     target: setting.key,
                     set: { value: String(enabled) },
@@ -342,7 +371,10 @@ export class Setting {
         setMoveFolderInsteadOfCopy: async (enabled: boolean) => {
             await this.desktop.lib.db
                 .insert(setting)
-                .values({ key: "mod_move_folder_instead_of_copy", value: String(enabled) })
+                .values({
+                    key: "mod_move_folder_instead_of_copy",
+                    value: String(enabled),
+                })
                 .onConflictDoUpdate({
                     target: setting.key,
                     set: { value: String(enabled) },
@@ -392,7 +424,10 @@ export class Setting {
         setVirtualizationThreshold: async (threshold: number) => {
             await this.desktop.lib.db
                 .insert(setting)
-                .values({ key: "mod_virtualization_threshold", value: String(threshold) })
+                .values({
+                    key: "mod_virtualization_threshold",
+                    value: String(threshold),
+                })
                 .onConflictDoUpdate({
                     target: setting.key,
                     set: { value: String(threshold) },
@@ -442,7 +477,7 @@ export class Setting {
             return JSON.parse(qr.value as string);
         },
 
-        // biome-ignore lint/suspicious/noExplicitAny: <>
+        // oxlint-disable-next-line typescript/no-explicit-any
         setProxy: async (settings: any) => {
             await this.desktop.lib.db
                 .insert(setting)
@@ -452,7 +487,7 @@ export class Setting {
                     set: { value: JSON.stringify(settings) },
                 });
 
-            await this.desktop.updateProxy();
+            await this.desktop.httpService.updateProxy();
         },
     };
 
@@ -472,6 +507,10 @@ export class Setting {
             return qr.value === "true";
         },
 
+        getPersistLogs: async () => {
+            return this.desktop.service.modTools.togglePersist.getPersistLogs();
+        },
+
         setPersistToggles: async (enabled: boolean) => {
             await this.desktop.lib.db
                 .insert(setting)
@@ -481,72 +520,12 @@ export class Setting {
                     set: { value: String(enabled) },
                 });
 
-            if (this.desktop.service?.xxmi) {
+            if (this.desktop.service?.modTools) {
                 if (enabled) {
-                    this.desktop.service.xxmi.startPersistWatcher();
+                    this.desktop.service.modTools.startPersistWatcher();
                 } else {
-                    this.desktop.service.xxmi.stopPersistWatcher();
+                    this.desktop.service.modTools.stopPersistWatcher();
                 }
-            }
-        },
-    };
-
-    overlay = {
-        getEnabled: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "overlay_enabled"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "overlay_enabled", value: "true" });
-                return true;
-            }
-
-            return qr.value === "true";
-        },
-
-        setEnabled: async (enabled: boolean) => {
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "overlay_enabled", value: String(enabled) })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: String(enabled) },
-                });
-
-            if (this.desktop.service?.overlay) {
-                this.desktop.service.overlay.updateSettings();
-            }
-        },
-
-        getToggleKey: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "overlay_toggle_key"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "overlay_toggle_key", value: "Alt+A" });
-                return "Alt+A";
-            }
-
-            return qr.value;
-        },
-
-        setToggleKey: async (key: string) => {
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "overlay_toggle_key", value: key })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: key },
-                });
-
-            if (this.desktop.service?.overlay) {
-                this.desktop.service.overlay.updateSettings();
             }
         },
     };
@@ -582,3 +561,4 @@ export class Setting {
 }
 
 export default Setting;
+

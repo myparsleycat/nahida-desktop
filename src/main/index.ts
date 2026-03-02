@@ -5,12 +5,13 @@ import { BACKEND_URL } from "@shared/const";
 import AutoLaunch from "auto-launch";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { app, crashReporter, protocol, session } from "electron";
+import { app, crashReporter, protocol } from "electron";
 import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
 import { IS_ELECTRON } from "./const";
 import { startInit } from "./init";
 import { DB_FILE_NAME } from "./internal/const";
 import * as schema from "./internal/db/schema";
+import { DesktopHttpService } from "./internal/http";
 import Logger from "./internal/logger";
 import Updater from "./internal/updater";
 import { IPC } from "./ipc";
@@ -27,16 +28,13 @@ import { registerProtocal } from "./protocals";
 import ArchiveService from "./services/archive";
 import Auth from "./services/auth";
 import { DriveService } from "./services/drive";
-import { FixToolsManager } from "./services/fix-tools-manager";
 import ModManager from "./services/mod-manager";
-import OverlayService from "./services/overlay";
-import { Tools } from "./services/tools";
+import { ModTools } from "./services/mod-tools";
 import TransferService from "./services/transfer";
 import { XXMI } from "./services/xxmi";
 import Setting from "./setting";
 import LoginWindow from "./windows/login";
 import MainWindow from "./windows/main";
-import OverlayWindow from "./windows/overlay";
 import ReportWindow from "./windows/report";
 import SettingWindow from "./windows/setting";
 
@@ -56,6 +54,7 @@ const db = drizzle(sqlite, { schema });
 export class NahidaDesktop {
     public initialized: boolean = false;
     public userAgent: string;
+    public readonly httpService: DesktopHttpService;
 
     public setting: Setting;
     public readonly ipc: IPC;
@@ -68,10 +67,8 @@ export class NahidaDesktop {
         main: MainWindow;
         auth: LoginWindow;
         setting: SettingWindow;
-        overlay: OverlayWindow;
         report: ReportWindow;
     };
-
     public lib: {
         db: typeof db;
         fs: FS;
@@ -90,24 +87,21 @@ export class NahidaDesktop {
         drive: DriveService;
         transfer: TransferService;
         mod: ModManager;
-        fixTools: FixToolsManager;
+        modTools: ModTools;
         archive: ArchiveService;
-        tools: Tools;
         xxmi: XXMI;
-        overlay: OverlayService;
     };
-
     public constructor() {
         this.userAgent = `Nahida Desktop/${app.getVersion()}`;
         this.setting = new Setting(this);
         this.ipc = new IPC(this);
         this.updater = new Updater(this);
         this.logger = new Logger(false, false);
+        this.httpService = new DesktopHttpService(this);
         this.window = {
             main: new MainWindow(this),
             auth: new LoginWindow(this),
             setting: new SettingWindow(this),
-            overlay: new OverlayWindow(this),
             report: new ReportWindow(this),
         };
         this.lib = {
@@ -128,11 +122,9 @@ export class NahidaDesktop {
             drive: new DriveService(this),
             transfer: new TransferService(this),
             mod: new ModManager(this),
-            fixTools: new FixToolsManager(this),
+            modTools: new ModTools(this),
             archive: new ArchiveService(this),
-            tools: new Tools(this),
             xxmi: new XXMI(this),
-            overlay: new OverlayService(this),
         };
     }
 
@@ -149,6 +141,7 @@ export class NahidaDesktop {
 
         await startInit(this);
         this.updater.initialize();
+        await this.service.xxmi.init();
 
         const logLevel = await this.setting.general.getLogLevel();
         this.logger.setLevel(logLevel);
@@ -168,22 +161,7 @@ export class NahidaDesktop {
             }
         }
 
-        await this.updateProxy();
-    }
-
-    public async updateProxy() {
-        const proxy = await this.setting.net.getProxy();
-        if (proxy && proxy.type !== "disabled" && proxy.host && proxy.port) {
-            const protocol = proxy.type === "socks5" ? "socks5" : "http";
-            const proxyRules = `${protocol}://${proxy.host}:${proxy.port}`;
-            await app.whenReady();
-            await session.defaultSession.setProxy({ proxyRules });
-            this.logger.info(`Proxy updated: ${proxyRules}`, "NahidaDesktop:updateProxy");
-        } else {
-            await app.whenReady();
-            await session.defaultSession.setProxy({ proxyRules: "" });
-            this.logger.info("Proxy disabled", "NahidaDesktop:updateProxy");
-        }
+        await this.httpService.updateProxy();
     }
 }
 
@@ -255,10 +233,7 @@ app.whenReady().then(async () => {
 
     await desktop.init();
 
-    desktop.service.xxmi.startMonitor();
-
-    // const loggedIn = await desktop.service.auth.isLoggedIn();
-    // if (loggedIn) {
+    // const loggedIn = await desktop.service.auth.isLoggedIn();  // if (loggedIn) {
     desktop.lib.tray.createTray();
     await desktop.window.main.createMainWindow();
     // } else {
@@ -276,8 +251,13 @@ app.whenReady().then(async () => {
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on("window-all-closed", async () => {
-    const loggedIn = await desktop.service.auth.isLoggedIn();
-    if (process.platform !== "darwin" && !loggedIn) {
+    if (desktop.shouldExitOnQuit) {
+        app.quit();
+        return;
+    }
+
+    const runInBackground = await desktop.setting.general.getRunInBackground();
+    if (!runInBackground) {
         app.quit();
     }
 });

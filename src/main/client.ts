@@ -1,14 +1,13 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: <> */
 import type { App } from "@backend/index";
 import { treaty } from "@elysiajs/eden";
-import { fetcher } from "@main/internal/fetcher";
 import { BACKEND_URL } from "@shared/const";
 import { isEmpty } from "es-toolkit/compat";
 import { desktop } from "./index";
 
 export const eden = treaty<App>(BACKEND_URL, {
     fetcher: (async (input: URL | RequestInfo, init: RequestInit | undefined) => {
-        const response = await fetcher(input.toString(), init);
+        const response = await desktop.httpService.fetcher(input.toString(), init);
 
         if (response.status === 401) {
             await desktop.service.auth.startLogout();
@@ -62,3 +61,4 @@ function createProxy(pathSegments: string[] = []): EdenProxy {
 }
 
 export const eden2url = createProxy();
+

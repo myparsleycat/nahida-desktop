@@ -223,6 +223,31 @@
       }
     },
     "tools": {
+      "d3d11_builder": {
+        "title": "d3d11.dll 빌드",
+        "description": "게임 프로세스에 인젝션될 dll을 빌드합니다",
+        "provider": "제공자",
+        "version": "버전",
+        "loading": "불러오는 중...",
+        "target_importer": "대상 Importer",
+        "no_importer": "사용 가능한 Importer가 없습니다",
+        "select_importer_msg": "대상 Importer를 선택해주세요.",
+        "building": "빌드 진행중",
+        "start_build": "빌드 시작",
+        "progress": {
+          "XXMI_INIT": "초기화 중...",
+          "XXMI_ERR_GIMI_NOT_FOUND": "Importer를 찾을 수 없습니다.",
+          "XXMI_FIND_VS": "Visual Studio 빌드 도구 찾는 중...",
+          "XXMI_ERR_VS_NOT_FOUND": "Visual Studio 환경(vcvars64.bat)을 찾을 수 없습니다. C++ 빌드 도구가 설치되어 있는지 확인하세요.",
+          "XXMI_BUILDING": "D3D11 DLL 빌드 중...",
+          "XXMI_ERR_DLL_NOT_FOUND": "빌드된 d3d11.dll 파일을 찾을 수 없습니다.",
+          "XXMI_BUILD_SUCCESS": "d3d11.dll이 성공적으로 적용되었습니다.",
+          "XXMI_ERR_BUILD_FAILED": "빌드 중 예기치 않은 오류가 발생했습니다.",
+          "XXMI_DOWNLOAD_REPO": "XXMI 소스 코드 다운로드 중...",
+          "XXMI_EXTRACT_REPO": "소스 코드 압축 해제 중...",
+          "XXMI_ENABLE_UNSAFE_MODE": "Unsafe Mode 활성화 중..."
+        }
+      },
       "fix-tool-manager": {
         "presets": {},
         "builder": {
@@ -272,6 +297,8 @@
           "checkBackgroundUpdates": "백그라운드 업데이트 확인",
           "checkBackgroundUpdatesDescription": "백그라운드에서 업데이트를 확인합니다.",
           "checkUpdate": "업데이트 확인",
+          "runInBackground": "백그라운드 실행",
+          "runInBackgroundDescription": "모든 창을 닫아도 앱을 백그라운드에서 계속 실행합니다.",
           "autoUpdate": "자동 업데이트",
           "autoUpdateDescription": "업데이트를 확인한 후 자동으로 설치합니다 (준비 중)"
         },
@@ -334,13 +361,6 @@
             "threshold": "기준 모드 개수",
             "thresholdDescription": "설정한 개수 이상의 모드가 있을 때 가상화를 적용합니다"
           }
-        },
-        "overlay": {
-          "title": "오버레이",
-          "enableOverlay": "오버레이 활성화",
-          "enableOverlayDescription": "게임 내 오버레이 기능을 사용합니다",
-          "overlayKey": "단축키",
-          "overlayKeyDescription": "오버레이를 켜고 끄는 단축키를 설정합니다"
         }
       },
       "xxmi": {
@@ -349,6 +369,7 @@
         "activeImporter": "활성화된 Importer",
         "persistToggles": "토글 영구 저장",
         "persistTogglesDescription": "리로드할 때 모드 ini를 수정해 토글 상태를 영구 저장합니다",
+        "persistNotFoundXXMI": "XXMI Launcher 경로를 먼저 설정해 주세요.",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "XXMI 를 찾을 수 없습니다",

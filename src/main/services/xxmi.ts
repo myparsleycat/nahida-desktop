@@ -3,7 +3,7 @@ import { setting } from "@main/internal/db/schema";
 import { findFileAcrossDrives, spawnPrivilegedProcess, waitForProcess } from "@native/native-util";
 import { WaitResult } from "@native/native-util/constants";
 import { type XXMIConfig, XXMIConfigSchema } from "@shared/schemas/xxmi";
-import { delay, retry } from "es-toolkit";
+import { delay } from "es-toolkit";
 import fse from "fs-extra";
 import type { NahidaDesktop } from "..";
 
@@ -14,9 +14,6 @@ export class XXMI {
 
     private busy: boolean;
     private initPromise: Promise<void> | null = null;
-
-    private persistWatchers: string[] = [];
-    private cachedD3dxUserIni: Map<string, Record<string, string>> = new Map();
 
     constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
@@ -47,7 +44,7 @@ export class XXMI {
 
             const persistEnabled = await this.desktop.setting.xxmi.getPersistToggles();
             if (persistEnabled) {
-                await this.startPersistWatcher();
+                await this.desktop.service.modTools.startPersistWatcher();
             }
         } catch (error) {
             this.desktop.logger.error(`Failed to initialize XXMI: ${error}`, "XXMI.initialize");
@@ -71,6 +68,7 @@ export class XXMI {
     }
 
     public async getXXMIData() {
+        await this.init();
         return {
             xxmiPath: this.xxmiPath,
             enabledImporters: this.getEnabledImporters(),
@@ -174,74 +172,6 @@ export class XXMI {
         }
     }
 
-    private monitorInterval: NodeJS.Timeout | null = null;
-
-    public startMonitor() {
-        if (this.monitorInterval) return;
-
-        this.scanForRunningGames().catch((err) => {
-            this.desktop.logger.error(`Error in game scan: ${err}`, "XXMI.monitor");
-        });
-
-        this.monitorInterval = setInterval(() => {
-            this.scanForRunningGames().catch((err) => {
-                this.desktop.logger.error(`Error in game scan: ${err}`, "XXMI.monitor");
-            });
-        }, 5000);
-    }
-
-    public stopMonitor() {
-        if (this.monitorInterval) {
-            clearInterval(this.monitorInterval);
-            this.monitorInterval = null;
-        }
-    }
-
-    public async scanForRunningGames() {
-        await this.init();
-
-        if (this.busy || !this.xxmiConfig) return;
-
-        try {
-            const importers = this.getEnabledImporters();
-            const processList = await this.desktop.lib.native.getProcessList();
-
-            for (const { key: importer } of importers) {
-                const config = this.xxmiConfig.Importers[importer];
-                const processName = this.getGameProcessName(importer, config);
-
-                const found = processList.find(
-                    (p) => p.name.toLowerCase() === processName.toLowerCase(),
-                );
-
-                if (found) {
-                    if (this.desktop.service.overlay.currentTrackId === found.pid) {
-                        return;
-                    }
-
-                    const title =
-                        (await this.desktop.lib.native.getWindowTitle(found.pid)) || importer;
-
-                    const isOverlayEnabled = await this.desktop.setting.overlay.getEnabled();
-                    if (isOverlayEnabled) {
-                        this.desktop.logger.info(
-                            `Found running game ${importer} (${processName}, PID: ${found.pid}, Title: ${title}), attaching overlay...`,
-                            "XXMI.scanForRunningGames",
-                        );
-
-                        await this.desktop.window.overlay.createOverlayWindow({
-                            title,
-                            pid: found.pid,
-                        });
-                    }
-                    break;
-                }
-            }
-        } catch (error) {
-            this.desktop.logger.error(`Scan failed: ${error}`, "XXMI.scanForRunningGames");
-        }
-    }
-
     public async startGame(importer: string) {
         if (this.busy) {
             throw new Error("XXMI is busy");
@@ -294,200 +224,13 @@ export class XXMI {
                 );
             }
 
-            this.desktop.logger.info(
-                `Detected ${processName} (PID: ${pid}), attaching overlay...`,
-                "XXMI.startGame",
-            );
-
-            let attempts = 0;
-            let title = importer;
-            while (attempts < 10) {
-                const fetchedTitle = await this.desktop.lib.native.getWindowTitle(pid);
-                if (fetchedTitle) {
-                    title = fetchedTitle;
-                    break;
-                }
-                await delay(1000);
-                attempts++;
-            }
-
-            const isOverlayEnabled = await this.desktop.setting.overlay.getEnabled();
-            if (isOverlayEnabled) {
-                await this.desktop.window.overlay.createOverlayWindow({
-                    title,
-                    pid: pid,
-                });
-            }
-
-            const overlayWindow = this.desktop.window.overlay.window;
-            if (overlayWindow) {
-                overlayWindow.webContents.send("renderer:reload");
-            }
-
+            this.desktop.logger.info(`Detected ${processName} (PID: ${pid})`, "XXMI.startGame");
             await delay(1000);
         } catch (error) {
             this.desktop.logger.error(`Failed to start game: ${error}`, "XXMI.startGame");
             throw error;
         } finally {
             this.busy = false;
-        }
-    }
-
-    public async startPersistWatcher() {
-        if (!this.xxmiPath || !this.xxmiConfig) return;
-
-        const enabled = await this.desktop.setting.xxmi.getPersistToggles();
-        if (!enabled) return;
-
-        await this.stopPersistWatcher();
-
-        const importers = this.getEnabledImporters();
-        for (const importer of importers) {
-            const d3dxPath = path.join(importer.importerFolder, "d3dx_user.ini");
-            if (await fse.pathExists(d3dxPath)) {
-                const content = await fse.readFile(d3dxPath, "utf-8");
-                this.cachedD3dxUserIni.set(importer.key, this.parseD3dxUserIni(content));
-
-                const watcherId = await this.desktop.lib.watcher.createWatcher(
-                    d3dxPath,
-                    { compareContents: true },
-                    async (eventName, changedPath) => {
-                        if (eventName === "modify") {
-                            await this.handleD3dxUserIniChange(importer, changedPath);
-                        }
-                    },
-                );
-                this.persistWatchers.push(watcherId);
-                this.desktop.logger.info(
-                    `Started watching ${d3dxPath} for persist updates`,
-                    "XXMI.startPersistWatcher",
-                );
-            }
-        }
-    }
-
-    public async stopPersistWatcher() {
-        for (const id of this.persistWatchers) {
-            await this.desktop.lib.watcher.removeWatcher(id);
-        }
-        this.persistWatchers = [];
-        this.cachedD3dxUserIni.clear();
-    }
-
-    private parseD3dxUserIni(content: string): Record<string, string> {
-        const result: Record<string, string> = {};
-        const lines = content.split(/\r?\n/);
-        let inConstants = false;
-
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith(";")) continue;
-
-            if (trimmed.startsWith("[")) {
-                inConstants = trimmed === "[Constants]";
-                continue;
-            }
-
-            if (inConstants && trimmed.startsWith("$")) {
-                const parts = trimmed.split("=");
-                if (parts.length >= 2) {
-                    const key = parts[0].trim();
-                    const value = parts.slice(1).join("=").trim();
-                    result[key] = value;
-                }
-            }
-        }
-        return result;
-    }
-
-    private async handleD3dxUserIniChange(
-        importer: { key: string; importerFolder: string },
-        iniPath: string,
-    ) {
-        if (!this.xxmiPath) return;
-
-        try {
-            const content = await retry(
-                async () => {
-                    const isReadable = await this.desktop.lib.fs.isPathReadable(iniPath);
-                    if (!isReadable) {
-                        throw new Error(`Path ${iniPath} is not readable yet`);
-                    }
-                    return await fse.readFile(iniPath, "utf-8");
-                },
-                {
-                    retries: 10,
-                    delay: 200,
-                },
-            );
-
-            const newParsed = this.parseD3dxUserIni(content);
-            const oldParsed = this.cachedD3dxUserIni.get(importer.key) || {};
-
-            for (const [key, newValue] of Object.entries(newParsed)) {
-                const oldValue = oldParsed[key];
-                if (newValue !== oldValue) {
-                    const lastSlashIdx = key.lastIndexOf("\\");
-                    if (lastSlashIdx > 1) {
-                        // 1 because key starts with "$\"
-                        const relIniPath = key.substring(2, lastSlashIdx);
-                        const varName = key.substring(lastSlashIdx + 1);
-
-                        const targetIniPath = path.join(importer.importerFolder, relIniPath);
-                        if (await fse.pathExists(targetIniPath)) {
-                            await this.updateModIniPersist(targetIniPath, varName, newValue);
-                        }
-                    }
-                }
-            }
-
-            this.cachedD3dxUserIni.set(importer.key, newParsed);
-        } catch (error) {
-            this.desktop.logger.error(
-                `Error handling d3dx_user.ini change: ${error}`,
-                "XXMI.handleD3dxUserIniChange",
-            );
-        }
-    }
-
-    private async updateModIniPersist(targetIniPath: string, varName: string, newValue: string) {
-        try {
-            const content = await fse.readFile(targetIniPath, "utf-8");
-            const lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
-            const lines = content.split(/\r?\n/);
-            let inConstants = false;
-            let modified = false;
-
-            for (let i = 0; i < lines.length; i++) {
-                const trimmed = lines[i].trim();
-                if (trimmed.startsWith("[")) {
-                    inConstants = trimmed === "[Constants]";
-                    continue;
-                }
-
-                if (inConstants && trimmed.startsWith("global persist $")) {
-                    const escapedVarName = varName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-                    const regex = new RegExp(`^global\\s+persist\\s+\\$${escapedVarName}\\s*=`);
-                    if (regex.test(trimmed)) {
-                        lines[i] = `global persist $${varName} = ${newValue}`;
-                        modified = true;
-                        break;
-                    }
-                }
-            }
-
-            if (modified) {
-                await fse.writeFile(targetIniPath, lines.join(lineEnding), "utf-8");
-                this.desktop.logger.info(
-                    `Updated persist variable $${varName} to ${newValue} in ${targetIniPath}`,
-                    "XXMI.updateModIniPersist",
-                );
-            }
-        } catch (error) {
-            this.desktop.logger.error(
-                `Error updating mod ini ${targetIniPath}: ${error}`,
-                "XXMI.updateModIniPersist",
-            );
         }
     }
 }

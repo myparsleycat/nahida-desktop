@@ -223,6 +223,31 @@
       }
     },
     "tools": {
+      "d3d11_builder": {
+        "title": "Build d3d11.dll",
+        "description": "Builds the DLL to be injected into the game process for the selected version",
+        "provider": "Provider",
+        "version": "Version",
+        "loading": "Loading...",
+        "target_importer": "Target Importer",
+        "no_importer": "No available Importer",
+        "select_importer_msg": "Please select a target Importer.",
+        "building": "Building",
+        "start_build": "Start Build",
+        "progress": {
+          "XXMI_INIT": "Initializing...",
+          "XXMI_ERR_GIMI_NOT_FOUND": "Could not find the importer.",
+          "XXMI_FIND_VS": "Locating Visual Studio build tools...",
+          "XXMI_ERR_VS_NOT_FOUND": "Could not find the Visual Studio environment (vcvars64.bat). Please make sure the C++ build tools are installed.",
+          "XXMI_BUILDING": "Building D3D11 DLL...",
+          "XXMI_ERR_DLL_NOT_FOUND": "Could not find the built d3d11.dll file.",
+          "XXMI_BUILD_SUCCESS": "d3d11.dll was applied successfully.",
+          "XXMI_ERR_BUILD_FAILED": "An unexpected error occurred during the build.",
+          "XXMI_DOWNLOAD_REPO": "Downloading XXMI source code...",
+          "XXMI_EXTRACT_REPO": "Extracting source code archive...",
+          "XXMI_ENABLE_UNSAFE_MODE": "Enabling Unsafe Mode..."
+        }
+      },
       "fix-tool-manager": {
         "presets": {},
         "builder": {
@@ -272,6 +297,8 @@
           "checkBackgroundUpdates": "Check for updates in background",
           "checkBackgroundUpdatesDescription": "Check for updates in the background.",
           "checkUpdate": "Check for updates",
+          "runInBackground": "Run in background",
+          "runInBackgroundDescription": "Keep running in the background when all windows are closed.",
           "autoUpdate": "Auto update",
           "autoUpdateDescription": "Automatically install after checking for updates (Coming soon)"
         },
@@ -334,13 +361,6 @@
             "threshold": "Threshold Mod Count",
             "thresholdDescription": "Applies virtualization when the number of mods exceeds the set count"
           }
-        },
-        "overlay": {
-          "title": "Overlay",
-          "enableOverlay": "Enable Overlay",
-          "enableOverlayDescription": "Use in-game overlay feature",
-          "overlayKey": "Hotkey",
-          "overlayKeyDescription": "Set the hotkey to toggle the overlay on and off"
         }
       },
       "xxmi": {
@@ -349,6 +369,7 @@
         "activeImporter": "Active Importer",
         "persistToggles": "Persist Toggles",
         "persistTogglesDescription": "Permanently saves toggle states by modifying the mod INI during reload",
+        "persistNotFoundXXMI": "Please set the XXMI Launcher path first.",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "XXMI not found",

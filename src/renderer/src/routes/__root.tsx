@@ -1,13 +1,12 @@
 import { PathSelectorDialog } from "@renderer/components/path-selector-dialog";
 import { RootProvider } from "@renderer/components/root-provider";
 import { Sidebar } from "@renderer/components/sidebar";
-import { Titlebar } from "@renderer/components/titlebar";
 import { Toaster } from "@renderer/components/ui/sonner";
 import { useGlobalEvents } from "@renderer/hooks/use-global-events";
+import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { cn } from "@renderer/lib/utils";
 import { useGlobalStore } from "@renderer/store/global";
 import type { QueryClient } from "@tanstack/react-query";
-import { useQuery } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet, useLocation } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -17,11 +16,7 @@ function RootComponent() {
   const setAppStatus = useGlobalStore((state) => state.setAppStatus);
   const setSession = useGlobalStore((state) => state.setSession);
   const { i18n } = useTranslation();
-
-  const { data: titlebarStyle } = useQuery({
-    queryKey: ["settings", "general", "titlebarStyle"],
-    queryFn: async () => window.api.invoke("setting:general:getTitlebarStyle"),
-  });
+  const { screenHeight, titlebarStyle } = useTitlebar();
 
   useEffect(() => {
     window.api.invoke("util:getAppStatus").then((appStatus) => {
@@ -34,14 +29,6 @@ function RootComponent() {
       if (language) i18n.changeLanguage(language);
     });
   }, [setAppStatus, setSession, i18n]);
-
-  useEffect(() => {
-    if (location.pathname.startsWith("/overlay")) {
-      document.documentElement.classList.add("transparent");
-    } else {
-      document.documentElement.classList.remove("transparent");
-    }
-  }, [location.pathname]);
 
   const [pathSelectorData, setPathSelectorData] = useState<{
     selectionId: string;
@@ -57,16 +44,12 @@ function RootComponent() {
 
   useGlobalEvents(handlePathSelectorModeSelect);
 
-  if (location.pathname.startsWith("/overlay")) {
-    return <Outlet />;
-  }
-
   const noSidebarPath = ["/setting", "/auth", "/report"];
   const isNoSidebar = noSidebarPath.some((path) => location.pathname.startsWith(path));
 
   return (
     <>
-      {titlebarStyle !== "native" && <div className="h-7 shrink-0" />}
+      {titlebarStyle === "modern" && <div className="h-7 shrink-0" />}
 
       <Toaster position="bottom-right" richColors />
 
@@ -79,12 +62,7 @@ function RootComponent() {
         />
       )}
 
-      <main
-        className={cn(
-          "flex w-screen overflow-hidden",
-          titlebarStyle === "native" ? "h-screen" : "h-[calc(100vh-28px)]",
-        )}
-      >
+      <main className={cn("flex w-screen overflow-hidden", screenHeight)}>
         <div className="flex flex-row w-full">
           {!isNoSidebar && <Sidebar className="border-b" />}
 
@@ -93,6 +71,29 @@ function RootComponent() {
           </div>
         </div>
       </main>
+    </>
+  );
+}
+
+function NotFoundComponent() {
+  const location = useLocation();
+  const { Titlebar } = useTitlebar();
+
+  return (
+    <>
+      <Titlebar />
+      <div>Not Found here is {location.pathname}</div>
+    </>
+  );
+}
+
+function PendingComponent() {
+  const { Titlebar } = useTitlebar();
+
+  return (
+    <>
+      <Titlebar />
+      <div>Loading...</div>
     </>
   );
 }
@@ -107,21 +108,6 @@ export const Route = createRootRouteWithContext<{
       </RootProvider>
     );
   },
-  notFoundComponent: () => {
-    const location = useLocation();
-    return (
-      <>
-        <Titlebar />
-        <div>Not Found here is {location.pathname}</div>
-      </>
-    );
-  },
-  pendingComponent: () => {
-    return (
-      <>
-        <Titlebar />
-        <div>Loading...</div>
-      </>
-    );
-  },
+  notFoundComponent: NotFoundComponent,
+  pendingComponent: PendingComponent,
 });

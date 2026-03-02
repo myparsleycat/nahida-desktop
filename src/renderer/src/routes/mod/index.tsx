@@ -5,7 +5,7 @@ import { ModGrid } from "@renderer/components/mod/mod-grid";
 import { ModList } from "@renderer/components/mod/mod-list";
 import { PresetManagementDialog } from "@renderer/components/mod/preset-management-dialog";
 import ModSidebar from "@renderer/components/mod/sidebar";
-import { Titlebar } from "@renderer/components/titlebar";
+import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { useCharacters, useGames } from "@renderer/hooks/use-mod-data";
 import { useModDragDrop } from "@renderer/hooks/use-mod-drag-drop";
 import {
@@ -25,6 +25,7 @@ export const Route = createFileRoute("/mod/")({
 
 function RouteComponent() {
   const { t } = useTranslation();
+  const { Titlebar } = useTitlebar();
   const { queryClient } = Route.useRouteContext();
 
   const selectedGame = useModStore((s) => s.selectedGame);

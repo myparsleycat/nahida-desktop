@@ -7,10 +7,6 @@ export function registerWindowHandlers(d: NahidaDesktop) {
         d.window.setting.createSettingWindow();
     });
 
-    rh("overlay:setIgnoreMouseEvents", async (ignore: boolean) => {
-        d.window.overlay.setIgnoreMouseEvents(ignore);
-    });
-
     ipcMain.on("window-control", (event, command) => {
         const win = BrowserWindow.fromWebContents(event.sender);
         if (!win) return;
@@ -27,9 +23,7 @@ export function registerWindowHandlers(d: NahidaDesktop) {
                 }
                 break;
             case "close":
-                if (win === d.window.main.window) {
-                    win.hide();
-                } else if (!win.isDestroyed()) {
+                if (!win.isDestroyed()) {
                     win.destroy();
                 }
                 break;

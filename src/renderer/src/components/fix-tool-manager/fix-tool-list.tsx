@@ -3,7 +3,6 @@ import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
-import type { Script } from "@renderer/routes/tools/fix-tool-manger";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { sortBy } from "es-toolkit";
 import { Reorder } from "framer-motion";
@@ -14,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import execIcon from "@/renderer/assets/img/document-executable-svgrepo-com.svg";
 import pythonIcon from "@/renderer/assets/img/python-svgrepo-com.svg";
+import { Script } from "../tools/fix-tool-manger";
 
 type FixToolListProps = {
   insertedPresetTools: Script[];
@@ -107,7 +107,7 @@ export function FixToolList({ insertedPresetTools, onAddScript }: FixToolListPro
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`border rounded-lg bg-card transition-all overflow-hidden duration-200 flex flex-col h-full ${
+      className={`border rounded-lg bg-card transition-all overflow-hidden duration-200 flex flex-col h-full min-h-0 ${
         isDragOver ? "border-primary bg-primary/5 ring-2 ring-primary/20" : ""
       }`}
     >
@@ -167,7 +167,7 @@ export function FixToolList({ insertedPresetTools, onAddScript }: FixToolListPro
                 <Reorder.Item
                   key={script.id}
                   value={script}
-                  className="group grid grid-cols-[1fr_auto_auto] items-center gap-2 p-3 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors"
+                  className="group grid grid-cols-[1fr_auto_auto] items-center gap-2 p-3 rounded-lg border border-border bg-card hover:border-accent/40 hover:bg-card/80 transition-colors"
                 >
                   <div className="flex flex-row space-x-2 items-center min-w-0">
                     {script.type === "python" ? (

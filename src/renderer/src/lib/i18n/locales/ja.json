@@ -224,6 +224,31 @@
       }
     },
     "tools": {
+      "d3d11_builder": {
+        "title": "d3d11.dll をビルド",
+        "description": "選択したバージョンに合わせて、ゲームプロセスにインジェクションされる DLL をビルドします",
+        "provider": "プロバイダー",
+        "version": "バージョン",
+        "loading": "読み込み中...",
+        "target_importer": "対象 Importer",
+        "no_importer": "利用可能な Importer がありません",
+        "select_importer_msg": "対象の Importer を選択してください。",
+        "building": "ビルド中",
+        "start_build": "ビルド開始",
+        "progress": {
+          "XXMI_INIT": "初期化中...",
+          "XXMI_ERR_GIMI_NOT_FOUND": "Importer が見つかりません。",
+          "XXMI_FIND_VS": "Visual Studio ビルドツールを検索中...",
+          "XXMI_ERR_VS_NOT_FOUND": "Visual Studio 環境 (vcvars64.bat) が見つかりません。C++ ビルドツールがインストールされていることを確認してください。",
+          "XXMI_BUILDING": "D3D11 DLL をビルド中...",
+          "XXMI_ERR_DLL_NOT_FOUND": "ビルドされた d3d11.dll ファイルが見つかりません。",
+          "XXMI_BUILD_SUCCESS": "d3d11.dll が正常に適用されました。",
+          "XXMI_ERR_BUILD_FAILED": "ビルド中に予期しないエラーが発生しました。",
+          "XXMI_DOWNLOAD_REPO": "XXMI ソースコードをダウンロード中...",
+          "XXMI_EXTRACT_REPO": "ソースコードのアーカイブを展開中...",
+          "XXMI_ENABLE_UNSAFE_MODE": "Unsafe Mode を有効化中..."
+        }
+      },
       "fix-tool-manager": {
         "presets": {},
         "builder": {
@@ -273,6 +298,8 @@
           "checkBackgroundUpdates": "バックグラウンド更新確認",
           "checkBackgroundUpdatesDescription": "バックグラウンドで更新を確認します。",
           "checkUpdate": "更新確認",
+          "runInBackground": "バックグラウンド実行",
+          "runInBackgroundDescription": "すべてのウィンドウを閉じてもアプリをバックグラウンドで実行し続けます。",
           "autoUpdate": "自動更新",
           "autoUpdateDescription": "更新確認後、自動的にインストールします (準備中)"
         },
@@ -335,13 +362,6 @@
             "threshold": "基準MOD数",
             "thresholdDescription": "設定した数以上のMODがある場合に仮想化を適用します"
           }
-        },
-        "overlay": {
-          "title": "オーバーレイ",
-          "enableOverlay": "オーバーレイを有効にする",
-          "enableOverlayDescription": "ゲーム内オーバーレイ機能を使用します",
-          "overlayKey": "ショートカットキー",
-          "overlayKeyDescription": "オーバーレイのオン/オフを切り替えるショートカットキーを設定します"
         }
       },
       "xxmi": {
@@ -350,6 +370,7 @@
         "activeImporter": "有効なImporter",
         "persistToggles": "トグルの永続保存",
         "persistTogglesDescription": "リロード時にMODのINIを変更して、トグル状態を永続的に保存します",
+        "persistNotFoundXXMI": "先にXXMI Launcherのパスを設定してください。",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "XXMIが見つかりません",

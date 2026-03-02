@@ -21,6 +21,8 @@ export function getDefaultWebPreferences() {
 }
 
 export function focus(window: BrowserWindow) {
+    if (window.isDestroyed()) return;
+
     if (window.isMinimized()) window.restore();
 
     window.setAlwaysOnTop(true);

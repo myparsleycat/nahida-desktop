@@ -1,4 +1,4 @@
-import { Titlebar } from "@renderer/components/titlebar";
+import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 
@@ -8,6 +8,7 @@ export const Route = createFileRoute("/")({
 
 function RouteComponent() {
   const navi = useNavigate();
+  const { Titlebar } = useTitlebar();
 
   useEffect(() => {
     window.api.invoke("setting:general:getDefaultStartPage").then((page: string | null) => {
