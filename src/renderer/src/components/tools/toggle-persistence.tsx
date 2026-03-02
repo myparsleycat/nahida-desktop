@@ -23,7 +23,7 @@ export default function TogglePersistence() {
     onSuccess: (_, newEnabled) => {
       queryClient.setQueryData(["setting:xxmi:getPersistToggles"], newEnabled);
     },
-    onError: (err: any) => {
+    onError: (err) => {
       toast.error(err.message);
     },
   });

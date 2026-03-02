@@ -237,13 +237,13 @@
         "start_build": "ビルド開始",
         "progress": {
           "XXMI_INIT": "初期化中...",
-          "XXMI_ERR_GIMI_NOT_FOUND": "エラー: Importer が見つかりません。",
+          "XXMI_ERR_GIMI_NOT_FOUND": "Importer が見つかりません。",
           "XXMI_FIND_VS": "Visual Studio ビルドツールを検索中...",
-          "XXMI_ERR_VS_NOT_FOUND": "エラー: Visual Studio 環境 (vcvars64.bat) が見つかりません。C++ ビルドツールがインストールされているか確認してください。",
+          "XXMI_ERR_VS_NOT_FOUND": "Visual Studio 環境 (vcvars64.bat) が見つかりません。C++ ビルドツールがインストールされていることを確認してください。",
           "XXMI_BUILDING": "D3D11 DLL をビルド中...",
-          "XXMI_ERR_DLL_NOT_FOUND": "エラー: ビルドされた d3d11.dll ファイルが見つかりません。",
-          "XXMI_BUILD_SUCCESS": "ビルド成功！ d3d11.dll が正常に適用されました。",
-          "XXMI_ERR_BUILD_FAILED": "エラー: ビルド中に予期しないエラーが発生しました。",
+          "XXMI_ERR_DLL_NOT_FOUND": "ビルドされた d3d11.dll ファイルが見つかりません。",
+          "XXMI_BUILD_SUCCESS": "d3d11.dll が正常に適用されました。",
+          "XXMI_ERR_BUILD_FAILED": "ビルド中に予期しないエラーが発生しました。",
           "XXMI_DOWNLOAD_REPO": "XXMI ソースコードをダウンロード中...",
           "XXMI_EXTRACT_REPO": "ソースコードのアーカイブを展開中...",
           "XXMI_ENABLE_UNSAFE_MODE": "Unsafe Mode を有効化中..."

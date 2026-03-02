@@ -3,7 +3,7 @@ import TogglePersistence from "@renderer/components/tools/toggle-persistence";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { cn } from "@renderer/lib/utils";
 import { Link } from "@tanstack/react-router";
-import { ChevronRight, Wrench, ExternalLink, LayoutGrid, Menu, X } from "lucide-react";
+import { ChevronRight, Wrench, ExternalLink, Menu, X } from "lucide-react";
 import { useState } from "react";
 import FixToolManager from "./fix-tool-manger";
 
@@ -61,17 +61,15 @@ export default function ToolsPage() {
           screenHeight,
         )}
       >
-        {/* Sidebar header */}
         <div className="flex items-center gap-2.5 px-4 py-4 border-b border-sidebar-border">
           <div className="flex h-7 w-7 items-center justify-center rounded bg-accent/20">
             <Wrench className="h-3.5 w-3.5 text-accent" />
           </div>
           <span className="text-sm font-semibold text-sidebar-foreground tracking-tight">
-            Dev Tools
+            Mod Tools
           </span>
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-3 px-2">
           <p className="px-2 mb-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
             Tools
@@ -129,18 +127,9 @@ export default function ToolsPage() {
             })}
           </ul>
         </nav>
-
-        {/* Footer */}
-        <div className="px-4 py-3 border-t border-sidebar-border">
-          <p className="text-[10px] text-muted-foreground font-mono">
-            {toolPages.length} tools available
-          </p>
-        </div>
       </aside>
 
-      {/* Main content */}
       <div className="flex flex-1 flex-col min-w-0">
-        {/* Topbar */}
         <header className="flex items-center gap-3 px-4 h-10 border-b border-border shrink-0">
           <button
             onClick={() => setSidebarOpen((v) => !v)}
@@ -154,7 +143,6 @@ export default function ToolsPage() {
             )}
           </button>
 
-          {/* Breadcrumb */}
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
             <span className="text-foreground font-medium">Tools</span>
             {activeTool && (
@@ -166,12 +154,10 @@ export default function ToolsPage() {
           </div>
         </header>
 
-        {/* Tool content */}
         <main className="flex-1 min-h-0 overflow-hidden p-4">
           {activeTool && activeTool.component ? (
             <div className="h-full min-h-0 max-w-2xl mx-auto">{activeTool.component()}</div>
           ) : (
-            /* Overview grid */
             <div className="max-w-3xl mx-auto space-y-6 overflow-y-auto h-full">
               <div>
                 <h1 className="text-xl font-semibold text-foreground text-balance">
@@ -224,28 +210,6 @@ export default function ToolsPage() {
                     </button>
                   );
                 })}
-              </div>
-
-              {/* Stats row */}
-              <div className="flex gap-4 pt-2">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <LayoutGrid className="h-3.5 w-3.5" />
-                  <span>
-                    <span className="text-foreground font-medium">
-                      {toolPages.filter((t) => !t.path).length}
-                    </span>{" "}
-                    inline tools
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  <span>
-                    <span className="text-foreground font-medium">
-                      {toolPages.filter((t) => !!t.path).length}
-                    </span>{" "}
-                    external pages
-                  </span>
-                </div>
               </div>
             </div>
           )}

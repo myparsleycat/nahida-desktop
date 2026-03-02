@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
-import { Loader2Icon } from "lucide-react";
+import { CircleCheckIcon, CircleXIcon, Loader2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -124,7 +124,7 @@ export default function D3D11Builder() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border border-border bg-secondary/20 p-4 rounded-lg">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border bg-card p-4 rounded-lg hover:shadow transition-shadow duration-200">
         <div className="space-y-2">
           <label className="text-xs font-medium text-muted-foreground uppercase tracking-widest">
             {t("page.tools.d3d11_builder.provider")}
@@ -208,31 +208,43 @@ export default function D3D11Builder() {
         </div>
       </div>
 
+      {progress && (
+        <div className="p-3 bg-card border rounded-lg hover:shadow transition-shadow duration-200">
+          <div
+            className={`flex items-center gap-2 text-sm font-medium animate-in fade-in ${progress.includes("ERR") || progress.includes("Error") ? "text-destructive" : "text-muted-foreground"}`}
+          >
+            {isRunning ? (
+              <Loader2Icon className="size-5 animate-spin" />
+            ) : progress.includes("ERR") || progress.includes("Error") ? (
+              <CircleXIcon className="size-5" />
+            ) : progress.includes("SUCCESS") ? (
+              <CircleCheckIcon className="size-5" />
+            ) : null}
+
+            <p>
+              {progress.startsWith("XXMI_") || progress.startsWith("page.tools.")
+                ? t(
+                    progress.startsWith("page.tools.")
+                      ? progress
+                      : `page.tools.d3d11_builder.progress.${progress}`,
+                    progress,
+                  )
+                : progress}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-4">
         <Button
           onClick={handleBuild}
           disabled={isRunning || !selectedImporter || versions.length === 0}
-          className="bg-accent text-accent-foreground hover:bg-accent/90 font-mono text-sm shadow-sm"
+          variant="outline"
         >
-          {isRunning && <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />}
           {isRunning
             ? t("page.tools.d3d11_builder.building")
             : t("page.tools.d3d11_builder.start_build")}
         </Button>
-        {progress && (
-          <div
-            className={`text-sm font-medium animate-in fade-in ${progress.includes("ERR") || progress.includes("Error") ? "text-destructive" : "text-muted-foreground"}`}
-          >
-            {progress.startsWith("XXMI_") || progress.startsWith("page.tools.")
-              ? t(
-                  progress.startsWith("page.tools.")
-                    ? progress
-                    : `page.tools.d3d11_builder.progress.${progress}`,
-                  progress,
-                )
-              : progress}
-          </div>
-        )}
       </div>
     </div>
   );

@@ -46,10 +46,12 @@ export class DllBuilder {
             const url = `https://api.github.com/repos/${owner}/XXMI-Libs-Package/releases`;
             const resp = await ky.get(url, {
                 headers: {
-                    "User-Agent": "NahidaDesktop",
+                    "User-Agent":
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
                 },
                 // @ts-expect-error
                 dispatcher: await this.desktop.getAgent(),
+                throwHttpErrors: false,
             });
 
             if (!resp.ok) {
