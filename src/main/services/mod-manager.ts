@@ -102,7 +102,7 @@ export class ModManager {
                 searchModPreview ?? (await this.desktop.setting.mod.getSearchModPreview());
 
             try {
-                return getCharactersFolder(modFolderPath, shouldFallback);
+                return await getCharactersFolder(modFolderPath, shouldFallback);
             } catch (error) {
                 this.desktop.logger.error(error, `Mod:characters:${game}`);
                 throw error;
@@ -116,7 +116,7 @@ export class ModManager {
             const shouldFallback =
                 searchModPreview ?? (await this.desktop.setting.mod.getSearchModPreview());
             try {
-                return getCharactersFolder(folderPath, shouldFallback);
+                return await getCharactersFolder(folderPath, shouldFallback);
             } catch (error) {
                 this.desktop.logger.error(error, `Mod:subGroups:${folderPath}`);
                 throw error;
@@ -125,7 +125,7 @@ export class ModManager {
 
         mods: async (groupPath: string): Promise<FolderGroup> => {
             try {
-                return getMods(groupPath);
+                return await getMods(groupPath);
             } catch (error) {
                 this.desktop.logger.error(error, `Mod:mods:${groupPath}`);
                 throw error;
@@ -702,7 +702,7 @@ export class ModManager {
                     const pid = await this.get.gamePid(matchedGame.game);
                     if (pid) {
                         try {
-                            const sent = sendF10(pid);
+                            const sent = await sendF10(pid);
                             if (sent) {
                                 this.desktop.logger.info(
                                     `Sent F10 to ${matchedGame.game} (PID: ${pid})`,
