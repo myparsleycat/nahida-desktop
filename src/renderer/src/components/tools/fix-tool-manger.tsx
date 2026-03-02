@@ -1,20 +1,14 @@
 import { FixToolList } from "@renderer/components/fix-tool-manager/fix-tool-list";
 import { PresetBuilder } from "@renderer/components/fix-tool-manager/preset-builder";
 import { PresetViewer } from "@renderer/components/fix-tool-manager/preset-viewer";
-import { Titlebar } from "@renderer/components/titlebar";
 import { cn } from "@renderer/lib/utils";
-import { createFileRoute } from "@tanstack/react-router";
 import { ArrowRightIcon } from "lucide-react";
 import { useState } from "react";
-
-export const Route = createFileRoute("/tools/fix-tool-manger")({
-  component: RouteComponent,
-});
 
 const getScriptsFn = () => window.api.invoke("ftm:getScripts");
 export type Script = Awaited<ReturnType<typeof getScriptsFn>>[number];
 
-function RouteComponent() {
+export default function FixToolManager() {
   const [tab, setTab] = useState<"presets" | "builder">("presets");
   const [insertedPresetTools, setInsertedPresetTools] = useState<Script[]>([]);
 
@@ -36,10 +30,8 @@ function RouteComponent() {
   };
 
   return (
-    <div className="p-5 h-[calc(100vh-74px)]">
-      <Titlebar title={{ text: "Fix Tool Manager", position: "center" }} />
-
-      <div className="flex rounded-xl p-1.5 w-min bg-accent h-10 mb-2 space-x-2">
+    <div className="h-full min-h-0 flex flex-col">
+      <div className="flex rounded-xl p-1.5 w-min bg-card h-10 mb-2 shrink-0 space-x-2">
         <button
           onClick={() => setTab("presets")}
           className={cn("flex items-center p-2 rounded-lg", tab === "presets" && "outline")}
@@ -56,19 +48,25 @@ function RouteComponent() {
       </div>
 
       {tab === "presets" ? (
-        <PresetViewer />
+        <div className="flex-1 min-h-0">
+          <PresetViewer />
+        </div>
       ) : (
-        <div className="grid grid-cols-[1fr_2rem_1fr] h-full gap-x-3">
-          <FixToolList insertedPresetTools={insertedPresetTools} onAddScript={handleAddScript} />
+        <div className="grid grid-cols-[1fr_2rem_1fr] flex-1 min-h-0 gap-x-3">
+          <div className="min-h-0">
+            <FixToolList insertedPresetTools={insertedPresetTools} onAddScript={handleAddScript} />
+          </div>
           <div className="flex items-center justify-center">
             <ArrowRightIcon className="w-4 h-4" />
           </div>
-          <PresetBuilder
-            insertedPresetTools={insertedPresetTools}
-            setInsertedPresetTools={setInsertedPresetTools}
-            onRemoveScript={handleRemoveScript}
-            onReorderScripts={handleReorderScripts}
-          />
+          <div className="min-h-0">
+            <PresetBuilder
+              insertedPresetTools={insertedPresetTools}
+              setInsertedPresetTools={setInsertedPresetTools}
+              onRemoveScript={handleRemoveScript}
+              onReorderScripts={handleReorderScripts}
+            />
+          </div>
         </div>
       )}
     </div>

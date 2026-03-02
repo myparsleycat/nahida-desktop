@@ -2,7 +2,6 @@ import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { cn } from "@renderer/lib/utils";
-import type { Script } from "@renderer/routes/tools/fix-tool-manger";
 import { Reorder } from "framer-motion";
 import { GripVertical, Save, X } from "lucide-react";
 import { useState } from "react";
@@ -10,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import execIcon from "@/renderer/assets/img/document-executable-svgrepo-com.svg";
 import pythonIcon from "@/renderer/assets/img/python-svgrepo-com.svg";
+import { Script } from "../tools/fix-tool-manger";
 
 interface PresetBuilderProps {
   insertedPresetTools: Script[];
@@ -52,7 +52,7 @@ export function PresetBuilder({
   };
 
   return (
-    <div className="border rounded-lg bg-card overflow-hidden flex flex-col h-full">
+    <div className="border rounded-lg bg-card overflow-hidden flex flex-col h-full min-h-0">
       <div className="flex flex-col gap-2 p-3 border-b">
         <div className="flex items-center justify-between">
           <div className="flex-1">
@@ -114,12 +114,12 @@ export function PresetBuilder({
                   value={script}
                   className={cn(
                     "group grid grid-cols-[auto_1fr_auto] items-center gap-3 p-4 rounded-lg border border-border bg-card cursor-grab active:cursor-grabbing transition-colors",
-                    "hover:bg-accent/30",
+                    "hover:border-accent/40 hover:bg-card/80",
                   )}
                 >
                   <div className="flex items-center gap-2 shrink-0 pointer-events-none">
                     <GripVertical className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-xs font-medium text-muted-foreground min-w-[20px]">
+                    <span className="text-xs font-medium text-muted-foreground min-w-5">
                       {index + 1}
                     </span>
                   </div>

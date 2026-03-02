@@ -4,7 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
-import { setting } from "@main/internal/db/schema";
 import { getAgent } from "@main/internal/fetcher";
 import fse from "fs-extra";
 import ky from "ky";
@@ -16,42 +15,96 @@ export class DllBuilder {
     private readonly VS_EDITIONS = ["Community", "Professional", "Enterprise", "Insiders"];
     private readonly VS_VERSIONS = ["2025", "2022", "18", "17"];
 
-    constructor(private readonly desktop: NahidaDesktop) {}
+    private isBuilding = false;
+    private currentProgress = "";
 
-    public async getGIMIPath() {
-        const result = await this.desktop.lib.db.query.setting.findFirst({
-            where: (t, { eq }) => eq(t.key, "savedGimiPath"),
-        });
+    private releasesCache: Record<string, string[]> = {
+        SpectrumQT: ["master"],
+        U149: ["master"],
+    };
 
-        return result?.value;
+    constructor(private readonly desktop: NahidaDesktop) {
+        this.updateReleases();
     }
 
-    public async saveGIMIPath(gimiPath: string) {
-        await this.desktop.lib.db
-            .insert(setting)
-            .values({
-                key: "savedGimiPath",
-                value: gimiPath,
-            })
-            .onConflictDoUpdate({
-                target: setting.key,
-                set: {
-                    value: gimiPath,
+    public getBuilderState() {
+        return {
+            isBuilding: this.isBuilding,
+            progress: this.currentProgress,
+        };
+    }
+
+    public async updateReleases() {
+        await Promise.all([
+            this.fetchProviderReleases("SpectrumQT"),
+            this.fetchProviderReleases("U149"),
+        ]);
+    }
+
+    private async fetchProviderReleases(provider: string) {
+        try {
+            const owner = provider === "U149" ? "myparsleycat" : "SpectrumQT";
+            const url = `https://api.github.com/repos/${owner}/XXMI-Libs-Package/releases`;
+            const resp = await ky.get(url, {
+                headers: {
+                    "User-Agent": "NahidaDesktop",
                 },
+                // @ts-expect-error
+                dispatcher: await getAgent(),
             });
+
+            if (!resp.ok) {
+                this.releasesCache[provider] = ["master"];
+                return;
+            }
+
+            // oxlint-disable-next-line typescript/no-explicit-any
+            const releases = (await resp.json()) as any[];
+            // oxlint-disable-next-line typescript/no-explicit-any
+            this.releasesCache[provider] = ["master", ...releases.map((r: any) => r.tag_name)];
+        } catch (error) {
+            this.desktop.logger.error(error, "DllBuilder:fetchProviderReleases");
+            this.releasesCache[provider] = ["master"];
+        }
     }
 
-    public async buildNewD3DDLL({ gimiPath }: { gimiPath?: string }) {
-        const targetDir = this.resolveTargetDirectory(gimiPath);
-        if (!(await fse.pathExists(targetDir))) {
-            this.desktop.ipc.broadcast("tools:progress", "GIMI 경로를 찾을 수 없습니다");
+    public getProviderReleases(provider: string) {
+        return this.releasesCache[provider] || ["master"];
+    }
+
+    private updateProgress(code: string) {
+        this.currentProgress = code;
+        this.desktop.ipc.broadcast("tools:progress", code);
+    }
+
+    public async buildNewD3DDLL({
+        provider,
+        version,
+        importerKey,
+        importerPath,
+    }: {
+        provider: string;
+        version: string;
+        importerKey: string;
+        importerPath?: string;
+    }) {
+        if (this.isBuilding) {
             return false;
         }
 
-        this.desktop.ipc.broadcast("tools:progress", "Visual Studio 를 찾는중");
+        this.isBuilding = true;
+        this.updateProgress("XXMI_INIT");
+        if (!importerPath || !(await fse.pathExists(importerPath))) {
+            this.updateProgress("XXMI_ERR_GIMI_NOT_FOUND");
+            this.isBuilding = false;
+            return false;
+        }
+
+        this.updateProgress("XXMI_FIND_VS");
         const vcvarsPath = await this.findVsDevCmd();
         if (!vcvarsPath) {
-            this.desktop.ipc.broadcast("tools:progress", "Visual Studio를 찾을 수 없습니다");
+            this.updateProgress("XXMI_ERR_VS_NOT_FOUND");
+            this.isBuilding = false;
             return false;
         }
 
@@ -60,51 +113,48 @@ export class DllBuilder {
         await fse.emptyDir(tempDir);
 
         try {
-            const projectPath = await this.prepareSourceCode(tempDir);
+            const projectPath = await this.prepareSourceCode(tempDir, provider, version);
 
-            this.desktop.ipc.broadcast("tools:progress", "빌드 중");
+            this.updateProgress("XXMI_BUILDING");
             this.desktop.logger.info("Building D3D11 DLL...", "DllBuilder:buildNewD3DDLL");
 
             const buildSuccess = await this.executeMsBuild(vcvarsPath, projectPath);
             if (!buildSuccess) {
+                this.isBuilding = false;
                 return false;
             }
 
             const builtDllPath = path.join(projectPath, "x64", "Release", "d3d11.dll");
             if (!(await fse.pathExists(builtDllPath))) {
-                this.desktop.ipc.broadcast(
-                    "tools:progress",
-                    "빌드 성공, 하지만 d3d11.dll 을 찾을 수 없습니다.",
-                );
+                this.updateProgress("XXMI_ERR_DLL_NOT_FOUND");
+                this.isBuilding = false;
                 return false;
             }
 
-            const finalDestination = path.join(targetDir, "d3d11.dll");
+            const finalDestination = path.join(importerPath, "d3d11.dll");
             await fse.copy(builtDllPath, finalDestination, { overwrite: true });
 
-            await this.enableUnsafeMode(targetDir);
+            const xxmiPath = await this.desktop.service.xxmi.getXXMIPath();
+            if (xxmiPath) {
+                await this.enableUnsafeMode(xxmiPath, importerKey);
+            }
 
-            this.desktop.ipc.broadcast("tools:progress", "완료됨");
+            this.updateProgress("XXMI_BUILD_SUCCESS");
             this.desktop.logger.info(
                 `Successfully built and installed d3d11.dll to ${finalDestination}`,
                 "DllBuilder:buildNewD3DDLL",
             );
 
+            this.isBuilding = false;
             return true;
         } catch (error) {
             this.desktop.logger.error(error, "DllBuilder:buildNewD3DDLL");
-            this.desktop.ipc.broadcast("tools:progress", (error as Error).message);
+            this.updateProgress("XXMI_ERR_BUILD_FAILED");
+            this.isBuilding = false;
             return false;
         } finally {
             await fse.remove(tempDir).catch(() => {});
         }
-    }
-
-    private resolveTargetDirectory(inputPath?: string): string {
-        if (inputPath) {
-            return inputPath;
-        }
-        return path.join(os.homedir(), "AppData", "Roaming", "XXMI Launcher", "GIMI");
     }
 
     private async findVsDevCmd(): Promise<string | null> {
@@ -129,13 +179,17 @@ export class DllBuilder {
         return null;
     }
 
-    private async prepareSourceCode(workDir: string): Promise<string> {
-        this.desktop.ipc.broadcast("tools:progress", "XXMI 리포지토리 다운로드 중");
+    private async prepareSourceCode(
+        workDir: string,
+        provider: string,
+        version: string,
+    ): Promise<string> {
+        this.updateProgress("XXMI_DOWNLOAD_REPO");
         this.desktop.logger.info("Downloading XXMI Repo...", "DllBuilder:prepareSourceCode");
 
-        const zipPath = await this.downloadXXMIRepo(workDir);
+        const zipPath = await this.downloadXXMIRepo(workDir, provider, version);
 
-        this.desktop.ipc.broadcast("tools:progress", "압축 해제 중");
+        this.updateProgress("XXMI_EXTRACT_REPO");
         this.desktop.logger.info("Extracting Repo...", "DllBuilder:prepareSourceCode");
 
         const extractDir = await this.desktop.service.archive.extract(zipPath, workDir);
@@ -146,8 +200,17 @@ export class DllBuilder {
         return repoDirName ? path.join(extractDir, repoDirName) : extractDir;
     }
 
-    private async downloadXXMIRepo(targetDir: string): Promise<string> {
-        const url = "https://github.com/SpectrumQT/XXMI-Libs-Package/archive/refs/heads/master.zip";
+    private async downloadXXMIRepo(
+        targetDir: string,
+        provider: string,
+        version: string,
+    ): Promise<string> {
+        const owner = provider === "U149" ? "myparsleycat" : "SpectrumQT";
+        const url =
+            version === "master"
+                ? `https://github.com/${owner}/XXMI-Libs-Package/archive/refs/heads/master.zip`
+                : `https://github.com/${owner}/XXMI-Libs-Package/archive/refs/tags/${version}.zip`;
+
         const zipPath = path.join(targetDir, "repo.zip");
 
         const resp = await ky.get(url, {
@@ -180,8 +243,8 @@ export class DllBuilder {
         }
     }
 
-    private async generateUnsafeModeSignature(gimiDir: string) {
-        const privateKeyPath = path.join(gimiDir, "..", "Resources", "Security", "private_key.der");
+    private async generateUnsafeModeSignature(xxmiPath: string) {
+        const privateKeyPath = path.join(xxmiPath, "Resources", "Security", "private_key.der");
         const privateKeyBase64 = await fse.readFile(privateKeyPath, "utf8");
         const privateKeyBuffer = Buffer.from(privateKeyBase64, "base64");
 
@@ -199,9 +262,9 @@ export class DllBuilder {
         return signature.toString("base64");
     }
 
-    private async enableUnsafeMode(gimiDir: string) {
+    private async enableUnsafeMode(xxmiPath: string, importerKey: string) {
         try {
-            const configPath = path.join(gimiDir, "..", "XXMI Launcher Config.json");
+            const configPath = path.join(xxmiPath, "XXMI Launcher Config.json");
 
             if (!(await fse.pathExists(configPath))) {
                 this.desktop.logger.warn(
@@ -218,25 +281,26 @@ export class DllBuilder {
 
             const config = await fse.readJson(configPath);
 
-            if (config?.Importers?.GIMI?.Migoto) {
-                if (config.Importers.GIMI.Migoto.unsafe_mode === false) {
-                    this.desktop.ipc.broadcast(
-                        "tools:progress",
-                        "런처 설정 업데이트 (unsafe_mode 활성화)",
-                    );
+            const importerConfig = config?.Importers?.[importerKey]?.Migoto;
+            if (importerConfig) {
+                if (importerConfig.unsafe_mode === false) {
+                    this.updateProgress("XXMI_ENABLE_UNSAFE_MODE");
 
-                    config.Importers.GIMI.Migoto.unsafe_mode = true;
-                    config.Importers.GIMI.Migoto.unsafe_mode_signature =
-                        await this.generateUnsafeModeSignature(gimiDir);
+                    importerConfig.unsafe_mode = true;
+                    importerConfig.unsafe_mode_signature =
+                        await this.generateUnsafeModeSignature(xxmiPath);
 
                     await fse.writeJson(configPath, config, { spaces: 4 });
 
-                    this.desktop.logger.info("Enabled unsafe_mode", "DllBuilder:enableUnsafeMode");
+                    this.desktop.logger.info(
+                        `Enabled unsafe_mode for ${importerKey}`,
+                        "DllBuilder:enableUnsafeMode",
+                    );
                 }
             }
         } catch (error) {
             this.desktop.logger.error(
-                `Failed to update config: ${error}`,
+                `Failed to update config for ${importerKey}: ${error}`,
                 "DllBuilder:enableUnsafeMode",
             );
         }

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-export function TogglePersistence() {
+export default function TogglePersistence() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
@@ -34,9 +34,7 @@ export function TogglePersistence() {
         <h3 className="text-lg font-semibold text-muted-foreground">
           {t("page.setting.xxmi.persistToggles")}
         </h3>
-        <p className="text-sm text-muted-foreground italic">
-          XXMI Launcher를 먼저 설정해 주세요.
-        </p>
+        <p className="text-sm text-muted-foreground italic">XXMI Launcher를 먼저 설정해 주세요.</p>
       </div>
     );
   }

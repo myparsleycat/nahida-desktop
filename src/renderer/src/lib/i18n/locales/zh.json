@@ -223,6 +223,31 @@
       }
     },
     "tools": {
+      "d3d11_builder": {
+        "title": "构建 d3d11.dll",
+        "description": "根据所选版本构建将注入到游戏进程中的 DLL",
+        "provider": "提供方",
+        "version": "版本",
+        "loading": "加载中...",
+        "target_importer": "目标 Importer",
+        "no_importer": "没有可用的 Importer",
+        "select_importer_msg": "请选择目标 Importer。",
+        "building": "构建中",
+        "start_build": "开始构建",
+        "progress": {
+          "XXMI_INIT": "正在初始化...",
+          "XXMI_ERR_GIMI_NOT_FOUND": "错误：找不到 Importer。",
+          "XXMI_FIND_VS": "正在查找 Visual Studio 构建工具...",
+          "XXMI_ERR_VS_NOT_FOUND": "错误：找不到 Visual Studio 环境 (vcvars64.bat)。请确认已安装 C++ 构建工具。",
+          "XXMI_BUILDING": "正在构建 D3D11 DLL...",
+          "XXMI_ERR_DLL_NOT_FOUND": "错误：找不到已构建的 d3d11.dll 文件。",
+          "XXMI_BUILD_SUCCESS": "构建成功！d3d11.dll 已成功应用。",
+          "XXMI_ERR_BUILD_FAILED": "错误：构建过程中发生了意外错误。",
+          "XXMI_DOWNLOAD_REPO": "正在下载 XXMI 源代码...",
+          "XXMI_EXTRACT_REPO": "正在解压源代码压缩包...",
+          "XXMI_ENABLE_UNSAFE_MODE": "正在启用 Unsafe Mode..."
+        }
+      },
       "fix-tool-manager": {
         "presets": {},
         "builder": {
