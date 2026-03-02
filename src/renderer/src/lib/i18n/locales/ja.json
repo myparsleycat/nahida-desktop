@@ -298,6 +298,8 @@
           "checkBackgroundUpdates": "バックグラウンド更新確認",
           "checkBackgroundUpdatesDescription": "バックグラウンドで更新を確認します。",
           "checkUpdate": "更新確認",
+          "runInBackground": "バックグラウンド実行",
+          "runInBackgroundDescription": "すべてのウィンドウを閉じてもアプリをバックグラウンドで実行し続けます。",
           "autoUpdate": "自動更新",
           "autoUpdateDescription": "更新確認後、自動的にインストールします (準備中)"
         },

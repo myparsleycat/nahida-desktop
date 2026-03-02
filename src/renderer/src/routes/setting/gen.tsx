@@ -26,6 +26,7 @@ const settingsConfig = {
   runOnStartup: "setting:general:getRunOnStartup",
   language: "setting:general:getLanguage",
   checkBackgroundUpdates: "setting:general:getCheckBackgroundUpdates",
+  runInBackground: "setting:general:getRunInBackground",
   moveTransferPageWhenStartTransfer: "setting:general:getMoveTransferPageWhenStartTransfer",
   powerSaveBlockInTransfer: "setting:general:getPowerSaveBlockInTransfer",
   defaultStartPage: "setting:general:getDefaultStartPage",
@@ -41,6 +42,7 @@ function RouteComponent() {
     runOnStartup: boolean;
     language: string;
     checkBackgroundUpdates: boolean;
+    runInBackground: boolean;
     moveTransferPageWhenStartTransfer: boolean;
     powerSaveBlockInTransfer: boolean;
     defaultStartPage: string;
@@ -113,6 +115,25 @@ function RouteComponent() {
                 }
               />
             </div>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-sm font-medium">
+                {t("page.setting.gen.application.runInBackground")}
+              </span>
+              <p className="text-xs text-muted-foreground">
+                {t("page.setting.gen.application.runInBackgroundDescription")}
+              </p>
+            </div>
+            <Switch
+              checked={settings.runInBackground}
+              onCheckedChange={(val) =>
+                update("runInBackground", val, "setting:general:setRunInBackground")
+              }
+            />
           </div>
 
           <Separator />

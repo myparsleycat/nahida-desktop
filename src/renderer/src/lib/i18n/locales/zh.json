@@ -297,6 +297,8 @@
           "checkBackgroundUpdates": "后台检查更新",
           "checkBackgroundUpdatesDescription": "在后台检查更新。",
           "checkUpdate": "检查更新",
+          "runInBackground": "后台运行",
+          "runInBackgroundDescription": "关闭所有窗口后，应用仍在后台继续运行。",
           "autoUpdate": "自动更新",
           "autoUpdateDescription": "检查更新后自动安装 (即将推出)"
         },

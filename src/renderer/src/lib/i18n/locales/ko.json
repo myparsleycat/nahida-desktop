@@ -297,6 +297,8 @@
           "checkBackgroundUpdates": "백그라운드 업데이트 확인",
           "checkBackgroundUpdatesDescription": "백그라운드에서 업데이트를 확인합니다.",
           "checkUpdate": "업데이트 확인",
+          "runInBackground": "백그라운드 실행",
+          "runInBackgroundDescription": "모든 창을 닫아도 앱을 백그라운드에서 계속 실행합니다.",
           "autoUpdate": "자동 업데이트",
           "autoUpdateDescription": "업데이트를 확인한 후 자동으로 설치합니다 (준비 중)"
         },

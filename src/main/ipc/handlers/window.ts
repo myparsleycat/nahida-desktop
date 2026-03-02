@@ -23,9 +23,7 @@ export function registerWindowHandlers(d: NahidaDesktop) {
                 }
                 break;
             case "close":
-                if (win === d.window.main.window) {
-                    win.hide();
-                } else if (!win.isDestroyed()) {
+                if (!win.isDestroyed()) {
                     win.destroy();
                 }
                 break;

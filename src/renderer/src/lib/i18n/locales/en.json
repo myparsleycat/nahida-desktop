@@ -297,6 +297,8 @@
           "checkBackgroundUpdates": "Check for updates in background",
           "checkBackgroundUpdatesDescription": "Check for updates in the background.",
           "checkUpdate": "Check for updates",
+          "runInBackground": "Run in background",
+          "runInBackgroundDescription": "Keep running in the background when all windows are closed.",
           "autoUpdate": "Auto update",
           "autoUpdateDescription": "Automatically install after checking for updates (Coming soon)"
         },

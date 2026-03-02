@@ -258,6 +258,31 @@ export class Setting {
                 });
         },
 
+        getRunInBackground: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "runInBackground"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db
+                    .insert(setting)
+                    .values({ key: "runInBackground", value: "true" });
+                return true;
+            }
+
+            return qr.value === "true";
+        },
+
+        setRunInBackground: async (enabled: boolean) => {
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({ key: "runInBackground", value: String(enabled) })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(enabled) },
+                });
+        },
+
         getImageCacheSize: async () => {
             const [result] = await this.desktop.lib.db
                 .select({ totalSize: sum(imageCache.size) })

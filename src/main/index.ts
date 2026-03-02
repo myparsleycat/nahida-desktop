@@ -263,8 +263,13 @@ app.whenReady().then(async () => {
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on("window-all-closed", async () => {
-    const loggedIn = await desktop.service.auth.isLoggedIn();
-    if (process.platform !== "darwin" && !loggedIn) {
+    if (desktop.shouldExitOnQuit) {
+        app.quit();
+        return;
+    }
+
+    const runInBackground = await desktop.setting.general.getRunInBackground();
+    if (!runInBackground) {
         app.quit();
     }
 });

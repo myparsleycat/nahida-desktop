@@ -62,6 +62,14 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         return await d.setting.general.setCheckBackgroundUpdates(enabled);
     });
 
+    rh("setting:general:getRunInBackground", async () => {
+        return await d.setting.general.getRunInBackground();
+    });
+
+    rh("setting:general:setRunInBackground", async (enabled) => {
+        return await d.setting.general.setRunInBackground(enabled);
+    });
+
     rh("setting:general:getImageCacheSize", async () => {
         return await d.setting.general.getImageCacheSize();
     });
