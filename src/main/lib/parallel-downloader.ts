@@ -1,10 +1,10 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: <> */
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { getAgent, getHeaders } from "@main/internal/fetcher";
 import { retry } from "es-toolkit";
 import fse from "fs-extra";
 import ky from "ky";
+import { Agent, ProxyAgent } from "undici";
 
 export interface ParallelDownloadOptions {
     url: string;
@@ -25,17 +25,19 @@ export class ParallelDownloader {
                 info: (msg: string, ...args: any[]) => void;
                 warn: (msg: string, ...args: any[]) => void;
             };
+            getAgent: () => Promise<Agent | ProxyAgent>;
+            getHeaders: (url: string) => Promise<Record<string, string>>;
         },
     ) {}
 
     public async checkRangeSupport(url: string): Promise<boolean> {
         try {
             const response = await ky.head(url, {
-                headers: await getHeaders(url),
+                headers: await this.options.getHeaders(url),
                 timeout: 10000,
                 throwHttpErrors: false,
                 // @ts-expect-error
-                dispatcher: await getAgent(),
+                dispatcher: await this.options.getAgent(),
             });
 
             const acceptRanges = response.headers.get("Accept-Ranges");
@@ -88,7 +90,7 @@ export class ParallelDownloader {
 
         const response = await ky(url, {
             headers: {
-                ...(await getHeaders(url)),
+                ...(await this.options.getHeaders(url)),
                 ...requestHeaders,
             },
             signal,
@@ -104,7 +106,7 @@ export class ParallelDownloader {
                 }
             },
             // @ts-expect-error
-            dispatcher: await getAgent(),
+            dispatcher: await this.options.getAgent(),
         });
 
         if (!response.ok && response.status !== 206) {

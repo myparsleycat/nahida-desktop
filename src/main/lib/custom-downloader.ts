@@ -1,6 +1,5 @@
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
-import { getAgent, getHeaders } from "@main/internal/fetcher";
 import type { TransferData } from "@shared/types.gen";
 import { Notification } from "electron";
 import { throttle } from "es-toolkit";
@@ -18,6 +17,8 @@ export class CustomDownloader {
         this.desktop = desktop;
         this.downloader = new ParallelDownloader({
             logger: desktop.logger,
+            getAgent: () => this.desktop.getAgent(),
+            getHeaders: (url: string) => this.desktop.getHeaders(url),
         });
     }
 
@@ -57,9 +58,9 @@ export class CustomDownloader {
                         }
                     }
                 },
-                headers: await getHeaders(url),
+                headers: await this.desktop.getHeaders(url),
                 // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
-                dispatcher: await getAgent(),
+                dispatcher: await this.desktop.getAgent(),
             });
             if (!resp.ok) {
                 throw new Error(`Failed to download file: ${resp.statusText}`);
@@ -238,9 +239,9 @@ export class CustomDownloader {
         const resp = await ky.head(fileUrl, {
             redirect: "follow",
             throwHttpErrors: false,
-            headers: await getHeaders(fileUrl),
+            headers: await this.desktop.getHeaders(fileUrl),
             // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
-            dispatcher: await getAgent(),
+            dispatcher: await this.desktop.getAgent(),
         });
         if (!resp.ok) {
             throw new Error(`Failed to get real file URL: ${resp.statusText}`);

@@ -4,7 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
-import { getAgent } from "@main/internal/fetcher";
 import fse from "fs-extra";
 import ky from "ky";
 import type { NahidaDesktop } from "@/main";
@@ -50,7 +49,7 @@ export class DllBuilder {
                     "User-Agent": "NahidaDesktop",
                 },
                 // @ts-expect-error
-                dispatcher: await getAgent(),
+                dispatcher: await this.desktop.getAgent(),
             });
 
             if (!resp.ok) {
@@ -220,7 +219,7 @@ export class DllBuilder {
                 Referer: "https://github.com/SpectrumQT/XXMI-Libs-Package",
             },
             // @ts-expect-error
-            dispatcher: await getAgent(),
+            dispatcher: await this.desktop.getAgent(),
         });
 
         if (!resp.ok) {

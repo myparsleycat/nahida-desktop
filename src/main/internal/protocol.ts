@@ -1,9 +1,9 @@
-import fse from "fs-extra";
 import path from "node:path";
 import { fileTypeFromBuffer } from "file-type/node";
-import { fetcher } from "./fetcher";
+import fse from "fs-extra";
+import type { NahidaDesktop } from "..";
 
-export const NahidaProtocolHandler = async (req: Request) => {
+export const NahidaProtocolHandler = async (desktop: NahidaDesktop, req: Request) => {
     const parsedUrl = new URL(req.url);
     const hostname = parsedUrl.hostname;
     const params = parsedUrl.searchParams;
@@ -108,7 +108,7 @@ export const NahidaProtocolHandler = async (req: Request) => {
 
                 for (let attempt = 1; attempt <= maxRetries; attempt++) {
                     try {
-                        const resp = await fetcher(imgUrl);
+                        const resp = await desktop.fetcher(imgUrl);
 
                         if (!resp.ok) {
                             return new Response(`Error`, {
