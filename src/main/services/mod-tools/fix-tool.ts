@@ -6,9 +6,9 @@ import { eq } from "drizzle-orm";
 import { sortBy } from "es-toolkit";
 import fse from "fs-extra";
 import { nanoid } from "nanoid";
-import type { NahidaDesktop } from "..";
+import type { NahidaDesktop } from "@/main";
 
-export class FixToolsManager {
+export class FixTool {
     private currentAbortController: AbortController | null = null;
     private activeExecutor: ScriptExecutor | null = null;
 
@@ -262,12 +262,9 @@ export class FixToolsManager {
     public sendInput(input: string) {
         if (this.activeExecutor?.isRunning()) {
             this.activeExecutor.sendInput(input);
-            this.desktop.logger.info(`Sent input: ${JSON.stringify(input)}`, "FixToolsManager");
+            this.desktop.logger.info(`Sent input: ${JSON.stringify(input)}`, "FixTool");
         } else {
-            this.desktop.logger.warn(
-                "Cannot send input: No active script running",
-                "FixToolsManager",
-            );
+            this.desktop.logger.warn("Cannot send input: No active script running", "FixTool");
         }
     }
 
@@ -334,7 +331,7 @@ export class FixToolsManager {
             return false;
         } finally {
             await fse.remove(scriptPath).catch((err) => {
-                this.desktop.logger.error(`Failed to cleanup temp file: ${err}`, "FixToolsManager");
+                this.desktop.logger.error(`Failed to cleanup temp file: ${err}`, "FixTool");
             });
         }
     }

@@ -8,18 +8,15 @@ import { setting } from "@main/internal/db/schema";
 import { getAgent } from "@main/internal/fetcher";
 import fse from "fs-extra";
 import ky from "ky";
-import type { NahidaDesktop } from "..";
+import type { NahidaDesktop } from "@/main";
 
 const execAsync = promisify(exec);
 
-export class Tools {
-    private readonly desktop: NahidaDesktop;
+export class DllBuilder {
     private readonly VS_EDITIONS = ["Community", "Professional", "Enterprise", "Insiders"];
     private readonly VS_VERSIONS = ["2025", "2022", "18", "17"];
 
-    public constructor(desktop: NahidaDesktop) {
-        this.desktop = desktop;
-    }
+    constructor(private readonly desktop: NahidaDesktop) {}
 
     public async getGIMIPath() {
         const result = await this.desktop.lib.db.query.setting.findFirst({
@@ -66,7 +63,7 @@ export class Tools {
             const projectPath = await this.prepareSourceCode(tempDir);
 
             this.desktop.ipc.broadcast("tools:progress", "빌드 중");
-            this.desktop.logger.info("Building D3D11 DLL...", "Tools:buildNewD3DDLL");
+            this.desktop.logger.info("Building D3D11 DLL...", "DllBuilder:buildNewD3DDLL");
 
             const buildSuccess = await this.executeMsBuild(vcvarsPath, projectPath);
             if (!buildSuccess) {
@@ -90,12 +87,12 @@ export class Tools {
             this.desktop.ipc.broadcast("tools:progress", "완료됨");
             this.desktop.logger.info(
                 `Successfully built and installed d3d11.dll to ${finalDestination}`,
-                "Tools:buildNewD3DDLL",
+                "DllBuilder:buildNewD3DDLL",
             );
 
             return true;
         } catch (error) {
-            this.desktop.logger.error(error, "Tools:buildNewD3DDLL");
+            this.desktop.logger.error(error, "DllBuilder:buildNewD3DDLL");
             this.desktop.ipc.broadcast("tools:progress", (error as Error).message);
             return false;
         } finally {
@@ -134,12 +131,12 @@ export class Tools {
 
     private async prepareSourceCode(workDir: string): Promise<string> {
         this.desktop.ipc.broadcast("tools:progress", "XXMI 리포지토리 다운로드 중");
-        this.desktop.logger.info("Downloading XXMI Repo...", "Tools:prepareSourceCode");
+        this.desktop.logger.info("Downloading XXMI Repo...", "DllBuilder:prepareSourceCode");
 
         const zipPath = await this.downloadXXMIRepo(workDir);
 
         this.desktop.ipc.broadcast("tools:progress", "압축 해제 중");
-        this.desktop.logger.info("Extracting Repo...", "Tools:prepareSourceCode");
+        this.desktop.logger.info("Extracting Repo...", "DllBuilder:prepareSourceCode");
 
         const extractDir = await this.desktop.service.archive.extract(zipPath, workDir);
 
@@ -209,12 +206,15 @@ export class Tools {
             if (!(await fse.pathExists(configPath))) {
                 this.desktop.logger.warn(
                     `Config file not found at ${configPath}`,
-                    "Tools:enableUnsafeMode",
+                    "DllBuilder:enableUnsafeMode",
                 );
                 return;
             }
 
-            this.desktop.logger.info(`configPath found: ${configPath}`, "Tools:enableUnsafeMode");
+            this.desktop.logger.info(
+                `configPath found: ${configPath}`,
+                "DllBuilder:enableUnsafeMode",
+            );
 
             const config = await fse.readJson(configPath);
 
@@ -231,13 +231,13 @@ export class Tools {
 
                     await fse.writeJson(configPath, config, { spaces: 4 });
 
-                    this.desktop.logger.info("Enabled unsafe_mode", "Tools:enableUnsafeMode");
+                    this.desktop.logger.info("Enabled unsafe_mode", "DllBuilder:enableUnsafeMode");
                 }
             }
         } catch (error) {
             this.desktop.logger.error(
                 `Failed to update config: ${error}`,
-                "Tools:enableUnsafeMode",
+                "DllBuilder:enableUnsafeMode",
             );
         }
     }

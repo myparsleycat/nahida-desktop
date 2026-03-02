@@ -452,7 +452,7 @@ export class Setting {
             return JSON.parse(qr.value as string);
         },
 
-        // biome-ignore lint/suspicious/noExplicitAny: <>
+        // oxlint-disable-next-line typescript/no-explicit-any
         setProxy: async (settings: any) => {
             await this.desktop.lib.db
                 .insert(setting)
@@ -491,11 +491,11 @@ export class Setting {
                     set: { value: String(enabled) },
                 });
 
-            if (this.desktop.service?.xxmi) {
+            if (this.desktop.service?.modTools) {
                 if (enabled) {
-                    this.desktop.service.xxmi.startPersistWatcher();
+                    this.desktop.service.modTools.startPersistWatcher();
                 } else {
-                    this.desktop.service.xxmi.stopPersistWatcher();
+                    this.desktop.service.modTools.stopPersistWatcher();
                 }
             }
         },

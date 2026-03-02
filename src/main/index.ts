@@ -27,9 +27,8 @@ import { registerProtocal } from "./protocals";
 import ArchiveService from "./services/archive";
 import Auth from "./services/auth";
 import { DriveService } from "./services/drive";
-import { FixToolsManager } from "./services/fix-tools-manager";
 import ModManager from "./services/mod-manager";
-import { Tools } from "./services/tools";
+import { ModTools } from "./services/mod-tools";
 import TransferService from "./services/transfer";
 import { XXMI } from "./services/xxmi";
 import Setting from "./setting";
@@ -86,9 +85,8 @@ export class NahidaDesktop {
         drive: DriveService;
         transfer: TransferService;
         mod: ModManager;
-        fixTools: FixToolsManager;
+        modTools: ModTools;
         archive: ArchiveService;
-        tools: Tools;
         xxmi: XXMI;
     };
     public constructor() {
@@ -121,9 +119,8 @@ export class NahidaDesktop {
             drive: new DriveService(this),
             transfer: new TransferService(this),
             mod: new ModManager(this),
-            fixTools: new FixToolsManager(this),
+            modTools: new ModTools(this),
             archive: new ArchiveService(this),
-            tools: new Tools(this),
             xxmi: new XXMI(this),
         };
     }
