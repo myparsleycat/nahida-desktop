@@ -4,6 +4,34 @@ import fse from "fs-extra";
 import type { NahidaDesktop } from "@/main";
 
 export class TogglePersist {
+    private static readonly modifierTokens = new Set([
+        "ctrl",
+        "shift",
+        "alt",
+        "no_ctrl",
+        "no_shift",
+        "no_alt",
+    ]);
+    private static readonly xboxTokens = new Set([
+        "xb_left_trigger",
+        "xb_right_trigger",
+        "xb_left_shoulder",
+        "xb_right_shoulder",
+        "xb_left_thumb",
+        "xb_right_thumb",
+        "xb_dpad_up",
+        "xb_dpad_down",
+        "xb_dpad_left",
+        "xb_dpad_right",
+        "xb_a",
+        "xb_b",
+        "xb_x",
+        "xb_y",
+        "xb_start",
+        "xb_back",
+        "xb_guide",
+    ]);
+
     private persistWatchers: string[] = [];
     private cachedD3dxUserIni: Map<string, Record<string, string>> = new Map();
     private persistLogs: string[] = [];
@@ -210,7 +238,7 @@ export class TogglePersist {
         const evaluateSection = (hasVarAssignment: boolean) => {
             if (!hasVarAssignment) return false;
             if (!keyValue) return true;
-            return keyValue.length !== 1;
+            return !this.isAllowedKeyBinding(keyValue);
         };
 
         let hasTargetVarAssignment = false;
@@ -243,6 +271,25 @@ export class TogglePersist {
         }
 
         return evaluateSection(hasTargetVarAssignment);
+    }
+
+    private isAllowedKeyBinding(keyValue: string): boolean {
+        const tokens = keyValue
+            .toLowerCase()
+            .split(/[+\s]+/)
+            .map((token) => token.trim())
+            .filter(Boolean);
+
+        if (tokens.length === 0) return false;
+        return tokens.every((token) => this.isAllowedKeyToken(token));
+    }
+
+    private isAllowedKeyToken(token: string): boolean {
+        if (token.length === 1) return true;
+        if (TogglePersist.modifierTokens.has(token)) return true;
+        if (TogglePersist.xboxTokens.has(token)) return true;
+        if (/^vk_[a-z0-9_]+$/i.test(token)) return true;
+        return false;
     }
 
     private addPersistLog(level: "INFO" | "ERROR", message: string) {
