@@ -12,7 +12,7 @@ interface Bounds {
     height: number;
 }
 
-const DEFAULT_TOGGLE_VIEWER_HOTKEY = "no_shift no_ ctrl alt H";
+const DEFAULT_TOGGLE_VIEWER_HOTKEY = "ctrl H";
 
 export class Setting {
     private desktop: NahidaDesktop;
@@ -667,4 +667,3 @@ export class Setting {
 }
 
 export default Setting;
-

@@ -79,7 +79,7 @@ export default function ToggleViewerGenerator() {
     queryKey: ["setting:xxmi:getToggleViewerAutoGenerate"],
     queryFn: () => window.api.invoke("setting:xxmi:getToggleViewerAutoGenerate"),
   });
-  const { data: hotkey = "no_shift no_ ctrl alt H", isPending: isHotkeyPending } = useQuery({
+  const { data: hotkey = "ctrl H", isPending: isHotkeyPending } = useQuery({
     queryKey: ["setting:xxmi:getToggleViewerHotkey"],
     queryFn: () => window.api.invoke("setting:xxmi:getToggleViewerHotkey"),
   });
