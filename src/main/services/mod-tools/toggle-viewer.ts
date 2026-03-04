@@ -912,6 +912,23 @@ export class ToggleViewer {
     }
 
     private async deleteArtifactRecordByIdAndPath(id: string, targetIniPath: string) {
+        const artifactDirPath = path.dirname(targetIniPath);
+        const managedArtifactPaths = [
+            path.join(artifactDirPath, "toggle-viewer.ini"),
+            path.join(artifactDirPath, "toggle-viewer.txt"),
+        ];
+
+        for (const artifactPath of managedArtifactPaths) {
+            try {
+                await fse.unlink(artifactPath);
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+                    continue;
+                }
+                this.logError(`Failed to delete managed artifact file ${artifactPath}: ${error}`);
+            }
+        }
+
         await this.desktop.lib.db
             .delete(toggleViewerArtifact)
             .where(
