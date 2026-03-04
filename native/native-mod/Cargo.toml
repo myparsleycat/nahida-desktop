@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 [dependencies]
 alphanumeric-sort = "1.5.5"
 glob = "0.3.3"
-napi = "3.0.0"
+napi = { version = "3.0.0", features = ["async", "tokio_rt"] }
 napi-derive = "3.0.0"
 rayon = "1.10.0"
 walkdir = "2.5.0"

@@ -15,6 +15,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetWindowThreadProcessId, IsWindowVisible, SetForegroundWindow,
 };
 
+fn compare_paths(a: &Path, b: &Path) -> std::cmp::Ordering {
+    compare_str(&a.to_string_lossy(), &b.to_string_lossy())
+}
+
 struct FindWindowData {
     target_pid: u32,
     found_hwnd: Option<HWND>,
@@ -34,7 +38,13 @@ unsafe extern "system" fn enum_windows_callback(hwnd: HWND, lparam: LPARAM) -> B
 }
 
 #[napi]
-pub fn send_f10(pid: u32) -> bool {
+pub async fn send_f10(pid: u32) -> bool {
+    napi::tokio::task::spawn_blocking(move || send_f10_sync(pid))
+        .await
+        .unwrap_or(false)
+}
+
+fn send_f10_sync(pid: u32) -> bool {
     unsafe {
         let mut data = FindWindowData {
             target_pid: pid,
@@ -60,7 +70,9 @@ pub fn send_f10(pid: u32) -> bool {
                     },
                 }];
 
-                SendInput(&input_down, std::mem::size_of::<INPUT>() as i32);
+                if SendInput(&input_down, std::mem::size_of::<INPUT>() as i32) != 1 {
+                    return false;
+                }
 
                 std::thread::sleep(std::time::Duration::from_millis(100));
 
@@ -75,7 +87,9 @@ pub fn send_f10(pid: u32) -> bool {
                     },
                 }];
 
-                SendInput(&input_up, std::mem::size_of::<INPUT>() as i32);
+                if SendInput(&input_up, std::mem::size_of::<INPUT>() as i32) != 1 {
+                    return false;
+                }
                 return true;
             }
         }
@@ -119,6 +133,7 @@ pub struct ModInfo {
 }
 
 #[napi(object)]
+#[derive(Clone, Default)]
 pub struct FolderGroup {
     pub name: String,
     pub path: String,
@@ -127,54 +142,60 @@ pub struct FolderGroup {
     pub mod_count: u32,
 }
 
-fn get_map_value(data: &HashMap<String, String>, key: &str) -> Option<String> {
-    data.get(key).cloned().filter(|s| !s.is_empty())
+fn get_map_value(data: &mut HashMap<String, String>, key: &str) -> Option<String> {
+    data.remove(key).filter(|s| !s.is_empty())
 }
 
 fn process_section_data(
-    section_name: &str,
-    data: &HashMap<String, String>,
+    section_name: String,
+    mut data: HashMap<String, String>,
     ini_file_name: &str,
 ) -> Option<ToggleKey> {
     if !section_name.to_ascii_lowercase().starts_with("key") {
         return None;
     }
 
-    let type_val = get_map_value(data, "type");
+    let type_val = get_map_value(&mut data, "type");
+    let key_val = get_map_value(&mut data, "key");
+    let back_val = get_map_value(&mut data, "back");
+
     let is_hold = type_val
         .as_deref()
         .map(|t| t.eq_ignore_ascii_case("hold"))
         .unwrap_or(false);
 
-    let (variable, values) =
-        data.iter()
-            .filter(|(k, _)| k.starts_with('$'))
-            .find_map(|(k, v)| {
-                let mut iter = v.split(',').map(|s| s.trim());
-                let first = iter.next()?;
-                let second = iter.next();
+    let mut vars: Vec<_> = data
+        .into_iter()
+        .filter(|(k, _)| k.starts_with('$'))
+        .collect();
+    vars.sort_by(|(ka, _), (kb, _)| ka.cmp(kb));
 
-                if second.is_some() || is_hold {
-                    let mut vals = vec![first.to_string()];
-                    if let Some(s) = second {
-                        vals.push(s.to_string());
-                    }
-                    vals.extend(iter.map(|s| s.to_string()));
-                    Some((k, vals))
-                } else {
-                    None
-                }
-            })?;
+    let (variable, values) = vars.into_iter().find_map(|(k, v)| {
+        let mut iter = v.split(',').map(|s| s.trim());
+        let first = iter.next()?;
+        let second = iter.next();
+
+        if second.is_some() || is_hold {
+            let mut vals = vec![first.to_string()];
+            if let Some(s) = second {
+                vals.push(s.to_string());
+            }
+            vals.extend(iter.map(|s| s.to_string()));
+            Some((k, vals))
+        } else {
+            None
+        }
+    })?;
 
     let current_value = values.first().cloned();
 
     Some(ToggleKey {
-        section_name: section_name.to_string(),
+        section_name,
         ini_file_name: ini_file_name.to_string(),
-        key: get_map_value(data, "key"),
-        back: get_map_value(data, "back"),
+        key: key_val,
+        back: back_val,
         type_: type_val,
-        variable: variable.clone(),
+        variable,
         values,
         current_value,
     })
@@ -199,22 +220,28 @@ fn parse_ini(path_str: &str) -> Vec<ToggleKey> {
     let mut section_data: HashMap<String, String> = HashMap::new();
 
     for line_result in reader.lines() {
-        let line = match line_result {
-            Ok(l) => l,
-            Err(_) => continue,
-        };
+        let Ok(line) = line_result else { continue };
 
-        let clean_line = line.trim_start_matches('\u{FEFF}').trim();
+        let mut clean_line = line.trim_start_matches('\u{FEFF}').trim();
+        
+        if let Some(pos) = clean_line.find(';') {
+            clean_line = clean_line[..pos].trim();
+        }
+        if let Some(pos) = clean_line.find('#') {
+            clean_line = clean_line[..pos].trim();
+        }
 
-        if clean_line.is_empty() || clean_line.starts_with(';') {
+        if clean_line.is_empty() {
             continue;
         }
 
         if clean_line.starts_with('[') && clean_line.ends_with(']') {
             if !current_section.is_empty() {
-                if let Some(tk) =
-                    process_section_data(&current_section, &section_data, &ini_file_name)
-                {
+                if let Some(tk) = process_section_data(
+                    std::mem::take(&mut current_section),
+                    std::mem::take(&mut section_data),
+                    &ini_file_name,
+                ) {
                     toggle_keys.push(tk);
                 }
                 section_data.clear();
@@ -234,7 +261,7 @@ fn parse_ini(path_str: &str) -> Vec<ToggleKey> {
     }
 
     if !current_section.is_empty() {
-        if let Some(tk) = process_section_data(&current_section, &section_data, &ini_file_name) {
+        if let Some(tk) = process_section_data(current_section, section_data, &ini_file_name) {
             toggle_keys.push(tk);
         }
     }
@@ -243,7 +270,13 @@ fn parse_ini(path_str: &str) -> Vec<ToggleKey> {
 }
 
 #[napi]
-pub fn process_ini_files(paths: Vec<String>) -> Vec<IniResult> {
+pub async fn process_ini_files(paths: Vec<String>) -> Vec<IniResult> {
+    napi::tokio::task::spawn_blocking(move || process_ini_files_sync(paths))
+        .await
+        .unwrap_or_default()
+}
+
+pub fn process_ini_files_sync(paths: Vec<String>) -> Vec<IniResult> {
     paths
         .into_iter()
         .map(|path_str| {
@@ -312,9 +345,6 @@ fn get_score(filename: &str, is_root: bool, is_video: bool) -> i32 {
 }
 
 fn is_excluded_file(filename: &str) -> bool {
-    if filename.contains("preview") {
-        return false;
-    }
     const EXCLUDED: &[&str] = &["normal", "light", "material", "diffuse"];
     EXCLUDED.iter().any(|&k| filename.contains(k))
 }
@@ -370,8 +400,19 @@ fn find_preview(mod_path: &Path, max_depth: usize) -> Option<String> {
 }
 
 #[napi]
-pub fn get_characters_folder(
+pub async fn get_characters_folder(
     mod_folder_path: String,
+    fallback_to_mod_preview: Option<bool>,
+) -> Vec<FolderGroup> {
+    napi::tokio::task::spawn_blocking(move || {
+        get_characters_folder_sync(&mod_folder_path, fallback_to_mod_preview)
+    })
+    .await
+    .unwrap_or_default()
+}
+
+pub fn get_characters_folder_sync(
+    mod_folder_path: &str,
     fallback_to_mod_preview: Option<bool>,
 ) -> Vec<FolderGroup> {
     let root_path = Path::new(&mod_folder_path);
@@ -380,7 +421,7 @@ pub fn get_characters_folder(
         return Vec::new();
     }
 
-    let groups: Vec<PathBuf> = match fs::read_dir(root_path) {
+    let mut groups: Vec<PathBuf> = match fs::read_dir(root_path) {
         Ok(entries) => entries
             .filter_map(|e| e.ok())
             .map(|e| e.path())
@@ -388,6 +429,8 @@ pub fn get_characters_folder(
             .collect(),
         Err(_) => return Vec::new(),
     };
+    
+    groups.sort_by(|a, b| compare_paths(a, b));
 
     let search_depth = if fallback_to_mod_preview.unwrap_or(true) {
         3
@@ -395,7 +438,7 @@ pub fn get_characters_folder(
         1
     };
 
-    groups
+    let mut results: Vec<FolderGroup> = groups
         .par_iter()
         .map(|group_path| {
             let name = group_path
@@ -424,7 +467,10 @@ pub fn get_characters_folder(
                 mod_count,
             }
         })
-        .collect()
+        .collect();
+
+    results.sort_by(|a, b| compare_str(&a.name, &b.name));
+    results
 }
 
 fn scan_mod_folder(mod_path: &Path) -> Option<ModInfo> {
@@ -438,7 +484,7 @@ fn scan_mod_folder(mod_path: &Path) -> Option<ModInfo> {
     let mut best_preview_score = -1;
     let mut best_preview_path: Option<String> = None;
 
-    for entry in WalkDir::new(mod_path).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(mod_path).follow_links(true).into_iter().filter_map(|e| e.ok()) {
         if entry.file_type().is_file() {
             let path = entry.path();
 
@@ -504,7 +550,7 @@ fn scan_mod_folder(mod_path: &Path) -> Option<ModInfo> {
         .as_secs_f64()
         * 1000.0;
 
-    let mut inis = process_ini_files(ini_paths);
+    let mut inis = process_ini_files_sync(ini_paths);
     inis.sort_by(|a, b| match (a.has_toggle_key, b.has_toggle_key) {
         (true, false) => std::cmp::Ordering::Less,
         (false, true) => std::cmp::Ordering::Greater,
@@ -523,7 +569,13 @@ fn scan_mod_folder(mod_path: &Path) -> Option<ModInfo> {
 }
 
 #[napi]
-pub fn get_mods(group_path: String) -> FolderGroup {
+pub async fn get_mods(group_path: String) -> FolderGroup {
+    napi::tokio::task::spawn_blocking(move || get_mods_sync(group_path))
+        .await
+        .unwrap_or_else(|_| FolderGroup::default())
+}
+
+pub fn get_mods_sync(group_path: String) -> FolderGroup {
     let group_path_buf = PathBuf::from(&group_path);
     let group_name = group_path_buf
         .file_name()
@@ -531,7 +583,7 @@ pub fn get_mods(group_path: String) -> FolderGroup {
         .unwrap_or("")
         .to_string();
 
-    let mod_folders: Vec<PathBuf> = match fs::read_dir(&group_path_buf) {
+    let mut mod_folders: Vec<PathBuf> = match fs::read_dir(&group_path_buf) {
         Ok(entries) => entries
             .filter_map(|e| e.ok())
             .map(|e| e.path())
@@ -539,8 +591,10 @@ pub fn get_mods(group_path: String) -> FolderGroup {
             .collect(),
         Err(_) => Vec::new(),
     };
+    
+    mod_folders.sort_by(|a, b| compare_paths(a, b));
 
-    let (mods, preview) = rayon::join(
+    let (mut mods, preview) = rayon::join(
         || {
             mod_folders
                 .par_iter()
@@ -549,6 +603,8 @@ pub fn get_mods(group_path: String) -> FolderGroup {
         },
         || find_preview(&group_path_buf, 3),
     );
+    
+    mods.sort_by(|a, b| compare_str(&a.name, &b.name));
 
     let mod_count = mods.len() as u32;
 
