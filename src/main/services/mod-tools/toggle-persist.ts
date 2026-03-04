@@ -1,12 +1,45 @@
 import path from "node:path";
-import { retry } from "es-toolkit";
+import { debounce, retry } from "es-toolkit";
 import fse from "fs-extra";
 import type { NahidaDesktop } from "@/main";
 
 export class TogglePersist {
+    private static readonly modifierTokens = new Set([
+        "ctrl",
+        "shift",
+        "alt",
+        "no_ctrl",
+        "no_shift",
+        "no_alt",
+    ]);
+    private static readonly xboxTokens = new Set([
+        "xb_left_trigger",
+        "xb_right_trigger",
+        "xb_left_shoulder",
+        "xb_right_shoulder",
+        "xb_left_thumb",
+        "xb_right_thumb",
+        "xb_dpad_up",
+        "xb_dpad_down",
+        "xb_dpad_left",
+        "xb_dpad_right",
+        "xb_a",
+        "xb_b",
+        "xb_x",
+        "xb_y",
+        "xb_start",
+        "xb_back",
+        "xb_guide",
+    ]);
+
     private persistWatchers: string[] = [];
     private cachedD3dxUserIni: Map<string, Record<string, string>> = new Map();
     private persistLogs: string[] = [];
+    private persistUpdateDebouncers: Map<string, () => void> = new Map();
+    private pendingPersistUpdates: Map<
+        string,
+        { targetIniPath: string; varName: string; newValue: string }
+    > = new Map();
 
     constructor(private readonly desktop: NahidaDesktop) {}
 
@@ -51,6 +84,8 @@ export class TogglePersist {
         }
         this.persistWatchers = [];
         this.cachedD3dxUserIni.clear();
+        this.persistUpdateDebouncers.clear();
+        this.pendingPersistUpdates.clear();
         if (watcherCount > 0) {
             this.logInfo(`Stopped persist watcher (${watcherCount})`);
         }
@@ -119,7 +154,7 @@ export class TogglePersist {
 
                         const targetIniPath = path.join(importer.importerFolder, relIniPath);
                         if (await fse.pathExists(targetIniPath)) {
-                            await this.updateModIniPersist(targetIniPath, varName, newValue);
+                            this.queuePersistUpdate(targetIniPath, varName, newValue);
                         }
                     }
                 }
@@ -131,11 +166,37 @@ export class TogglePersist {
         }
     }
 
+    private queuePersistUpdate(targetIniPath: string, varName: string, newValue: string) {
+        const updateKey = `${targetIniPath}::${varName.toLowerCase()}`;
+        this.pendingPersistUpdates.set(updateKey, { targetIniPath, varName, newValue });
+
+        let debounced = this.persistUpdateDebouncers.get(updateKey);
+        if (!debounced) {
+            debounced = debounce(async () => {
+                const pending = this.pendingPersistUpdates.get(updateKey);
+                if (!pending) return;
+                this.pendingPersistUpdates.delete(updateKey);
+                await this.updateModIniPersist(
+                    pending.targetIniPath,
+                    pending.varName,
+                    pending.newValue,
+                );
+            }, 200);
+            this.persistUpdateDebouncers.set(updateKey, debounced);
+        }
+
+        debounced();
+    }
+
     private async updateModIniPersist(targetIniPath: string, varName: string, newValue: string) {
         try {
             const content = await fse.readFile(targetIniPath, "utf-8");
             const lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
             const lines = content.split(/\r?\n/);
+            if (this.isAnimationPersistVariable(lines, varName)) {
+                return;
+            }
+
             let inConstants = false;
             let modified = false;
 
@@ -168,13 +229,83 @@ export class TogglePersist {
         }
     }
 
+    private isAnimationPersistVariable(lines: string[], varName: string): boolean {
+        let inKeySection = false;
+        let keyValue: string | null = null;
+        const escapedVarName = varName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const varRegex = new RegExp(`^\\$${escapedVarName}\\s*=`);
+
+        const evaluateSection = (hasVarAssignment: boolean) => {
+            if (!hasVarAssignment) return false;
+            if (!keyValue) return true;
+            return !this.isAllowedKeyBinding(keyValue);
+        };
+
+        let hasTargetVarAssignment = false;
+
+        for (const rawLine of lines) {
+            const trimmed = rawLine.trim();
+            if (!trimmed || trimmed.startsWith(";")) continue;
+
+            if (trimmed.startsWith("[")) {
+                if (evaluateSection(hasTargetVarAssignment)) {
+                    return true;
+                }
+                inKeySection = /^\[Key/i.test(trimmed);
+                keyValue = null;
+                hasTargetVarAssignment = false;
+                continue;
+            }
+
+            if (!inKeySection) continue;
+
+            const keyMatch = trimmed.match(/^key\s*=\s*(.+)$/i);
+            if (keyMatch) {
+                keyValue = keyMatch[1].split(";")[0].trim();
+                continue;
+            }
+
+            if (varRegex.test(trimmed)) {
+                hasTargetVarAssignment = true;
+            }
+        }
+
+        return evaluateSection(hasTargetVarAssignment);
+    }
+
+    private isAllowedKeyBinding(keyValue: string): boolean {
+        const tokens = keyValue
+            .toLowerCase()
+            .split(/[+\s]+/)
+            .map((token) => token.trim())
+            .filter(Boolean);
+
+        if (tokens.length === 0) return false;
+        return tokens.every((token) => this.isAllowedKeyToken(token));
+    }
+
+    private isAllowedKeyToken(token: string): boolean {
+        if (token.length === 1) return true;
+        if (TogglePersist.modifierTokens.has(token)) return true;
+        if (TogglePersist.xboxTokens.has(token)) return true;
+        if (/^vk_[a-z0-9_]+$/i.test(token)) return true;
+        return false;
+    }
+
     private addPersistLog(level: "INFO" | "ERROR", message: string) {
         const entry = `[${new Date().toISOString()}] [${level}] ${message}`;
         this.persistLogs.push(entry);
         if (this.persistLogs.length > 10) {
             this.persistLogs = this.persistLogs.slice(-10);
         }
-        this.desktop.ipc.broadcast("setting:xxmi:persistLogs", this.getPersistLogs());
+        const mainWindow = this.desktop.window.main.window;
+        if (mainWindow) {
+            this.desktop.ipc.postMessageToWindow(
+                mainWindow,
+                "setting:xxmi:persistLogs",
+                this.getPersistLogs(),
+            );
+        }
     }
 
     private logInfo(message: string) {

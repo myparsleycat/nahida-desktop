@@ -75,3 +75,13 @@ export const scriptPresetItemRelations = relations(scriptPresetItem, ({ one }) =
         references: [script.id],
     }),
 }));
+
+export const toggleViewerArtifact = sqliteTable("toggle_viewer_artifact", {
+    id: text("id").primaryKey(),
+    targetIniPath: text("target_ini_path").notNull().unique(),
+    toggleTxtPath: text("toggle_txt_path").notNull(),
+    toggleIniPath: text("toggle_ini_path").notNull(),
+    toggleTxtHash: text("toggle_txt_hash").notNull(),
+    toggleIniHash: text("toggle_ini_hash").notNull(),
+    updatedAt: text("updated_at").notNull(),
+});

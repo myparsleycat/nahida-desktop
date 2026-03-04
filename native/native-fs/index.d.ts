@@ -8,6 +8,8 @@ export declare class NativeWatcher {
 
 export declare function collectFiles(paths: Array<string>, allowedExt: Array<string>): RawCollectionResult
 
+export declare function findFiles(paths: Array<string>, includeExt: Array<string>, excludeFileNames: Array<string>): Array<string>
+
 export interface NativeWatcherOptions {
   pollIntervalMs?: number
   compareContents?: boolean

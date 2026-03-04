@@ -151,6 +151,42 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         return d.setting.xxmi.getPersistLogs();
     });
 
+    rh("setting:xxmi:getToggleViewerAutoGenerate", async () => {
+        return await d.setting.xxmi.getToggleViewerAutoGenerate();
+    });
+
+    rh("setting:xxmi:setToggleViewerAutoGenerate", async (enabled) => {
+        await d.setting.xxmi.setToggleViewerAutoGenerate(enabled);
+    });
+
+    rh("setting:xxmi:getToggleViewerHotkey", async () => {
+        return await d.setting.xxmi.getToggleViewerHotkey();
+    });
+
+    rh("setting:xxmi:setToggleViewerHotkey", async (hotkey) => {
+        await d.setting.xxmi.setToggleViewerHotkey(hotkey);
+    });
+
+    rh("setting:xxmi:getToggleViewerLogs", async () => {
+        return d.setting.xxmi.getToggleViewerLogs();
+    });
+
+    rh("setting:xxmi:getToggleViewerState", async () => {
+        return d.setting.xxmi.getToggleViewerState();
+    });
+
+    rh("setting:xxmi:runToggleViewerBatchGenerate", async () => {
+        return d.setting.xxmi.runToggleViewerBatchGenerate();
+    });
+
+    rh("setting:xxmi:runToggleViewerBatchDelete", async () => {
+        return d.setting.xxmi.runToggleViewerBatchDelete();
+    });
+
+    rh("setting:xxmi:cancelToggleViewerWork", async () => {
+        return d.setting.xxmi.cancelToggleViewerWork();
+    });
+
     rh("setting:advanced:getAll", async () => {
         return await d.setting.advanced.getAll();
     });

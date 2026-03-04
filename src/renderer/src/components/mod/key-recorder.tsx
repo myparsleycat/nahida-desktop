@@ -2,8 +2,9 @@ import { Button } from "@renderer/components/ui/button";
 import { DialogClose, DialogFooter } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
 import { Kbd } from "@renderer/components/ui/kbd";
+import { formatKeyLabel, getBaseKey, getUsedModifiers } from "@shared/key-formatter";
 import { useEffect, useRef, useState } from "react";
-import { formatKeyLabel, getBaseKey, getUsedModifiers, mapKeyboardEventToInternal } from "./utils";
+import { mapKeyboardEventToInternal } from "./utils";
 
 interface KeyRecorderProps {
   defaultValue: string;
@@ -21,8 +22,8 @@ export function KeyRecorder({ defaultValue, otherKeys, onSave }: KeyRecorderProp
 
   const displayKeys = value
     .split(" ")
-    .map(formatKeyLabel)
-    .filter((k) => k !== null);
+    .map((k) => formatKeyLabel(k))
+    .filter((k): k is string => k !== null);
 
   useEffect(() => {
     containerRef.current?.focus();
@@ -98,6 +99,7 @@ export function KeyRecorder({ defaultValue, otherKeys, onSave }: KeyRecorderProp
 
   return (
     <div className="flex flex-col gap-4">
+      {/* oxlint-disable-next-line jsx_a11y/no-static-element-interactions */}
       <div
         ref={containerRef}
         className="flex items-center justify-center p-6 border border-dashed rounded-md bg-muted/30 focus:bg-accent/30 focus:border-solid outline-none transition-all cursor-pointer min-h-[100px]"

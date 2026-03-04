@@ -12,6 +12,8 @@ interface Bounds {
     height: number;
 }
 
+const DEFAULT_TOGGLE_VIEWER_HOTKEY = "ctrl H";
+
 export class Setting {
     private desktop: NahidaDesktop;
 
@@ -528,6 +530,110 @@ export class Setting {
                 }
             }
         },
+
+        getToggleViewerAutoGenerate: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "xxmi_toggle_viewer_auto_generate"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db.insert(setting).values({
+                    key: "xxmi_toggle_viewer_auto_generate",
+                    value: "false",
+                });
+                return false;
+            }
+
+            return qr.value === "true";
+        },
+
+        getToggleViewerHotkey: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "xxmi_toggle_viewer_hotkey"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db.insert(setting).values({
+                    key: "xxmi_toggle_viewer_hotkey",
+                    value: DEFAULT_TOGGLE_VIEWER_HOTKEY,
+                });
+                return DEFAULT_TOGGLE_VIEWER_HOTKEY;
+            }
+
+            const value = (qr.value || "").trim();
+            return value || DEFAULT_TOGGLE_VIEWER_HOTKEY;
+        },
+
+        getToggleViewerLogs: async () => {
+            return this.desktop.service.modTools.toggleViewer.getLogs();
+        },
+
+        getToggleViewerState: async () => {
+            return this.desktop.service.modTools.toggleViewer.getState();
+        },
+
+        runToggleViewerBatchGenerate: async () => {
+            await this.desktop.service.modTools.toggleViewer.runBatchGenerate();
+        },
+
+        runToggleViewerBatchDelete: async () => {
+            await this.desktop.service.modTools.toggleViewer.runBatchDelete();
+        },
+
+        cancelToggleViewerWork: async () => {
+            this.desktop.service.modTools.toggleViewer.cancelCurrentWork();
+        },
+
+        setToggleViewerHotkey: async (hotkey: string) => {
+            const normalizedHotkey = hotkey.trim() || DEFAULT_TOGGLE_VIEWER_HOTKEY;
+
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({
+                    key: "xxmi_toggle_viewer_hotkey",
+                    value: normalizedHotkey,
+                })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: normalizedHotkey },
+                });
+
+            if (this.desktop.service?.modTools) {
+                await this.desktop.service.modTools.toggleViewer.applyHotkeyToArtifacts(
+                    normalizedHotkey,
+                );
+            }
+        },
+
+        setToggleViewerAutoGenerate: async (enabled: boolean) => {
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({
+                    key: "xxmi_toggle_viewer_auto_generate",
+                    value: String(enabled),
+                })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(enabled) },
+                });
+
+            if (this.desktop.service?.modTools) {
+                if (enabled) {
+                    const toggleViewerState = this.desktop.service.modTools.toggleViewer.getState();
+                    if (toggleViewerState.mode === "generate") {
+                        this.desktop.logger.info(
+                            "Deferred toggle viewer watcher start until manual generate completes",
+                            "Setting.xxmi.setToggleViewerAutoGenerate",
+                        );
+                    } else {
+                        await this.desktop.service.modTools.startToggleViewerWatcher();
+                    }
+                } else {
+                    this.desktop.service.modTools.toggleViewer.cancelCurrentWork();
+                    await this.desktop.service.modTools.stopToggleViewerWatcher();
+                }
+            }
+        },
     };
 
     advanced = {
@@ -561,4 +667,3 @@ export class Setting {
 }
 
 export default Setting;
-

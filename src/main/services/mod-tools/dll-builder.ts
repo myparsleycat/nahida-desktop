@@ -19,7 +19,7 @@ export class DllBuilder {
 
     private releasesCache: Record<string, string[]> = {
         SpectrumQT: ["master"],
-        U149: ["master"],
+        myparsleycat: ["master"],
     };
 
     constructor(private readonly desktop: NahidaDesktop) {
@@ -36,13 +36,13 @@ export class DllBuilder {
     public async updateReleases() {
         await Promise.all([
             this.fetchProviderReleases("SpectrumQT"),
-            this.fetchProviderReleases("U149"),
+            this.fetchProviderReleases("myparsleycat"),
         ]);
     }
 
     private async fetchProviderReleases(provider: string) {
         try {
-            const owner = provider === "U149" ? "myparsleycat" : "SpectrumQT";
+            const owner = provider === "myparsleycat" ? "myparsleycat" : "SpectrumQT";
             const url = `https://api.github.com/repos/${owner}/XXMI-Libs-Package/releases`;
             const resp = await ky.get(url, {
                 headers: {
@@ -206,7 +206,7 @@ export class DllBuilder {
         provider: string,
         version: string,
     ): Promise<string> {
-        const owner = provider === "U149" ? "myparsleycat" : "SpectrumQT";
+        const owner = provider === "myparsleycat" ? "myparsleycat" : "SpectrumQT";
         const url =
             version === "master"
                 ? `https://github.com/${owner}/XXMI-Libs-Package/archive/refs/heads/master.zip`
@@ -218,7 +218,7 @@ export class DllBuilder {
             headers: {
                 "User-Agent":
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-                Referer: "https://github.com/SpectrumQT/XXMI-Libs-Package",
+                Referer: `https://github.com/${provider}/XXMI-Libs-Package`,
             },
             // @ts-expect-error
             dispatcher: await this.desktop.httpService.getAgent(),
@@ -307,4 +307,3 @@ export class DllBuilder {
         }
     }
 }
-

@@ -248,6 +248,26 @@
           "XXMI_ENABLE_UNSAFE_MODE": "Enabling Unsafe Mode..."
         }
       },
+      "toggle_viewer_generator": {
+        "title": "Toggle Viewer Generator",
+        "not_configured": "XXMI path is not configured. Configure XXMI first.",
+        "auto_generate": "Toggle Viewer Auto Generate",
+        "auto_generate_desc": "Auto-generate toggle-viewer files from mod ini toggle sections.",
+        "hotkey": "Toggle Viewer Key",
+        "batch_generate": "Batch Generate",
+        "batch_delete": "Batch Delete",
+        "stop": "Stop",
+        "running": "Running: {{mode}}",
+        "idle": "Idle",
+        "unknown": "unknown",
+        "logs": "Logs",
+        "no_logs": "No logs yet.",
+        "dialog": {
+          "trigger": "Hotkey:",
+          "title": "Toggle Viewer Hotkey",
+          "description": "Press the key combination to set"
+        }
+      },
       "fix-tool-manager": {
         "presets": {},
         "builder": {

@@ -8,9 +8,9 @@ export interface FolderGroup {
   modCount: number
 }
 
-export declare function getCharactersFolder(modFolderPath: string, fallbackToModPreview?: boolean | undefined | null): Array<FolderGroup>
+export declare function getCharactersFolder(modFolderPath: string, fallbackToModPreview?: boolean | undefined | null): Promise<Array<FolderGroup>>
 
-export declare function getMods(groupPath: string): FolderGroup
+export declare function getMods(groupPath: string): Promise<FolderGroup>
 
 export interface IniResult {
   name: string
@@ -29,9 +29,9 @@ export interface ModInfo {
   inis: Array<IniResult>
 }
 
-export declare function processIniFiles(paths: Array<string>): Array<IniResult>
+export declare function processIniFiles(paths: Array<string>): Promise<Array<IniResult>>
 
-export declare function sendF10(pid: number): boolean
+export declare function sendF10(pid: number): Promise<boolean>
 
 export interface ToggleKey {
   sectionName: string

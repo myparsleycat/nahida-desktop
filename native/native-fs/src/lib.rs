@@ -139,6 +139,93 @@ pub fn collect_files(
   })
 }
 
+#[napi]
+pub fn find_files(
+  paths: Vec<String>,
+  include_ext: Vec<String>,
+  exclude_file_names: Vec<String>,
+) -> napi::Result<Vec<String>> {
+  let normalized_ext: Vec<String> = include_ext
+    .into_iter()
+    .map(|ext| {
+      if ext.starts_with('.') {
+        ext.to_lowercase()
+      } else {
+        format!(".{}", ext).to_lowercase()
+      }
+    })
+    .collect();
+
+  let mut excluded_name_set: std::collections::HashSet<String> = std::collections::HashSet::new();
+  let mut excluded_prefixes: Vec<String> = Vec::new();
+  for name in exclude_file_names {
+    let normalized = name.to_lowercase();
+    if let Some(prefix) = normalized.strip_suffix('*') {
+      if !prefix.is_empty() {
+        excluded_prefixes.push(prefix.to_string());
+      }
+    } else {
+      excluded_name_set.insert(normalized);
+    }
+  }
+
+  let mut all_files: Vec<String> = Vec::new();
+
+  for p in paths {
+    let absolute_path = match std::path::Path::new(&p).canonicalize() {
+      Ok(p) => p,
+      Err(_) => continue,
+    };
+
+    let absolute_path_str = absolute_path.to_string_lossy().to_string();
+    let absolute_path_str = absolute_path_str.trim_start_matches(r#"\\?\"#).to_string();
+    let absolute_path = std::path::PathBuf::from(absolute_path_str);
+
+    let entries = WalkDir::new(&absolute_path)
+      .skip_hidden(true)
+      .process_read_dir(|_depth, _path, _state, children| {
+        children.retain(|child| {
+          child
+            .as_ref()
+            .map(|c| !c.file_name().to_string_lossy().starts_with('.'))
+            .unwrap_or(false)
+        });
+      })
+      .into_iter()
+      .filter_map(|e| e.ok());
+
+    for entry in entries {
+      if !entry.file_type().is_file() {
+        continue;
+      }
+
+      let name = entry.file_name().to_string_lossy().to_string();
+      let name_lower = name.to_lowercase();
+
+      if excluded_name_set.contains(&name_lower) {
+        continue;
+      }
+
+      if excluded_prefixes
+        .iter()
+        .any(|prefix| name_lower.starts_with(prefix))
+      {
+        continue;
+      }
+
+      let is_allowed =
+        normalized_ext.is_empty() || normalized_ext.iter().any(|ext| name_lower.ends_with(ext));
+      if !is_allowed {
+        continue;
+      }
+
+      all_files.push(entry.path().to_string_lossy().replace('\\', "/"));
+    }
+  }
+
+  Ok(all_files)
+}
+
 #[napi(object)]
 pub struct WatchEvent {
   #[napi(ts_type = "\"create\" | \"modify\" | \"remove\"")]
