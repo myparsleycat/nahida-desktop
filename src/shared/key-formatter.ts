@@ -117,7 +117,7 @@ export function formatKeySequence(
 
 export function getBaseKey(keyString: string): string | null {
     if (!keyString) return null;
-    const parts = keyString.split(" ");
+    const parts = keyString.trim().split(/\s+/).filter(Boolean);
     const modifiers = new Set([
         "ctrl",
         "alt",
@@ -151,7 +151,7 @@ export function getUsedModifiers(baseKey: string, otherKeys: string[]) {
         if (!keyStr) continue;
         const currentBase = getBaseKey(keyStr);
         if (currentBase && currentBase.toLowerCase() === targetBase) {
-            const parts = keyStr.toLowerCase().split(" ");
+            const parts = keyStr.trim().toLowerCase().split(/\s+/).filter(Boolean);
             if (parts.includes("ctrl")) used.ctrl = true;
             if (parts.includes("alt")) used.alt = true;
             if (parts.includes("shift")) used.shift = true;
