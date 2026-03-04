@@ -251,7 +251,14 @@ export class TogglePersist {
         if (this.persistLogs.length > 10) {
             this.persistLogs = this.persistLogs.slice(-10);
         }
-        this.desktop.ipc.broadcast("setting:xxmi:persistLogs", this.getPersistLogs());
+        const mainWindow = this.desktop.window.main.window;
+        if (mainWindow) {
+            this.desktop.ipc.postMessageToWindow(
+                mainWindow,
+                "setting:xxmi:persistLogs",
+                this.getPersistLogs(),
+            );
+        }
     }
 
     private logInfo(message: string) {
