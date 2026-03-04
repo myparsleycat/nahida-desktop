@@ -1,5 +1,5 @@
 import path from "node:path";
-import { retry } from "es-toolkit";
+import { debounce, retry } from "es-toolkit";
 import fse from "fs-extra";
 import type { NahidaDesktop } from "@/main";
 
@@ -165,6 +165,10 @@ export class TogglePersist {
             const content = await fse.readFile(targetIniPath, "utf-8");
             const lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
             const lines = content.split(/\r?\n/);
+            if (this.isAnimationPersistVariable(lines, varName)) {
+                return;
+            }
+
             let inConstants = false;
             let modified = false;
 
@@ -195,6 +199,50 @@ export class TogglePersist {
         } catch (error) {
             this.logError(`Error updating mod ini ${targetIniPath}: ${error}`);
         }
+    }
+
+    private isAnimationPersistVariable(lines: string[], varName: string): boolean {
+        let inKeySection = false;
+        let keyValue: string | null = null;
+        const escapedVarName = varName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const varRegex = new RegExp(`^\\$${escapedVarName}\\s*=`);
+
+        const evaluateSection = (hasVarAssignment: boolean) => {
+            if (!hasVarAssignment) return false;
+            if (!keyValue) return true;
+            return keyValue.length !== 1;
+        };
+
+        let hasTargetVarAssignment = false;
+
+        for (const rawLine of lines) {
+            const trimmed = rawLine.trim();
+            if (!trimmed || trimmed.startsWith(";")) continue;
+
+            if (trimmed.startsWith("[")) {
+                if (evaluateSection(hasTargetVarAssignment)) {
+                    return true;
+                }
+                inKeySection = /^\[Key/i.test(trimmed);
+                keyValue = null;
+                hasTargetVarAssignment = false;
+                continue;
+            }
+
+            if (!inKeySection) continue;
+
+            const keyMatch = trimmed.match(/^key\s*=\s*(.+)$/i);
+            if (keyMatch) {
+                keyValue = keyMatch[1].split(";")[0].trim();
+                continue;
+            }
+
+            if (varRegex.test(trimmed)) {
+                hasTargetVarAssignment = true;
+            }
+        }
+
+        return evaluateSection(hasTargetVarAssignment);
     }
 
     private addPersistLog(level: "INFO" | "ERROR", message: string) {
