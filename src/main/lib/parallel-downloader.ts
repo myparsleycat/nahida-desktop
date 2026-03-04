@@ -1,4 +1,4 @@
-/** biome-ignore-all lint/suspicious/noExplicitAny: <> */
+// oxlint-disable typescript/no-explicit-any
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { retry } from "es-toolkit";

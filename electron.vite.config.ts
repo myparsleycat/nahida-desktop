@@ -1,17 +1,15 @@
 import { resolve } from "node:path";
-import { defineConfig } from "electron-vite";
-import react from "@vitejs/plugin-react";
-import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import tailwindcss from "@tailwindcss/vite";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "electron-vite";
 import { ipcGeneratorPlugin } from "./plugins/ipc-generator";
 import { nativeBindingPlugin } from "./plugins/native-binding";
 
-const ReactCompilerConfig = { 
-  target: "19",
-  runtimeModule: 'react-compiler-runtime'
+const ReactCompilerConfig = {
+    target: "19",
+    runtimeModule: "react-compiler-runtime",
 };
-
-// import { visualizer } from "rollup-plugin-visualizer";
 
 export default defineConfig({
     main: {
@@ -25,16 +23,7 @@ export default defineConfig({
                 "@backend": resolve("../backend/src"),
             },
         },
-        plugins: [
-            ipcGeneratorPlugin(),
-            nativeBindingPlugin(),
-            // visualizer({
-            //     filename: "dist/stats-main.html",
-            //     open: true,
-            //     gzipSize: true,
-            //     brotliSize: true,
-            // }),
-        ]
+        plugins: [ipcGeneratorPlugin(), nativeBindingPlugin()],
     },
     preload: {
         build: {
@@ -68,10 +57,8 @@ export default defineConfig({
             }),
             react({
                 babel: {
-                    plugins: [
-                        ["babel-plugin-react-compiler", ReactCompilerConfig]
-                    ]
-                }
+                    plugins: [["babel-plugin-react-compiler", ReactCompilerConfig]],
+                },
             }),
             tailwindcss(),
             // visualizer({
