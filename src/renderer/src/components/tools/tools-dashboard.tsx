@@ -1,5 +1,6 @@
 import D3D11Builder from "@renderer/components/tools/d3d11-builder";
 import TogglePersistence from "@renderer/components/tools/toggle-persistence";
+import ToggleViewerGenerator from "@renderer/components/tools/toggle-viewer-generator";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { cn } from "@renderer/lib/utils";
 import { Link } from "@tanstack/react-router";
@@ -27,6 +28,10 @@ const toolPages: ToolPage[] = [
   {
     name: "Toggle Persistence",
     component: () => <TogglePersistence />,
+  },
+  {
+    name: "Toggle Viewer Generator",
+    component: () => <ToggleViewerGenerator />,
   },
   {
     name: "Fix Tool Manager",

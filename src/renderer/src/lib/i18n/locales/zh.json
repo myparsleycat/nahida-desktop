@@ -248,6 +248,26 @@
           "XXMI_ENABLE_UNSAFE_MODE": "正在启用 Unsafe Mode..."
         }
       },
+      "toggle_viewer_generator": {
+        "title": "Toggle Viewer 生成器",
+        "not_configured": "未配置 XXMI 路径。请先配置 XXMI。",
+        "auto_generate": "自动生成 Toggle Viewer",
+        "auto_generate_desc": "从模组 ini 的切换部分自动生成 toggle-viewer 文件。",
+        "hotkey": "Toggle Viewer 快捷键",
+        "batch_generate": "批量生成",
+        "batch_delete": "批量删除",
+        "stop": "停止",
+        "running": "运行中: {{mode}}",
+        "idle": "空闲",
+        "unknown": "未知",
+        "logs": "日志",
+        "no_logs": "暂无日志。",
+        "dialog": {
+          "trigger": "快捷键:",
+          "title": "Toggle Viewer 快捷键",
+          "description": "按下键盘组合以设置快捷键"
+        }
+      },
       "fix-tool-manager": {
         "presets": {},
         "builder": {

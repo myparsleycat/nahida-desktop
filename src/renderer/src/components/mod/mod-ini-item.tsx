@@ -10,9 +10,9 @@ import {
 import { Kbd } from "@renderer/components/ui/kbd";
 import { cn } from "@renderer/lib/utils";
 import type { ModInfo, ModIni, ToggleKey } from "@renderer/types/mod";
+import { formatKeyLabel } from "@shared/key-formatter";
 import { FileCogIcon } from "lucide-react";
 import { KeyRecorder } from "./key-recorder";
-import { formatKeyLabel } from "./utils";
 
 interface ModToggleKeyItemProps {
   modPath: string;
@@ -33,8 +33,8 @@ function KeyDisplay({ keys }: { keys: string }) {
     <div className="flex flex-wrap items-center gap-1">
       {keys
         .split(" ")
-        .map(formatKeyLabel)
-        .filter((k) => k !== null)
+        .map((k) => formatKeyLabel(k))
+        .filter((k): k is string => k !== null)
         .map((label, idx) => (
           <Kbd key={idx.toString()} className="text-xs">
             {label}

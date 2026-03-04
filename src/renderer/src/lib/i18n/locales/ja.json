@@ -249,6 +249,26 @@
           "XXMI_ENABLE_UNSAFE_MODE": "Unsafe Mode を有効化中..."
         }
       },
+      "toggle_viewer_generator": {
+        "title": "Toggle Viewer ジェネレーター",
+        "not_configured": "XXMIパスが設定されていません。先にXXMIを設定してください。",
+        "auto_generate": "Toggle Viewer 自動生成",
+        "auto_generate_desc": "MODのiniトグルセクションからtoggle-viewerファイルを自動生成します。",
+        "hotkey": "Toggle Viewer ホットキー",
+        "batch_generate": "一括生成",
+        "batch_delete": "一括削除",
+        "stop": "停止",
+        "running": "実行中: {{mode}}",
+        "idle": "待機中",
+        "unknown": "不明",
+        "logs": "ログ",
+        "no_logs": "まだログはありません。",
+        "dialog": {
+          "trigger": "ホットキー:",
+          "title": "Toggle Viewer ホットキー",
+          "description": "設定するキーの組み合わせを押してください"
+        }
+      },
       "fix-tool-manager": {
         "presets": {},
         "builder": {

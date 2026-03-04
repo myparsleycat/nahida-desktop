@@ -164,9 +164,18 @@ export type IpcHandlers = {
     "setting:mod:setVirtualizationThreshold": (...args: any[]) => any;
     "setting:net:getProxy": (...args: Parameters<typeof desktop.setting.net.getProxy>) => ReturnType<typeof desktop.setting.net.getProxy>;
     "setting:net:setProxy": (...args: Parameters<typeof desktop.setting.net.setProxy>) => ReturnType<typeof desktop.setting.net.setProxy>;
+    "setting:xxmi:cancelToggleViewerWork": (...args: Parameters<typeof desktop.setting.xxmi.cancelToggleViewerWork>) => ReturnType<typeof desktop.setting.xxmi.cancelToggleViewerWork>;
     "setting:xxmi:getPersistLogs": (...args: Parameters<typeof desktop.setting.xxmi.getPersistLogs>) => ReturnType<typeof desktop.setting.xxmi.getPersistLogs>;
     "setting:xxmi:getPersistToggles": (...args: Parameters<typeof desktop.setting.xxmi.getPersistToggles>) => ReturnType<typeof desktop.setting.xxmi.getPersistToggles>;
+    "setting:xxmi:getToggleViewerAutoGenerate": (...args: Parameters<typeof desktop.setting.xxmi.getToggleViewerAutoGenerate>) => ReturnType<typeof desktop.setting.xxmi.getToggleViewerAutoGenerate>;
+    "setting:xxmi:getToggleViewerHotkey": (...args: Parameters<typeof desktop.setting.xxmi.getToggleViewerHotkey>) => ReturnType<typeof desktop.setting.xxmi.getToggleViewerHotkey>;
+    "setting:xxmi:getToggleViewerLogs": (...args: Parameters<typeof desktop.setting.xxmi.getToggleViewerLogs>) => ReturnType<typeof desktop.setting.xxmi.getToggleViewerLogs>;
+    "setting:xxmi:getToggleViewerState": (...args: Parameters<typeof desktop.setting.xxmi.getToggleViewerState>) => ReturnType<typeof desktop.setting.xxmi.getToggleViewerState>;
+    "setting:xxmi:runToggleViewerBatchDelete": (...args: Parameters<typeof desktop.setting.xxmi.runToggleViewerBatchDelete>) => ReturnType<typeof desktop.setting.xxmi.runToggleViewerBatchDelete>;
+    "setting:xxmi:runToggleViewerBatchGenerate": (...args: Parameters<typeof desktop.setting.xxmi.runToggleViewerBatchGenerate>) => ReturnType<typeof desktop.setting.xxmi.runToggleViewerBatchGenerate>;
     "setting:xxmi:setPersistToggles": (...args: any[]) => any;
+    "setting:xxmi:setToggleViewerAutoGenerate": (...args: any[]) => any;
+    "setting:xxmi:setToggleViewerHotkey": (...args: any[]) => any;
     "tools:buildNewD3DDLL": (...args: Parameters<typeof desktop.service.modTools.dllBuilder.buildNewD3DDLL>) => ReturnType<typeof desktop.service.modTools.dllBuilder.buildNewD3DDLL>;
     "tools:getBuilderState": (...args: Parameters<typeof desktop.service.modTools.dllBuilder.getBuilderState>) => ReturnType<typeof desktop.service.modTools.dllBuilder.getBuilderState>;
     "tools:getProviderReleases": (...args: Parameters<typeof desktop.service.modTools.dllBuilder.getProviderReleases>) => ReturnType<typeof desktop.service.modTools.dllBuilder.getProviderReleases>;
@@ -233,6 +242,7 @@ export type IpcEvents = {
         errorFiles: number;
     }) => void;
     "setting:xxmi:persistLogs": (logs: string[]) => void;
+    "setting:xxmi:toggleViewerLogs": (logs: string[]) => void;
     "tools:progress": (message: string) => void;
     "ftm:log": (message: string) => void;
 
