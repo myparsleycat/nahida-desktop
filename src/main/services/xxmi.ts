@@ -51,6 +51,8 @@ export class XXMI {
                 await this.desktop.setting.xxmi.getToggleViewerAutoGenerate();
             if (toggleViewerEnabled) {
                 await this.desktop.service.modTools.startToggleViewerWatcher();
+            } else {
+                await this.desktop.service.modTools.stopToggleViewerWatcher();
             }
         } catch (error) {
             this.desktop.logger.error(`Failed to initialize XXMI: ${error}`, "XXMI.initialize");
