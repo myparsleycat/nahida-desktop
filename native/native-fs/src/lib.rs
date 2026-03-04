@@ -156,10 +156,18 @@ pub fn find_files(
     })
     .collect();
 
-  let excluded_name_set: std::collections::HashSet<String> = exclude_file_names
-    .into_iter()
-    .map(|name| name.to_lowercase())
-    .collect();
+  let mut excluded_name_set: std::collections::HashSet<String> = std::collections::HashSet::new();
+  let mut excluded_prefixes: Vec<String> = Vec::new();
+  for name in exclude_file_names {
+    let normalized = name.to_lowercase();
+    if let Some(prefix) = normalized.strip_suffix('*') {
+      if !prefix.is_empty() {
+        excluded_prefixes.push(prefix.to_string());
+      }
+    } else {
+      excluded_name_set.insert(normalized);
+    }
+  }
 
   let mut all_files: Vec<String> = Vec::new();
 
@@ -195,6 +203,13 @@ pub fn find_files(
       let name_lower = name.to_lowercase();
 
       if excluded_name_set.contains(&name_lower) {
+        continue;
+      }
+
+      if excluded_prefixes
+        .iter()
+        .any(|prefix| name_lower.starts_with(prefix))
+      {
         continue;
       }
 

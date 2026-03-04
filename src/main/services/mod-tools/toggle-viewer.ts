@@ -468,7 +468,7 @@ export class ToggleViewer {
         try {
             const stat = await fse.stat(targetPath);
             if (stat.isDirectory()) {
-                const iniPaths = findFiles([targetPath], [".ini"], ["toggle-viewer.ini"]).map((p) =>
+                const iniPaths = findFiles([targetPath], [".ini"], ["toggle-viewer.ini", "disabled*"]).map((p) =>
                     path.resolve(p),
                 );
                 for (const iniPath of iniPaths) {
@@ -484,7 +484,7 @@ export class ToggleViewer {
     }
 
     private async findIniCandidates(modsPath: string) {
-        return findFiles([modsPath], [".ini"], ["toggle-viewer.ini"]).map((p) => path.resolve(p));
+        return findFiles([modsPath], [".ini"], ["toggle-viewer.ini", "disabled*"]).map((p) => path.resolve(p));
     }
 
     private async processIni(iniPath: string, toggleViewerHotkey: string) {
