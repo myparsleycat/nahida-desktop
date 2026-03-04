@@ -7,6 +7,11 @@ export class TogglePersist {
     private persistWatchers: string[] = [];
     private cachedD3dxUserIni: Map<string, Record<string, string>> = new Map();
     private persistLogs: string[] = [];
+    private persistUpdateDebouncers: Map<string, () => void> = new Map();
+    private pendingPersistUpdates: Map<
+        string,
+        { targetIniPath: string; varName: string; newValue: string }
+    > = new Map();
 
     constructor(private readonly desktop: NahidaDesktop) {}
 
@@ -51,6 +56,8 @@ export class TogglePersist {
         }
         this.persistWatchers = [];
         this.cachedD3dxUserIni.clear();
+        this.persistUpdateDebouncers.clear();
+        this.pendingPersistUpdates.clear();
         if (watcherCount > 0) {
             this.logInfo(`Stopped persist watcher (${watcherCount})`);
         }
@@ -119,7 +126,7 @@ export class TogglePersist {
 
                         const targetIniPath = path.join(importer.importerFolder, relIniPath);
                         if (await fse.pathExists(targetIniPath)) {
-                            await this.updateModIniPersist(targetIniPath, varName, newValue);
+                            this.queuePersistUpdate(targetIniPath, varName, newValue);
                         }
                     }
                 }
@@ -129,6 +136,28 @@ export class TogglePersist {
         } catch (error) {
             this.logError(`Error handling d3dx_user.ini change: ${error}`);
         }
+    }
+
+    private queuePersistUpdate(targetIniPath: string, varName: string, newValue: string) {
+        const updateKey = `${targetIniPath}::${varName.toLowerCase()}`;
+        this.pendingPersistUpdates.set(updateKey, { targetIniPath, varName, newValue });
+
+        let debounced = this.persistUpdateDebouncers.get(updateKey);
+        if (!debounced) {
+            debounced = debounce(async () => {
+                const pending = this.pendingPersistUpdates.get(updateKey);
+                if (!pending) return;
+                this.pendingPersistUpdates.delete(updateKey);
+                await this.updateModIniPersist(
+                    pending.targetIniPath,
+                    pending.varName,
+                    pending.newValue,
+                );
+            }, 200);
+            this.persistUpdateDebouncers.set(updateKey, debounced);
+        }
+
+        debounced();
     }
 
     private async updateModIniPersist(targetIniPath: string, varName: string, newValue: string) {
