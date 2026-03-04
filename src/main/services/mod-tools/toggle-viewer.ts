@@ -719,17 +719,17 @@ export class ToggleViewer {
     private buildToggleViewerTxt(iniPath: string, keySections: ParsedKeySection[]) {
         const modName = path.basename(path.dirname(iniPath));
         const iniName = path.basename(iniPath);
-        const lines: string[] = [`Mod: ${modName}`, "", `Ini: ${iniName}`, "", "Keys:"];
+        const lines: string[] = [`Mod: ${modName}`, "", `Ini: ${iniName}`, ""];
 
         for (let i = 0; i < keySections.length; i++) {
             const keySection = keySections[i];
-            lines.push(`    ${keySection.sectionName}:`);
+            lines.push(`${keySection.sectionName}:`);
             lines.push(
-                `        Key: ${formatKeySequence(keySection.keyValue, { asciiFallback: true })}`,
+                `    Key: ${formatKeySequence(keySection.keyValue, { asciiFallback: true })}`,
             );
             if (keySection.backValue) {
                 lines.push(
-                    `        Back: ${formatKeySequence(keySection.backValue, { asciiFallback: true })}`,
+                    `    Back: ${formatKeySequence(keySection.backValue, { asciiFallback: true })}`,
                 );
             }
             if (i < keySections.length - 1) {
