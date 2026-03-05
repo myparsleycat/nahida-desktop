@@ -36,6 +36,7 @@ export class TogglePersist {
     private cachedD3dxUserIni: Map<string, Record<string, string>> = new Map();
     private persistLogs: string[] = [];
     private persistUpdateDebouncers: Map<string, () => void> = new Map();
+    private persistFileUpdateLocks: Map<string, Promise<void>> = new Map();
     private pendingPersistUpdates: Map<
         string,
         { targetIniPath: string; varName: string; newValue: string }
@@ -85,6 +86,7 @@ export class TogglePersist {
         this.persistWatchers = [];
         this.cachedD3dxUserIni.clear();
         this.persistUpdateDebouncers.clear();
+        this.persistFileUpdateLocks.clear();
         this.pendingPersistUpdates.clear();
         if (watcherCount > 0) {
             this.logInfo(`Stopped persist watcher (${watcherCount})`);
@@ -176,7 +178,7 @@ export class TogglePersist {
                 const pending = this.pendingPersistUpdates.get(updateKey);
                 if (!pending) return;
                 this.pendingPersistUpdates.delete(updateKey);
-                await this.updateModIniPersist(
+                await this.enqueuePersistFileUpdate(
                     pending.targetIniPath,
                     pending.varName,
                     pending.newValue,
@@ -186,6 +188,27 @@ export class TogglePersist {
         }
 
         debounced();
+    }
+
+    private async enqueuePersistFileUpdate(
+        targetIniPath: string,
+        varName: string,
+        newValue: string,
+    ) {
+        const lockKey = targetIniPath.toLowerCase();
+        const previous = this.persistFileUpdateLocks.get(lockKey) ?? Promise.resolve();
+        const next = previous
+            .catch(() => {})
+            .then(() => this.updateModIniPersist(targetIniPath, varName, newValue));
+        this.persistFileUpdateLocks.set(lockKey, next);
+
+        try {
+            await next;
+        } finally {
+            if (this.persistFileUpdateLocks.get(lockKey) === next) {
+                this.persistFileUpdateLocks.delete(lockKey);
+            }
+        }
     }
 
     private async updateModIniPersist(targetIniPath: string, varName: string, newValue: string) {
@@ -209,9 +232,18 @@ export class TogglePersist {
 
                 if (inConstants && trimmed.startsWith("global persist $")) {
                     const escapedVarName = varName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-                    const regex = new RegExp(`^global\\s+persist\\s+\\$${escapedVarName}\\s*=`);
-                    if (regex.test(trimmed)) {
-                        lines[i] = `global persist $${varName} = ${newValue}`;
+                    const regex = new RegExp(
+                        `^global\\s+persist\\s+\\$(${escapedVarName})\\s*=\\s*(.+)$`,
+                        "i",
+                    );
+                    const match = trimmed.match(regex);
+                    if (match) {
+                        const currentValue = match[2].trim();
+                        if (currentValue === newValue.trim()) {
+                            break;
+                        }
+                        const existingVarName = match[1];
+                        lines[i] = `global persist $${existingVarName} = ${newValue}`;
                         modified = true;
                         break;
                     }
