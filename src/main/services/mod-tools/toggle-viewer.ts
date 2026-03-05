@@ -468,9 +468,11 @@ export class ToggleViewer {
         try {
             const stat = await fse.stat(targetPath);
             if (stat.isDirectory()) {
-                const iniPaths = findFiles([targetPath], [".ini"], ["toggle-viewer.ini", "disabled*"]).map((p) =>
-                    path.resolve(p),
-                );
+                const iniPaths = findFiles(
+                    [targetPath],
+                    [".ini"],
+                    ["toggle-viewer.ini", "disabled*"],
+                ).map((p) => path.resolve(p));
                 for (const iniPath of iniPaths) {
                     this.pendingChangedIniPaths.add(iniPath);
                 }
@@ -484,7 +486,9 @@ export class ToggleViewer {
     }
 
     private async findIniCandidates(modsPath: string) {
-        return findFiles([modsPath], [".ini"], ["toggle-viewer.ini", "disabled*"]).map((p) => path.resolve(p));
+        return findFiles([modsPath], [".ini"], ["toggle-viewer.ini", "disabled*"]).map((p) =>
+            path.resolve(p),
+        );
     }
 
     private async processIni(iniPath: string, toggleViewerHotkey: string) {
@@ -506,7 +510,6 @@ export class ToggleViewer {
 
         const positionHash = this.resolvePositionHash(sections);
         if (!positionHash) {
-            this.logInfo(`Position hash not found: ${iniPath}`);
             return false;
         }
 
@@ -545,7 +548,6 @@ export class ToggleViewer {
                 },
             });
 
-        this.logInfo(`Generated toggle-viewer artifacts: ${iniPath}`);
         return true;
     }
 
