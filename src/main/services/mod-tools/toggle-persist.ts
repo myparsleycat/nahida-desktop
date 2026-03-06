@@ -1,4 +1,5 @@
 import path from "node:path";
+import { formatDate } from "@shared/utils";
 import { debounce, retry } from "es-toolkit";
 import fse from "fs-extra";
 import type { NahidaDesktop } from "@/main";
@@ -325,7 +326,8 @@ export class TogglePersist {
     }
 
     private addPersistLog(level: "INFO" | "ERROR", message: string) {
-        const entry = `[${new Date().toISOString()}] [${level}] ${message}`;
+        const now = new Date();
+        const entry = `[${formatDate(now)}] [${level}] ${message}`;
         this.persistLogs.push(entry);
         if (this.persistLogs.length > 10) {
             this.persistLogs = this.persistLogs.slice(-10);
