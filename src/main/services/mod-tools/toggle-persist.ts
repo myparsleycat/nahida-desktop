@@ -216,9 +216,9 @@ export class TogglePersist {
             const content = await fse.readFile(targetIniPath, "utf-8");
             const lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
             const lines = content.split(/\r?\n/);
-            if (this.isAnimationPersistVariable(lines, varName)) {
-                return;
-            }
+            // if (this.isAnimationPersistVariable(lines, varName)) {
+            //     return;
+            // }
 
             let inConstants = false;
             let modified = false;
