@@ -706,6 +706,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
   const { selectedItems, setSelectedItems, setLastSelectedIdx, copyOrCuts, setCopyOrCuts } =
     useSelectionStore();
   const isfocusSearchInput = useViewStore((s) => s.isfocusSearchInput);
+  const setSearchInDirQuery = useViewStore((s) => s.setSearchInDirQuery);
 
   const searchBuffer = useRef("");
   const searchTimeout = useRef<number | undefined>(undefined);
@@ -733,6 +734,41 @@ export function HandlerProvider(props: HandlerProviderProps) {
             searchInput.select();
           }
         }
+        return;
+      }
+
+      if (isfocusSearchInput && e.key === "ArrowDown") {
+        if (dialog.anyDialogOpen()) return;
+
+        e.preventDefault();
+        const searchInput = document.getElementById(
+          "drive-search-input",
+        ) as HTMLInputElement | null;
+        if (searchInput) {
+          searchInput.blur();
+        }
+
+        if (sortedContents.length > 0) {
+          setSelectedItems([sortedContents[0]]);
+          setLastSelectedIdx(0);
+
+          const element = document.getElementById(sortedContents[0]?.id);
+          if (element) {
+            element.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        }
+        return;
+      }
+
+      if (isfocusSearchInput && e.key === "Escape") {
+        e.preventDefault();
+        const searchInput = document.getElementById(
+          "drive-search-input",
+        ) as HTMLInputElement | null;
+        if (searchInput) {
+          searchInput.blur();
+        }
+        setSearchInDirQuery("");
         return;
       }
 
