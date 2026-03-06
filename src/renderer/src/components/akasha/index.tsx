@@ -701,6 +701,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
   const { queryClient } = useRouteContext({ from: "__root__" });
   const { children, sortedContents, queryData, currentId } = props;
   const navi = useNavigate();
+  const location = useLocation();
   const dialog = useDialogStore();
   const { selectedItems, setSelectedItems, setLastSelectedIdx, copyOrCuts, setCopyOrCuts } =
     useSelectionStore();
@@ -757,7 +758,9 @@ export function HandlerProvider(props: HandlerProviderProps) {
         if (e.ctrlKey || e.metaKey) {
           if (currentIndex !== -1 && sortedContents[currentIndex]?.isDir) {
             navi({
-              to: "/drive/drive/$id",
+              to: location.pathname.startsWith("/drive/share")
+                ? "/drive/share/$id"
+                : "/drive/drive/$id",
               params: { id: sortedContents[currentIndex].id },
             });
           }
@@ -780,7 +783,9 @@ export function HandlerProvider(props: HandlerProviderProps) {
           if (queryData.data?.parent) {
             const isUUID = validator.isUUID(queryData.data.parent.id);
             navi({
-              to: "/drive/drive/$id",
+              to: location.pathname.startsWith("/drive/share")
+                ? "/drive/share/$id"
+                : "/drive/drive/$id",
               params: {
                 id: isUUID ? "root" : queryData.data.parent.id,
               },
