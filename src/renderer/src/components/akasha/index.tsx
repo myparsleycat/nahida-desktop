@@ -171,6 +171,7 @@ export function AkashaHeadButtons() {
       <div className="relative flex items-center shrink-0">
         <SearchIcon className="size-4 absolute left-2 text-muted-foreground" />
         <Input
+          id="drive-search-input"
           className="pl-7 w-50 h-9 dark:bg-transparent"
           placeholder={t("page.drive.head_buttons.search_in_dir_placeholder")}
           value={searchInDirQuery}
@@ -719,6 +720,21 @@ export function HandlerProvider(props: HandlerProviderProps) {
   const handleKeyDown = useCallback(
     async (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "r") return;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        if (!dialog.anyDialogOpen()) {
+          const searchInput = document.getElementById(
+            "drive-search-input",
+          ) as HTMLInputElement | null;
+          if (searchInput) {
+            searchInput.focus();
+            searchInput.select();
+          }
+        }
+        return;
+      }
+
       if (isfocusSearchInput) return;
       if (dialog.anyDialogOpen()) return;
 
