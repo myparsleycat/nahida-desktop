@@ -40,7 +40,7 @@ export class TogglePersist {
     private persistFileUpdateLocks: Map<string, Promise<void>> = new Map();
     private pendingPersistUpdates: Map<
         string,
-        { targetIniPath: string; varName: string; newValue: string }
+        { targetIniPath: string; updates: Map<string, string> }
     > = new Map();
 
     constructor(private readonly desktop: NahidaDesktop) {}
@@ -170,22 +170,27 @@ export class TogglePersist {
     }
 
     private queuePersistUpdate(targetIniPath: string, varName: string, newValue: string) {
-        const updateKey = `${targetIniPath}::${varName.toLowerCase()}`;
-        this.pendingPersistUpdates.set(updateKey, { targetIniPath, varName, newValue });
+        const fileKey = targetIniPath.toLowerCase();
+        const varKey = varName.toLowerCase();
+        let pending = this.pendingPersistUpdates.get(fileKey);
+        if (!pending) {
+            pending = { targetIniPath, updates: new Map() };
+            this.pendingPersistUpdates.set(fileKey, pending);
+        }
+        pending.updates.set(varKey, newValue);
 
-        let debounced = this.persistUpdateDebouncers.get(updateKey);
+        let debounced = this.persistUpdateDebouncers.get(fileKey);
         if (!debounced) {
             debounced = debounce(async () => {
-                const pending = this.pendingPersistUpdates.get(updateKey);
+                const pending = this.pendingPersistUpdates.get(fileKey);
                 if (!pending) return;
-                this.pendingPersistUpdates.delete(updateKey);
+                this.pendingPersistUpdates.delete(fileKey);
                 await this.enqueuePersistFileUpdate(
                     pending.targetIniPath,
-                    pending.varName,
-                    pending.newValue,
+                    pending.updates,
                 );
             }, 200);
-            this.persistUpdateDebouncers.set(updateKey, debounced);
+            this.persistUpdateDebouncers.set(fileKey, debounced);
         }
 
         debounced();
@@ -193,14 +198,13 @@ export class TogglePersist {
 
     private async enqueuePersistFileUpdate(
         targetIniPath: string,
-        varName: string,
-        newValue: string,
+        updates: Map<string, string>,
     ) {
         const lockKey = targetIniPath.toLowerCase();
         const previous = this.persistFileUpdateLocks.get(lockKey) ?? Promise.resolve();
         const next = previous
             .catch(() => {})
-            .then(() => this.updateModIniPersist(targetIniPath, varName, newValue));
+            .then(() => this.updateModIniPersist(targetIniPath, updates));
         this.persistFileUpdateLocks.set(lockKey, next);
 
         try {
@@ -212,7 +216,10 @@ export class TogglePersist {
         }
     }
 
-    private async updateModIniPersist(targetIniPath: string, varName: string, newValue: string) {
+    private async updateModIniPersist(
+        targetIniPath: string,
+        updates: Map<string, string>,
+    ) {
         try {
             const content = await fse.readFile(targetIniPath, "utf-8");
             const lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
@@ -223,6 +230,7 @@ export class TogglePersist {
 
             let inConstants = false;
             let modified = false;
+            const updatedVars: string[] = [];
 
             for (let i = 0; i < lines.length; i++) {
                 const trimmed = lines[i].trim();
@@ -232,30 +240,33 @@ export class TogglePersist {
                 }
 
                 if (inConstants && trimmed.startsWith("global persist $")) {
-                    const escapedVarName = varName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-                    const regex = new RegExp(
-                        `^global\\s+persist\\s+\\$(${escapedVarName})\\s*=\\s*(.+)$`,
-                        "i",
+                    const match = trimmed.match(
+                        /^global\s+persist\s+\$(.+?)\s*=\s*(.+)$/i,
                     );
-                    const match = trimmed.match(regex);
-                    if (match) {
-                        const currentValue = match[2].trim();
-                        if (currentValue === newValue.trim()) {
-                            break;
-                        }
-                        const existingVarName = match[1];
-                        lines[i] = `global persist $${existingVarName} = ${newValue}`;
-                        modified = true;
-                        break;
-                    }
+                    if (!match) continue;
+                    const existingVarName = match[1].trim();
+                    const varKey = existingVarName.toLowerCase();
+                    const nextValue = updates.get(varKey);
+                    if (nextValue === undefined) continue;
+
+                    const currentValue = match[2].trim();
+                    if (currentValue === nextValue.trim()) continue;
+
+                    lines[i] = `global persist $${existingVarName} = ${nextValue}`;
+                    updatedVars.push(existingVarName);
+                    modified = true;
                 }
             }
 
             if (modified) {
                 await fse.writeFile(targetIniPath, lines.join(lineEnding), "utf-8");
-                this.logInfo(
-                    `Updated persist variable $${varName} to ${newValue} in ${targetIniPath}`,
-                );
+                const summary =
+                    updatedVars.length === 1
+                        ? `Updated persist variable $${updatedVars[0]} in ${targetIniPath}`
+                        : `Updated persist variables ${updatedVars
+                              .map((name) => `$${name}`)
+                              .join(", ")} in ${targetIniPath}`;
+                this.logInfo(summary);
             }
         } catch (error) {
             this.logError(`Error updating mod ini ${targetIniPath}: ${error}`);
