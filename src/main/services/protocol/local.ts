@@ -58,7 +58,7 @@ export class LocalProtocol {
                     return new Response("not found", { status: 404 });
                 }
 
-                this.desktop.logger.info("Resized image", "LocalProtocol.handle");
+                this.desktop.logger.info(`Resized image: ${fullPath}`, "LocalProtocol.handle");
 
                 const blob = new Blob([new Uint8Array(resizedImg)], { type: "image/webp" });
                 await this.desktop.lib.db.insert(imageCache).values({
