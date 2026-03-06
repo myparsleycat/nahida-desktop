@@ -27,7 +27,16 @@
       "toolbar": {
         "all": "All",
         "upload": "Upload",
-        "download": "Download"
+        "download": "Download",
+        "status_filter": {
+          "title": "Status Filter",
+          "uploading": "Uploading",
+          "downloading": "Downloading",
+          "paused": "Paused",
+          "completed": "Completed",
+          "failed": "Failed",
+          "queued": "Queued"
+        }
       },
       "empty_state": {
         "all_tabs": "No transfer history",

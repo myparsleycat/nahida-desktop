@@ -27,7 +27,16 @@
       "toolbar": {
         "all": "전체",
         "upload": "업로드",
-        "download": "다운로드"
+        "download": "다운로드",
+        "status_filter": {
+          "title": "상태 필터",
+          "uploading": "업로드 중",
+          "downloading": "다운로드 중",
+          "paused": "일시정지됨",
+          "completed": "완료됨",
+          "failed": "실패",
+          "queued": "대기열"
+        }
       },
       "empty_state": {
         "all_tabs": "전송 기록이 없습니다",
