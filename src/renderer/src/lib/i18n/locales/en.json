@@ -321,7 +321,6 @@
         "general": "General",
         "mod": "Mod",
         "account": "Account",
-        "network": "Network",
         "advanced": "Advanced"
       },
       "gen": {
@@ -427,21 +426,6 @@
         },
         "my_account": "My Account",
         "logout": "Logout"
-      },
-      "net": {
-        "title": "Network",
-        "proxy": {
-          "title": "Proxy Settings",
-          "type": "Proxy Type",
-          "disabled": "Disabled",
-          "host": "Host",
-          "port": "Port",
-          "requiresAuth": "Proxy server requires password",
-          "username": "Username",
-          "password": "Password",
-          "save": "Save",
-          "saved": "Proxy settings saved."
-        }
       },
       "adv": {
         "title": "Advanced",

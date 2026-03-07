@@ -160,8 +160,6 @@ export class NahidaDesktop {
                 autoLaunch.disable();
             }
         }
-
-        await this.httpService.updateProxy();
     }
 }
 

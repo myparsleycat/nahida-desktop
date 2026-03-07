@@ -323,7 +323,6 @@
         "general": "一般",
         "mod": "MOD",
         "account": "ID",
-        "network": "通信",
         "advanced": "詳細"
       },
       "gen": {
@@ -429,21 +428,6 @@
         },
         "my_account": "マイアカウント",
         "logout": "ログアウト"
-      },
-      "net": {
-        "title": "ネットワーク",
-        "proxy": {
-          "title": "プロキシ設定",
-          "type": "プロキシタイプ",
-          "disabled": "使用しない",
-          "host": "ホスト",
-          "port": "ポート",
-          "requiresAuth": "プロキシサーバーがパスワードを要求",
-          "username": "ユーザー名",
-          "password": "パスワード",
-          "save": "保存",
-          "saved": "プロキシ設定が保存されました。"
-        }
       },
       "adv": {
         "title": "詳細設定",

@@ -1,79 +1,29 @@
-import { app, session } from "electron";
 import ky from "ky";
-import { Agent, Pool, ProxyAgent } from "undici";
+import { Agent, Pool } from "undici";
 import { appVersion } from "../const";
 import type { NahidaDesktop } from "../index";
 
 const NHD_PREFIXES = ["http://localhost", "https://api.nahida.live"];
 
 export class DesktopHttpService {
-    private cachedAgent: Agent | ProxyAgent | null = null;
-    private cachedProxyHash = "";
+    private cachedAgent: Agent | null = null;
 
     constructor(private readonly desktop: NahidaDesktop) {}
 
-    public async updateProxy() {
-        const proxy = await this.desktop.setting.net.getProxy();
-        if (proxy && proxy.type !== "disabled" && proxy.host && proxy.port) {
-            const protocol = proxy.type === "socks5" ? "socks5" : "http";
-            const proxyRules = `${protocol}://${proxy.host}:${proxy.port}`;
-            await app.whenReady();
-            await session.defaultSession.setProxy({ proxyRules });
-            this.desktop.logger.info(`Proxy updated: ${proxyRules}`, "DesktopHttpService:updateProxy");
-        } else {
-            await app.whenReady();
-            await session.defaultSession.setProxy({ proxyRules: "" });
-            this.desktop.logger.info("Proxy disabled", "DesktopHttpService:updateProxy");
-        }
-    }
-
     public async getAgent() {
-        const proxy = await this.desktop.setting.net.getProxy();
-        const proxyHash = JSON.stringify(proxy);
-
-        if (this.cachedAgent && this.cachedProxyHash === proxyHash) {
+        if (this.cachedAgent) {
             return this.cachedAgent;
         }
 
-        if (proxy && proxy.type !== "disabled" && proxy.host && proxy.port) {
-            let url: string;
-            let token: string | undefined;
+        this.cachedAgent = new Agent({
+            factory(origin, options) {
+                return new Pool(origin, {
+                    ...options,
+                    allowH2: true,
+                });
+            },
+        });
 
-            if (proxy.type === "socks5") {
-                const auth =
-                    proxy.requiresAuth && proxy.username && proxy.password
-                        ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}@`
-                        : "";
-                url = `socks5://${auth}${proxy.host}:${proxy.port}`;
-            } else {
-                url = `http://${proxy.host}:${proxy.port}`;
-                if (proxy.requiresAuth && proxy.username && proxy.password) {
-                    token = `Basic ${Buffer.from(`${proxy.username}:${proxy.password}`).toString("base64")}`;
-                }
-            }
-
-            this.cachedAgent = new ProxyAgent({
-                uri: url,
-                token,
-                factory(origin, options) {
-                    return new Pool(origin, {
-                        ...options,
-                        allowH2: true,
-                    });
-                },
-            });
-        } else {
-            this.cachedAgent = new Agent({
-                factory(origin, options) {
-                    return new Pool(origin, {
-                        ...options,
-                        allowH2: true,
-                    });
-                },
-            });
-        }
-
-        this.cachedProxyHash = proxyHash;
         return this.cachedAgent;
     }
 

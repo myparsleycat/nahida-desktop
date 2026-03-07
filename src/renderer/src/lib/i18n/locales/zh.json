@@ -322,7 +322,6 @@
         "general": "常规",
         "mod": "模组",
         "account": "账户",
-        "network": "网络",
         "advanced": "高级设置"
       },
       "gen": {
@@ -428,21 +427,6 @@
         },
         "my_account": "我的账户",
         "logout": "登出"
-      },
-      "net": {
-        "title": "网络",
-        "proxy": {
-          "title": "代理设置",
-          "type": "代理类型",
-          "disabled": "不使用",
-          "host": "主机",
-          "port": "端口",
-          "requiresAuth": "代理服务器需要密码",
-          "username": "用户名",
-          "password": "密码",
-          "save": "保存",
-          "saved": "代理设置已保存。"
-        }
       },
       "adv": {
         "title": "高级设置",

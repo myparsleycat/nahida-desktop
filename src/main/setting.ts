@@ -466,37 +466,6 @@ export class Setting {
         },
     };
 
-    net = {
-        getProxy: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "net_proxy"),
-            });
-
-            if (!qr) {
-                const defaultProxy = { type: "disabled" };
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "net_proxy", value: JSON.stringify(defaultProxy) });
-                return defaultProxy;
-            }
-
-            return JSON.parse(qr.value as string);
-        },
-
-        // oxlint-disable-next-line typescript/no-explicit-any
-        setProxy: async (settings: any) => {
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "net_proxy", value: JSON.stringify(settings) })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: JSON.stringify(settings) },
-                });
-
-            await this.desktop.httpService.updateProxy();
-        },
-    };
-
     xxmi = {
         getPersistToggles: async () => {
             const qr = await this.desktop.lib.db.query.setting.findFirst({
@@ -643,7 +612,7 @@ export class Setting {
     advanced = {
         getAll: async () => {
             const rows = await this.desktop.lib.db.select().from(setting);
-            const sensitiveKeys = ["proxy", "password", "token", "secret", "credentials"];
+            const sensitiveKeys = ["password", "token", "secret", "credentials"];
 
             return rows.map((row) => {
                 const isSensitive = sensitiveKeys.some((k) => row.key.toLowerCase().includes(k));

@@ -2,7 +2,7 @@ import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { useGlobalStore } from "@renderer/store/global";
 import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
-import { GamepadIcon, Globe, PackageIcon, ServerCrash, Settings, User } from "lucide-react";
+import { GamepadIcon, PackageIcon, ServerCrash, Settings, User } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -28,7 +28,6 @@ function RouteComponent() {
     { icon: GamepadIcon, label: t("page.setting.tabs.mod"), path: "/setting/mod" },
     { icon: PackageIcon, label: "XXMI", path: "/setting/xxmi" },
     { icon: User, label: t("page.setting.tabs.account"), path: "/setting/acc" },
-    { icon: Globe, label: t("page.setting.tabs.network"), path: "/setting/net" },
     { icon: ServerCrash, label: t("page.setting.tabs.advanced"), path: "/setting/adv" },
   ];
 
