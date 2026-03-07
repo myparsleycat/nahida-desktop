@@ -92,7 +92,8 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
   const queueRevealForDestination = useCallback(
     (destinationId: string) => {
       const destinationIndex = breadcrumbItems.findIndex((item) => item.id === destinationId);
-      const childOnCurrentPath = destinationIndex >= 0 ? breadcrumbItems[destinationIndex + 1] : undefined;
+      const childOnCurrentPath =
+        destinationIndex >= 0 ? breadcrumbItems[destinationIndex + 1] : undefined;
 
       if (location.pathname.startsWith("/drive/share")) {
         setPendingShareRevealId(childOnCurrentPath?.id ?? null);
@@ -409,14 +410,15 @@ function ContextMenuContentSnippet() {
       )}
 
       {isSharePath ? (
-        <ContextMenuItem className="gap-x-2 text-red-500" onClick={handleTrashBtn}>
+        <ContextMenuItem className="gap-x-2" variant="destructive" onClick={handleTrashBtn}>
           <Trash2Icon size={18} />
           {t("page.drive.context_menu.trash")}
         </ContextMenuItem>
       ) : (
         <>
           <ContextMenuItem
-            className="gap-x-2 text-red-500"
+            className="gap-x-2"
+            variant="destructive"
             onClick={() => dialog.setOpen("deleteItemsDialog", true)}
           >
             <Trash2Icon size={18} />
@@ -739,12 +741,15 @@ export function HandlerProvider(props: HandlerProviderProps) {
   const searchBuffer = useRef("");
   const searchTimeout = useRef<number | undefined>(undefined);
 
-  const scrollItemIntoCenter = useCallback((itemId: string, behavior: ScrollBehavior = "smooth") => {
-    const element = document.querySelector<HTMLElement>(`[data-uuid="${itemId}"]`);
-    if (element) {
-      element.scrollIntoView({ behavior, block: "center" });
-    }
-  }, []);
+  const scrollItemIntoCenter = useCallback(
+    (itemId: string, behavior: ScrollBehavior = "smooth") => {
+      const element = document.querySelector<HTMLElement>(`[data-uuid="${itemId}"]`);
+      if (element) {
+        element.scrollIntoView({ behavior, block: "center" });
+      }
+    },
+    [],
+  );
 
   const resetSearchBuffer = () => {
     searchBuffer.current = "";

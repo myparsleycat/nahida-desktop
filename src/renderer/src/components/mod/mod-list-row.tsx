@@ -157,7 +157,7 @@ export function ModListRow({
               handleToggle(mod, e);
             }}
           >
-            <td className="py-2 pl-2 align-middle text-center w-[40px]">
+            <td className="py-2 pl-2 align-middle text-center w-10">
               {mod.preview ? (
                 <div className="preview-trigger" onClick={(e) => e.stopPropagation()}>
                   <ModPreviewLightbox preview={mod.preview} />
@@ -200,7 +200,7 @@ export function ModListRow({
                   <ImageIcon className="mr-2 size-4" />
                   {t("page.mod.context-menu.open-preview-viewer")}
                 </ContextMenuItem>
-                <ContextMenuItem onClick={handleDeletePreview}>
+                <ContextMenuItem variant="destructive" onClick={handleDeletePreview}>
                   <TrashIcon className="mr-2 size-4" />
                   {t("page.mod.context-menu.delete-preview")}
                 </ContextMenuItem>
@@ -257,10 +257,7 @@ export function ModListRow({
             {t("page.mod.context-menu.open-folder")}
           </ContextMenuItem>
           <ContextMenuSeparator />
-          <ContextMenuItem
-            onClick={() => setShowDeleteModal(true)}
-            className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-          >
+          <ContextMenuItem variant="destructive" onClick={() => setShowDeleteModal(true)}>
             <TrashIcon className="mr-2 size-4" />
             {t("g.delete")}
           </ContextMenuItem>
