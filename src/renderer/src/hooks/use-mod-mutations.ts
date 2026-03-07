@@ -1,5 +1,5 @@
 import { useModStore } from "@renderer/store/mod";
-import type { FolderGroup, ModInfo } from "@shared/types.gen";
+import type { ApplyPresetResult, FolderGroup, ModInfo } from "@shared/types.gen";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -153,10 +153,13 @@ export function useModMutations() {
 }
 
 export function usePresetMutations() {
+    const { t } = useTranslation();
     const queryClient = useQueryClient();
     const selectedGame = useModStore((s) => s.selectedGame);
     const newPresetName = useModStore((s) => s.newPresetName);
+    const newPresetDescription = useModStore((s) => s.newPresetDescription);
     const setNewPresetName = useModStore((s) => s.setNewPresetName);
+    const setNewPresetDescription = useModStore((s) => s.setNewPresetDescription);
     const setIsPresetDialogOpen = useModStore((s) => s.setIsPresetDialogOpen);
     const setIsSelectedPresetDialogOpen = useModStore((s) => s.setIsSelectedPresetDialogOpen);
     const setSelectedPreset = useModStore((s) => s.setSelectedPreset);
@@ -164,25 +167,48 @@ export function usePresetMutations() {
     const createPresetMutation = useMutation({
         mutationFn: () => {
             if (!selectedGame) {
-                throw new Error("게임이 선택되지 않았습니다.");
+                throw new Error("GAME_NOT_SELECTED");
             }
-            return window.api.invoke("mod:createPreset", selectedGame, newPresetName);
+            return window.api.invoke(
+                "mod:createPreset",
+                selectedGame,
+                newPresetName,
+                newPresetDescription,
+            );
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["presets", selectedGame] });
             setNewPresetName("");
+            setNewPresetDescription("");
             setIsPresetDialogOpen(false);
             toast.success("프리셋이 추가되었습니다.");
+        },
+        onError: (error) => {
+            if ((error as Error).message.includes("PRESET_NAME_EXISTS")) {
+                toast.error("이미 존재하는 프리셋 이름입니다.");
+            }
         },
     });
 
     const applyPresetMutation = useMutation({
-        mutationFn: (presetId: string) => window.api.invoke("mod:applyPreset", presetId),
-        onSuccess: () => {
+        mutationFn: (presetId: string) =>
+            window.api.invoke("mod:applyPreset", presetId) as Promise<ApplyPresetResult>,
+        onSuccess: (result) => {
             queryClient.invalidateQueries({ queryKey: ["modGroup"] });
             queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] });
             setIsSelectedPresetDialogOpen(false);
+            if (result.missing.length > 0) {
+                toast.warning(
+                    `프리셋 적용 완료. 누락된 모드 ${result.missing.length}개가 있습니다.`,
+                );
+                return;
+            }
             toast.success("프리셋이 적용되었습니다.");
+        },
+        onError: (error) => {
+            if ((error as Error).message.includes("LEGACY_PRESET_NOT_SUPPORTED")) {
+                toast.error(t("page.mod.hooks.use-mod-mutations.apply-preset-mutation.legacy"));
+            }
         },
     });
 

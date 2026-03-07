@@ -187,7 +187,9 @@
           }
         },
         "preset-management": {
-          "description": "이 프리셋에는 {{length}}개의 모드가 저장되어 있습니다."
+          "description": "이 프리셋에는 {{length}}개의 모드가 저장되어 있습니다.",
+          "legacy-badge": "레거시",
+          "legacy-description": "이 프리셋은 구버전 형식이라 적용할 수 없습니다. 삭제 후 다시 만들어 주세요."
         },
         "delete-game": {
           "title": "게임 삭제",
@@ -198,6 +200,8 @@
           "description": "삭제된 모드는 휴지통에서 복원할 수 있습니다."
         },
         "add-preset": {
+          "name-placeholder": "프리셋 이름",
+          "description-placeholder": "설명 (선택 사항)",
           "title": "새 프리셋 생성",
           "#": {
             "0": "프리셋 이름을 입력해주세요"
@@ -210,6 +214,9 @@
             "0": "이미 {{name}} 폴더가 존재합니다",
             "1": "폴더가 잠겨있어 변경할 수 없습니다",
             "2": "모드 상태 변경에 실패했습니다"
+          },
+          "apply-preset-mutation": {
+            "legacy": "레거시 프리셋은 적용할 수 없습니다. 삭제 후 다시 만들어 주세요."
           }
         }
       },

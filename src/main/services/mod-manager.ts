@@ -1,14 +1,29 @@
 import path from "node:path";
 import { getCharactersFolder, getMods, sendF10 } from "@native/native-mod";
-import type { FolderGroup, Preset } from "@shared/types.gen";
+import type { ApplyPresetResult, FolderGroup, Preset } from "@shared/types.gen";
 import { GAME_MATCH_CASES } from "@shared/xxmi-match";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { trim } from "es-toolkit";
 import fg from "fast-glob";
 import fse from "fs-extra";
 import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "..";
-import { gamePaths, modPresets, setting } from "../internal/db/schema";
+import { gamePaths, modPresetItems, modPresets, setting } from "../internal/db/schema";
+
+interface PresetSnapshotItemRecord {
+    modKey: string;
+    relativePath: string;
+    groupRelativePath: string;
+    folderName: string;
+    isEnabled: boolean;
+}
+
+interface ScannedPresetItem extends PresetSnapshotItemRecord {
+    actualPath: string;
+}
+
+const MOD_PRESET_ITEM_INSERT_BATCH_SIZE = 100;
+const MOD_PRESET_VERSION = 2;
 
 export class ModManager {
     private readonly desktop: NahidaDesktop;
@@ -84,43 +99,104 @@ export class ModManager {
         return newPath;
     }
 
-    private async getEnabledModPaths(game: string): Promise<string[]> {
-        const enabledMods: string[] = [];
-        const characterGroups = await this.get.characters(game);
-
-        for (const charGroup of characterGroups) {
-            const fullGroup = await this.get.mods(charGroup.path);
-            for (const mod of fullGroup.mods) {
-                if (mod.isEnabled) {
-                    enabledMods.push(mod.path);
-                }
-            }
-        }
-
-        return enabledMods;
+    private normalizeModPath(modPath: string): string {
+        return path.normalize(modPath).toLowerCase();
     }
 
-    private async resolvePresetModPath(savedModPath: string): Promise<string | null> {
-        const folderName = path.basename(savedModPath);
-        const parentPath = path.dirname(savedModPath);
+    private normalizeRelativePath(targetPath: string): string {
+        return targetPath
+            .split(/[\\/]+/)
+            .filter(Boolean)
+            .map((segment) => this.stripDisabledPrefix(segment).toLowerCase())
+            .join("/");
+    }
 
-        try {
-            await fse.access(savedModPath);
-            return savedModPath;
-        } catch {
-            const alternativePath = path.join(parentPath, `DISABLED ${folderName}`);
+    private stripDisabledPrefix(folderName: string): string {
+        return trim(folderName.replace(/^disabled\s+/i, ""));
+    }
 
-            try {
-                await fse.access(alternativePath);
-                return alternativePath;
-            } catch {
-                this.desktop.logger.warn(
-                    `Mod ${savedModPath} not found, skipping`,
-                    "Mod:applyPreset",
-                );
-                return null;
+    private toGameRelativePath(rootPath: string, targetPath: string): string {
+        return this.normalizeRelativePath(path.relative(rootPath, targetPath));
+    }
+
+    private buildModKey(gamePath: string, groupPath: string, modPath: string): string {
+        const groupRelativePath = this.toGameRelativePath(gamePath, groupPath);
+        const modRelativePath = this.toGameRelativePath(gamePath, modPath);
+        return `${groupRelativePath}::${modRelativePath}`;
+    }
+
+    private buildPresetSnapshotItem(
+        gamePath: string,
+        groupPath: string,
+        modPath: string,
+    ): ScannedPresetItem {
+        const folderName = path.basename(modPath);
+        return {
+            modKey: this.buildModKey(gamePath, groupPath, modPath),
+            relativePath: this.toGameRelativePath(gamePath, modPath),
+            groupRelativePath: this.toGameRelativePath(gamePath, groupPath),
+            folderName: this.stripDisabledPrefix(folderName),
+            isEnabled: !/^disabled\s+/i.test(folderName),
+            actualPath: modPath,
+        };
+    }
+
+    private getPresetGroupPath(gamePath: string, modPath: string): string {
+        const relativePath = path.relative(gamePath, modPath);
+        const segments = relativePath.split(/[\\/]+/).filter(Boolean);
+
+        if (segments.length <= 1) {
+            return gamePath;
+        }
+
+        return path.join(gamePath, ...segments.slice(0, -1));
+    }
+
+    private async collectPresetSnapshotItems(gamePath: string): Promise<ScannedPresetItem[]> {
+        const iniPaths = await this.desktop.lib.fs.findFiles(gamePath, {
+            extensions: [".ini"],
+        });
+        const modPathMap = new Map<string, string>();
+
+        for (const iniPath of iniPaths) {
+            const modPath = path.dirname(iniPath);
+            const normalizedModPath = this.normalizeModPath(modPath);
+            if (!modPathMap.has(normalizedModPath)) {
+                modPathMap.set(normalizedModPath, modPath);
             }
         }
+
+        return Array.from(modPathMap.values())
+            .sort((a, b) => a.localeCompare(b))
+            .map((modPath) => {
+                const groupPath = this.getPresetGroupPath(gamePath, modPath);
+                return this.buildPresetSnapshotItem(gamePath, groupPath, modPath);
+            });
+    }
+
+    private async getPresetSnapshot(game: string): Promise<ScannedPresetItem[]> {
+        const gamePath = await this.get.gamePath(game);
+        if (!gamePath) {
+            throw new Error(`No mod folder path set for ${game}`);
+        }
+
+        const items = await this.collectPresetSnapshotItems(gamePath);
+        return items
+            .sort((a, b) => a.relativePath.localeCompare(b.relativePath))
+            .map((item) => ({
+                ...item,
+                relativePath: item.relativePath,
+            }));
+    }
+
+    private toPresetRecord(item: ScannedPresetItem): PresetSnapshotItemRecord {
+        return {
+            modKey: item.modKey,
+            relativePath: item.relativePath,
+            groupRelativePath: item.groupRelativePath,
+            folderName: item.folderName,
+            isEnabled: item.isEnabled,
+        };
     }
 
     get = {
@@ -176,12 +252,18 @@ export class ModManager {
                 where: eq(modPresets.game, game),
             });
 
-            return results.map((r) => ({
-                id: r.id,
-                game: r.game,
-                name: r.name,
-                mods: JSON.parse(r.mods),
-            }));
+            return results
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((r) => ({
+                    id: r.id,
+                    game: r.game,
+                    name: r.name,
+                    description: r.description ?? null,
+                    createdAt: r.createdAt,
+                    updatedAt: r.updatedAt,
+                    version: r.version,
+                    isLegacy: r.version < MOD_PRESET_VERSION,
+                }));
         },
 
         games: async () => {
@@ -483,28 +565,76 @@ export class ModManager {
             }
         },
 
-        createPreset: async (game: string, name: string): Promise<Preset> => {
-            const enabledMods = await this.getEnabledModPaths(game);
+        createPreset: async (game: string, name: string, description?: string): Promise<Preset> => {
+            const trimmedName = trim(name);
+            const trimmedDescription = trim(description ?? "");
+            if (!trimmedName) {
+                throw new Error("INVALID_PRESET_NAME");
+            }
+
+            const existingPreset = await this.desktop.lib.db.query.modPresets.findFirst({
+                where: and(eq(modPresets.game, game), eq(modPresets.name, trimmedName)),
+            });
+            if (existingPreset) {
+                throw new Error("PRESET_NAME_EXISTS");
+            }
+
+            const snapshot = await this.getPresetSnapshot(game);
 
             const id = nanoid();
-            const preset: Preset = {
-                id,
-                game,
-                name,
-                mods: enabledMods,
-            };
+            const now = new Date().toISOString();
 
-            await this.desktop.lib.db.insert(modPresets).values({
-                id,
-                game,
-                name,
-                mods: JSON.stringify(enabledMods),
+            this.desktop.lib.db.transaction((tx) => {
+                tx.insert(modPresets)
+                    .values({
+                        id,
+                        game,
+                        name: trimmedName,
+                        description: trimmedDescription || null,
+                        itemCount: 0,
+                        createdAt: now,
+                        updatedAt: now,
+                        version: MOD_PRESET_VERSION,
+                    })
+                    .run();
+
+                if (snapshot.length > 0) {
+                    const presetItems = snapshot.map((item, index) => ({
+                        presetId: id,
+                        ...this.toPresetRecord(item),
+                        itemOrder: index,
+                    }));
+
+                    for (
+                        let startIndex = 0;
+                        startIndex < presetItems.length;
+                        startIndex += MOD_PRESET_ITEM_INSERT_BATCH_SIZE
+                    ) {
+                        tx.insert(modPresetItems)
+                            .values(
+                                presetItems.slice(
+                                    startIndex,
+                                    startIndex + MOD_PRESET_ITEM_INSERT_BATCH_SIZE,
+                                ),
+                            )
+                            .run();
+                    }
+                }
             });
 
-            return preset;
+            return {
+                id,
+                game,
+                name: trimmedName,
+                description: trimmedDescription || null,
+                createdAt: now,
+                updatedAt: now,
+                version: MOD_PRESET_VERSION,
+                isLegacy: false,
+            };
         },
 
-        applyPreset: async (presetId: string): Promise<void> => {
+        applyPreset: async (presetId: string): Promise<ApplyPresetResult> => {
             const preset = await this.desktop.lib.db.query.modPresets.findFirst({
                 where: eq(modPresets.id, presetId),
             });
@@ -513,34 +643,60 @@ export class ModManager {
                 throw new Error(`Preset ${presetId} not found`);
             }
 
-            const modPaths = JSON.parse(preset.mods) as string[];
-            const targetEnabledMods = new Set(modPaths);
-            const currentEnabledMods = await this.getEnabledModPaths(preset.game);
+            if (preset.version < MOD_PRESET_VERSION) {
+                throw new Error("LEGACY_PRESET_NOT_SUPPORTED");
+            }
 
-            for (const currentModPath of currentEnabledMods) {
-                if (targetEnabledMods.has(currentModPath)) {
+            const presetItems = await this.desktop.lib.db.query.modPresetItems.findMany({
+                where: eq(modPresetItems.presetId, presetId),
+            });
+            const currentItems = await this.getPresetSnapshot(preset.game);
+            const currentByKey = new Map(currentItems.map((item) => [item.modKey, item] as const));
+            const currentByRelativePath = new Map(
+                currentItems.map((item) => [item.relativePath.toLowerCase(), item] as const),
+            );
+            const result: ApplyPresetResult = {
+                presetId,
+                applied: [],
+                skipped: [],
+                missing: [],
+            };
+
+            for (const presetItem of presetItems.sort((a, b) => a.itemOrder - b.itemOrder)) {
+                const currentItem =
+                    currentByKey.get(presetItem.modKey) ??
+                    currentByRelativePath.get(presetItem.relativePath.toLowerCase());
+
+                if (!currentItem) {
+                    result.missing.push({
+                        modKey: presetItem.modKey,
+                        expectedFolderName: presetItem.folderName,
+                        expectedRelativePath: presetItem.relativePath,
+                    });
+                    continue;
+                }
+
+                if (currentItem.isEnabled === presetItem.isEnabled) {
+                    result.skipped.push(currentItem.relativePath);
                     continue;
                 }
 
                 try {
-                    await this.fn.disable(currentModPath);
-                } catch (error) {
-                    this.desktop.logger.error(error, `Mod:applyPreset:disable:${currentModPath}`);
-                }
-            }
-
-            for (const modPath of modPaths) {
-                try {
-                    const actualModPath = await this.resolvePresetModPath(modPath);
-                    if (!actualModPath) {
-                        continue;
+                    if (presetItem.isEnabled) {
+                        await this.fn.enable(currentItem.actualPath);
+                    } else {
+                        await this.fn.disable(currentItem.actualPath);
                     }
-
-                    await this.fn.enable(actualModPath);
+                    result.applied.push(currentItem.relativePath);
                 } catch (error) {
-                    this.desktop.logger.error(error, `Mod:applyPreset:enable:${modPath}`);
+                    this.desktop.logger.error(
+                        error,
+                        `Mod:applyPreset:${presetItem.isEnabled ? "enable" : "disable"}:${currentItem.actualPath}`,
+                    );
                 }
             }
+
+            return result;
         },
 
         deletePreset: async (presetId: string): Promise<void> => {
@@ -548,9 +704,29 @@ export class ModManager {
         },
 
         updatePresetName: async (presetId: string, newName: string): Promise<void> => {
+            const preset = await this.desktop.lib.db.query.modPresets.findFirst({
+                where: eq(modPresets.id, presetId),
+            });
+
+            if (!preset) {
+                throw new Error(`Preset ${presetId} not found`);
+            }
+
+            const trimmedName = trim(newName);
+            if (!trimmedName) {
+                throw new Error("INVALID_PRESET_NAME");
+            }
+
+            const existingPreset = await this.desktop.lib.db.query.modPresets.findFirst({
+                where: and(eq(modPresets.game, preset.game), eq(modPresets.name, trimmedName)),
+            });
+            if (existingPreset && existingPreset.id !== presetId) {
+                throw new Error("PRESET_NAME_EXISTS");
+            }
+
             await this.desktop.lib.db
                 .update(modPresets)
-                .set({ name: newName })
+                .set({ name: trimmedName, updatedAt: new Date().toISOString() })
                 .where(eq(modPresets.id, presetId));
         },
 

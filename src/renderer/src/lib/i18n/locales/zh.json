@@ -187,7 +187,9 @@
           }
         },
         "preset-management": {
-          "description": "此预设包含 {{length}} 个模组。"
+          "description": "此预设包含 {{length}} 个模组。",
+          "legacy-badge": "旧版",
+          "legacy-description": "此预设使用旧格式，无法套用。请删除后重新建立。"
         },
         "delete-game": {
           "title": "删除游戏",
@@ -198,6 +200,8 @@
           "description": "已删除的模组可以从回收站恢复。"
         },
         "add-preset": {
+          "name-placeholder": "预设名称",
+          "description-placeholder": "说明（可选）",
           "title": "新建预设",
           "#": {
             "0": "请输入预设名称"
@@ -210,6 +214,9 @@
             "0": "{{name}} 文件夹已存在",
             "1": "文件夹被锁定，无法修改",
             "2": "修改模组状态失败"
+          },
+          "apply-preset-mutation": {
+            "legacy": "旧版预设无法套用。请删除后重新建立。"
           }
         }
       },

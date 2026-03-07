@@ -26,11 +26,16 @@ export function PresetManagementDialog() {
           <DialogTitle>{selectedPreset?.name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">
-            {t("page.mod.dialog.preset-management.description", {
-              length: selectedPreset?.mods.length || 0,
-            })}
-          </p>
+          {selectedPreset?.description && (
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+              {selectedPreset.description}
+            </p>
+          )}
+          {selectedPreset?.isLegacy && (
+            <p className="text-sm text-destructive">
+              {t("page.mod.dialog.preset-management.legacy-description")}
+            </p>
+          )}
         </div>
         <DialogFooter className="flex justify-between">
           <Button
@@ -43,7 +48,10 @@ export function PresetManagementDialog() {
             <DialogClose asChild>
               <Button variant="outline">{t("g.cancel")}</Button>
             </DialogClose>
-            <Button onClick={() => selectedPreset && applyPresetMutation.mutate(selectedPreset.id)}>
+            <Button
+              disabled={selectedPreset?.isLegacy}
+              onClick={() => selectedPreset && applyPresetMutation.mutate(selectedPreset.id)}
+            >
               {t("g.apply")}
             </Button>
           </div>

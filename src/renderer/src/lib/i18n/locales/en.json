@@ -187,7 +187,8 @@
           }
         },
         "preset-management": {
-          "description": "This preset contains {{length}} mods."
+          "legacy-badge": "Legacy",
+          "legacy-description": "This preset uses the old format and cannot be applied. Delete and recreate it."
         },
         "delete-game": {
           "title": "Delete Game",
@@ -199,6 +200,8 @@
         },
         "add-preset": {
           "title": "Create New Preset",
+          "name-placeholder": "Preset name",
+          "description-placeholder": "Description (optional)",
           "#": {
             "0": "Please enter a preset name"
           }
@@ -210,6 +213,9 @@
             "0": "The {{name}} folder already exists",
             "1": "The folder is locked and cannot be modified",
             "2": "Failed to change mod status"
+          },
+          "apply-preset-mutation": {
+            "legacy": "Legacy presets cannot be applied. Delete and recreate the preset."
           }
         }
       },

@@ -101,8 +101,8 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return await desktop.service.mod.get.presets(game);
     });
 
-    rh("mod:createPreset", async (game: string, name: string) => {
-        return await desktop.service.mod.fn.createPreset(game, name);
+    rh("mod:createPreset", async (game: string, name: string, description?: string) => {
+        return await desktop.service.mod.fn.createPreset(game, name, description);
     });
 
     rh("mod:applyPreset", async (presetId: string) => {

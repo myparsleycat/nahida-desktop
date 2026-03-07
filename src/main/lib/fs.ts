@@ -16,6 +16,11 @@ export interface ReaddirOptions {
     mode?: "flat" | "tree";
 }
 
+export interface FileSearchOptions {
+    extensions?: string[];
+    limit?: number;
+}
+
 // oxlint-disable-next-line no-control-regex
 const WINDOWS_INVALID_CHARS_REGEX = /[<>:"/\\|?*\u0000-\u001F]/;
 // oxlint-disable-next-line no-control-regex
@@ -198,6 +203,34 @@ export class FS {
         }
 
         return totalSize;
+    }
+
+    public async listDirectories(dirPath: string) {
+        const entries = await fse.readdir(dirPath, { withFileTypes: true });
+        return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+    }
+
+    public async findFiles(dirPath: string, options: FileSearchOptions = {}): Promise<string[]> {
+        const { extensions, limit } = options;
+        const normalizedExtensions = extensions?.map((ext) => ext.toLowerCase());
+        const files = await fg(["**/*"], {
+            cwd: dirPath,
+            onlyFiles: true,
+            absolute: true,
+            dot: true,
+        });
+        const filteredFiles = files.filter((filePath) => {
+            if (!normalizedExtensions || normalizedExtensions.length === 0) {
+                return true;
+            }
+            return normalizedExtensions.includes(path.extname(filePath).toLowerCase());
+        });
+
+        if (typeof limit === "number") {
+            return filteredFiles.slice(0, limit);
+        }
+
+        return filteredFiles;
     }
 
     private flattenNodes(nodes: FileNode[]): string[] {
