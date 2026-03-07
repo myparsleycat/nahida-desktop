@@ -27,7 +27,16 @@
       "toolbar": {
         "all": "すべて",
         "upload": "アップロード",
-        "download": "ダウンロード"
+        "download": "ダウンロード",
+        "status_filter": {
+          "title": "状態フィルター",
+          "uploading": "アップロード中",
+          "downloading": "ダウンロード中",
+          "paused": "一時停止",
+          "completed": "完了",
+          "failed": "失敗",
+          "queued": "待機中"
+        }
       },
       "empty_state": {
         "all_tabs": "転送履歴がありません",

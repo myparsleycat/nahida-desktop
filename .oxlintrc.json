@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "react", "jsx-a11y"],
+  "plugins": ["typescript", "react"],
   "categories": {},
   "rules": {
     "typescript/no-explicit-any": "warn",
@@ -12,11 +12,6 @@
     }
   ],
   "settings": {
-    "jsx-a11y": {
-      "polymorphicPropName": null,
-      "components": {},
-      "attributes": {}
-    },
     "next": {
       "rootDir": []
     },

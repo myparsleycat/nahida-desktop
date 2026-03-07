@@ -34,10 +34,14 @@ export class Setting {
     }
 
     public async setBounds(bounds: Bounds) {
+        const value = JSON.stringify(bounds);
         await this.desktop.lib.db
-            .update(setting)
-            .set({ value: JSON.stringify(bounds) })
-            .where(eq(setting.key, "bounds"));
+            .insert(setting)
+            .values({ key: "bounds", value })
+            .onConflictDoUpdate({
+                target: setting.key,
+                set: { value },
+            });
     }
 
     general = {

@@ -159,21 +159,13 @@ export const TransferItem = memo((props: TransferItemProps) => {
   } = props;
   const { t } = useTranslation();
 
-  const [isHovered, setIsHovered] = useState(false);
   const isActive = status === "uploading" || status === "downloading";
   const isPaused = status === "paused";
   const isCompleted = status === "completed";
   const isFailed = status === "failed";
 
   return (
-    <div
-      className={cn(
-        "group grid grid-cols-[auto_minmax(0,1fr)_auto] w-full max-w-full items-center gap-4 rounded-lg border border-border bg-card p-4 transition-all overflow-hidden",
-        isHovered && "border-muted-foreground/30 bg-accent/30",
-      )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
+    <div className="group grid grid-cols-[auto_minmax(0,1fr)_auto] w-full max-w-full items-center gap-4 rounded-lg border bg-card p-4 transition-all overflow-hidden hover:border-accent">
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary">
         {type === "upload" ? (
           <ArrowUpFromLine className="size-5 shrink-0" />

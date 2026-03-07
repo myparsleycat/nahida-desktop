@@ -97,7 +97,9 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
             size="icon"
             variant="ghost"
             className="shrink-0 mr-1"
-            onClick={() => {
+            onClick={(e) => {
+              e.currentTarget.blur();
+
               const isSharePath = location.pathname.startsWith("/drive/share");
               const parentId = current?.parentId
                 ? current.parentId
@@ -120,6 +122,9 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
           <Button
             variant="ghost"
             className="min-w-0 max-w-fit flex flex-row items-center px-2 overflow-hidden"
+            onClick={(e) => {
+              e.currentTarget.blur();
+            }}
           >
             <FolderIcon className="mr-2 h-4 w-4 shrink-0" />
             <span className="truncate text-left min-w-0">{current?.name}</span>
@@ -171,6 +176,7 @@ export function AkashaHeadButtons() {
       <div className="relative flex items-center shrink-0">
         <SearchIcon className="size-4 absolute left-2 text-muted-foreground" />
         <Input
+          id="drive-search-input"
           className="pl-7 w-50 h-9 dark:bg-transparent"
           placeholder={t("page.drive.head_buttons.search_in_dir_placeholder")}
           value={searchInDirQuery}
@@ -700,10 +706,12 @@ export function HandlerProvider(props: HandlerProviderProps) {
   const { queryClient } = useRouteContext({ from: "__root__" });
   const { children, sortedContents, queryData, currentId } = props;
   const navi = useNavigate();
+  const location = useLocation();
   const dialog = useDialogStore();
   const { selectedItems, setSelectedItems, setLastSelectedIdx, copyOrCuts, setCopyOrCuts } =
     useSelectionStore();
   const isfocusSearchInput = useViewStore((s) => s.isfocusSearchInput);
+  const setSearchInDirQuery = useViewStore((s) => s.setSearchInDirQuery);
 
   const searchBuffer = useRef("");
   const searchTimeout = useRef<number | undefined>(undefined);
@@ -719,6 +727,56 @@ export function HandlerProvider(props: HandlerProviderProps) {
   const handleKeyDown = useCallback(
     async (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "r") return;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        if (!dialog.anyDialogOpen()) {
+          const searchInput = document.getElementById(
+            "drive-search-input",
+          ) as HTMLInputElement | null;
+          if (searchInput) {
+            searchInput.focus();
+            searchInput.select();
+          }
+        }
+        return;
+      }
+
+      if (isfocusSearchInput && e.key === "ArrowDown") {
+        if (dialog.anyDialogOpen()) return;
+
+        e.preventDefault();
+        const searchInput = document.getElementById(
+          "drive-search-input",
+        ) as HTMLInputElement | null;
+        if (searchInput) {
+          searchInput.blur();
+        }
+
+        if (sortedContents.length > 0) {
+          setSelectedItems([sortedContents[0]]);
+          setLastSelectedIdx(0);
+
+          const element = document.getElementById(sortedContents[0]?.id);
+          if (element) {
+            element.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        }
+        return;
+      }
+
+      if (isfocusSearchInput && e.key === "Escape") {
+        e.preventDefault();
+        const searchInput = document.getElementById(
+          "drive-search-input",
+        ) as HTMLInputElement | null;
+        if (searchInput) {
+          searchInput.blur();
+        }
+        setSearchInDirQuery("");
+        return;
+      }
+
       if (isfocusSearchInput) return;
       if (dialog.anyDialogOpen()) return;
 
@@ -741,7 +799,9 @@ export function HandlerProvider(props: HandlerProviderProps) {
         if (e.ctrlKey || e.metaKey) {
           if (currentIndex !== -1 && sortedContents[currentIndex]?.isDir) {
             navi({
-              to: "/drive/drive/$id",
+              to: location.pathname.startsWith("/drive/share")
+                ? "/drive/share/$id"
+                : "/drive/drive/$id",
               params: { id: sortedContents[currentIndex].id },
             });
           }
@@ -764,7 +824,9 @@ export function HandlerProvider(props: HandlerProviderProps) {
           if (queryData.data?.parent) {
             const isUUID = validator.isUUID(queryData.data.parent.id);
             navi({
-              to: "/drive/drive/$id",
+              to: location.pathname.startsWith("/drive/share")
+                ? "/drive/share/$id"
+                : "/drive/drive/$id",
               params: {
                 id: isUUID ? "root" : queryData.data.parent.id,
               },

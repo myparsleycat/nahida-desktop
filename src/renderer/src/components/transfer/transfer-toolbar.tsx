@@ -1,3 +1,16 @@
+import { Badge } from "@renderer/components/ui/badge";
+import { Button } from "@renderer/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@renderer/components/ui/dropdown-menu";
+import { Input } from "@renderer/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
+import { cn } from "@renderer/lib/utils";
 import {
   Search,
   Filter,
@@ -7,21 +20,8 @@ import {
   Play,
   BrushCleaningIcon,
 } from "lucide-react";
-import { Button } from "@renderer/components/ui/button";
-import { Input } from "@renderer/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
-import { Badge } from "@renderer/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuCheckboxItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
-} from "@renderer/components/ui/dropdown-menu";
-import { cn } from "@renderer/lib/utils";
-import { TransferTabType, TransferStatus } from "./types";
 import { useTranslation } from "react-i18next";
+import { TransferTabType, TransferStatus } from "./types";
 
 interface TransferToolbarProps {
   activeTab: TransferTabType;
@@ -141,43 +141,43 @@ export function TransferToolbar({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel>상태 필터</DropdownMenuLabel>
+            <DropdownMenuLabel>{t("page.transfer.toolbar.status_filter.title")}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuCheckboxItem
               checked={statusFilter.includes("uploading")}
               onCheckedChange={() => onToggleStatusFilter("uploading")}
             >
-              업로드 중
+              {t("page.transfer.toolbar.status_filter.uploading")}
             </DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem
               checked={statusFilter.includes("downloading")}
               onCheckedChange={() => onToggleStatusFilter("downloading")}
             >
-              다운로드 중
+              {t("page.transfer.toolbar.status_filter.downloading")}
             </DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem
               checked={statusFilter.includes("paused")}
               onCheckedChange={() => onToggleStatusFilter("paused")}
             >
-              일시정지됨
+              {t("page.transfer.toolbar.status_filter.paused")}
             </DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem
               checked={statusFilter.includes("completed")}
               onCheckedChange={() => onToggleStatusFilter("completed")}
             >
-              완료됨
+              {t("page.transfer.toolbar.status_filter.completed")}
             </DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem
               checked={statusFilter.includes("failed")}
               onCheckedChange={() => onToggleStatusFilter("failed")}
             >
-              실패
+              {t("page.transfer.toolbar.status_filter.failed")}
             </DropdownMenuCheckboxItem>
             <DropdownMenuCheckboxItem
               checked={statusFilter.includes("queued")}
               onCheckedChange={() => onToggleStatusFilter("queued")}
             >
-              대기열
+              {t("page.transfer.toolbar.status_filter.queued")}
             </DropdownMenuCheckboxItem>
           </DropdownMenuContent>
         </DropdownMenu>

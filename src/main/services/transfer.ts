@@ -51,6 +51,54 @@ export class TransferService {
         }
     }
 
+    private syncMainWindowProgressBar() {
+        const mainWindow = this.desktop.window.main.window;
+        if (!mainWindow) return;
+
+        const queueStatuses: TransferStatus[] = [
+            "completed",
+            "progress",
+            "preparing",
+            "pending",
+            "paused",
+            "error",
+        ];
+        const remainingTransfers = this.transfers.filter(
+            (t) => t.status !== "completed" && t.status !== "canceled",
+        );
+        if (remainingTransfers.length === 0) {
+            mainWindow.setProgressBar(-1);
+            return;
+        }
+
+        const queueTransfers = this.transfers.filter((t) => queueStatuses.includes(t.status));
+        if (queueTransfers.length === 0) {
+            mainWindow.setProgressBar(-1);
+            return;
+        }
+
+        const totalProgress = queueTransfers.reduce((sum, transfer) => {
+            if (transfer.status === "completed") return sum + 100;
+            return sum + Math.min(100, transfer.progress || 0);
+        }, 0);
+
+        let mode: "normal" | "indeterminate" | "error" | "paused" = "normal";
+
+        if (remainingTransfers.some((t) => t.status === "progress")) {
+            mode = "normal";
+        } else if (
+            remainingTransfers.some((t) => t.status === "preparing" || t.status === "pending")
+        ) {
+            mode = "indeterminate";
+        } else if (remainingTransfers.some((t) => t.status === "paused")) {
+            mode = "paused";
+        } else if (remainingTransfers.some((t) => t.status === "error")) {
+            mode = "error";
+        }
+
+        mainWindow.setProgressBar(totalProgress / (queueTransfers.length * 100), { mode });
+    }
+
     private emitUpdate() {
         const safeTransfers = this.transfers.map((t) => {
             const {
@@ -63,6 +111,7 @@ export class TransferService {
             } = t;
             return rest;
         });
+        this.syncMainWindowProgressBar();
         this.desktop.window.main.window?.webContents.send("transfer:update", safeTransfers);
     }
 

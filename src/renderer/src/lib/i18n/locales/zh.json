@@ -27,7 +27,16 @@
       "toolbar": {
         "all": "全部",
         "upload": "上传",
-        "download": "下载"
+        "download": "下载",
+        "status_filter": {
+          "title": "状态筛选",
+          "uploading": "上传中",
+          "downloading": "下载中",
+          "paused": "已暂停",
+          "completed": "已完成",
+          "failed": "失败",
+          "queued": "排队中"
+        }
       },
       "empty_state": {
         "all_tabs": "无传输记录",

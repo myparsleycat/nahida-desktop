@@ -28,9 +28,12 @@ export class Auth {
         const encryptedKey = this.desktop.lib.crypto.encryptString(key);
 
         await this.desktop.lib.db
-            .update(setting)
-            .set({ value: encryptedKey })
-            .where(eq(setting.key, "token"));
+            .insert(setting)
+            .values({ key: "token", value: encryptedKey })
+            .onConflictDoUpdate({
+                target: setting.key,
+                set: { value: encryptedKey },
+            });
     }
 
     public async getToken() {
@@ -176,4 +179,3 @@ export class Auth {
 }
 
 export default Auth;
-
