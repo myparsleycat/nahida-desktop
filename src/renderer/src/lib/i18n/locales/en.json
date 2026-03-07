@@ -319,6 +319,7 @@
       "title": "Settings",
       "tabs": {
         "general": "General",
+        "transfer": "Transfer",
         "mod": "Mod",
         "account": "Account",
         "advanced": "Advanced"
@@ -395,6 +396,17 @@
             "threshold": "Threshold Mod Count",
             "thresholdDescription": "Applies virtualization when the number of mods exceeds the set count"
           }
+        }
+      },
+      "transfer": {
+        "title": "Transfer",
+        "downloadConcurrency": {
+          "title": "Download concurrency",
+          "description": "Controls how many files can be downloaded at the same time in drive transfers. Range: 16 to 64."
+        },
+        "uploadConcurrency": {
+          "title": "Upload concurrency",
+          "description": "Controls how many files can be uploaded at the same time in drive transfers. Range: 4 to 16."
         }
       },
       "xxmi": {

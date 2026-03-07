@@ -73,6 +73,10 @@ export class UploadLib {
         this.desktop = desktop;
     }
 
+    private async syncQueueConcurrency() {
+        this.fileQueue.concurrency = await this.desktop.setting.transfer.getUploadConcurrency();
+    }
+
     private async collect(
         paths: string[],
         additionalExt: string[] = [],
@@ -658,6 +662,8 @@ export class UploadLib {
         initialTransferedSize?: number;
     }) {
         try {
+            await this.syncQueueConcurrency();
+
             this.desktop.service.transfer.updateTransfer(pid, {
                 status: "preparing",
                 transferedFiles: 0,

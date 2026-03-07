@@ -322,7 +322,8 @@
         "general": "常规",
         "mod": "模组",
         "account": "账户",
-        "advanced": "高级设置"
+        "advanced": "高级设置",
+        "transfer": "Transfer"
       },
       "gen": {
         "application": {
@@ -432,6 +433,17 @@
         "title": "高级设置",
         "warning_title": "注意",
         "warning_description": "更改此处的设置可能会影响应用行为。"
+      },
+      "transfer": {
+        "title": "传输",
+        "downloadConcurrency": {
+          "title": "下载并发数",
+          "description": "设置在网盘传输中可同时下载的文件数量。范围：16 到 64"
+        },
+        "uploadConcurrency": {
+          "title": "上传并发数",
+          "description": "设置在网盘传输中可同时上传的文件数量。范围：4 到 16"
+        }
       }
     },
     "report": {

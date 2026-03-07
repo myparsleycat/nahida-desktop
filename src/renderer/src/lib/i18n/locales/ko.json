@@ -322,7 +322,8 @@
         "general": "일반",
         "mod": "모드",
         "account": "계정",
-        "advanced": "고급"
+        "advanced": "고급",
+        "transfer": "전송"
       },
       "gen": {
         "application": {
@@ -432,6 +433,17 @@
         "title": "고급",
         "warning_title": "주의",
         "warning_description": "이 곳의 설정을 변경하면 앱 동작에 영향을 줄 수 있습니다."
+      },
+      "transfer": {
+        "title": "전송",
+        "downloadConcurrency": {
+          "title": "다운로드 동시 전송 수",
+          "description": "드라이브 전송에서 동시에 다운로드할 파일 수를 설정합니다. 범위: 16~64"
+        },
+        "uploadConcurrency": {
+          "title": "업로드 동시 전송 수",
+          "description": "드라이브 전송에서 동시에 업로드할 파일 수를 설정합니다. 범위: 4~16"
+        }
       }
     },
     "report": {

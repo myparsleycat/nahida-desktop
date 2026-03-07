@@ -13,6 +13,20 @@ interface Bounds {
 }
 
 const DEFAULT_TOGGLE_VIEWER_HOTKEY = "ctrl H";
+const TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT = 32;
+const TRANSFER_DOWNLOAD_CONCURRENCY_MIN = 16;
+const TRANSFER_DOWNLOAD_CONCURRENCY_MAX = 64;
+const TRANSFER_UPLOAD_CONCURRENCY_DEFAULT = 8;
+const TRANSFER_UPLOAD_CONCURRENCY_MIN = 4;
+const TRANSFER_UPLOAD_CONCURRENCY_MAX = 16;
+
+function clampTransferConcurrency(value: number, min: number, max: number, fallback: number) {
+    if (!Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.min(max, Math.max(min, Math.trunc(value)));
+}
 
 export class Setting {
     private desktop: NahidaDesktop;
@@ -462,6 +476,88 @@ export class Setting {
                 .onConflictDoUpdate({
                     target: setting.key,
                     set: { value: String(enabled) },
+                });
+        },
+    };
+
+    transfer = {
+        getDownloadConcurrency: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "transfer_download_concurrency"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db.insert(setting).values({
+                    key: "transfer_download_concurrency",
+                    value: String(TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT),
+                });
+                return TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT;
+            }
+
+            return clampTransferConcurrency(
+                parseInt(qr.value as string, 10),
+                TRANSFER_DOWNLOAD_CONCURRENCY_MIN,
+                TRANSFER_DOWNLOAD_CONCURRENCY_MAX,
+                TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT,
+            );
+        },
+
+        setDownloadConcurrency: async (concurrency: number) => {
+            const value = String(
+                clampTransferConcurrency(
+                    concurrency,
+                    TRANSFER_DOWNLOAD_CONCURRENCY_MIN,
+                    TRANSFER_DOWNLOAD_CONCURRENCY_MAX,
+                    TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT,
+                ),
+            );
+
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({ key: "transfer_download_concurrency", value })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value },
+                });
+        },
+
+        getUploadConcurrency: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "transfer_upload_concurrency"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db.insert(setting).values({
+                    key: "transfer_upload_concurrency",
+                    value: String(TRANSFER_UPLOAD_CONCURRENCY_DEFAULT),
+                });
+                return TRANSFER_UPLOAD_CONCURRENCY_DEFAULT;
+            }
+
+            return clampTransferConcurrency(
+                parseInt(qr.value as string, 10),
+                TRANSFER_UPLOAD_CONCURRENCY_MIN,
+                TRANSFER_UPLOAD_CONCURRENCY_MAX,
+                TRANSFER_UPLOAD_CONCURRENCY_DEFAULT,
+            );
+        },
+
+        setUploadConcurrency: async (concurrency: number) => {
+            const value = String(
+                clampTransferConcurrency(
+                    concurrency,
+                    TRANSFER_UPLOAD_CONCURRENCY_MIN,
+                    TRANSFER_UPLOAD_CONCURRENCY_MAX,
+                    TRANSFER_UPLOAD_CONCURRENCY_DEFAULT,
+                ),
+            );
+
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({ key: "transfer_upload_concurrency", value })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value },
                 });
         },
     };

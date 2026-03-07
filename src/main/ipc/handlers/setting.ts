@@ -131,6 +131,22 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         d.ipc.broadcast("mod:update-settings");
     });
 
+    rh("setting:transfer:getDownloadConcurrency", async () => {
+        return await d.setting.transfer.getDownloadConcurrency();
+    });
+
+    rh("setting:transfer:setDownloadConcurrency", async (concurrency) => {
+        return await d.setting.transfer.setDownloadConcurrency(concurrency);
+    });
+
+    rh("setting:transfer:getUploadConcurrency", async () => {
+        return await d.setting.transfer.getUploadConcurrency();
+    });
+
+    rh("setting:transfer:setUploadConcurrency", async (concurrency) => {
+        return await d.setting.transfer.setUploadConcurrency(concurrency);
+    });
+
     rh("setting:xxmi:getPersistToggles", async () => {
         return await d.setting.xxmi.getPersistToggles();
     });
