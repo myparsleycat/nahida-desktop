@@ -18,6 +18,10 @@ interface ViewState {
     setLastDriveId: (id: string) => void;
     lastShareId: string;
     setLastShareId: (id: string) => void;
+    pendingDriveRevealId: string | null;
+    setPendingDriveRevealId: (id: string | null) => void;
+    pendingShareRevealId: string | null;
+    setPendingShareRevealId: (id: string | null) => void;
 }
 
 export const viewStore = createStore<ViewState>((set) => ({
@@ -33,6 +37,10 @@ export const viewStore = createStore<ViewState>((set) => ({
     setLastDriveId: (lastDriveId) => set({ lastDriveId }),
     lastShareId: "share",
     setLastShareId: (lastShareId) => set({ lastShareId }),
+    pendingDriveRevealId: null,
+    setPendingDriveRevealId: (pendingDriveRevealId) => set({ pendingDriveRevealId }),
+    pendingShareRevealId: null,
+    setPendingShareRevealId: (pendingShareRevealId) => set({ pendingShareRevealId }),
 }));
 
 export function useViewStore<T>(selector: (state: ViewState) => T): T {
