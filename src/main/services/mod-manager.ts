@@ -84,6 +84,45 @@ export class ModManager {
         return newPath;
     }
 
+    private async getEnabledModPaths(game: string): Promise<string[]> {
+        const enabledMods: string[] = [];
+        const characterGroups = await this.get.characters(game);
+
+        for (const charGroup of characterGroups) {
+            const fullGroup = await this.get.mods(charGroup.path);
+            for (const mod of fullGroup.mods) {
+                if (mod.isEnabled) {
+                    enabledMods.push(mod.path);
+                }
+            }
+        }
+
+        return enabledMods;
+    }
+
+    private async resolvePresetModPath(savedModPath: string): Promise<string | null> {
+        const folderName = path.basename(savedModPath);
+        const parentPath = path.dirname(savedModPath);
+
+        try {
+            await fse.access(savedModPath);
+            return savedModPath;
+        } catch {
+            const alternativePath = path.join(parentPath, `DISABLED ${folderName}`);
+
+            try {
+                await fse.access(alternativePath);
+                return alternativePath;
+            } catch {
+                this.desktop.logger.warn(
+                    `Mod ${savedModPath} not found, skipping`,
+                    "Mod:applyPreset",
+                );
+                return null;
+            }
+        }
+    }
+
     get = {
         gamePath: async (game: string): Promise<string | null> => {
             const result = await this.desktop.lib.db.query.gamePaths.findFirst({
@@ -445,17 +484,7 @@ export class ModManager {
         },
 
         createPreset: async (game: string, name: string): Promise<Preset> => {
-            const enabledMods: string[] = [];
-
-            const characterGroups = await this.get.characters(game);
-            for (const charGroup of characterGroups) {
-                const fullGroup = await this.get.mods(charGroup.path);
-                for (const mod of fullGroup.mods) {
-                    if (mod.isEnabled) {
-                        enabledMods.push(mod.path);
-                    }
-                }
-            }
+            const enabledMods = await this.getEnabledModPaths(game);
 
             const id = nanoid();
             const preset: Preset = {
@@ -485,53 +514,33 @@ export class ModManager {
             }
 
             const modPaths = JSON.parse(preset.mods) as string[];
+            const targetEnabledMods = new Set(modPaths);
+            const currentEnabledMods = await this.getEnabledModPaths(preset.game);
 
-            await Promise.all(
-                modPaths.map(async (modPath) => {
-                    try {
-                        const folderName = path.basename(modPath);
-                        const parentPath = path.dirname(modPath);
-                        const isEnabledInPreset = !/^disabled\s+/i.test(folderName);
+            for (const currentModPath of currentEnabledMods) {
+                if (targetEnabledMods.has(currentModPath)) {
+                    continue;
+                }
 
-                        let actualModPath: string | null = null;
+                try {
+                    await this.fn.disable(currentModPath);
+                } catch (error) {
+                    this.desktop.logger.error(error, `Mod:applyPreset:disable:${currentModPath}`);
+                }
+            }
 
-                        try {
-                            await fse.access(modPath);
-                            actualModPath = modPath;
-                        } catch {
-                            let alternativePath: string;
-                            if (isEnabledInPreset) {
-                                alternativePath = path.join(parentPath, `DISABLED ${folderName}`);
-                            } else {
-                                const regex = /^disabled\s+/i;
-                                const cleanName = trim(folderName.replace(regex, ""));
-                                alternativePath = path.join(parentPath, cleanName);
-                            }
-
-                            try {
-                                await fse.access(alternativePath);
-                                actualModPath = alternativePath;
-                            } catch {
-                                this.desktop.logger.warn(
-                                    `Mod ${modPath} not found, skipping`,
-                                    "Mod:applyPreset",
-                                );
-                                return;
-                            }
-                        }
-
-                        if (actualModPath) {
-                            if (isEnabledInPreset) {
-                                await this.fn.enable(actualModPath);
-                            } else {
-                                await this.fn.disable(actualModPath);
-                            }
-                        }
-                    } catch (error) {
-                        this.desktop.logger.error(error, `Mod:applyPreset:${modPath}`);
+            for (const modPath of modPaths) {
+                try {
+                    const actualModPath = await this.resolvePresetModPath(modPath);
+                    if (!actualModPath) {
+                        continue;
                     }
-                }),
-            );
+
+                    await this.fn.enable(actualModPath);
+                } catch (error) {
+                    this.desktop.logger.error(error, `Mod:applyPreset:enable:${modPath}`);
+                }
+            }
         },
 
         deletePreset: async (presetId: string): Promise<void> => {
