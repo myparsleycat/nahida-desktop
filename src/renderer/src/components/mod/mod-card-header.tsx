@@ -212,7 +212,9 @@ export const ModCardHeader = memo(function ModCardHeader({
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDelete}>{t("g.delete")}</AlertDialogAction>
+              <AlertDialogAction variant="destructive" onClick={handleDelete}>
+                {t("g.delete")}
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

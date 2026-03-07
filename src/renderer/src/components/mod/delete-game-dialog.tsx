@@ -32,7 +32,7 @@ export function DeleteGameDialog() {
         <AlertDialogFooter>
           <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
           <AlertDialogAction
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            variant="destructive"
             onClick={() => {
               if (selectedGame) {
                 deleteGameMutation.mutate(selectedGame);

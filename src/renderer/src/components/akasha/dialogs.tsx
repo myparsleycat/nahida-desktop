@@ -834,7 +834,11 @@ export function DeleteItemsDialog() {
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
-          <AlertDialogAction onClick={handleDelete} disabled={deleteMutation.isPending}>
+          <AlertDialogAction
+            variant="destructive"
+            onClick={handleDelete}
+            disabled={deleteMutation.isPending}
+          >
             {deleteMutation.isPending && <Loader2Icon className="animate-spin" />}
             {t("page.drive.dialog.delete_items.action")}
           </AlertDialogAction>
