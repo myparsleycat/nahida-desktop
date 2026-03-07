@@ -97,7 +97,9 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
             size="icon"
             variant="ghost"
             className="shrink-0 mr-1"
-            onClick={() => {
+            onClick={(e) => {
+              e.currentTarget.blur();
+
               const isSharePath = location.pathname.startsWith("/drive/share");
               const parentId = current?.parentId
                 ? current.parentId
@@ -120,6 +122,9 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
           <Button
             variant="ghost"
             className="min-w-0 max-w-fit flex flex-row items-center px-2 overflow-hidden"
+            onClick={(e) => {
+              e.currentTarget.blur();
+            }}
           >
             <FolderIcon className="mr-2 h-4 w-4 shrink-0" />
             <span className="truncate text-left min-w-0">{current?.name}</span>
