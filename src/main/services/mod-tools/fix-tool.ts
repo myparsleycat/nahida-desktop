@@ -105,8 +105,8 @@ export class FixTool {
 
         const presetId = nanoid();
 
-        await this.desktop.lib.db.transaction(async (tx) => {
-            await tx.insert(scriptPreset).values({ id: presetId, name: trimmedName });
+        this.desktop.lib.db.transaction((tx) => {
+            tx.insert(scriptPreset).values({ id: presetId, name: trimmedName }).run();
 
             const presetItems = scriptIds.map((scriptId, index) => ({
                 presetId: presetId,
@@ -114,7 +114,7 @@ export class FixTool {
                 order: index,
             }));
 
-            await tx.insert(scriptPresetItem).values(presetItems);
+            tx.insert(scriptPresetItem).values(presetItems).run();
         });
     }
 

@@ -60,7 +60,22 @@ export interface Preset {
     id: string;
     game: string;
     name: string;
-    mods: string[];
+    description: string | null;
+    createdAt: string;
+    updatedAt: string;
+    version: number;
+    isLegacy: boolean;
+}
+
+export interface ApplyPresetResult {
+    presetId: string;
+    applied: string[];
+    skipped: string[];
+    missing: {
+        modKey: string;
+        expectedFolderName: string;
+        expectedRelativePath: string;
+    }[];
 }
 
 export interface PathMetadata {

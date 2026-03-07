@@ -188,7 +188,9 @@
           }
         },
         "preset-management": {
-          "description": "このプリセットには {{length}} 個のMODが保存されています。"
+          "description": "このプリセットには {{length}} 個のMODが保存されています。",
+          "legacy-badge": "旧形式",
+          "legacy-description": "このプリセットは旧形式のため適用できません。削除してから作り直してください。"
         },
         "delete-game": {
           "title": "ゲーム削除",
@@ -199,6 +201,8 @@
           "description": "削除されたMODはゴミ箱から復元できます。"
         },
         "add-preset": {
+          "name-placeholder": "プリセット名",
+          "description-placeholder": "説明（任意）",
           "title": "新規プリセット作成",
           "#": {
             "0": "プリセット名を入力してください"
@@ -211,6 +215,9 @@
             "0": "{{name}} フォルダはすでに存在します",
             "1": "フォルダがロックされており変更できません",
             "2": "MODの状態変更に失敗しました"
+          },
+          "apply-preset-mutation": {
+            "legacy": "旧形式のプリセットは適用できません。削除してから作り直してください。"
           }
         }
       },

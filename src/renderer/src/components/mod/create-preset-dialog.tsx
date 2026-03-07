@@ -9,6 +9,7 @@ import {
   DialogTrigger,
 } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
+import { Textarea } from "@renderer/components/ui/textarea";
 import { usePresetMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModStore } from "@renderer/store/mod";
 import { LoaderIcon, Plus } from "lucide-react";
@@ -25,6 +26,8 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
   const setIsOpen = useModStore((s) => s.setIsPresetDialogOpen);
   const newPresetName = useModStore((s) => s.newPresetName);
   const setNewPresetName = useModStore((s) => s.setNewPresetName);
+  const newPresetDescription = useModStore((s) => s.newPresetDescription);
+  const setNewPresetDescription = useModStore((s) => s.setNewPresetDescription);
 
   const { createPresetMutation } = usePresetMutations();
 
@@ -36,8 +39,16 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
     createPresetMutation.mutate();
   };
 
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open && !createPresetMutation.isPending) {
+      setNewPresetName("");
+      setNewPresetDescription("");
+    }
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button variant="outline" size="icon" disabled={disabled}>
           <Plus className="size-4" />
@@ -47,11 +58,16 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
         <DialogHeader>
           <DialogTitle>{t("page.mod.dialog.add-preset.title")}</DialogTitle>
         </DialogHeader>
-        <div>
+        <div className="space-y-3">
           <Input
             placeholder={t("g.name")}
             value={newPresetName}
             onChange={(e) => setNewPresetName(e.target.value)}
+          />
+          <Textarea
+            placeholder={t("page.mod.dialog.add-preset.description-placeholder")}
+            value={newPresetDescription}
+            onChange={(e) => setNewPresetDescription(e.target.value)}
           />
         </div>
         <DialogFooter>

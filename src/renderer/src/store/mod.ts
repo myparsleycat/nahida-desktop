@@ -10,6 +10,8 @@ interface ModState {
     setSelectedPreset: (preset: Preset | null) => void;
     newPresetName: string;
     setNewPresetName: (name: string) => void;
+    newPresetDescription: string;
+    setNewPresetDescription: (description: string) => void;
     isPresetDialogOpen: boolean;
     setIsPresetDialogOpen: (open: boolean) => void;
     isSelectedPresetDialogOpen: boolean;
@@ -49,6 +51,8 @@ export const modStore = createStore<ModState>((set, get) => ({
     setSelectedPreset: (selectedPreset) => set({ selectedPreset }),
     newPresetName: "",
     setNewPresetName: (newPresetName) => set({ newPresetName }),
+    newPresetDescription: "",
+    setNewPresetDescription: (newPresetDescription) => set({ newPresetDescription }),
     isPresetDialogOpen: false,
     setIsPresetDialogOpen: (isPresetDialogOpen) => set({ isPresetDialogOpen }),
     isSelectedPresetDialogOpen: false,

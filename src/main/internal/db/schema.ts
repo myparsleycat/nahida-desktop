@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { blob, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { blob, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const setting = sqliteTable("setting", {
     key: text().primaryKey(),
@@ -11,14 +11,38 @@ export const gamePaths = sqliteTable("game_paths", {
     modFolderPath: text().notNull(),
 });
 
-export const modPresets = sqliteTable("mod_presets", {
-    id: text().primaryKey(),
-    game: text()
-        .notNull()
-        .references(() => gamePaths.game),
-    name: text().notNull().unique(),
-    mods: text().notNull(),
-});
+export const modPresets = sqliteTable(
+    "mod_presets",
+    {
+        id: text().primaryKey(),
+        game: text()
+            .notNull()
+            .references(() => gamePaths.game),
+        name: text().notNull(),
+        description: text(),
+        itemCount: integer("item_count").notNull().default(0),
+        createdAt: text("created_at").notNull(),
+        updatedAt: text("updated_at").notNull(),
+        version: integer().notNull().default(1),
+    },
+    (t) => [uniqueIndex("mod_presets_game_name_idx").on(t.game, t.name)],
+);
+
+export const modPresetItems = sqliteTable(
+    "mod_preset_items",
+    {
+        presetId: text("preset_id")
+            .notNull()
+            .references(() => modPresets.id, { onDelete: "cascade" }),
+        modKey: text("mod_key").notNull(),
+        relativePath: text("relative_path").notNull(),
+        groupRelativePath: text("group_relative_path").notNull(),
+        folderName: text("folder_name").notNull(),
+        isEnabled: integer("is_enabled", { mode: "boolean" }).notNull(),
+        itemOrder: integer("item_order").notNull(),
+    },
+    (t) => [primaryKey({ columns: [t.presetId, t.modKey] })],
+);
 
 export const imageCache = sqliteTable("image_cache", {
     hash: text().primaryKey(),

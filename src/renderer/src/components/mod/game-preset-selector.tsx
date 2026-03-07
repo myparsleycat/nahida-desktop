@@ -15,6 +15,7 @@ import { getMatchingImporter } from "@shared/xxmi-match";
 import { useLocation } from "@tanstack/react-router";
 import { PlayIcon, Trash2Icon } from "lucide-react";
 import { memo, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { AddGameDialog } from "./add-game-dialog";
 import { CreatePresetDialog } from "./create-preset-dialog";
@@ -32,6 +33,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
   onBrowseFolder,
   onAddGame,
 }: GamePresetSelectorProps) {
+  const { t } = useTranslation();
   const location = useLocation();
   const selectedGame = useModStore((s) => s.selectedGame);
   const setSelectedGame = useModStore((s) => s.setSelectedGame);
@@ -133,7 +135,9 @@ export const GamePresetSelector = memo(function GamePresetSelector({
               <SelectLabel>Preset</SelectLabel>
               {presets.map((preset) => (
                 <SelectItem key={preset.id} value={preset.id}>
-                  {preset.name}
+                  {preset.isLegacy
+                    ? `${preset.name} (${t("page.mod.dialog.preset-management.legacy-badge")})`
+                    : preset.name}
                 </SelectItem>
               ))}
             </SelectGroup>
