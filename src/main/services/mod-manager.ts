@@ -515,11 +515,23 @@ export class ModManager {
 
                 let currentSection: string | null = null;
                 let updated = false;
+                let foundVariableInSection = false;
 
-                for (const line of lines) {
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
                     const trimmedLine = line.trim();
 
                     if (trimmedLine.startsWith("[") && trimmedLine.endsWith("]")) {
+                        // If we are leaving the targeted section, check if we need to insert the variable
+                        if (
+                            currentSection?.toLowerCase() === sectionName.toLowerCase() &&
+                            !foundVariableInSection &&
+                            value !== ""
+                        ) {
+                            newLines.push(`${variable} = ${value}`);
+                            updated = true;
+                        }
+
                         currentSection = trimmedLine.slice(1, -1);
                         newLines.push(line);
                         continue;
@@ -535,11 +547,27 @@ export class ModManager {
                         currentSection?.toLowerCase() === sectionName.toLowerCase() &&
                         isVariableLine
                     ) {
-                        newLines.push(`${variable} = ${value}`);
-                        updated = true;
+                        foundVariableInSection = true;
+                        if (value === "") {
+                            // Delete the line by not pushing it to newLines
+                            updated = true;
+                        } else {
+                            newLines.push(`${variable} = ${value}`);
+                            updated = true;
+                        }
                     } else {
                         newLines.push(line);
                     }
+                }
+
+                // Handling if the target section is the very last block
+                if (
+                    currentSection?.toLowerCase() === sectionName.toLowerCase() &&
+                    !foundVariableInSection &&
+                    value !== ""
+                ) {
+                    newLines.push(`${variable} = ${value}`);
+                    updated = true;
                 }
 
                 if (updated) {

@@ -11,7 +11,7 @@ import { Kbd } from "@renderer/components/ui/kbd";
 import { cn } from "@renderer/lib/utils";
 import type { ModInfo, ModIni, ToggleKey } from "@renderer/types/mod";
 import { formatKeyLabel } from "@shared/key-formatter";
-import { FileCogIcon } from "lucide-react";
+import { FileCogIcon, PlusIcon, TrashIcon } from "lucide-react";
 import { KeyRecorder } from "./key-recorder";
 
 interface ModToggleKeyItemProps {
@@ -95,26 +95,78 @@ function ModToggleKeyItem({
         <p className="truncate">{toggleKey.sectionName}</p>
       </div>
 
-      {toggleKey.key && (
-        <KeySettingDialog
-          label="key"
-          value={toggleKey.key}
-          otherKeys={otherKeys}
-          onSave={(newValue) =>
-            onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "key", newValue)
-          }
-        />
+      {toggleKey.key ? (
+        <div className="flex items-center gap-1">
+          <KeySettingDialog
+            label="key"
+            value={toggleKey.key}
+            otherKeys={otherKeys}
+            onSave={(newValue) =>
+              onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "key", newValue)
+            }
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "key", "");
+            }}
+          >
+            <TrashIcon className="size-4" />
+          </Button>
+        </div>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full justify-start text-xs h-8 text-muted-foreground"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "key", "VK_PRIOR");
+          }}
+        >
+          <PlusIcon className="size-3 mr-1.5" />
+          Add key
+        </Button>
       )}
 
-      {toggleKey.back && (
-        <KeySettingDialog
-          label="back"
-          value={toggleKey.back}
-          otherKeys={otherKeys}
-          onSave={(newValue) =>
-            onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "back", newValue)
-          }
-        />
+      {toggleKey.back ? (
+        <div className="flex items-center gap-1">
+          <KeySettingDialog
+            label="back"
+            value={toggleKey.back}
+            otherKeys={otherKeys}
+            onSave={(newValue) =>
+              onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "back", newValue)
+            }
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "back", "");
+            }}
+          >
+            <TrashIcon className="size-4" />
+          </Button>
+        </div>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full justify-start text-xs h-8 text-muted-foreground"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "back", "VK_NEXT");
+          }}
+        >
+          <PlusIcon className="size-3 mr-1.5" />
+          Add back
+        </Button>
       )}
     </div>
   );
