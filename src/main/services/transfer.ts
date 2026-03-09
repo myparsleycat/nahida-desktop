@@ -35,7 +35,7 @@ export class TransferService {
         if (anyTransfering && powerSaveBlockInTransfer) {
             if (!this.isPowerSaveBlockerActive) {
                 try {
-                    this.desktop.lib.utils.preventAppSuspension(true);
+                    await this.desktop.lib.utils.preventAppSuspension(true);
                     this.isPowerSaveBlockerActive = true;
                 } catch (e) {
                     this.desktop.logger.error(e, "Transfer:preventAppSuspension:start");
@@ -43,7 +43,7 @@ export class TransferService {
             }
         } else if (!anyTransfering && this.isPowerSaveBlockerActive) {
             try {
-                this.desktop.lib.utils.preventAppSuspension(false);
+                await this.desktop.lib.utils.preventAppSuspension(false);
                 this.isPowerSaveBlockerActive = false;
             } catch (e) {
                 this.desktop.logger.error(e, "Transfer:preventAppSuspension:stop");
