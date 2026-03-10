@@ -15,6 +15,7 @@
   ],
   "compilerOptions": {
     "composite": false,
+    "lib": ["ESNext", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
