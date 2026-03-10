@@ -16,6 +16,7 @@ import {
 } from "@renderer/components/ui/dropdown-menu";
 import { Input } from "@renderer/components/ui/input";
 import { Skeleton } from "@renderer/components/ui/skeleton";
+import { useAuth } from "@renderer/hooks/use-auth";
 import i18n from "@renderer/lib/i18n";
 import { cn } from "@renderer/lib/utils";
 import {
@@ -51,7 +52,6 @@ import type React from "react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import validator from "validator";
 import { PreviewModal } from "./preview-modal";
 
 export interface Ancestor {
@@ -68,6 +68,7 @@ interface AkashaBreadcrumbProps {
 
 export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
   const { itemId, ancestors } = props;
+  const { session } = useAuth();
   const navi = useNavigate();
   const { t } = useTranslation();
   const location = useLocation();
@@ -77,12 +78,19 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
   const breadcrumbItems = useMemo(() => {
     const isSharePath = location.pathname.startsWith("/drive/share");
 
-    const rootItem = isSharePath
-      ? { id: "share", name: t("page.drive.share_drive"), parentId: null }
-      : { id: "root", name: t("page.drive.title"), parentId: null };
+    if (isSharePath) {
+      return [{ id: "share", name: t("page.drive.share_drive"), parentId: null }, ...ancestors];
+    }
 
-    return [rootItem, ...ancestors];
-  }, [ancestors, t, location.pathname]);
+    if (ancestors[0]?.parentId === null) {
+      return [{ ...ancestors[0], name: t("page.drive.title") }, ...ancestors.slice(1)];
+    }
+
+    return [
+      { id: session?.drive.rootId!, name: t("page.drive.title"), parentId: null },
+      ...ancestors,
+    ];
+  }, [ancestors, location.pathname, session?.drive.rootId, t]);
 
   const current = useMemo(() => {
     if (breadcrumbItems.length === 0) return undefined;
@@ -122,7 +130,7 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
                 ? current.parentId
                 : isSharePath
                   ? "share"
-                  : "root";
+                  : session?.drive.rootId!;
 
               queueRevealForDestination(parentId);
 
@@ -849,19 +857,20 @@ export function HandlerProvider(props: HandlerProviderProps) {
 
         if (e.ctrlKey || e.metaKey) {
           if (queryData.data?.parent) {
-            const isUUID = validator.isUUID(queryData.data.parent.id);
-            const parentId = isUUID ? "root" : queryData.data.parent.id;
+            const isSharePath = location.pathname.startsWith("/drive/share");
+            const parentId =
+              isSharePath && queryData.data.parent.parentId === null
+                ? "share"
+                : queryData.data.parent.id;
 
-            if (location.pathname.startsWith("/drive/share")) {
+            if (isSharePath) {
               setPendingShareRevealId(currentId);
             } else {
               setPendingDriveRevealId(currentId);
             }
 
             navi({
-              to: location.pathname.startsWith("/drive/share")
-                ? "/drive/share/$id"
-                : "/drive/drive/$id",
+              to: isSharePath ? "/drive/share/$id" : "/drive/drive/$id",
               params: {
                 id: parentId,
               },

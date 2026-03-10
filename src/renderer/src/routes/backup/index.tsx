@@ -17,6 +17,7 @@ import {
 import { Input } from "@renderer/components/ui/input";
 import { Label } from "@renderer/components/ui/label";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
+import { useAuth } from "@renderer/hooks/use-auth";
 import { cn } from "@renderer/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
@@ -97,6 +98,7 @@ function StatusBadge({ status }: { status: BackupStatus }) {
 }
 
 function RouteComponent() {
+  const { session } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<BackupStatus | "all">("all");
 
@@ -114,7 +116,7 @@ function RouteComponent() {
 
   const [localPath, setLocalPath] = useState("");
   const [selectCloudPathDialogOpen, setSelectCloudPathDialogOpen] = useState(false);
-  const [currentId, setCurrentId] = useState<string>("root");
+  const [currentId, setCurrentId] = useState<string>(session?.drive.rootId!);
   const [cloudPath, setCloudPath] = useState("");
   const [selectedItemId, setSelectedItemId] = useState<string>("");
 
@@ -128,7 +130,7 @@ function RouteComponent() {
 
   useEffect(() => {
     if (!selectCloudPathDialogOpen) {
-      setCurrentId("root");
+      setCurrentId(session?.drive.rootId!);
       setSelectedItemId("");
     }
   }, [selectCloudPathDialogOpen]);

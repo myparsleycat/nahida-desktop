@@ -33,7 +33,7 @@ export const viewStore = createStore<ViewState>((set) => ({
     setSearchInDirQuery: (searchInDirQuery) => set({ searchInDirQuery }),
     isfocusSearchInput: false,
     setFocusSearchInputState: (isfocusSearchInput) => set({ isfocusSearchInput }),
-    lastDriveId: "root",
+    lastDriveId: "",
     setLastDriveId: (lastDriveId) => set({ lastDriveId }),
     lastShareId: "share",
     setLastShareId: (lastShareId) => set({ lastShareId }),
