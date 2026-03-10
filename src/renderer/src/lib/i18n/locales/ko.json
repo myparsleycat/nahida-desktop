@@ -322,8 +322,8 @@
         "general": "일반",
         "mod": "모드",
         "account": "계정",
-        "network": "네트워크",
-        "advanced": "고급"
+        "advanced": "고급",
+        "transfer": "전송"
       },
       "gen": {
         "application": {
@@ -429,25 +429,21 @@
         "my_account": "내 계정",
         "logout": "로그아웃"
       },
-      "net": {
-        "title": "네트워크",
-        "proxy": {
-          "title": "프록시 설정",
-          "type": "프록시 유형",
-          "disabled": "사용 안 함",
-          "host": "호스트",
-          "port": "포트",
-          "requiresAuth": "프록시 서버가 암호를 요구함",
-          "username": "사용자 이름",
-          "password": "암호",
-          "save": "저장",
-          "saved": "프록시 설정이 저장되었습니다."
-        }
-      },
       "adv": {
         "title": "고급",
         "warning_title": "주의",
         "warning_description": "이 곳의 설정을 변경하면 앱 동작에 영향을 줄 수 있습니다."
+      },
+      "transfer": {
+        "title": "전송",
+        "downloadConcurrency": {
+          "title": "다운로드 동시 전송 수",
+          "description": "드라이브 전송에서 동시에 다운로드할 파일 수를 설정합니다. 범위: 16~64"
+        },
+        "uploadConcurrency": {
+          "title": "업로드 동시 전송 수",
+          "description": "드라이브 전송에서 동시에 업로드할 파일 수를 설정합니다. 범위: 4~16"
+        }
       }
     },
     "report": {

@@ -323,8 +323,8 @@
         "general": "一般",
         "mod": "MOD",
         "account": "ID",
-        "network": "通信",
-        "advanced": "詳細"
+        "advanced": "詳細",
+        "transfer": "Transfer"
       },
       "gen": {
         "application": {
@@ -430,25 +430,21 @@
         "my_account": "マイアカウント",
         "logout": "ログアウト"
       },
-      "net": {
-        "title": "ネットワーク",
-        "proxy": {
-          "title": "プロキシ設定",
-          "type": "プロキシタイプ",
-          "disabled": "使用しない",
-          "host": "ホスト",
-          "port": "ポート",
-          "requiresAuth": "プロキシサーバーがパスワードを要求",
-          "username": "ユーザー名",
-          "password": "パスワード",
-          "save": "保存",
-          "saved": "プロキシ設定が保存されました。"
-        }
-      },
       "adv": {
         "title": "詳細設定",
         "warning_title": "注意",
         "warning_description": "ここでの設定を変更すると、アプリの動作に影響を与える可能性があります。"
+      },
+      "transfer": {
+        "title": "転送",
+        "downloadConcurrency": {
+          "title": "ダウンロード同時転送数",
+          "description": "ドライブ転送で同時にダウンロードするファイル数を設定します。範囲: 16〜64"
+        },
+        "uploadConcurrency": {
+          "title": "アップロード同時転送数",
+          "description": "ドライブ転送で同時にアップロードするファイル数を設定します。範囲: 4〜16"
+        }
       }
     },
     "report": {

@@ -1,5 +1,11 @@
 import { Button } from "@renderer/components/ui/button";
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@renderer/components/ui/context-menu";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -11,7 +17,8 @@ import { Kbd } from "@renderer/components/ui/kbd";
 import { cn } from "@renderer/lib/utils";
 import type { ModInfo, ModIni, ToggleKey } from "@renderer/types/mod";
 import { formatKeyLabel } from "@shared/key-formatter";
-import { FileCogIcon } from "lucide-react";
+import { FileCogIcon, PlusIcon } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { KeyRecorder } from "./key-recorder";
 
 interface ModToggleKeyItemProps {
@@ -49,31 +56,70 @@ function KeySettingDialog({
   value,
   otherKeys,
   onSave,
+  onDelete,
+  children,
 }: {
   label: string;
   value: string;
   otherKeys: string[];
   onSave: (newValue: string) => void;
+  onDelete?: () => void;
+  children?: ReactNode;
 }) {
+  const [open, setOpen] = useState(false);
+  const trigger = children ?? (
+    <button
+      type="button"
+      className={cn(
+        "flex flex-row items-center w-full transition-colors",
+        "border border-white/20 space-x-1 bg-foreground/5 hover:bg-background/10 p-2 rounded-lg",
+        "justify-start flex-row size-full p-1",
+      )}
+    >
+      <span className="text-sm">{label}:</span>
+      <KeyDisplay keys={value} />
+    </button>
+  );
+
   return (
-    <Dialog>
-      <DialogTrigger
-        className={cn(
-          "flex flex-row items-center w-full transition-colors",
-          "border border-white/20 space-x-1 bg-foreground/5 hover:bg-background/10 p-2 rounded-lg",
-          "justify-start flex-row size-full p-1",
-        )}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <span className="text-sm">{label}:</span>
-        <KeyDisplay keys={value} />
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={setOpen}>
+      {onDelete ? (
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <DialogTrigger asChild onClick={(e) => e.stopPropagation()}>
+              {trigger}
+            </DialogTrigger>
+          </ContextMenuTrigger>
+          <ContextMenuContent onClick={(e) => e.stopPropagation()}>
+            <ContextMenuItem
+              variant="destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+            >
+              Delete {label}
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+      ) : (
+        <DialogTrigger asChild onClick={(e) => e.stopPropagation()}>
+          {trigger}
+        </DialogTrigger>
+      )}
       <DialogContent onClick={(e) => e.stopPropagation()}>
         <DialogHeader>
           <DialogTitle className="capitalize">{label}</DialogTitle>
           <DialogDescription>Press the key combination to set</DialogDescription>
         </DialogHeader>
-        <KeyRecorder defaultValue={value} otherKeys={otherKeys} onSave={onSave} />
+        <KeyRecorder
+          defaultValue={value}
+          otherKeys={otherKeys}
+          onSave={(newValue) => {
+            onSave(newValue);
+            setOpen(false);
+          }}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -95,7 +141,7 @@ function ModToggleKeyItem({
         <p className="truncate">{toggleKey.sectionName}</p>
       </div>
 
-      {toggleKey.key && (
+      {toggleKey.key ? (
         <KeySettingDialog
           label="key"
           value={toggleKey.key}
@@ -103,10 +149,29 @@ function ModToggleKeyItem({
           onSave={(newValue) =>
             onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "key", newValue)
           }
+          onDelete={() => onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "key", "")}
         />
+      ) : (
+        <KeySettingDialog
+          label="key"
+          value=""
+          otherKeys={otherKeys}
+          onSave={(newValue) =>
+            onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "key", newValue)
+          }
+        >
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-start text-xs text-muted-foreground"
+          >
+            <PlusIcon className="size-3 mr-1.5" />
+            Add key
+          </Button>
+        </KeySettingDialog>
       )}
 
-      {toggleKey.back && (
+      {toggleKey.back ? (
         <KeySettingDialog
           label="back"
           value={toggleKey.back}
@@ -114,7 +179,30 @@ function ModToggleKeyItem({
           onSave={(newValue) =>
             onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "back", newValue)
           }
+          onDelete={() => onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "back", "")}
         />
+      ) : (
+        <KeySettingDialog
+          label="back"
+          value=""
+          otherKeys={otherKeys}
+          onSave={(newValue) =>
+            onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "back", newValue)
+          }
+        >
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(
+              "flex flex-row items-center w-full transition-colors dark:text-muted-foreground",
+              "border border-white/20 space-x-1 bg-foreground/5 hover:bg-background/10 p-2 rounded-lg",
+              "justify-start flex-row size-full p-1",
+            )}
+          >
+            <PlusIcon className="size-3 mr-1.5" />
+            Add back
+          </Button>
+        </KeySettingDialog>
       )}
     </div>
   );

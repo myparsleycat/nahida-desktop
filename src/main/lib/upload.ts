@@ -73,6 +73,10 @@ export class UploadLib {
         this.desktop = desktop;
     }
 
+    private async syncQueueConcurrency() {
+        this.fileQueue.concurrency = await this.desktop.setting.transfer.getUploadConcurrency();
+    }
+
     private async collect(
         paths: string[],
         additionalExt: string[] = [],
@@ -513,6 +517,44 @@ export class UploadLib {
 
         const BACKPRESSURE_LIMIT = (this.fileQueue.concurrency || 32) * 3;
 
+        const queueUploads = async (filesToUpload: FinalFile[]) => {
+            for (const file of filesToUpload) {
+                if (signal?.aborted) break;
+
+                if (this.fileQueue.size >= BACKPRESSURE_LIMIT) {
+                    await new Promise<void>((resolve) => {
+                        this.fileQueue.once("next", () => resolve());
+                    });
+                }
+
+                if (signal?.aborted) break;
+
+                this.fileQueue.add(async () => {
+                    if (signal?.aborted) return;
+                    try {
+                        await this.uploadFile(file, signal, (bytes) => {
+                            if (onProgress) {
+                                onProgress({
+                                    bytes,
+                                    isServerDeduplicated: false,
+                                });
+                            }
+                        });
+                        if (onProgress) {
+                            onProgress({
+                                bytes: 0,
+                                fileId: file.FID,
+                                isServerDeduplicated: false,
+                            });
+                        }
+                    } catch (err) {
+                        if (signal?.aborted) return;
+                        this.desktop.logger.error(err, `UploadLib:filesUpload:${file.name}`);
+                    }
+                });
+            }
+        };
+
         const processChunk = async (chunkItems: FinalFile[]) => {
             if (signal?.aborted || chunkItems.length === 0) return;
 
@@ -571,41 +613,7 @@ export class UploadLib {
                 }
             }
 
-            for (const file of filesToUpload) {
-                if (signal?.aborted) break;
-
-                if (this.fileQueue.size >= BACKPRESSURE_LIMIT) {
-                    await new Promise<void>((resolve) => {
-                        this.fileQueue.once("next", () => resolve());
-                    });
-                }
-
-                if (signal?.aborted) break;
-
-                this.fileQueue.add(async () => {
-                    if (signal?.aborted) return;
-                    try {
-                        await this.uploadFile(file, signal, (bytes) => {
-                            if (onProgress) {
-                                onProgress({
-                                    bytes,
-                                    isServerDeduplicated: false,
-                                });
-                            }
-                        });
-                        if (onProgress) {
-                            onProgress({
-                                bytes: 0,
-                                fileId: file.FID,
-                                isServerDeduplicated: false,
-                            });
-                        }
-                    } catch (err) {
-                        if (signal?.aborted) return;
-                        this.desktop.logger.error(err, `UploadLib:filesUpload:${file.name}`);
-                    }
-                });
-            }
+            await queueUploads(filesToUpload);
         };
 
         const metadataQueue = new PQueue({ concurrency: 1 });
@@ -619,6 +627,10 @@ export class UploadLib {
                 }),
             ),
         );
+
+        if (!signal?.aborted) {
+            await this.fileQueue.onIdle();
+        }
 
         const remainingChunks = chunk(allRemainingFiles, CHUNK_SIZE);
         await Promise.all(
@@ -658,6 +670,8 @@ export class UploadLib {
         initialTransferedSize?: number;
     }) {
         try {
+            await this.syncQueueConcurrency();
+
             this.desktop.service.transfer.updateTransfer(pid, {
                 status: "preparing",
                 transferedFiles: 0,

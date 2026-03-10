@@ -8,6 +8,7 @@ import {
 import type { ModInfo } from "@renderer/types/mod";
 import { useRouteContext } from "@tanstack/react-router";
 import { ClipboardIcon, ImageIcon, TrashIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Preview } from "./preview";
 
@@ -18,6 +19,7 @@ interface ModPreviewContainerProps {
 }
 
 export function ModPreviewContainer({ mod, selectedGroupPath, onPaste }: ModPreviewContainerProps) {
+  const { t } = useTranslation();
   const { queryClient } = useRouteContext({ from: "__root__" });
 
   const previewContent = (
@@ -71,11 +73,11 @@ export function ModPreviewContainer({ mod, selectedGroupPath, onPaste }: ModPrev
               }}
             >
               <ImageIcon />
-              뷰어로 열기
+              {t("page.mod.context-menu.open-preview-viewer")}
             </ContextMenuItem>
-            <ContextMenuItem onClick={handleDelete}>
+            <ContextMenuItem variant="destructive" onClick={handleDelete}>
               <TrashIcon />
-              프리뷰 삭제
+              {t("page.mod.context-menu.delete-preview")}
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>

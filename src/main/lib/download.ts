@@ -512,6 +512,10 @@ export class DownloadLib {
         this.task = new FileDownloadTask(desktop);
     }
 
+    private async syncQueueConcurrency() {
+        this.fileQueue.concurrency = await this.desktop.setting.transfer.getDownloadConcurrency();
+    }
+
     public async startStreamingDownload(uuid: string, signal: AbortSignal) {
         return this.streamer.fetchMetadata(uuid, signal);
     }
@@ -551,6 +555,8 @@ export class DownloadLib {
         initialTransferedFiles?: number;
     }) {
         try {
+            await this.syncQueueConcurrency();
+
             if (!data.root) throw new Error("Root directory information was not received.");
 
             this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });

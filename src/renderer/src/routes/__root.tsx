@@ -14,7 +14,6 @@ import { useTranslation } from "react-i18next";
 function RootComponent() {
   const location = useLocation();
   const setAppStatus = useGlobalStore((state) => state.setAppStatus);
-  const setSession = useGlobalStore((state) => state.setSession);
   const { i18n } = useTranslation();
   const { screenHeight, titlebarStyle } = useTitlebar();
 
@@ -22,13 +21,10 @@ function RootComponent() {
     window.api.invoke("util:getAppStatus").then((appStatus) => {
       setAppStatus(appStatus);
     });
-    window.api.invoke("auth:getSession").then((session) => {
-      setSession(session);
-    });
     window.api.invoke("setting:general:getLanguage").then((language) => {
       if (language) i18n.changeLanguage(language);
     });
-  }, [setAppStatus, setSession, i18n]);
+  }, [setAppStatus, i18n]);
 
   const [pathSelectorData, setPathSelectorData] = useState<{
     selectionId: string;

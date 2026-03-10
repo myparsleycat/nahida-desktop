@@ -11,7 +11,6 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { chunk } from "es-toolkit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 import { ModCard } from "./mod-card";
 
 interface ModGridProps {
@@ -105,10 +104,6 @@ export function ModGrid(_props: ModGridProps) {
       variable: string,
       value: string,
     ) => {
-      if (!value.trim()) {
-        toast.error(t("page.mod.toast.value-required"));
-        return;
-      }
       updateToggleKeyMutation.mutate({
         modPath,
         iniFileName,

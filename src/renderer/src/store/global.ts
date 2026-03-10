@@ -6,7 +6,9 @@ interface GlobalStore {
     appStatus: AppStatus | null;
     setAppStatus: (appStatus: AppStatus) => void;
     session: Session | null;
+    sessionInitialized: boolean;
     setSession: (session: Session | null) => void;
+    setSessionInitialized: (initialized: boolean) => void;
 }
 
 export const globalStore = createStore<GlobalStore>((set) => {
@@ -14,7 +16,9 @@ export const globalStore = createStore<GlobalStore>((set) => {
         appStatus: null,
         setAppStatus: (appStatus) => set({ appStatus }),
         session: null,
-        setSession: (session) => set({ session }),
+        sessionInitialized: false,
+        setSession: (session) => set({ session, sessionInitialized: true }),
+        setSessionInitialized: (sessionInitialized) => set({ sessionInitialized }),
     };
 });
 

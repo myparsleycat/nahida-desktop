@@ -512,16 +512,45 @@ export class ModManager {
                 const content = await fse.readFile(iniPath, "utf-8");
                 const lines = content.split("\n");
                 const newLines: string[] = [];
+                const variableLine = `${variable} = ${value}`;
 
                 let currentSection: string | null = null;
                 let updated = false;
+                let foundVariableInSection = false;
+                let sectionStartIndex = -1;
 
-                for (const line of lines) {
+                const insertIntoCurrentSection = () => {
+                    if (
+                        currentSection?.toLowerCase() !== sectionName.toLowerCase() ||
+                        foundVariableInSection ||
+                        value === ""
+                    ) {
+                        return;
+                    }
+
+                    let insertIndex = newLines.length;
+                    while (
+                        insertIndex > sectionStartIndex + 1 &&
+                        newLines[insertIndex - 1].trim() === ""
+                    ) {
+                        insertIndex -= 1;
+                    }
+
+                    newLines.splice(insertIndex, 0, variableLine);
+                    updated = true;
+                    foundVariableInSection = true;
+                };
+
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
                     const trimmedLine = line.trim();
 
                     if (trimmedLine.startsWith("[") && trimmedLine.endsWith("]")) {
+                        insertIntoCurrentSection();
+
                         currentSection = trimmedLine.slice(1, -1);
                         newLines.push(line);
+                        sectionStartIndex = newLines.length - 1;
                         continue;
                     }
 
@@ -535,12 +564,19 @@ export class ModManager {
                         currentSection?.toLowerCase() === sectionName.toLowerCase() &&
                         isVariableLine
                     ) {
-                        newLines.push(`${variable} = ${value}`);
-                        updated = true;
+                        foundVariableInSection = true;
+                        if (value === "") {
+                            updated = true;
+                        } else {
+                            newLines.push(variableLine);
+                            updated = true;
+                        }
                     } else {
                         newLines.push(line);
                     }
                 }
+
+                insertIntoCurrentSection();
 
                 if (updated) {
                     const newContent = newLines.join("\n");

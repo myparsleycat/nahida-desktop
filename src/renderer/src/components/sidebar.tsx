@@ -1,3 +1,4 @@
+import { useAuth } from "@renderer/hooks/use-auth";
 import { cn } from "@renderer/lib/utils";
 import { viewStore } from "@renderer/store/drive";
 import { useGlobalStore } from "@renderer/store/global";
@@ -21,7 +22,7 @@ export function Sidebar({ className }: { className?: string }) {
   const navi = useNavigate();
   const { t } = useTranslation();
   const appStatus = useGlobalStore((state) => state.appStatus);
-  const session = useGlobalStore((state) => state.session);
+  const { session } = useAuth();
 
   const handlePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -64,7 +65,7 @@ export function Sidebar({ className }: { className?: string }) {
                       navi({
                         to: "/drive/drive/$id",
                         params: {
-                          id: lastDriveId,
+                          id: lastDriveId ? lastDriveId : session.drive.rootId,
                         },
                       });
                     }}
@@ -72,7 +73,7 @@ export function Sidebar({ className }: { className?: string }) {
                       navi({
                         to: "/drive/drive/$id",
                         params: {
-                          id: "root",
+                          id: session.drive.rootId,
                         },
                       });
                     }}

@@ -4,7 +4,7 @@ import { pipeline } from "node:stream/promises";
 import { retry } from "es-toolkit";
 import fse from "fs-extra";
 import ky from "ky";
-import { Agent, ProxyAgent } from "undici";
+import { Agent } from "undici";
 
 export interface ParallelDownloadOptions {
     url: string;
@@ -25,7 +25,7 @@ export class ParallelDownloader {
                 info: (msg: string, ...args: any[]) => void;
                 warn: (msg: string, ...args: any[]) => void;
             };
-            getAgent: () => Promise<Agent | ProxyAgent>;
+            getAgent: () => Promise<Agent>;
             getHeaders: (url: string) => Promise<Record<string, string>>;
         },
     ) {}

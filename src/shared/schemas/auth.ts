@@ -16,6 +16,10 @@ export const SessionSchema = z.object({
         role: z.string(),
         image: z.string().nullable(),
     }),
+    drive: z.object({
+        id: z.string(),
+        rootId: z.string()
+    })
 });
 
 export type Session = z.infer<typeof SessionSchema>;

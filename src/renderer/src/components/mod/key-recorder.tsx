@@ -102,7 +102,7 @@ export function KeyRecorder({ defaultValue, otherKeys, onSave }: KeyRecorderProp
       {/* oxlint-disable-next-line jsx_a11y/no-static-element-interactions */}
       <div
         ref={containerRef}
-        className="flex items-center justify-center p-6 border border-dashed rounded-md bg-muted/30 focus:bg-accent/30 focus:border-solid outline-none transition-all cursor-pointer min-h-[100px]"
+        className="flex items-center justify-center p-6 border border-dashed rounded-md bg-muted/30 focus:bg-foreground/10 focus:border-solid outline-none transition-all cursor-pointer min-h-[100px]"
         tabIndex={0}
         onKeyDown={handleKeyDown}
         onKeyUp={handleKeyUp}
@@ -132,7 +132,7 @@ export function KeyRecorder({ defaultValue, otherKeys, onSave }: KeyRecorderProp
       <div ref={footerRef}>
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="ghost">Cancel</Button>
+            <Button variant="outline">Cancel</Button>
           </DialogClose>
           <DialogClose asChild>
             <Button ref={saveButtonRef} onClick={() => onSave(value)}>

@@ -16,6 +16,7 @@ import {
 } from "@renderer/components/ui/dropdown-menu";
 import { Input } from "@renderer/components/ui/input";
 import { Skeleton } from "@renderer/components/ui/skeleton";
+import { useAuth } from "@renderer/hooks/use-auth";
 import i18n from "@renderer/lib/i18n";
 import { cn } from "@renderer/lib/utils";
 import {
@@ -51,7 +52,6 @@ import type React from "react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import validator from "validator";
 import { PreviewModal } from "./preview-modal";
 
 export interface Ancestor {
@@ -68,24 +68,49 @@ interface AkashaBreadcrumbProps {
 
 export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
   const { itemId, ancestors } = props;
+  const { session } = useAuth();
   const navi = useNavigate();
   const { t } = useTranslation();
   const location = useLocation();
+  const setPendingDriveRevealId = useViewStore((s) => s.setPendingDriveRevealId);
+  const setPendingShareRevealId = useViewStore((s) => s.setPendingShareRevealId);
 
   const breadcrumbItems = useMemo(() => {
     const isSharePath = location.pathname.startsWith("/drive/share");
 
-    const rootItem = isSharePath
-      ? { id: "share", name: t("page.drive.share_drive"), parentId: null }
-      : { id: "root", name: t("page.drive.title"), parentId: null };
+    if (isSharePath) {
+      return [{ id: "share", name: t("page.drive.share_drive"), parentId: null }, ...ancestors];
+    }
 
-    return [rootItem, ...ancestors];
-  }, [ancestors, t, location.pathname]);
+    if (ancestors[0]?.parentId === null) {
+      return [{ ...ancestors[0], name: t("page.drive.title") }, ...ancestors.slice(1)];
+    }
+
+    return [
+      { id: session?.drive.rootId!, name: t("page.drive.title"), parentId: null },
+      ...ancestors,
+    ];
+  }, [ancestors, location.pathname, session?.drive.rootId, t]);
 
   const current = useMemo(() => {
     if (breadcrumbItems.length === 0) return undefined;
     return breadcrumbItems[breadcrumbItems.length - 1];
   }, [breadcrumbItems]);
+
+  const queueRevealForDestination = useCallback(
+    (destinationId: string) => {
+      const destinationIndex = breadcrumbItems.findIndex((item) => item.id === destinationId);
+      const childOnCurrentPath =
+        destinationIndex >= 0 ? breadcrumbItems[destinationIndex + 1] : undefined;
+
+      if (location.pathname.startsWith("/drive/share")) {
+        setPendingShareRevealId(childOnCurrentPath?.id ?? null);
+      } else {
+        setPendingDriveRevealId(childOnCurrentPath?.id ?? null);
+      }
+    },
+    [breadcrumbItems, location.pathname, setPendingDriveRevealId, setPendingShareRevealId],
+  );
 
   return (
     <div className="flex-1 flex flex-row items-center h-full min-w-0 overflow-hidden mr-2">
@@ -105,7 +130,9 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
                 ? current.parentId
                 : isSharePath
                   ? "share"
-                  : "root";
+                  : session?.drive.rootId!;
+
+              queueRevealForDestination(parentId);
 
               navi({
                 to: isSharePath ? "/drive/share/$id" : "/drive/drive/$id",
@@ -140,6 +167,7 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
             <DropdownMenuItem
               key={ancestor.id}
               onClick={() => {
+                queueRevealForDestination(ancestor.id);
                 navi({
                   to: location.pathname.startsWith("/drive/share")
                     ? "/drive/share/$id"
@@ -390,14 +418,15 @@ function ContextMenuContentSnippet() {
       )}
 
       {isSharePath ? (
-        <ContextMenuItem className="gap-x-2 text-red-500" onClick={handleTrashBtn}>
+        <ContextMenuItem className="gap-x-2" variant="destructive" onClick={handleTrashBtn}>
           <Trash2Icon size={18} />
           {t("page.drive.context_menu.trash")}
         </ContextMenuItem>
       ) : (
         <>
           <ContextMenuItem
-            className="gap-x-2 text-red-500"
+            className="gap-x-2"
+            variant="destructive"
             onClick={() => dialog.setOpen("deleteItemsDialog", true)}
           >
             <Trash2Icon size={18} />
@@ -712,9 +741,23 @@ export function HandlerProvider(props: HandlerProviderProps) {
     useSelectionStore();
   const isfocusSearchInput = useViewStore((s) => s.isfocusSearchInput);
   const setSearchInDirQuery = useViewStore((s) => s.setSearchInDirQuery);
+  const pendingDriveRevealId = useViewStore((s) => s.pendingDriveRevealId);
+  const setPendingDriveRevealId = useViewStore((s) => s.setPendingDriveRevealId);
+  const pendingShareRevealId = useViewStore((s) => s.pendingShareRevealId);
+  const setPendingShareRevealId = useViewStore((s) => s.setPendingShareRevealId);
 
   const searchBuffer = useRef("");
   const searchTimeout = useRef<number | undefined>(undefined);
+
+  const scrollItemIntoCenter = useCallback(
+    (itemId: string, behavior: ScrollBehavior = "smooth") => {
+      const element = document.querySelector<HTMLElement>(`[data-uuid="${itemId}"]`);
+      if (element) {
+        element.scrollIntoView({ behavior, block: "center" });
+      }
+    },
+    [],
+  );
 
   const resetSearchBuffer = () => {
     searchBuffer.current = "";
@@ -756,11 +799,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
         if (sortedContents.length > 0) {
           setSelectedItems([sortedContents[0]]);
           setLastSelectedIdx(0);
-
-          const element = document.getElementById(sortedContents[0]?.id);
-          if (element) {
-            element.scrollIntoView({ behavior: "smooth", block: "center" });
-          }
+          scrollItemIntoCenter(sortedContents[0].id);
         }
         return;
       }
@@ -809,11 +848,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
           const nextIndex = Math.min(currentIndex + 1, sortedContents.length - 1);
           setSelectedItems([sortedContents[nextIndex]]);
           setLastSelectedIdx(nextIndex);
-
-          const element = document.getElementById(sortedContents[nextIndex]?.id);
-          if (element) {
-            element.scrollIntoView({ behavior: "smooth", block: "center" });
-          }
+          scrollItemIntoCenter(sortedContents[nextIndex].id);
         }
       }
 
@@ -822,13 +857,22 @@ export function HandlerProvider(props: HandlerProviderProps) {
 
         if (e.ctrlKey || e.metaKey) {
           if (queryData.data?.parent) {
-            const isUUID = validator.isUUID(queryData.data.parent.id);
+            const isSharePath = location.pathname.startsWith("/drive/share");
+            const parentId =
+              isSharePath && queryData.data.parent.parentId === null
+                ? "share"
+                : queryData.data.parent.id;
+
+            if (isSharePath) {
+              setPendingShareRevealId(currentId);
+            } else {
+              setPendingDriveRevealId(currentId);
+            }
+
             navi({
-              to: location.pathname.startsWith("/drive/share")
-                ? "/drive/share/$id"
-                : "/drive/drive/$id",
+              to: isSharePath ? "/drive/share/$id" : "/drive/drive/$id",
               params: {
-                id: isUUID ? "root" : queryData.data.parent.id,
+                id: parentId,
               },
             });
           } else {
@@ -838,11 +882,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
           const prevIndex = Math.max(currentIndex - 1, 0);
           setSelectedItems([sortedContents[prevIndex]]);
           setLastSelectedIdx(prevIndex);
-
-          const element = document.getElementById(sortedContents[prevIndex]?.id);
-          if (element) {
-            element.scrollIntoView({ behavior: "smooth", block: "center" });
-          }
+          scrollItemIntoCenter(sortedContents[prevIndex].id);
         }
       }
 
@@ -867,11 +907,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
         if (firstMatchedItem) {
           setSelectedItems([firstMatchedItem]);
           setLastSelectedIdx(sortedContents.indexOf(firstMatchedItem));
-
-          const element = document.querySelector(`[data-uuid="${firstMatchedItem.id}"]`);
-          if (element) {
-            element.scrollIntoView({ behavior: "smooth", block: "center" });
-          }
+          scrollItemIntoCenter(firstMatchedItem.id);
         }
       }
 
@@ -952,8 +988,47 @@ export function HandlerProvider(props: HandlerProviderProps) {
       setSelectedItems,
       setLastSelectedIdx,
       setCopyOrCuts,
+      currentId,
+      location.pathname,
+      scrollItemIntoCenter,
+      setPendingDriveRevealId,
+      setPendingShareRevealId,
     ],
   );
+
+  useEffect(() => {
+    const pendingRevealId = location.pathname.startsWith("/drive/share")
+      ? pendingShareRevealId
+      : pendingDriveRevealId;
+
+    if (!pendingRevealId || sortedContents.length === 0) return;
+
+    const matchedIndex = sortedContents.findIndex((item) => item.id === pendingRevealId);
+    if (matchedIndex < 0) return;
+
+    setSelectedItems([sortedContents[matchedIndex]]);
+    setLastSelectedIdx(matchedIndex);
+
+    requestAnimationFrame(() => {
+      scrollItemIntoCenter(pendingRevealId, "auto");
+    });
+
+    if (location.pathname.startsWith("/drive/share")) {
+      setPendingShareRevealId(null);
+    } else {
+      setPendingDriveRevealId(null);
+    }
+  }, [
+    location.pathname,
+    pendingDriveRevealId,
+    pendingShareRevealId,
+    scrollItemIntoCenter,
+    setLastSelectedIdx,
+    setPendingDriveRevealId,
+    setPendingShareRevealId,
+    setSelectedItems,
+    sortedContents,
+  ]);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);

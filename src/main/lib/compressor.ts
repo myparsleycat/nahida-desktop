@@ -6,6 +6,7 @@ import {
     gzip,
     zstdCompress,
     zstdDecompress,
+    constants,
 } from "node:zlib";
 import type { NahidaDesktop } from "..";
 
@@ -16,6 +17,11 @@ export const zstdDecompressAsync = promisify(zstdDecompress);
 export const brotliCompressAsync = promisify(brotliCompress);
 export const brotliDecompressAsync = promisify(brotliDecompress);
 
+interface ZstdCompressOption {
+    chunkSize?: number; // default 16 * 1024
+    level?: number; // default 3
+}
+
 export class Compressor {
     private readonly desktop: NahidaDesktop;
 
@@ -24,8 +30,13 @@ export class Compressor {
     }
 
     zstd = {
-        compress: async (data: Buffer) => {
-            return await zstdCompressAsync(data);
+        compress: async (data: Buffer, options?: ZstdCompressOption) => {
+            return await zstdCompressAsync(data, {
+                chunkSize: options?.chunkSize || 16 * 1024,
+                params: {
+                    [constants.ZSTD_c_compressionLevel]: options?.level || 3,
+                },
+            });
         },
         decompress: async (data: Buffer) => {
             return await zstdDecompressAsync(data);

@@ -131,12 +131,20 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         d.ipc.broadcast("mod:update-settings");
     });
 
-    rh("setting:net:getProxy", async () => {
-        return await d.setting.net.getProxy();
+    rh("setting:transfer:getDownloadConcurrency", async () => {
+        return await d.setting.transfer.getDownloadConcurrency();
     });
 
-    rh("setting:net:setProxy", async (settings) => {
-        return await d.setting.net.setProxy(settings);
+    rh("setting:transfer:setDownloadConcurrency", async (concurrency) => {
+        return await d.setting.transfer.setDownloadConcurrency(concurrency);
+    });
+
+    rh("setting:transfer:getUploadConcurrency", async () => {
+        return await d.setting.transfer.getUploadConcurrency();
+    });
+
+    rh("setting:transfer:setUploadConcurrency", async (concurrency) => {
+        return await d.setting.transfer.setUploadConcurrency(concurrency);
     });
 
     rh("setting:xxmi:getPersistToggles", async () => {

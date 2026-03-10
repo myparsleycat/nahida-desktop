@@ -16,6 +16,7 @@
   ],
   "compilerOptions": {
     "composite": false,
+    "lib": ["ESNext", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
     "types": ["electron-vite/node"],
     "baseUrl": ".",
     "paths": {
