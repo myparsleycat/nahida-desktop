@@ -18,11 +18,15 @@ export class Utils {
             this.isPreventAppSuspension = true;
             this.preventAppSuspensionId = id;
             return id;
-        } else if (!v && this.preventAppSuspensionId) {
-            powerSaveBlocker.stop(this.preventAppSuspensionId);
+        } else if (!v && this.preventAppSuspensionId !== null) {
+            if (powerSaveBlocker.isStarted(this.preventAppSuspensionId)) {
+                powerSaveBlocker.stop(this.preventAppSuspensionId);
+            }
             this.isPreventAppSuspension = false;
             this.preventAppSuspensionId = null;
             return null;
+        } else if ((v && this.isPreventAppSuspension) || (!v && this.preventAppSuspensionId === null)) {
+            return this.preventAppSuspensionId;
         } else {
             throw new Error("Invalid arguments");
         }
