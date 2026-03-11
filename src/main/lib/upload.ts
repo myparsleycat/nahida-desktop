@@ -77,6 +77,10 @@ export class UploadLib {
         this.fileQueue.concurrency = await this.desktop.setting.transfer.getUploadConcurrency();
     }
 
+    private async getCreateManyConcurrency() {
+        return await this.desktop.setting.transfer.getUploadCreateManyConcurrency();
+    }
+
     private async collect(
         paths: string[],
         additionalExt: string[] = [],
@@ -659,31 +663,28 @@ export class UploadLib {
             await queueUploads(filesToUpload);
         };
 
-        const metadataQueue = new PQueue({ concurrency: 1 });
+        const processMetadataChunks = async (chunks: FinalFile[][], concurrency: number) => {
+            const metadataQueue = new PQueue({ concurrency });
+
+            await Promise.all(
+                chunks.map((fileChunk) =>
+                    metadataQueue.add(async () => {
+                        if (signal?.aborted) return;
+                        await processChunk(fileChunk);
+                    }),
+                ),
+            );
+        };
 
         const representativeChunks = chunk(representativeFiles, CHUNK_SIZE);
-        await Promise.all(
-            representativeChunks.map((fileChunk) =>
-                metadataQueue.add(async () => {
-                    if (signal?.aborted) return;
-                    await processChunk(fileChunk);
-                }),
-            ),
-        );
+        await processMetadataChunks(representativeChunks, await this.getCreateManyConcurrency());
 
         if (!signal?.aborted) {
             await this.fileQueue.onIdle();
         }
 
         const remainingChunks = chunk(allRemainingFiles, CHUNK_SIZE);
-        await Promise.all(
-            remainingChunks.map((fileChunk) =>
-                metadataQueue.add(async () => {
-                    if (signal?.aborted) return;
-                    await processChunk(fileChunk);
-                }),
-            ),
-        );
+        await processMetadataChunks(remainingChunks, 1);
 
         if (!signal?.aborted) {
             await this.fileQueue.onIdle();

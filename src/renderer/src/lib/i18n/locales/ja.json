@@ -444,6 +444,10 @@
         "uploadConcurrency": {
           "title": "アップロード同時転送数",
           "description": "ドライブ転送で同時にアップロードするファイル数を設定します。範囲: 4〜16"
+        },
+        "uploadCreateManyConcurrency": {
+          "title": "アップロードメタデータ同時リクエスト数",
+          "description": "ファイルアップロード開始前に同時実行する リクエスト数を設定します。範囲: 1〜4"
         }
       }
     },
