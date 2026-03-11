@@ -443,6 +443,10 @@
         "uploadConcurrency": {
           "title": "업로드 동시 전송 수",
           "description": "드라이브 전송에서 동시에 업로드할 파일 수를 설정합니다. 범위: 4~16"
+        },
+        "uploadCreateManyConcurrency": {
+          "title": "업로드 메타데이터 동시 요청 수",
+          "description": "파일 업로드를 시작하기 전에 동시에 실행할 요청 수를 설정합니다. 범위: 1~4"
         }
       }
     },

@@ -14,11 +14,11 @@ interface Bounds {
 
 const DEFAULT_TOGGLE_VIEWER_HOTKEY = "ctrl H";
 const TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT = 32;
-const TRANSFER_DOWNLOAD_CONCURRENCY_MIN = 16;
-const TRANSFER_DOWNLOAD_CONCURRENCY_MAX = 64;
+const TRANSFER_DOWNLOAD_CONCURRENCY_MIN_MAX = [16, 64];
 const TRANSFER_UPLOAD_CONCURRENCY_DEFAULT = 8;
-const TRANSFER_UPLOAD_CONCURRENCY_MIN = 4;
-const TRANSFER_UPLOAD_CONCURRENCY_MAX = 16;
+const TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX = [4, 16];
+const TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT = 2;
+const TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX = [1, 4];
 
 function clampTransferConcurrency(value: number, min: number, max: number, fallback: number) {
     if (!Number.isFinite(value)) {
@@ -496,8 +496,8 @@ export class Setting {
 
             return clampTransferConcurrency(
                 parseInt(qr.value as string, 10),
-                TRANSFER_DOWNLOAD_CONCURRENCY_MIN,
-                TRANSFER_DOWNLOAD_CONCURRENCY_MAX,
+                TRANSFER_DOWNLOAD_CONCURRENCY_MIN_MAX[0],
+                TRANSFER_DOWNLOAD_CONCURRENCY_MIN_MAX[1],
                 TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT,
             );
         },
@@ -506,8 +506,8 @@ export class Setting {
             const value = String(
                 clampTransferConcurrency(
                     concurrency,
-                    TRANSFER_DOWNLOAD_CONCURRENCY_MIN,
-                    TRANSFER_DOWNLOAD_CONCURRENCY_MAX,
+                    TRANSFER_DOWNLOAD_CONCURRENCY_MIN_MAX[0],
+                    TRANSFER_DOWNLOAD_CONCURRENCY_MIN_MAX[1],
                     TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT,
                 ),
             );
@@ -536,8 +536,8 @@ export class Setting {
 
             return clampTransferConcurrency(
                 parseInt(qr.value as string, 10),
-                TRANSFER_UPLOAD_CONCURRENCY_MIN,
-                TRANSFER_UPLOAD_CONCURRENCY_MAX,
+                TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX[0],
+                TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX[1],
                 TRANSFER_UPLOAD_CONCURRENCY_DEFAULT,
             );
         },
@@ -546,8 +546,8 @@ export class Setting {
             const value = String(
                 clampTransferConcurrency(
                     concurrency,
-                    TRANSFER_UPLOAD_CONCURRENCY_MIN,
-                    TRANSFER_UPLOAD_CONCURRENCY_MAX,
+                    TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX[0],
+                    TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX[1],
                     TRANSFER_UPLOAD_CONCURRENCY_DEFAULT,
                 ),
             );
@@ -555,6 +555,46 @@ export class Setting {
             await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "transfer_upload_concurrency", value })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value },
+                });
+        },
+
+        getUploadCreateManyConcurrency: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "transfer_upload_create_many_concurrency"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db.insert(setting).values({
+                    key: "transfer_upload_create_many_concurrency",
+                    value: String(TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT),
+                });
+                return TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT;
+            }
+
+            return clampTransferConcurrency(
+                parseInt(qr.value as string, 10),
+                TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[0],
+                TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[1],
+                TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT,
+            );
+        },
+
+        setUploadCreateManyConcurrency: async (concurrency: number) => {
+            const value = String(
+                clampTransferConcurrency(
+                    concurrency,
+                    TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[0],
+                    TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[1],
+                    TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT,
+                ),
+            );
+
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({ key: "transfer_upload_create_many_concurrency", value })
                 .onConflictDoUpdate({
                     target: setting.key,
                     set: { value },

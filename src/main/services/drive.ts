@@ -38,14 +38,6 @@ export class DriveService {
         this.upload = new Upload(this.desktop);
     }
 
-    private async makeMyDrive() {
-        const { data, error } = await eden.akasha.drive.my.post();
-        if (error) {
-            throw String(error);
-        }
-        return data;
-    }
-
     private balanceAndInterleaveFiles<T extends { size: number }>(
         files: T[],
         maxPerChunk: number = 100,
@@ -119,16 +111,7 @@ export class DriveService {
     get = {
         item: async (itemId: string): Promise<DriveItem> => {
             const { data, error } = await eden.akasha.content({ id: itemId }).get();
-
-            if (error) {
-                if (error.status === 404 && error.value === "user_drive_not_generated") {
-                    await this.makeMyDrive();
-                    return this.desktop.service.drive.get.item(itemId);
-                }
-
-                throw error;
-            }
-
+            if (error) throw error;
             return data;
         },
     };
@@ -140,8 +123,7 @@ export class DriveService {
             return await retry(
                 async () => {
                     const { data, error } = await eden.akasha.dir.create_many.post({
-                        current: parentId,
-                        parentId: parentId,
+                        parentId,
                         dirs: [{ path: parentId, name }],
                     });
                     if (error) {
@@ -364,7 +346,6 @@ export class DriveService {
         moveMany: async ({ ids, destId }: { ids: string[]; destId: string }) => {
             const { data, error } = await eden.akasha.content.move_many.post({
                 uuids: ids,
-                current: destId,
                 target: destId,
             });
             return { data, error };
