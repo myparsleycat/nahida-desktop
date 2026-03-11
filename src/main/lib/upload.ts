@@ -1,4 +1,4 @@
-﻿import path from "node:path";
+import path from "node:path";
 import { eden, eden2url } from "@main/client";
 import sha256PiscinaWorker from "@main/worker/drive/sha256-piscina.worker?modulePath";
 import { collectFiles } from "@native/native-fs";
@@ -109,13 +109,56 @@ export class UploadLib {
             ".blend",
             ".pck",
         ];
+        const allowedExt = [...defaultAllowedExt, ...additionalExt].map((ext) =>
+            ext.startsWith(".") ? ext.toLowerCase() : `.${ext.toLowerCase()}`,
+        );
+        const rootFiles: Array<Omit<FilesComponent, "FID">> = [];
+        const directoryPaths: string[] = [];
 
-        const result = collectFiles(paths, [...defaultAllowedExt, ...additionalExt]);
-        const files: FilesComponent[] = result.files.map((f) => ({
+        for (const rawPath of paths) {
+            try {
+                const absolutePath = await fse.realpath(rawPath);
+                const stat = await fse.stat(absolutePath);
+
+                if (stat.isDirectory()) {
+                    directoryPaths.push(absolutePath);
+                    continue;
+                }
+
+                if (!stat.isFile()) {
+                    continue;
+                }
+
+                const normalizedFullPath = absolutePath.replaceAll("\\", "/");
+                const name = path.basename(normalizedFullPath);
+                const loweredName = name.toLowerCase();
+                const isAllowed =
+                    allowedExt.length === 0 || allowedExt.some((ext) => loweredName.endsWith(ext));
+
+                if (!isAllowed) {
+                    continue;
+                }
+
+                rootFiles.push({
+                    path: name,
+                    name,
+                    size: stat.size,
+                    parentPath: "",
+                    fullPath: normalizedFullPath,
+                });
+            } catch {
+                continue;
+            }
+        }
+
+        const collected =
+            directoryPaths.length > 0 ? collectFiles(directoryPaths, allowedExt) : null;
+        const files: FilesComponent[] = [...(collected?.files ?? []), ...rootFiles].map((f) => ({
             ...f,
             FID: nanoid(),
         }));
-        return { files, directories: result.directories };
+
+        return { files, directories: collected?.directories ?? [] };
     }
 
     private async isMediaByMagicNumbers(file: Buffer) {
@@ -677,11 +720,14 @@ export class UploadLib {
                 transferedFiles: 0,
             });
 
-            const createdDirs = await this.desktop.service.drive.post.dirs(
-                params.destId,
-                directories,
-                abortController.signal,
-            );
+            const createdDirs =
+                directories.length > 0
+                    ? await this.desktop.service.drive.post.dirs(
+                          params.destId,
+                          directories,
+                          abortController.signal,
+                      )
+                    : [];
             const parentIdProcessedFiles = this.mapFilesToParentIds(
                 files,
                 createdDirs,
