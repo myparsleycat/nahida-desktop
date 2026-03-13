@@ -329,13 +329,11 @@
           "title": "Application",
           "runOnStartup": "Run on startup",
           "runOnStartupDescription": "Automatically launch the app when the system starts.",
-          "checkBackgroundUpdates": "Check for updates in background",
-          "checkBackgroundUpdatesDescription": "Check for updates in the background.",
           "checkUpdate": "Check for updates",
           "runInBackground": "Run in background",
           "runInBackgroundDescription": "Keep running in the background when all windows are closed.",
           "autoUpdate": "Auto update",
-          "autoUpdateDescription": "Automatically install after checking for updates (Coming soon)"
+          "autoUpdateDescription": "Check for updates on startup and every hour, then download them automatically."
         },
         "language": {
           "title": "Language",
@@ -489,6 +487,19 @@
       "file_name_placeholder": "Enter file name",
       "download_location": "Download Location",
       "need_select_character_folder": "Select a character folder on the left"
+    }
+  },
+  "updater": {
+    "toast": {
+      "available": {
+        "title": "A new version is available.",
+        "description": "A new version of Nahida Desktop is available. Restart to update.",
+        "action": "Update"
+      },
+      "notAvailable": {
+        "title": "You're up to date.",
+        "description": "There are no updates available right now."
+      }
     }
   }
 }

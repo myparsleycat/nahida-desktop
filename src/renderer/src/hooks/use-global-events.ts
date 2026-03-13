@@ -53,5 +53,5 @@ export function useGlobalEvents(
         return () => {
             removeAllListeners();
         };
-    }, [onPathSelectorModeSelect]);
+    }, [onPathSelectorModeSelect, i18n]);
 }

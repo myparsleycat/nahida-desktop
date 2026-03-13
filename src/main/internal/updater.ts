@@ -1,14 +1,12 @@
 const { autoUpdater } = require("electron-updater");
 
-import { app, BrowserWindow, dialog, Notification } from "electron";
-import ProgressBar from "electron-progressbar";
-import { convert } from "html-to-text";
+import { app, BrowserWindow } from "electron";
 import type { NahidaDesktop } from "..";
 import isDev from "./isDev";
 
 autoUpdater.allowDowngrade = false;
-autoUpdater.autoDownload = false;
-autoUpdater.autoInstallOnAppQuit = false;
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
 autoUpdater.disableDifferentialDownload = true;
 autoUpdater.autoRunAppAfterInstall = true;
 autoUpdater.allowPrerelease = false;
@@ -22,87 +20,36 @@ export class Updater {
     public updateDownloaded: boolean = false;
     public updateAvailable: boolean = false;
     private interval: ReturnType<typeof setInterval> | undefined = undefined;
-    private progressBar: ProgressBar | null = null;
-    private isManualCheck: boolean = false;
+    private isCheckingForUpdates: boolean = false;
+    private hasRunInitialAutoCheck: boolean = false;
 
     public constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
     }
 
     public initialize(): void {
-        autoUpdater.on("checking-for-update", () => {
-            if (this.isManualCheck) {
-                new Notification({
-                    title: "Nahida Desktop",
-                    body: "Checking for update...",
-                }).show();
-            }
-        });
-
-        autoUpdater.on("download-progress", (progress) => {
-            if (!this.progressBar) return;
-
-            const percent = Math.floor(progress.percent);
-            this.progressBar.value = percent;
-            this.progressBar.text = `Download Files... ${percent}%`;
-        });
-
         autoUpdater.on("error", (err) => {
+            this.isCheckingForUpdates = false;
             this.updateDownloaded = false;
             this.updateAvailable = false;
 
             this.desktop.logger.log("error", err, "updater");
         });
 
-        autoUpdater.on("update-available", (updateInfo) => {
+        autoUpdater.on("update-available", () => {
+            this.isCheckingForUpdates = false;
             this.updateAvailable = true;
-
-            if (this.isManualCheck) {
-                this.showUpdateDialog(updateInfo);
-            } else {
-                const notification = new Notification({
-                    title: "Nahida Desktop Update Available",
-                    body: `New version v${updateInfo.version} is available. Click to start installation.`,
-                });
-                notification.on("click", () => {
-                    this.showUpdateDialog(updateInfo);
-                });
-                notification.show();
-            }
         });
 
         autoUpdater.on("update-not-available", () => {
+            this.isCheckingForUpdates = false;
             this.updateDownloaded = false;
             this.updateAvailable = false;
-
-            if (this.isManualCheck) {
-                new Notification({
-                    title: "Nahida Desktop",
-                    body: "No update available",
-                }).show();
-            }
         });
 
-        autoUpdater.on("update-downloaded", (info) => {
+        autoUpdater.on("update-downloaded", async (info) => {
             this.updateDownloaded = true;
-
-            if (this.progressBar) {
-                this.progressBar.setCompleted();
-            }
-
-            dialog
-                .showMessageBox({
-                    type: "info",
-                    title: "Update",
-                    message: "New version has been downloaded. Restart to apply?",
-                    buttons: ["Yes", "No"],
-                })
-                .then((result) => {
-                    const { response } = result;
-                    if (response === 0) {
-                        this.installUpdate();
-                    }
-                });
+            await this.notifyUpdateReady(info.version);
         });
 
         autoUpdater.on("update-cancelled", () => {});
@@ -110,67 +57,100 @@ export class Updater {
         clearInterval(this.interval);
 
         this.interval = setInterval(async () => {
-            const checkBackgroundUpdates =
-                await this.desktop.setting.general.getCheckBackgroundUpdates();
-            if (!checkBackgroundUpdates) return;
-
-            this.checkForUpdates(false).catch((err) => {
+            this.runAutomaticCheck().catch((err) => {
                 this.desktop.logger.log("error", err, "updater.interval");
                 this.desktop.logger.log("error", err);
             });
         }, 3600000);
 
-        this.desktop.setting.general.getCheckBackgroundUpdates().then((checkBackgroundUpdates) => {
-            if (checkBackgroundUpdates) {
-                this.checkForUpdates(false).catch((err) => {
-                    this.desktop.logger.log("error", err, "updater.initialCheck");
-                    this.desktop.logger.log("error", err);
-                });
+        void this.runInitialAutomaticCheck();
+    }
+
+    public async checkForUpdates(): Promise<void> {
+        if (this.isCheckingForUpdates || this.updateAvailable || this.updateDownloaded) {
+            return;
+        }
+        this.isCheckingForUpdates = true;
+
+        try {
+            await autoUpdater.checkForUpdates();
+        } finally {
+            this.isCheckingForUpdates = false;
+        }
+    }
+
+    private async runInitialAutomaticCheck(): Promise<void> {
+        if (this.hasRunInitialAutoCheck) {
+            return;
+        }
+
+        this.hasRunInitialAutoCheck = true;
+
+        try {
+            const autoUpdate = await this.desktop.setting.general.getAutoUpdate();
+            if (!autoUpdate) {
+                return;
             }
-        });
+
+            await this.checkForUpdates();
+        } catch (err) {
+            this.desktop.logger.log("error", err, "updater.initialCheck");
+            this.desktop.logger.log("error", err);
+        }
     }
 
-    private showUpdateDialog(updateInfo: any): void {
-        dialog
-            .showMessageBox({
-                type: "info",
-                title: `New Update Available: v${updateInfo.version}`,
-                message: "New version is available. Do you want to update now?",
-                detail: convert(String(updateInfo.releaseNotes)),
-                buttons: ["Yes", "No"],
-            })
-            .then((result) => {
-                const { response } = result;
+    private async runAutomaticCheck(): Promise<void> {
+        const autoUpdate = await this.desktop.setting.general.getAutoUpdate();
+        if (!autoUpdate) {
+            return;
+        }
 
-                if (response === 0) {
-                    this.progressBar = new ProgressBar({
-                        detail: "Wait...",
-                        text: "Download Files...",
-                        initialValue: 0,
-                        maxValue: 100,
-                    });
-
-                    this.progressBar
-                        .on("completed", () => {
-                            if (this.progressBar)
-                                this.progressBar.detail = "Update completed. Closing...";
-                        })
-                        .on("aborted", () => {})
-                        .on("progress", (percent: number) => {
-                            if (this.progressBar)
-                                this.progressBar.text = `Download Files... ${percent}%`;
-                        });
-
-                    autoUpdater.downloadUpdate();
-                }
-            });
+        await this.checkForUpdates();
     }
 
-    public async checkForUpdates(manual: boolean = false): Promise<void> {
-        this.isManualCheck = manual;
-        await autoUpdater.checkForUpdates();
+    public getStatus(): { updateAvailable: boolean; updateDownloaded: boolean } {
+        return {
+            updateAvailable: this.updateAvailable,
+            updateDownloaded: this.updateDownloaded,
+        };
     }
 
+    public async showPendingDialogsIfNeeded(): Promise<void> {
+        const mainWindow = this.desktop.window.main.window;
+        if (this.updateDownloaded && mainWindow) {
+            this.desktop.ipc.postMessageToWindow(mainWindow, "updater:update-downloaded");
+        }
+    }
+
+    private async notifyUpdateReady(_version: string): Promise<void> {
+        const mainWindow = await this.focusMainWindow();
+        if (!mainWindow) {
+            return;
+        }
+
+        this.desktop.ipc.postMessageToWindow(mainWindow, "updater:update-downloaded");
+    }
+
+    private async focusMainWindow(): Promise<BrowserWindow | null> {
+        let mainWindow = this.desktop.window.main.window;
+
+        if (!mainWindow || mainWindow.isDestroyed()) {
+            mainWindow = await this.desktop.window.main.createMainWindow();
+        }
+
+        if (!mainWindow || mainWindow.isDestroyed()) {
+            return null;
+        }
+
+        if (mainWindow.isMinimized()) {
+            mainWindow.restore();
+        }
+
+        mainWindow.show();
+        mainWindow.focus();
+
+        return mainWindow;
+    }
     public async installUpdate(): Promise<void> {
         if (!this.updateDownloaded || !this.updateAvailable) {
             throw new Error("No update available to install.");
