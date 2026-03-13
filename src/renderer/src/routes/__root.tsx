@@ -18,31 +18,35 @@ import { cn } from "@renderer/lib/utils";
 import { useGlobalStore } from "@renderer/store/global";
 import type { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet, useLocation } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 function UpdateAlertDialog() {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
+  const open = useGlobalStore((state) => state.shouldPromptForUpdate);
+  const setShouldPromptForUpdate = useGlobalStore((state) => state.setShouldPromptForUpdate);
+  const isDismissingRef = useRef(false);
 
-  useEffect(() => {
-    window.api.invoke("updater:getStatus").then((status) => {
-      if (status.updateDownloaded) {
-        setOpen(true);
-      }
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      setShouldPromptForUpdate(true);
+      return;
+    }
+
+    setShouldPromptForUpdate(false);
+
+    if (isDismissingRef.current) {
+      return;
+    }
+
+    isDismissingRef.current = true;
+    window.api.invoke("updater:dismissUpdateDialog").finally(() => {
+      isDismissingRef.current = false;
     });
-
-    const removeListener = window.api.on("updater:update-downloaded", () => {
-      setOpen(true);
-    });
-
-    return () => {
-      removeListener();
-    };
-  }, []);
+  };
 
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{t("updater.toast.available.title")}</AlertDialogTitle>
@@ -54,6 +58,7 @@ function UpdateAlertDialog() {
           <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={() => {
+              setShouldPromptForUpdate(false);
               window.api.invoke("updater:installUpdate");
             }}
           >
@@ -68,6 +73,8 @@ function UpdateAlertDialog() {
 function RootComponent() {
   const location = useLocation();
   const setAppStatus = useGlobalStore((state) => state.setAppStatus);
+  const setUpdateDownloaded = useGlobalStore((state) => state.setUpdateDownloaded);
+  const setShouldPromptForUpdate = useGlobalStore((state) => state.setShouldPromptForUpdate);
   const { i18n } = useTranslation();
   const { screenHeight, titlebarStyle } = useTitlebar();
 
@@ -75,10 +82,23 @@ function RootComponent() {
     window.api.invoke("util:getAppStatus").then((appStatus) => {
       setAppStatus(appStatus);
     });
+    window.api.invoke("updater:getStatus").then((status) => {
+      setUpdateDownloaded(status.updateDownloaded);
+      setShouldPromptForUpdate(status.shouldPromptForUpdate);
+    });
     window.api.invoke("setting:general:getLanguage").then((language) => {
       if (language) i18n.changeLanguage(language);
     });
-  }, [setAppStatus, i18n]);
+
+    const removeUpdateListener = window.api.on("updater:update-downloaded", () => {
+      setUpdateDownloaded(true);
+      setShouldPromptForUpdate(true);
+    });
+
+    return () => {
+      removeUpdateListener();
+    };
+  }, [setAppStatus, setUpdateDownloaded, setShouldPromptForUpdate, i18n]);
 
   const [pathSelectorData, setPathSelectorData] = useState<{
     selectionId: string;

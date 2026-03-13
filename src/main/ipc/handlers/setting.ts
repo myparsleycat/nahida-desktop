@@ -62,6 +62,10 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         return d.updater.getStatus();
     });
 
+    rh("updater:dismissUpdateDialog", async () => {
+        d.updater.dismissUpdateDialog();
+    });
+
     rh("updater:installUpdate", async () => {
         return await d.updater.installUpdate();
     });

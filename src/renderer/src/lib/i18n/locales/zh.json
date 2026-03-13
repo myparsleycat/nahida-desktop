@@ -491,6 +491,9 @@
     }
   },
   "updater": {
+    "titlebar": {
+      "action": "点击以重启并更新"
+    },
     "toast": {
       "available": {
         "title": "有新版本可用。",

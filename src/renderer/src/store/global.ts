@@ -5,6 +5,10 @@ import { createStore, useStore } from "zustand";
 interface GlobalStore {
     appStatus: AppStatus | null;
     setAppStatus: (appStatus: AppStatus) => void;
+    updateDownloaded: boolean;
+    setUpdateDownloaded: (updateDownloaded: boolean) => void;
+    shouldPromptForUpdate: boolean;
+    setShouldPromptForUpdate: (shouldPromptForUpdate: boolean) => void;
     session: Session | null;
     sessionInitialized: boolean;
     setSession: (session: Session | null) => void;
@@ -15,6 +19,10 @@ export const globalStore = createStore<GlobalStore>((set) => {
     return {
         appStatus: null,
         setAppStatus: (appStatus) => set({ appStatus }),
+        updateDownloaded: false,
+        setUpdateDownloaded: (updateDownloaded) => set({ updateDownloaded }),
+        shouldPromptForUpdate: false,
+        setShouldPromptForUpdate: (shouldPromptForUpdate) => set({ shouldPromptForUpdate }),
         session: null,
         sessionInitialized: false,
         setSession: (session) => set({ session, sessionInitialized: true }),

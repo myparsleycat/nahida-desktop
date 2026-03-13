@@ -19,6 +19,7 @@ export class Updater {
     private readonly desktop: NahidaDesktop;
     public updateDownloaded: boolean = false;
     public updateAvailable: boolean = false;
+    private updateDialogDismissed: boolean = false;
     private interval: ReturnType<typeof setInterval> | undefined = undefined;
     private isCheckingForUpdates: boolean = false;
     private hasRunInitialAutoCheck: boolean = false;
@@ -32,6 +33,7 @@ export class Updater {
             this.isCheckingForUpdates = false;
             this.updateDownloaded = false;
             this.updateAvailable = false;
+            this.updateDialogDismissed = false;
 
             this.desktop.logger.log("error", err, "updater");
         });
@@ -45,10 +47,12 @@ export class Updater {
             this.isCheckingForUpdates = false;
             this.updateDownloaded = false;
             this.updateAvailable = false;
+            this.updateDialogDismissed = false;
         });
 
         autoUpdater.on("update-downloaded", async (info) => {
             this.updateDownloaded = true;
+            this.updateDialogDismissed = false;
             await this.notifyUpdateReady(info.version);
         });
 
@@ -108,18 +112,31 @@ export class Updater {
         await this.checkForUpdates();
     }
 
-    public getStatus(): { updateAvailable: boolean; updateDownloaded: boolean } {
+    public getStatus(): {
+        updateAvailable: boolean;
+        updateDownloaded: boolean;
+        shouldPromptForUpdate: boolean;
+    } {
         return {
             updateAvailable: this.updateAvailable,
             updateDownloaded: this.updateDownloaded,
+            shouldPromptForUpdate: this.updateDownloaded && !this.updateDialogDismissed,
         };
     }
 
     public async showPendingDialogsIfNeeded(): Promise<void> {
         const mainWindow = this.desktop.window.main.window;
-        if (this.updateDownloaded && mainWindow) {
+        if (this.updateDownloaded && !this.updateDialogDismissed && mainWindow) {
             this.desktop.ipc.postMessageToWindow(mainWindow, "updater:update-downloaded");
         }
+    }
+
+    public dismissUpdateDialog(): void {
+        if (!this.updateDownloaded) {
+            return;
+        }
+
+        this.updateDialogDismissed = true;
     }
 
     private async notifyUpdateReady(_version: string): Promise<void> {

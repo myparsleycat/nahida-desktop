@@ -492,6 +492,9 @@
     }
   },
   "updater": {
+    "titlebar": {
+      "action": "クリックして再起動し、アップデート"
+    },
     "toast": {
       "available": {
         "title": "新しいバージョンが利用可能です。",

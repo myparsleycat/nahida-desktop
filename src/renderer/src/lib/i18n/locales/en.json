@@ -490,6 +490,9 @@
     }
   },
   "updater": {
+    "titlebar": {
+      "action": "Click to restart and update"
+    },
     "toast": {
       "available": {
         "title": "A new version is available.",

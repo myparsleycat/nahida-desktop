@@ -491,6 +491,9 @@
     }
   },
   "updater": {
+    "titlebar": {
+      "action": "클릭해 재시작하고 업데이트"
+    },
     "toast": {
       "available": {
         "title": "새로운 버전이 출시되었습니다.",

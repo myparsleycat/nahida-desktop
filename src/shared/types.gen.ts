@@ -206,6 +206,7 @@ export type IpcHandlers = {
     "transfer:resume": (...args: any[]) => any;
     "transfer:resume-all": (...args: any[]) => any;
     "transfer:retry": (...args: any[]) => any;
+    "updater:dismissUpdateDialog": (...args: any[]) => any;
     "updater:getStatus": (...args: Parameters<typeof desktop.updater.getStatus>) => ReturnType<typeof desktop.updater.getStatus>;
     "updater:installUpdate": (...args: Parameters<typeof desktop.updater.installUpdate>) => ReturnType<typeof desktop.updater.installUpdate>;
     "util:copyStr": (...args: Parameters<typeof import("@main/services/util").copyStr>) => ReturnType<typeof import("@main/services/util").copyStr>;
