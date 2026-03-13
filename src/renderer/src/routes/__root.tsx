@@ -26,6 +26,7 @@ function UpdateAlertDialog() {
   const open = useGlobalStore((state) => state.shouldPromptForUpdate);
   const setShouldPromptForUpdate = useGlobalStore((state) => state.setShouldPromptForUpdate);
   const isDismissingRef = useRef(false);
+  const skipNextDismissRef = useRef(false);
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
@@ -34,6 +35,11 @@ function UpdateAlertDialog() {
     }
 
     setShouldPromptForUpdate(false);
+
+    if (skipNextDismissRef.current) {
+      skipNextDismissRef.current = false;
+      return;
+    }
 
     if (isDismissingRef.current) {
       return;
@@ -58,6 +64,7 @@ function UpdateAlertDialog() {
           <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={() => {
+              skipNextDismissRef.current = true;
               setShouldPromptForUpdate(false);
               window.api.invoke("updater:installUpdate");
             }}
