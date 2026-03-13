@@ -50,16 +50,24 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         await d.setting.general.setTitlebarStyle(style);
     });
 
-    rh("setting:general:checkUpdate", async () => {
-        return await d.setting.general.checkUpdate();
+    rh("setting:general:getAutoUpdate", async () => {
+        return await d.setting.general.getAutoUpdate();
     });
 
-    rh("setting:general:getCheckBackgroundUpdates", async () => {
-        return await d.setting.general.getCheckBackgroundUpdates();
+    rh("setting:general:setAutoUpdate", async (enabled) => {
+        return await d.setting.general.setAutoUpdate(enabled);
     });
 
-    rh("setting:general:setCheckBackgroundUpdates", async (enabled) => {
-        return await d.setting.general.setCheckBackgroundUpdates(enabled);
+    rh("updater:getStatus", async () => {
+        return d.updater.getStatus();
+    });
+
+    rh("updater:dismissUpdateDialog", async () => {
+        d.updater.dismissUpdateDialog();
+    });
+
+    rh("updater:installUpdate", async () => {
+        return await d.updater.installUpdate();
     });
 
     rh("setting:general:getRunInBackground", async () => {

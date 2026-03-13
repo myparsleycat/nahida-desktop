@@ -330,13 +330,11 @@
           "title": "应用程序",
           "runOnStartup": "开机启动",
           "runOnStartupDescription": "系统启动时自动运行应用。",
-          "checkBackgroundUpdates": "后台检查更新",
-          "checkBackgroundUpdatesDescription": "在后台检查更新。",
           "checkUpdate": "检查更新",
           "runInBackground": "后台运行",
           "runInBackgroundDescription": "关闭所有窗口后，应用仍在后台继续运行。",
           "autoUpdate": "自动更新",
-          "autoUpdateDescription": "检查更新后自动安装 (即将推出)"
+          "autoUpdateDescription": "在启动时和每隔 1 小时检查更新，并自动下载。"
         },
         "language": {
           "title": "语言",
@@ -490,6 +488,22 @@
       "file_name_placeholder": "输入文件名",
       "download_location": "下载位置",
       "need_select_character_folder": "请在左侧选择角色文件夹"
+    }
+  },
+  "updater": {
+    "titlebar": {
+      "action": "点击以重启并更新"
+    },
+    "toast": {
+      "available": {
+        "title": "有新版本可用。",
+        "description": "Nahida Desktop 有新版本可用。请重新启动以完成更新。",
+        "action": "更新"
+      },
+      "notAvailable": {
+        "title": "当前已是最新版本。",
+        "description": "目前没有可用更新。"
+      }
     }
   }
 }

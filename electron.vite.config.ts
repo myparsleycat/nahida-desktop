@@ -1,15 +1,11 @@
 import { resolve } from "node:path";
+import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
-import react from "@vitejs/plugin-react";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "electron-vite";
 import { ipcGeneratorPlugin } from "./plugins/ipc-generator";
 import { nativeBindingPlugin } from "./plugins/native-binding";
-
-const ReactCompilerConfig = {
-    target: "19",
-    runtimeModule: "react-compiler-runtime",
-};
 
 export default defineConfig({
     main: {
@@ -55,11 +51,8 @@ export default defineConfig({
                 target: "react",
                 autoCodeSplitting: true,
             }),
-            react({
-                babel: {
-                    plugins: [["babel-plugin-react-compiler", ReactCompilerConfig]],
-                },
-            }),
+            react(),
+            babel({ presets: [reactCompilerPreset()] } as Parameters<typeof babel>[0]),
             tailwindcss(),
             // visualizer({
             //     filename: "dist/stats-renderer.html",

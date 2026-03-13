@@ -1,8 +1,12 @@
+import { Button } from "@renderer/components/ui/button";
 import { cn } from "@renderer/lib/utils";
+import { useGlobalStore } from "@renderer/store/global";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "@tanstack/react-router";
 import { find } from "es-toolkit/compat";
-import { MaximizeIcon, MinusIcon, XIcon } from "lucide-react";
+import { DownloadIcon, MaximizeIcon, MinusIcon, XIcon } from "lucide-react";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface TitlebarProps {
   title?: {
@@ -19,6 +23,9 @@ const WINDOW_CONFIG: Record<string, { hideMinimize?: boolean; hideMaximize?: boo
 
 export function Titlebar({ title }: TitlebarProps) {
   const location = useLocation();
+  const { t } = useTranslation();
+  const updateDownloaded = useGlobalStore((state) => state.updateDownloaded);
+  const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
 
   const { data: titlebarStyle } = useQuery({
     queryKey: ["settings", "general", "titlebarStyle"],
@@ -31,6 +38,7 @@ export function Titlebar({ title }: TitlebarProps) {
   );
 
   const { hideMinimize, hideMaximize } = configEntry?.[1] || {};
+  const shouldShowUpdateButton = updateDownloaded && !configEntry;
 
   if (titlebarStyle === "native") return null;
 
@@ -56,11 +64,32 @@ export function Titlebar({ title }: TitlebarProps) {
         )}
       </div>
 
-      <div className="buttons flex h-full ml-auto z-10">
+      <div className="buttons flex h-full ml-auto z-10 items-center">
+        {shouldShowUpdateButton && (
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            className="h-5 px-2 text-[10px] mr-4"
+            isLoading={isInstallingUpdate}
+            onClick={async () => {
+              setIsInstallingUpdate(true);
+              try {
+                await window.api.invoke("updater:installUpdate");
+              } finally {
+                setIsInstallingUpdate(false);
+              }
+            }}
+          >
+            <DownloadIcon />
+            {t("updater.titlebar.action")}
+          </Button>
+        )}
+
         {!hideMinimize && (
           <button
             type="button"
-            className="flex justify-center items-center px-3 hover:bg-muted duration-150 min"
+            className="flex justify-center items-center px-3 hover:bg-muted duration-150 min h-full"
             tabIndex={-1}
             onClick={() => {
               window.electron.ipcRenderer.send("window-control", "minimize");
@@ -73,7 +102,7 @@ export function Titlebar({ title }: TitlebarProps) {
         {!hideMaximize && (
           <button
             type="button"
-            className="flex justify-center items-center px-3 hover:bg-muted duration-150 max"
+            className="flex justify-center items-center px-3 hover:bg-muted duration-150 max h-full"
             tabIndex={-1}
             onClick={() => {
               window.electron.ipcRenderer.send("window-control", "maximize");
@@ -85,7 +114,7 @@ export function Titlebar({ title }: TitlebarProps) {
 
         <button
           type="button"
-          className="flex justify-center items-center px-3 hover:bg-red-500 duration-150 close"
+          className="flex justify-center items-center px-3 hover:bg-red-500 duration-150 close h-full"
           tabIndex={-1}
           onClick={() => {
             window.electron.ipcRenderer.send("window-control", "close");

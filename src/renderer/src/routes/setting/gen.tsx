@@ -25,7 +25,7 @@ export const Route = createFileRoute("/setting/gen")({
 const settingsConfig = {
   runOnStartup: "setting:general:getRunOnStartup",
   language: "setting:general:getLanguage",
-  checkBackgroundUpdates: "setting:general:getCheckBackgroundUpdates",
+  autoUpdate: "setting:general:getAutoUpdate",
   runInBackground: "setting:general:getRunInBackground",
   moveTransferPageWhenStartTransfer: "setting:general:getMoveTransferPageWhenStartTransfer",
   powerSaveBlockInTransfer: "setting:general:getPowerSaveBlockInTransfer",
@@ -41,7 +41,7 @@ function RouteComponent() {
   const { settings, update, isLoading } = useSettings<{
     runOnStartup: boolean;
     language: string;
-    checkBackgroundUpdates: boolean;
+    autoUpdate: boolean;
     runInBackground: boolean;
     moveTransferPageWhenStartTransfer: boolean;
     powerSaveBlockInTransfer: boolean;
@@ -57,9 +57,6 @@ function RouteComponent() {
       setImageCacheSize(size);
     });
   }, []);
-
-  const [autoUpdate, setAutoUpdate] = useState(false);
-
   if (isLoading) {
     return null;
   }
@@ -95,23 +92,17 @@ function RouteComponent() {
           <div className="flex items-center justify-between">
             <div className="space-y-0.5 flex-1">
               <span className="text-sm font-medium">
-                {t("page.setting.gen.application.checkBackgroundUpdates")}
+                {t("page.setting.gen.application.autoUpdate")}
               </span>
               <p className="text-xs text-muted-foreground">
-                {t("page.setting.gen.application.checkBackgroundUpdatesDescription")}
+                {t("page.setting.gen.application.autoUpdateDescription")}
               </p>
             </div>
             <div className="flex items-center gap-4">
-              <Button
-                variant="secondary"
-                onClick={() => window.api.invoke("setting:general:checkUpdate")}
-              >
-                {t("page.setting.gen.application.checkUpdate")}
-              </Button>
               <Switch
-                checked={settings.checkBackgroundUpdates}
+                checked={settings.autoUpdate}
                 onCheckedChange={(val) =>
-                  update("checkBackgroundUpdates", val, "setting:general:setCheckBackgroundUpdates")
+                  update("autoUpdate", val, "setting:general:setAutoUpdate")
                 }
               />
             </div>
@@ -134,20 +125,6 @@ function RouteComponent() {
                 update("runInBackground", val, "setting:general:setRunInBackground")
               }
             />
-          </div>
-
-          <Separator />
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium text-muted-foreground">
-                {t("page.setting.gen.application.autoUpdate")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.gen.application.autoUpdateDescription")}
-              </p>
-            </div>
-            <Switch checked={autoUpdate} onCheckedChange={setAutoUpdate} disabled />
           </div>
         </CardContent>
       </Card>

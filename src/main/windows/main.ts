@@ -78,6 +78,7 @@ export class MainWindow {
 
         this.window.on("ready-to-show", async () => {
             this.window?.show();
+            void this.desktop.updater.showPendingDialogsIfNeeded();
         });
 
         const saveBounds = debounce(async () => {

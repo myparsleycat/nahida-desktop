@@ -330,13 +330,11 @@
           "title": "애플리케이션",
           "runOnStartup": "로그인할 때 실행",
           "runOnStartupDescription": "시스템이 시작될 때 앱을 자동으로 실행합니다.",
-          "checkBackgroundUpdates": "백그라운드 업데이트 확인",
-          "checkBackgroundUpdatesDescription": "백그라운드에서 업데이트를 확인합니다.",
           "checkUpdate": "업데이트 확인",
           "runInBackground": "백그라운드 실행",
           "runInBackgroundDescription": "모든 창을 닫아도 앱을 백그라운드에서 계속 실행합니다.",
           "autoUpdate": "자동 업데이트",
-          "autoUpdateDescription": "업데이트를 확인한 후 자동으로 설치합니다 (준비 중)"
+          "autoUpdateDescription": "앱 시작 시와 1시간마다 업데이트를 확인하고 자동으로 다운로드합니다."
         },
         "language": {
           "title": "언어",
@@ -490,6 +488,22 @@
       "file_name_placeholder": "파일 이름을 입력하세요",
       "download_location": "다운로드 위치",
       "need_select_character_folder": "좌측에서 캐릭터 폴더를 선택하세요"
+    }
+  },
+  "updater": {
+    "titlebar": {
+      "action": "클릭해 재시작하고 업데이트"
+    },
+    "toast": {
+      "available": {
+        "title": "새로운 버전이 출시되었습니다.",
+        "description": "Nahida Desktop의 새로운 버전이 출시되었습니다. 다시 시작하여 업데이트하세요.",
+        "action": "업데이트"
+      },
+      "notAvailable": {
+        "title": "최신 버전을 사용 중입니다.",
+        "description": "현재 사용할 수 있는 업데이트가 없습니다."
+      }
     }
   }
 }

@@ -249,29 +249,25 @@ export class Setting {
             this.desktop.window.setting.focus();
         },
 
-        checkUpdate: async () => {
-            await this.desktop.updater.checkForUpdates(true);
-        },
-
-        getCheckBackgroundUpdates: async () => {
+        getAutoUpdate: async () => {
             const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "checkBackgroundUpdates"),
+                where: (t, { eq }) => eq(t.key, "autoUpdate"),
             });
 
             if (!qr) {
                 await this.desktop.lib.db
                     .insert(setting)
-                    .values({ key: "checkBackgroundUpdates", value: "true" });
+                    .values({ key: "autoUpdate", value: "true" });
                 return true;
             }
 
             return qr.value === "true";
         },
 
-        setCheckBackgroundUpdates: async (enabled: boolean) => {
+        setAutoUpdate: async (enabled: boolean) => {
             await this.desktop.lib.db
                 .insert(setting)
-                .values({ key: "checkBackgroundUpdates", value: String(enabled) })
+                .values({ key: "autoUpdate", value: String(enabled) })
                 .onConflictDoUpdate({
                     target: setting.key,
                     set: { value: String(enabled) },
