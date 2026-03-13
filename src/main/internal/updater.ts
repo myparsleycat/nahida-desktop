@@ -51,6 +51,7 @@ export class Updater {
         });
 
         autoUpdater.on("update-downloaded", async (info) => {
+            this.isCheckingForUpdates = false;
             this.updateDownloaded = true;
             this.updateDialogDismissed = false;
             await this.notifyUpdateReady(info.version);
@@ -76,11 +77,7 @@ export class Updater {
         }
         this.isCheckingForUpdates = true;
 
-        try {
-            await autoUpdater.checkForUpdates();
-        } finally {
-            this.isCheckingForUpdates = false;
-        }
+        await autoUpdater.checkForUpdates();
     }
 
     private async runInitialAutomaticCheck(): Promise<void> {
