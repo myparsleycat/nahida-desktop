@@ -235,6 +235,23 @@
       "log-dialog": {
         "title": "Log",
         "running": "Running..."
+      },
+      "toggle-persist-preset": {
+        "title": "Toggle Persist Preset",
+        "button": "Toggle persist presets",
+        "add": "Add preset",
+        "empty": "No presets",
+        "create-title": "Create Toggle Persist Preset",
+        "create-description": "Save the current toggle persist state from this mod's ini files.",
+        "manage-title": "Manage Toggle Persist Preset",
+        "manage-description": "Apply this preset, rename it, or update it with the current mod ini state.",
+        "name-placeholder": "Preset name",
+        "name-required": "Please enter a preset name.",
+        "loading": "Loading current persist state...",
+        "partial": "{{count}} toggle states were not found in the mod ini and will be skipped.",
+        "persist-required": "You can create or update presets only when Persist Toggles is enabled.",
+        "update": "Update",
+        "update-hint": "Update saves the current mod ini state for this mod using the name above."
       }
     },
     "tools": {

@@ -101,20 +101,44 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return await desktop.service.mod.get.presets(game);
     });
 
+    rh("mod:getTogglePersistSnapshot", async (game: string, modPath: string) => {
+        return await desktop.service.mod.get.togglePersistSnapshot(game, modPath);
+    });
+
+    rh("mod:getTogglePersistPresets", async (game: string, modPath: string) => {
+        return await desktop.service.mod.get.togglePersistPresets(game, modPath);
+    });
+
     rh("mod:createPreset", async (game: string, name: string, description?: string) => {
         return await desktop.service.mod.fn.createPreset(game, name, description);
+    });
+
+    rh("mod:createTogglePersistPreset", async (game: string, modPath: string, name: string) => {
+        return await desktop.service.mod.fn.createTogglePersistPreset(game, modPath, name);
     });
 
     rh("mod:applyPreset", async (presetId: string) => {
         return await desktop.service.mod.fn.applyPreset(presetId);
     });
 
+    rh("mod:applyTogglePersistPreset", async (presetId: string, modPath: string) => {
+        return await desktop.service.mod.fn.applyTogglePersistPreset(presetId, modPath);
+    });
+
     rh("mod:deletePreset", async (presetId: string) => {
         return await desktop.service.mod.fn.deletePreset(presetId);
     });
 
+    rh("mod:deleteTogglePersistPreset", async (presetId: string) => {
+        return await desktop.service.mod.fn.deleteTogglePersistPreset(presetId);
+    });
+
     rh("mod:updatePresetName", async (presetId: string, newName: string) => {
         return await desktop.service.mod.fn.updatePresetName(presetId, newName);
+    });
+
+    rh("mod:updateTogglePersistPreset", async (presetId: string, modPath: string, name: string) => {
+        return await desktop.service.mod.fn.updateTogglePersistPreset(presetId, modPath, name);
     });
 
     rh("mod:getLastGame", async () => {

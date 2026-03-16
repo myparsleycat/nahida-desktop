@@ -44,6 +44,41 @@ export const modPresetItems = sqliteTable(
     (t) => [primaryKey({ columns: [t.presetId, t.modKey] })],
 );
 
+export const modTogglePersistPresets = sqliteTable(
+    "mod_toggle_persist_presets",
+    {
+        id: text().primaryKey(),
+        game: text()
+            .notNull()
+            .references(() => gamePaths.game),
+        modKey: text("mod_key").notNull(),
+        relativePath: text("relative_path").notNull(),
+        groupRelativePath: text("group_relative_path").notNull(),
+        folderName: text("folder_name").notNull(),
+        name: text().notNull(),
+        itemCount: integer("item_count").notNull().default(0),
+        createdAt: text("created_at").notNull(),
+        updatedAt: text("updated_at").notNull(),
+    },
+    (t) => [uniqueIndex("mod_toggle_persist_presets_game_mod_name_idx").on(t.game, t.modKey, t.name)],
+);
+
+export const modTogglePersistPresetItems = sqliteTable(
+    "mod_toggle_persist_preset_items",
+    {
+        presetId: text("preset_id")
+            .notNull()
+            .references(() => modTogglePersistPresets.id, { onDelete: "cascade" }),
+        iniRelativePath: text("ini_relative_path").notNull(),
+        iniName: text("ini_name").notNull(),
+        sectionName: text("section_name").notNull(),
+        variable: text("variable").notNull(),
+        value: text("value").notNull(),
+        itemOrder: integer("item_order").notNull(),
+    },
+    (t) => [primaryKey({ columns: [t.presetId, t.iniRelativePath, t.variable] })],
+);
+
 export const imageCache = sqliteTable("image_cache", {
     hash: text().primaryKey(),
     image: blob({ mode: "buffer" }).notNull(),

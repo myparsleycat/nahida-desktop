@@ -1,4 +1,10 @@
-import type { FolderGroup, GameConfig, Preset } from "@shared/types.gen";
+import type {
+    FolderGroup,
+    GameConfig,
+    ModTogglePersistPreset,
+    ModTogglePersistState,
+    Preset,
+} from "@shared/types.gen";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 export function useGames() {
@@ -31,6 +37,30 @@ export function usePresets(selectedGame: string) {
         queryKey: ["presets", selectedGame],
         queryFn: () => window.api.invoke("mod:getPresets", selectedGame),
         enabled: !!selectedGame,
+    });
+}
+
+export function useModTogglePersistSnapshot(
+    selectedGame: string,
+    modPath: string,
+    enabled = true,
+) {
+    return useQuery<ModTogglePersistState[]>({
+        queryKey: ["modTogglePersistSnapshot", selectedGame, modPath],
+        queryFn: () => window.api.invoke("mod:getTogglePersistSnapshot", selectedGame, modPath),
+        enabled: enabled && !!selectedGame && !!modPath,
+    });
+}
+
+export function useModTogglePersistPresets(
+    selectedGame: string,
+    modPath: string,
+    enabled = true,
+) {
+    return useQuery<ModTogglePersistPreset[]>({
+        queryKey: ["modTogglePersistPresets", selectedGame, modPath],
+        queryFn: () => window.api.invoke("mod:getTogglePersistPresets", selectedGame, modPath),
+        enabled: enabled && !!selectedGame && !!modPath,
     });
 }
 

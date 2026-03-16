@@ -78,6 +78,36 @@ export interface ApplyPresetResult {
     }[];
 }
 
+export interface ModTogglePersistState {
+    iniRelativePath: string;
+    iniName: string;
+    sectionName: string;
+    variable: string;
+    currentValue: string | null;
+    values: string[];
+    isMissing: boolean;
+}
+
+export interface ModTogglePersistPresetItem {
+    iniRelativePath: string;
+    iniName: string;
+    sectionName: string;
+    variable: string;
+    value: string;
+}
+
+export interface ModTogglePersistPreset {
+    id: string;
+    game: string;
+    modKey: string;
+    modRelativePath: string;
+    name: string;
+    itemCount: number;
+    createdAt: string;
+    updatedAt: string;
+    items: ModTogglePersistPresetItem[];
+}
+
 export interface PathMetadata {
     isDirectory: boolean;
     isFile: boolean;
@@ -114,9 +144,12 @@ export type IpcHandlers = {
     "ftm:sendInput": (...args: Parameters<typeof desktop.service.modTools.fixTool.sendInput>) => ReturnType<typeof desktop.service.modTools.fixTool.sendInput>;
     "mod:addGame": (...args: Parameters<typeof desktop.service.mod.fn.addGame>) => ReturnType<typeof desktop.service.mod.fn.addGame>;
     "mod:applyPreset": (...args: Parameters<typeof desktop.service.mod.fn.applyPreset>) => ReturnType<typeof desktop.service.mod.fn.applyPreset>;
+    "mod:applyTogglePersistPreset": (...args: Parameters<typeof desktop.service.mod.fn.applyTogglePersistPreset>) => ReturnType<typeof desktop.service.mod.fn.applyTogglePersistPreset>;
     "mod:copyFolder": (...args: any[]) => any;
     "mod:createPreset": (...args: Parameters<typeof desktop.service.mod.fn.createPreset>) => ReturnType<typeof desktop.service.mod.fn.createPreset>;
+    "mod:createTogglePersistPreset": (...args: Parameters<typeof desktop.service.mod.fn.createTogglePersistPreset>) => ReturnType<typeof desktop.service.mod.fn.createTogglePersistPreset>;
     "mod:deletePreset": (...args: Parameters<typeof desktop.service.mod.fn.deletePreset>) => ReturnType<typeof desktop.service.mod.fn.deletePreset>;
+    "mod:deleteTogglePersistPreset": (...args: Parameters<typeof desktop.service.mod.fn.deleteTogglePersistPreset>) => ReturnType<typeof desktop.service.mod.fn.deleteTogglePersistPreset>;
     "mod:disableAll": (...args: Parameters<typeof desktop.service.mod.fn.disableAll>) => ReturnType<typeof desktop.service.mod.fn.disableAll>;
     "mod:enableAll": (...args: Parameters<typeof desktop.service.mod.fn.enableAll>) => ReturnType<typeof desktop.service.mod.fn.enableAll>;
     "mod:exclusiveToggle": (...args: Parameters<typeof desktop.service.mod.fn.exclusiveToggle>) => ReturnType<typeof desktop.service.mod.fn.exclusiveToggle>;
@@ -130,6 +163,8 @@ export type IpcHandlers = {
     "mod:getPresets": (...args: Parameters<typeof desktop.service.mod.get.presets>) => ReturnType<typeof desktop.service.mod.get.presets>;
     "mod:getPreviousFocusedGame": (...args: Parameters<typeof desktop.service.mod.get.previousFocusedGame>) => ReturnType<typeof desktop.service.mod.get.previousFocusedGame>;
     "mod:getSubGroups": (...args: Parameters<typeof desktop.service.mod.get.subGroups>) => ReturnType<typeof desktop.service.mod.get.subGroups>;
+    "mod:getTogglePersistPresets": (...args: Parameters<typeof desktop.service.mod.get.togglePersistPresets>) => ReturnType<typeof desktop.service.mod.get.togglePersistPresets>;
+    "mod:getTogglePersistSnapshot": (...args: Parameters<typeof desktop.service.mod.get.togglePersistSnapshot>) => ReturnType<typeof desktop.service.mod.get.togglePersistSnapshot>;
     "mod:pastePreview": (...args: Parameters<typeof desktop.service.mod.fn.pastePreview>) => ReturnType<typeof desktop.service.mod.fn.pastePreview>;
     "mod:pickFolder": (...args: any[]) => any;
     "mod:removeGame": (...args: Parameters<typeof desktop.service.mod.fn.removeGame>) => ReturnType<typeof desktop.service.mod.fn.removeGame>;
@@ -139,6 +174,7 @@ export type IpcHandlers = {
     "mod:toggle": (...args: Parameters<typeof desktop.service.mod.fn.toggle>) => ReturnType<typeof desktop.service.mod.fn.toggle>;
     "mod:updatePresetName": (...args: Parameters<typeof desktop.service.mod.fn.updatePresetName>) => ReturnType<typeof desktop.service.mod.fn.updatePresetName>;
     "mod:updateToggleKey": (...args: any[]) => any;
+    "mod:updateTogglePersistPreset": (...args: Parameters<typeof desktop.service.mod.fn.updateTogglePersistPreset>) => ReturnType<typeof desktop.service.mod.fn.updateTogglePersistPreset>;
     "mod:watchCharacter": (...args: Parameters<typeof desktop.service.mod.watchCharacter>) => ReturnType<typeof desktop.service.mod.watchCharacter>;
     "mod:watchGame": (...args: Parameters<typeof desktop.service.mod.watchGame>) => ReturnType<typeof desktop.service.mod.watchGame>;
     "pathSelector:cancel": (...args: Parameters<typeof desktop.lib.pathSelector.cancelSelection>) => ReturnType<typeof desktop.lib.pathSelector.cancelSelection>;

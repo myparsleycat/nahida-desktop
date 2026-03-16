@@ -1,6 +1,14 @@
 import path from "node:path";
 import { getCharactersFolder, getMods, sendF10 } from "@native/native-mod";
-import type { ApplyPresetResult, FolderGroup, Preset } from "@shared/types.gen";
+import type {
+    ApplyPresetResult,
+    FolderGroup,
+    ModInfo,
+    ModTogglePersistPreset,
+    ModTogglePersistPresetItem,
+    ModTogglePersistState,
+    Preset,
+} from "@shared/types.gen";
 import { GAME_MATCH_CASES } from "@shared/xxmi-match";
 import { and, eq } from "drizzle-orm";
 import { trim } from "es-toolkit";
@@ -8,7 +16,14 @@ import fg from "fast-glob";
 import fse from "fs-extra";
 import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "..";
-import { gamePaths, modPresetItems, modPresets, setting } from "../internal/db/schema";
+import {
+    gamePaths,
+    modPresetItems,
+    modPresets,
+    modTogglePersistPresetItems,
+    modTogglePersistPresets,
+    setting,
+} from "../internal/db/schema";
 
 interface PresetSnapshotItemRecord {
     modKey: string;
@@ -20,6 +35,14 @@ interface PresetSnapshotItemRecord {
 
 interface ScannedPresetItem extends PresetSnapshotItemRecord {
     actualPath: string;
+}
+
+interface TogglePersistPresetItemRecord {
+    iniRelativePath: string;
+    iniName: string;
+    sectionName: string;
+    variable: string;
+    value: string;
 }
 
 const MOD_PRESET_ITEM_INSERT_BATCH_SIZE = 100;
@@ -199,6 +222,159 @@ export class ModManager {
         };
     }
 
+    private async getModInfoByPath(modPath: string): Promise<ModInfo> {
+        const group = await this.get.mods(path.dirname(modPath));
+        const normalizedModPath = this.normalizeModPath(modPath);
+        const matchedMod = group.mods.find(
+            (item) => this.normalizeModPath(item.path) === normalizedModPath,
+        );
+
+        if (!matchedMod) {
+            throw new Error(`Mod ${modPath} not found`);
+        }
+
+        return matchedMod;
+    }
+
+    private async getTogglePersistPresetContext(game: string, modPath: string) {
+        const gamePath = await this.get.gamePath(game);
+        if (!gamePath) {
+            throw new Error(`No mod folder path set for ${game}`);
+        }
+
+        const mod = await this.getModInfoByPath(modPath);
+        const groupPath = this.getPresetGroupPath(gamePath, mod.path);
+        const snapshotItem = this.buildPresetSnapshotItem(gamePath, groupPath, mod.path);
+
+        return {
+            gamePath,
+            mod,
+            snapshotItem,
+        };
+    }
+
+    private parseModIniPersistValues(content: string): Record<string, string> {
+        const result: Record<string, string> = {};
+        const lines = content.split(/\r?\n/);
+        let inConstants = false;
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith(";")) {
+                continue;
+            }
+
+            if (trimmed.startsWith("[")) {
+                inConstants = trimmed.toLowerCase() === "[constants]";
+                continue;
+            }
+
+            if (!inConstants) {
+                continue;
+            }
+
+            const match = trimmed.match(/^global\s+persist\s+\$(.+?)\s*=\s*(.+)$/i);
+            if (!match) {
+                continue;
+            }
+
+            const variable = match[1].trim().toLowerCase();
+            const value = match[2].split(";")[0].trim();
+            result[variable] = value;
+        }
+
+        return result;
+    }
+
+    private normalizeTogglePersistVariable(variable: string): string {
+        return variable.trim().replace(/^\$/, "").toLowerCase();
+    }
+
+    private async buildTogglePersistSnapshot(mod: ModInfo): Promise<ModTogglePersistState[]> {
+        const snapshots = await Promise.all(
+            mod.inis.map(async (ini) => {
+                const content = await fse.readFile(ini.path, "utf-8");
+                const persistValues = this.parseModIniPersistValues(content);
+
+                return ini.toggleKeys.map((toggleKey) => {
+                    const variable = this.normalizeTogglePersistVariable(toggleKey.variable);
+                    const currentValue = persistValues[variable] ?? null;
+                    return {
+                        iniRelativePath: path.relative(mod.path, ini.path),
+                        iniName: ini.name,
+                        sectionName: toggleKey.sectionName,
+                        variable,
+                        currentValue,
+                        values: [...toggleKey.values],
+                        isMissing: currentValue === null,
+                    };
+                });
+            }),
+        );
+
+        return snapshots.flat();
+    }
+
+    private async getTogglePersistSnapshot(
+        game: string,
+        modPath: string,
+    ): Promise<ModTogglePersistState[]> {
+        const { mod } = await this.getTogglePersistPresetContext(game, modPath);
+        return await this.buildTogglePersistSnapshot(mod);
+    }
+
+    private toTogglePersistPresetItems(
+        snapshot: ModTogglePersistState[],
+    ): TogglePersistPresetItemRecord[] {
+        return snapshot
+            .filter((item) => !item.isMissing && item.currentValue !== null)
+            .map((item) => ({
+                iniRelativePath: item.iniRelativePath,
+                iniName: item.iniName,
+                sectionName: item.sectionName,
+                variable: item.variable,
+                value: item.currentValue ?? "",
+            }));
+    }
+
+    private toTogglePersistPresetItem(item: TogglePersistPresetItemRecord): ModTogglePersistPresetItem {
+        return {
+            iniRelativePath: item.iniRelativePath,
+            iniName: item.iniName,
+            sectionName: item.sectionName,
+            variable: item.variable,
+            value: item.value,
+        };
+    }
+
+    private async getTogglePersistPresetItems(
+        presetId: string,
+    ): Promise<ModTogglePersistPresetItem[]> {
+        const rows = await this.desktop.lib.db.query.modTogglePersistPresetItems.findMany({
+            where: eq(modTogglePersistPresetItems.presetId, presetId),
+        });
+
+        return rows
+            .sort((a, b) => a.itemOrder - b.itemOrder)
+            .map((row) => this.toTogglePersistPresetItem(row));
+    }
+
+    private async toTogglePersistPreset(
+        row: typeof modTogglePersistPresets.$inferSelect,
+    ): Promise<ModTogglePersistPreset> {
+        return {
+            id: row.id,
+            game: row.game,
+            modKey: row.modKey,
+            modRelativePath: row.relativePath,
+            name: row.name,
+            itemCount: row.itemCount,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+            items: await this.getTogglePersistPresetItems(row.id),
+        };
+    }
+
     get = {
         gamePath: async (game: string): Promise<string | null> => {
             const result = await this.desktop.lib.db.query.gamePaths.findFirst({
@@ -264,6 +440,29 @@ export class ModManager {
                     version: r.version,
                     isLegacy: r.version < MOD_PRESET_VERSION,
                 }));
+        },
+
+        togglePersistSnapshot: async (
+            game: string,
+            modPath: string,
+        ): Promise<ModTogglePersistState[]> => {
+            return await this.getTogglePersistSnapshot(game, modPath);
+        },
+
+        togglePersistPresets: async (
+            game: string,
+            modPath: string,
+        ): Promise<ModTogglePersistPreset[]> => {
+            const { snapshotItem } = await this.getTogglePersistPresetContext(game, modPath);
+            const rows = await this.desktop.lib.db.query.modTogglePersistPresets.findMany({
+                where: and(
+                    eq(modTogglePersistPresets.game, game),
+                    eq(modTogglePersistPresets.modKey, snapshotItem.modKey),
+                ),
+            });
+
+            const presets = await Promise.all(rows.map((row) => this.toTogglePersistPreset(row)));
+            return presets.sort((a, b) => a.name.localeCompare(b.name));
         },
 
         games: async () => {
@@ -766,6 +965,198 @@ export class ModManager {
                 .where(eq(modPresets.id, presetId));
         },
 
+        createTogglePersistPreset: async (
+            game: string,
+            modPath: string,
+            name: string,
+        ): Promise<ModTogglePersistPreset> => {
+            const persistEnabled = await this.desktop.setting.xxmi.getPersistToggles();
+            if (!persistEnabled) {
+                throw new Error("TOGGLE_PERSIST_DISABLED");
+            }
+
+            const trimmedName = trim(name);
+            if (!trimmedName) {
+                throw new Error("INVALID_PRESET_NAME");
+            }
+
+            const { snapshotItem } = await this.getTogglePersistPresetContext(game, modPath);
+            const existingPreset = await this.desktop.lib.db.query.modTogglePersistPresets.findFirst({
+                where: and(
+                    eq(modTogglePersistPresets.game, game),
+                    eq(modTogglePersistPresets.modKey, snapshotItem.modKey),
+                    eq(modTogglePersistPresets.name, trimmedName),
+                ),
+            });
+
+            if (existingPreset) {
+                throw new Error("PRESET_NAME_EXISTS");
+            }
+
+            const snapshot = await this.getTogglePersistSnapshot(game, modPath);
+            const presetItems = this.toTogglePersistPresetItems(snapshot);
+            if (presetItems.length === 0) {
+                throw new Error("TOGGLE_PERSIST_PRESET_EMPTY");
+            }
+
+            const id = nanoid();
+            const now = new Date().toISOString();
+
+            this.desktop.lib.db.transaction((tx) => {
+                tx.insert(modTogglePersistPresets)
+                    .values({
+                        id,
+                        game,
+                        modKey: snapshotItem.modKey,
+                        relativePath: snapshotItem.relativePath,
+                        groupRelativePath: snapshotItem.groupRelativePath,
+                        folderName: snapshotItem.folderName,
+                        name: trimmedName,
+                        itemCount: presetItems.length,
+                        createdAt: now,
+                        updatedAt: now,
+                    })
+                    .run();
+
+                tx.insert(modTogglePersistPresetItems)
+                    .values(
+                        presetItems.map((item, index) => ({
+                            presetId: id,
+                            ...item,
+                            itemOrder: index,
+                        })),
+                    )
+                    .run();
+            });
+
+            return {
+                id,
+                game,
+                modKey: snapshotItem.modKey,
+                modRelativePath: snapshotItem.relativePath,
+                name: trimmedName,
+                itemCount: presetItems.length,
+                createdAt: now,
+                updatedAt: now,
+                items: presetItems.map((item) => this.toTogglePersistPresetItem(item)),
+            };
+        },
+
+        updateTogglePersistPreset: async (
+            presetId: string,
+            modPath: string,
+            newName: string,
+        ): Promise<ModTogglePersistPreset> => {
+            const persistEnabled = await this.desktop.setting.xxmi.getPersistToggles();
+            if (!persistEnabled) {
+                throw new Error("TOGGLE_PERSIST_DISABLED");
+            }
+
+            const preset = await this.desktop.lib.db.query.modTogglePersistPresets.findFirst({
+                where: eq(modTogglePersistPresets.id, presetId),
+            });
+
+            if (!preset) {
+                throw new Error(`Preset ${presetId} not found`);
+            }
+
+            const trimmedName = trim(newName);
+            if (!trimmedName) {
+                throw new Error("INVALID_PRESET_NAME");
+            }
+
+            const { snapshotItem } = await this.getTogglePersistPresetContext(preset.game, modPath);
+            const existingPreset = await this.desktop.lib.db.query.modTogglePersistPresets.findFirst({
+                where: and(
+                    eq(modTogglePersistPresets.game, preset.game),
+                    eq(modTogglePersistPresets.modKey, snapshotItem.modKey),
+                    eq(modTogglePersistPresets.name, trimmedName),
+                ),
+            });
+
+            if (existingPreset && existingPreset.id !== presetId) {
+                throw new Error("PRESET_NAME_EXISTS");
+            }
+
+            const snapshot = await this.getTogglePersistSnapshot(preset.game, modPath);
+            const presetItems = this.toTogglePersistPresetItems(snapshot);
+            if (presetItems.length === 0) {
+                throw new Error("TOGGLE_PERSIST_PRESET_EMPTY");
+            }
+
+            const now = new Date().toISOString();
+
+            this.desktop.lib.db.transaction((tx) => {
+                tx.update(modTogglePersistPresets)
+                    .set({
+                        modKey: snapshotItem.modKey,
+                        relativePath: snapshotItem.relativePath,
+                        groupRelativePath: snapshotItem.groupRelativePath,
+                        folderName: snapshotItem.folderName,
+                        name: trimmedName,
+                        itemCount: presetItems.length,
+                        updatedAt: now,
+                    })
+                    .where(eq(modTogglePersistPresets.id, presetId))
+                    .run();
+
+                tx.delete(modTogglePersistPresetItems)
+                    .where(eq(modTogglePersistPresetItems.presetId, presetId))
+                    .run();
+
+                tx.insert(modTogglePersistPresetItems)
+                    .values(
+                        presetItems.map((item, index) => ({
+                            presetId,
+                            ...item,
+                            itemOrder: index,
+                        })),
+                    )
+                    .run();
+            });
+
+            return {
+                id: presetId,
+                game: preset.game,
+                modKey: snapshotItem.modKey,
+                modRelativePath: snapshotItem.relativePath,
+                name: trimmedName,
+                itemCount: presetItems.length,
+                createdAt: preset.createdAt,
+                updatedAt: now,
+                items: presetItems.map((item) => this.toTogglePersistPresetItem(item)),
+            };
+        },
+
+        applyTogglePersistPreset: async (presetId: string, modPath: string): Promise<void> => {
+            const preset = await this.desktop.lib.db.query.modTogglePersistPresets.findFirst({
+                where: eq(modTogglePersistPresets.id, presetId),
+            });
+
+            if (!preset) {
+                throw new Error(`Preset ${presetId} not found`);
+            }
+
+            const presetItems = await this.getTogglePersistPresetItems(presetId);
+            if (presetItems.length === 0) {
+                throw new Error("TOGGLE_PERSIST_PRESET_EMPTY");
+            }
+
+            await this.desktop.service.modTools.togglePersist.applyModIniPersistValues(
+                presetItems.map((item) => ({
+                    iniPath: path.join(modPath, item.iniRelativePath),
+                    variable: item.variable,
+                    value: item.value,
+                })),
+            );
+        },
+
+        deleteTogglePersistPreset: async (presetId: string): Promise<void> => {
+            await this.desktop.lib.db
+                .delete(modTogglePersistPresets)
+                .where(eq(modTogglePersistPresets.id, presetId));
+        },
+
         addGame: async (game: string, modFolderPath: string) => {
             if (!game || !modFolderPath) {
                 throw new Error("Game and modFolderPath are required");
@@ -780,8 +1171,11 @@ export class ModManager {
         },
 
         removeGame: async (game: string) => {
-            await this.desktop.lib.db.delete(gamePaths).where(eq(gamePaths.game, game));
+            await this.desktop.lib.db
+                .delete(modTogglePersistPresets)
+                .where(eq(modTogglePersistPresets.game, game));
             await this.desktop.lib.db.delete(modPresets).where(eq(modPresets.game, game));
+            await this.desktop.lib.db.delete(gamePaths).where(eq(gamePaths.game, game));
         },
 
         setLastGame: async (game: string) => {

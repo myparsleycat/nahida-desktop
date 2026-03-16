@@ -236,6 +236,23 @@
       "log-dialog": {
         "title": "日志",
         "running": "运行中..."
+      },
+      "toggle-persist-preset": {
+        "title": "切换 persist 预设",
+        "button": "切换 persist 预设",
+        "add": "添加预设",
+        "empty": "没有预设",
+        "create-title": "创建切换 persist 预设",
+        "create-description": "保存此模组当前 mod ini 中的切换 persist 状态。",
+        "manage-title": "管理切换 persist 预设",
+        "manage-description": "可以应用预设、修改名称，或用当前 mod ini 状态更新它。",
+        "name-placeholder": "预设名称",
+        "name-required": "请输入预设名称。",
+        "loading": "正在加载当前 persist 状态...",
+        "partial": "有 {{count}} 个切换状态未在 mod ini 中找到，因此不会保存。",
+        "persist-required": "只有在启用 Persist Toggles 时，才能创建或更新预设。",
+        "update": "修改",
+        "update-hint": "修改会使用上方名称，按当前 mod ini 状态重新保存。"
       }
     },
     "tools": {

@@ -35,6 +35,7 @@ import {
 import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { ModTogglePersistPresetMenu } from "./mod-toggle-persist-preset-menu";
 
 interface ModCardHeaderProps {
   mod: ModInfo;
@@ -123,6 +124,8 @@ export const ModCardHeader = memo(function ModCardHeader({
         {mod.name.replace(/disabled/gi, "").trim()}
       </span>
       <div className="flex items-center gap-1">
+        <ModTogglePersistPresetMenu mod={mod} />
+
         <DropdownMenu>
           <DropdownMenuTrigger
             className={cn(

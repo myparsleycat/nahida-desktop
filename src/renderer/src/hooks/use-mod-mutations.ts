@@ -1,5 +1,10 @@
 import { useModStore } from "@renderer/store/mod";
-import type { ApplyPresetResult, FolderGroup, ModInfo } from "@shared/types.gen";
+import type {
+    ApplyPresetResult,
+    FolderGroup,
+    ModInfo,
+    ModTogglePersistPreset,
+} from "@shared/types.gen";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -223,4 +228,99 @@ export function usePresetMutations() {
     });
 
     return { createPresetMutation, applyPresetMutation, deletePresetMutation };
+}
+
+export function useModTogglePersistPresetMutations(game: string, modPath: string) {
+    const queryClient = useQueryClient();
+
+    const invalidatePresetQueries = async () => {
+        await queryClient.invalidateQueries({
+            queryKey: ["modTogglePersistPresets", game, modPath],
+        });
+        await queryClient.invalidateQueries({
+            queryKey: ["modTogglePersistSnapshot", game, modPath],
+        });
+    };
+
+    const createPresetMutation = useMutation({
+        mutationFn: (name: string) =>
+            window.api.invoke("mod:createTogglePersistPreset", game, modPath, name),
+        onSuccess: async () => {
+            await invalidatePresetQueries();
+            toast.success("토글 persist 프리셋이 추가되었습니다.");
+        },
+        onError: (error) => {
+            const message = (error as Error).message;
+            if (message.includes("PRESET_NAME_EXISTS")) {
+                toast.error("이미 존재하는 프리셋 이름입니다.");
+                return;
+            }
+            if (message.includes("TOGGLE_PERSIST_DISABLED")) {
+                toast.error("토글 영구 저장 기능이 켜져 있을 때만 프리셋을 생성할 수 있습니다.");
+                return;
+            }
+            if (message.includes("TOGGLE_PERSIST_PRESET_EMPTY")) {
+                toast.error("저장할 persist 상태를 찾지 못했습니다.");
+            }
+        },
+    });
+
+    const updatePresetMutation = useMutation({
+        mutationFn: ({ presetId, name }: { presetId: string; name: string }) =>
+            window.api.invoke("mod:updateTogglePersistPreset", presetId, modPath, name),
+        onSuccess: async (preset: ModTogglePersistPreset) => {
+            await invalidatePresetQueries();
+            queryClient.setQueryData(
+                ["modTogglePersistPresets", game, modPath],
+                (current: ModTogglePersistPreset[] | undefined) =>
+                    current?.map((item) => (item.id === preset.id ? preset : item)) ?? [preset],
+            );
+            toast.success("토글 persist 프리셋이 수정되었습니다.");
+        },
+        onError: (error) => {
+            const message = (error as Error).message;
+            if (message.includes("PRESET_NAME_EXISTS")) {
+                toast.error("이미 존재하는 프리셋 이름입니다.");
+                return;
+            }
+            if (message.includes("TOGGLE_PERSIST_DISABLED")) {
+                toast.error("토글 영구 저장 기능이 켜져 있을 때만 프리셋을 수정할 수 있습니다.");
+                return;
+            }
+            if (message.includes("TOGGLE_PERSIST_PRESET_EMPTY")) {
+                toast.error("현재 persist 상태를 찾지 못해 프리셋을 갱신하지 못했습니다.");
+            }
+        },
+    });
+
+    const applyPresetMutation = useMutation({
+        mutationFn: (presetId: string) =>
+            window.api.invoke("mod:applyTogglePersistPreset", presetId, modPath),
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({ queryKey: ["modGroup"] });
+            await invalidatePresetQueries();
+            toast.success("토글 persist 프리셋이 적용되었습니다.");
+        },
+        onError: (error) => {
+            const message = (error as Error).message;
+            if (message.includes("Mod") && message.includes("not found")) {
+                toast.error("프리셋을 적용할 현재 모드를 찾지 못했습니다.");
+            }
+        },
+    });
+
+    const deletePresetMutation = useMutation({
+        mutationFn: (presetId: string) => window.api.invoke("mod:deleteTogglePersistPreset", presetId),
+        onSuccess: async () => {
+            await invalidatePresetQueries();
+            toast.success("토글 persist 프리셋이 삭제되었습니다.");
+        },
+    });
+
+    return {
+        createPresetMutation,
+        updatePresetMutation,
+        applyPresetMutation,
+        deletePresetMutation,
+    };
 }

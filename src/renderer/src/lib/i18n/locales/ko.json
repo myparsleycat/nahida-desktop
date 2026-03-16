@@ -236,6 +236,23 @@
       "log-dialog": {
         "title": "로그",
         "running": "실행 중..."
+      },
+      "toggle-persist-preset": {
+        "title": "토글 persist 프리셋",
+        "button": "토글 persist 프리셋",
+        "add": "프리셋 추가",
+        "empty": "프리셋 없음",
+        "create-title": "토글 persist 프리셋 생성",
+        "create-description": "이 모드의 현재 mod ini 토글 persist 상태를 저장합니다.",
+        "manage-title": "토글 persist 프리셋 관리",
+        "manage-description": "프리셋을 적용하거나 이름을 바꾸고, 현재 mod ini 상태로 갱신할 수 있습니다.",
+        "name-placeholder": "프리셋 이름",
+        "name-required": "프리셋 이름을 입력해주세요.",
+        "loading": "현재 persist 상태를 불러오는 중...",
+        "partial": "mod ini 에서 값을 찾지 못한 토글 상태 {{count}}개는 저장되지 않습니다.",
+        "persist-required": "토글 영구 저장 기능이 켜져 있을 때만 프리셋을 생성하거나 수정할 수 있습니다.",
+        "update": "수정",
+        "update-hint": "수정은 위 이름으로 현재 mod ini 상태를 다시 저장합니다."
       }
     },
     "tools": {

@@ -1,8 +1,50 @@
 import path from "node:path";
+import { getMatchingImporter } from "@shared/xxmi-match";
 import { formatDate } from "@shared/utils";
 import { debounce, retry } from "es-toolkit";
 import fse from "fs-extra";
 import type { NahidaDesktop } from "@/main";
+
+export interface PersistStateTarget {
+    iniPath: string;
+    iniName: string;
+    sectionName: string;
+    variable: string;
+    values: string[];
+    fallbackValue?: string;
+}
+
+export interface PersistStateSnapshotItem {
+    iniRelativePath: string;
+    iniName: string;
+    sectionName: string;
+    variable: string;
+    currentValue: string | null;
+    values: string[];
+    isMissing: boolean;
+}
+
+export interface PersistStateValueInput {
+    iniRelativePath: string;
+    variable: string;
+    value: string;
+}
+
+export interface ModIniPersistValueInput {
+    iniPath: string;
+    variable: string;
+    value: string;
+}
+
+interface ResolvedImporterContext {
+    key: string;
+    importerFolder: string;
+    d3dxPath: string;
+}
+
+function normalizePersistVariable(variable: string): string {
+    return variable.trim().replace(/^\$/, "").toLowerCase();
+}
 
 export class TogglePersist {
     private static readonly modifierTokens = new Set([
@@ -98,7 +140,7 @@ export class TogglePersist {
         return [...this.persistLogs];
     }
 
-    private parseD3dxUserIni(content: string): Record<string, string> {
+    public parseD3dxUserIni(content: string): Record<string, string> {
         const result: Record<string, string> = {};
         const lines = content.split(/\r?\n/);
         let inConstants = false;
@@ -122,6 +164,242 @@ export class TogglePersist {
             }
         }
         return result;
+    }
+
+    public async getPersistStateSnapshot(
+        game: string,
+        targets: PersistStateTarget[],
+    ): Promise<PersistStateSnapshotItem[]> {
+        if (targets.length === 0) {
+            return [];
+        }
+
+        const importer = await this.resolveImporterContext(game);
+        const content = await fse.readFile(importer.d3dxPath, "utf-8");
+        const parsed = this.parseD3dxUserIni(content);
+
+        return targets.map((target) => {
+            const iniRelativePath = this.toIniRelativePath(importer.importerFolder, target.iniPath);
+            const key = this.buildPersistEntryKey(iniRelativePath, target.variable);
+            const currentValue = parsed[key] ?? target.fallbackValue ?? null;
+            return {
+                iniRelativePath,
+                iniName: target.iniName,
+                sectionName: target.sectionName,
+                variable: target.variable,
+                currentValue,
+                values: [...target.values],
+                isMissing: currentValue === null,
+            };
+        });
+    }
+
+    public async applyPersistValues(game: string, values: PersistStateValueInput[]): Promise<void> {
+        if (values.length === 0) {
+            throw new Error("TOGGLE_PERSIST_PRESET_EMPTY");
+        }
+
+        const importer = await this.resolveImporterContext(game);
+        const content = await fse.readFile(importer.d3dxPath, "utf-8");
+        const updates = new Map<string, string>();
+        const iniUpdates = new Map<string, { targetIniPath: string; updates: Map<string, string> }>();
+
+        for (const value of values) {
+            const normalizedRelativePath = this.normalizeIniRelativePath(value.iniRelativePath);
+            updates.set(
+                this.buildPersistEntryKey(normalizedRelativePath, value.variable),
+                value.value,
+            );
+
+            const targetIniPath = path.join(importer.importerFolder, normalizedRelativePath);
+            const lockKey = targetIniPath.toLowerCase();
+            let fileUpdate = iniUpdates.get(lockKey);
+            if (!fileUpdate) {
+                fileUpdate = {
+                    targetIniPath,
+                    updates: new Map(),
+                };
+                iniUpdates.set(lockKey, fileUpdate);
+            }
+            fileUpdate.updates.set(normalizePersistVariable(value.variable), value.value);
+        }
+
+        const { changed, content: nextContent, parsed } = this.applyD3dxUserIniUpdates(
+            content,
+            updates,
+        );
+
+        if (changed) {
+            await fse.writeFile(importer.d3dxPath, nextContent, "utf-8");
+            this.cachedD3dxUserIni.set(importer.key, parsed);
+            this.logInfo(
+                `Applied ${values.length} persist preset value${values.length === 1 ? "" : "s"} to ${importer.d3dxPath}`,
+            );
+        }
+
+        for (const fileUpdate of iniUpdates.values()) {
+            await this.enqueuePersistFileUpdate(fileUpdate.targetIniPath, fileUpdate.updates);
+        }
+    }
+
+    public async applyModIniPersistValues(values: ModIniPersistValueInput[]): Promise<void> {
+        if (values.length === 0) {
+            throw new Error("TOGGLE_PERSIST_PRESET_EMPTY");
+        }
+
+        const iniUpdates = new Map<string, { targetIniPath: string; updates: Map<string, string> }>();
+
+        for (const value of values) {
+            const lockKey = value.iniPath.toLowerCase();
+            let fileUpdate = iniUpdates.get(lockKey);
+            if (!fileUpdate) {
+                fileUpdate = {
+                    targetIniPath: value.iniPath,
+                    updates: new Map(),
+                };
+                iniUpdates.set(lockKey, fileUpdate);
+            }
+            fileUpdate.updates.set(normalizePersistVariable(value.variable), value.value);
+        }
+
+        for (const fileUpdate of iniUpdates.values()) {
+            await this.enqueuePersistFileUpdate(fileUpdate.targetIniPath, fileUpdate.updates);
+        }
+    }
+
+    private async resolveImporterContext(game: string): Promise<ResolvedImporterContext> {
+        await this.desktop.service.xxmi.init();
+
+        const importers = this.desktop.service.xxmi.getEnabledImporters();
+        const matchedImporter = getMatchingImporter(
+            game,
+            importers.map((importer) => importer.key),
+        );
+
+        if (!matchedImporter) {
+            throw new Error("TOGGLE_PERSIST_IMPORTER_NOT_FOUND");
+        }
+
+        const importer = importers.find((item) => item.key === matchedImporter);
+        if (!importer) {
+            throw new Error("TOGGLE_PERSIST_IMPORTER_NOT_FOUND");
+        }
+
+        const d3dxPath = path.join(importer.importerFolder, "d3dx_user.ini");
+        if (!(await fse.pathExists(d3dxPath))) {
+            throw new Error("TOGGLE_PERSIST_D3DX_USER_INI_NOT_FOUND");
+        }
+
+        return {
+            key: importer.key,
+            importerFolder: importer.importerFolder,
+            d3dxPath,
+        };
+    }
+
+    private toIniRelativePath(importerFolder: string, iniPath: string): string {
+        const relativePath = path.relative(importerFolder, iniPath);
+        if (!relativePath || relativePath.startsWith("..")) {
+            throw new Error("TOGGLE_PERSIST_TARGET_OUTSIDE_IMPORTER");
+        }
+        return this.normalizeIniRelativePath(relativePath);
+    }
+
+    private normalizeIniRelativePath(relativePath: string): string {
+        return relativePath
+            .split(/[\\/]+/)
+            .filter(Boolean)
+            .join("\\");
+    }
+
+    private buildPersistEntryKey(iniRelativePath: string, variable: string): string {
+        return `$\\${this.normalizeIniRelativePath(iniRelativePath)}\\${normalizePersistVariable(variable)}`;
+    }
+
+    private applyD3dxUserIniUpdates(content: string, updates: Map<string, string>) {
+        const lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
+        const lines = content.split(/\r?\n/);
+        const normalizedUpdates = new Map(
+            Array.from(updates.entries()).map(([key, value]) => [
+                key.toLowerCase(),
+                { key, value },
+            ]),
+        );
+
+        let constantsSectionStart = -1;
+        let constantsSectionEnd = lines.length;
+        let inConstants = false;
+        let changed = false;
+        const handledKeys = new Set<string>();
+
+        for (let i = 0; i < lines.length; i++) {
+            const trimmed = lines[i].trim();
+
+            if (trimmed.startsWith("[")) {
+                if (inConstants && constantsSectionEnd === lines.length) {
+                    constantsSectionEnd = i;
+                }
+
+                inConstants = trimmed.toLowerCase() === "[constants]";
+                if (inConstants && constantsSectionStart === -1) {
+                    constantsSectionStart = i;
+                }
+                continue;
+            }
+
+            if (!inConstants || !trimmed.startsWith("$")) {
+                continue;
+            }
+
+            const separatorIndex = trimmed.indexOf("=");
+            if (separatorIndex === -1) {
+                continue;
+            }
+
+            const currentKey = trimmed.slice(0, separatorIndex).trim();
+            const update = normalizedUpdates.get(currentKey.toLowerCase());
+            if (!update) {
+                continue;
+            }
+
+            handledKeys.add(currentKey.toLowerCase());
+            const currentValue = trimmed.slice(separatorIndex + 1).trim();
+            if (currentValue === update.value.trim()) {
+                continue;
+            }
+
+            lines[i] = `${update.key} = ${update.value}`;
+            changed = true;
+        }
+
+        if (inConstants && constantsSectionEnd === lines.length) {
+            constantsSectionEnd = lines.length;
+        }
+
+        const missingEntries = Array.from(normalizedUpdates.entries())
+            .filter(([key]) => !handledKeys.has(key))
+            .map(([, entry]) => `${entry.key} = ${entry.value}`);
+
+        if (missingEntries.length > 0) {
+            if (constantsSectionStart === -1) {
+                if (lines.length > 0 && lines[lines.length - 1].trim() !== "") {
+                    lines.push("");
+                }
+                lines.push("[Constants]");
+                constantsSectionStart = lines.length - 1;
+                constantsSectionEnd = lines.length;
+            }
+
+            lines.splice(constantsSectionEnd, 0, ...missingEntries);
+            changed = true;
+        }
+
+        const nextContent = lines.join(lineEnding);
+        return {
+            changed,
+            content: nextContent,
+            parsed: this.parseD3dxUserIni(nextContent),
+        };
     }
 
     private async handleD3dxUserIniChange(

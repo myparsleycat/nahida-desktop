@@ -237,6 +237,23 @@
       "log-dialog": {
         "title": "ログ",
         "running": "実行中..."
+      },
+      "toggle-persist-preset": {
+        "title": "トグル persist プリセット",
+        "button": "トグル persist プリセット",
+        "add": "プリセットを追加",
+        "empty": "プリセットなし",
+        "create-title": "トグル persist プリセット作成",
+        "create-description": "このMODの現在の mod ini トグル persist 状態を保存します。",
+        "manage-title": "トグル persist プリセット管理",
+        "manage-description": "プリセットの適用、名前変更、現在の mod ini 状態での更新ができます。",
+        "name-placeholder": "プリセット名",
+        "name-required": "プリセット名を入力してください。",
+        "loading": "現在の persist 状態を読み込み中...",
+        "partial": "mod ini で見つからなかったトグル状態 {{count}} 件は保存されません。",
+        "persist-required": "Persist Toggles が有効なときのみプリセットを作成または更新できます。",
+        "update": "更新",
+        "update-hint": "更新すると、上の名前で現在の mod ini 状態を再保存します。"
       }
     },
     "tools": {
