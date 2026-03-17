@@ -1,3 +1,4 @@
+import { WindowsOnlyRoute } from "@renderer/components/windows-only-route";
 import { DownloadConfirmationOverlay } from "@renderer/components/download-confirmation-overlay";
 import { ContentHeader } from "@renderer/components/mod/content-header";
 import { DeleteGameDialog } from "@renderer/components/mod/delete-game-dialog";
@@ -24,6 +25,14 @@ export const Route = createFileRoute("/mod/")({
 });
 
 function RouteComponent() {
+  return (
+    <WindowsOnlyRoute fallbackTo="/transfer">
+      <ModRouteContent />
+    </WindowsOnlyRoute>
+  );
+}
+
+function ModRouteContent() {
   const { t } = useTranslation();
   const { Titlebar } = useTitlebar();
   const { queryClient } = Route.useRouteContext();

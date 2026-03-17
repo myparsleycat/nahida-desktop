@@ -1,6 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
+import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import { BACKEND_URL } from "@shared/const";
 import AutoLaunch from "auto-launch";
 import Database from "better-sqlite3";
@@ -19,7 +20,6 @@ import Compressor from "./lib/compressor";
 import CryptoLib from "./lib/crypto";
 import CustomDownloader from "./lib/custom-downloader";
 import { FS } from "./lib/fs";
-import { NativeLib } from "./lib/native";
 import { PathSelector } from "./lib/path-selector";
 import Tray from "./lib/tray";
 import Utils from "./lib/utils";
@@ -28,15 +28,16 @@ import { registerProtocal } from "./protocals";
 import ArchiveService from "./services/archive";
 import Auth from "./services/auth";
 import { DriveService } from "./services/drive";
-import ModManager from "./services/mod-manager";
-import { ModTools } from "./services/mod-tools";
 import TransferService from "./services/transfer";
-import { XXMI } from "./services/xxmi";
 import Setting from "./setting";
 import LoginWindow from "./windows/login";
 import MainWindow from "./windows/main";
 import ReportWindow from "./windows/report";
 import SettingWindow from "./windows/setting";
+import type { NativeLib } from "./lib/native";
+import type ModManager from "./services/mod-manager";
+import type { ModTools } from "./services/mod-tools";
+import type { XXMI } from "./services/xxmi";
 
 if (IS_ELECTRON) {
     // Needs to be here, otherwise Chromium's FileSystemAccess API won't work. Waiting for the electron team to fix it.
@@ -114,18 +115,36 @@ export class NahidaDesktop {
             customDownloader: new CustomDownloader(this),
             pathSelector: new PathSelector(this),
             watcher: new Watcher(this),
-            native: new NativeLib(this),
+            native: undefined as unknown as NativeLib,
         };
 
         this.service = {
             auth: new Auth(this),
             drive: new DriveService(this),
             transfer: new TransferService(this),
-            mod: new ModManager(this),
-            modTools: new ModTools(this),
+            mod: undefined as unknown as ModManager,
+            modTools: undefined as unknown as ModTools,
             archive: new ArchiveService(this),
-            xxmi: new XXMI(this),
+            xxmi: undefined as unknown as XXMI,
         };
+    }
+
+    private async initializePlatformServices() {
+        if (!supportsWindowsDesktopFeatures(process.platform)) {
+            return;
+        }
+
+        const [{ NativeLib }, { default: ModManager }, { ModTools }, { XXMI }] = await Promise.all([
+            import("./lib/native"),
+            import("./services/mod-manager"),
+            import("./services/mod-tools"),
+            import("./services/xxmi"),
+        ]);
+
+        this.lib.native = new NativeLib(this);
+        this.service.mod = new ModManager(this);
+        this.service.modTools = new ModTools(this);
+        this.service.xxmi = new XXMI(this);
     }
 
     public async init() {
@@ -139,9 +158,12 @@ export class NahidaDesktop {
             },
         });
 
+        await this.initializePlatformServices();
         await startInit(this);
         this.updater.initialize();
-        await this.service.xxmi.init();
+        if (supportsWindowsDesktopFeatures(process.platform)) {
+            await this.service.xxmi.init();
+        }
 
         const logLevel = await this.setting.general.getLogLevel();
         this.logger.setLevel(logLevel);

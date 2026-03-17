@@ -22,6 +22,8 @@ import {
 import { Separator } from "@renderer/components/ui/separator";
 import { Switch } from "@renderer/components/ui/switch";
 import { useSettings } from "@renderer/hooks/use-settings";
+import { useGlobalStore } from "@renderer/store/global";
+import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import { formatSize } from "@shared/utils";
 import { createFileRoute } from "@tanstack/react-router";
 import { LoaderIcon } from "lucide-react";
@@ -47,6 +49,8 @@ const settingsConfig = {
 function RouteComponent() {
   const { theme, setTheme } = useTheme();
   const { t } = useTranslation();
+  const appStatus = useGlobalStore((state) => state.appStatus);
+  const hasWindowsDesktopFeatures = supportsWindowsDesktopFeatures(appStatus?.platform);
 
   const { settings, update, isLoading, setSettings } = useSettings<{
     runOnStartup: boolean;
@@ -75,6 +79,11 @@ function RouteComponent() {
       return;
     }
 
+    if (!hasWindowsDesktopFeatures) {
+      await update("runInBackground", false, "setting:general:setRunInBackground");
+      return;
+    }
+
     const [persistEnabled, toggleViewerEnabled] = await Promise.all([
       window.api.invoke("setting:xxmi:getPersistToggles"),
       window.api.invoke("setting:xxmi:getToggleViewerAutoGenerate"),
@@ -88,6 +97,13 @@ function RouteComponent() {
 
     await update("runInBackground", false, "setting:general:setRunInBackground");
   };
+
+  const startPageOptions = [
+    { value: "/transfer", label: t("page.transfer.title") },
+    { value: "/drive/drive/root", label: t("page.drive.title") },
+    { value: "/drive/share/root", label: t("page.share_drive.title") },
+    ...(hasWindowsDesktopFeatures ? [{ value: "/mod", label: t("page.mod.title") }] : []),
+  ];
 
   const confirmDisableRunInBackground = async () => {
     setIsRunInBackgroundConfirmOpen(false);
@@ -244,10 +260,11 @@ function RouteComponent() {
                 </SelectTrigger>
                 <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
                   <SelectGroup>
-                    <SelectItem value="/transfer">{t("page.transfer.title")}</SelectItem>
-                    <SelectItem value="/drive/drive/root">{t("page.drive.title")}</SelectItem>
-                    <SelectItem value="/drive/share/root">{t("page.share_drive.title")}</SelectItem>
-                    <SelectItem value="/mod">{t("page.mod.title")}</SelectItem>
+                    {startPageOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>

@@ -8,6 +8,7 @@ export interface AppStatus {
     version: string;
     isPackaged: boolean;
     isDev: boolean;
+    platform: NodeJS.Platform;
 }
 
 export interface ProxySettings {
