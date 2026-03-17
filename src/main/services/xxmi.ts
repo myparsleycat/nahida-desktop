@@ -34,6 +34,7 @@ export class XXMI {
         this.xxmiPath = await this.getXXMIPath();
         if (!this.xxmiPath) {
             this.xxmiConfig = null;
+            await this.desktop.service.modTools.stopAutoModActionsWatcher();
             return;
         }
 
@@ -54,9 +55,12 @@ export class XXMI {
             } else {
                 await this.desktop.service.modTools.stopToggleViewerWatcher();
             }
+
+            await this.desktop.service.modTools.refreshAutoModActionsWatcher();
         } catch (error) {
             this.desktop.logger.error(`Failed to initialize XXMI: ${error}`, "XXMI.initialize");
             this.xxmiConfig = null;
+            await this.desktop.service.modTools.stopAutoModActionsWatcher();
         }
     }
 

@@ -11,6 +11,7 @@ import type { NahidaDesktop } from "@/main";
 export class FixTool {
     private currentAbortController: AbortController | null = null;
     private activeExecutor: ScriptExecutor | null = null;
+    private ghostRunQueue: Promise<void> = Promise.resolve();
 
     constructor(private desktop: NahidaDesktop) {}
 
@@ -259,6 +260,43 @@ export class FixTool {
         }
     }
 
+    public async runPresetGhost(presetId: string, destPath: string) {
+        const queuedRun = this.ghostRunQueue.catch(() => {}).then(async () => {
+            const preset = await this.desktop.lib.db.query.scriptPreset.findFirst({
+                where: eq(scriptPreset.id, presetId),
+                with: { scripts: true },
+            });
+
+            if (!preset) throw new Error("Preset not found");
+            if (preset.scripts.length === 0) throw new Error("Preset has no scripts");
+            if (!(await fse.pathExists(destPath))) {
+                throw new Error("Destination path does not exist");
+            }
+
+            const stat = await fse.stat(destPath);
+            if (!stat.isDirectory()) {
+                throw new Error("Destination path is not a directory");
+            }
+
+            const executor = new ScriptExecutor(() => {});
+            const sortedItems = sortBy(preset.scripts, ["order"]);
+
+            for (const item of sortedItems) {
+                const _script = await this.desktop.lib.db.query.script.findFirst({
+                    where: eq(scriptTable.id, item.scriptId),
+                });
+                if (!_script) {
+                    continue;
+                }
+
+                await this._runScriptGhost(_script, destPath, executor);
+            }
+        });
+
+        this.ghostRunQueue = queuedRun;
+        await queuedRun;
+    }
+
     public sendInput(input: string) {
         if (this.activeExecutor?.isRunning()) {
             this.activeExecutor.sendInput(input);
@@ -329,6 +367,42 @@ export class FixTool {
                 );
             }
             return false;
+        } finally {
+            await fse.remove(scriptPath).catch((err) => {
+                this.desktop.logger.error(`Failed to cleanup temp file: ${err}`, "FixTool");
+            });
+        }
+    }
+
+    private async _runScriptGhost(
+        script: typeof scriptTable.$inferSelect,
+        destPath: string,
+        executor: ScriptExecutor,
+    ): Promise<boolean> {
+        const now = new Date();
+        const tempFileName = `${script.sha256}-${now.getTime()}.${script.type === "python" ? "py" : "exe"}`;
+        const scriptPath = path.join(destPath, tempFileName);
+
+        try {
+            if (script.isSrcZstd) {
+                const decomp = await this.desktop.lib.compressor.zstd.decompress(script.source);
+                await fse.writeFile(scriptPath, decomp);
+            } else {
+                const comp = await this.desktop.lib.compressor.zstd.compress(script.source);
+                await this.desktop.lib.db
+                    .update(scriptTable)
+                    .set({
+                        source: comp,
+                        isSrcZstd: true,
+                        zstdSha256: crypto.createHash("sha256").update(comp).digest("hex"),
+                        zstdSize: comp.length,
+                    })
+                    .where(eq(scriptTable.id, script.id));
+                await fse.writeFile(scriptPath, script.source);
+            }
+
+            await executor.execute(scriptPath, script.type as "python" | "exec", destPath);
+            return true;
         } finally {
             await fse.remove(scriptPath).catch((err) => {
                 this.desktop.logger.error(`Failed to cleanup temp file: ${err}`, "FixTool");

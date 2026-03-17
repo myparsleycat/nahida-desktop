@@ -1,3 +1,4 @@
+import AutoModActions from "@renderer/components/tools/auto-mod-actions";
 import D3D11Builder from "@renderer/components/tools/d3d11-builder";
 import TogglePersistence from "@renderer/components/tools/toggle-persistence";
 import ToggleViewerGenerator from "@renderer/components/tools/toggle-viewer-generator";
@@ -21,6 +22,10 @@ type ToolPage =
     };
 
 const toolPages: ToolPage[] = [
+  {
+    name: "Auto Mod Actions",
+    component: () => <AutoModActions />,
+  },
   {
     name: "D3D11 Builder",
     component: () => <D3D11Builder />,

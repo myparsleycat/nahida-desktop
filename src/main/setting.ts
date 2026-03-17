@@ -1,5 +1,10 @@
 import type { NahidaDesktop } from "@main/index";
 import { imageCache, setting } from "@main/internal/db/schema";
+import {
+    AUTO_MOD_ACTIONS_SETTING_KEY,
+    type AutoModActionsConfig,
+    normalizeAutoModActionsConfig,
+} from "@shared/auto-mod-actions";
 import AutoLaunch from "auto-launch";
 import { eq, sum } from "drizzle-orm";
 import { app, BrowserWindow } from "electron";
@@ -687,6 +692,63 @@ export class Setting {
 
         cancelToggleViewerWork: async () => {
             this.desktop.service.modTools.toggleViewer.cancelCurrentWork();
+        },
+
+        getAutoModActionsConfig: async (): Promise<AutoModActionsConfig> => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, AUTO_MOD_ACTIONS_SETTING_KEY),
+            });
+
+            const importerKeys = this.desktop.service.xxmi
+                .getEnabledImporters()
+                .map((importer) => importer.key);
+
+            if (!qr?.value) {
+                const defaultConfig = normalizeAutoModActionsConfig({}, importerKeys);
+                await this.desktop.lib.db
+                    .insert(setting)
+                    .values({
+                        key: AUTO_MOD_ACTIONS_SETTING_KEY,
+                        value: JSON.stringify(defaultConfig),
+                    })
+                    .onConflictDoUpdate({
+                        target: setting.key,
+                        set: { value: JSON.stringify(defaultConfig) },
+                    });
+                return defaultConfig;
+            }
+
+            try {
+                return normalizeAutoModActionsConfig(JSON.parse(qr.value), importerKeys);
+            } catch {
+                return normalizeAutoModActionsConfig({}, importerKeys);
+            }
+        },
+
+        setAutoModActionsConfig: async (config: AutoModActionsConfig) => {
+            const importerKeys = this.desktop.service.xxmi
+                .getEnabledImporters()
+                .map((importer) => importer.key);
+            const normalizedConfig = normalizeAutoModActionsConfig(config, importerKeys);
+
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({
+                    key: AUTO_MOD_ACTIONS_SETTING_KEY,
+                    value: JSON.stringify(normalizedConfig),
+                })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: JSON.stringify(normalizedConfig) },
+                });
+
+            if (this.desktop.service?.modTools) {
+                await this.desktop.service.modTools.refreshAutoModActionsWatcher();
+            }
+        },
+
+        restoreAutoModActionsBackups: async (importerKey: string) => {
+            return await this.desktop.service.modTools.restoreAutoModActionsBackups(importerKey);
         },
 
         setToggleViewerHotkey: async (hotkey: string) => {

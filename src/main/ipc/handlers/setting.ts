@@ -211,6 +211,18 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         return d.setting.xxmi.cancelToggleViewerWork();
     });
 
+    rh("setting:xxmi:getAutoModActionsConfig", async () => {
+        return await d.setting.xxmi.getAutoModActionsConfig();
+    });
+
+    rh("setting:xxmi:setAutoModActionsConfig", async (config) => {
+        await d.setting.xxmi.setAutoModActionsConfig(config);
+    });
+
+    rh("setting:xxmi:restoreAutoModActionsBackups", async (importerKey) => {
+        return await d.setting.xxmi.restoreAutoModActionsBackups(importerKey);
+    });
+
     rh("setting:advanced:getAll", async () => {
         return await d.setting.advanced.getAll();
     });
