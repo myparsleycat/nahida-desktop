@@ -1,4 +1,4 @@
-/** biome-ignore-all lint/suspicious/noExplicitAny: <> */
+// oxlint-disable typescript/no-explicit-any
 import type { App } from "@backend/index";
 import { treaty } from "@elysiajs/eden";
 import { BACKEND_URL } from "@shared/const";
@@ -61,4 +61,3 @@ function createProxy(pathSegments: string[] = []): EdenProxy {
 }
 
 export const eden2url = createProxy();
-

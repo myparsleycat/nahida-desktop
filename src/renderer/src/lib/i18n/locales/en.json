@@ -171,6 +171,7 @@
       },
       "character-sidebar": {
         "add-to-character": "Add to {{name}}",
+        "open-in-explorer": "Open in File Explorer",
         "collapse-subgroups": "Collapse subgroups",
         "expand-subgroups": "Expand subgroups",
         "unpersist-subgroups": "Unpersist subgroups",

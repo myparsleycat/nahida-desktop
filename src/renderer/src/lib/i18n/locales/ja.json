@@ -172,6 +172,7 @@
       },
       "character-sidebar": {
         "add-to-character": "{{name}}に追加",
+        "open-in-explorer": "ファイルエクスプローラーで開く",
         "collapse-subgroups": "サブフォルダーを折りたたむ",
         "expand-subgroups": "サブフォルダーを探索",
         "unpersist-subgroups": "サブフォルダー指定を解除",

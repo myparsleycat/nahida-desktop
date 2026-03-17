@@ -1,17 +1,18 @@
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import type { ReadableStream } from "node:stream/web";
 import { createGunzip, createZstdDecompress } from "node:zlib";
 import { eden } from "@main/client";
 import type { TransferData } from "@shared/types.gen";
 import { decode } from "cbor-x";
 import { retry, throttle } from "es-toolkit";
 import fse from "fs-extra";
-import { decompress } from "fzstd";
 import ky from "ky";
 import { nanoid } from "nanoid";
 import PQueue from "p-queue";
 import type { NahidaDesktop } from "..";
+import { zstdDecompressAsync } from "./compressor";
 import { ParallelDownloader } from "./parallel-downloader";
 
 export type DownloadParams = {
@@ -45,7 +46,7 @@ class DownloadStreamer {
 
     private async decompressData(str: string) {
         const compressedData = Buffer.from(str, "base64");
-        return decompress(compressedData);
+        return zstdDecompressAsync(compressedData);
     }
 
     private async parseStreamedData(data) {
@@ -333,15 +334,16 @@ class FileDownloadTask {
         if (!response.body) throw new Error("No response body");
 
         const fileStream = fse.createWriteStream(targetPath);
-        const streams: any[] = [Readable.fromWeb(response.body as any)];
-
-        if (file.compAlg === "gzip") streams.push(createGunzip());
-        else if (file.compAlg === "zstd") streams.push(createZstdDecompress());
-
-        streams.push(fileStream);
+        const source = Readable.fromWeb(response.body as unknown as ReadableStream);
 
         try {
-            await (pipeline as any)(...streams, { signal });
+            if (file.compAlg === "gzip") {
+                await pipeline(source, createGunzip(), fileStream, { signal });
+            } else if (file.compAlg === "zstd") {
+                await pipeline(source, createZstdDecompress(), fileStream, { signal });
+            } else {
+                await pipeline(source, fileStream, { signal });
+            }
         } catch (pipeErr) {
             fileStream.destroy();
             await fse.remove(targetPath).catch(() => {});
@@ -562,7 +564,7 @@ export class DownloadLib {
             this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
 
             const pathMap = this.fs.resolveDirectoryPaths(data.root, data.dirs, params.savePath);
-            await this.prepareDirectories(pathMap);
+            const ensuredDirs = new Set<string>();
 
             let downloadedBytes = initialTransferedSize ?? 0;
             let downloadedCount = initialTransferedFiles ?? 0;
@@ -588,6 +590,11 @@ export class DownloadLib {
                 const filePath = path.join(parentPath, file.name);
 
                 this.fileQueue.add(async () => {
+                    if (parentPath && !ensuredDirs.has(parentPath)) {
+                        await this.desktop.lib.fs.ensureDir(parentPath);
+                        ensuredDirs.add(parentPath);
+                    }
+
                     await this.processFileDownloadTask({
                         pid,
                         file,
@@ -605,6 +612,16 @@ export class DownloadLib {
                 });
             }
 
+            for (const dirPath of pathMap.values()) {
+                if (abort.signal.aborted) break;
+                if (!ensuredDirs.has(dirPath)) {
+                    this.fileQueue.add(async () => {
+                        await this.desktop.lib.fs.ensureDir(dirPath);
+                        ensuredDirs.add(dirPath);
+                    });
+                }
+            }
+
             if (!abort.signal.aborted) await this.fileQueue.onIdle();
             throttledUpdate.flush();
 
@@ -618,12 +635,6 @@ export class DownloadLib {
                 error: err instanceof Error ? err.message : String(err),
             });
             throw err;
-        }
-    }
-
-    private async prepareDirectories(pathMap: Map<string, string>) {
-        for (const dirPath of pathMap.values()) {
-            await this.desktop.lib.fs.ensureDir(dirPath);
         }
     }
 
@@ -705,4 +716,3 @@ export class DownloadLib {
 }
 
 export default DownloadLib;
-

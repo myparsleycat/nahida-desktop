@@ -2,13 +2,14 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@renderer/components/ui/context-menu";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { cn } from "@renderer/lib/utils";
 import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
-import { FolderMinus, FolderTree } from "lucide-react";
+import { FolderIcon, FolderMinus, FolderTree } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Preview } from "./preview";
@@ -165,6 +166,13 @@ export const CharacterSidebarItem = memo(
         </ContextMenuTrigger>
 
         <ContextMenuContent className="w-56">
+          <ContextMenuItem onClick={() => window.api.invoke("util:openPath", group.path)}>
+            <FolderIcon className="mr-2 h-4 w-4" />
+            {t("page.mod.character-sidebar.open-in-explorer")}
+          </ContextMenuItem>
+
+          <ContextMenuSeparator />
+
           {!isPersistent && (
             <ContextMenuItem onClick={() => toggleExpandedGroup(group.path)}>
               {isExpanded ? (

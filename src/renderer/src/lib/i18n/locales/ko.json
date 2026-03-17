@@ -171,6 +171,7 @@
       },
       "character-sidebar": {
         "add-to-character": "{{name}}에 추가",
+        "open-in-explorer": "파일 탐색기에서 열기",
         "collapse-subgroups": "서브폴더 접기",
         "expand-subgroups": "서브폴더로 탐색",
         "unpersist-subgroups": "서브폴더 지정 해제",
