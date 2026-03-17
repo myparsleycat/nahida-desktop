@@ -335,6 +335,9 @@
           "checkUpdate": "更新確認",
           "runInBackground": "バックグラウンド実行",
           "runInBackgroundDescription": "すべてのウィンドウを閉じてもアプリをバックグラウンドで実行し続けます。",
+          "runInBackgroundDisableConfirmTitle": "バックグラウンド実行を無効にしますか？",
+          "runInBackgroundDisableConfirmDescription": "Toggle Persist と Toggle Viewer は、バックグラウンド実行が有効になっているほうがより安全かつ安定して動作します。これをオフにすると、すべてのウィンドウを閉じたあとにこれらの機能が安全に動作し続けない可能性があります。それでもバックグラウンド実行をオフにしますか？",
+          "runInBackgroundDisableConfirmAction": "無効にする",
           "autoUpdate": "自動更新",
           "autoUpdateDescription": "起動時と1時間ごとに更新を確認し、自動でダウンロードします。"
         },

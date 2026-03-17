@@ -334,6 +334,9 @@
           "checkUpdate": "检查更新",
           "runInBackground": "后台运行",
           "runInBackgroundDescription": "关闭所有窗口后，应用仍在后台继续运行。",
+          "runInBackgroundDisableConfirmTitle": "要关闭后台运行吗？",
+          "runInBackgroundDisableConfirmDescription": "启用 `Toggle Persist` 或 `Toggle Viewer` 时，保持后台运行会更安全、更稳定。如果关闭此选项，在关闭所有窗口后，这两个功能可能无法继续可靠运行。\n\n仍然要关闭后台运行吗？",
+          "runInBackgroundDisableConfirmAction": "仍然关闭",
           "autoUpdate": "自动更新",
           "autoUpdateDescription": "在启动时和每隔 1 小时检查更新，并自动下载。"
         },
