@@ -131,7 +131,7 @@ export class PathSelector {
         }
 
         const savePath = dialogResult.filePaths[0];
-        const isWritable = this.desktop.lib.fs.isPathWritable(savePath);
+        const isWritable = await this.desktop.lib.fs.isPathWritable(savePath);
         if (!isWritable) {
             throw new Error("Path is not writable");
         }
