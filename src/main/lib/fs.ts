@@ -50,7 +50,7 @@ export class FS {
 
     public async isPathWritable(pathStr: string) {
         try {
-            await fse.access(pathStr, fse.constants.W_OK | fse.constants.R_OK);
+            await fse.access(pathStr, fse.constants.W_OK | fse.constants.X_OK);
             return true;
         } catch {
             return false;
