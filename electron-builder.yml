@@ -1,5 +1,6 @@
 appId: com.nahida.app
 productName: Nahida Desktop
+afterSign: scripts/after-sign-mac.js
 directories:
     buildResources: build
 files:
@@ -40,6 +41,7 @@ nsis:
     include: build/installer.nsh
     deleteAppDataOnUninstall: true
 mac:
+    identity: null
     entitlementsInherit: build/entitlements.mac.plist
     extendInfo:
         - NSCameraUsageDescription: Application requests access to the device's camera.
