@@ -562,7 +562,7 @@ export class DownloadLib {
             this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
 
             const pathMap = this.fs.resolveDirectoryPaths(data.root, data.dirs, params.savePath);
-            await this.prepareDirectories(pathMap);
+            const ensuredDirs = new Set<string>();
 
             let downloadedBytes = initialTransferedSize ?? 0;
             let downloadedCount = initialTransferedFiles ?? 0;
@@ -588,6 +588,11 @@ export class DownloadLib {
                 const filePath = path.join(parentPath, file.name);
 
                 this.fileQueue.add(async () => {
+                    if (parentPath && !ensuredDirs.has(parentPath)) {
+                        await this.desktop.lib.fs.ensureDir(parentPath);
+                        ensuredDirs.add(parentPath);
+                    }
+
                     await this.processFileDownloadTask({
                         pid,
                         file,
@@ -603,6 +608,16 @@ export class DownloadLib {
                         },
                     });
                 });
+            }
+
+            for (const dirPath of pathMap.values()) {
+                if (abort.signal.aborted) break;
+                if (!ensuredDirs.has(dirPath)) {
+                    this.fileQueue.add(async () => {
+                        await this.desktop.lib.fs.ensureDir(dirPath);
+                        ensuredDirs.add(dirPath);
+                    });
+                }
             }
 
             if (!abort.signal.aborted) await this.fileQueue.onIdle();
@@ -621,11 +636,6 @@ export class DownloadLib {
         }
     }
 
-    private async prepareDirectories(pathMap: Map<string, string>) {
-        for (const dirPath of pathMap.values()) {
-            await this.desktop.lib.fs.ensureDir(dirPath);
-        }
-    }
 
     private async waitForQueueBackpressure() {
         const BACKPRESSURE_LIMIT = 200;
