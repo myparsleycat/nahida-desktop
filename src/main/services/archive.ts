@@ -13,11 +13,19 @@ export class ArchiveService {
         await fse.ensureDir(targetDir);
 
         try {
-            const extractedPath = await extractArchive(archivePath, targetDir);
+            const extractedPath = await extractArchive(
+                archivePath,
+                targetDir,
+                _onProgress
+                    ? (_error, progress) => {
+                          if (!progress) {
+                              return;
+                          }
 
-            if (_onProgress) {
-                _onProgress(100, "Extraction complete");
-            }
+                          _onProgress(progress.percent, progress.message);
+                      }
+                    : undefined,
+            );
 
             return extractedPath;
         } catch (error: any) {

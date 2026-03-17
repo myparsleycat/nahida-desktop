@@ -39,12 +39,12 @@ export class ModManager {
         if (!modFolderPath) return;
 
         if (this.gameWatcherId) {
-            await this.desktop.lib.watcher.removeWatcher(this.gameWatcherId);
+            await this.desktop.lib.watcher.remove(this.gameWatcherId);
             this.gameWatcherId = null;
         }
 
         try {
-            this.gameWatcherId = await this.desktop.lib.watcher.createWatcher(
+            this.gameWatcherId = await this.desktop.lib.watcher.create(
                 modFolderPath,
                 { depth: 0 },
                 (event) => {
@@ -65,12 +65,12 @@ export class ModManager {
 
     public async watchCharacter(characterPath: string) {
         if (this.characterWatcherId) {
-            await this.desktop.lib.watcher.removeWatcher(this.characterWatcherId);
+            await this.desktop.lib.watcher.remove(this.characterWatcherId);
             this.characterWatcherId = null;
         }
 
         try {
-            this.characterWatcherId = await this.desktop.lib.watcher.createWatcher(
+            this.characterWatcherId = await this.desktop.lib.watcher.create(
                 characterPath,
                 { depth: 0 },
                 (event) => {

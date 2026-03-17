@@ -90,7 +90,7 @@ export class ToggleViewer {
         }, 500);
 
         for (const modsPath of modsPaths) {
-            const watcherId = await this.desktop.lib.watcher.createWatcher(
+            const watcherId = await this.desktop.lib.watcher.create(
                 modsPath,
                 { compareContents: true },
                 async (eventName, changedPath) => {
@@ -134,7 +134,7 @@ export class ToggleViewer {
         this.cancelCurrentWork();
         const count = this.watcherIds.length;
         for (const watcherId of this.watcherIds) {
-            await this.desktop.lib.watcher.removeWatcher(watcherId);
+            await this.desktop.lib.watcher.remove(watcherId);
         }
         this.watcherIds = [];
         this.scanDebouncer = null;

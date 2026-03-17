@@ -223,7 +223,7 @@ fn parse_ini(path_str: &str) -> Vec<ToggleKey> {
         let Ok(line) = line_result else { continue };
 
         let mut clean_line = line.trim_start_matches('\u{FEFF}').trim();
-        
+
         if let Some(pos) = clean_line.find(';') {
             clean_line = clean_line[..pos].trim();
         }
@@ -349,7 +349,35 @@ fn is_excluded_file(filename: &str) -> bool {
     EXCLUDED.iter().any(|&k| filename.contains(k))
 }
 
+fn is_disabled_folder_name(folder_name: &str) -> bool {
+    folder_name
+        .trim()
+        .to_ascii_lowercase()
+        .starts_with("disabled ")
+}
+
+fn get_preview_location_priority(relative: &Path) -> i32 {
+    if relative.components().count() == 1 {
+        return 2;
+    }
+
+    let is_in_disabled_folder = relative
+        .parent()
+        .into_iter()
+        .flat_map(|parent| parent.components())
+        .filter_map(|component| component.as_os_str().to_str())
+        .any(is_disabled_folder_name);
+
+    if is_in_disabled_folder {
+        0
+    } else {
+        1
+    }
+}
+
 fn find_preview(mod_path: &Path, max_depth: usize) -> Option<String> {
+    const LOCATION_PRIORITY_MULTIPLIER: i32 = 10_000;
+
     let mut best_score = -1;
     let mut best_path: Option<String> = None;
 
@@ -378,7 +406,8 @@ fn find_preview(mod_path: &Path, max_depth: usize) -> Option<String> {
                     let is_root = relative.components().count() == 1;
                     let is_video =
                         ext.eq_ignore_ascii_case("mp4") || ext.eq_ignore_ascii_case("webm");
-                    let score = get_score(&lower_filename, is_root, is_video);
+                    let score = get_score(&lower_filename, is_root, is_video)
+                        + get_preview_location_priority(relative) * LOCATION_PRIORITY_MULTIPLIER;
 
                     if score > best_score {
                         best_score = score;
@@ -429,7 +458,7 @@ pub fn get_characters_folder_sync(
             .collect(),
         Err(_) => return Vec::new(),
     };
-    
+
     groups.sort_by(|a, b| compare_paths(a, b));
 
     let search_depth = if fallback_to_mod_preview.unwrap_or(true) {
@@ -484,7 +513,11 @@ fn scan_mod_folder(mod_path: &Path) -> Option<ModInfo> {
     let mut best_preview_score = -1;
     let mut best_preview_path: Option<String> = None;
 
-    for entry in WalkDir::new(mod_path).follow_links(true).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(mod_path)
+        .follow_links(true)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
         if entry.file_type().is_file() {
             let path = entry.path();
 
@@ -591,7 +624,7 @@ pub fn get_mods_sync(group_path: String) -> FolderGroup {
             .collect(),
         Err(_) => Vec::new(),
     };
-    
+
     mod_folders.sort_by(|a, b| compare_paths(a, b));
 
     let (mut mods, preview) = rayon::join(
@@ -603,7 +636,7 @@ pub fn get_mods_sync(group_path: String) -> FolderGroup {
         },
         || find_preview(&group_path_buf, 3),
     );
-    
+
     mods.sort_by(|a, b| compare_str(&a.name, &b.name));
 
     let mod_count = mods.len() as u32;
