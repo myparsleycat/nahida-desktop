@@ -1,6 +1,7 @@
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import type { ReadableStream } from "node:stream/web";
 import { createGunzip, createZstdDecompress } from "node:zlib";
 import { eden } from "@main/client";
 import type { TransferData } from "@shared/types.gen";
@@ -333,15 +334,16 @@ class FileDownloadTask {
         if (!response.body) throw new Error("No response body");
 
         const fileStream = fse.createWriteStream(targetPath);
-        const streams: any[] = [Readable.fromWeb(response.body as any)];
-
-        if (file.compAlg === "gzip") streams.push(createGunzip());
-        else if (file.compAlg === "zstd") streams.push(createZstdDecompress());
-
-        streams.push(fileStream);
+        const source = Readable.fromWeb(response.body as unknown as ReadableStream);
 
         try {
-            await (pipeline as any)(...streams, { signal });
+            if (file.compAlg === "gzip") {
+                await pipeline(source, createGunzip(), fileStream, { signal });
+            } else if (file.compAlg === "zstd") {
+                await pipeline(source, createZstdDecompress(), fileStream, { signal });
+            } else {
+                await pipeline(source, fileStream, { signal });
+            }
         } catch (pipeErr) {
             fileStream.destroy();
             await fse.remove(targetPath).catch(() => {});
