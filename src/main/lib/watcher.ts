@@ -17,7 +17,7 @@ export class Watcher {
         this.watchers = new Map();
     }
 
-    public async createWatcher(
+    public async create(
         dest: string | string[],
         options: WatcherOptions = {},
         callback: (eventName: WatchEvent["eventName"], path: string) => void,
@@ -55,7 +55,7 @@ export class Watcher {
         }
     }
 
-    public async removeWatcher(id: string) {
+    public async remove(id: string) {
         const watcher = this.watchers.get(id);
         if (watcher) {
             watcher.unwatch();

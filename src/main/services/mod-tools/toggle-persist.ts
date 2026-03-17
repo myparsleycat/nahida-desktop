@@ -64,7 +64,7 @@ export class TogglePersist {
                 const content = await fse.readFile(d3dxPath, "utf-8");
                 this.cachedD3dxUserIni.set(importer.key, this.parseD3dxUserIni(content));
 
-                const watcherId = await this.desktop.lib.watcher.createWatcher(
+                const watcherId = await this.desktop.lib.watcher.create(
                     d3dxPath,
                     { compareContents: true },
                     async (eventName, changedPath) => {
@@ -82,7 +82,7 @@ export class TogglePersist {
     public async stopPersistWatcher() {
         const watcherCount = this.persistWatchers.length;
         for (const id of this.persistWatchers) {
-            await this.desktop.lib.watcher.removeWatcher(id);
+            await this.desktop.lib.watcher.remove(id);
         }
         this.persistWatchers = [];
         this.cachedD3dxUserIni.clear();
@@ -185,10 +185,7 @@ export class TogglePersist {
                 const pending = this.pendingPersistUpdates.get(fileKey);
                 if (!pending) return;
                 this.pendingPersistUpdates.delete(fileKey);
-                await this.enqueuePersistFileUpdate(
-                    pending.targetIniPath,
-                    pending.updates,
-                );
+                await this.enqueuePersistFileUpdate(pending.targetIniPath, pending.updates);
             }, 200);
             this.persistUpdateDebouncers.set(fileKey, debounced);
         }
@@ -196,10 +193,7 @@ export class TogglePersist {
         debounced();
     }
 
-    private async enqueuePersistFileUpdate(
-        targetIniPath: string,
-        updates: Map<string, string>,
-    ) {
+    private async enqueuePersistFileUpdate(targetIniPath: string, updates: Map<string, string>) {
         const lockKey = targetIniPath.toLowerCase();
         const previous = this.persistFileUpdateLocks.get(lockKey) ?? Promise.resolve();
         const next = previous
@@ -216,10 +210,7 @@ export class TogglePersist {
         }
     }
 
-    private async updateModIniPersist(
-        targetIniPath: string,
-        updates: Map<string, string>,
-    ) {
+    private async updateModIniPersist(targetIniPath: string, updates: Map<string, string>) {
         try {
             const content = await fse.readFile(targetIniPath, "utf-8");
             const lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
@@ -240,9 +231,7 @@ export class TogglePersist {
                 }
 
                 if (inConstants && trimmed.startsWith("global persist $")) {
-                    const match = trimmed.match(
-                        /^global\s+persist\s+\$(.+?)\s*=\s*(.+)$/i,
-                    );
+                    const match = trimmed.match(/^global\s+persist\s+\$(.+?)\s*=\s*(.+)$/i);
                     if (!match) continue;
                     const existingVarName = match[1].trim();
                     const varKey = existingVarName.toLowerCase();
