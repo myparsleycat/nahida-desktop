@@ -627,6 +627,10 @@ export class Setting {
                     set: { value: String(enabled) },
                 });
 
+            if (enabled) {
+                await this.desktop.setting.general.setRunInBackground(true);
+            }
+
             if (this.desktop.service?.modTools) {
                 if (enabled) {
                     this.desktop.service.modTools.startPersistWatcher();
@@ -721,6 +725,10 @@ export class Setting {
                     target: setting.key,
                     set: { value: String(enabled) },
                 });
+
+            if (enabled) {
+                await this.desktop.setting.general.setRunInBackground(true);
+            }
 
             if (this.desktop.service?.modTools) {
                 if (enabled) {
