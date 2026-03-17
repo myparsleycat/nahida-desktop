@@ -1,17 +1,29 @@
 #![deny(clippy::all)]
 
 use compress_tools::{uncompress_archive, Ownership};
+use napi::bindgen_prelude::*;
+use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
+use napi_derive::napi;
 use std::fs::{self, File};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::sync::{
+    atomic::{AtomicU8, Ordering},
+    Arc,
+};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use napi::bindgen_prelude::*;
-use napi_derive::napi;
+#[napi(object)]
+pub struct ExtractProgress {
+    pub percent: u32,
+    pub message: String,
+}
 
 #[derive(Clone)]
 pub struct ExtractorTask {
     pub archive: String,
     pub destination: String,
+    pub on_progress: Option<Arc<ThreadsafeFunction<ExtractProgress>>>,
 }
 
 fn get_unique_folder_name(base_path: &Path, folder_name: &str) -> PathBuf {
@@ -34,6 +46,90 @@ fn get_unique_folder_name(base_path: &Path, folder_name: &str) -> PathBuf {
     }
 }
 
+fn emit_progress(
+    callback: &Option<Arc<ThreadsafeFunction<ExtractProgress>>>,
+    percent: u32,
+    message: impl Into<String>,
+) {
+    if let Some(callback) = callback {
+        callback.call(
+            Ok(ExtractProgress {
+                percent,
+                message: message.into(),
+            }),
+            ThreadsafeFunctionCallMode::NonBlocking,
+        );
+    }
+}
+
+struct ProgressReader<R> {
+    inner: R,
+    total_bytes: u64,
+    processed_bytes: u64,
+    last_percent: Arc<AtomicU8>,
+    callback: Option<Arc<ThreadsafeFunction<ExtractProgress>>>,
+}
+
+impl<R> ProgressReader<R> {
+    fn new(
+        inner: R,
+        total_bytes: u64,
+        callback: Option<Arc<ThreadsafeFunction<ExtractProgress>>>,
+        last_percent: Arc<AtomicU8>,
+    ) -> Self {
+        Self {
+            inner,
+            total_bytes,
+            processed_bytes: 0,
+            last_percent,
+            callback,
+        }
+    }
+
+    fn report_if_needed(&self) {
+        if self.total_bytes == 0 {
+            return;
+        }
+
+        let raw_percent = ((self.processed_bytes.saturating_mul(90)) / self.total_bytes) as u32;
+        let capped_percent = raw_percent.clamp(1, 90) as u8;
+        let prev = self.last_percent.load(Ordering::Relaxed);
+
+        if capped_percent > prev
+            && self
+                .last_percent
+                .compare_exchange(prev, capped_percent, Ordering::Relaxed, Ordering::Relaxed)
+                .is_ok()
+        {
+            emit_progress(
+                &self.callback,
+                capped_percent as u32,
+                format!("Extracting... {}%", capped_percent),
+            );
+        }
+    }
+}
+
+impl<R: Read> Read for ProgressReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let read = self.inner.read(buf)?;
+        if read > 0 {
+            self.processed_bytes = self.processed_bytes.saturating_add(read as u64);
+            self.report_if_needed();
+        }
+        Ok(read)
+    }
+}
+
+impl<R: Seek> Seek for ProgressReader<R> {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        let next = self.inner.seek(pos)?;
+        self.processed_bytes = next;
+        self.report_if_needed();
+        Ok(next)
+    }
+}
+
 #[napi]
 impl Task for ExtractorTask {
     type Output = String;
@@ -42,6 +138,8 @@ impl Task for ExtractorTask {
     fn compute(&mut self) -> Result<Self::Output> {
         let dest_path = Path::new(&self.destination);
         let archive_path = Path::new(&self.archive);
+
+        emit_progress(&self.on_progress, 0, "Preparing extraction");
 
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -62,10 +160,26 @@ impl Task for ExtractorTask {
             Error::from_reason(format!("Extraction failed: {}", e))
         };
 
-        let mut source = File::open(archive_path).map_err(|e| cleanup_temp(&e))?;
+        let source_file = File::open(archive_path).map_err(|e| cleanup_temp(&e))?;
+        let archive_size = source_file.metadata().map(|m| m.len()).unwrap_or(0);
+
+        let last_percent = Arc::new(AtomicU8::new(0));
+        let mut source = ProgressReader::new(
+            source_file,
+            archive_size,
+            self.on_progress.clone(),
+            last_percent.clone(),
+        );
+
+        emit_progress(&self.on_progress, 1, "Starting extraction");
 
         if let Err(e) = uncompress_archive(&mut source, &temp_folder, Ownership::Ignore) {
             return Err(cleanup_temp(&e));
+        }
+
+        if last_percent.load(Ordering::Relaxed) < 92 {
+            last_percent.store(92, Ordering::Relaxed);
+            emit_progress(&self.on_progress, 92, "Finalizing extracted files");
         }
 
         let mut current_path = temp_folder.clone();
@@ -96,6 +210,16 @@ impl Task for ExtractorTask {
                     if file_type.is_dir() {
                         current_path = single_entry.path();
                         target_folder_name = single_entry.file_name().to_string_lossy().to_string();
+
+                        if last_percent.load(Ordering::Relaxed) < 95 {
+                            last_percent.store(95, Ordering::Relaxed);
+                            emit_progress(
+                                &self.on_progress,
+                                95,
+                                format!("Resolving extracted folder: {}", target_folder_name),
+                            );
+                        }
+
                         continue;
                     }
                 }
@@ -105,6 +229,11 @@ impl Task for ExtractorTask {
 
         let target_path = get_unique_folder_name(dest_path, &target_folder_name);
 
+        if last_percent.load(Ordering::Relaxed) < 97 {
+            last_percent.store(97, Ordering::Relaxed);
+            emit_progress(&self.on_progress, 97, "Moving extracted contents");
+        }
+
         if current_path != temp_folder {
             if let Err(e) = fs::rename(&current_path, &target_path) {
                 return Err(cleanup_temp(&format!(
@@ -113,16 +242,16 @@ impl Task for ExtractorTask {
                 )));
             }
             let _ = fs::remove_dir_all(&temp_folder);
-        } else {
-            if let Err(e) = fs::rename(&temp_folder, &target_path) {
-                return Err(cleanup_temp(&format!(
-                    "Failed to rename temp folder: {}",
-                    e
-                )));
-            }
+        } else if let Err(e) = fs::rename(&temp_folder, &target_path) {
+            return Err(cleanup_temp(&format!(
+                "Failed to rename temp folder: {}",
+                e
+            )));
         }
 
         let final_path = target_path.to_string_lossy().to_string();
+
+        emit_progress(&self.on_progress, 100, "Extraction complete");
 
         Ok(final_path)
     }
@@ -133,9 +262,14 @@ impl Task for ExtractorTask {
 }
 
 #[napi]
-pub fn extract_archive(archive_path: String, destination_path: String) -> AsyncTask<ExtractorTask> {
+pub fn extract_archive(
+    archive_path: String,
+    destination_path: String,
+    on_progress: Option<ThreadsafeFunction<ExtractProgress>>,
+) -> AsyncTask<ExtractorTask> {
     AsyncTask::new(ExtractorTask {
         archive: archive_path,
         destination: destination_path,
+        on_progress: on_progress.map(Arc::new),
     })
 }
