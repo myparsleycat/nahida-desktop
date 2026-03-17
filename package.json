@@ -52,7 +52,6 @@
     "filename-reserved-regex": "^4.0.0",
     "filesize": "^11.0.13",
     "fs-extra": "^11.3.4",
-    "fzstd": "^0.1.1",
     "hono": "^4.12.8",
     "html-to-text": "^9.0.5",
     "koffi": "^2.15.2",

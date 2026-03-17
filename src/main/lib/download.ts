@@ -7,11 +7,11 @@ import type { TransferData } from "@shared/types.gen";
 import { decode } from "cbor-x";
 import { retry, throttle } from "es-toolkit";
 import fse from "fs-extra";
-import { decompress } from "fzstd";
 import ky from "ky";
 import { nanoid } from "nanoid";
 import PQueue from "p-queue";
 import type { NahidaDesktop } from "..";
+import { zstdDecompressAsync } from "./compressor";
 import { ParallelDownloader } from "./parallel-downloader";
 
 export type DownloadParams = {
@@ -45,7 +45,7 @@ class DownloadStreamer {
 
     private async decompressData(str: string) {
         const compressedData = Buffer.from(str, "base64");
-        return decompress(compressedData);
+        return zstdDecompressAsync(compressedData);
     }
 
     private async parseStreamedData(data) {
@@ -636,7 +636,6 @@ export class DownloadLib {
         }
     }
 
-
     private async waitForQueueBackpressure() {
         const BACKPRESSURE_LIMIT = 200;
         if (this.fileQueue.size >= BACKPRESSURE_LIMIT) {
@@ -715,4 +714,3 @@ export class DownloadLib {
 }
 
 export default DownloadLib;
-
