@@ -9,6 +9,7 @@ import { decode } from "cbor-x";
 import { retry, throttle } from "es-toolkit";
 import fse from "fs-extra";
 import ky from "ky";
+import ms from "ms";
 import { nanoid } from "nanoid";
 import PQueue from "p-queue";
 import type { NahidaDesktop } from "..";
@@ -479,7 +480,7 @@ class FileDownloadTask {
         retryCount: number,
         maxRetries: number,
     ): NodeJS.Timeout {
-        const CHECK_INTERVAL = 2000;
+        const CHECK_INTERVAL = ms("1s");
         const SLOW_SPEED_THRESHOLD = 500 * 1024; // 500KB/s
 
         let lastBytes = getCurrentBytes();
