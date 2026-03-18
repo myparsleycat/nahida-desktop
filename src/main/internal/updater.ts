@@ -72,13 +72,15 @@ export class Updater {
         void this.runInitialAutomaticCheck();
     }
 
-    public async checkForUpdates(): Promise<void> {
+    public async checkForUpdates(userInitiated: boolean = false): Promise<void> {
         if (this.isCheckingForUpdates) {
             return;
         }
 
         if (this.updateDownloaded) {
-            this.updateDialogDismissed = false;
+            if (userInitiated) {
+                this.updateDialogDismissed = false;
+            }
             await this.notifyUpdateReady();
             return;
         }
