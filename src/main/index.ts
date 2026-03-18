@@ -271,17 +271,22 @@ app.whenReady().then(async () => {
             .catch((err) => console.log("An error occurred: ", err));
     }
 
-    app.on("second-instance", (_event, commandLine, _workingDirectory) => {
+    app.on("second-instance", async (_event, commandLine, _workingDirectory) => {
         const deepLinkUrl = commandLine.find((arg) => arg.startsWith("nahida://"));
         if (deepLinkUrl?.startsWith("nahida://auth")) {
             // AuthService.handleOAuth2Callback(deepLinkUrl);
         }
 
-        if (desktop.window.main.window) {
-            if (desktop.window.main.window.isMinimized()) desktop.window.main.window.restore();
-            desktop.window.main.window.show();
-            desktop.window.main.window.focus();
+        let mainWindow = desktop.window.main.window;
+        if (!mainWindow || mainWindow.isDestroyed()) {
+            mainWindow = await desktop.window.main.createMainWindow();
         }
+
+        if (!mainWindow || mainWindow.isDestroyed()) {
+            return;
+        }
+
+        desktop.window.main.focus();
     });
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.nahida");
