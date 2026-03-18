@@ -1,17 +1,18 @@
 import os from "node:os";
 import path from "node:path";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
-import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import { BACKEND_URL } from "@shared/const";
+import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import AutoLaunch from "auto-launch";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { app, crashReporter, protocol } from "electron";
 import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
 import { IS_ELECTRON } from "./const";
-import { startInit } from "./init";
 import { DB_FILE_NAME } from "./internal/const";
+import { InitDB } from "./internal/db";
 import * as schema from "./internal/db/schema";
+import { NahidaProtocolHandler } from "./internal/protocol";
 import { DesktopHttpService } from "./internal/http";
 import Logger from "./internal/logger";
 import Updater from "./internal/updater";
@@ -20,6 +21,7 @@ import Compressor from "./lib/compressor";
 import CryptoLib from "./lib/crypto";
 import CustomDownloader from "./lib/custom-downloader";
 import { FS } from "./lib/fs";
+import type { NativeLib } from "./lib/native";
 import { PathSelector } from "./lib/path-selector";
 import Tray from "./lib/tray";
 import Utils from "./lib/utils";
@@ -28,16 +30,16 @@ import { registerProtocal } from "./protocals";
 import ArchiveService from "./services/archive";
 import Auth from "./services/auth";
 import { DriveService } from "./services/drive";
+import type ModManager from "./services/mod-manager";
+import type { ModTools } from "./services/mod-tools";
 import TransferService from "./services/transfer";
+import type { XXMI } from "./services/xxmi";
 import Setting from "./setting";
 import LoginWindow from "./windows/login";
 import MainWindow from "./windows/main";
 import ReportWindow from "./windows/report";
 import SettingWindow from "./windows/setting";
-import type { NativeLib } from "./lib/native";
-import type ModManager from "./services/mod-manager";
-import type { ModTools } from "./services/mod-tools";
-import type { XXMI } from "./services/xxmi";
+import { startServer } from "./server";
 
 if (IS_ELECTRON) {
     // Needs to be here, otherwise Chromium's FileSystemAccess API won't work. Waiting for the electron team to fix it.
@@ -148,6 +150,8 @@ export class NahidaDesktop {
     }
 
     public async init() {
+        if (this.initialized) return;
+
         crashReporter.start({
             submitURL: `${BACKEND_URL}/desktop/crash-report`,
             globalExtra: {
@@ -159,7 +163,45 @@ export class NahidaDesktop {
         });
 
         await this.initializePlatformServices();
-        await startInit(this);
+
+        if (supportsWindowsDesktopFeatures(process.platform)) {
+            this.lib.native.startTracking();
+        }
+
+        // init db
+        await InitDB(this.lib.db);
+
+        // init lang
+        const lang = await this.lib.db.query.setting.findFirst({
+            where: (t, { eq }) => eq(t.key, "language"),
+        });
+        if (!lang) {
+            const locale = app.getLocale();
+            if (locale.startsWith("en"))
+                await this.lib.db.insert(schema.setting).values({ key: "language", value: "en" });
+            else if (locale === "ko")
+                await this.lib.db.insert(schema.setting).values({ key: "language", value: "ko" });
+            else if (locale.startsWith("zh"))
+                await this.lib.db.insert(schema.setting).values({ key: "language", value: "zh" });
+            else await this.lib.db.insert(schema.setting).values({ key: "language", value: "en" });
+        }
+
+        // make server
+        try {
+            await startServer();
+        } catch (error) {
+            this.logger.error(`Failed to start server on port 1027: ${error}`, "Server");
+            throw error;
+        }
+
+        // make tray
+        this.lib.tray.createTray();
+
+        // register custom protocol
+        protocol.handle("nahida", async (req) => await NahidaProtocolHandler(this, req));
+
+        this.initialized = true;
+
         this.updater.initialize();
         if (supportsWindowsDesktopFeatures(process.platform)) {
             await this.service.xxmi.init();
@@ -182,6 +224,8 @@ export class NahidaDesktop {
                 autoLaunch.disable();
             }
         }
+
+        await this.window.main.createMainWindow();
     }
 }
 
@@ -252,13 +296,6 @@ app.whenReady().then(async () => {
     });
 
     await desktop.init();
-
-    // const loggedIn = await desktop.service.auth.isLoggedIn();  // if (loggedIn) {
-    desktop.lib.tray.createTray();
-    await desktop.window.main.createMainWindow();
-    // } else {
-    //     await desktop.window.auth.createLoginWindow();
-    // }
 
     // app.on('activate', async () => {
     //     // On macOS it's common to re-create a window in the app when the

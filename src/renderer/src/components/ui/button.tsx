@@ -1,7 +1,7 @@
-import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@renderer/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
-import { Loader2 } from "lucide-react";
+import { Loader2Icon } from "lucide-react";
+import { Slot } from "radix-ui";
 import * as React from "react";
 
 const buttonVariants = cva(
@@ -42,8 +42,7 @@ const buttonVariants = cva(
 );
 
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
   asChild?: boolean;
   isLoading?: boolean;
   onClickPromise?: (event: React.MouseEvent<HTMLButtonElement>) => Promise<unknown>;
@@ -66,7 +65,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     ref,
   ) => {
     const [isPending, setIsPending] = React.useState(false);
-    const Comp = asChild ? Slot : "button";
+    const Comp = asChild ? Slot.Root : "button";
 
     const isLoading = isLoadingProp || isPending;
 
@@ -103,7 +102,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       >
         {isLoading ? (
           <>
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            <Loader2Icon className="h-4 w-4 animate-spin" aria-hidden="true" />
             {asChild ? children : null}
           </>
         ) : (

@@ -1,6 +1,7 @@
 const { autoUpdater } = require("electron-updater");
 
 import { app, BrowserWindow } from "electron";
+import ms from "ms";
 import type { NahidaDesktop } from "..";
 import isDev from "./isDev";
 
@@ -66,7 +67,7 @@ export class Updater {
                 this.desktop.logger.log("error", err, "updater.interval");
                 this.desktop.logger.log("error", err);
             });
-        }, 3600000);
+        }, ms("1h"));
 
         void this.runInitialAutomaticCheck();
     }
