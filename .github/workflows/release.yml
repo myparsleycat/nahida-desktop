@@ -121,7 +121,7 @@ jobs:
               uses: actions/cache@v4
               with:
                   path: C:\vcpkg\installed
-                  key: ${{ runner.os }}-vcpkg-libarchive-x64-windows-static
+                  key: ${{ runner.os }}-vcpkg-${{ hashFiles('native/extractor/Cargo.toml', '.github/workflows/release.yml') }}-x64-windows-static
 
             - name: Install libarchive via vcpkg (Windows only)
               if: matrix.platform == 'win'
