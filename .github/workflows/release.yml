@@ -1,144 +1,163 @@
 name: Build & Release
 
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+    push:
+        branches:
+            - main
+    workflow_dispatch:
 
 jobs:
-  check-version:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.get_version.outputs.version }}
-      tag_exists: ${{ steps.check_tag.outputs.exists }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    check-version:
+        runs-on: ubuntu-latest
+        outputs:
+            version: ${{ steps.get_version.outputs.version }}
+            tag_exists: ${{ steps.check_tag.outputs.exists }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
 
-      - name: Get version from package.json
-        id: get_version
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "version=v$VERSION" >> $GITHUB_OUTPUT
-          echo "Version: v$VERSION"
+            - name: Get version from package.json
+              id: get_version
+              run: |
+                  VERSION=$(node -p "require('./package.json').version")
+                  echo "version=v$VERSION" >> $GITHUB_OUTPUT
+                  echo "Version: v$VERSION"
 
-      - name: Check if tag already exists
-        id: check_tag
-        run: |
-          if git ls-remote --tags origin "refs/tags/${{ steps.get_version.outputs.version }}" | grep -q .; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "⏭️ Tag ${{ steps.get_version.outputs.version }} already exists, skipping release."
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "🆕 Tag ${{ steps.get_version.outputs.version }} not found, proceeding with release."
-          fi
+            - name: Check if tag already exists
+              id: check_tag
+              run: |
+                  if git ls-remote --tags origin "refs/tags/${{ steps.get_version.outputs.version }}" | grep -q .; then
+                    echo "exists=true" >> $GITHUB_OUTPUT
+                    echo "⏭️ Tag ${{ steps.get_version.outputs.version }} already exists, skipping release."
+                  else
+                    echo "exists=false" >> $GITHUB_OUTPUT
+                    echo "🆕 Tag ${{ steps.get_version.outputs.version }} not found, proceeding with release."
+                  fi
 
-      - name: Create tag
-        if: steps.check_tag.outputs.exists == 'false'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag ${{ steps.get_version.outputs.version }}
-          git push origin ${{ steps.get_version.outputs.version }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Create tag
+              if: steps.check_tag.outputs.exists == 'false'
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git tag ${{ steps.get_version.outputs.version }}
+                  git push origin ${{ steps.get_version.outputs.version }}
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build:
-    needs: check-version
-    if: needs.check-version.outputs.tag_exists == 'false'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            platform: win
-          - os: macos-latest
-            platform: mac
+    build:
+        needs: check-version
+        if: needs.check-version.outputs.tag_exists == 'false'
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - os: windows-latest
+                      platform: win
+                    - os: macos-latest
+                      platform: mac
 
-    runs-on: ${{ matrix.os }}
+        runs-on: ${{ matrix.os }}
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: latest
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v4
+              with:
+                  version: latest
 
-      - name: Get pnpm store directory
-        shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+            - name: Get pnpm store directory
+              shell: bash
+              run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+            - name: Cache pnpm store
+              uses: actions/cache@v4
+              with:
+                  path: ${{ env.STORE_PATH }}
+                  key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+                  restore-keys: |
+                      ${{ runner.os }}-pnpm-store-
 
-      - name: Setup Rust toolchain (Windows only)
-        if: matrix.platform == 'win'
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-msvc
+            - name: Setup Rust toolchain (Windows only)
+              if: matrix.platform == 'win'
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  targets: x86_64-pc-windows-msvc
 
-      - name: Cache Rust build artifacts (Windows only)
-        if: matrix.platform == 'win'
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            native/dll-injector/target
-            native/extractor/target
-            native/native-mod/target
-            native/native-util/target
-            native/native-fs/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+            - name: Cache Rust build artifacts (Windows only)
+              if: matrix.platform == 'win'
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      native/dll-injector/target
+                      native/extractor/target
+                      native/native-mod/target
+                      native/native-util/target
+                      native/native-fs/target
+                  key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cargo-
 
-      - name: Install dependencies
-        run: pnpm install
+            - name: Install dependencies
+              run: pnpm install
 
-      - name: Build native modules (Windows only)
-        if: matrix.platform == 'win'
-        run: pnpm run build:native
+            - name: Set VCPKG_ROOT (Windows only)
+              if: matrix.platform == 'win'
+              shell: pwsh
+              run: echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
 
-      - name: Generate DB migrations & build renderer
-        run: pnpm run build
+            - name: Cache vcpkg packages (Windows only)
+              if: matrix.platform == 'win'
+              uses: actions/cache@v4
+              with:
+                  path: C:\vcpkg\installed
+                  key: ${{ runner.os }}-vcpkg-libarchive-x64-windows-static
 
-      - name: Build & Publish (Windows)
-        if: matrix.platform == 'win'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm exec electron-builder --win --publish always
+            - name: Install libarchive via vcpkg (Windows only)
+              if: matrix.platform == 'win'
+              shell: pwsh
+              run: |
+                  vcpkg install libarchive:x64-windows-static
+                  vcpkg integrate install
 
-      - name: Build & Publish (macOS)
-        if: matrix.platform == 'mac'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm exec electron-builder --mac --publish always
+            - name: Build native modules (Windows only)
+              if: matrix.platform == 'win'
+              run: pnpm run build:native
 
-      - name: Upload artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-${{ matrix.platform }}-${{ needs.check-version.outputs.version }}
-          path: |
-            dist/*.exe
-            dist/*.dmg
-            dist/*.zip
-            dist/latest*.yml
-          if-no-files-found: ignore
-          retention-days: 7
+            - name: Generate DB migrations & build renderer
+              run: pnpm run build
+
+            - name: Build & Publish (Windows)
+              if: matrix.platform == 'win'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: pnpm exec electron-builder --win --publish always
+
+            - name: Build & Publish (macOS)
+              if: matrix.platform == 'mac'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: pnpm exec electron-builder --mac --publish always
+
+            - name: Upload artifacts
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: release-${{ matrix.platform }}-${{ needs.check-version.outputs.version }}
+                  path: |
+                      dist/*.exe
+                      dist/*.dmg
+                      dist/*.zip
+                      dist/latest*.yml
+                  if-no-files-found: ignore
+                  retention-days: 7
