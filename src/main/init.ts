@@ -1,4 +1,5 @@
 import { InitDB } from "@main/internal/db";
+import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import { app, protocol } from "electron";
 import type { NahidaDesktop } from "./index";
 import { setting } from "./internal/db/schema";
@@ -8,7 +9,9 @@ import { startServer } from "./server";
 export async function startInit(desktop: NahidaDesktop) {
     if (desktop.initialized) return;
 
-    desktop.lib.native.startTracking();
+    if (supportsWindowsDesktopFeatures(process.platform)) {
+        desktop.lib.native.startTracking();
+    }
 
     // init db
     await InitDB(desktop.lib.db);
@@ -37,15 +40,7 @@ export async function startInit(desktop: NahidaDesktop) {
     }
 
     // make tray
-    // createTray();
-    // 로그인 후에 만들도록 순서 변경함
-
-    const plist = await desktop.lib.native.getProcessList();
-    const zenless = plist.find((p) => p.name.toLowerCase().includes("zenless"));
-    if (zenless) {
-        const topmostPid = desktop.lib.native.getTopmostPid([zenless.pid]);
-        console.log("topmostPid", topmostPid);
-    }
+    desktop.lib.tray.createTray();
 
     // register custom protocol
     protocol.handle("nahida", async (req) => await NahidaProtocolHandler(desktop, req));

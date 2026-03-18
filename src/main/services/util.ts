@@ -22,6 +22,7 @@ export function getAppStatus(): AppStatus {
         version: app.getVersion(),
         isPackaged: app.isPackaged,
         isDev: isDev,
+        platform: process.platform,
     };
 }
 

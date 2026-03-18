@@ -1,4 +1,5 @@
 {
+    "project_name": "nahida-desktop",
     "languages": {
         "JavaScript": {
             "tab_size": 4,

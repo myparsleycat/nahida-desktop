@@ -2,6 +2,7 @@ import { useAuth } from "@renderer/hooks/use-auth";
 import { cn } from "@renderer/lib/utils";
 import { viewStore } from "@renderer/store/drive";
 import { useGlobalStore } from "@renderer/store/global";
+import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpDownIcon,
@@ -23,6 +24,7 @@ export function Sidebar({ className }: { className?: string }) {
   const { t } = useTranslation();
   const appStatus = useGlobalStore((state) => state.appStatus);
   const { session } = useAuth();
+  const hasWindowsDesktopFeatures = supportsWindowsDesktopFeatures(appStatus?.platform);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -122,23 +124,25 @@ export function Sidebar({ className }: { className?: string }) {
             </>
           )}
 
-          <Tooltip disableHoverableContent={true}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onPointerDown={handlePointerDown}
-                onClick={() => {
-                  navi({ to: "/mod" });
-                }}
-              >
-                <GamepadIcon className={cn(iconSize)} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right" hideWhenDetached={true}>
-              {t("page.mod.title")}
-            </TooltipContent>
-          </Tooltip>
+          {hasWindowsDesktopFeatures && (
+            <Tooltip disableHoverableContent={true}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onPointerDown={handlePointerDown}
+                  onClick={() => {
+                    navi({ to: "/mod" });
+                  }}
+                >
+                  <GamepadIcon className={cn(iconSize)} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right" hideWhenDetached={true}>
+                {t("page.mod.title")}
+              </TooltipContent>
+            </Tooltip>
+          )}
 
           {appStatus?.isDev && (
             <Tooltip disableHoverableContent={true}>
@@ -160,23 +164,25 @@ export function Sidebar({ className }: { className?: string }) {
             </Tooltip>
           )}
 
-          <Tooltip disableHoverableContent={true}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onPointerDown={handlePointerDown}
-                onClick={() => {
-                  navi({ to: "/tools" });
-                }}
-              >
-                <WrenchIcon className={cn(iconSize)} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right" hideWhenDetached={true}>
-              Tools
-            </TooltipContent>
-          </Tooltip>
+          {hasWindowsDesktopFeatures && (
+            <Tooltip disableHoverableContent={true}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onPointerDown={handlePointerDown}
+                  onClick={() => {
+                    navi({ to: "/tools" });
+                  }}
+                >
+                  <WrenchIcon className={cn(iconSize)} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right" hideWhenDetached={true}>
+                Tools
+              </TooltipContent>
+            </Tooltip>
+          )}
 
           <Separator orientation="horizontal" />
 

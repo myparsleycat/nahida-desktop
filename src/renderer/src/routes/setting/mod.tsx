@@ -1,3 +1,4 @@
+import { WindowsOnlyRoute } from "@renderer/components/windows-only-route";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { Input } from "@renderer/components/ui/input";
@@ -23,6 +24,14 @@ const settingsConfig = {
 } as const;
 
 function RouteComponent() {
+  return (
+    <WindowsOnlyRoute fallbackTo="/setting/gen">
+      <ModSettingsRouteContent />
+    </WindowsOnlyRoute>
+  );
+}
+
+function ModSettingsRouteContent() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [anim1] = useAutoAnimate({ duration: 150 });

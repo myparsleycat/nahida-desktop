@@ -1,6 +1,7 @@
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { useGlobalStore } from "@renderer/store/global";
+import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import { createFileRoute, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { ArrowUpDown, GamepadIcon, PackageIcon, ServerCrash, Settings, User } from "lucide-react";
 import { useEffect } from "react";
@@ -16,12 +17,22 @@ function RouteComponent() {
   const location = useLocation();
   const navi = useNavigate();
   const appStatus = useGlobalStore((state) => state.appStatus);
+  const hasWindowsDesktopFeatures = supportsWindowsDesktopFeatures(appStatus?.platform);
 
   useEffect(() => {
     if (location.pathname === "/setting") {
       navi({ to: "/setting/gen" });
+      return;
     }
-  }, [navi, location.pathname]);
+
+    if (
+      appStatus &&
+      !hasWindowsDesktopFeatures &&
+      ["/setting/mod", "/setting/xxmi"].includes(location.pathname)
+    ) {
+      navi({ to: "/setting/gen" });
+    }
+  }, [appStatus, hasWindowsDesktopFeatures, navi, location.pathname]);
 
   const navItems = [
     { icon: Settings, label: t("page.setting.tabs.general"), path: "/setting/gen" },
@@ -30,7 +41,7 @@ function RouteComponent() {
     { icon: User, label: t("page.setting.tabs.account"), path: "/setting/acc" },
     { icon: ArrowUpDown, label: t("page.setting.tabs.transfer"), path: "/setting/transfer" },
     { icon: ServerCrash, label: t("page.setting.tabs.advanced"), path: "/setting/adv" },
-  ];
+  ].filter((item) => hasWindowsDesktopFeatures || !["/setting/mod", "/setting/xxmi"].includes(item.path));
 
   return (
     <div className="flex flex-col h-full relative">

@@ -334,6 +334,9 @@
           "checkUpdate": "업데이트 확인",
           "runInBackground": "백그라운드 실행",
           "runInBackgroundDescription": "모든 창을 닫아도 앱을 백그라운드에서 계속 실행합니다.",
+          "runInBackgroundDisableConfirmTitle": "백그라운드 실행을 끌까요?",
+          "runInBackgroundDisableConfirmDescription": "Toggle Persist 또는 Toggle Viewer가 켜져 있으면 백그라운드 실행을 유지하는 것이 더 안전합니다. 이 기능을 끄면 모든 창을 닫은 뒤 해당 기능들이 안정적으로 계속 동작하지 않을 수 있습니다. 그래도 백그라운드 실행을 끄시겠어요?",
+          "runInBackgroundDisableConfirmAction": "그래도 끄기",
           "autoUpdate": "자동 업데이트",
           "autoUpdateDescription": "앱 시작 시와 1시간마다 업데이트를 확인하고 자동으로 다운로드합니다."
         },

@@ -50,7 +50,7 @@ export class FS {
 
     public async isPathWritable(pathStr: string) {
         try {
-            await fse.access(pathStr, fse.constants.W_OK | fse.constants.R_OK);
+            await fse.access(pathStr, fse.constants.W_OK | fse.constants.X_OK);
             return true;
         } catch {
             return false;
@@ -127,6 +127,22 @@ export class FS {
     }
 
     public sanitizePath(input: string) {
+        if (process.platform === "darwin") {
+            const parsed = path.parse(input);
+
+            if (!parsed.base) {
+                return input;
+            }
+
+            const sanitizedBase = this.sanitizeWindowsFilename(parsed.base);
+
+            if (!parsed.dir) {
+                return sanitizedBase;
+            }
+
+            return path.join(parsed.dir, sanitizedBase);
+        }
+
         return input
             .split(path.sep)
             .map((part, index) => {

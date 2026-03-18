@@ -1,4 +1,14 @@
 import { type Theme, useTheme } from "@renderer/components/theme-provider";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@renderer/components/ui/alert-dialog";
 import { Button } from "@renderer/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import {
@@ -12,6 +22,8 @@ import {
 import { Separator } from "@renderer/components/ui/separator";
 import { Switch } from "@renderer/components/ui/switch";
 import { useSettings } from "@renderer/hooks/use-settings";
+import { useGlobalStore } from "@renderer/store/global";
+import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import { formatSize } from "@shared/utils";
 import { createFileRoute } from "@tanstack/react-router";
 import { LoaderIcon } from "lucide-react";
@@ -37,8 +49,10 @@ const settingsConfig = {
 function RouteComponent() {
   const { theme, setTheme } = useTheme();
   const { t } = useTranslation();
+  const appStatus = useGlobalStore((state) => state.appStatus);
+  const hasWindowsDesktopFeatures = supportsWindowsDesktopFeatures(appStatus?.platform);
 
-  const { settings, update, isLoading } = useSettings<{
+  const { settings, update, isLoading, setSettings } = useSettings<{
     runOnStartup: boolean;
     language: string;
     autoUpdate: boolean;
@@ -51,12 +65,51 @@ function RouteComponent() {
   }>(settingsConfig);
 
   const [imageCacheSize, setImageCacheSize] = useState<number | null>(null);
+  const [isRunInBackgroundConfirmOpen, setIsRunInBackgroundConfirmOpen] = useState(false);
 
   useEffect(() => {
     window.api.invoke("setting:general:getImageCacheSize").then((size) => {
       setImageCacheSize(size);
     });
   }, []);
+
+  const handleRunInBackgroundChange = async (val: boolean) => {
+    if (val) {
+      await update("runInBackground", true, "setting:general:setRunInBackground");
+      return;
+    }
+
+    if (!hasWindowsDesktopFeatures) {
+      await update("runInBackground", false, "setting:general:setRunInBackground");
+      return;
+    }
+
+    const [persistEnabled, toggleViewerEnabled] = await Promise.all([
+      window.api.invoke("setting:xxmi:getPersistToggles"),
+      window.api.invoke("setting:xxmi:getToggleViewerAutoGenerate"),
+    ]);
+
+    if (persistEnabled || toggleViewerEnabled) {
+      setIsRunInBackgroundConfirmOpen(true);
+      setSettings((prev) => ({ ...prev, runInBackground: true }));
+      return;
+    }
+
+    await update("runInBackground", false, "setting:general:setRunInBackground");
+  };
+
+  const startPageOptions = [
+    { value: "/transfer", label: t("page.transfer.title") },
+    { value: "/drive/drive/root", label: t("page.drive.title") },
+    { value: "/drive/share/root", label: t("page.share_drive.title") },
+    ...(hasWindowsDesktopFeatures ? [{ value: "/mod", label: t("page.mod.title") }] : []),
+  ];
+
+  const confirmDisableRunInBackground = async () => {
+    setIsRunInBackgroundConfirmOpen(false);
+    await update("runInBackground", false, "setting:general:setRunInBackground");
+  };
+
   if (isLoading) {
     return null;
   }
@@ -121,13 +174,33 @@ function RouteComponent() {
             </div>
             <Switch
               checked={settings.runInBackground}
-              onCheckedChange={(val) =>
-                update("runInBackground", val, "setting:general:setRunInBackground")
-              }
+              onCheckedChange={handleRunInBackgroundChange}
             />
           </div>
         </CardContent>
       </Card>
+
+      <AlertDialog
+        open={isRunInBackgroundConfirmOpen}
+        onOpenChange={setIsRunInBackgroundConfirmOpen}
+      >
+        <AlertDialogContent className="w-full">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("page.setting.gen.application.runInBackgroundDisableConfirmTitle")}
+            </AlertDialogTitle>
+          </AlertDialogHeader>
+          <p className="text-muted-foreground *:[a]:hover:text-foreground text-sm text-pretty *:[a]:underline *:[a]:underline-offset-3">
+            {t("page.setting.gen.application.runInBackgroundDisableConfirmDescription")}
+          </p>
+          <AlertDialogFooter className="flex flex-row justify-end">
+            <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={confirmDisableRunInBackground}>
+              {t("page.setting.gen.application.runInBackgroundDisableConfirmAction")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Card>
         <CardContent>
@@ -187,10 +260,11 @@ function RouteComponent() {
                 </SelectTrigger>
                 <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
                   <SelectGroup>
-                    <SelectItem value="/transfer">{t("page.transfer.title")}</SelectItem>
-                    <SelectItem value="/drive/drive/root">{t("page.drive.title")}</SelectItem>
-                    <SelectItem value="/drive/share/root">{t("page.share_drive.title")}</SelectItem>
-                    <SelectItem value="/mod">{t("page.mod.title")}</SelectItem>
+                    {startPageOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>

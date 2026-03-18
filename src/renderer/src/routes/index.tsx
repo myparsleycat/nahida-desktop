@@ -12,7 +12,7 @@ function RouteComponent() {
 
   useEffect(() => {
     window.api.invoke("setting:general:getDefaultStartPage").then((page: string | null) => {
-      const targetPage = page || "/mod";
+      const targetPage = page || "/transfer";
       navi({ to: targetPage });
     });
   }, [navi]);

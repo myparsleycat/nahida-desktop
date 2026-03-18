@@ -1,5 +1,6 @@
 import type { NahidaDesktop } from "@main/index";
 import { imageCache, setting } from "@main/internal/db/schema";
+import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import AutoLaunch from "auto-launch";
 import { eq, sum } from "drizzle-orm";
 import { app, BrowserWindow } from "electron";
@@ -26,6 +27,23 @@ function clampTransferConcurrency(value: number, min: number, max: number, fallb
     }
 
     return Math.min(max, Math.max(min, Math.trunc(value)));
+}
+
+function getDefaultStartPageForPlatform(platform: NodeJS.Platform) {
+    return supportsWindowsDesktopFeatures(platform) ? "/mod" : "/transfer";
+}
+
+function sanitizeDefaultStartPage(page: string | null | undefined, platform: NodeJS.Platform) {
+    const fallback = getDefaultStartPageForPlatform(platform);
+    if (!page) {
+        return fallback;
+    }
+
+    if (!supportsWindowsDesktopFeatures(platform) && page === "/mod") {
+        return fallback;
+    }
+
+    return page;
 }
 
 export class Setting {
@@ -196,24 +214,26 @@ export class Setting {
             const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "defaultStartPage"),
             });
+            const defaultPage = getDefaultStartPageForPlatform(process.platform);
 
             if (!qr) {
                 await this.desktop.lib.db
                     .insert(setting)
-                    .values({ key: "defaultStartPage", value: "/mod" });
-                return "/mod";
+                    .values({ key: "defaultStartPage", value: defaultPage });
+                return defaultPage;
             }
 
-            return qr.value;
+            return sanitizeDefaultStartPage(qr.value, process.platform);
         },
 
         setDefaultStartPage: async (page: string | null) => {
+            const nextPage = sanitizeDefaultStartPage(page, process.platform);
             await this.desktop.lib.db
                 .insert(setting)
-                .values({ key: "defaultStartPage", value: page || "/mod" })
+                .values({ key: "defaultStartPage", value: nextPage })
                 .onConflictDoUpdate({
                     target: setting.key,
-                    set: { value: page || "/mod" },
+                    set: { value: nextPage },
                 });
         },
 
@@ -627,6 +647,10 @@ export class Setting {
                     set: { value: String(enabled) },
                 });
 
+            if (enabled) {
+                await this.desktop.setting.general.setRunInBackground(true);
+            }
+
             if (this.desktop.service?.modTools) {
                 if (enabled) {
                     this.desktop.service.modTools.startPersistWatcher();
@@ -721,6 +745,10 @@ export class Setting {
                     target: setting.key,
                     set: { value: String(enabled) },
                 });
+
+            if (enabled) {
+                await this.desktop.setting.general.setRunInBackground(true);
+            }
 
             if (this.desktop.service?.modTools) {
                 if (enabled) {

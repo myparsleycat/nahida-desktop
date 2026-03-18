@@ -1,16 +1,16 @@
 appId: com.nahida.app
 productName: Nahida Desktop
+afterSign: scripts/after-sign-mac.js
 directories:
     buildResources: build
 files:
-    - "!**/.vscode/*"
+    - "!**/.*"
+    - "!**/.*/**/*"
     - "!src/**/*"
     - "!electron.vite.config.{js,ts,mjs,cjs}"
-    - "!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}"
-    - "!{.env,.env.*,.npmrc,pnpm-lock.yaml}"
+    - "!{eslint.config.mjs,dev-app-update.yml,CHANGELOG.md,README.md}"
+    - "!{pnpm-lock.yaml}"
     - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
-    - "!node_modules/.pnpm/@cbor-extract+cbor-extract-darwin-arm64@*/**/*"
-    - "!node_modules/.pnpm/@cbor-extract+cbor-extract-darwin-x64@*/**/*"
     - "!node_modules/.pnpm/@cbor-extract+cbor-extract-linux-arm@*/**/*"
     - "!node_modules/.pnpm/@cbor-extract+cbor-extract-linux-arm64@*/**/*"
     - "!node_modules/.pnpm/@cbor-extract+cbor-extract-linux-x64@*/**/*"
@@ -18,11 +18,7 @@ files:
     - "!plugins/**/*"
     - "!local.db"
 # asar: false
-extraResources:
-    - from: build/watchman-v2025.02.24.00-windows
-    - from: "native/dll-injector/target/release"
-      filter:
-          - dll-injector.exe
+disableDefaultIgnoredFiles: true
 asarUnpack:
     - resources/**
     - "**/*.node"
@@ -32,6 +28,10 @@ win:
     # cscLink: nahida-desktop.pfx
     # cscKeyPassword: password
     executableName: Nahida Desktop
+    extraResources:
+        - from: "native/dll-injector/target/release"
+          filter:
+              - dll-injector.exe
 nsis:
     artifactName: Nahida Desktop Setup ${version}.${ext}
     shortcutName: ${productName}
@@ -40,6 +40,7 @@ nsis:
     include: build/installer.nsh
     deleteAppDataOnUninstall: true
 mac:
+    identity: null
     entitlementsInherit: build/entitlements.mac.plist
     extendInfo:
         - NSCameraUsageDescription: Application requests access to the device's camera.

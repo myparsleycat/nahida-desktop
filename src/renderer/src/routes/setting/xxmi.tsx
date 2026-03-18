@@ -1,3 +1,4 @@
+import { WindowsOnlyRoute } from "@renderer/components/windows-only-route";
 import { XXMIImporters } from "@renderer/components/setting/xxmi/xxmi-importers";
 import { XXMIPath } from "@renderer/components/setting/xxmi/xxmi-path";
 import { useQuery } from "@tanstack/react-query";
@@ -12,6 +13,14 @@ import type { IpcHandlers } from "@shared/types.gen";
 export type XXMIData = Awaited<ReturnType<IpcHandlers["xxmi:getXXMIData"]>>;
 
 function RouteComponent() {
+  return (
+    <WindowsOnlyRoute fallbackTo="/setting/gen">
+      <XXMIRouteContent />
+    </WindowsOnlyRoute>
+  );
+}
+
+function XXMIRouteContent() {
   const { data: xxmiData, refetch } = useQuery({
     queryKey: ["xxmi:getXXMIData"],
     queryFn: () => window.api.invoke("xxmi:getXXMIData"),
