@@ -140,7 +140,7 @@ pub async fn collect_files(
 }
 
 #[napi]
-pub fn find_files(
+pub async fn find_files(
   paths: Vec<String>,
   include_ext: Vec<String>,
   exclude_file_names: Vec<String>,

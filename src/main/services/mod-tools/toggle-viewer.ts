@@ -1,7 +1,7 @@
 import path from "node:path";
-import toggleViewerUtilityWorker from "@main/worker/mod-tools/toggle-viewer.utility?modulePath";
 import { toggleViewerArtifact } from "@main/internal/db/schema";
 import { replaceHotkeyInGeneratedIni, sha256 } from "@main/lib/toggle-viewer-core";
+import toggleViewerUtilityWorker from "@main/worker/mod-tools/toggle-viewer.utility?modulePath";
 import { findFiles } from "@native/native-fs";
 import { and, eq } from "drizzle-orm";
 import { utilityProcess, type UtilityProcess } from "electron";
@@ -58,6 +58,7 @@ interface ToggleViewerProcessIniRequest extends ToggleViewerWorkerRequestBase {
     hotkey: string;
 }
 
+// oxlint-disable-next-line no-unused-vars
 type ToggleViewerWorkerRequest = ToggleViewerScanModsRequest | ToggleViewerProcessIniRequest;
 type ToggleViewerWorkerRequestInput =
     | {
@@ -496,10 +497,8 @@ export class ToggleViewer {
         try {
             const stat = await fse.stat(targetPath);
             if (stat.isDirectory()) {
-                const iniPaths = findFiles(
-                    [targetPath],
-                    [".ini"],
-                    ["toggle-viewer.ini", "disabled*"],
+                const iniPaths = (
+                    await findFiles([targetPath], [".ini"], ["toggle-viewer.ini", "disabled*"])
                 ).map((candidate) => path.resolve(candidate));
                 for (const iniPath of iniPaths) {
                     this.pendingChangedIniPaths.add(iniPath);

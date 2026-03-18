@@ -1,10 +1,10 @@
 import path from "node:path";
-import { findFiles } from "@native/native-fs";
-import fse from "fs-extra";
 import {
     generateToggleViewerArtifact,
     type GeneratedToggleViewerArtifact,
 } from "@main/lib/toggle-viewer-core";
+import { findFiles } from "@native/native-fs";
+import fse from "fs-extra";
 
 interface WorkerRequestBase {
     reqId: string;
@@ -75,9 +75,7 @@ process.parentPort?.on("message", async (event) => {
     }
 });
 
-async function handleScanModsPaths(
-    request: ScanModsPathsRequest,
-): Promise<WorkerSuccessResponse> {
+async function handleScanModsPaths(request: ScanModsPathsRequest): Promise<WorkerSuccessResponse> {
     const logs: string[] = [];
     const artifacts: GeneratedToggleViewerArtifact[] = [];
     const seenTargetIniPaths = new Set<string>();
@@ -89,9 +87,9 @@ async function handleScanModsPaths(
             continue;
         }
 
-        const iniPaths = findFiles([modsPath], [".ini"], ["toggle-viewer.ini", "disabled*"]).map(
-            (candidate) => path.resolve(candidate),
-        );
+        const iniPaths = (
+            await findFiles([modsPath], [".ini"], ["toggle-viewer.ini", "disabled*"])
+        ).map((candidate) => path.resolve(candidate));
         const result = await processIniPaths(request.reqId, iniPaths, request.hotkey, logs);
         for (const artifact of result.artifacts) {
             artifacts.push(artifact);
