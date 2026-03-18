@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import fsp from "node:fs/promises";
 import path from "node:path";
 import { eden } from "@main/client";
 import isDev from "@main/internal/isDev";
@@ -80,12 +81,17 @@ export async function mkdir(parentPath: string, name: string): Promise<string> {
     desktop.lib.fs.assertValidWindowsFilename(trimmedName);
 
     const nextPath = path.join(parentPath, trimmedName);
-    const exists = await desktop.lib.fs.pathExists(nextPath);
-    if (exists) {
-        throw new Error(`ALREADY_EXISTS:${trimmedName}`);
+    try {
+        await fsp.mkdir(nextPath);
+    } catch (error) {
+        const code = (error as NodeJS.ErrnoException | undefined)?.code;
+        const name = (error as NodeJS.ErrnoException | undefined)?.name;
+        if (code === "EEXIST" || name === "AlreadyExists") {
+            throw new Error(`ALREADY_EXISTS:${trimmedName}`);
+        }
+        throw error;
     }
 
-    await desktop.lib.fs.ensureDir(nextPath);
     return nextPath;
 }
 
