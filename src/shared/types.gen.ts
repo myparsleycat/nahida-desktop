@@ -134,6 +134,7 @@ export type IpcHandlers = {
     "mod:pastePreview": (...args: Parameters<typeof desktop.service.mod.fn.pastePreview>) => ReturnType<typeof desktop.service.mod.fn.pastePreview>;
     "mod:pickFolder": (...args: any[]) => any;
     "mod:removeGame": (...args: Parameters<typeof desktop.service.mod.fn.removeGame>) => ReturnType<typeof desktop.service.mod.fn.removeGame>;
+    "mod:rename": (...args: Parameters<typeof desktop.service.mod.fn.rename>) => ReturnType<typeof desktop.service.mod.fn.rename>;
     "mod:selectFolder": (...args: any[]) => any;
     "mod:setExpandedGroups": (...args: Parameters<typeof desktop.service.mod.fn.setExpandedGroups>) => ReturnType<typeof desktop.service.mod.fn.setExpandedGroups>;
     "mod:setLastGame": (...args: Parameters<typeof desktop.service.mod.fn.setLastGame>) => ReturnType<typeof desktop.service.mod.fn.setLastGame>;

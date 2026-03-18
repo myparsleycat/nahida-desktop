@@ -149,7 +149,38 @@ export function useModMutations() {
         },
     });
 
-    return { toggleModMutation, exclusiveToggleModMutation, updateToggleKeyMutation };
+    const renameModMutation = useMutation({
+        mutationFn: async ({ mod, newName }: { mod: ModInfo; newName: string }) => {
+            try {
+                await window.api.invoke("mod:rename", mod.path, newName);
+                const currentGroupPath = selectedGroup?.path;
+                if (currentGroupPath) {
+                    const refreshedGroup = (await window.api.invoke(
+                        "mod:getMods",
+                        currentGroupPath,
+                    )) as FolderGroup;
+                    return refreshedGroup;
+                }
+                return null;
+            } catch (error) {
+                showRenameMutationError(error);
+                throw error;
+            }
+        },
+        onSuccess: (refreshedGroup) => {
+            if (refreshedGroup) {
+                updateLocalGroupCache(refreshedGroup);
+            }
+            toast.success(t("page.mod.toast.rename-success"));
+        },
+    });
+
+    return {
+        toggleModMutation,
+        exclusiveToggleModMutation,
+        updateToggleKeyMutation,
+        renameModMutation,
+    };
 }
 
 export function usePresetMutations() {

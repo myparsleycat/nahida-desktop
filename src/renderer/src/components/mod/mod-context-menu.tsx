@@ -21,8 +21,17 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@renderer/components/ui/context-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
+import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { cn } from "@renderer/lib/utils";
 import type { ModInfo } from "@renderer/types/mod";
 import { useRouteContext } from "@tanstack/react-router";
@@ -30,10 +39,11 @@ import {
   ChevronRightIcon,
   FolderIcon,
   ImageIcon,
+  PencilIcon,
   TerminalSquareIcon,
   TrashIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -53,6 +63,10 @@ interface ModContextMenuProps {
   children: ReactNode;
 }
 
+const DISABLED_PREFIX_REGEX = /^disabled\s+/i;
+
+const getRenameDefaultValue = (name: string) => name.replace(DISABLED_PREFIX_REGEX, "").trim();
+
 export function ModContextMenu({
   mod,
   selectedGroupPath,
@@ -62,14 +76,18 @@ export function ModContextMenu({
 }: ModContextMenuProps) {
   const { t } = useTranslation();
   const { queryClient } = useRouteContext({ from: "__root__" });
+  const { renameModMutation } = useModMutations();
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showLogModal, setShowLogModal] = useState(false);
+  const [showRenameDialog, setShowRenameDialog] = useState(false);
+  const [renameValue, setRenameValue] = useState(getRenameDefaultValue(mod.name));
   const [logs, setLogs] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [inputCmd, setInputCmd] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!showLogModal) return;
@@ -84,6 +102,15 @@ export function ModContextMenu({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [logs]);
+
+  useEffect(() => {
+    if (!showRenameDialog) return;
+    setRenameValue(getRenameDefaultValue(mod.name));
+    queueMicrotask(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    });
+  }, [mod.name, showRenameDialog]);
 
   const invalidateModGroup = () => {
     queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
@@ -139,6 +166,23 @@ export function ModContextMenu({
     promise.then(() => {
       invalidateModGroup();
     });
+  };
+
+  const handleRenameSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const nextName = renameValue.trim();
+
+    if (!nextName) {
+      toast.error(t("page.mod.hooks.use-mod-mutations.rename-mutation.2"));
+      return;
+    }
+
+    try {
+      await renameModMutation.mutateAsync({ mod, newName: nextName });
+      setShowRenameDialog(false);
+    } catch {
+      return;
+    }
   };
 
   return (
@@ -220,6 +264,10 @@ export function ModContextMenu({
             <FolderIcon className="mr-2 size-4" />
             {t("page.mod.context-menu.open-folder")}
           </ContextMenuItem>
+          <ContextMenuItem onClick={() => setShowRenameDialog(true)}>
+            <PencilIcon className="mr-2 size-4" />
+            {t("page.mod.context-menu.rename")}
+          </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem variant="destructive" onClick={() => setShowDeleteModal(true)}>
             <TrashIcon className="mr-2 size-4" />
@@ -242,6 +290,38 @@ export function ModContextMenu({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={showRenameDialog} onOpenChange={setShowRenameDialog}>
+        <DialogContent aria-describedby={undefined} onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle>{t("page.mod.dialog.rename-mod.title")}</DialogTitle>
+            <DialogDescription>{t("page.mod.dialog.rename-mod.description")}</DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={handleRenameSubmit}>
+            <Input
+              ref={renameInputRef}
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              placeholder={t("page.mod.dialog.rename-mod.name-placeholder")}
+              maxLength={255}
+              disabled={renameModMutation.isPending}
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowRenameDialog(false)}
+                disabled={renameModMutation.isPending}
+              >
+                {t("g.cancel")}
+              </Button>
+              <Button type="submit" disabled={renameModMutation.isPending}>
+                {t("page.mod.dialog.rename-mod.confirm")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={showLogModal} onOpenChange={setShowLogModal}>
         <AlertDialogContent

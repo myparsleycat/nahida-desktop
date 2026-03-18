@@ -13,7 +13,8 @@
     "create": "创建",
     "unknown": "未知",
     "save": "保存",
-    "close": "关闭"
+    "close": "关闭",
+    "rename": "重命名"
   },
   "page": {
     "transfer": {
@@ -216,6 +217,14 @@
             "1": "文件夹被锁定，无法修改",
             "2": "修改模组状态失败"
           },
+          "rename-mutation": {
+            "0": "{{name}} 文件夹已存在",
+            "1": "{{processes}} 正在使用该文件夹，无法重命名",
+            "1-fallback": "文件夹被锁定，无法重命名",
+            "2": "请输入有效的模组名称",
+            "3": "重命名模组失败"
+          },
+          "locked-description": "正在被以下进程使用: {{processes}}",
           "apply-preset-mutation": {
             "legacy": "旧版预设无法套用。请删除后重新建立。"
           }
@@ -226,13 +235,15 @@
         "open-preview-viewer": "用预览查看器打开",
         "delete-preview": "删除预览",
         "open-cmd": "打开 CMD",
-        "open-folder": "打开文件夹"
+        "open-folder": "打开文件夹",
+        "rename": "重命名"
       },
       "toast": {
         "trash-loading": "移动到回收站中...",
         "trash-success": "删除成功",
         "trash-error": "删除失败",
-        "value-required": "请输入数值。"
+        "value-required": "请输入数值。",
+        "rename-success": "模组重命名成功"
       },
       "log-dialog": {
         "title": "日志",

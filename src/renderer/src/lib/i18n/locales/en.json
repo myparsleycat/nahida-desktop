@@ -13,7 +13,8 @@
     "create": "Create",
     "unknown": "Unknown",
     "save": "Save",
-    "close": "Close"
+    "close": "Close",
+    "rename": "Rename"
   },
   "page": {
     "transfer": {
@@ -199,6 +200,12 @@
           "title": "Are you sure you want to delete this mod?",
           "description": "Deleted mods can be restored from the recycle bin."
         },
+        "rename-mod": {
+          "title": "Rename Mod",
+          "description": "Change the folder name used for this mod.",
+          "name-placeholder": "Mod name",
+          "confirm": "Rename"
+        },
         "add-preset": {
           "title": "Create New Preset",
           "name-placeholder": "Preset name",
@@ -225,13 +232,15 @@
         "open-preview-viewer": "Open in viewer",
         "delete-preview": "Delete preview",
         "open-cmd": "Open CMD",
-        "open-folder": "Open folder"
+        "open-folder": "Open folder",
+        "rename": "Rename"
       },
       "toast": {
         "trash-loading": "Moving to recycle bin...",
         "trash-success": "Deleted successfully",
         "trash-error": "Failed to delete",
-        "value-required": "Please enter a value."
+        "value-required": "Please enter a value.",
+        "rename-success": "Mod renamed successfully"
       },
       "log-dialog": {
         "title": "Log",

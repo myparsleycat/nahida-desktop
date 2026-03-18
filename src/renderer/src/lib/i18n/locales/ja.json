@@ -13,7 +13,8 @@
     "create": "作成",
     "unknown": "不明",
     "save": "保存",
-    "close": "閉じる"
+    "close": "閉じる",
+    "rename": "名前を変更"
   },
   "page": {
     "transfer": {
@@ -201,6 +202,12 @@
           "title": "このMODを削除しますか？",
           "description": "削除されたMODはゴミ箱から復元できます。"
         },
+        "rename-mod": {
+          "title": "MOD名を変更",
+          "description": "このMODに使われているフォルダー名を変更します。",
+          "name-placeholder": "MOD名",
+          "confirm": "名前を変更"
+        },
         "add-preset": {
           "name-placeholder": "プリセット名",
           "description-placeholder": "説明（任意）",
@@ -227,13 +234,15 @@
         "open-preview-viewer": "プレビュービューアーで開く",
         "delete-preview": "プレビューを削除",
         "open-cmd": "CMDを開く",
-        "open-folder": "フォルダーを開く"
+        "open-folder": "フォルダーを開く",
+        "rename": "名前を変更"
       },
       "toast": {
         "trash-loading": "ゴミ箱に移動中...",
         "trash-success": "削除完了",
         "trash-error": "削除失敗",
-        "value-required": "値を入力してください。"
+        "value-required": "値を入力してください。",
+        "rename-success": "MOD名を変更しました"
       },
       "log-dialog": {
         "title": "ログ",

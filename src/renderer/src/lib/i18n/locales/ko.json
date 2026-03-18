@@ -13,7 +13,8 @@
     "create": "생성",
     "unknown": "알 수 없는",
     "save": "저장",
-    "close": "닫기"
+    "close": "닫기",
+    "rename": "이름 변경"
   },
   "page": {
     "transfer": {
@@ -216,6 +217,14 @@
             "1": "폴더가 잠겨있어 변경할 수 없습니다",
             "2": "모드 상태 변경에 실패했습니다"
           },
+          "rename-mutation": {
+            "0": "이미 {{name}} 폴더가 존재합니다",
+            "1": "{{processes}} 가 해당 폴더를 사용 중이기 때문에 이름을 변경할 수 없습니다",
+            "1-fallback": "폴더가 잠겨있어 이름을 변경할 수 없습니다",
+            "2": "올바른 모드 이름을 입력해주세요",
+            "3": "모드 이름 변경에 실패했습니다"
+          },
+          "locked-description": "다음 프로세스에서 해당 폴더를 사용 중입니다: {{processes}}",
           "apply-preset-mutation": {
             "legacy": "레거시 프리셋은 적용할 수 없습니다. 삭제 후 다시 만들어 주세요."
           }
@@ -226,13 +235,15 @@
         "open-preview-viewer": "뷰어로 열기",
         "delete-preview": "프리뷰 삭제",
         "open-cmd": "CMD 열기",
-        "open-folder": "폴더 열기"
+        "open-folder": "폴더 열기",
+        "rename": "이름 변경"
       },
       "toast": {
         "trash-loading": "휴지통으로 이동 중...",
         "trash-success": "삭제 완료",
         "trash-error": "삭제 실패",
-        "value-required": "값을 입력해주세요."
+        "value-required": "값을 입력해주세요.",
+        "rename-success": "모드 이름이 변경되었습니다"
       },
       "log-dialog": {
         "title": "로그",
