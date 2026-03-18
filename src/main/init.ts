@@ -40,17 +40,7 @@ export async function startInit(desktop: NahidaDesktop) {
     }
 
     // make tray
-    // createTray();
-    // 로그인 후에 만들도록 순서 변경함
-
-    if (supportsWindowsDesktopFeatures(process.platform)) {
-        const plist = await desktop.lib.native.getProcessList();
-        const zenless = plist.find((p) => p.name.toLowerCase().includes("zenless"));
-        if (zenless) {
-            const topmostPid = desktop.lib.native.getTopmostPid([zenless.pid]);
-            console.log("topmostPid", topmostPid);
-        }
-    }
+    desktop.lib.tray.createTray();
 
     // register custom protocol
     protocol.handle("nahida", async (req) => await NahidaProtocolHandler(desktop, req));
