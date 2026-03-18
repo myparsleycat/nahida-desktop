@@ -1,35 +1,77 @@
-﻿import crypto from "node:crypto";
 import path from "node:path";
+import toggleViewerUtilityWorker from "@main/worker/mod-tools/toggle-viewer.utility?modulePath";
 import { toggleViewerArtifact } from "@main/internal/db/schema";
+import { replaceHotkeyInGeneratedIni, sha256 } from "@main/lib/toggle-viewer-core";
 import { findFiles } from "@native/native-fs";
-import { formatKeySequence } from "@shared/key-formatter";
 import { and, eq } from "drizzle-orm";
+import { utilityProcess, type UtilityProcess } from "electron";
 import { debounce } from "es-toolkit";
 import fse from "fs-extra";
 import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "@/main";
 
-interface IniEntry {
-    key: string;
-    value: string;
-}
-
-interface IniSection {
-    name: string;
-    entries: IniEntry[];
-}
-
-interface ParsedKeySection {
-    sectionName: string;
-    keyValue: string;
-    backValue?: string;
-}
-
 type ToggleViewerTaskType = "scan" | "generate" | "delete";
 const DEFAULT_TOGGLE_VIEWER_HOTKEY = "ctrl H";
 
+interface ToggleViewerWorkerArtifact {
+    targetIniPath: string;
+    toggleTxtPath: string;
+    toggleIniPath: string;
+    toggleTxtHash: string;
+    toggleIniHash: string;
+    txtContent: string;
+    iniContent: string;
+}
+
+interface ToggleViewerWorkerSuccessResponse {
+    type: "success";
+    reqId: string;
+    artifacts: ToggleViewerWorkerArtifact[];
+    seenTargetIniPaths?: string[];
+    invalidIniPaths?: string[];
+    logs: string[];
+}
+
+interface ToggleViewerWorkerErrorResponse {
+    type: "error";
+    reqId: string;
+    error: string;
+}
+
+type ToggleViewerWorkerResponse =
+    | ToggleViewerWorkerSuccessResponse
+    | ToggleViewerWorkerErrorResponse;
+
+interface ToggleViewerWorkerRequestBase {
+    reqId: string;
+}
+
+interface ToggleViewerScanModsRequest extends ToggleViewerWorkerRequestBase {
+    type: "scanModsPaths";
+    modsPaths: string[];
+    hotkey: string;
+}
+
+interface ToggleViewerProcessIniRequest extends ToggleViewerWorkerRequestBase {
+    type: "processIniPaths";
+    iniPaths: string[];
+    hotkey: string;
+}
+
+type ToggleViewerWorkerRequest = ToggleViewerScanModsRequest | ToggleViewerProcessIniRequest;
+type ToggleViewerWorkerRequestInput =
+    | {
+          type: "scanModsPaths";
+          modsPaths: string[];
+          hotkey: string;
+      }
+    | {
+          type: "processIniPaths";
+          iniPaths: string[];
+          hotkey: string;
+      };
+
 export class ToggleViewer {
-    private static readonly fullScanConcurrency = 8;
     private watcherIds: string[] = [];
     private scanDebouncer: (() => void) | null = null;
     private logs: string[] = [];
@@ -38,6 +80,14 @@ export class ToggleViewer {
     private pendingChangedIniPaths = new Set<string>();
     private activeAbortController: AbortController | null = null;
     private currentTask: ToggleViewerTaskType | null = null;
+    private utilityChild: UtilityProcess | null = null;
+    private pendingRequests = new Map<
+        string,
+        {
+            resolve: (value: ToggleViewerWorkerSuccessResponse) => void;
+            reject: (reason?: unknown) => void;
+        }
+    >();
 
     constructor(private readonly desktop: NahidaDesktop) {}
 
@@ -105,7 +155,6 @@ export class ToggleViewer {
                     }
 
                     await this.handleWatcherChange(eventName, changedPath);
-
                     this.scanDebouncer?.();
                 },
             );
@@ -141,6 +190,9 @@ export class ToggleViewer {
         this.pendingChangedIniPaths.clear();
         if (count > 0) {
             this.logInfo(`Stopped toggle viewer watcher (${count})`);
+        }
+        if (!this.currentTask) {
+            this.disposeUtilityProcess();
         }
     }
 
@@ -184,6 +236,8 @@ export class ToggleViewer {
                         `Failed to start watcher after manual generate completion: ${error}`,
                     );
                 }
+            } else if (!autoGenerateEnabled) {
+                this.disposeUtilityProcess();
             }
         }
     }
@@ -270,6 +324,7 @@ export class ToggleViewer {
         } finally {
             this.currentTask = null;
             this.activeAbortController = null;
+            this.disposeUtilityProcess();
         }
     }
 
@@ -285,10 +340,7 @@ export class ToggleViewer {
                 }
 
                 const currentContent = await fse.readFile(record.toggleIniPath, "utf-8");
-                const nextContent = this.replaceHotkeyInGeneratedIni(
-                    currentContent,
-                    normalizedHotkey,
-                );
+                const nextContent = replaceHotkeyInGeneratedIni(currentContent, normalizedHotkey);
                 if (nextContent === currentContent) {
                     continue;
                 }
@@ -298,7 +350,7 @@ export class ToggleViewer {
                 await this.desktop.lib.db
                     .update(toggleViewerArtifact)
                     .set({
-                        toggleIniHash: this.sha256(nextContent),
+                        toggleIniHash: sha256(nextContent),
                         updatedAt,
                     })
                     .where(eq(toggleViewerArtifact.id, record.id));
@@ -319,40 +371,41 @@ export class ToggleViewer {
         this.isScanning = true;
         const signal = options?.signal;
 
-        const importers = this.desktop.service.xxmi.getEnabledImporters();
-        const seenTargetIniPaths = new Set<string>();
-        const toggleViewerHotkey = await this.getToggleViewerHotkey();
-
         try {
-            for (const importer of importers) {
-                const modsPath = path.join(importer.importerFolder, "mods");
-                if (!(await fse.pathExists(modsPath))) {
-                    continue;
-                }
-
-                if (signal?.aborted) {
-                    this.logInfo("Toggle viewer scan cancelled");
-                    return;
-                }
-
-                const iniCandidates = await this.findIniCandidates(modsPath);
-                await this.processIniBatch(
-                    iniCandidates,
-                    seenTargetIniPaths,
-                    toggleViewerHotkey,
-                    signal,
-                );
+            const modsPaths = await this.getEnabledModsPaths();
+            if (modsPaths.length === 0) {
+                this.logInfo("Toggle viewer scan skipped: no enabled importer mods folder");
+                return;
             }
+
+            const toggleViewerHotkey = await this.getToggleViewerHotkey();
+            const response = await this.callWorker(
+                {
+                    type: "scanModsPaths",
+                    modsPaths,
+                    hotkey: toggleViewerHotkey,
+                },
+                signal,
+            );
+
+            this.flushWorkerLogs(response.logs);
+            await this.persistWorkerArtifacts(response.artifacts);
 
             if (signal?.aborted) {
                 this.logInfo("Toggle viewer scan cancelled");
                 return;
             }
 
-            await this.deleteStaleRecords(seenTargetIniPaths);
+            await this.deleteStaleRecords(new Set(response.seenTargetIniPaths ?? []));
             this.logInfo(
-                `Scan complete. matched=${seenTargetIniPaths.size}, importers=${importers.length}`,
+                `Scan complete. matched=${response.seenTargetIniPaths?.length ?? 0}, importers=${modsPaths.length}`,
             );
+        } catch (error) {
+            if ((error as Error).message === "Aborted") {
+                this.logInfo("Toggle viewer scan cancelled");
+                return;
+            }
+            throw error;
         } finally {
             this.isScanning = false;
             if (this.pendingScan) {
@@ -371,7 +424,6 @@ export class ToggleViewer {
         }
         this.isScanning = true;
         const signal = options?.signal;
-        const toggleViewerHotkey = await this.getToggleViewerHotkey();
 
         try {
             const targets = [...this.pendingChangedIniPaths];
@@ -381,22 +433,32 @@ export class ToggleViewer {
                 return;
             }
 
-            let processedCount = 0;
-            for (const iniPath of targets) {
-                if (signal?.aborted) {
-                    this.logInfo("Toggle viewer scan cancelled");
-                    return;
-                }
+            const toggleViewerHotkey = await this.getToggleViewerHotkey();
+            const response = await this.callWorker(
+                {
+                    type: "processIniPaths",
+                    iniPaths: targets,
+                    hotkey: toggleViewerHotkey,
+                },
+                signal,
+            );
 
-                const processed = await this.processIniOrDeleteRecord(iniPath, toggleViewerHotkey);
-                if (processed) {
-                    processedCount += 1;
-                }
+            this.flushWorkerLogs(response.logs);
+            await this.persistWorkerArtifacts(response.artifacts);
+
+            for (const invalidIniPath of response.invalidIniPaths ?? []) {
+                await this.deleteArtifactRecordByTargetIniPath(invalidIniPath);
             }
 
             this.logInfo(
-                `Incremental scan complete. queued=${targets.length}, processed=${processedCount}`,
+                `Incremental scan complete. queued=${targets.length}, processed=${response.artifacts.length}`,
             );
+        } catch (error) {
+            if ((error as Error).message === "Aborted") {
+                this.logInfo("Toggle viewer scan cancelled");
+                return;
+            }
+            throw error;
         } finally {
             this.isScanning = false;
             if (this.pendingScan) {
@@ -406,40 +468,6 @@ export class ToggleViewer {
                 }
             }
         }
-    }
-
-    private async processIniBatch(
-        iniPaths: string[],
-        seenTargetIniPaths: Set<string>,
-        toggleViewerHotkey: string,
-        signal?: AbortSignal,
-    ) {
-        let cursor = 0;
-        const workerCount = Math.max(
-            1,
-            Math.min(ToggleViewer.fullScanConcurrency, iniPaths.length),
-        );
-
-        const workers = Array.from({ length: workerCount }, async () => {
-            while (true) {
-                if (signal?.aborted) {
-                    return;
-                }
-
-                const index = cursor++;
-                if (index >= iniPaths.length) {
-                    return;
-                }
-
-                const iniPath = path.resolve(iniPaths[index]);
-                const processed = await this.processIni(iniPath, toggleViewerHotkey);
-                if (processed) {
-                    seenTargetIniPaths.add(iniPath);
-                }
-            }
-        });
-
-        await Promise.all(workers);
     }
 
     private async handleWatcherChange(
@@ -472,7 +500,7 @@ export class ToggleViewer {
                     [targetPath],
                     [".ini"],
                     ["toggle-viewer.ini", "disabled*"],
-                ).map((p) => path.resolve(p));
+                ).map((candidate) => path.resolve(candidate));
                 for (const iniPath of iniPaths) {
                     this.pendingChangedIniPaths.add(iniPath);
                 }
@@ -485,325 +513,16 @@ export class ToggleViewer {
         return lower.endsWith(".ini") && !lower.endsWith(`${path.sep}toggle-viewer.ini`);
     }
 
-    private async findIniCandidates(modsPath: string) {
-        return findFiles([modsPath], [".ini"], ["toggle-viewer.ini", "disabled*"]).map((p) =>
-            path.resolve(p),
-        );
-    }
-
-    private async processIni(iniPath: string, toggleViewerHotkey: string) {
-        const dir = path.dirname(iniPath);
-
-        let content = "";
-        try {
-            content = await fse.readFile(iniPath, "utf-8");
-        } catch (error) {
-            this.logError(`Failed to read ini ${iniPath}: ${error}`);
-            return false;
-        }
-
-        const sections = this.parseIni(content);
-        const keySections = this.findTargetKeySections(sections);
-        if (keySections.length === 0) {
-            return false;
-        }
-
-        const positionHash = this.resolvePositionHash(sections);
-        if (!positionHash) {
-            return false;
-        }
-
-        const toggleViewerTxtPath = path.join(dir, "toggle-viewer.txt");
-        const toggleViewerIniPath = path.join(dir, "toggle-viewer.ini");
-
-        const txtContent = this.buildToggleViewerTxt(iniPath, keySections);
-        const iniContent = this.buildToggleViewerIni(positionHash, toggleViewerHotkey);
-
-        await this.writeIfChanged(toggleViewerTxtPath, txtContent);
-        await this.writeIfChanged(toggleViewerIniPath, iniContent);
-
-        const txtHash = this.sha256(txtContent);
-        const iniHash = this.sha256(iniContent);
-        const updatedAt = new Date().toISOString();
-
-        await this.desktop.lib.db
-            .insert(toggleViewerArtifact)
-            .values({
-                id: nanoid(),
-                targetIniPath: iniPath,
-                toggleTxtPath: toggleViewerTxtPath,
-                toggleIniPath: toggleViewerIniPath,
-                toggleTxtHash: txtHash,
-                toggleIniHash: iniHash,
-                updatedAt,
-            })
-            .onConflictDoUpdate({
-                target: toggleViewerArtifact.targetIniPath,
-                set: {
-                    toggleTxtPath: toggleViewerTxtPath,
-                    toggleIniPath: toggleViewerIniPath,
-                    toggleTxtHash: txtHash,
-                    toggleIniHash: iniHash,
-                    updatedAt,
-                },
-            });
-
-        return true;
-    }
-
-    private async processIniOrDeleteRecord(iniPath: string, toggleViewerHotkey: string) {
-        if (!(await fse.pathExists(iniPath))) {
-            await this.deleteArtifactRecordByTargetIniPath(iniPath);
-            return false;
-        }
-
-        const processed = await this.processIni(iniPath, toggleViewerHotkey);
-        if (!processed) {
-            await this.deleteArtifactRecordByTargetIniPath(iniPath);
-        }
-        return processed;
-    }
-
-    private parseIni(content: string): IniSection[] {
-        const lines = content.split(/\r?\n/);
-        const sections: IniSection[] = [];
-        let currentSection: IniSection | null = null;
-
-        for (const rawLine of lines) {
-            const trimmed = rawLine.trim();
-            if (!trimmed || trimmed.startsWith(";")) continue;
-
-            const sectionMatch = trimmed.match(/^\[(.+)\]$/);
-            if (sectionMatch) {
-                currentSection = {
-                    name: sectionMatch[1].trim(),
-                    entries: [],
-                };
-                sections.push(currentSection);
-                continue;
-            }
-
-            if (!currentSection) continue;
-            const eqIndex = trimmed.indexOf("=");
-            if (eqIndex <= 0) continue;
-
-            const rawKey = trimmed.slice(0, eqIndex).trim();
-            const rawValue = trimmed.slice(eqIndex + 1).trim();
-            const value = rawValue.split(";")[0].trim();
-
-            currentSection.entries.push({
-                key: rawKey,
-                value,
-            });
-        }
-
-        return sections;
-    }
-
-    private findTargetKeySections(sections: IniSection[]): ParsedKeySection[] {
-        const result: ParsedKeySection[] = [];
-
-        for (const section of sections) {
-            if (!section.name.toLowerCase().startsWith("key")) continue;
-
-            const typeValue = this.getEntryValue(section, "type");
-            if (typeValue?.toLowerCase() !== "cycle") continue;
-
-            let hasMultiValueVariable = false;
-            for (const entry of section.entries) {
-                if (!entry.key.startsWith("$")) continue;
-                const values = entry.value
-                    .split(",")
-                    .map((v) => v.trim())
-                    .filter(Boolean);
-                if (values.length >= 2) {
-                    hasMultiValueVariable = true;
-                    break;
-                }
-            }
-            if (!hasMultiValueVariable) continue;
-
-            const keyValue = this.getEntryValue(section, "key");
-            if (!keyValue) continue;
-
-            const backValue = this.getEntryValue(section, "back");
-            result.push({
-                sectionName: section.name,
-                keyValue,
-                backValue: backValue || undefined,
-            });
-        }
-
-        return result;
-    }
-
-    private resolvePositionHash(sections: IniSection[]): string | null {
-        const textureSections = sections.filter((s) =>
-            s.name.toLowerCase().startsWith("textureoverride"),
-        );
-        const resourceSections = sections.filter((s) =>
-            s.name.toLowerCase().startsWith("resource"),
-        );
-
-        // case 1: TextureOverride section name contains BodyPosition and has hash.
-        for (const section of textureSections) {
-            if (!section.name.toLowerCase().includes("bodyposition")) continue;
-            const hash = this.getEntryValue(section, "hash");
-            if (hash) return hash;
-        }
-
-        // case 2: Resource*BodyPosition exists, then use hash of TextureOverride that references it via vb0.
-        const bodyPositionResourceSet = new Set(
-            resourceSections
-                .map((s) => s.name)
-                .filter((name) => name.toLowerCase().includes("bodyposition"))
-                .map((name) => name.toLowerCase()),
-        );
-
-        if (bodyPositionResourceSet.size > 0) {
-            for (const section of textureSections) {
-                const vb0 = this.getEntryValue(section, "vb0");
-                if (!vb0 || !bodyPositionResourceSet.has(vb0.toLowerCase())) continue;
-                const hash = this.getEntryValue(section, "hash");
-                if (hash) return hash;
+    private async getEnabledModsPaths() {
+        const importers = this.desktop.service.xxmi.getEnabledImporters();
+        const modsPaths: string[] = [];
+        for (const importer of importers) {
+            const modsPath = path.join(importer.importerFolder, "mods");
+            if (await fse.pathExists(modsPath)) {
+                modsPaths.push(modsPath);
             }
         }
-
-        // case 3: Resource*Position exists, and TextureOverride referencing it via vb0 has body in section name.
-        const positionResourceSet = new Set(
-            resourceSections
-                .map((s) => s.name)
-                .filter((name) => name.toLowerCase().includes("position"))
-                .map((name) => name.toLowerCase()),
-        );
-        if (positionResourceSet.size > 0) {
-            for (const section of textureSections) {
-                const lowerName = section.name.toLowerCase();
-                if (!lowerName.includes("body")) continue;
-                const vb0 = this.getEntryValue(section, "vb0");
-                if (!vb0 || !positionResourceSet.has(vb0.toLowerCase())) continue;
-                const hash = this.getEntryValue(section, "hash");
-                if (hash) return hash;
-            }
-        }
-
-        // case 4: Fallback to first Resource*Position reference (vb0) in TextureOverride.
-        const firstPositionResource = resourceSections.find((section) =>
-            section.name.toLowerCase().includes("position"),
-        );
-        if (firstPositionResource) {
-            for (const section of textureSections) {
-                const vb0 = this.getEntryValue(section, "vb0");
-                if (vb0?.toLowerCase() !== firstPositionResource.name.toLowerCase()) continue;
-                const hash = this.getEntryValue(section, "hash");
-                if (hash) return hash;
-            }
-        }
-
-        // case 5: WWMI-style fallback where vb0 position binding is in CommandListOverrideSharedResources.
-        const commandListOverrideSharedResources = sections.find(
-            (section) => section.name.toLowerCase() === "commandlistoverridesharedresources",
-        );
-        const sharedVb0 = commandListOverrideSharedResources
-            ? this.getEntryValue(commandListOverrideSharedResources, "vb0")
-            : null;
-        if (sharedVb0 && sharedVb0.toLowerCase().includes("position")) {
-            for (const section of textureSections) {
-                if (!section.name.toLowerCase().includes("component")) continue;
-                const hash = this.getEntryValue(section, "hash");
-                if (hash) return hash;
-            }
-        }
-
-        return null;
-    }
-
-    private buildToggleViewerTxt(iniPath: string, keySections: ParsedKeySection[]) {
-        const modName = path.basename(path.dirname(iniPath));
-        const iniName = path.basename(iniPath);
-        const lines: string[] = [`Mod: ${modName}`, "", `Ini: ${iniName}`, ""];
-
-        for (let i = 0; i < keySections.length; i++) {
-            const keySection = keySections[i];
-            lines.push(`${keySection.sectionName}:`);
-            lines.push(
-                `    Key: ${formatKeySequence(keySection.keyValue, { asciiFallback: true })}`,
-            );
-            if (keySection.backValue) {
-                lines.push(
-                    `    Back: ${formatKeySequence(keySection.backValue, { asciiFallback: true })}`,
-                );
-            }
-            if (i < keySections.length - 1) {
-                lines.push("");
-            }
-        }
-
-        return `${lines.join("\n")}\n`;
-    }
-
-    private buildToggleViewerIni(hash: string, hotkey: string) {
-        const lines = [
-            "[Constants]",
-            "global $active = 0",
-            "global $enabled = 0",
-            "",
-            "[Key]",
-            `key = ${hotkey}`,
-            "condition = $active == 1",
-            "type = cycle",
-            "$enabled = 0,1",
-            "",
-            "[TextureOverrideCharacterPosition]",
-            `hash = ${hash}`,
-            "$active = 1",
-            "",
-            "[Present]",
-            "post $active = 0",
-            "run = CommandListKey",
-            "",
-            "[CommandListKey]",
-            "if $active == 1 && $enabled == 1",
-            "    pre Resource\\ShaderFixes\\help.ini\\NotificationParams = ResourceBox",
-            "    pre run = CustomShader\\ShaderFixes\\help.ini\\FormatText",
-            "    pre Resource\\ShaderFixes\\help.ini\\Notification = Resourcename1",
-            "endif",
-            "",
-            "[ResourceBox]",
-            "type = StructuredBuffer",
-            "array = 1",
-            "data = R32_FLOAT   -0.95 -1 1 1      1 1 1 1    0 0 0 0.95   0.05 0.05     1 2   0  1.0",
-            "",
-            "[Resourcename1]",
-            "type = buffer",
-            "format = R8_UINT",
-            "filename = toggle-viewer.txt",
-            "",
-        ];
-
-        return lines.join("\n");
-    }
-
-    private replaceHotkeyInGeneratedIni(content: string, hotkey: string) {
-        const newline = content.includes("\r\n") ? "\r\n" : "\n";
-        const lines = content.split(/\r?\n/);
-        let inKeySection = false;
-
-        for (let i = 0; i < lines.length; i++) {
-            const trimmed = lines[i].trim();
-            const sectionMatch = trimmed.match(/^\[(.+)\]$/);
-            if (sectionMatch) {
-                inKeySection = sectionMatch[1].trim().toLowerCase() === "key";
-                continue;
-            }
-
-            if (inKeySection && /^\s*key\s*=/.test(lines[i])) {
-                lines[i] = `key = ${hotkey}`;
-                return lines.join(newline);
-            }
-        }
-
-        return content;
+        return modsPaths;
     }
 
     private async getToggleViewerHotkey() {
@@ -814,15 +533,141 @@ export class ToggleViewer {
         }
     }
 
-    private getEntryValue(section: IniSection, key: string) {
-        const found = section.entries.find(
-            (entry) => entry.key.toLowerCase() === key.toLowerCase(),
-        );
-        return found?.value || null;
+    private async callWorker(
+        request: ToggleViewerWorkerRequestInput,
+        signal?: AbortSignal,
+    ): Promise<ToggleViewerWorkerSuccessResponse> {
+        const child = this.ensureUtilityProcess();
+        const reqId = nanoid();
+
+        if (signal?.aborted) {
+            throw new Error("Aborted");
+        }
+
+        return new Promise<ToggleViewerWorkerSuccessResponse>((resolve, reject) => {
+            let settled = false;
+            const cleanup = () => {
+                if (!settled) {
+                    settled = true;
+                }
+                this.pendingRequests.delete(reqId);
+                if (signal) {
+                    signal.removeEventListener("abort", abortHandler);
+                }
+            };
+
+            const abortHandler = () => {
+                child.postMessage({ type: "abort", reqId });
+                cleanup();
+                reject(new Error("Aborted"));
+            };
+
+            this.pendingRequests.set(reqId, {
+                resolve: (response) => {
+                    cleanup();
+                    resolve(response);
+                },
+                reject: (reason) => {
+                    cleanup();
+                    reject(reason);
+                },
+            });
+
+            if (signal) {
+                signal.addEventListener("abort", abortHandler, { once: true });
+            }
+
+            child.postMessage({ ...request, reqId });
+        });
     }
 
-    private sha256(content: string) {
-        return crypto.createHash("sha256").update(content).digest("hex");
+    private ensureUtilityProcess() {
+        if (this.utilityChild) {
+            return this.utilityChild;
+        }
+
+        const child = utilityProcess.fork(toggleViewerUtilityWorker, [], {
+            stdio: "ignore",
+        });
+
+        child.on("message", (event) => {
+            const response = ((event as { data?: ToggleViewerWorkerResponse }).data ??
+                event) as ToggleViewerWorkerResponse;
+            const pending = this.pendingRequests.get(response.reqId);
+            if (!pending) {
+                return;
+            }
+
+            if (response.type === "success") {
+                pending.resolve(response);
+                return;
+            }
+
+            pending.reject(new Error(response.error));
+        });
+
+        child.on("exit", (_code) => {
+            if (this.utilityChild !== child) {
+                return;
+            }
+
+            const pendingEntries = [...this.pendingRequests.values()];
+            this.pendingRequests.clear();
+            this.utilityChild = null;
+
+            for (const pending of pendingEntries) {
+                pending.reject(new Error("Toggle viewer utility process exited"));
+            }
+        });
+
+        this.utilityChild = child;
+        return child;
+    }
+
+    private disposeUtilityProcess() {
+        if (!this.utilityChild) {
+            return;
+        }
+
+        const child = this.utilityChild;
+        this.utilityChild = null;
+        child.kill();
+    }
+
+    private flushWorkerLogs(logs: string[]) {
+        for (const log of logs) {
+            this.logError(log);
+        }
+    }
+
+    private async persistWorkerArtifacts(artifacts: ToggleViewerWorkerArtifact[]) {
+        for (const artifact of artifacts) {
+            await this.writeIfChanged(artifact.toggleTxtPath, artifact.txtContent);
+            await this.writeIfChanged(artifact.toggleIniPath, artifact.iniContent);
+
+            const updatedAt = new Date().toISOString();
+            await this.desktop.lib.db
+                .insert(toggleViewerArtifact)
+                .values({
+                    id: nanoid(),
+                    targetIniPath: artifact.targetIniPath,
+                    toggleTxtPath: artifact.toggleTxtPath,
+                    toggleIniPath: artifact.toggleIniPath,
+                    toggleTxtHash: artifact.toggleTxtHash,
+                    toggleIniHash: artifact.toggleIniHash,
+                    updatedAt,
+                })
+                .onConflictDoUpdate({
+                    target: toggleViewerArtifact.targetIniPath,
+                    set: {
+                        toggleTxtPath: artifact.toggleTxtPath,
+                        toggleIniPath: artifact.toggleIniPath,
+                        toggleTxtHash: artifact.toggleTxtHash,
+                        toggleIniHash: artifact.toggleIniHash,
+                        updatedAt,
+                    },
+                });
+        }
     }
 
     private async writeIfChanged(filePath: string, nextContent: string) {
