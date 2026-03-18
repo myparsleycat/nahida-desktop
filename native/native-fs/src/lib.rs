@@ -361,7 +361,7 @@ pub async fn get_locking_processes(path: String) -> napi::Result<Vec<ProcessInfo
     }
 
     let mut session_handle: u32 = 0;
-    let mut session_key = [0u16; 32];
+    let mut session_key = [0u16; 33];
 
     unsafe {
       let result = RmStartSession(&mut session_handle, Some(0), windows::core::PWSTR(session_key.as_mut_ptr()));
