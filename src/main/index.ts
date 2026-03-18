@@ -272,21 +272,26 @@ app.whenReady().then(async () => {
     }
 
     app.on("second-instance", async (_event, commandLine, _workingDirectory) => {
-        const deepLinkUrl = commandLine.find((arg) => arg.startsWith("nahida://"));
-        if (deepLinkUrl?.startsWith("nahida://auth")) {
-            // AuthService.handleOAuth2Callback(deepLinkUrl);
-        }
+        try {
+            const deepLinkUrl = commandLine.find((arg) => arg.startsWith("nahida://"));
+            if (deepLinkUrl?.startsWith("nahida://auth")) {
+                // AuthService.handleOAuth2Callback(deepLinkUrl);
+            }
 
-        let mainWindow = desktop.window.main.window;
-        if (!mainWindow || mainWindow.isDestroyed()) {
-            mainWindow = await desktop.window.main.createMainWindow();
-        }
+            let mainWindow = desktop.window.main.window;
+            if (!mainWindow || mainWindow.isDestroyed()) {
+                mainWindow = await desktop.window.main.createMainWindow();
+            }
 
-        if (!mainWindow || mainWindow.isDestroyed()) {
+            if (!mainWindow || mainWindow.isDestroyed()) {
+                return;
+            }
+
+            desktop.window.main.focus();
+        } catch (error) {
+            desktop.logger.error(`Failed to handle second-instance event: ${error}`, "App");
             return;
         }
-
-        desktop.window.main.focus();
     });
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.nahida");
