@@ -174,6 +174,8 @@
       "character-sidebar": {
         "add-to-character": "{{name}}に追加",
         "open-in-explorer": "ファイルエクスプローラーで開く",
+        "create-folder": "新しいフォルダーを作成",
+        "delete-folder": "削除",
         "collapse-subgroups": "サブフォルダーを折りたたむ",
         "expand-subgroups": "サブフォルダーを探索",
         "unpersist-subgroups": "サブフォルダー指定を解除",
@@ -207,6 +209,29 @@
           "description": "このMODに使われているフォルダー名を変更します。",
           "name-placeholder": "MOD名",
           "confirm": "名前を変更"
+        },
+        "create-folder": {
+          "title": "新しいフォルダーを作成",
+          "description": "{{name}} の下に新しいフォルダーを作成します。",
+          "name-placeholder": "フォルダー名",
+          "#": {
+            "success": "\"{{name}}\" フォルダーを作成しました",
+            "invalid-name": "フォルダー名が無効です",
+            "already-exists": "同じ名前のフォルダーが既に存在します",
+            "failed": "フォルダーの作成に失敗しました"
+          }
+        },
+        "delete-folder": {
+          "title": "フォルダーを削除しますか？",
+          "description": "「{{name}}」を削除しますか？削除したフォルダーはゴミ箱から復元できます。",
+          "#": {
+            "success": "フォルダーをゴミ箱に移動しました",
+            "failed": "フォルダーの削除に失敗しました"
+          }
+        },
+        "delete-preview": {
+          "title": "プレビューを削除しますか？",
+          "description": "「{{name}}」のプレビューを削除しますか？削除したプレビューはゴミ箱から復元できます。"
         },
         "add-preset": {
           "name-placeholder": "プリセット名",

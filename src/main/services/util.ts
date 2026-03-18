@@ -4,6 +4,7 @@ import { eden } from "@main/client";
 import isDev from "@main/internal/isDev";
 import { nahidaLogsPath } from "@main/internal/logger";
 import type { AppStatus, PathMetadata } from "@shared/types.gen";
+import { trim } from "es-toolkit";
 import {
     BrowserWindow,
     clipboard,
@@ -68,6 +69,24 @@ export function openPath(path: string) {
 export async function trash(path: string) {
     await shell.trashItem(path);
     return;
+}
+
+export async function mkdir(parentPath: string, name: string): Promise<string> {
+    const trimmedName = trim(name);
+    if (!trimmedName) {
+        throw new Error("INVALID_GROUP_NAME");
+    }
+
+    desktop.lib.fs.assertValidWindowsFilename(trimmedName);
+
+    const nextPath = path.join(parentPath, trimmedName);
+    const exists = await desktop.lib.fs.pathExists(nextPath);
+    if (exists) {
+        throw new Error(`ALREADY_EXISTS:${trimmedName}`);
+    }
+
+    await desktop.lib.fs.ensureDir(nextPath);
+    return nextPath;
 }
 
 export function openCmd(path: string) {

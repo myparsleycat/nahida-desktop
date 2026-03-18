@@ -1,13 +1,9 @@
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@renderer/components/ui/alert-dialog";
 import { Button, buttonVariants } from "@renderer/components/ui/button";
 import {
@@ -22,6 +18,7 @@ import {
 import { Input } from "@renderer/components/ui/input";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
+import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
 import { cn } from "@renderer/lib/utils";
 import type { ModInfo } from "@renderer/types/mod";
 import { useRouteContext } from "@tanstack/react-router";
@@ -32,9 +29,8 @@ import {
   TrashIcon,
   WrenchIcon,
 } from "lucide-react";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 
 interface ModCardHeaderProps {
   mod: ModInfo;
@@ -58,6 +54,7 @@ export const ModCardHeader = memo(function ModCardHeader({
   const [inputCmd, setInputCmd] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { confirmTrash, confirmTrashDialog } = useConfirmTrash();
 
   useEffect(() => {
     window.api.invoke("ftm:getScripts").then(setFixTools);
@@ -104,16 +101,18 @@ export const ModCardHeader = memo(function ModCardHeader({
     setInputCmd("");
   };
 
-  const handleDelete = (e: React.MouseEvent) => {
+  const handleDelete = (e: MouseEvent) => {
     e.stopPropagation();
-    const promise = window.api.invoke("util:fs:trash", mod.path);
-    toast.promise(promise, {
-      loading: t("page.mod.toast.trash-loading"),
-      success: t("page.mod.toast.trash-success"),
-      error: t("page.mod.toast.trash-error"),
-    });
-    promise.then(() => {
-      queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
+    confirmTrash({
+      path: mod.path,
+      title: t("page.mod.dialog.delete-mod.title"),
+      description: t("page.mod.dialog.delete-mod.description"),
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
+      },
+      contentProps: {
+        onClick: (event) => event.stopPropagation(),
+      },
     });
   };
 
@@ -197,27 +196,9 @@ export const ModCardHeader = memo(function ModCardHeader({
           <TerminalSquareIcon />
         </Button>
 
-        <AlertDialog>
-          <AlertDialogTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button variant="ghost" size="icon" className="size-7 hover:bg-accent/20">
-              <TrashIcon />
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("page.mod.dialog.delete-mod.title")}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {t("page.mod.dialog.delete-mod.description")}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
-              <AlertDialogAction variant="destructive" onClick={handleDelete}>
-                {t("g.delete")}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <Button variant="ghost" size="icon" className="size-7 hover:bg-accent/20" onClick={handleDelete}>
+          <TrashIcon />
+        </Button>
 
         <Button
           variant="ghost"
@@ -307,6 +288,7 @@ export const ModCardHeader = memo(function ModCardHeader({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {confirmTrashDialog}
     </div>
   );
 });

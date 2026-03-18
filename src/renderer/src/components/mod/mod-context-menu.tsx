@@ -1,9 +1,6 @@
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
@@ -31,6 +28,7 @@ import {
 } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
+import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { cn } from "@renderer/lib/utils";
 import type { ModInfo } from "@renderer/types/mod";
@@ -77,8 +75,8 @@ export function ModContextMenu({
   const { t } = useTranslation();
   const { queryClient } = useRouteContext({ from: "__root__" });
   const { renameModMutation } = useModMutations();
+  const { confirmTrash, confirmTrashDialog } = useConfirmTrash();
 
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showLogModal, setShowLogModal] = useState(false);
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [renameValue, setRenameValue] = useState(getRenameDefaultValue(mod.name));
@@ -112,8 +110,8 @@ export function ModContextMenu({
     });
   }, [mod.name, showRenameDialog]);
 
-  const invalidateModGroup = () => {
-    queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
+  const invalidateModGroup = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
   };
 
   const handleRun = async (type: "tool" | "preset", id: string) => {
@@ -143,28 +141,25 @@ export function ModContextMenu({
   };
 
   const handleDelete = () => {
-    const promise = window.api.invoke("util:fs:trash", mod.path);
-    toast.promise(promise, {
-      loading: t("page.mod.toast.trash-loading"),
-      success: t("page.mod.toast.trash-success"),
-      error: t("page.mod.toast.trash-error"),
+    confirmTrash({
+      path: mod.path,
+      title: t("page.mod.dialog.delete-mod.title"),
+      description: t("page.mod.dialog.delete-mod.description"),
+      onSuccess: async () => {
+        await invalidateModGroup();
+      },
     });
-    promise.then(() => {
-      invalidateModGroup();
-    });
-    setShowDeleteModal(false);
   };
 
   const handleDeletePreview = () => {
     if (!mod.preview) return;
-    const promise = window.api.invoke("util:fs:trash", mod.preview);
-    toast.promise(promise, {
-      loading: t("page.mod.toast.trash-loading"),
-      success: t("page.mod.toast.trash-success"),
-      error: t("page.mod.toast.trash-error"),
-    });
-    promise.then(() => {
-      invalidateModGroup();
+    confirmTrash({
+      path: mod.preview,
+      title: t("page.mod.dialog.delete-preview.title"),
+      description: t("page.mod.dialog.delete-preview.description", { name: mod.name }),
+      onSuccess: async () => {
+        await invalidateModGroup();
+      },
     });
   };
 
@@ -269,27 +264,12 @@ export function ModContextMenu({
             {t("page.mod.context-menu.rename")}
           </ContextMenuItem>
           <ContextMenuSeparator />
-          <ContextMenuItem variant="destructive" onClick={() => setShowDeleteModal(true)}>
+          <ContextMenuItem variant="destructive" onClick={handleDelete}>
             <TrashIcon className="mr-2 size-4" />
             {t("g.delete")}
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
-
-      <AlertDialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("page.mod.dialog.delete-mod.title")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("page.mod.dialog.delete-mod.description")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>{t("g.delete")}</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <Dialog open={showRenameDialog} onOpenChange={setShowRenameDialog}>
         <DialogContent aria-describedby={undefined} onClick={(e) => e.stopPropagation()}>
@@ -398,6 +378,7 @@ export function ModContextMenu({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {confirmTrashDialog}
     </>
   );
 }

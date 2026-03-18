@@ -173,6 +173,8 @@
       "character-sidebar": {
         "add-to-character": "添加到 {{name}}",
         "open-in-explorer": "在文件资源管理器中打开",
+        "create-folder": "新建文件夹",
+        "delete-folder": "删除",
         "collapse-subgroups": "折叠子文件夹",
         "expand-subgroups": "探索子文件夹",
         "unpersist-subgroups": "取消子文件夹指定",
@@ -206,6 +208,29 @@
           "description": "更改这个模组所使用的文件夹名称。",
           "name-placeholder": "模组名称",
           "confirm": "重命名"
+        },
+        "create-folder": {
+          "title": "新建文件夹",
+          "description": "在 {{name}} 下创建一个新文件夹。",
+          "name-placeholder": "文件夹名称",
+          "#": {
+            "success": "已创建“{{name}}”文件夹",
+            "invalid-name": "文件夹名称无效",
+            "already-exists": "已存在同名文件夹",
+            "failed": "创建文件夹失败"
+          }
+        },
+        "delete-folder": {
+          "title": "要删除这个文件夹吗？",
+          "description": "确定要删除“{{name}}”文件夹吗？删除后的文件夹可以从回收站恢复。",
+          "#": {
+            "success": "已将文件夹移至回收站",
+            "failed": "删除文件夹失败"
+          }
+        },
+        "delete-preview": {
+          "title": "要删除预览吗？",
+          "description": "确定要删除“{{name}}”的预览吗？删除后的预览可以从回收站恢复。"
         },
         "add-preset": {
           "name-placeholder": "预设名称",

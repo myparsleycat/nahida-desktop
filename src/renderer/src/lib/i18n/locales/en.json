@@ -173,6 +173,8 @@
       "character-sidebar": {
         "add-to-character": "Add to {{name}}",
         "open-in-explorer": "Open in File Explorer",
+        "create-folder": "Create New Folder",
+        "delete-folder": "Delete Folder",
         "collapse-subgroups": "Collapse subgroups",
         "expand-subgroups": "Expand subgroups",
         "unpersist-subgroups": "Unpersist subgroups",
@@ -205,6 +207,29 @@
           "description": "Change the folder name used for this mod.",
           "name-placeholder": "Mod name",
           "confirm": "Rename"
+        },
+        "create-folder": {
+          "title": "Create New Folder",
+          "description": "Create a new folder under {{name}}.",
+          "name-placeholder": "Folder name",
+          "#": {
+            "success": "\"{{name}}\" folder created",
+            "invalid-name": "The folder name is invalid",
+            "already-exists": "A folder with that name already exists",
+            "failed": "Failed to create folder"
+          }
+        },
+        "delete-folder": {
+          "title": "Delete Folder",
+          "description": "Are you sure you want to delete \"{{name}}\"? The folder can be restored from the recycle bin.",
+          "#": {
+            "success": "Folder moved to trash",
+            "failed": "Failed to delete folder"
+          }
+        },
+        "delete-preview": {
+          "title": "Delete Preview",
+          "description": "Are you sure you want to delete the preview for \"{{name}}\"? It can be restored from the recycle bin."
         },
         "add-preset": {
           "title": "Create New Preset",

@@ -5,6 +5,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@renderer/components/ui/context-menu";
+import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
 import type { ModInfo } from "@renderer/types/mod";
 import { useRouteContext } from "@tanstack/react-router";
 import { ClipboardIcon, ImageIcon, TrashIcon } from "lucide-react";
@@ -21,6 +22,7 @@ interface ModPreviewContainerProps {
 export function ModPreviewContainer({ mod, selectedGroupPath, onPaste }: ModPreviewContainerProps) {
   const { t } = useTranslation();
   const { queryClient } = useRouteContext({ from: "__root__" });
+  const { confirmTrash, confirmTrashDialog } = useConfirmTrash();
 
   const previewContent = (
     <Preview
@@ -45,14 +47,13 @@ export function ModPreviewContainer({ mod, selectedGroupPath, onPaste }: ModPrev
 
   const handleDelete = () => {
     if (!mod.preview) return;
-    const promise = window.api.invoke("util:fs:trash", mod.preview);
-    toast.promise(promise, {
-      loading: "휴지통으로 이동 중...",
-      success: "삭제 완료",
-      error: "삭제 실패",
-    });
-    promise.then(() => {
-      queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
+    confirmTrash({
+      path: mod.preview,
+      title: t("page.mod.dialog.delete-preview.title"),
+      description: t("page.mod.dialog.delete-preview.description", { name: mod.name }),
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
+      },
     });
   };
 
@@ -84,6 +85,7 @@ export function ModPreviewContainer({ mod, selectedGroupPath, onPaste }: ModPrev
       ) : (
         previewContent
       )}
+      {confirmTrashDialog}
     </div>
   );
 }
