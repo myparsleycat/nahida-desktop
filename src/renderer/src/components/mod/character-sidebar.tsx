@@ -290,13 +290,17 @@ export const CharacterSidebar = memo(function CharacterSidebar({
         return;
       }
 
-      const validationMessage = ValidateName(newFolderName);
+      const trimmedName = newFolderName.trim();
+      if (!trimmedName) {
+        return;
+      }
+
+      const validationMessage = ValidateName(trimmedName);
       if (validationMessage) {
         toast.warning(validationMessage);
         return;
       }
 
-      const trimmedName = newFolderName.trim();
       await createFolderMutation.mutateAsync({
         groupPath: createFolderTarget.path,
         name: trimmedName,
