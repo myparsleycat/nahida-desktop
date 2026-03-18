@@ -413,10 +413,24 @@ export class ModManager {
             const isEnabled = !DISABLED_PREFIX_REGEX.test(folderName);
 
             let result: string;
-            if (isEnabled) {
-                result = await this.fn.disable(modPath);
-            } else {
-                result = await this.fn.enable(modPath);
+
+            try {
+                if (isEnabled) {
+                    result = await this.fn.disable(modPath);
+                } else {
+                    result = await this.fn.enable(modPath);
+                }
+            } catch (err) {
+                const lockInfo = await this.desktop.lib.fs.isLockedPathError(err, modPath);
+                if (lockInfo.isLocked) {
+                    console.log("lockInfo", lockInfo);
+                    if (lockInfo.processes.length > 0) {
+                        const processNames = lockInfo.processes.map((p) => p.name).join(", ");
+                        throw new Error(`MOD_FOLDER_LOCKED|${processNames}`);
+                    }
+                    throw new Error("MOD_FOLDER_LOCKED");
+                }
+                throw err;
             }
 
             // await this.fn.triggerF10(modPath);

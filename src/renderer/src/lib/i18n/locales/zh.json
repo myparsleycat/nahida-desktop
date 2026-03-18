@@ -201,6 +201,12 @@
           "title": "确定要删除这个模组？",
           "description": "已删除的模组可以从回收站恢复。"
         },
+        "rename-mod": {
+          "title": "重命名模组",
+          "description": "更改这个模组所使用的文件夹名称。",
+          "name-placeholder": "模组名称",
+          "confirm": "重命名"
+        },
         "add-preset": {
           "name-placeholder": "预设名称",
           "description-placeholder": "说明（可选）",
@@ -214,7 +220,8 @@
         "use-mod-mutations": {
           "toggle-mutation": {
             "0": "{{name}} 文件夹已存在",
-            "1": "文件夹被锁定，无法修改",
+            "1": "{{processes}} 正在使用该文件夹，无法修改",
+            "1-fallback": "文件夹被锁定，无法修改",
             "2": "修改模组状态失败"
           },
           "rename-mutation": {

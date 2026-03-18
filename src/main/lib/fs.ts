@@ -1,5 +1,6 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { getLockingProcesses } from "@native/native-fs";
 import fg from "fast-glob";
 import fse from "fs-extra";
 import type { NahidaDesktop } from "..";
@@ -80,6 +81,22 @@ export class FS {
 
     public async stat(path: fse.PathLike) {
         return fse.stat(path);
+    }
+
+    public async isLockedPathError(error: unknown, pathStr: string) {
+        const code = (error as NodeJS.ErrnoException | undefined)?.code;
+        const isLocked = code === "EBUSY" || code === "EPERM" || code === "EACCES";
+        if (!isLocked) {
+            return { isLocked: false, processes: [] };
+        }
+
+        try {
+            const processes = await getLockingProcesses(pathStr);
+            return { isLocked, processes };
+        } catch (e) {
+            this.desktop.logger.error(e, "FS:isLockedPathError:getLockingProcesses");
+            return { isLocked, processes: [] };
+        }
     }
 
     public isValidWindowsFilename(name: string): boolean {

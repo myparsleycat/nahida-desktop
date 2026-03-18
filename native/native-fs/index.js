@@ -583,3 +583,4 @@ module.exports = binding
 module.exports.NativeWatcher = binding.NativeWatcher
 module.exports.collectFiles = binding.collectFiles
 module.exports.findFiles = binding.findFiles
+module.exports.getLockingProcesses = binding.getLockingProcesses

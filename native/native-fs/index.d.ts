@@ -10,9 +10,16 @@ export declare function collectFiles(paths: Array<string>, allowedExt: Array<str
 
 export declare function findFiles(paths: Array<string>, includeExt: Array<string>, excludeFileNames: Array<string>): Array<string>
 
+export declare function getLockingProcesses(path: string): Promise<Array<ProcessInfo>>
+
 export interface NativeWatcherOptions {
   pollIntervalMs?: number
   compareContents?: boolean
+}
+
+export interface ProcessInfo {
+  name: string
+  pid: number
 }
 
 export interface RawCollectionResult {

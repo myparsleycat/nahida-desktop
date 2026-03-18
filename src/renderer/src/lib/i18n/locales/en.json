@@ -219,9 +219,18 @@
         "use-mod-mutations": {
           "toggle-mutation": {
             "0": "The {{name}} folder already exists",
-            "1": "The folder is locked and cannot be modified",
+            "1": "{{processes}} is using the folder, so it cannot be modified",
+            "1-fallback": "The folder is locked and cannot be modified",
             "2": "Failed to change mod status"
           },
+          "rename-mutation": {
+            "0": "The {{name}} folder already exists",
+            "1": "The folder {{processes}} is using the folder, so it cannot be renamed",
+            "1-fallback": "The folder is locked and cannot be renamed",
+            "2": "Please enter a valid mod name",
+            "3": "Failed to rename mod"
+          },
+          "locked-description": "Used by: {{processes}}",
           "apply-preset-mutation": {
             "legacy": "Legacy presets cannot be applied. Delete and recreate the preset."
           }

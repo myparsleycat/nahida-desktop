@@ -201,6 +201,12 @@
           "title": "이 모드를 삭제할까요?",
           "description": "삭제된 모드는 휴지통에서 복원할 수 있습니다."
         },
+        "rename-mod": {
+          "title": "모드 이름 변경",
+          "description": "이 모드에 사용되는 폴더 이름을 변경합니다.",
+          "name-placeholder": "모드 이름",
+          "confirm": "이름 변경"
+        },
         "add-preset": {
           "name-placeholder": "프리셋 이름",
           "description-placeholder": "설명 (선택 사항)",
@@ -212,9 +218,10 @@
       },
       "hooks": {
         "use-mod-mutations": {
-          "toggle-mutation": {
+            "toggle-mutation": {
             "0": "이미 {{name}} 폴더가 존재합니다",
-            "1": "폴더가 잠겨있어 변경할 수 없습니다",
+            "1": "{{processes}} 가 해당 폴더를 사용 중이기 때문에 변경할 수 없습니다",
+            "1-fallback": "폴더가 잠겨있어 변경할 수 없습니다",
             "2": "모드 상태 변경에 실패했습니다"
           },
           "rename-mutation": {
