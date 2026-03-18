@@ -289,26 +289,37 @@ export class UploadLib {
 
         let lastTransferredBytes = 0;
 
-        const response = await ky.post(uploadUrl, {
-            body: formData,
-            headers: await this.desktop.httpService.getHeaders(uploadUrl),
-            signal,
-            throwHttpErrors: false,
-            timeout: 100000,
-            onUploadProgress: (progress) => {
-                if (onProgress) {
-                    const incremental = progress.transferredBytes - lastTransferredBytes;
-                    lastTransferredBytes = progress.transferredBytes;
-                    if (incremental > 0) {
-                        onProgress(incremental);
+        try {
+            const response = await ky.post(uploadUrl, {
+                body: formData,
+                headers: await this.desktop.httpService.getHeaders(uploadUrl),
+                signal,
+                throwHttpErrors: false,
+                timeout: 100000,
+                onUploadProgress: (progress) => {
+                    if (onProgress) {
+                        const incremental = progress.transferredBytes - lastTransferredBytes;
+                        lastTransferredBytes = progress.transferredBytes;
+                        if (incremental > 0) {
+                            onProgress(incremental);
+                        }
                     }
-                }
-            },
-            // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
-            dispatcher: await this.desktop.httpService.getAgent(),
-        });
+                },
+                // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
+                dispatcher: await this.desktop.httpService.getAgent(),
+            });
 
-        return response;
+            if (!response.ok && onProgress && lastTransferredBytes > 0) {
+                onProgress(-lastTransferredBytes);
+            }
+
+            return response;
+        } catch (error) {
+            if (onProgress && lastTransferredBytes > 0) {
+                onProgress(-lastTransferredBytes);
+            }
+            throw error;
+        }
     }
 
     private async uploadLargeFile(
