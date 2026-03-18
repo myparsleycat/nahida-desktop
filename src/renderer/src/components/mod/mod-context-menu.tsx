@@ -136,6 +136,10 @@ export function ModContextMenu({
   };
 
   const handleSendInput = () => {
+    if (!isRunning) {
+      return;
+    }
+
     window.api.invoke("ftm:sendInput", `${inputCmd}\r\n`);
     setInputCmd("");
   };
@@ -350,9 +354,14 @@ export function ModContextMenu({
               ref={inputRef}
               placeholder="Input..."
               value={inputCmd}
+              disabled={!isRunning}
               onChange={(e) => setInputCmd(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
+                  if (!isRunning) {
+                    return;
+                  }
+
                   handleSendInput();
                 }
               }}
