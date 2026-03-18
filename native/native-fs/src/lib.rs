@@ -28,7 +28,7 @@ pub struct RawCollectionResult {
 }
 
 #[napi]
-pub fn collect_files(
+pub async fn collect_files(
   paths: Vec<String>,
   allowed_ext: Vec<String>,
 ) -> napi::Result<RawCollectionResult> {
@@ -140,7 +140,7 @@ pub fn collect_files(
 }
 
 #[napi]
-pub fn find_files(
+pub async fn find_files(
   paths: Vec<String>,
   include_ext: Vec<String>,
   exclude_file_names: Vec<String>,
@@ -324,4 +324,114 @@ impl NativeWatcher {
   pub fn unwatch(&mut self) {
     self.watcher = None;
   }
+}
+
+#[napi(object)]
+pub struct ProcessInfo {
+  pub name: String,
+  pub pid: u32,
+}
+
+#[napi]
+#[cfg(windows)]
+pub async fn get_locking_processes(path: String) -> napi::Result<Vec<ProcessInfo>> {
+  use std::os::windows::ffi::OsStrExt;
+  use windows::core::PCWSTR;
+  use windows::Win32::System::RestartManager::{
+    RmStartSession, RmRegisterResources, RmGetList, RmEndSession, RM_PROCESS_INFO
+  };
+
+  napi::tokio::task::spawn_blocking(move || {
+    let normalized_path = path.replace('/', "\\");
+    let target = std::path::Path::new(&normalized_path);
+
+    let file_paths: Vec<String> = if target.is_dir() {
+      WalkDir::new(target)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .filter_map(|e| e.path().to_str().map(|s| s.to_string()))
+        .collect()
+    } else {
+      vec![normalized_path.clone()]
+    };
+
+    if file_paths.is_empty() {
+      return Ok(vec![]);
+    }
+
+    let mut session_handle: u32 = 0;
+    let mut session_key = [0u16; 33];
+
+    unsafe {
+      let result = RmStartSession(&mut session_handle, Some(0), windows::core::PWSTR(session_key.as_mut_ptr()));
+      if result.is_err() {
+        return Ok(vec![]);
+      }
+
+      let wide_paths: Vec<Vec<u16>> = file_paths
+        .iter()
+        .map(|p| {
+          std::ffi::OsStr::new(p)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
+        })
+        .collect();
+      let pcwstrs: Vec<PCWSTR> = wide_paths.iter().map(|w| PCWSTR(w.as_ptr())).collect();
+
+      let res = RmRegisterResources(session_handle, Some(&pcwstrs), None, None);
+      if res.is_err() {
+        let _ = RmEndSession(session_handle);
+        return Ok(vec![]);
+      }
+
+      let mut n_proc_info_needed: u32 = 0;
+      let mut n_proc_info: u32 = 0;
+      let mut reason: u32 = 0;
+
+      let _ = RmGetList(
+        session_handle,
+        &mut n_proc_info_needed,
+        &mut n_proc_info,
+        None,
+        &mut reason,
+      );
+
+      if n_proc_info_needed == 0 {
+        let _ = RmEndSession(session_handle);
+        return Ok(vec![]);
+      }
+
+      let mut proc_info: Vec<RM_PROCESS_INFO> = vec![std::mem::zeroed(); n_proc_info_needed as usize];
+      n_proc_info = n_proc_info_needed;
+
+      let res2 = RmGetList(
+        session_handle,
+        &mut n_proc_info_needed,
+        &mut n_proc_info,
+        Some(proc_info.as_mut_ptr()),
+        &mut reason,
+      );
+
+      let results = if res2.is_ok() {
+        (0..n_proc_info)
+          .map(|i| {
+            let info = &proc_info[i as usize];
+            let name = String::from_utf16_lossy(&info.strAppName)
+              .trim_end_matches('\0')
+              .to_string();
+            ProcessInfo { name, pid: info.Process.dwProcessId }
+          })
+          .collect()
+      } else {
+        vec![]
+      };
+
+      let _ = RmEndSession(session_handle);
+      Ok(results)
+    }
+  })
+  .await
+  .map_err(|e| napi::Error::new(napi::Status::GenericFailure, format!("Task join failed: {}", e)))?
 }

@@ -13,7 +13,8 @@
     "create": "创建",
     "unknown": "未知",
     "save": "保存",
-    "close": "关闭"
+    "close": "关闭",
+    "rename": "重命名"
   },
   "page": {
     "transfer": {
@@ -172,6 +173,8 @@
       "character-sidebar": {
         "add-to-character": "添加到 {{name}}",
         "open-in-explorer": "在文件资源管理器中打开",
+        "create-folder": "新建文件夹",
+        "delete-folder": "删除",
         "collapse-subgroups": "折叠子文件夹",
         "expand-subgroups": "探索子文件夹",
         "unpersist-subgroups": "取消子文件夹指定",
@@ -200,6 +203,35 @@
           "title": "确定要删除这个模组？",
           "description": "已删除的模组可以从回收站恢复。"
         },
+        "rename-mod": {
+          "title": "重命名模组",
+          "description": "更改这个模组所使用的文件夹名称。",
+          "name-placeholder": "模组名称",
+          "confirm": "重命名"
+        },
+        "create-folder": {
+          "title": "新建文件夹",
+          "description": "在 {{name}} 下创建一个新文件夹。",
+          "name-placeholder": "文件夹名称",
+          "#": {
+            "success": "已创建“{{name}}”文件夹",
+            "invalid-name": "文件夹名称无效",
+            "already-exists": "已存在同名文件夹",
+            "failed": "创建文件夹失败"
+          }
+        },
+        "delete-folder": {
+          "title": "要删除这个文件夹吗？",
+          "description": "确定要删除“{{name}}”文件夹吗？删除后的文件夹可以从回收站恢复。",
+          "#": {
+            "success": "已将文件夹移至回收站",
+            "failed": "删除文件夹失败"
+          }
+        },
+        "delete-preview": {
+          "title": "要删除预览吗？",
+          "description": "确定要删除“{{name}}”的预览吗？删除后的预览可以从回收站恢复。"
+        },
         "add-preset": {
           "name-placeholder": "预设名称",
           "description-placeholder": "说明（可选）",
@@ -213,9 +245,18 @@
         "use-mod-mutations": {
           "toggle-mutation": {
             "0": "{{name}} 文件夹已存在",
-            "1": "文件夹被锁定，无法修改",
+            "1": "{{processes}} 正在使用该文件夹，无法修改",
+            "1-fallback": "文件夹被锁定，无法修改",
             "2": "修改模组状态失败"
           },
+          "rename-mutation": {
+            "0": "{{name}} 文件夹已存在",
+            "1": "{{processes}} 正在使用该文件夹，无法重命名",
+            "1-fallback": "文件夹被锁定，无法重命名",
+            "2": "请输入有效的模组名称",
+            "3": "重命名模组失败"
+          },
+          "locked-description": "正在被以下进程使用: {{processes}}",
           "apply-preset-mutation": {
             "legacy": "旧版预设无法套用。请删除后重新建立。"
           }
@@ -226,13 +267,15 @@
         "open-preview-viewer": "用预览查看器打开",
         "delete-preview": "删除预览",
         "open-cmd": "打开 CMD",
-        "open-folder": "打开文件夹"
+        "open-folder": "打开文件夹",
+        "rename": "重命名"
       },
       "toast": {
         "trash-loading": "移动到回收站中...",
         "trash-success": "删除成功",
         "trash-error": "删除失败",
-        "value-required": "请输入数值。"
+        "value-required": "请输入数值。",
+        "rename-success": "模组重命名成功"
       },
       "log-dialog": {
         "title": "日志",

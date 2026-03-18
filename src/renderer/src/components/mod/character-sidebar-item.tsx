@@ -9,7 +9,7 @@ import { Skeleton } from "@renderer/components/ui/skeleton";
 import { cn } from "@renderer/lib/utils";
 import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
-import { FolderIcon, FolderMinus, FolderTree } from "lucide-react";
+import { FolderIcon, FolderMinus, FolderPlus, FolderTree, TrashIcon } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Preview } from "./preview";
@@ -19,12 +19,23 @@ interface CharacterSidebarItemProps {
   isSelected: boolean;
   onClick: (group: FolderGroup, e: React.MouseEvent) => void;
   onDrop?: (group: FolderGroup, files: File[]) => void;
+  onCreateFolder?: (group: FolderGroup) => void;
+  onDeleteFolder?: (group: FolderGroup) => void;
   itemRefs: React.MutableRefObject<Map<string, { element: HTMLButtonElement; group: FolderGroup }>>;
   depth?: number;
 }
 
 export const CharacterSidebarItem = memo(
-  ({ group, isSelected, onClick, onDrop, itemRefs, depth = 0 }: CharacterSidebarItemProps) => {
+  ({
+    group,
+    isSelected,
+    onClick,
+    onDrop,
+    onCreateFolder,
+    onDeleteFolder,
+    itemRefs,
+    depth = 0,
+  }: CharacterSidebarItemProps) => {
     const { t } = useTranslation();
     const expandedGroups = useModStore((s) => s.expandedGroups);
     const persistentGroups = useModStore((s) => s.persistentGroups);
@@ -169,6 +180,16 @@ export const CharacterSidebarItem = memo(
           <ContextMenuItem onClick={() => window.api.invoke("util:openPath", group.path)}>
             <FolderIcon className="mr-2 h-4 w-4" />
             {t("page.mod.character-sidebar.open-in-explorer")}
+          </ContextMenuItem>
+
+          <ContextMenuItem onClick={() => onCreateFolder?.(group)}>
+            <FolderPlus className="mr-2 h-4 w-4" />
+            {t("page.mod.character-sidebar.create-folder")}
+          </ContextMenuItem>
+
+          <ContextMenuItem variant="destructive" onClick={() => onDeleteFolder?.(group)}>
+            <TrashIcon className="mr-2 h-4 w-4" />
+            {t("page.mod.character-sidebar.delete-folder")}
           </ContextMenuItem>
 
           <ContextMenuSeparator />

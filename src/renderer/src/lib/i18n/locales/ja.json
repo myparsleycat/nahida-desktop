@@ -13,7 +13,8 @@
     "create": "作成",
     "unknown": "不明",
     "save": "保存",
-    "close": "閉じる"
+    "close": "閉じる",
+    "rename": "名前を変更"
   },
   "page": {
     "transfer": {
@@ -173,6 +174,8 @@
       "character-sidebar": {
         "add-to-character": "{{name}}に追加",
         "open-in-explorer": "ファイルエクスプローラーで開く",
+        "create-folder": "新しいフォルダーを作成",
+        "delete-folder": "削除",
         "collapse-subgroups": "サブフォルダーを折りたたむ",
         "expand-subgroups": "サブフォルダーを探索",
         "unpersist-subgroups": "サブフォルダー指定を解除",
@@ -201,6 +204,35 @@
           "title": "このMODを削除しますか？",
           "description": "削除されたMODはゴミ箱から復元できます。"
         },
+        "rename-mod": {
+          "title": "MOD名を変更",
+          "description": "このMODに使われているフォルダー名を変更します。",
+          "name-placeholder": "MOD名",
+          "confirm": "名前を変更"
+        },
+        "create-folder": {
+          "title": "新しいフォルダーを作成",
+          "description": "{{name}} の下に新しいフォルダーを作成します。",
+          "name-placeholder": "フォルダー名",
+          "#": {
+            "success": "\"{{name}}\" フォルダーを作成しました",
+            "invalid-name": "フォルダー名が無効です",
+            "already-exists": "同じ名前のフォルダーが既に存在します",
+            "failed": "フォルダーの作成に失敗しました"
+          }
+        },
+        "delete-folder": {
+          "title": "フォルダーを削除しますか？",
+          "description": "「{{name}}」を削除しますか？削除したフォルダーはゴミ箱から復元できます。",
+          "#": {
+            "success": "フォルダーをゴミ箱に移動しました",
+            "failed": "フォルダーの削除に失敗しました"
+          }
+        },
+        "delete-preview": {
+          "title": "プレビューを削除しますか？",
+          "description": "「{{name}}」のプレビューを削除しますか？削除したプレビューはゴミ箱から復元できます。"
+        },
         "add-preset": {
           "name-placeholder": "プリセット名",
           "description-placeholder": "説明（任意）",
@@ -214,9 +246,18 @@
         "use-mod-mutations": {
           "toggle-mutation": {
             "0": "{{name}} フォルダはすでに存在します",
-            "1": "フォルダがロックされており変更できません",
+            "1": "{{processes}} がフォルダーを使用中のため変更できません",
+            "1-fallback": "フォルダがロックされており変更できません",
             "2": "MODの状態変更に失敗しました"
           },
+          "rename-mutation": {
+            "0": "{{name}} フォルダはすでに存在します",
+            "1": "{{processes}} がフォルダーを使用中のため名前を変更できません",
+            "1-fallback": "フォルダがロックされており名前を変更できません",
+            "2": "有効なMOD名を入力してください",
+            "3": "MOD名の変更に失敗しました"
+          },
+          "locked-description": "使用中のプロセス: {{processes}}",
           "apply-preset-mutation": {
             "legacy": "旧形式のプリセットは適用できません。削除してから作り直してください。"
           }
@@ -227,13 +268,15 @@
         "open-preview-viewer": "プレビュービューアーで開く",
         "delete-preview": "プレビューを削除",
         "open-cmd": "CMDを開く",
-        "open-folder": "フォルダーを開く"
+        "open-folder": "フォルダーを開く",
+        "rename": "名前を変更"
       },
       "toast": {
         "trash-loading": "ゴミ箱に移動中...",
         "trash-success": "削除完了",
         "trash-error": "削除失敗",
-        "value-required": "値を入力してください。"
+        "value-required": "値を入力してください。",
+        "rename-success": "MOD名を変更しました"
       },
       "log-dialog": {
         "title": "ログ",

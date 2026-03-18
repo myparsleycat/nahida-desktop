@@ -4,6 +4,7 @@ import {
     getAppStatus,
     getClipboardFiles,
     getPathMetadata,
+    mkdir,
     openCmd,
     openExternal,
     openPath,
@@ -25,6 +26,7 @@ export function registerUtilHandlers(_desktop: NahidaDesktop) {
     );
     rh("util:copyStr", copyStr);
     rh("util:openPath", openPath);
+    rh("util:fs:mkdir", mkdir);
     rh("util:fs:trash", trash);
     rh("util:openCmd", openCmd);
     rh("util:getClipboardFiles", getClipboardFiles);

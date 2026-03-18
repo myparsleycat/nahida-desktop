@@ -156,7 +156,7 @@ export class UploadLib {
         }
 
         const collected =
-            directoryPaths.length > 0 ? collectFiles(directoryPaths, allowedExt) : null;
+            directoryPaths.length > 0 ? await collectFiles(directoryPaths, allowedExt) : null;
         const files: FilesComponent[] = [...(collected?.files ?? []), ...rootFiles].map((f) => ({
             ...f,
             FID: nanoid(),

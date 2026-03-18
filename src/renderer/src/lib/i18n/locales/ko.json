@@ -13,7 +13,8 @@
     "create": "생성",
     "unknown": "알 수 없는",
     "save": "저장",
-    "close": "닫기"
+    "close": "닫기",
+    "rename": "이름 변경"
   },
   "page": {
     "transfer": {
@@ -172,6 +173,8 @@
       "character-sidebar": {
         "add-to-character": "{{name}}에 추가",
         "open-in-explorer": "파일 탐색기에서 열기",
+        "create-folder": "새 폴더 만들기",
+        "delete-folder": "삭제",
         "collapse-subgroups": "서브폴더 접기",
         "expand-subgroups": "서브폴더로 탐색",
         "unpersist-subgroups": "서브폴더 지정 해제",
@@ -200,6 +203,35 @@
           "title": "이 모드를 삭제할까요?",
           "description": "삭제된 모드는 휴지통에서 복원할 수 있습니다."
         },
+        "rename-mod": {
+          "title": "모드 이름 변경",
+          "description": "이 모드에 사용되는 폴더 이름을 변경합니다.",
+          "name-placeholder": "모드 이름",
+          "confirm": "이름 변경"
+        },
+        "create-folder": {
+          "title": "새 폴더 만들기",
+          "description": "{{name}} 아래에 새 폴더를 만듭니다.",
+          "name-placeholder": "폴더 이름",
+          "#": {
+            "success": "\"{{name}}\" 폴더를 만들었습니다",
+            "invalid-name": "폴더 이름이 올바르지 않습니다",
+            "already-exists": "이미 존재하는 폴더명입니다",
+            "failed": "폴더 생성에 실패했습니다"
+          }
+        },
+        "delete-folder": {
+          "title": "이 폴더를 삭제할까요?",
+          "description": "\"{{name}}\" 폴더를 삭제할까요? 삭제한 폴더는 휴지통에서 복원할 수 있습니다.",
+          "#": {
+            "success": "폴더를 휴지통으로 보냈습니다",
+            "failed": "폴더 삭제에 실패했습니다"
+          }
+        },
+        "delete-preview": {
+          "title": "프리뷰를 삭제할까요?",
+          "description": "\"{{name}}\"의 프리뷰를 삭제할까요? 삭제한 프리뷰는 휴지통에서 복원할 수 있습니다."
+        },
         "add-preset": {
           "name-placeholder": "프리셋 이름",
           "description-placeholder": "설명 (선택 사항)",
@@ -211,11 +243,20 @@
       },
       "hooks": {
         "use-mod-mutations": {
-          "toggle-mutation": {
+            "toggle-mutation": {
             "0": "이미 {{name}} 폴더가 존재합니다",
-            "1": "폴더가 잠겨있어 변경할 수 없습니다",
+            "1": "{{processes}} 가 해당 폴더를 사용 중이기 때문에 변경할 수 없습니다",
+            "1-fallback": "폴더가 잠겨있어 변경할 수 없습니다",
             "2": "모드 상태 변경에 실패했습니다"
           },
+          "rename-mutation": {
+            "0": "이미 {{name}} 폴더가 존재합니다",
+            "1": "{{processes}} 가 해당 폴더를 사용 중이기 때문에 이름을 변경할 수 없습니다",
+            "1-fallback": "폴더가 잠겨있어 이름을 변경할 수 없습니다",
+            "2": "올바른 모드 이름을 입력해주세요",
+            "3": "모드 이름 변경에 실패했습니다"
+          },
+          "locked-description": "다음 프로세스에서 해당 폴더를 사용 중입니다: {{processes}}",
           "apply-preset-mutation": {
             "legacy": "레거시 프리셋은 적용할 수 없습니다. 삭제 후 다시 만들어 주세요."
           }
@@ -226,13 +267,15 @@
         "open-preview-viewer": "뷰어로 열기",
         "delete-preview": "프리뷰 삭제",
         "open-cmd": "CMD 열기",
-        "open-folder": "폴더 열기"
+        "open-folder": "폴더 열기",
+        "rename": "이름 변경"
       },
       "toast": {
         "trash-loading": "휴지통으로 이동 중...",
         "trash-success": "삭제 완료",
         "trash-error": "삭제 실패",
-        "value-required": "값을 입력해주세요."
+        "value-required": "값을 입력해주세요.",
+        "rename-success": "모드 이름이 변경되었습니다"
       },
       "log-dialog": {
         "title": "로그",

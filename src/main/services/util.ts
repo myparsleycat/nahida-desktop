@@ -1,9 +1,11 @@
 import { spawn } from "node:child_process";
+import fsp from "node:fs/promises";
 import path from "node:path";
 import { eden } from "@main/client";
 import isDev from "@main/internal/isDev";
 import { nahidaLogsPath } from "@main/internal/logger";
 import type { AppStatus, PathMetadata } from "@shared/types.gen";
+import { trim } from "es-toolkit";
 import {
     BrowserWindow,
     clipboard,
@@ -68,6 +70,29 @@ export function openPath(path: string) {
 export async function trash(path: string) {
     await shell.trashItem(path);
     return;
+}
+
+export async function mkdir(parentPath: string, name: string): Promise<string> {
+    const trimmedName = trim(name);
+    if (!trimmedName) {
+        throw new Error("INVALID_GROUP_NAME");
+    }
+
+    desktop.lib.fs.assertValidWindowsFilename(trimmedName);
+
+    const nextPath = path.join(parentPath, trimmedName);
+    try {
+        await fsp.mkdir(nextPath);
+    } catch (error) {
+        const code = (error as NodeJS.ErrnoException | undefined)?.code;
+        const name = (error as NodeJS.ErrnoException | undefined)?.name;
+        if (code === "EEXIST" || name === "AlreadyExists") {
+            throw new Error(`ALREADY_EXISTS:${trimmedName}`);
+        }
+        throw error;
+    }
+
+    return nextPath;
 }
 
 export function openCmd(path: string) {

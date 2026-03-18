@@ -42,6 +42,72 @@ export function useModMutations() {
         queryClient.setQueryData(["modGroup", refreshedGroup.path], refreshedGroup);
     };
 
+    const showToggleMutationError = (error: unknown) => {
+        const errorMessage = (error as Error).message || "";
+        if (errorMessage.includes("ALREADY_EXISTS")) {
+            const folderName = errorMessage.split("ALREADY_EXISTS:")[1] || t("g.unknown");
+            toast.error(
+                t("page.mod.hooks.use-mod-mutations.toggle-mutation.0", {
+                    name: folderName,
+                }),
+            );
+            return;
+        }
+
+        if (errorMessage.includes("MOD_FOLDER_LOCKED")) {
+            const processNames = errorMessage.split("MOD_FOLDER_LOCKED|")[1];
+            if (processNames) {
+                toast.warning(
+                    t("page.mod.hooks.use-mod-mutations.toggle-mutation.1", {
+                        processes: processNames,
+                    }),
+                );
+            } else {
+                toast.warning(t("page.mod.hooks.use-mod-mutations.toggle-mutation.1-fallback"));
+            }
+            return;
+        }
+
+        toast.error(t("page.mod.hooks.use-mod-mutations.toggle-mutation.2"));
+    };
+
+    const showRenameMutationError = (error: unknown) => {
+        const errorMessage = (error as Error).message || "";
+        if (errorMessage.includes("ALREADY_EXISTS")) {
+            const folderName = errorMessage.split("ALREADY_EXISTS:")[1] || t("g.unknown");
+            toast.error(
+                t("page.mod.hooks.use-mod-mutations.rename-mutation.0", {
+                    name: folderName,
+                }),
+            );
+            return;
+        }
+
+        if (errorMessage.includes("MOD_FOLDER_LOCKED")) {
+            const processNames = errorMessage.split("MOD_FOLDER_LOCKED|")[1];
+            if (processNames) {
+                toast.warning(
+                    t("page.mod.hooks.use-mod-mutations.rename-mutation.1", {
+                        processes: processNames,
+                    }),
+                );
+            } else {
+                toast.warning(t("page.mod.hooks.use-mod-mutations.rename-mutation.1-fallback"));
+            }
+            return;
+        }
+
+        if (
+            errorMessage.includes("INVALID_WINDOWS_FILENAME") ||
+            errorMessage.includes("INVALID_MOD_NAME")
+        ) {
+            toast.error(t("page.mod.hooks.use-mod-mutations.rename-mutation.2"));
+            return;
+        }
+
+        toast.error(t("page.mod.hooks.use-mod-mutations.rename-mutation.3"));
+    };
+
     const toggleModMutation = useMutation({
         mutationFn: async (mod: ModInfo) => {
             try {
@@ -56,19 +122,7 @@ export function useModMutations() {
                 }
                 return null;
             } catch (error) {
-                const errorMessage = (error as Error).message || "";
-                if (errorMessage.includes("ALREADY_EXISTS")) {
-                    const folderName = errorMessage.split("ALREADY_EXISTS:")[1] || t("g.unknown");
-                    toast.error(
-                        t("page.mod.hooks.use-mod-mutations.toggle-mutation.0", {
-                            name: folderName,
-                        }),
-                    );
-                } else if (errorMessage.includes("EBUSY")) {
-                    toast.error(t("page.mod.hooks.use-mod-mutations.toggle-mutation.1"));
-                } else {
-                    toast.error(t("page.mod.hooks.use-mod-mutations.toggle-mutation.2"));
-                }
+                showToggleMutationError(error);
                 throw error;
             }
         },
@@ -93,19 +147,7 @@ export function useModMutations() {
                 }
                 return null;
             } catch (error) {
-                const errorMessage = (error as Error).message || "";
-                if (errorMessage.includes("ALREADY_EXISTS")) {
-                    const folderName = errorMessage.split("ALREADY_EXISTS:")[1] || t("g.unknown");
-                    toast.error(
-                        t("page.mod.hooks.use-mod-mutations.toggle-mutation.0", {
-                            name: folderName,
-                        }),
-                    );
-                } else if (errorMessage.includes("EBUSY")) {
-                    toast.error(t("page.mod.hooks.use-mod-mutations.toggle-mutation.1"));
-                } else {
-                    toast.error(t("page.mod.hooks.use-mod-mutations.toggle-mutation.2"));
-                }
+                showToggleMutationError(error);
                 throw error;
             }
         },
@@ -149,7 +191,38 @@ export function useModMutations() {
         },
     });
 
-    return { toggleModMutation, exclusiveToggleModMutation, updateToggleKeyMutation };
+    const renameModMutation = useMutation({
+        mutationFn: async ({ mod, newName }: { mod: ModInfo; newName: string }) => {
+            try {
+                await window.api.invoke("mod:rename", mod.path, newName);
+                const currentGroupPath = selectedGroup?.path;
+                if (currentGroupPath) {
+                    const refreshedGroup = (await window.api.invoke(
+                        "mod:getMods",
+                        currentGroupPath,
+                    )) as FolderGroup;
+                    return refreshedGroup;
+                }
+                return null;
+            } catch (error) {
+                showRenameMutationError(error);
+                throw error;
+            }
+        },
+        onSuccess: (refreshedGroup) => {
+            if (refreshedGroup) {
+                updateLocalGroupCache(refreshedGroup);
+            }
+            toast.success(t("page.mod.toast.rename-success"));
+        },
+    });
+
+    return {
+        toggleModMutation,
+        exclusiveToggleModMutation,
+        updateToggleKeyMutation,
+        renameModMutation,
+    };
 }
 
 export function usePresetMutations() {

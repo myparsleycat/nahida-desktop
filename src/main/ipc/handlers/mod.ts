@@ -67,6 +67,10 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return await desktop.service.mod.fn.exclusiveToggle(modPath);
     });
 
+    rh("mod:rename", async (modPath: string, newName: string) => {
+        return await desktop.service.mod.fn.rename(modPath, newName);
+    });
+
     rh("mod:enableAll", async (groupPath: string) => {
         return await desktop.service.mod.fn.enableAll(groupPath);
     });

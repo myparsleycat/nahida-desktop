@@ -13,7 +13,8 @@
     "create": "Create",
     "unknown": "Unknown",
     "save": "Save",
-    "close": "Close"
+    "close": "Close",
+    "rename": "Rename"
   },
   "page": {
     "transfer": {
@@ -172,6 +173,8 @@
       "character-sidebar": {
         "add-to-character": "Add to {{name}}",
         "open-in-explorer": "Open in File Explorer",
+        "create-folder": "Create New Folder",
+        "delete-folder": "Delete Folder",
         "collapse-subgroups": "Collapse subgroups",
         "expand-subgroups": "Expand subgroups",
         "unpersist-subgroups": "Unpersist subgroups",
@@ -199,6 +202,35 @@
           "title": "Are you sure you want to delete this mod?",
           "description": "Deleted mods can be restored from the recycle bin."
         },
+        "rename-mod": {
+          "title": "Rename Mod",
+          "description": "Change the folder name used for this mod.",
+          "name-placeholder": "Mod name",
+          "confirm": "Rename"
+        },
+        "create-folder": {
+          "title": "Create New Folder",
+          "description": "Create a new folder under {{name}}.",
+          "name-placeholder": "Folder name",
+          "#": {
+            "success": "\"{{name}}\" folder created",
+            "invalid-name": "The folder name is invalid",
+            "already-exists": "A folder with that name already exists",
+            "failed": "Failed to create folder"
+          }
+        },
+        "delete-folder": {
+          "title": "Delete Folder",
+          "description": "Are you sure you want to delete \"{{name}}\"? The folder can be restored from the recycle bin.",
+          "#": {
+            "success": "Folder moved to trash",
+            "failed": "Failed to delete folder"
+          }
+        },
+        "delete-preview": {
+          "title": "Delete Preview",
+          "description": "Are you sure you want to delete the preview for \"{{name}}\"? It can be restored from the recycle bin."
+        },
         "add-preset": {
           "title": "Create New Preset",
           "name-placeholder": "Preset name",
@@ -212,9 +244,18 @@
         "use-mod-mutations": {
           "toggle-mutation": {
             "0": "The {{name}} folder already exists",
-            "1": "The folder is locked and cannot be modified",
+            "1": "{{processes}} is using the folder, so it cannot be modified",
+            "1-fallback": "The folder is locked and cannot be modified",
             "2": "Failed to change mod status"
           },
+          "rename-mutation": {
+            "0": "The {{name}} folder already exists",
+            "1": "The folder {{processes}} is using the folder, so it cannot be renamed",
+            "1-fallback": "The folder is locked and cannot be renamed",
+            "2": "Please enter a valid mod name",
+            "3": "Failed to rename mod"
+          },
+          "locked-description": "Used by: {{processes}}",
           "apply-preset-mutation": {
             "legacy": "Legacy presets cannot be applied. Delete and recreate the preset."
           }
@@ -225,13 +266,15 @@
         "open-preview-viewer": "Open in viewer",
         "delete-preview": "Delete preview",
         "open-cmd": "Open CMD",
-        "open-folder": "Open folder"
+        "open-folder": "Open folder",
+        "rename": "Rename"
       },
       "toast": {
         "trash-loading": "Moving to recycle bin...",
         "trash-success": "Deleted successfully",
         "trash-error": "Failed to delete",
-        "value-required": "Please enter a value."
+        "value-required": "Please enter a value.",
+        "rename-success": "Mod renamed successfully"
       },
       "log-dialog": {
         "title": "Log",

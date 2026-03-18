@@ -86,24 +86,33 @@ function RootComponent() {
   const { screenHeight, titlebarStyle } = useTitlebar();
 
   useEffect(() => {
-    window.api.invoke("util:getAppStatus").then((appStatus) => {
-      setAppStatus(appStatus);
-    });
-    window.api.invoke("updater:getStatus").then((status) => {
-      setUpdateDownloaded(status.updateDownloaded);
-      setShouldPromptForUpdate(status.shouldPromptForUpdate);
-    });
-    window.api.invoke("setting:general:getLanguage").then((language) => {
-      if (language) i18n.changeLanguage(language);
-    });
-
     const removeUpdateListener = window.api.on("updater:update-downloaded", () => {
       setUpdateDownloaded(true);
       setShouldPromptForUpdate(true);
     });
 
+    const syncUpdaterStatus = () => {
+      window.api.invoke("updater:getStatus").then((status) => {
+        setUpdateDownloaded(status.updateDownloaded);
+        setShouldPromptForUpdate(status.shouldPromptForUpdate);
+      });
+    };
+
+    const removeWindowFocusListener = window.api.on("window:focus", () => {
+      syncUpdaterStatus();
+    });
+
+    window.api.invoke("util:getAppStatus").then((appStatus) => {
+      setAppStatus(appStatus);
+    });
+    syncUpdaterStatus();
+    window.api.invoke("setting:general:getLanguage").then((language) => {
+      if (language) i18n.changeLanguage(language);
+    });
+
     return () => {
       removeUpdateListener();
+      removeWindowFocusListener();
     };
   }, [setAppStatus, setUpdateDownloaded, setShouldPromptForUpdate, i18n]);
 

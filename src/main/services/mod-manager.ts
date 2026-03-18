@@ -24,6 +24,7 @@ interface ScannedPresetItem extends PresetSnapshotItemRecord {
 
 const MOD_PRESET_ITEM_INSERT_BATCH_SIZE = 100;
 const MOD_PRESET_VERSION = 2;
+const DISABLED_PREFIX_REGEX = /^disabled\s+/i;
 
 export class ModManager {
     private readonly desktop: NahidaDesktop;
@@ -112,7 +113,14 @@ export class ModManager {
     }
 
     private stripDisabledPrefix(folderName: string): string {
-        return trim(folderName.replace(/^disabled\s+/i, ""));
+        return trim(folderName.replace(DISABLED_PREFIX_REGEX, ""));
+    }
+
+    private restoreDisabledPrefix(sourceFolderName: string, folderName: string): string {
+        if (DISABLED_PREFIX_REGEX.test(sourceFolderName)) {
+            return `DISABLED ${folderName}`;
+        }
+        return folderName;
     }
 
     private toGameRelativePath(rootPath: string, targetPath: string): string {
@@ -380,10 +388,9 @@ export class ModManager {
 
         enable: async (modPath: string): Promise<string> => {
             const folderName = path.basename(modPath);
-            const regex = /^disabled\s+/i;
 
-            if (regex.test(folderName)) {
-                const baseFolderName = trim(folderName.replace(regex, ""));
+            if (DISABLED_PREFIX_REGEX.test(folderName)) {
+                const baseFolderName = trim(folderName.replace(DISABLED_PREFIX_REGEX, ""));
                 return this.renameWithUniqueName(modPath, baseFolderName);
             }
 
@@ -392,9 +399,8 @@ export class ModManager {
 
         disable: async (modPath: string): Promise<string> => {
             const folderName = path.basename(modPath);
-            const regex = /^disabled\s+/i;
 
-            if (!regex.test(folderName)) {
+            if (!DISABLED_PREFIX_REGEX.test(folderName)) {
                 const baseFolderName = `DISABLED ${folderName}`;
                 return this.renameWithUniqueName(modPath, baseFolderName);
             }
@@ -404,13 +410,27 @@ export class ModManager {
 
         toggle: async (modPath: string): Promise<string> => {
             const folderName = path.basename(modPath);
-            const isEnabled = !/^disabled\s+/i.test(folderName);
+            const isEnabled = !DISABLED_PREFIX_REGEX.test(folderName);
 
             let result: string;
-            if (isEnabled) {
-                result = await this.fn.disable(modPath);
-            } else {
-                result = await this.fn.enable(modPath);
+
+            try {
+                if (isEnabled) {
+                    result = await this.fn.disable(modPath);
+                } else {
+                    result = await this.fn.enable(modPath);
+                }
+            } catch (err) {
+                const lockInfo = await this.desktop.lib.fs.isLockedPathError(err, modPath);
+                if (lockInfo.isLocked) {
+                    console.log("lockInfo", lockInfo);
+                    if (lockInfo.processes.length > 0) {
+                        const processNames = lockInfo.processes.map((p) => p.name).join(", ");
+                        throw new Error(`MOD_FOLDER_LOCKED|${processNames}`);
+                    }
+                    throw new Error("MOD_FOLDER_LOCKED");
+                }
+                throw err;
             }
 
             // await this.fn.triggerF10(modPath);
@@ -419,7 +439,7 @@ export class ModManager {
 
         exclusiveToggle: async (modPath: string): Promise<string> => {
             const folderName = path.basename(modPath);
-            const isEnabled = !/^disabled\s+/i.test(folderName);
+            const isEnabled = !DISABLED_PREFIX_REGEX.test(folderName);
 
             if (!isEnabled) {
                 const groupPath = path.dirname(modPath);
@@ -453,6 +473,47 @@ export class ModManager {
                 const result = await this.fn.disable(modPath);
                 // await this.fn.triggerF10(modPath);
                 return result;
+            }
+        },
+
+        rename: async (modPath: string, newName: string): Promise<string> => {
+            const folderName = path.basename(modPath);
+            const trimmedName = this.stripDisabledPrefix(newName);
+
+            if (!trimmedName) {
+                throw new Error("INVALID_MOD_NAME");
+            }
+
+            this.desktop.lib.fs.assertValidWindowsFilename(trimmedName);
+
+            const nextFolderName = this.restoreDisabledPrefix(folderName, trimmedName);
+            if (folderName === nextFolderName) {
+                return modPath;
+            }
+
+            const parentPath = path.dirname(modPath);
+            const nextPath = path.join(parentPath, nextFolderName);
+
+            if (this.normalizeModPath(modPath) !== this.normalizeModPath(nextPath)) {
+                const exists = await this.desktop.lib.fs.pathExists(nextPath);
+                if (exists) {
+                    throw new Error(`ALREADY_EXISTS:${nextFolderName}`);
+                }
+            }
+
+            try {
+                await this.desktop.lib.fs.rename(modPath, nextPath);
+                return nextPath;
+            } catch (err) {
+                const lockInfo = await this.desktop.lib.fs.isLockedPathError(err, modPath);
+                if (lockInfo.isLocked) {
+                    if (lockInfo.processes.length > 0) {
+                        const processNames = lockInfo.processes.map((p) => p.name).join(", ");
+                        throw new Error(`MOD_FOLDER_LOCKED|${processNames}`);
+                    }
+                    throw new Error("MOD_FOLDER_LOCKED");
+                }
+                throw err;
             }
         },
 
