@@ -45,15 +45,15 @@ export class DllBuilder {
     }
 
     private async fetchProviderReleases(provider: string) {
-        const now = Date.now();
-        const lastFetchedAt = this.releasesFetchedAt[provider] ?? 0;
-        if (now - lastFetchedAt < this.RELEASES_FETCH_COOLDOWN_MS) {
-            return;
-        }
-
         const inFlight = this.releasesFetchInFlight[provider];
         if (inFlight) {
             await inFlight;
+            return;
+        }
+
+        const now = Date.now();
+        const lastFetchedAt = this.releasesFetchedAt[provider] ?? 0;
+        if (now - lastFetchedAt < this.RELEASES_FETCH_COOLDOWN_MS) {
             return;
         }
 
@@ -62,14 +62,13 @@ export class DllBuilder {
 
         try {
             await fetchPromise;
+            this.releasesFetchedAt[provider] = Date.now();
         } finally {
             delete this.releasesFetchInFlight[provider];
         }
     }
 
     private async fetchProviderReleasesInternal(provider: string) {
-        this.releasesFetchedAt[provider] = Date.now();
-
         try {
             const owner = provider === "myparsleycat" ? "myparsleycat" : "SpectrumQT";
             const url = `https://api.github.com/repos/${owner}/XXMI-Libs-Package/releases`;
