@@ -51,11 +51,11 @@ export class Updater {
             this.updateDialogDismissed = false;
         });
 
-        autoUpdater.on("update-downloaded", async (info) => {
+        autoUpdater.on("update-downloaded", async () => {
             this.isCheckingForUpdates = false;
             this.updateDownloaded = true;
             this.updateDialogDismissed = false;
-            await this.notifyUpdateReady(info.version);
+            await this.notifyUpdateReady();
         });
 
         autoUpdater.on("update-cancelled", () => {});
@@ -72,8 +72,20 @@ export class Updater {
         void this.runInitialAutomaticCheck();
     }
 
-    public async checkForUpdates(): Promise<void> {
-        if (this.isCheckingForUpdates || this.updateAvailable || this.updateDownloaded) {
+    public async checkForUpdates(userInitiated: boolean = false): Promise<void> {
+        if (this.isCheckingForUpdates) {
+            return;
+        }
+
+        if (this.updateDownloaded) {
+            if (userInitiated) {
+                this.updateDialogDismissed = false;
+            }
+            await this.notifyUpdateReady();
+            return;
+        }
+
+        if (this.updateAvailable) {
             return;
         }
         this.isCheckingForUpdates = true;
@@ -137,7 +149,7 @@ export class Updater {
         this.updateDialogDismissed = true;
     }
 
-    private async notifyUpdateReady(_version: string): Promise<void> {
+    private async notifyUpdateReady(): Promise<void> {
         const mainWindow = await this.focusMainWindow();
         if (!mainWindow) {
             return;

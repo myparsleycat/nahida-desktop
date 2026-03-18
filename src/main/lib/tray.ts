@@ -14,6 +14,13 @@ export class TrayManager {
         this.tray = new Tray(icon);
         const contextMenu = Menu.buildFromTemplate([
             {
+                label: "Check for Updates...",
+                type: "normal",
+                click: async () => {
+                    await this.desktop.updater.checkForUpdates(true);
+                },
+            },
+            {
                 label: "Setting",
                 type: "normal",
                 click: async () => {
