@@ -6,7 +6,7 @@ export declare class NativeWatcher {
   unwatch(): void
 }
 
-export declare function collectFiles(paths: Array<string>, allowedExt: Array<string>): RawCollectionResult
+export declare function collectFiles(paths: Array<string>, allowedExt: Array<string>): Promise<RawCollectionResult>
 
 export declare function findFiles(paths: Array<string>, includeExt: Array<string>, excludeFileNames: Array<string>): Array<string>
 

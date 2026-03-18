@@ -28,7 +28,7 @@ pub struct RawCollectionResult {
 }
 
 #[napi]
-pub fn collect_files(
+pub async fn collect_files(
   paths: Vec<String>,
   allowed_ext: Vec<String>,
 ) -> napi::Result<RawCollectionResult> {
