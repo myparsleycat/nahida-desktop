@@ -159,10 +159,10 @@ export default function D3D11Builder() {
               </div>
             ) : (
               <Select value={version} onValueChange={setVersion}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full max-w-36">
                   <SelectValue placeholder={t("page.tools.d3d11_builder.version")} />
                 </SelectTrigger>
-                <SelectContent position="popper" className="max-h-64">
+                <SelectContent position="popper">
                   <SelectGroup>
                     {versions.map((v) => (
                       <SelectItem key={v} value={v}>
