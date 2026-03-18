@@ -6,6 +6,7 @@ import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
 import fse from "fs-extra";
 import ky from "ky";
+import ms from "ms";
 import type { NahidaDesktop } from "@/main";
 
 const execAsync = promisify(exec);
@@ -13,6 +14,7 @@ const execAsync = promisify(exec);
 export class DllBuilder {
     private readonly VS_EDITIONS = ["Community", "Professional", "Enterprise", "Insiders"];
     private readonly VS_VERSIONS = ["2025", "2022", "18", "17"];
+    private readonly RELEASES_FETCH_COOLDOWN_MS = ms("1m");
 
     private isBuilding = false;
     private currentProgress = "";
@@ -21,6 +23,8 @@ export class DllBuilder {
         SpectrumQT: ["master"],
         myparsleycat: ["master"],
     };
+    private readonly releasesFetchedAt: Partial<Record<string, number>> = {};
+    private readonly releasesFetchInFlight: Partial<Record<string, Promise<void>>> = {};
 
     constructor(private readonly desktop: NahidaDesktop) {
         this.updateReleases();
@@ -41,6 +45,31 @@ export class DllBuilder {
     }
 
     private async fetchProviderReleases(provider: string) {
+        const now = Date.now();
+        const lastFetchedAt = this.releasesFetchedAt[provider] ?? 0;
+        if (now - lastFetchedAt < this.RELEASES_FETCH_COOLDOWN_MS) {
+            return;
+        }
+
+        const inFlight = this.releasesFetchInFlight[provider];
+        if (inFlight) {
+            await inFlight;
+            return;
+        }
+
+        const fetchPromise = this.fetchProviderReleasesInternal(provider);
+        this.releasesFetchInFlight[provider] = fetchPromise;
+
+        try {
+            await fetchPromise;
+        } finally {
+            delete this.releasesFetchInFlight[provider];
+        }
+    }
+
+    private async fetchProviderReleasesInternal(provider: string) {
+        this.releasesFetchedAt[provider] = Date.now();
+
         try {
             const owner = provider === "myparsleycat" ? "myparsleycat" : "SpectrumQT";
             const url = `https://api.github.com/repos/${owner}/XXMI-Libs-Package/releases`;
