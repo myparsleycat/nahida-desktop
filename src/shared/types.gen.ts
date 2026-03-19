@@ -339,6 +339,7 @@ export interface TransferData {
 export interface Transfer {
     pid: string;
     type: "upload" | "download";
+    currentId?: string;
     status: TransferStatus;
     totalSize: number;
     transferedSize: number;
