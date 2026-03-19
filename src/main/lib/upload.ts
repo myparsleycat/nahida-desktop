@@ -77,6 +77,10 @@ export class UploadLib {
         this.fileQueue.concurrency = await this.desktop.setting.transfer.getUploadConcurrency();
     }
 
+    private clearPendingFileQueue() {
+        this.fileQueue.clear();
+    }
+
     private async getCreateManyConcurrency() {
         return await this.desktop.setting.transfer.getUploadCreateManyConcurrency();
     }
@@ -724,6 +728,12 @@ export class UploadLib {
         processedFiles?: FinalFile[];
         initialTransferedSize?: number;
     }) {
+        const handleAbort = () => {
+            this.clearPendingFileQueue();
+        };
+
+        abortController.signal.addEventListener("abort", handleAbort, { once: true });
+
         try {
             await this.syncQueueConcurrency();
 
@@ -834,6 +844,8 @@ export class UploadLib {
                 error: err instanceof Error ? err.message : String(err),
             });
             throw err;
+        } finally {
+            abortController.signal.removeEventListener("abort", handleAbort);
         }
     }
 

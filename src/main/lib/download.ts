@@ -519,6 +519,10 @@ export class DownloadLib {
         this.fileQueue.concurrency = await this.desktop.setting.transfer.getDownloadConcurrency();
     }
 
+    private clearPendingFileQueue() {
+        this.fileQueue.clear();
+    }
+
     public async startStreamingDownload(uuid: string, signal: AbortSignal) {
         return this.streamer.fetchMetadata(uuid, signal);
     }
@@ -557,6 +561,12 @@ export class DownloadLib {
         initialTransferedSize?: number;
         initialTransferedFiles?: number;
     }) {
+        const handleAbort = () => {
+            this.clearPendingFileQueue();
+        };
+
+        abort.signal.addEventListener("abort", handleAbort, { once: true });
+
         try {
             await this.syncQueueConcurrency();
 
@@ -591,6 +601,7 @@ export class DownloadLib {
                 const filePath = path.join(parentPath, file.name);
 
                 this.fileQueue.add(async () => {
+                    if (abort.signal.aborted) return;
                     if (parentPath && !ensuredDirs.has(parentPath)) {
                         await this.desktop.lib.fs.ensureDir(parentPath);
                         ensuredDirs.add(parentPath);
@@ -617,6 +628,7 @@ export class DownloadLib {
                 if (abort.signal.aborted) break;
                 if (!ensuredDirs.has(dirPath)) {
                     this.fileQueue.add(async () => {
+                        if (abort.signal.aborted) return;
                         await this.desktop.lib.fs.ensureDir(dirPath);
                         ensuredDirs.add(dirPath);
                     });
@@ -636,6 +648,8 @@ export class DownloadLib {
                 error: err instanceof Error ? err.message : String(err),
             });
             throw err;
+        } finally {
+            abort.signal.removeEventListener("abort", handleAbort);
         }
     }
 
