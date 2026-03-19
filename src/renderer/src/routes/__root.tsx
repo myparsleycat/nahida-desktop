@@ -82,6 +82,7 @@ function RootComponent() {
   const setAppStatus = useGlobalStore((state) => state.setAppStatus);
   const setUpdateDownloaded = useGlobalStore((state) => state.setUpdateDownloaded);
   const setShouldPromptForUpdate = useGlobalStore((state) => state.setShouldPromptForUpdate);
+  const setTransfers = useGlobalStore((state) => state.setTransfers);
   const { i18n } = useTranslation();
   const { screenHeight, titlebarStyle } = useTitlebar();
 
@@ -102,10 +103,15 @@ function RootComponent() {
       syncUpdaterStatus();
     });
 
+    const removeTransferListener = window.api.on("transfer:update", (updatedTransfers) => {
+      setTransfers(updatedTransfers);
+    });
+
     window.api.invoke("util:getAppStatus").then((appStatus) => {
       setAppStatus(appStatus);
     });
     syncUpdaterStatus();
+    window.api.invoke("transfer:list").then(setTransfers);
     window.api.invoke("setting:general:getLanguage").then((language) => {
       if (language) i18n.changeLanguage(language);
     });
@@ -113,8 +119,9 @@ function RootComponent() {
     return () => {
       removeUpdateListener();
       removeWindowFocusListener();
+      removeTransferListener();
     };
-  }, [setAppStatus, setUpdateDownloaded, setShouldPromptForUpdate, i18n]);
+  }, [setAppStatus, setUpdateDownloaded, setShouldPromptForUpdate, setTransfers, i18n]);
 
   const [pathSelectorData, setPathSelectorData] = useState<{
     selectionId: string;

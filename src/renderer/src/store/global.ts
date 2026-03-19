@@ -1,5 +1,5 @@
 import type { Session } from "@shared/schemas/auth";
-import type { AppStatus } from "@shared/types.gen";
+import type { AppStatus, TransferWithoutData } from "@shared/types.gen";
 import { createStore, useStore } from "zustand";
 
 interface GlobalStore {
@@ -13,6 +13,8 @@ interface GlobalStore {
     sessionInitialized: boolean;
     setSession: (session: Session | null) => void;
     setSessionInitialized: (initialized: boolean) => void;
+    transfers: TransferWithoutData[];
+    setTransfers: (transfers: TransferWithoutData[]) => void;
 }
 
 export const globalStore = createStore<GlobalStore>((set) => {
@@ -27,6 +29,8 @@ export const globalStore = createStore<GlobalStore>((set) => {
         sessionInitialized: false,
         setSession: (session) => set({ session, sessionInitialized: true }),
         setSessionInitialized: (sessionInitialized) => set({ sessionInitialized }),
+        transfers: [],
+        setTransfers: (transfers) => set({ transfers }),
     };
 });
 

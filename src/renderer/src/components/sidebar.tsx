@@ -3,6 +3,7 @@ import { cn } from "@renderer/lib/utils";
 import { viewStore } from "@renderer/store/drive";
 import { useGlobalStore } from "@renderer/store/global";
 import { supportsWindowsDesktopFeatures } from "@shared/platform";
+import type { TransferWithoutData } from "@shared/types.gen";
 import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpDownIcon,
@@ -23,6 +24,7 @@ export function Sidebar({ className }: { className?: string }) {
   const navi = useNavigate();
   const { t } = useTranslation();
   const appStatus = useGlobalStore((state) => state.appStatus);
+  const transfers = useGlobalStore((state) => state.transfers);
   const { session } = useAuth();
   const hasWindowsDesktopFeatures = supportsWindowsDesktopFeatures(appStatus?.platform);
 
@@ -31,6 +33,20 @@ export function Sidebar({ className }: { className?: string }) {
   };
 
   const iconSize = "size-6";
+  const activeTransfers = transfers.filter((transfer) =>
+    ["pending", "preparing", "progress"].includes(transfer.status),
+  );
+  const activeTransferCount = activeTransfers.length;
+  const activeTransferProgress =
+    activeTransferCount === 0 ? null : getAggregateTransferProgress(activeTransfers);
+  const transferProgressLabel =
+    activeTransferProgress === null ? null : `${Math.round(activeTransferProgress)}%`;
+  const transferProgressRadius = 15;
+  const transferProgressCircumference = 2 * Math.PI * transferProgressRadius;
+  const transferProgressOffset =
+    activeTransferProgress === null
+      ? transferProgressCircumference
+      : transferProgressCircumference * (1 - activeTransferProgress / 100);
 
   return (
     <div className={`flex flex-col border-r ${className}`}>
@@ -41,16 +57,54 @@ export function Sidebar({ className }: { className?: string }) {
               <Button
                 variant="ghost"
                 size="icon"
+                className="relative overflow-visible"
                 onPointerDown={handlePointerDown}
                 onClick={() => {
                   navi({ to: "/transfer" });
                 }}
               >
-                <ArrowUpDownIcon className={cn(iconSize)} />
+                {activeTransferProgress !== null && (
+                  <>
+                    <svg
+                      className="pointer-events-none absolute inset-0 size-full -rotate-90"
+                      viewBox="0 0 32 32"
+                      aria-hidden="true"
+                    >
+                      <circle
+                        cx="16"
+                        cy="16"
+                        r={transferProgressRadius}
+                        className="fill-none stroke-border/70"
+                        strokeWidth="2"
+                      />
+                      <circle
+                        cx="16"
+                        cy="16"
+                        r={transferProgressRadius}
+                        className="fill-none stroke-primary transition-all duration-300"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeDasharray={transferProgressCircumference}
+                        strokeDashoffset={transferProgressOffset}
+                      />
+                    </svg>
+                    {/* <span className="pointer-events-none absolute -right-1 -bottom-1 rounded-full bg-primary px-1.5 py-0.5 text-[9px] leading-none font-semibold text-primary-foreground shadow-sm">
+                      {transferProgressLabel}
+                    </span> */}
+                  </>
+                )}
+                <ArrowUpDownIcon
+                  className={cn(iconSize, activeTransferProgress !== null && "scale-90")}
+                />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right" hideWhenDetached={true}>
-              {t("page.transfer.title")}
+              <div className="flex flex-col gap-0.5">
+                <span>{t("page.transfer.title")}</span>
+                {activeTransferProgress !== null && (
+                  <span className="text-background/80">{transferProgressLabel}</span>
+                )}
+              </div>
             </TooltipContent>
           </Tooltip>
 
@@ -225,4 +279,15 @@ export function Sidebar({ className }: { className?: string }) {
       </div>
     </div>
   );
+}
+
+function getAggregateTransferProgress(transfers: TransferWithoutData[]) {
+  const totalSize = transfers.reduce((sum, transfer) => sum + transfer.totalSize, 0);
+  if (totalSize > 0) {
+    const transferredSize = transfers.reduce((sum, transfer) => sum + transfer.transferedSize, 0);
+    return Math.max(0, Math.min(100, (transferredSize / totalSize) * 100));
+  }
+
+  const totalProgress = transfers.reduce((sum, transfer) => sum + transfer.progress, 0);
+  return Math.max(0, Math.min(100, totalProgress / Math.max(transfers.length, 1)));
 }

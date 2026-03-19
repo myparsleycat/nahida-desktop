@@ -6,10 +6,11 @@ import { TransferToolbar } from "@renderer/components/transfer/transfer-toolbar"
 import type { TransferItemProps } from "@renderer/components/transfer/types";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
-import type { Transfer, TransferWithoutData } from "@shared/types.gen";
+import { useGlobalStore } from "@renderer/store/global";
+import type { Transfer } from "@shared/types.gen";
 import { formatSize, formatTime } from "@shared/utils";
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/transfer")({
@@ -43,20 +44,7 @@ function mapStatus(
 function RouteComponent() {
   const { t } = useTranslation();
   const { Titlebar } = useTitlebar();
-
-  const [transfers, setTransfers] = useState<TransferWithoutData[]>([]);
-
-  useEffect(() => {
-    window.api.invoke("transfer:list").then(setTransfers);
-
-    const removeListener = window.api.on("transfer:update", (updatedTransfers) => {
-      setTransfers(updatedTransfers);
-    });
-
-    return () => {
-      removeListener();
-    };
-  }, []);
+  const transfers = useGlobalStore((state) => state.transfers);
 
   const handleCancel = useCallback((id: string) => {
     window.api.invoke("transfer:cancel", id);
@@ -86,22 +74,26 @@ function RouteComponent() {
     window.api.invoke("transfer:clear");
   }, []);
 
-  const transferItems: TransferItemProps[] = transfers.map((t) => ({
-    id: t.pid,
-    fileName: t.name,
-    fileSize: formatSize(t.totalSize),
-    fileType: "file",
-    progress: t.progress,
-    speed: `${formatSize(t.speed)}/s`,
-    timeRemaining: formatTime(t.eta),
-    status: mapStatus(t.status, t.type),
-    type: t.type,
-    path: t.path,
-    totalFiles: t.totalFiles,
-    processedFiles: t.transferedFiles,
-    failedFiles: t.failedFiles,
-    error: (t as any).error,
-  }));
+  const transferItems: TransferItemProps[] = transfers.map((t) => {
+    const error = "error" in t ? t.error : undefined;
+
+    return {
+      id: t.pid,
+      fileName: t.name,
+      fileSize: formatSize(t.totalSize),
+      fileType: "file",
+      progress: t.progress,
+      speed: `${formatSize(t.speed)}/s`,
+      timeRemaining: formatTime(t.eta),
+      status: mapStatus(t.status, t.type),
+      type: t.type,
+      path: t.path,
+      totalFiles: t.totalFiles,
+      processedFiles: t.transferedFiles,
+      failedFiles: t.failedFiles,
+      error: typeof error === "string" ? error : undefined,
+    };
+  });
 
   const activeUploads = transfers.filter(
     (t) => t.type === "upload" && (t.status === "progress" || t.status === "paused"),
