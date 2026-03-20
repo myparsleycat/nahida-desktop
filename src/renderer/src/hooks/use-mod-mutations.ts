@@ -20,6 +20,18 @@ export function useGameMutations() {
     const setEditGamePath = useModStore((s) => s.setEditGamePath);
     const setEditGameImporter = useModStore((s) => s.setEditGameImporter);
     const setIsEditGameDialogOpen = useModStore((s) => s.setIsEditGameDialogOpen);
+    const getMutationErrorMessage = (error: unknown) => {
+        if (error instanceof Error) {
+            return error.message || "";
+        }
+
+        if (typeof error === "object" && error !== null) {
+            const maybeError = error as { message?: string; code?: string };
+            return maybeError.message || maybeError.code || "";
+        }
+
+        return "";
+    };
 
     const addGameMutation = useMutation({
         mutationFn: ({ name, path }: { name: string; path: string }) =>
@@ -121,6 +133,25 @@ export function useGameMutations() {
             setEditGameImporter(null);
             setIsEditGameDialogOpen(false);
             toast.success(t("page.mod.hooks.use-mod-mutations.update-game-mutation.success"));
+        },
+        onError: (error) => {
+            const errorMessage = getMutationErrorMessage(error);
+
+            if (errorMessage.includes("DUPLICATE_MOD_FOLDER_PATH")) {
+                toast.warning(
+                    t(
+                        "page.mod.hooks.use-mod-mutations.add-game-mutation.duplicate-mod-folder-path",
+                    ),
+                );
+                return;
+            }
+
+            if (errorMessage.includes("INVALID_PARAMS")) {
+                toast.error(t("page.mod.hooks.use-mod-mutations.add-game-mutation.invalid-params"));
+                return;
+            }
+
+            toast.error(errorMessage || t("page.mod.hooks.use-mod-mutations.add-game-mutation.failed"));
         },
     });
 
