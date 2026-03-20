@@ -190,6 +190,12 @@
             "1": "모드 폴더 경로를 선택해주세요"
           }
         },
+        "edit-game": {
+          "title": "게임 설정",
+          "path_label": "모드 폴더 경로",
+          "importer_label": "Importer",
+          "no_importer": "없음"
+        },
         "preset-management": {
           "description": "이 프리셋에는 {{length}}개의 모드가 저장되어 있습니다.",
           "legacy-badge": "레거시",
@@ -243,7 +249,20 @@
       },
       "hooks": {
         "use-mod-mutations": {
-            "toggle-mutation": {
+          "add-game-mutation": {
+            "success": "게임이 추가되었습니다.",
+            "duplicate-game-name": "이미 존재하는 게임 이름입니다.",
+            "duplicate-mod-folder-path": "이미 사용 중인 모드 폴더 경로입니다.",
+            "invalid-params": "게임 이름과 모드 폴더 경로를 입력해주세요.",
+            "failed": "게임 추가에 실패했습니다."
+          },
+          "delete-game-mutation": {
+            "success": "게임이 삭제되었습니다."
+          },
+          "update-game-mutation": {
+            "success": "게임 설정이 저장되었습니다."
+          },
+          "toggle-mutation": {
             "0": "이미 {{name}} 폴더가 존재합니다",
             "1": "{{processes}} 가 해당 폴더를 사용 중이기 때문에 변경할 수 없습니다",
             "1-fallback": "폴더가 잠겨있어 변경할 수 없습니다",
@@ -257,8 +276,17 @@
             "3": "모드 이름 변경에 실패했습니다"
           },
           "locked-description": "다음 프로세스에서 해당 폴더를 사용 중입니다: {{processes}}",
+          "create-preset-mutation": {
+            "success": "프리셋이 추가되었습니다.",
+            "duplicate-name": "이미 존재하는 프리셋 이름입니다."
+          },
           "apply-preset-mutation": {
-            "legacy": "레거시 프리셋은 적용할 수 없습니다. 삭제 후 다시 만들어 주세요."
+            "legacy": "레거시 프리셋은 적용할 수 없습니다. 삭제 후 다시 만들어 주세요.",
+            "success": "프리셋이 적용되었습니다.",
+            "missing": "프리셋 적용이 완료되었지만 누락된 모드가 {{count}}개 있습니다."
+          },
+          "delete-preset-mutation": {
+            "success": "프리셋이 삭제되었습니다."
           }
         }
       },

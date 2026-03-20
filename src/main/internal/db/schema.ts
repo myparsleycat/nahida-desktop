@@ -9,6 +9,7 @@ export const setting = sqliteTable("setting", {
 export const gamePaths = sqliteTable("game_paths", {
     game: text().primaryKey(),
     modFolderPath: text().notNull(),
+    importer: text(),
 });
 
 export const modPresets = sqliteTable(
@@ -17,7 +18,7 @@ export const modPresets = sqliteTable(
         id: text().primaryKey(),
         game: text()
             .notNull()
-            .references(() => gamePaths.game),
+            .references(() => gamePaths.game, { onDelete: "cascade" }),
         name: text().notNull(),
         description: text(),
         itemCount: integer("item_count").notNull().default(0),

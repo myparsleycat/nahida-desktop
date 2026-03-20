@@ -1,14 +1,37 @@
-import { useModStore } from "@renderer/store/mod";
-import type { ApplyPresetResult, FolderGroup, ModInfo } from "@shared/types.gen";
+import { modStore, useModStore } from "@renderer/store/mod";
+import type { ApplyPresetResult, FolderGroup, GameConfig, ModInfo } from "@shared/types.gen";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 export function useGameMutations() {
+    const { t } = useTranslation();
     const queryClient = useQueryClient();
+    const selectedGame = useModStore((s) => s.selectedGame);
+    const setSelectedGame = useModStore((s) => s.setSelectedGame);
+    const setDeletingGame = useModStore((s) => s.setDeletingGame);
+    const setSelectedGroup = useModStore((s) => s.setSelectedGroup);
+    const setSelectedPreset = useModStore((s) => s.setSelectedPreset);
     const setNewGameName = useModStore((s) => s.setNewGameName);
     const setNewGamePath = useModStore((s) => s.setNewGamePath);
     const setIsAddGameDialogOpen = useModStore((s) => s.setIsAddGameDialogOpen);
+    const setIsDeleteGameDialogOpen = useModStore((s) => s.setIsDeleteGameDialogOpen);
+    const setEditingGame = useModStore((s) => s.setEditingGame);
+    const setEditGamePath = useModStore((s) => s.setEditGamePath);
+    const setEditGameImporter = useModStore((s) => s.setEditGameImporter);
+    const setIsEditGameDialogOpen = useModStore((s) => s.setIsEditGameDialogOpen);
+    const getMutationErrorMessage = (error: unknown) => {
+        if (error instanceof Error) {
+            return error.message || "";
+        }
+
+        if (typeof error === "object" && error !== null) {
+            const maybeError = error as { message?: string; code?: string };
+            return maybeError.message || maybeError.code || "";
+        }
+
+        return "";
+    };
 
     const addGameMutation = useMutation({
         mutationFn: ({ name, path }: { name: string; path: string }) =>
@@ -18,19 +41,121 @@ export function useGameMutations() {
             setNewGameName("");
             setNewGamePath("");
             setIsAddGameDialogOpen(false);
-            toast.success("게임이 추가되었습니다.");
+            toast.success(t("page.mod.hooks.use-mod-mutations.add-game-mutation.success"));
+        },
+        onError: (error) => {
+            const errorMessage = (error as Error).message || "";
+
+            if (errorMessage.includes("DUPLICATE_GAME_NAME")) {
+                toast.warning(
+                    t("page.mod.hooks.use-mod-mutations.add-game-mutation.duplicate-game-name"),
+                );
+                return;
+            }
+
+            if (errorMessage.includes("DUPLICATE_MOD_FOLDER_PATH")) {
+                toast.warning(
+                    t(
+                        "page.mod.hooks.use-mod-mutations.add-game-mutation.duplicate-mod-folder-path",
+                    ),
+                );
+                return;
+            }
+
+            if (errorMessage.includes("INVALID_PARAMS")) {
+                toast.error(t("page.mod.hooks.use-mod-mutations.add-game-mutation.invalid-params"));
+                return;
+            }
+
+            toast.error(t("page.mod.hooks.use-mod-mutations.add-game-mutation.failed"));
         },
     });
 
     const deleteGameMutation = useMutation({
         mutationFn: (game: string) => window.api.invoke("mod:removeGame", game),
-        onSuccess: () => {
+        onSuccess: async (_, deletedGame) => {
+            const currentGames = (queryClient.getQueryData(["games"]) as GameConfig[] | undefined) ?? [];
+            const remainingGames = currentGames.filter((game) => game.game !== deletedGame);
+            const nextSelectedGame =
+                selectedGame === deletedGame ? (remainingGames[0]?.game ?? "") : selectedGame;
+
+            queryClient.setQueryData(["games"], remainingGames);
+
+            setDeletingGame(null);
+            setIsDeleteGameDialogOpen(false);
+            setSelectedPreset(null);
+            setSelectedGroup(null);
+
+            const editingGame = modStore.getState().editingGame;
+            if (editingGame?.game === deletedGame) {
+                setEditingGame(null);
+                setEditGamePath("");
+                setEditGameImporter(null);
+                setIsEditGameDialogOpen(false);
+            }
+
+            if (selectedGame === deletedGame) {
+                setSelectedGame(nextSelectedGame);
+                await window.api.invoke("mod:setLastGame", nextSelectedGame);
+            }
+
+            queryClient.removeQueries({ queryKey: ["characters", deletedGame] });
+            queryClient.removeQueries({ queryKey: ["presets", deletedGame] });
+            queryClient.removeQueries({ queryKey: ["modGroup"] });
             queryClient.invalidateQueries({ queryKey: ["games"] });
-            toast.success("게임이 삭제되었습니다.");
+            toast.success(t("page.mod.hooks.use-mod-mutations.delete-game-mutation.success"));
+        },
+        onError: (err) => {
+            toast.error(err.message);
         },
     });
 
-    return { addGameMutation, deleteGameMutation };
+    const updateGameMutation = useMutation({
+        mutationFn: ({
+            game,
+            updates,
+        }: {
+            game: string;
+            updates: { modFolderPath: string; importer: string | null };
+        }) => window.api.invoke("mod:updateGame", game, updates),
+        onSuccess: async (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ["games"] });
+
+            if (selectedGame === variables.game) {
+                setSelectedGroup(null);
+                queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] });
+                queryClient.invalidateQueries({ queryKey: ["modGroup"] });
+                await window.api.invoke("mod:watchGame", variables.game);
+            }
+
+            setEditingGame(null);
+            setEditGamePath("");
+            setEditGameImporter(null);
+            setIsEditGameDialogOpen(false);
+            toast.success(t("page.mod.hooks.use-mod-mutations.update-game-mutation.success"));
+        },
+        onError: (error) => {
+            const errorMessage = getMutationErrorMessage(error);
+
+            if (errorMessage.includes("DUPLICATE_MOD_FOLDER_PATH")) {
+                toast.warning(
+                    t(
+                        "page.mod.hooks.use-mod-mutations.add-game-mutation.duplicate-mod-folder-path",
+                    ),
+                );
+                return;
+            }
+
+            if (errorMessage.includes("INVALID_PARAMS")) {
+                toast.error(t("page.mod.hooks.use-mod-mutations.add-game-mutation.invalid-params"));
+                return;
+            }
+
+            toast.error(errorMessage || t("page.mod.hooks.use-mod-mutations.add-game-mutation.failed"));
+        },
+    });
+
+    return { addGameMutation, deleteGameMutation, updateGameMutation };
 }
 
 export function useModMutations() {
@@ -254,11 +379,13 @@ export function usePresetMutations() {
             setNewPresetName("");
             setNewPresetDescription("");
             setIsPresetDialogOpen(false);
-            toast.success("프리셋이 추가되었습니다.");
+            toast.success(t("page.mod.hooks.use-mod-mutations.create-preset-mutation.success"));
         },
         onError: (error) => {
             if ((error as Error).message.includes("PRESET_NAME_EXISTS")) {
-                toast.error("이미 존재하는 프리셋 이름입니다.");
+                toast.error(
+                    t("page.mod.hooks.use-mod-mutations.create-preset-mutation.duplicate-name"),
+                );
             }
         },
     });
@@ -272,11 +399,13 @@ export function usePresetMutations() {
             setIsSelectedPresetDialogOpen(false);
             if (result.missing.length > 0) {
                 toast.warning(
-                    `프리셋 적용 완료. 누락된 모드 ${result.missing.length}개가 있습니다.`,
+                    t("page.mod.hooks.use-mod-mutations.apply-preset-mutation.missing", {
+                        count: result.missing.length,
+                    }),
                 );
                 return;
             }
-            toast.success("프리셋이 적용되었습니다.");
+            toast.success(t("page.mod.hooks.use-mod-mutations.apply-preset-mutation.success"));
         },
         onError: (error) => {
             if ((error as Error).message.includes("LEGACY_PRESET_NOT_SUPPORTED")) {
@@ -291,7 +420,7 @@ export function usePresetMutations() {
             queryClient.invalidateQueries({ queryKey: ["presets", selectedGame] });
             setSelectedPreset(null);
             setIsSelectedPresetDialogOpen(false);
-            toast.success("프리셋이 삭제되었습니다.");
+            toast.success(t("page.mod.hooks.use-mod-mutations.delete-preset-mutation.success"));
         },
     });
 

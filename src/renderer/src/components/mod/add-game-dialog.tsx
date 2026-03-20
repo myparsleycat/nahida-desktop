@@ -15,11 +15,11 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 interface AddGameDialogProps {
-  onBrowseFolder: () => void;
+  onPickFolder: () => Promise<string | null>;
   onAddGame: (name: string, path: string) => void;
 }
 
-export function AddGameDialog({ onBrowseFolder, onAddGame }: AddGameDialogProps) {
+export function AddGameDialog({ onPickFolder, onAddGame }: AddGameDialogProps) {
   const { t } = useTranslation();
 
   const isOpen = useModStore((s) => s.isAddGameDialogOpen);
@@ -27,6 +27,7 @@ export function AddGameDialog({ onBrowseFolder, onAddGame }: AddGameDialogProps)
   const newGameName = useModStore((s) => s.newGameName);
   const setNewGameName = useModStore((s) => s.setNewGameName);
   const newGamePath = useModStore((s) => s.newGamePath);
+  const setNewGamePath = useModStore((s) => s.setNewGamePath);
 
   const handleAdd = () => {
     if (!newGameName.trim()) {
@@ -38,6 +39,13 @@ export function AddGameDialog({ onBrowseFolder, onAddGame }: AddGameDialogProps)
       return;
     }
     onAddGame(newGameName, newGamePath);
+  };
+
+  const handlePickFolder = async () => {
+    const path = await onPickFolder();
+    if (path) {
+      setNewGamePath(path);
+    }
   };
 
   return (
@@ -65,7 +73,7 @@ export function AddGameDialog({ onBrowseFolder, onAddGame }: AddGameDialogProps)
               value={newGamePath}
               readOnly
             />
-            <Button variant="outline" size="icon" onClick={onBrowseFolder}>
+            <Button variant="outline" size="icon" onClick={handlePickFolder}>
               <FolderOpen className="size-4" />
             </Button>
           </div>

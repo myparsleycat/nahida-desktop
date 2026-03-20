@@ -1,0 +1,1 @@
+ALTER TABLE `game_paths` ADD `importer` text;

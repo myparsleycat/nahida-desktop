@@ -1,9 +1,11 @@
-import type { FolderGroup, Preset } from "@shared/types.gen";
+import type { FolderGroup, GameConfig, Preset } from "@shared/types.gen";
 import { createStore, useStore } from "zustand";
 
 interface ModState {
     selectedGame: string;
     setSelectedGame: (game: string) => void;
+    deletingGame: string | null;
+    setDeletingGame: (game: string | null) => void;
     selectedGroup: FolderGroup | null;
     setSelectedGroup: (group: FolderGroup | null) => void;
     selectedPreset: Preset | null;
@@ -24,6 +26,14 @@ interface ModState {
     setNewGameName: (name: string) => void;
     newGamePath: string;
     setNewGamePath: (path: string) => void;
+    editingGame: GameConfig | null;
+    setEditingGame: (game: GameConfig | null) => void;
+    editGamePath: string;
+    setEditGamePath: (path: string) => void;
+    editGameImporter: string | null;
+    setEditGameImporter: (importer: string | null) => void;
+    isEditGameDialogOpen: boolean;
+    setIsEditGameDialogOpen: (open: boolean) => void;
     downloadMode: { downloadId: string; suggestedName?: string } | null;
     setDownloadMode: (mode: { downloadId: string; suggestedName?: string } | null) => void;
     searchQuery: string;
@@ -45,6 +55,8 @@ interface ModState {
 export const modStore = createStore<ModState>((set, get) => ({
     selectedGame: "",
     setSelectedGame: (selectedGame) => set({ selectedGame }),
+    deletingGame: null,
+    setDeletingGame: (deletingGame) => set({ deletingGame }),
     selectedGroup: null,
     setSelectedGroup: (selectedGroup) => set({ selectedGroup }),
     selectedPreset: null,
@@ -66,6 +78,14 @@ export const modStore = createStore<ModState>((set, get) => ({
     setNewGameName: (newGameName) => set({ newGameName }),
     newGamePath: "",
     setNewGamePath: (newGamePath) => set({ newGamePath }),
+    editingGame: null,
+    setEditingGame: (editingGame) => set({ editingGame }),
+    editGamePath: "",
+    setEditGamePath: (editGamePath) => set({ editGamePath }),
+    editGameImporter: null,
+    setEditGameImporter: (editGameImporter) => set({ editGameImporter }),
+    isEditGameDialogOpen: false,
+    setIsEditGameDialogOpen: (isEditGameDialogOpen) => set({ isEditGameDialogOpen }),
     downloadMode: null,
     setDownloadMode: (downloadMode) => set({ downloadMode }),
     searchQuery: "",

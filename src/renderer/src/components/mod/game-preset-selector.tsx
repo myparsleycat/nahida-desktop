@@ -11,27 +11,29 @@ import {
 import { useEnabledImporters, usePresets } from "@renderer/hooks/use-mod-data";
 import { useModStore } from "@renderer/store/mod";
 import type { GameConfig } from "@shared/types.gen";
-import { getMatchingImporter } from "@shared/xxmi-match";
 import { useLocation } from "@tanstack/react-router";
-import { PlayIcon, Trash2Icon } from "lucide-react";
+import { PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
 import { memo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { AddGameDialog } from "./add-game-dialog";
 import { CreatePresetDialog } from "./create-preset-dialog";
+import { EditGameDialog, openEditGameDialog } from "./edit-game-dialog";
 
 interface GamePresetSelectorProps {
   games: GameConfig[];
-  onDeleteGameClick: () => void;
-  onBrowseFolder: () => void;
+  onDeleteGameClick: (game: string) => void;
+  onPickFolder: () => Promise<string | null>;
   onAddGame: (name: string, path: string) => void;
+  onUpdateGame: (game: string, updates: { modFolderPath: string; importer: string | null }) => void;
 }
 
 export const GamePresetSelector = memo(function GamePresetSelector({
   games,
   onDeleteGameClick,
-  onBrowseFolder,
+  onPickFolder,
   onAddGame,
+  onUpdateGame,
 }: GamePresetSelectorProps) {
   const { t } = useTranslation();
   const location = useLocation();
@@ -41,14 +43,15 @@ export const GamePresetSelector = memo(function GamePresetSelector({
   const setSelectedPreset = useModStore((s) => s.setSelectedPreset);
   const setIsSelectedPresetDialogOpen = useModStore((s) => s.setIsSelectedPresetDialogOpen);
   const isSelectedPresetDialogOpen = useModStore((s) => s.isSelectedPresetDialogOpen);
+  const setEditingGame = useModStore((s) => s.setEditingGame);
+  const setEditGamePath = useModStore((s) => s.setEditGamePath);
+  const setEditGameImporter = useModStore((s) => s.setEditGameImporter);
+  const setIsEditGameDialogOpen = useModStore((s) => s.setIsEditGameDialogOpen);
 
   const { data: presets = [] } = usePresets(selectedGame);
   const { data: enabledImporters = [] } = useEnabledImporters();
-
-  const matchedImporter = getMatchingImporter(
-    selectedGame || "",
-    enabledImporters.map((importer) => importer.key),
-  );
+  const selectedGameConfig = games.find((game) => game.game === selectedGame);
+  const selectedImporter = selectedGameConfig?.importer ?? null;
 
   useEffect(() => {
     if (!isSelectedPresetDialogOpen) {
@@ -61,16 +64,25 @@ export const GamePresetSelector = memo(function GamePresetSelector({
     await window.api.invoke("mod:setLastGame", game);
   };
 
+  const handleEditGameClick = (game: GameConfig) => {
+    openEditGameDialog(game, {
+      setEditingGame,
+      setEditGamePath,
+      setEditGameImporter,
+      setIsEditGameDialogOpen,
+    });
+  };
+
   return (
     <div className="flex flex-col items-center justify-center w-full p-2 border-t space-y-3">
       {location.pathname.startsWith("/mod") && (
         <div className="flex w-full space-x-1">
-          {matchedImporter && (
+          {selectedImporter && (
             <Button
               variant="outline"
               size="icon"
               onClickPromise={() =>
-                window.api.invoke("xxmi:startGame", matchedImporter).catch((err) => {
+                window.api.invoke("xxmi:startGame", selectedImporter).catch((err) => {
                   toast.error(err.toString());
                 })
               }
@@ -89,25 +101,34 @@ export const GamePresetSelector = memo(function GamePresetSelector({
             >
               <SelectGroup>
                 <SelectLabel>Games</SelectLabel>
-                {games.map((game) => (
-                  <SelectItem key={game.game} value={game.game}>
-                    {game.game}
-                  </SelectItem>
+                {games.map((game, idx) => (
+                  <div
+                    key={idx.toString()}
+                    className="group flex w-full items-center justify-between"
+                  >
+                    <SelectItem key={game.game} value={game.game}>
+                      {game.game}
+                    </SelectItem>
+
+                    <div className="w-0 overflow-hidden transition-all group-hover:w-10 group-focus-within:w-10">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                        onClick={() => {
+                          handleEditGameClick(game);
+                        }}
+                      >
+                        <PencilIcon className="size-4" />
+                      </Button>
+                    </div>
+                  </div>
                 ))}
               </SelectGroup>
             </SelectContent>
           </Select>
 
-          <AddGameDialog onBrowseFolder={onBrowseFolder} onAddGame={onAddGame} />
-
-          <Button
-            variant="outline"
-            size="icon"
-            disabled={!selectedGame}
-            onClick={onDeleteGameClick}
-          >
-            <Trash2Icon className="size-4 text-destructive" />
-          </Button>
+          <AddGameDialog onPickFolder={onPickFolder} onAddGame={onAddGame} />
         </div>
       )}
 
@@ -146,6 +167,13 @@ export const GamePresetSelector = memo(function GamePresetSelector({
 
         <CreatePresetDialog disabled={!selectedGame} />
       </div>
+
+      <EditGameDialog
+        enabledImporters={enabledImporters}
+        onPickFolder={onPickFolder}
+        onUpdateGame={onUpdateGame}
+        onDeleteGameClick={onDeleteGameClick}
+      />
     </div>
   );
 });

@@ -35,6 +35,19 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return await desktop.service.mod.fn.removeGame(game);
     });
 
+    rh(
+        "mod:updateGame",
+        async (
+            game: string,
+            updates: {
+                modFolderPath: string;
+                importer: string | null;
+            },
+        ) => {
+            return await desktop.service.mod.fn.updateGame(game, updates);
+        },
+    );
+
     rh("mod:pickFolder", async () => {
         const result = await dialog.showOpenDialog({
             properties: ["openDirectory"],

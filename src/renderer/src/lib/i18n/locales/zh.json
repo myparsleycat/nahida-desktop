@@ -190,6 +190,12 @@
             "1": "请选择模组文件夹路径"
           }
         },
+        "edit-game": {
+          "title": "游戏设置",
+          "path_label": "模组文件夹路径",
+          "importer_label": "Importer",
+          "no_importer": "无"
+        },
         "preset-management": {
           "description": "此预设包含 {{length}} 个模组。",
           "legacy-badge": "旧版",
@@ -243,6 +249,19 @@
       },
       "hooks": {
         "use-mod-mutations": {
+          "add-game-mutation": {
+            "success": "游戏已添加",
+            "duplicate-game-name": "该游戏名称已存在",
+            "duplicate-mod-folder-path": "该模组文件夹路径已被使用",
+            "invalid-params": "请输入游戏名称和模组文件夹路径",
+            "failed": "添加游戏失败"
+          },
+          "delete-game-mutation": {
+            "success": "游戏已删除"
+          },
+          "update-game-mutation": {
+            "success": "游戏设置已保存"
+          },
           "toggle-mutation": {
             "0": "{{name}} 文件夹已存在",
             "1": "{{processes}} 正在使用该文件夹，无法修改",
@@ -257,8 +276,17 @@
             "3": "重命名模组失败"
           },
           "locked-description": "正在被以下进程使用: {{processes}}",
+          "create-preset-mutation": {
+            "success": "预设已创建",
+            "duplicate-name": "该预设名称已存在"
+          },
           "apply-preset-mutation": {
-            "legacy": "旧版预设无法套用。请删除后重新建立。"
+            "legacy": "旧版预设无法套用。请删除后重新建立。",
+            "success": "预设已应用",
+            "missing": "预设已应用，但有 {{count}} 个模组缺失"
+          },
+          "delete-preset-mutation": {
+            "success": "预设已删除"
           }
         }
       },
