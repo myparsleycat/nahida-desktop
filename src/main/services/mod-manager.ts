@@ -3,7 +3,7 @@ import { db } from "@backend/lib/db";
 import { getCharactersFolder, getMods, sendF10 } from "@native/native-mod";
 import type { ApplyPresetResult, FolderGroup, Preset } from "@shared/types.gen";
 import { GAME_MATCH_CASES } from "@shared/xxmi-match";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { trim } from "es-toolkit";
 import fg from "fast-glob";
 import fse from "fs-extra";
@@ -859,6 +859,25 @@ export class ModManager {
         ) => {
             if (!game || !updates.modFolderPath) {
                 throw new Error("Game and modFolderPath are required");
+            }
+
+            const existingGame = await this.desktop.lib.db.query.gamePaths.findFirst({
+                where: (t, { eq }) => eq(t.game, game),
+            });
+
+            if (!existingGame) {
+                throw new Error(`Game ${game} not found`);
+            }
+
+            const duplicatePath = await this.desktop.lib.db.query.gamePaths.findFirst({
+                where: and(
+                    eq(gamePaths.modFolderPath, updates.modFolderPath),
+                    ne(gamePaths.game, game),
+                ),
+            });
+
+            if (duplicatePath) {
+                throw new Error("DUPLICATE_MOD_FOLDER_PATH");
             }
 
             await this.desktop.lib.db
