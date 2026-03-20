@@ -139,6 +139,7 @@ export type IpcHandlers = {
     "mod:setExpandedGroups": (...args: Parameters<typeof desktop.service.mod.fn.setExpandedGroups>) => ReturnType<typeof desktop.service.mod.fn.setExpandedGroups>;
     "mod:setLastGame": (...args: Parameters<typeof desktop.service.mod.fn.setLastGame>) => ReturnType<typeof desktop.service.mod.fn.setLastGame>;
     "mod:toggle": (...args: Parameters<typeof desktop.service.mod.fn.toggle>) => ReturnType<typeof desktop.service.mod.fn.toggle>;
+    "mod:updateGame": (...args: Parameters<typeof desktop.service.mod.fn.updateGame>) => ReturnType<typeof desktop.service.mod.fn.updateGame>;
     "mod:updatePresetName": (...args: Parameters<typeof desktop.service.mod.fn.updatePresetName>) => ReturnType<typeof desktop.service.mod.fn.updatePresetName>;
     "mod:updateToggleKey": (...args: any[]) => any;
     "mod:watchCharacter": (...args: Parameters<typeof desktop.service.mod.watchCharacter>) => ReturnType<typeof desktop.service.mod.watchCharacter>;
@@ -238,6 +239,7 @@ export type IpcHandlers = {
 export interface GameConfig {
     game: string;
     modFolderPath: string;
+    importer: string | null;
 }
 
 export type IpcEvents = {

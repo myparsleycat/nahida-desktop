@@ -12,7 +12,7 @@ export default function ModSidebar() {
 
   const selectedGame = useModStore((s) => s.selectedGame);
   const selectedGroup = useModStore((s) => s.selectedGroup);
-  const setNewGamePath = useModStore((s) => s.setNewGamePath);
+  const setDeletingGame = useModStore((s) => s.setDeletingGame);
   const setIsDeleteGameDialogOpen = useModStore((s) => s.setIsDeleteGameDialogOpen);
 
   const { data: games = [] } = useGames();
@@ -20,25 +20,31 @@ export default function ModSidebar() {
 
   const { handleFilesDrop } = useModDragDrop(selectedGroup?.path, queryClient, selectedGame || "");
 
-  const handleBrowseFolder = useCallback(async () => {
-    const path = await window.api.invoke("mod:pickFolder");
-    if (path) {
-      setNewGamePath(path);
-    }
-  }, [setNewGamePath]);
+  const handlePickFolder = useCallback(async () => {
+    return await window.api.invoke("mod:pickFolder");
+  }, []);
 
-  const { addGameMutation } = useGameMutations();
+  const { addGameMutation, updateGameMutation } = useGameMutations();
   const { mutate: addGame } = addGameMutation;
+  const { mutate: updateGame } = updateGameMutation;
 
-  const handleDeleteGameClick = useCallback(() => {
+  const handleDeleteGameClick = useCallback((game: string) => {
+    setDeletingGame(game);
     setIsDeleteGameDialogOpen(true);
-  }, [setIsDeleteGameDialogOpen]);
+  }, [setDeletingGame, setIsDeleteGameDialogOpen]);
 
   const handleAddGame = useCallback(
     (name: string, path: string) => {
       addGame({ name, path });
     },
     [addGame],
+  );
+
+  const handleUpdateGame = useCallback(
+    (game: string, updates: { modFolderPath: string; importer: string | null }) => {
+      updateGame({ game, updates });
+    },
+    [updateGame],
   );
 
   return (
@@ -54,8 +60,9 @@ export default function ModSidebar() {
       <GamePresetSelector
         games={games}
         onDeleteGameClick={handleDeleteGameClick}
-        onBrowseFolder={handleBrowseFolder}
+        onPickFolder={handlePickFolder}
         onAddGame={handleAddGame}
+        onUpdateGame={handleUpdateGame}
       />
     </div>
   );

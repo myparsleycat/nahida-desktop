@@ -1,4 +1,5 @@
 import path from "node:path";
+import { db } from "@backend/lib/db";
 import { getCharactersFolder, getMods, sendF10 } from "@native/native-mod";
 import type { ApplyPresetResult, FolderGroup, Preset } from "@shared/types.gen";
 import { GAME_MATCH_CASES } from "@shared/xxmi-match";
@@ -379,7 +380,7 @@ export class ModManager {
         setGamePath: async (game: string, modFolderPath: string) => {
             await this.desktop.lib.db
                 .insert(gamePaths)
-                .values({ game, modFolderPath })
+                .values({ game, modFolderPath, importer: null })
                 .onConflictDoUpdate({
                     target: gamePaths.game,
                     set: { modFolderPath },
@@ -829,20 +830,48 @@ export class ModManager {
 
         addGame: async (game: string, modFolderPath: string) => {
             if (!game || !modFolderPath) {
-                throw new Error("Game and modFolderPath are required");
+                throw new Error("INVALID_PARAMS");
             }
+
+            const exists = await this.desktop.lib.db.query.gamePaths.findFirst({
+                where: (t, { eq, or }) => or(eq(t.game, game), eq(t.modFolderPath, modFolderPath)),
+            });
+
+            if (exists) {
+                if (exists.game === game) {
+                    throw new Error("DUPLICATE_GAME_NAME");
+                } else if (exists.modFolderPath === modFolderPath) {
+                    throw new Error("DUPLICATE_MOD_FOLDER_PATH");
+                }
+            }
+
             await this.desktop.lib.db
                 .insert(gamePaths)
-                .values({ game, modFolderPath })
-                .onConflictDoUpdate({
-                    target: gamePaths.game,
-                    set: { modFolderPath },
-                });
+                .values({ game, modFolderPath, importer: null });
+        },
+
+        updateGame: async (
+            game: string,
+            updates: {
+                modFolderPath: string;
+                importer: string | null;
+            },
+        ) => {
+            if (!game || !updates.modFolderPath) {
+                throw new Error("Game and modFolderPath are required");
+            }
+
+            await this.desktop.lib.db
+                .update(gamePaths)
+                .set({
+                    modFolderPath: updates.modFolderPath,
+                    importer: updates.importer,
+                })
+                .where(eq(gamePaths.game, game));
         },
 
         removeGame: async (game: string) => {
             await this.desktop.lib.db.delete(gamePaths).where(eq(gamePaths.game, game));
-            await this.desktop.lib.db.delete(modPresets).where(eq(modPresets.game, game));
         },
 
         setLastGame: async (game: string) => {

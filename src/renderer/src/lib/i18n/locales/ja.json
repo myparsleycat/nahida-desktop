@@ -191,6 +191,12 @@
             "1": "MODフォルダーのパスを選択してください"
           }
         },
+        "edit-game": {
+          "title": "ゲーム設定",
+          "path_label": "MODフォルダーのパス",
+          "importer_label": "Importer",
+          "no_importer": "なし"
+        },
         "preset-management": {
           "description": "このプリセットには {{length}} 個のMODが保存されています。",
           "legacy-badge": "旧形式",
@@ -244,6 +250,19 @@
       },
       "hooks": {
         "use-mod-mutations": {
+          "add-game-mutation": {
+            "success": "ゲームを追加しました",
+            "duplicate-game-name": "そのゲーム名は既に存在します",
+            "duplicate-mod-folder-path": "そのMODフォルダーパスは既に使用されています",
+            "invalid-params": "ゲーム名とMODフォルダーパスを入力してください",
+            "failed": "ゲームの追加に失敗しました"
+          },
+          "delete-game-mutation": {
+            "success": "ゲームを削除しました"
+          },
+          "update-game-mutation": {
+            "success": "ゲーム設定を保存しました"
+          },
           "toggle-mutation": {
             "0": "{{name}} フォルダはすでに存在します",
             "1": "{{processes}} がフォルダーを使用中のため変更できません",
@@ -258,8 +277,17 @@
             "3": "MOD名の変更に失敗しました"
           },
           "locked-description": "使用中のプロセス: {{processes}}",
+          "create-preset-mutation": {
+            "success": "プリセットを追加しました",
+            "duplicate-name": "そのプリセット名は既に存在します"
+          },
           "apply-preset-mutation": {
-            "legacy": "旧形式のプリセットは適用できません。削除してから作り直してください。"
+            "legacy": "旧形式のプリセットは適用できません。削除してから作り直してください。",
+            "success": "プリセットを適用しました",
+            "missing": "プリセットを適用しましたが、{{count}} 個のMODが見つかりませんでした"
+          },
+          "delete-preset-mutation": {
+            "success": "プリセットを削除しました"
           }
         }
       },

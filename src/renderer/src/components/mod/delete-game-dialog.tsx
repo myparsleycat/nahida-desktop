@@ -16,17 +16,25 @@ export function DeleteGameDialog() {
   const { t } = useTranslation();
   const isOpen = useModStore((s) => s.isDeleteGameDialogOpen);
   const setIsOpen = useModStore((s) => s.setIsDeleteGameDialogOpen);
-  const selectedGame = useModStore((s) => s.selectedGame);
+  const deletingGame = useModStore((s) => s.deletingGame);
+  const setDeletingGame = useModStore((s) => s.setDeletingGame);
 
   const { deleteGameMutation } = useGameMutations();
 
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open) {
+      setDeletingGame(null);
+    }
+  };
+
   return (
-    <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
+    <AlertDialog open={isOpen} onOpenChange={handleOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{t("page.mod.dialog.delete-game.title")}</AlertDialogTitle>
           <AlertDialogDescription>
-            {t("page.mod.dialog.delete-game.description", { name: selectedGame })}
+            {t("page.mod.dialog.delete-game.description", { name: deletingGame ?? "" })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -34,8 +42,8 @@ export function DeleteGameDialog() {
           <AlertDialogAction
             variant="destructive"
             onClick={() => {
-              if (selectedGame) {
-                deleteGameMutation.mutate(selectedGame);
+              if (deletingGame) {
+                deleteGameMutation.mutate(deletingGame);
               }
             }}
           >

@@ -190,6 +190,12 @@
             "1": "Please select a mod folder path"
           }
         },
+        "edit-game": {
+          "title": "Edit Game",
+          "path_label": "Mod folder path",
+          "importer_label": "Importer",
+          "no_importer": "None"
+        },
         "preset-management": {
           "legacy-badge": "Legacy",
           "legacy-description": "This preset uses the old format and cannot be applied. Delete and recreate it."
@@ -242,6 +248,19 @@
       },
       "hooks": {
         "use-mod-mutations": {
+          "add-game-mutation": {
+            "success": "Game added",
+            "duplicate-game-name": "A game with that name already exists",
+            "duplicate-mod-folder-path": "That mod folder path is already in use",
+            "invalid-params": "Game name and mod folder path are required",
+            "failed": "Failed to add game"
+          },
+          "delete-game-mutation": {
+            "success": "Game deleted"
+          },
+          "update-game-mutation": {
+            "success": "Game settings saved"
+          },
           "toggle-mutation": {
             "0": "The {{name}} folder already exists",
             "1": "{{processes}} is using the folder, so it cannot be modified",
@@ -256,8 +275,17 @@
             "3": "Failed to rename mod"
           },
           "locked-description": "Used by: {{processes}}",
+          "create-preset-mutation": {
+            "success": "Preset created",
+            "duplicate-name": "A preset with that name already exists"
+          },
           "apply-preset-mutation": {
-            "legacy": "Legacy presets cannot be applied. Delete and recreate the preset."
+            "legacy": "Legacy presets cannot be applied. Delete and recreate the preset.",
+            "success": "Preset applied",
+            "missing": "Preset applied, but {{count}} mods were missing"
+          },
+          "delete-preset-mutation": {
+            "success": "Preset deleted"
           }
         }
       },
