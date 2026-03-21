@@ -64,12 +64,13 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
 
       await createPresetMutation.mutateAsync();
     } catch (error) {
-      if (getErrorMessage(error).includes("PRESET_CONFLICTS_EXIST")) {
-        const createConflicts = await getPresetCreateConflicts();
-        setConflicts(createConflicts);
-        setIsConflictDialogOpen(true);
+      if (!getErrorMessage(error).includes("PRESET_CONFLICTS_EXIST")) {
+        throw error;
       }
-      return;
+
+      const createConflicts = await getPresetCreateConflicts();
+      setConflicts(createConflicts);
+      setIsConflictDialogOpen(true);
     }
   };
 
