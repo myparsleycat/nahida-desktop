@@ -1,4 +1,3 @@
-import { Button } from "@renderer/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -9,6 +8,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@renderer/components/ui/alert-dialog";
+import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
   DialogClose,
@@ -19,6 +19,7 @@ import {
   DialogTrigger,
 } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
+import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Textarea } from "@renderer/components/ui/textarea";
 import { usePresetMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModStore } from "@renderer/store/mod";
@@ -151,38 +152,44 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
       <AlertDialog open={isConflictDialogOpen} onOpenChange={setIsConflictDialogOpen}>
         <AlertDialogContent className="max-w-lg">
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t("page.mod.dialog.add-preset.conflict.title")}
-            </AlertDialogTitle>
+            <AlertDialogTitle>{t("page.mod.dialog.add-preset.conflict.title")}</AlertDialogTitle>
             <AlertDialogDescription>
               {t("page.mod.dialog.add-preset.conflict.description")}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="max-h-64 space-y-3 overflow-y-auto text-sm">
-            {conflicts.map((conflict) => (
-              <div key={conflict.modKey} className="rounded-md border p-3">
-                <div className="font-medium">
-                  {t("page.mod.dialog.add-preset.conflict.mod-key-label")}
+          <ScrollArea>
+            <div className="max-h-64 space-y-3 text-sm">
+              {conflicts.map((conflict) => (
+                <div key={conflict.modKey} className="rounded-md border p-3">
+                  <div className="font-medium">
+                    {t("page.mod.dialog.add-preset.conflict.mod-key-label")}
+                  </div>
+                  <div className="text-muted-foreground break-all">{conflict.modKey}</div>
+                  <div className="mt-2 space-y-1">
+                    {conflict.candidates.map((candidate) => (
+                      <div
+                        key={candidate.actualPath}
+                        className="flex items-start justify-between gap-3"
+                      >
+                        <span className="break-all">{candidate.relativePath}</span>
+                        <span className="text-muted-foreground shrink-0">
+                          {candidate.isEnabled
+                            ? t("page.mod.dialog.add-preset.conflict.enabled")
+                            : t("page.mod.dialog.add-preset.conflict.disabled")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="text-muted-foreground break-all">{conflict.modKey}</div>
-                <div className="mt-2 space-y-1">
-                  {conflict.candidates.map((candidate) => (
-                    <div key={candidate.actualPath} className="flex items-start justify-between gap-3">
-                      <span className="break-all">{candidate.relativePath}</span>
-                      <span className="text-muted-foreground shrink-0">
-                        {candidate.isEnabled
-                          ? t("page.mod.dialog.add-preset.conflict.enabled")
-                          : t("page.mod.dialog.add-preset.conflict.disabled")}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </ScrollArea>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isBusy}>{t("g.cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={(event) => void handleResolveAndCreate(event)} disabled={isBusy}>
+            <AlertDialogAction
+              onClick={(event) => void handleResolveAndCreate(event)}
+              disabled={isBusy}
+            >
               {isBusy && <LoaderIcon className="animate-spin size-4" />}
               {t("page.mod.dialog.add-preset.conflict.action")}
             </AlertDialogAction>
