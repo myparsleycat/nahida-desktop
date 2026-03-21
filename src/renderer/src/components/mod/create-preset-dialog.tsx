@@ -47,6 +47,13 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
   const { createPresetMutation, getPresetCreateConflicts } = usePresetMutations();
 
   const getErrorMessage = (error: unknown) => (error instanceof Error ? error.message : "");
+  const isPresetConflictError = (error: unknown) => {
+    const errorMessage = getErrorMessage(error);
+    return (
+      errorMessage.includes("PRESET_CONFLICTS_EXIST") ||
+      errorMessage.includes("PRESET_CONFLICT_RESOLUTION_FAILED")
+    );
+  };
 
   const handleCreate = async () => {
     try {
@@ -80,10 +87,13 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
       await createPresetMutation.mutateAsync({ resolveConflicts: true });
       setIsConflictDialogOpen(false);
       setConflicts([]);
-    } catch {
+    } catch (error) {
+      if (!isPresetConflictError(error)) {
+        throw error;
+      }
+
       const createConflicts = await getPresetCreateConflicts();
       setConflicts(createConflicts);
-      return;
     } finally {
       setIsResolvingConflicts(false);
     }
