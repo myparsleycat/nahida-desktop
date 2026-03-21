@@ -24,7 +24,7 @@ import { usePresetMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModStore } from "@renderer/store/mod";
 import type { PresetCreateConflict } from "@shared/types.gen";
 import { LoaderIcon, Plus } from "lucide-react";
-import { useState } from "react";
+import { type MouseEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -69,7 +69,7 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
         return;
       }
 
-      await createPresetMutation.mutateAsync();
+      await createPresetMutation.mutateAsync({});
     } catch (error) {
       if (!getErrorMessage(error).includes("PRESET_CONFLICTS_EXIST")) {
         throw error;
@@ -81,8 +81,9 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
     }
   };
 
-  const handleResolveAndCreate = async () => {
+  const handleResolveAndCreate = async (event: MouseEvent<HTMLButtonElement>) => {
     try {
+      event.preventDefault();
       setIsResolvingConflicts(true);
       await createPresetMutation.mutateAsync({ resolveConflicts: true });
       setIsConflictDialogOpen(false);
@@ -181,7 +182,7 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isBusy}>{t("g.cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void handleResolveAndCreate()} disabled={isBusy}>
+            <AlertDialogAction onClick={(event) => void handleResolveAndCreate(event)} disabled={isBusy}>
               {isBusy && <LoaderIcon className="animate-spin size-4" />}
               {t("page.mod.dialog.add-preset.conflict.action")}
             </AlertDialogAction>
