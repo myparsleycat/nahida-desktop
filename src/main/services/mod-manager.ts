@@ -23,6 +23,18 @@ interface ScannedPresetItem extends PresetSnapshotItemRecord {
     actualPath: string;
 }
 
+interface PresetConflictCandidate {
+    actualPath: string;
+    relativePath: string;
+    folderName: string;
+    isEnabled: boolean;
+}
+
+interface PresetConflict {
+    modKey: string;
+    candidates: PresetConflictCandidate[];
+}
+
 const MOD_PRESET_ITEM_INSERT_BATCH_SIZE = 100;
 const MOD_PRESET_VERSION = 2;
 const DISABLED_PREFIX_REGEX = /^disabled\s+/i;
@@ -198,6 +210,70 @@ export class ModManager {
             }));
     }
 
+    private async getPresetSnapshotConflicts(game: string): Promise<PresetConflict[]> {
+        const items = await this.getPresetSnapshot(game);
+        const itemsByModKey = new Map<string, ScannedPresetItem[]>();
+
+        for (const item of items) {
+            const conflicts = itemsByModKey.get(item.modKey) ?? [];
+            conflicts.push(item);
+            itemsByModKey.set(item.modKey, conflicts);
+        }
+
+        return Array.from(itemsByModKey.entries())
+            .filter(([, conflicts]) => conflicts.length > 1)
+            .map(([modKey, conflicts]) => ({
+                modKey,
+                candidates: conflicts
+                    .sort((a, b) => a.relativePath.localeCompare(b.relativePath))
+                    .map((item) => ({
+                        actualPath: item.actualPath,
+                        relativePath: item.relativePath,
+                        folderName: item.folderName,
+                        isEnabled: item.isEnabled,
+                    })),
+            }))
+            .sort((a, b) => a.modKey.localeCompare(b.modKey));
+    }
+
+    private async resolvePresetSnapshotConflicts(game: string): Promise<PresetConflict[]> {
+        const conflicts = await this.getPresetSnapshotConflicts(game);
+
+        for (const conflict of conflicts) {
+            const candidates = conflict.candidates
+                .map((candidate) =>
+                    candidate.actualPath
+                        ? {
+                              ...candidate,
+                              actualPath: candidate.actualPath,
+                          }
+                        : null,
+                )
+                .filter((candidate): candidate is PresetConflictCandidate => candidate !== null);
+            const enabledCandidates = candidates.filter((candidate) => candidate.isEnabled);
+            const disabledCandidates = candidates.filter((candidate) => !candidate.isEnabled);
+
+            const renameTargets =
+                enabledCandidates.length > 0
+                    ? disabledCandidates
+                    : disabledCandidates.length > 1
+                      ? disabledCandidates.slice(1)
+                      : [];
+
+            for (const candidate of renameTargets) {
+                await this.renameWithUniqueName(
+                    candidate.actualPath,
+                    this.restoreDisabledPrefix(
+                        path.basename(candidate.actualPath),
+                        candidate.folderName,
+                    ),
+                );
+            }
+        }
+
+        return await this.getPresetSnapshotConflicts(game);
+    }
+
     private toPresetRecord(item: ScannedPresetItem): PresetSnapshotItemRecord {
         return {
             modKey: item.modKey,
@@ -273,6 +349,10 @@ export class ModManager {
                     version: r.version,
                     isLegacy: r.version < MOD_PRESET_VERSION,
                 }));
+        },
+
+        presetCreateConflicts: async (game: string): Promise<PresetConflict[]> => {
+            return await this.getPresetSnapshotConflicts(game);
         },
 
         games: async () => {
@@ -663,7 +743,12 @@ export class ModManager {
             }
         },
 
-        createPreset: async (game: string, name: string, description?: string): Promise<Preset> => {
+        createPreset: async (
+            game: string,
+            name: string,
+            description?: string,
+            resolveConflicts = false,
+        ): Promise<Preset> => {
             const trimmedName = trim(name);
             const trimmedDescription = trim(description ?? "");
             if (!trimmedName) {
@@ -675,6 +760,18 @@ export class ModManager {
             });
             if (existingPreset) {
                 throw new Error("PRESET_NAME_EXISTS");
+            }
+
+            if (resolveConflicts) {
+                const remainingConflicts = await this.resolvePresetSnapshotConflicts(game);
+                if (remainingConflicts.length > 0) {
+                    throw new Error("PRESET_CONFLICT_RESOLUTION_FAILED");
+                }
+            } else {
+                const conflicts = await this.getPresetSnapshotConflicts(game);
+                if (conflicts.length > 0) {
+                    throw new Error("PRESET_CONFLICTS_EXIST");
+                }
             }
 
             const snapshot = await this.getPresetSnapshot(game);
