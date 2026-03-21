@@ -110,11 +110,11 @@ export const GamePresetSelector = memo(function GamePresetSelector({
                       {game.game}
                     </SelectItem>
 
-                    <div className="w-0 overflow-hidden transition-all group-hover:w-10 group-focus-within:w-10">
+                    <div className="w-0 overflow-hidden transition-all group-hover:w-10">
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                        className="opacity-0 transition-opacity group-hover:opacity-100"
                         onClick={() => {
                           handleEditGameClick(game);
                         }}

@@ -79,6 +79,18 @@ export interface ApplyPresetResult {
     }[];
 }
 
+export interface PresetCreateConflictCandidate {
+    actualPath: string;
+    relativePath: string;
+    folderName: string;
+    isEnabled: boolean;
+}
+
+export interface PresetCreateConflict {
+    modKey: string;
+    candidates: PresetCreateConflictCandidate[];
+}
+
 export interface PathMetadata {
     isDirectory: boolean;
     isFile: boolean;
@@ -128,6 +140,7 @@ export type IpcHandlers = {
     "mod:getGames": (...args: Parameters<typeof desktop.service.mod.get.games>) => ReturnType<typeof desktop.service.mod.get.games>;
     "mod:getLastGame": (...args: Parameters<typeof desktop.service.mod.get.lastGame>) => ReturnType<typeof desktop.service.mod.get.lastGame>;
     "mod:getMods": (...args: Parameters<typeof desktop.service.mod.get.mods>) => ReturnType<typeof desktop.service.mod.get.mods>;
+    "mod:getPresetCreateConflicts": (...args: Parameters<typeof desktop.service.mod.get.presetCreateConflicts>) => ReturnType<typeof desktop.service.mod.get.presetCreateConflicts>;
     "mod:getPresets": (...args: Parameters<typeof desktop.service.mod.get.presets>) => ReturnType<typeof desktop.service.mod.get.presets>;
     "mod:getPreviousFocusedGame": (...args: Parameters<typeof desktop.service.mod.get.previousFocusedGame>) => ReturnType<typeof desktop.service.mod.get.previousFocusedGame>;
     "mod:getSubGroups": (...args: Parameters<typeof desktop.service.mod.get.subGroups>) => ReturnType<typeof desktop.service.mod.get.subGroups>;

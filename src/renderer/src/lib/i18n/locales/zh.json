@@ -242,6 +242,14 @@
           "name-placeholder": "预设名称",
           "description-placeholder": "说明（可选）",
           "title": "新建预设",
+          "conflict": {
+            "title": "发现重复模组项",
+            "description": "由于会忽略 DISABLED 前缀，这些文件夹会被视为同一个模组，因此当前无法创建预设。继续后会先重命名已禁用的重复文件夹，再继续创建预设。",
+            "mod-key-label": "冲突键",
+            "enabled": "启用",
+            "disabled": "禁用",
+            "action": "重命名已禁用的重复文件夹并继续"
+          },
           "#": {
             "0": "请输入预设名称"
           }
@@ -278,7 +286,8 @@
           "locked-description": "正在被以下进程使用: {{processes}}",
           "create-preset-mutation": {
             "success": "预设已创建",
-            "duplicate-name": "该预设名称已存在"
+            "duplicate-name": "该预设名称已存在",
+            "conflict-resolve-failed": "部分重复模组文件夹无法自动整理"
           },
           "apply-preset-mutation": {
             "legacy": "旧版预设无法套用。请删除后重新建立。",

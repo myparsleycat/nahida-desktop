@@ -241,6 +241,14 @@
           "title": "Create New Preset",
           "name-placeholder": "Preset name",
           "description-placeholder": "Description (optional)",
+          "conflict": {
+            "title": "Duplicate mod entries found",
+            "description": "These folders are treated as the same mod because the DISABLED prefix is ignored. Continue to rename the disabled duplicates and create the preset.",
+            "mod-key-label": "Conflict key",
+            "enabled": "Enabled",
+            "disabled": "Disabled",
+            "action": "Rename disabled duplicates and continue"
+          },
           "#": {
             "0": "Please enter a preset name"
           }
@@ -277,7 +285,8 @@
           "locked-description": "Used by: {{processes}}",
           "create-preset-mutation": {
             "success": "Preset created",
-            "duplicate-name": "A preset with that name already exists"
+            "duplicate-name": "A preset with that name already exists",
+            "conflict-resolve-failed": "Some duplicate mod folders could not be resolved automatically"
           },
           "apply-preset-mutation": {
             "legacy": "Legacy presets cannot be applied. Delete and recreate the preset.",

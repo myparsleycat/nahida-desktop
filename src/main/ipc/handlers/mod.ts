@@ -118,9 +118,21 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return await desktop.service.mod.get.presets(game);
     });
 
-    rh("mod:createPreset", async (game: string, name: string, description?: string) => {
-        return await desktop.service.mod.fn.createPreset(game, name, description);
+    rh("mod:getPresetCreateConflicts", async (game: string) => {
+        return await desktop.service.mod.get.presetCreateConflicts(game);
     });
+
+    rh(
+        "mod:createPreset",
+        async (game: string, name: string, description?: string, resolveConflicts?: boolean) => {
+            return await desktop.service.mod.fn.createPreset(
+                game,
+                name,
+                description,
+                resolveConflicts,
+            );
+        },
+    );
 
     rh("mod:applyPreset", async (presetId: string) => {
         return await desktop.service.mod.fn.applyPreset(presetId);

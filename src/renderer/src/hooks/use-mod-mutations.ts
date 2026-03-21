@@ -1,5 +1,11 @@
 import { modStore, useModStore } from "@renderer/store/mod";
-import type { ApplyPresetResult, FolderGroup, GameConfig, ModInfo } from "@shared/types.gen";
+import type {
+    ApplyPresetResult,
+    FolderGroup,
+    GameConfig,
+    ModInfo,
+    PresetCreateConflict,
+} from "@shared/types.gen";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -363,7 +369,7 @@ export function usePresetMutations() {
     const setSelectedPreset = useModStore((s) => s.setSelectedPreset);
 
     const createPresetMutation = useMutation({
-        mutationFn: () => {
+        mutationFn: ({ resolveConflicts = false }: { resolveConflicts?: boolean } = {}) => {
             if (!selectedGame) {
                 throw new Error("GAME_NOT_SELECTED");
             }
@@ -372,6 +378,7 @@ export function usePresetMutations() {
                 selectedGame,
                 newPresetName,
                 newPresetDescription,
+                resolveConflicts,
             );
         },
         onSuccess: () => {
@@ -386,9 +393,24 @@ export function usePresetMutations() {
                 toast.error(
                     t("page.mod.hooks.use-mod-mutations.create-preset-mutation.duplicate-name"),
                 );
+                return;
+            }
+
+            if ((error as Error).message.includes("PRESET_CONFLICT_RESOLUTION_FAILED")) {
+                toast.error(
+                    t("page.mod.hooks.use-mod-mutations.create-preset-mutation.conflict-resolve-failed"),
+                );
             }
         },
     });
+
+    const getPresetCreateConflicts = async (): Promise<PresetCreateConflict[]> => {
+        if (!selectedGame) {
+            throw new Error("GAME_NOT_SELECTED");
+        }
+
+        return await window.api.invoke("mod:getPresetCreateConflicts", selectedGame);
+    };
 
     const applyPresetMutation = useMutation({
         mutationFn: (presetId: string) =>
@@ -424,5 +446,5 @@ export function usePresetMutations() {
         },
     });
 
-    return { createPresetMutation, applyPresetMutation, deletePresetMutation };
+    return { createPresetMutation, getPresetCreateConflicts, applyPresetMutation, deletePresetMutation };
 }

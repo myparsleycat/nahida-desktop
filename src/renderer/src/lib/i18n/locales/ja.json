@@ -243,6 +243,14 @@
           "name-placeholder": "プリセット名",
           "description-placeholder": "説明（任意）",
           "title": "新規プリセット作成",
+          "conflict": {
+            "title": "重複したMOD項目が見つかりました",
+            "description": "DISABLED 接頭辞は同じMODとして扱われるため、このままではプリセットを作成できません。続行すると、無効な重複フォルダーの名前を変更してからプリセットを作成します。",
+            "mod-key-label": "競合キー",
+            "enabled": "有効",
+            "disabled": "無効",
+            "action": "無効な重複フォルダーをリネームして続行"
+          },
           "#": {
             "0": "プリセット名を入力してください"
           }
@@ -279,7 +287,8 @@
           "locked-description": "使用中のプロセス: {{processes}}",
           "create-preset-mutation": {
             "success": "プリセットを追加しました",
-            "duplicate-name": "そのプリセット名は既に存在します"
+            "duplicate-name": "そのプリセット名は既に存在します",
+            "conflict-resolve-failed": "一部の重複MODフォルダーを自動で整理できませんでした"
           },
           "apply-preset-mutation": {
             "legacy": "旧形式のプリセットは適用できません。削除してから作り直してください。",
