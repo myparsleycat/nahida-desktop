@@ -625,7 +625,8 @@
       "available": {
         "title": "有新版本可用。",
         "description": "Nahida Desktop 有新版本可用。请重新启动以完成更新。",
-        "action": "更新"
+        "action": "更新",
+        "releaseNotes": "打开补丁说明"
       },
       "notAvailable": {
         "title": "当前已是最新版本。",

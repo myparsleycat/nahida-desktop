@@ -626,7 +626,8 @@
       "available": {
         "title": "新しいバージョンが利用可能です。",
         "description": "Nahida Desktop の新しいバージョンが利用可能です。再起動して更新してください。",
-        "action": "更新"
+        "action": "更新",
+        "releaseNotes": "パッチノートを開く"
       },
       "notAvailable": {
         "title": "最新バージョンを使用しています。",

@@ -1,8 +1,9 @@
 const { autoUpdater } = require("electron-updater");
 
-import { app, BrowserWindow } from "electron";
 import type { AutoUpdateMode, UpdaterStatus } from "@shared/updater";
+import { app, BrowserWindow } from "electron";
 import ms from "ms";
+import z from "zod";
 import type { NahidaDesktop } from "..";
 import isDev from "./isDev";
 
@@ -20,11 +21,17 @@ export class Updater {
     private readonly desktop: NahidaDesktop;
     public updateDownloaded: boolean = false;
     public updateAvailable: boolean = false;
+    private releaseVersion: string | null = null;
+    private releaseNotesUrl: string | null = null;
     private updateDialogDismissed: boolean = false;
     private interval: ReturnType<typeof setInterval> | undefined = undefined;
     private isCheckingForUpdates: boolean = false;
     private isDownloadingUpdate: boolean = false;
     private hasRunInitialAutoCheck: boolean = false;
+    private updateInfoSchema = z.object({
+        version: z.string(),
+        releaseNotes: z.string(),
+    });
 
     public constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
@@ -36,15 +43,19 @@ export class Updater {
             this.isDownloadingUpdate = false;
             this.updateDownloaded = false;
             this.updateAvailable = false;
+            this.releaseNotesUrl = null;
             this.updateDialogDismissed = false;
             this.broadcastStatus();
 
             this.desktop.logger.log("error", err, "updater");
         });
 
-        autoUpdater.on("update-available", () => {
+        autoUpdater.on("update-available", (info) => {
+            const { version, releaseNotes } = this.updateInfoSchema.parse(info);
             this.isCheckingForUpdates = false;
             this.updateAvailable = true;
+            this.releaseVersion = version;
+            this.releaseNotesUrl = this.extractReleaseNotesUrl(releaseNotes);
             this.broadcastStatus();
             this.broadcastUpdateAvailable();
         });
@@ -54,6 +65,7 @@ export class Updater {
             this.isDownloadingUpdate = false;
             this.updateDownloaded = false;
             this.updateAvailable = false;
+            this.releaseNotesUrl = null;
             this.updateDialogDismissed = false;
             this.broadcastStatus();
         });
@@ -151,12 +163,22 @@ export class Updater {
     public async handleAutoUpdateModeChanged(mode: AutoUpdateMode): Promise<void> {
         autoUpdater.autoDownload = mode === "auto";
 
-        if (mode === "auto" && this.updateAvailable && !this.updateDownloaded && !this.isDownloadingUpdate) {
+        if (
+            mode === "auto" &&
+            this.updateAvailable &&
+            !this.updateDownloaded &&
+            !this.isDownloadingUpdate
+        ) {
             await this.downloadUpdate();
             return;
         }
 
-        if (mode !== "off" && !this.updateAvailable && !this.updateDownloaded && !this.isCheckingForUpdates) {
+        if (
+            mode !== "off" &&
+            !this.updateAvailable &&
+            !this.updateDownloaded &&
+            !this.isCheckingForUpdates
+        ) {
             await this.checkForUpdates();
             return;
         }
@@ -171,10 +193,23 @@ export class Updater {
             mode,
             updateAvailable: this.updateAvailable,
             updateDownloaded: this.updateDownloaded,
+            releaseNotesUrl: this.releaseNotesUrl,
             shouldPromptForUpdate: this.updateDownloaded && !this.updateDialogDismissed,
             isChecking: this.isCheckingForUpdates,
             isDownloading: this.isDownloadingUpdate,
         };
+    }
+
+    private extractReleaseNotesUrl(releaseNotes: string): string | null {
+        const notionLinkPattern = /<p>\s*notion:\s*<a[^>]+href="([^"]+)"[^>]*>/i;
+        const notionLinkMatch = notionLinkPattern.exec(releaseNotes);
+        if (notionLinkMatch?.[1]) {
+            return notionLinkMatch[1];
+        }
+
+        const fallbackPattern = /<a[^>]+href="([^"]*notion\.so[^"]*)"[^>]*>/i;
+        const fallbackMatch = fallbackPattern.exec(releaseNotes);
+        return fallbackMatch?.[1] ?? null;
     }
 
     public async showPendingDialogsIfNeeded(): Promise<void> {
