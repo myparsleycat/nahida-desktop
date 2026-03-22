@@ -28,9 +28,13 @@ export class Updater {
     private isCheckingForUpdates: boolean = false;
     private isDownloadingUpdate: boolean = false;
     private hasRunInitialAutoCheck: boolean = false;
+    private releaseNoteInfoSchema = z.object({
+        note: z.string(),
+        version: z.string().optional(),
+    });
     private updateInfoSchema = z.object({
         version: z.string(),
-        releaseNotes: z.string(),
+        releaseNotes: z.string().nullable(),
     });
 
     public constructor(desktop: NahidaDesktop) {
@@ -55,7 +59,7 @@ export class Updater {
             this.isCheckingForUpdates = false;
             this.updateAvailable = true;
             this.releaseVersion = version;
-            this.releaseNotesUrl = this.extractReleaseNotesUrl(releaseNotes);
+            this.releaseNotesUrl = releaseNotes && this.extractReleaseNotesUrl(releaseNotes);
             this.broadcastStatus();
             this.broadcastUpdateAvailable();
         });
