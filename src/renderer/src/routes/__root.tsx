@@ -80,22 +80,32 @@ function UpdateAlertDialog() {
 function RootComponent() {
   const location = useLocation();
   const setAppStatus = useGlobalStore((state) => state.setAppStatus);
+  const setUpdateAvailable = useGlobalStore((state) => state.setUpdateAvailable);
   const setUpdateDownloaded = useGlobalStore((state) => state.setUpdateDownloaded);
   const setShouldPromptForUpdate = useGlobalStore((state) => state.setShouldPromptForUpdate);
+  const setUpdaterStatus = useGlobalStore((state) => state.setUpdaterStatus);
   const setTransfers = useGlobalStore((state) => state.setTransfers);
   const { i18n } = useTranslation();
   const { screenHeight, titlebarStyle } = useTitlebar();
 
   useEffect(() => {
+    const removeStatusListener = window.api.on("updater:status-changed", (status) => {
+      setUpdaterStatus(status);
+    });
+
+    const removeUpdateAvailableListener = window.api.on("updater:update-available", () => {
+      setUpdateAvailable(true);
+    });
+
     const removeUpdateListener = window.api.on("updater:update-downloaded", () => {
+      setUpdateAvailable(true);
       setUpdateDownloaded(true);
       setShouldPromptForUpdate(true);
     });
 
     const syncUpdaterStatus = () => {
       window.api.invoke("updater:getStatus").then((status) => {
-        setUpdateDownloaded(status.updateDownloaded);
-        setShouldPromptForUpdate(status.shouldPromptForUpdate);
+        setUpdaterStatus(status);
       });
     };
 
@@ -117,11 +127,21 @@ function RootComponent() {
     });
 
     return () => {
+      removeStatusListener();
+      removeUpdateAvailableListener();
       removeUpdateListener();
       removeWindowFocusListener();
       removeTransferListener();
     };
-  }, [setAppStatus, setUpdateDownloaded, setShouldPromptForUpdate, setTransfers, i18n]);
+  }, [
+    setAppStatus,
+    setUpdateAvailable,
+    setUpdateDownloaded,
+    setShouldPromptForUpdate,
+    setUpdaterStatus,
+    setTransfers,
+    i18n,
+  ]);
 
   const [pathSelectorData, setPathSelectorData] = useState<{
     selectionId: string;

@@ -420,7 +420,21 @@
           "runInBackgroundDisableConfirmDescription": "Toggle Persist 또는 Toggle Viewer가 켜져 있으면 백그라운드 실행을 유지하는 것이 더 안전합니다. 이 기능을 끄면 모든 창을 닫은 뒤 해당 기능들이 안정적으로 계속 동작하지 않을 수 있습니다. 그래도 백그라운드 실행을 끄시겠어요?",
           "runInBackgroundDisableConfirmAction": "그래도 끄기",
           "autoUpdate": "자동 업데이트",
-          "autoUpdateDescription": "앱 시작 시와 1시간마다 업데이트를 확인하고 자동으로 다운로드합니다."
+          "updateStatus": "업데이트 상태",
+          "autoUpdateModes": {
+            "auto": {
+              "title": "자동 업데이트",
+              "description": "앱 시작 시와 1시간마다 업데이트를 확인하고 자동으로 다운로드합니다."
+            },
+            "notify": {
+              "title": "업데이트 알림",
+              "description": "업데이트는 자동으로 확인하지만, 다운로드는 직접 시작할 때만 진행합니다."
+            },
+            "off": {
+              "title": "자동 업데이트 끔",
+              "description": "업데이트 자동 확인과 자동 다운로드를 모두 비활성화합니다."
+            }
+          }
         },
         "language": {
           "title": "언어",
@@ -578,7 +592,19 @@
   },
   "updater": {
     "titlebar": {
-      "action": "클릭해 재시작하고 업데이트"
+      "action": "클릭해 재시작하고 업데이트",
+      "downloadAction": "업데이트 다운로드"
+    },
+    "actions": {
+      "download": "업데이트 다운로드",
+      "install": "재시작하고 업데이트"
+    },
+    "status": {
+      "idle": "최신 버전을 사용 중입니다.",
+      "checking": "업데이트를 확인하는 중입니다...",
+      "downloading": "업데이트를 다운로드하는 중입니다...",
+      "available": "새 업데이트가 있습니다. 원할 때 다운로드할 수 있습니다.",
+      "downloaded": "업데이트를 설치할 준비가 되었습니다."
     },
     "toast": {
       "available": {

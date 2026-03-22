@@ -419,7 +419,21 @@
           "runInBackgroundDisableConfirmDescription": "Toggle Persist and Toggle Viewer work more reliably when background run is enabled. If you turn this off, those features may not continue working safely after all windows are closed. Do you still want to turn off background run?",
           "runInBackgroundDisableConfirmAction": "Turn off anyway",
           "autoUpdate": "Auto update",
-          "autoUpdateDescription": "Check for updates on startup and every hour, then download them automatically."
+          "updateStatus": "Update status",
+          "autoUpdateModes": {
+            "auto": {
+              "title": "Automatic update",
+              "description": "Check for updates on startup and every hour, then download them automatically."
+            },
+            "notify": {
+              "title": "Update notifications",
+              "description": "Check for updates automatically, but only download them when you choose to."
+            },
+            "off": {
+              "title": "Disabled",
+              "description": "Do not check for or download updates automatically."
+            }
+          }
         },
         "language": {
           "title": "Language",
@@ -577,7 +591,19 @@
   },
   "updater": {
     "titlebar": {
-      "action": "Click to restart and update"
+      "action": "Click to restart and update",
+      "downloadAction": "Download update"
+    },
+    "actions": {
+      "download": "Download update",
+      "install": "Restart and update"
+    },
+    "status": {
+      "idle": "You're using the latest version.",
+      "checking": "Checking for updates...",
+      "downloading": "Downloading the update...",
+      "available": "An update is available. Download it when you're ready.",
+      "downloaded": "The update is ready to install."
     },
     "toast": {
       "available": {

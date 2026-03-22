@@ -24,8 +24,10 @@ const WINDOW_CONFIG: Record<string, { hideMinimize?: boolean; hideMaximize?: boo
 export function Titlebar({ title }: TitlebarProps) {
   const location = useLocation();
   const { t } = useTranslation();
+  const updateAvailable = useGlobalStore((state) => state.updateAvailable);
   const updateDownloaded = useGlobalStore((state) => state.updateDownloaded);
-  const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
+  const updaterDownloading = useGlobalStore((state) => state.updaterDownloading);
+  const [isUpdateActionPending, setIsUpdateActionPending] = useState(false);
 
   const { data: titlebarStyle } = useQuery({
     queryKey: ["settings", "general", "titlebarStyle"],
@@ -38,7 +40,8 @@ export function Titlebar({ title }: TitlebarProps) {
   );
 
   const { hideMinimize, hideMaximize } = configEntry?.[1] || {};
-  const shouldShowUpdateButton = updateDownloaded && !configEntry;
+  const shouldShowUpdateButton = (updateAvailable || updateDownloaded) && !configEntry;
+  const isDownloadAction = updateAvailable && !updateDownloaded;
 
   if (titlebarStyle === "native") return null;
 
@@ -71,18 +74,24 @@ export function Titlebar({ title }: TitlebarProps) {
             size="xs"
             variant="outline"
             className="h-5 px-2 text-[10px] mr-4"
-            isLoading={isInstallingUpdate}
+            isLoading={isUpdateActionPending || updaterDownloading}
             onClick={async () => {
-              setIsInstallingUpdate(true);
+              setIsUpdateActionPending(true);
               try {
-                await window.api.invoke("updater:installUpdate");
+                if (isDownloadAction) {
+                  await window.api.invoke("updater:downloadUpdate");
+                } else {
+                  await window.api.invoke("updater:installUpdate");
+                }
               } finally {
-                setIsInstallingUpdate(false);
+                setIsUpdateActionPending(false);
               }
             }}
           >
             <DownloadIcon />
-            {t("updater.titlebar.action")}
+            {isDownloadAction
+              ? t("updater.titlebar.downloadAction")
+              : t("updater.titlebar.action")}
           </Button>
         )}
 

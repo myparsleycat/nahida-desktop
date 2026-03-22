@@ -421,7 +421,21 @@
           "runInBackgroundDisableConfirmDescription": "Toggle Persist と Toggle Viewer は、バックグラウンド実行が有効になっているほうがより安全かつ安定して動作します。これをオフにすると、すべてのウィンドウを閉じたあとにこれらの機能が安全に動作し続けない可能性があります。それでもバックグラウンド実行をオフにしますか？",
           "runInBackgroundDisableConfirmAction": "無効にする",
           "autoUpdate": "自動更新",
-          "autoUpdateDescription": "起動時と1時間ごとに更新を確認し、自動でダウンロードします。"
+          "updateStatus": "更新状態",
+          "autoUpdateModes": {
+            "auto": {
+              "title": "自動更新",
+              "description": "起動時と1時間ごとに更新を確認し、自動でダウンロードします。"
+            },
+            "notify": {
+              "title": "更新通知",
+              "description": "更新は自動で確認しますが、ダウンロードは自分で開始したときだけ実行します。"
+            },
+            "off": {
+              "title": "自動更新オフ",
+              "description": "更新の自動確認と自動ダウンロードをどちらも無効にします。"
+            }
+          }
         },
         "language": {
           "title": "言語",
@@ -579,7 +593,19 @@
   },
   "updater": {
     "titlebar": {
-      "action": "クリックして再起動し、アップデート"
+      "action": "クリックして再起動し、アップデート",
+      "downloadAction": "アップデートをダウンロード"
+    },
+    "actions": {
+      "download": "アップデートをダウンロード",
+      "install": "再起動してアップデート"
+    },
+    "status": {
+      "idle": "最新バージョンを使用しています。",
+      "checking": "アップデートを確認しています...",
+      "downloading": "アップデートをダウンロードしています...",
+      "available": "新しいアップデートがあります。準備ができたらダウンロードできます。",
+      "downloaded": "アップデートをインストールする準備ができました。"
     },
     "toast": {
       "available": {

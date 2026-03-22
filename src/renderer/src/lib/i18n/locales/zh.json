@@ -420,7 +420,21 @@
           "runInBackgroundDisableConfirmDescription": "启用 `Toggle Persist` 或 `Toggle Viewer` 时，保持后台运行会更安全、更稳定。如果关闭此选项，在关闭所有窗口后，这两个功能可能无法继续可靠运行。\n\n仍然要关闭后台运行吗？",
           "runInBackgroundDisableConfirmAction": "仍然关闭",
           "autoUpdate": "自动更新",
-          "autoUpdateDescription": "在启动时和每隔 1 小时检查更新，并自动下载。"
+          "updateStatus": "更新状态",
+          "autoUpdateModes": {
+            "auto": {
+              "title": "自动更新",
+              "description": "在启动时和每隔 1 小时检查更新，并自动下载。"
+            },
+            "notify": {
+              "title": "更新提醒",
+              "description": "自动检查更新，但只有在你主动操作时才开始下载。"
+            },
+            "off": {
+              "title": "关闭自动更新",
+              "description": "禁用自动检查更新和自动下载。"
+            }
+          }
         },
         "language": {
           "title": "语言",
@@ -578,7 +592,19 @@
   },
   "updater": {
     "titlebar": {
-      "action": "点击以重启并更新"
+      "action": "点击以重启并更新",
+      "downloadAction": "下载更新"
+    },
+    "actions": {
+      "download": "下载更新",
+      "install": "重启并更新"
+    },
+    "status": {
+      "idle": "你当前使用的是最新版本。",
+      "checking": "正在检查更新...",
+      "downloading": "正在下载更新...",
+      "available": "发现新更新。你可以在方便时下载。",
+      "downloaded": "更新已准备好安装。"
     },
     "toast": {
       "available": {
