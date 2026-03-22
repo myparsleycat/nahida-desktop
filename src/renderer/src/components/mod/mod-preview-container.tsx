@@ -38,10 +38,10 @@ export function ModPreviewContainer({ mod, selectedGroupPath, onPaste }: ModPrev
         <div className="flex flex-col items-center justify-center gap-2">
           <ImageIcon className="w-12 h-12 text-muted-foreground/50" />
           <div className="flex flex-col items-center gap-1">
-            <span className="text-sm text-muted-foreground">No Preview</span>
+            <span className="text-sm text-muted-foreground">{t("page.mod.no-preview")}</span>
             <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={handlePasteClick}>
               <ClipboardIcon className="w-3 h-3" />
-              Paste
+              {t("page.mod.context-menu.paste-preview")}
             </Button>
           </div>
         </div>
@@ -69,7 +69,7 @@ export function ModPreviewContainer({ mod, selectedGroupPath, onPaste }: ModPrev
           <ContextMenuContent onClick={(e) => e.stopPropagation()}>
             <ContextMenuItem onClick={handlePasteClick}>
               <ClipboardIcon />
-              Paste
+              {t("page.mod.context-menu.paste-preview")}
             </ContextMenuItem>
             <ContextMenuItem
               onClick={() => {

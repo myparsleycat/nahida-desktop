@@ -300,7 +300,9 @@
         }
       },
       "empty_selection": "사이드바에서 그룹이나 캐릭터 폴더를 선택해주세요.",
+      "no-preview": "프리뷰 없음",
       "context-menu": {
+        "paste-preview": "붙여넣기",
         "open-preview-viewer": "뷰어로 열기",
         "delete-preview": "프리뷰 삭제",
         "open-cmd": "CMD 열기",

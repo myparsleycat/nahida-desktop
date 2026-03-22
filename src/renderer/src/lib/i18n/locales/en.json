@@ -299,7 +299,9 @@
         }
       },
       "empty_selection": "Please select a group or character folder from the sidebar.",
+      "no-preview": "No Preview",
       "context-menu": {
+        "paste-preview": "Paste",
         "open-preview-viewer": "Open in viewer",
         "delete-preview": "Delete preview",
         "open-cmd": "Open CMD",

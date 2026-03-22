@@ -301,7 +301,9 @@
         }
       },
       "empty_selection": "サイドバーからグループまたはキャラクターフォルダを選択してください。",
+      "no-preview": "プレビューなし",
       "context-menu": {
+        "paste-preview": "貼り付け",
         "open-preview-viewer": "プレビュービューアーで開く",
         "delete-preview": "プレビューを削除",
         "open-cmd": "CMDを開く",
