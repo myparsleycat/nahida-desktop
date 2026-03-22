@@ -16,13 +16,17 @@ import { Preview } from "./preview";
 interface ModPreviewContainerProps {
   mod: ModInfo;
   selectedGroupPath?: string;
-  onPaste: (e: React.MouseEvent) => void;
+  onPaste: () => void;
 }
 
 export function ModPreviewContainer({ mod, selectedGroupPath, onPaste }: ModPreviewContainerProps) {
   const { t } = useTranslation();
   const { queryClient } = useRouteContext({ from: "__root__" });
   const { confirmTrash, confirmTrashDialog } = useConfirmTrash();
+  const handlePasteClick = (e?: React.SyntheticEvent) => {
+    e?.stopPropagation();
+    onPaste();
+  };
 
   const previewContent = (
     <Preview
@@ -35,7 +39,7 @@ export function ModPreviewContainer({ mod, selectedGroupPath, onPaste }: ModPrev
           <ImageIcon className="w-12 h-12 text-muted-foreground/50" />
           <div className="flex flex-col items-center gap-1">
             <span className="text-sm text-muted-foreground">No Preview</span>
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onPaste}>
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={handlePasteClick}>
               <ClipboardIcon className="w-3 h-3" />
               Paste
             </Button>
@@ -63,6 +67,10 @@ export function ModPreviewContainer({ mod, selectedGroupPath, onPaste }: ModPrev
         <ContextMenu>
           <ContextMenuTrigger>{previewContent}</ContextMenuTrigger>
           <ContextMenuContent onClick={(e) => e.stopPropagation()}>
+            <ContextMenuItem onClick={handlePasteClick}>
+              <ClipboardIcon />
+              Paste
+            </ContextMenuItem>
             <ContextMenuItem
               onClick={() => {
                 if (!mod.preview) return;
