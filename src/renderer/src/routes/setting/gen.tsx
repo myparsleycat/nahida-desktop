@@ -4,7 +4,6 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
@@ -24,9 +23,10 @@ import { Switch } from "@renderer/components/ui/switch";
 import { useSettings } from "@renderer/hooks/use-settings";
 import { useGlobalStore } from "@renderer/store/global";
 import { supportsWindowsDesktopFeatures } from "@shared/platform";
+import type { AutoUpdateMode } from "@shared/updater";
 import { formatSize } from "@shared/utils";
 import { createFileRoute } from "@tanstack/react-router";
-import { LoaderIcon } from "lucide-react";
+import { DownloadIcon, LoaderIcon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -37,7 +37,7 @@ export const Route = createFileRoute("/setting/gen")({
 const settingsConfig = {
   runOnStartup: "setting:general:getRunOnStartup",
   language: "setting:general:getLanguage",
-  autoUpdate: "setting:general:getAutoUpdate",
+  autoUpdateMode: "setting:general:getAutoUpdateMode",
   runInBackground: "setting:general:getRunInBackground",
   moveTransferPageWhenStartTransfer: "setting:general:getMoveTransferPageWhenStartTransfer",
   powerSaveBlockInTransfer: "setting:general:getPowerSaveBlockInTransfer",
@@ -50,12 +50,18 @@ function RouteComponent() {
   const { theme, setTheme } = useTheme();
   const { t } = useTranslation();
   const appStatus = useGlobalStore((state) => state.appStatus);
+  const updateAvailable = useGlobalStore((state) => state.updateAvailable);
+  const updateDownloaded = useGlobalStore((state) => state.updateDownloaded);
+  const shouldPromptForUpdate = useGlobalStore((state) => state.shouldPromptForUpdate);
+  const updaterMode = useGlobalStore((state) => state.updaterMode);
+  const updaterChecking = useGlobalStore((state) => state.updaterChecking);
+  const updaterDownloading = useGlobalStore((state) => state.updaterDownloading);
   const hasWindowsDesktopFeatures = supportsWindowsDesktopFeatures(appStatus?.platform);
 
   const { settings, update, isLoading, setSettings } = useSettings<{
     runOnStartup: boolean;
     language: string;
-    autoUpdate: boolean;
+    autoUpdateMode: AutoUpdateMode;
     runInBackground: boolean;
     moveTransferPageWhenStartTransfer: boolean;
     powerSaveBlockInTransfer: boolean;
@@ -66,6 +72,7 @@ function RouteComponent() {
 
   const [imageCacheSize, setImageCacheSize] = useState<number | null>(null);
   const [isRunInBackgroundConfirmOpen, setIsRunInBackgroundConfirmOpen] = useState(false);
+  const [isUpdaterActionPending, setIsUpdaterActionPending] = useState(false);
 
   useEffect(() => {
     window.api.invoke("setting:general:getImageCacheSize").then((size) => {
@@ -110,6 +117,64 @@ function RouteComponent() {
     await update("runInBackground", false, "setting:general:setRunInBackground");
   };
 
+  const autoUpdateModeOptions: Array<{
+    value: AutoUpdateMode;
+    label: string;
+    description: string;
+  }> = [
+    {
+      value: "auto",
+      label: t("page.setting.gen.application.autoUpdateModes.auto.title"),
+      description: t("page.setting.gen.application.autoUpdateModes.auto.description"),
+    },
+    {
+      value: "notify",
+      label: t("page.setting.gen.application.autoUpdateModes.notify.title"),
+      description: t("page.setting.gen.application.autoUpdateModes.notify.description"),
+    },
+    {
+      value: "off",
+      label: t("page.setting.gen.application.autoUpdateModes.off.title"),
+      description: t("page.setting.gen.application.autoUpdateModes.off.description"),
+    },
+  ];
+
+  const selectedAutoUpdateMode = autoUpdateModeOptions.find(
+    (option) => option.value === settings.autoUpdateMode,
+  );
+
+  const updaterStatusText = updaterChecking
+    ? t("updater.status.checking")
+    : updaterDownloading
+      ? t("updater.status.downloading")
+      : updateDownloaded
+        ? t("updater.status.downloaded")
+        : updateAvailable
+          ? t("updater.status.available")
+          : settings.autoUpdateMode === "off"
+            ? t("page.setting.gen.application.autoUpdateModes.off.title")
+            : t("updater.status.idle");
+
+  const shouldOfferManualDownload =
+    updateAvailable && !updateDownloaded && (shouldPromptForUpdate || updaterMode === "notify");
+
+  const handleUpdateAction = async () => {
+    setIsUpdaterActionPending(true);
+
+    try {
+      if (updateDownloaded) {
+        await window.api.invoke("updater:installUpdate");
+        return;
+      }
+
+      if (shouldOfferManualDownload) {
+        await window.api.invoke("updater:downloadUpdate");
+      }
+    } finally {
+      setIsUpdaterActionPending(false);
+    }
+  };
+
   if (isLoading) {
     return null;
   }
@@ -142,23 +207,66 @@ function RouteComponent() {
 
           <Separator />
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between space-x-3">
             <div className="space-y-0.5 flex-1">
               <span className="text-sm font-medium">
                 {t("page.setting.gen.application.autoUpdate")}
               </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.gen.application.autoUpdateDescription")}
-              </p>
+              <p className="text-xs text-muted-foreground">{selectedAutoUpdateMode?.description}</p>
             </div>
             <div className="flex items-center gap-4">
-              <Switch
-                checked={settings.autoUpdate}
-                onCheckedChange={(val) =>
-                  update("autoUpdate", val, "setting:general:setAutoUpdate")
+              <Select
+                value={settings.autoUpdateMode}
+                onValueChange={(val: AutoUpdateMode) =>
+                  update("autoUpdateMode", val, "setting:general:setAutoUpdateMode")
                 }
-              />
+              >
+                <SelectTrigger className="w-42">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
+                  <SelectGroup>
+                    {autoUpdateModeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </div>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5 flex-1">
+              <span className="text-sm font-medium">
+                {t("page.setting.gen.application.updateStatus")}
+              </span>
+              <p className="text-xs text-muted-foreground">{updaterStatusText}</p>
+            </div>
+            {(shouldOfferManualDownload || updateDownloaded) && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                isLoading={isUpdaterActionPending || updaterChecking || updaterDownloading}
+                onClick={handleUpdateAction}
+              >
+                {updateDownloaded ? (
+                  <>
+                    <RefreshCwIcon />
+                    {t("updater.actions.install")}
+                  </>
+                ) : (
+                  <>
+                    <DownloadIcon />
+                    {t("updater.actions.download")}
+                  </>
+                )}
+              </Button>
+            )}
           </div>
 
           <Separator />

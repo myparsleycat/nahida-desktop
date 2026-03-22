@@ -47,8 +47,7 @@ export const ModCard = memo(function ModCard({
   const { queryClient } = useRouteContext({ from: "__root__" });
   const mouseDownTargetRef = useRef<EventTarget | null>(null);
 
-  const handlePaste = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handlePaste = async () => {
     try {
       const files = await window.api.invoke("util:getClipboardFiles");
       if (files.length > 0) {

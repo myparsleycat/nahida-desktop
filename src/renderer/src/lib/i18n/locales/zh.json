@@ -181,6 +181,15 @@
         "persist-subgroups": "指定为子文件夹"
       },
       "dialog": {
+        "extract_archive_path": {
+          "title": "选择解压路径",
+          "description": "当 {{fileName}} 内只有一个顶层文件夹时，请选择解压后的目录结构。",
+          "cancel": "取消",
+          "flatten_single_root": "移除顶层文件夹",
+          "flatten_single_root_example": "示例：mod.zip/a/b/mod.ini -> b/mod.ini",
+          "keep_archive_root": "保留压缩包路径",
+          "keep_archive_root_example": "示例：mod.zip/a/b/mod.ini -> a/b/mod.ini"
+        },
         "add-game": {
           "title": "添加游戏",
           "name_input_placeholder": "游戏名称 (例如：原神)",
@@ -300,7 +309,9 @@
         }
       },
       "empty_selection": "请从侧边栏选择群组或角色文件夹。",
+      "no-preview": "无预览",
       "context-menu": {
+        "paste-preview": "粘贴",
         "open-preview-viewer": "用预览查看器打开",
         "delete-preview": "删除预览",
         "open-cmd": "打开 CMD",
@@ -418,7 +429,21 @@
           "runInBackgroundDisableConfirmDescription": "启用 `Toggle Persist` 或 `Toggle Viewer` 时，保持后台运行会更安全、更稳定。如果关闭此选项，在关闭所有窗口后，这两个功能可能无法继续可靠运行。\n\n仍然要关闭后台运行吗？",
           "runInBackgroundDisableConfirmAction": "仍然关闭",
           "autoUpdate": "自动更新",
-          "autoUpdateDescription": "在启动时和每隔 1 小时检查更新，并自动下载。"
+          "updateStatus": "更新状态",
+          "autoUpdateModes": {
+            "auto": {
+              "title": "自动更新",
+              "description": "在启动时和每隔 1 小时检查更新，并自动下载。"
+            },
+            "notify": {
+              "title": "更新提醒",
+              "description": "自动检查更新，但只有在你主动操作时才开始下载。"
+            },
+            "off": {
+              "title": "关闭自动更新",
+              "description": "禁用自动检查更新和自动下载。"
+            }
+          }
         },
         "language": {
           "title": "语言",
@@ -460,6 +485,13 @@
         "title": "模组",
         "mod_management": {
           "title": "模组管理",
+          "archiveExtractPathMode": "压缩包解压路径",
+          "archiveExtractPathModeDescription": "当压缩包内只有一个顶层文件夹时，选择其解压路径处理方式。",
+          "archiveExtractPathModes": {
+            "flatten_single_root": "移除顶层文件夹",
+            "keep_archive_root": "保留压缩包路径",
+            "ask_every_time": "每次询问"
+          },
           "deleteArchiveAfterExtract": "解压后删除压缩包",
           "deleteArchiveAfterExtractDescription": "将压缩文件解压到模组文件夹后删除源文件",
           "moveFolderInsteadOfCopy": "移动文件夹而非复制",
@@ -576,13 +608,26 @@
   },
   "updater": {
     "titlebar": {
-      "action": "点击以重启并更新"
+      "action": "点击以重启并更新",
+      "downloadAction": "下载更新"
+    },
+    "actions": {
+      "download": "下载更新",
+      "install": "重启并更新"
+    },
+    "status": {
+      "idle": "你当前使用的是最新版本。",
+      "checking": "正在检查更新...",
+      "downloading": "正在下载更新...",
+      "available": "发现新更新。你可以在方便时下载。",
+      "downloaded": "更新已准备好安装。"
     },
     "toast": {
       "available": {
         "title": "有新版本可用。",
         "description": "Nahida Desktop 有新版本可用。请重新启动以完成更新。",
-        "action": "更新"
+        "action": "更新",
+        "releaseNotes": "打开补丁说明"
       },
       "notAvailable": {
         "title": "当前已是最新版本。",

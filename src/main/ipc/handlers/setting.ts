@@ -51,12 +51,12 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         await d.setting.general.setTitlebarStyle(style);
     });
 
-    rh("setting:general:getAutoUpdate", async () => {
-        return await d.setting.general.getAutoUpdate();
+    rh("setting:general:getAutoUpdateMode", async () => {
+        return await d.setting.general.getAutoUpdateMode();
     });
 
-    rh("setting:general:setAutoUpdate", async (enabled) => {
-        return await d.setting.general.setAutoUpdate(enabled);
+    rh("setting:general:setAutoUpdateMode", async (mode) => {
+        return await d.setting.general.setAutoUpdateMode(mode);
     });
 
     rh("updater:getStatus", async () => {
@@ -69,6 +69,10 @@ export function registerSettingHandlers(d: NahidaDesktop) {
 
     rh("updater:installUpdate", async () => {
         return await d.updater.installUpdate();
+    });
+
+    rh("updater:downloadUpdate", async () => {
+        return await d.updater.downloadUpdate();
     });
 
     rh("setting:general:getRunInBackground", async () => {
@@ -97,6 +101,15 @@ export function registerSettingHandlers(d: NahidaDesktop) {
 
     rh("setting:mod:getDeleteArchiveAfterExtract", async () => {
         return await d.setting.mod.getDeleteArchiveAfterExtract();
+    });
+
+    rh("setting:mod:getArchiveExtractPathMode", async () => {
+        return await d.setting.mod.getArchiveExtractPathMode();
+    });
+
+    rh("setting:mod:setArchiveExtractPathMode", async (mode) => {
+        await d.setting.mod.setArchiveExtractPathMode(mode);
+        d.ipc.broadcast("mod:update-settings");
     });
 
     rh("setting:mod:setDeleteArchiveAfterExtract", async (enabled) => {

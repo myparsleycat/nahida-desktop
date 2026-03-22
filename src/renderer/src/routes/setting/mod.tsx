@@ -1,11 +1,20 @@
-import { WindowsOnlyRoute } from "@renderer/components/windows-only-route";
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { Input } from "@renderer/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@renderer/components/ui/select";
 import { Separator } from "@renderer/components/ui/separator";
 import { Switch } from "@renderer/components/ui/switch";
+import { WindowsOnlyRoute } from "@renderer/components/windows-only-route";
 import { useSettings } from "@renderer/hooks/use-settings";
 import { Logger } from "@renderer/lib/logger";
+import type { ArchiveExtractPathMode } from "@shared/mod";
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
@@ -16,6 +25,7 @@ export const Route = createFileRoute("/setting/mod")({
 });
 
 const settingsConfig = {
+  archiveExtractPathMode: "setting:mod:getArchiveExtractPathMode",
   deleteArchiveAfterExtract: "setting:mod:getDeleteArchiveAfterExtract",
   moveFolderInsteadOfCopy: "setting:mod:getMoveFolderInsteadOfCopy",
   virtualizationEnabled: "setting:mod:getVirtualizationEnabled",
@@ -37,6 +47,7 @@ function ModSettingsRouteContent() {
   const [anim1] = useAutoAnimate({ duration: 150 });
 
   const { settings, update, setSettings, isLoading } = useSettings<{
+    archiveExtractPathMode: ArchiveExtractPathMode;
     deleteArchiveAfterExtract: boolean;
     moveFolderInsteadOfCopy: boolean;
     virtualizationEnabled: boolean;
@@ -84,6 +95,46 @@ function ModSettingsRouteContent() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col space-y-4">
+            <div className="flex items-center justify-between space-x-2">
+              <div className="space-y-0.5">
+                <span className="text-sm font-medium">
+                  {t("page.setting.mod.mod_management.archiveExtractPathMode")}
+                </span>
+                <p className="text-sm text-muted-foreground">
+                  {t("page.setting.mod.mod_management.archiveExtractPathModeDescription")}
+                </p>
+              </div>
+              <Select
+                value={settings.archiveExtractPathMode}
+                onValueChange={(value: ArchiveExtractPathMode) =>
+                  update("archiveExtractPathMode", value, "setting:mod:setArchiveExtractPathMode")
+                }
+              >
+                <SelectTrigger className="w-55">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectGroup>
+                    <SelectItem value="flatten_single_root">
+                      {t(
+                        "page.setting.mod.mod_management.archiveExtractPathModes.flatten_single_root",
+                      )}
+                    </SelectItem>
+                    <SelectItem value="keep_archive_root">
+                      {t(
+                        "page.setting.mod.mod_management.archiveExtractPathModes.keep_archive_root",
+                      )}
+                    </SelectItem>
+                    <SelectItem value="ask_every_time">
+                      {t("page.setting.mod.mod_management.archiveExtractPathModes.ask_every_time")}
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Separator />
+
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <span className="text-sm font-medium">

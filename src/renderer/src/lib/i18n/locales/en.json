@@ -181,6 +181,15 @@
         "persist-subgroups": "Persist subgroups"
       },
       "dialog": {
+        "extract_archive_path": {
+          "title": "Choose extraction path",
+          "description": "Choose the extracted folder structure when {{fileName}} contains a single top-level folder.",
+          "cancel": "Cancel",
+          "flatten_single_root": "Remove top-level folder",
+          "flatten_single_root_example": "Example: mod.zip/a/b/mod.ini -> b/mod.ini",
+          "keep_archive_root": "Keep archive paths",
+          "keep_archive_root_example": "Example: mod.zip/a/b/mod.ini -> a/b/mod.ini"
+        },
         "add-game": {
           "title": "Add Game",
           "name_input_placeholder": "Game Name (e.g. Genshin)",
@@ -299,7 +308,9 @@
         }
       },
       "empty_selection": "Please select a group or character folder from the sidebar.",
+      "no-preview": "No Preview",
       "context-menu": {
+        "paste-preview": "Paste",
         "open-preview-viewer": "Open in viewer",
         "delete-preview": "Delete preview",
         "open-cmd": "Open CMD",
@@ -417,7 +428,21 @@
           "runInBackgroundDisableConfirmDescription": "Toggle Persist and Toggle Viewer work more reliably when background run is enabled. If you turn this off, those features may not continue working safely after all windows are closed. Do you still want to turn off background run?",
           "runInBackgroundDisableConfirmAction": "Turn off anyway",
           "autoUpdate": "Auto update",
-          "autoUpdateDescription": "Check for updates on startup and every hour, then download them automatically."
+          "updateStatus": "Update status",
+          "autoUpdateModes": {
+            "auto": {
+              "title": "Automatic update",
+              "description": "Check for updates on startup and every hour, then download them automatically."
+            },
+            "notify": {
+              "title": "Update notifications",
+              "description": "Check for updates automatically, but only download them when you choose to."
+            },
+            "off": {
+              "title": "Disabled",
+              "description": "Do not check for or download updates automatically."
+            }
+          }
         },
         "language": {
           "title": "Language",
@@ -459,6 +484,13 @@
         "title": "Mod",
         "mod_management": {
           "title": "Mod Management",
+          "archiveExtractPathMode": "Archive extraction path",
+          "archiveExtractPathModeDescription": "Choose how archives with a single top-level folder should be extracted.",
+          "archiveExtractPathModes": {
+            "flatten_single_root": "Remove top-level folder",
+            "keep_archive_root": "Keep archive paths",
+            "ask_every_time": "Ask every time"
+          },
           "deleteArchiveAfterExtract": "Delete archive after extraction",
           "deleteArchiveAfterExtractDescription": "Delete the original archive file after extracting it to the mod folder",
           "moveFolderInsteadOfCopy": "Move folder instead of copy",
@@ -575,13 +607,26 @@
   },
   "updater": {
     "titlebar": {
-      "action": "Click to restart and update"
+      "action": "Click to restart and update",
+      "downloadAction": "Download update"
+    },
+    "actions": {
+      "download": "Download update",
+      "install": "Restart and update"
+    },
+    "status": {
+      "idle": "You're using the latest version.",
+      "checking": "Checking for updates...",
+      "downloading": "Downloading the update...",
+      "available": "An update is available. Download it when you're ready.",
+      "downloaded": "The update is ready to install."
     },
     "toast": {
       "available": {
         "title": "A new version is available.",
         "description": "A new version of Nahida Desktop is available. Restart to update.",
-        "action": "Update"
+        "action": "Update",
+        "releaseNotes": "Open patch notes"
       },
       "notAvailable": {
         "title": "You're up to date.",

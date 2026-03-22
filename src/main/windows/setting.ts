@@ -15,15 +15,58 @@ export class SettingWindow {
         this.window = null;
     }
 
-    public focus() {
-        if (!this.window) {
-            this.createSettingWindow();
-        } else {
-            focus(this.window);
+    private getParentWindow() {
+        const mainWindow = this.desktop.window.main.window;
+
+        if (!mainWindow || mainWindow.isDestroyed()) {
+            return null;
+        }
+
+        return mainWindow;
+    }
+
+    public async focus() {
+        const window = await this.createSettingWindow();
+        if (window) {
+            focus(window);
         }
     }
 
+    public async recreateWithMainParentIfNeeded() {
+        if (!this.window || this.window.isDestroyed()) {
+            this.window = null;
+            return;
+        }
+
+        const parentWindow = this.getParentWindow();
+        if (!parentWindow || this.window.getParentWindow() === parentWindow) {
+            return;
+        }
+
+        const existingWindow = this.window;
+        this.window = null;
+        existingWindow.close();
+        await this.createSettingWindow();
+    }
+
     async createSettingWindow() {
+        if (this.window?.isDestroyed()) {
+            this.window = null;
+        }
+
+        const parentWindow = this.getParentWindow();
+
+        if (this.window) {
+            if (this.window.getParentWindow() !== parentWindow) {
+                const existingWindow = this.window;
+                this.window = null;
+                existingWindow.close();
+            } else {
+                focus(this.window);
+                return this.window;
+            }
+        }
+
         if (this.window) {
             focus(this.window);
             return this.window;
@@ -46,9 +89,11 @@ export class SettingWindow {
                 ...getDefaultWebPreferences(),
             },
             icon,
+            ...(parentWindow ? { parent: parentWindow } : {}),
         });
+        const window = this.window;
 
-        this.window.webContents.setWindowOpenHandler(({ url }) => {
+        window.webContents.setWindowOpenHandler(({ url }) => {
             if (url.startsWith("http")) {
                 openExternal(url);
                 return { action: "deny" };
@@ -56,16 +101,18 @@ export class SettingWindow {
             return { action: "allow" };
         });
 
-        this.window.on("ready-to-show", () => {
-            this.window?.show();
+        window.on("ready-to-show", () => {
+            window.show();
         });
 
-        this.window.on("closed", () => {
-            this.window = null;
+        window.on("closed", () => {
+            if (this.window === window) {
+                this.window = null;
+            }
         });
 
         if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-            this.window.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/#/setting`);
+            window.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/#/setting`);
         } else {
             // cjs
             // desktop.window.setting.loadFile(path.join(__dirname, "../renderer/index.html"), {
@@ -73,7 +120,7 @@ export class SettingWindow {
             // });
 
             // esm
-            this.window.loadFile(
+            window.loadFile(
                 fileURLToPath(new URL("../renderer/index.html", import.meta.url)),
                 {
                     hash: "setting",
@@ -81,7 +128,7 @@ export class SettingWindow {
             );
         }
 
-        return this.window;
+        return window;
     }
 }
 

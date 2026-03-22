@@ -140,6 +140,8 @@ export class MainWindow {
             this.desktop.ipc.postMessageToWindow(this.window, "window:focus");
         });
 
+        await this.desktop.window.setting.recreateWithMainParentIfNeeded();
+
         // this.window.webContents.openDevTools();
         return this.window;
     }

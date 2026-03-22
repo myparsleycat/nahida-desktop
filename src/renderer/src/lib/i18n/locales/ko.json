@@ -181,6 +181,15 @@
         "persist-subgroups": "서브폴더로 지정"
       },
       "dialog": {
+        "extract_archive_path": {
+          "title": "압축 해제 경로 선택",
+          "description": "{{fileName}} 안에 단일 최상위 폴더가 있을 때 어떤 구조로 해제할지 선택해 주세요.",
+          "cancel": "취소",
+          "flatten_single_root": "최상위 폴더 제거",
+          "flatten_single_root_example": "예: mod.zip/a/b/mod.ini -> b/mod.ini",
+          "keep_archive_root": "압축 내부 경로 유지",
+          "keep_archive_root_example": "예: mod.zip/a/b/mod.ini -> a/b/mod.ini"
+        },
         "add-game": {
           "title": "게임 추가",
           "name_input_placeholder": "게임 이름 (예: 원공노)",
@@ -300,7 +309,9 @@
         }
       },
       "empty_selection": "사이드바에서 그룹이나 캐릭터 폴더를 선택해주세요.",
+      "no-preview": "프리뷰 없음",
       "context-menu": {
+        "paste-preview": "붙여넣기",
         "open-preview-viewer": "뷰어로 열기",
         "delete-preview": "프리뷰 삭제",
         "open-cmd": "CMD 열기",
@@ -418,7 +429,21 @@
           "runInBackgroundDisableConfirmDescription": "Toggle Persist 또는 Toggle Viewer가 켜져 있으면 백그라운드 실행을 유지하는 것이 더 안전합니다. 이 기능을 끄면 모든 창을 닫은 뒤 해당 기능들이 안정적으로 계속 동작하지 않을 수 있습니다. 그래도 백그라운드 실행을 끄시겠어요?",
           "runInBackgroundDisableConfirmAction": "그래도 끄기",
           "autoUpdate": "자동 업데이트",
-          "autoUpdateDescription": "앱 시작 시와 1시간마다 업데이트를 확인하고 자동으로 다운로드합니다."
+          "updateStatus": "업데이트 상태",
+          "autoUpdateModes": {
+            "auto": {
+              "title": "자동 업데이트",
+              "description": "앱 시작 시와 1시간마다 업데이트를 확인하고 자동으로 다운로드합니다."
+            },
+            "notify": {
+              "title": "업데이트 알림",
+              "description": "업데이트는 자동으로 확인하지만, 다운로드는 직접 시작할 때만 진행합니다."
+            },
+            "off": {
+              "title": "자동 업데이트 끔",
+              "description": "업데이트 자동 확인과 자동 다운로드를 모두 비활성화합니다."
+            }
+          }
         },
         "language": {
           "title": "언어",
@@ -460,6 +485,13 @@
         "title": "모드",
         "mod_management": {
           "title": "모드 관리",
+          "archiveExtractPathMode": "압축 해제 경로 방식",
+          "archiveExtractPathModeDescription": "압축 파일 안에 단일 최상위 폴더가 있을 때 어떤 경로로 해제할지 선택합니다.",
+          "archiveExtractPathModes": {
+            "flatten_single_root": "최상위 폴더 제거",
+            "keep_archive_root": "압축 내부 경로 유지",
+            "ask_every_time": "매번 물어봄"
+          },
           "deleteArchiveAfterExtract": "압축 해제 후 삭제",
           "deleteArchiveAfterExtractDescription": "압축 파일을 모드 폴더에 해제한 후 원본 압축 파일을 삭제합니다",
           "moveFolderInsteadOfCopy": "폴더 복사 대신 이동",
@@ -576,13 +608,26 @@
   },
   "updater": {
     "titlebar": {
-      "action": "클릭해 재시작하고 업데이트"
+      "action": "클릭해 재시작하고 업데이트",
+      "downloadAction": "업데이트 다운로드"
+    },
+    "actions": {
+      "download": "업데이트 다운로드",
+      "install": "재시작하고 업데이트"
+    },
+    "status": {
+      "idle": "최신 버전을 사용 중입니다.",
+      "checking": "업데이트를 확인하는 중입니다...",
+      "downloading": "업데이트를 다운로드하는 중입니다...",
+      "available": "새 업데이트가 있습니다. 원할 때 다운로드할 수 있습니다.",
+      "downloaded": "업데이트를 설치할 준비가 되었습니다."
     },
     "toast": {
       "available": {
         "title": "새로운 버전이 출시되었습니다.",
         "description": "Nahida Desktop의 새로운 버전이 출시되었습니다. 다시 시작하여 업데이트하세요.",
-        "action": "업데이트"
+        "action": "업데이트",
+        "releaseNotes": "패치 노트 열기"
       },
       "notAvailable": {
         "title": "최신 버전을 사용 중입니다.",

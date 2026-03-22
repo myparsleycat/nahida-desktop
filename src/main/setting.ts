@@ -1,6 +1,8 @@
 import type { NahidaDesktop } from "@main/index";
 import { imageCache, setting } from "@main/internal/db/schema";
+import { ARCHIVE_EXTRACT_PATH_MODES, type ArchiveExtractPathMode } from "@shared/mod";
 import { supportsWindowsDesktopFeatures } from "@shared/platform";
+import type { AutoUpdateMode } from "@shared/updater";
 import AutoLaunch from "auto-launch";
 import { eq, sum } from "drizzle-orm";
 import { app, BrowserWindow } from "electron";
@@ -44,6 +46,18 @@ function sanitizeDefaultStartPage(page: string | null | undefined, platform: Nod
     }
 
     return page;
+}
+
+function normalizeAutoUpdateMode(value: string | null | undefined): AutoUpdateMode {
+    if (value === "notify") {
+        return "notify";
+    }
+
+    if (value === "off" || value === "false") {
+        return "off";
+    }
+
+    return "auto";
 }
 
 export class Setting {
@@ -269,7 +283,7 @@ export class Setting {
             this.desktop.window.setting.focus();
         },
 
-        getAutoUpdate: async () => {
+        getAutoUpdateMode: async (): Promise<AutoUpdateMode> => {
             const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "autoUpdate"),
             });
@@ -277,21 +291,32 @@ export class Setting {
             if (!qr) {
                 await this.desktop.lib.db
                     .insert(setting)
-                    .values({ key: "autoUpdate", value: "true" });
-                return true;
+                    .values({ key: "autoUpdate", value: "auto" });
+                return "auto";
             }
 
-            return qr.value === "true";
+            const mode = normalizeAutoUpdateMode(qr.value);
+
+            if (qr.value !== mode) {
+                await this.desktop.lib.db
+                    .update(setting)
+                    .set({ value: mode })
+                    .where(eq(setting.key, "autoUpdate"));
+            }
+
+            return mode;
         },
 
-        setAutoUpdate: async (enabled: boolean) => {
+        setAutoUpdateMode: async (mode: AutoUpdateMode) => {
             await this.desktop.lib.db
                 .insert(setting)
-                .values({ key: "autoUpdate", value: String(enabled) })
+                .values({ key: "autoUpdate", value: mode })
                 .onConflictDoUpdate({
                     target: setting.key,
-                    set: { value: String(enabled) },
+                    set: { value: mode },
                 });
+
+            await this.desktop.updater.handleAutoUpdateModeChanged(mode);
         },
 
         getRunInBackground: async () => {
@@ -361,6 +386,39 @@ export class Setting {
     };
 
     mod = {
+        getArchiveExtractPathMode: async (): Promise<ArchiveExtractPathMode> => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "mod_archive_extract_path_mode"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db.insert(setting).values({
+                    key: "mod_archive_extract_path_mode",
+                    value: "flatten_single_root",
+                });
+                return "flatten_single_root";
+            }
+
+            if (ARCHIVE_EXTRACT_PATH_MODES.includes(qr.value as ArchiveExtractPathMode)) {
+                return qr.value as ArchiveExtractPathMode;
+            }
+
+            return "flatten_single_root";
+        },
+
+        setArchiveExtractPathMode: async (mode: ArchiveExtractPathMode) => {
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({
+                    key: "mod_archive_extract_path_mode",
+                    value: mode,
+                })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: mode },
+                });
+        },
+
         getDeleteArchiveAfterExtract: async () => {
             const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "mod_delete_archive_after_extract"),

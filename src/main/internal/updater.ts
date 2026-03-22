@@ -1,12 +1,13 @@
 const { autoUpdater } = require("electron-updater");
 
+import type { AutoUpdateMode, UpdaterStatus } from "@shared/updater";
 import { app, BrowserWindow } from "electron";
 import ms from "ms";
+import z from "zod";
 import type { NahidaDesktop } from "..";
 import isDev from "./isDev";
 
 autoUpdater.allowDowngrade = false;
-autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
 autoUpdater.disableDifferentialDownload = true;
 autoUpdater.autoRunAppAfterInstall = true;
@@ -20,10 +21,21 @@ export class Updater {
     private readonly desktop: NahidaDesktop;
     public updateDownloaded: boolean = false;
     public updateAvailable: boolean = false;
+    private releaseVersion: string | null = null;
+    private releaseNotesUrl: string | null = null;
     private updateDialogDismissed: boolean = false;
     private interval: ReturnType<typeof setInterval> | undefined = undefined;
     private isCheckingForUpdates: boolean = false;
+    private isDownloadingUpdate: boolean = false;
     private hasRunInitialAutoCheck: boolean = false;
+    private releaseNoteInfoSchema = z.object({
+        note: z.string(),
+        version: z.string().optional(),
+    });
+    private updateInfoSchema = z.object({
+        version: z.string(),
+        releaseNotes: z.string().nullable(),
+    });
 
     public constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
@@ -31,34 +43,62 @@ export class Updater {
 
     public initialize(): void {
         autoUpdater.on("error", (err) => {
-            this.isCheckingForUpdates = false;
-            this.updateDownloaded = false;
-            this.updateAvailable = false;
-            this.updateDialogDismissed = false;
+            if (this.isDownloadingUpdate) {
+                this.isCheckingForUpdates = false;
+                this.isDownloadingUpdate = false;
+            } else {
+                this.isCheckingForUpdates = false;
+                this.isDownloadingUpdate = false;
+                this.updateDownloaded = false;
+                this.updateAvailable = false;
+                this.releaseNotesUrl = null;
+                this.updateDialogDismissed = false;
+            }
+            this.broadcastStatus();
 
             this.desktop.logger.log("error", err, "updater");
         });
 
-        autoUpdater.on("update-available", () => {
+        autoUpdater.on("update-available", (info) => {
+            const { version, releaseNotes } = this.updateInfoSchema.parse(info);
             this.isCheckingForUpdates = false;
             this.updateAvailable = true;
+            this.releaseVersion = version;
+            this.releaseNotesUrl = releaseNotes && this.extractReleaseNotesUrl(releaseNotes);
+            this.broadcastStatus();
+            this.broadcastUpdateAvailable();
         });
 
         autoUpdater.on("update-not-available", () => {
             this.isCheckingForUpdates = false;
+            this.isDownloadingUpdate = false;
             this.updateDownloaded = false;
             this.updateAvailable = false;
+            this.releaseNotesUrl = null;
             this.updateDialogDismissed = false;
+            this.broadcastStatus();
         });
 
         autoUpdater.on("update-downloaded", async () => {
             this.isCheckingForUpdates = false;
+            this.isDownloadingUpdate = false;
             this.updateDownloaded = true;
             this.updateDialogDismissed = false;
+            this.broadcastStatus();
             await this.notifyUpdateReady();
         });
 
-        autoUpdater.on("update-cancelled", () => {});
+        autoUpdater.on("download-progress", () => {
+            if (!this.isDownloadingUpdate) {
+                this.isDownloadingUpdate = true;
+                this.broadcastStatus();
+            }
+        });
+
+        autoUpdater.on("update-cancelled", () => {
+            this.isDownloadingUpdate = false;
+            this.broadcastStatus();
+        });
 
         clearInterval(this.interval);
 
@@ -77,6 +117,9 @@ export class Updater {
             return;
         }
 
+        const mode = await this.desktop.setting.general.getAutoUpdateMode();
+        autoUpdater.autoDownload = mode === "auto";
+
         if (this.updateDownloaded) {
             if (userInitiated) {
                 this.updateDialogDismissed = false;
@@ -86,9 +129,13 @@ export class Updater {
         }
 
         if (this.updateAvailable) {
+            if (mode === "auto" && !this.isDownloadingUpdate) {
+                await this.downloadUpdate();
+            }
             return;
         }
         this.isCheckingForUpdates = true;
+        this.broadcastStatus();
 
         await autoUpdater.checkForUpdates();
     }
@@ -101,8 +148,8 @@ export class Updater {
         this.hasRunInitialAutoCheck = true;
 
         try {
-            const autoUpdate = await this.desktop.setting.general.getAutoUpdate();
-            if (!autoUpdate) {
+            const autoUpdateMode = await this.desktop.setting.general.getAutoUpdateMode();
+            if (autoUpdateMode === "off") {
                 return;
             }
 
@@ -114,24 +161,64 @@ export class Updater {
     }
 
     private async runAutomaticCheck(): Promise<void> {
-        const autoUpdate = await this.desktop.setting.general.getAutoUpdate();
-        if (!autoUpdate) {
+        const autoUpdateMode = await this.desktop.setting.general.getAutoUpdateMode();
+        if (autoUpdateMode === "off") {
             return;
         }
 
         await this.checkForUpdates();
     }
 
-    public getStatus(): {
-        updateAvailable: boolean;
-        updateDownloaded: boolean;
-        shouldPromptForUpdate: boolean;
-    } {
+    public async handleAutoUpdateModeChanged(mode: AutoUpdateMode): Promise<void> {
+        autoUpdater.autoDownload = mode === "auto";
+
+        if (
+            mode === "auto" &&
+            this.updateAvailable &&
+            !this.updateDownloaded &&
+            !this.isDownloadingUpdate
+        ) {
+            await this.downloadUpdate();
+            return;
+        }
+
+        if (
+            mode !== "off" &&
+            !this.updateAvailable &&
+            !this.updateDownloaded &&
+            !this.isCheckingForUpdates
+        ) {
+            await this.checkForUpdates();
+            return;
+        }
+
+        this.broadcastStatus();
+    }
+
+    public async getStatus(): Promise<UpdaterStatus> {
+        const mode = await this.desktop.setting.general.getAutoUpdateMode();
+
         return {
+            mode,
             updateAvailable: this.updateAvailable,
             updateDownloaded: this.updateDownloaded,
+            releaseNotesUrl: this.releaseNotesUrl,
             shouldPromptForUpdate: this.updateDownloaded && !this.updateDialogDismissed,
+            isChecking: this.isCheckingForUpdates,
+            isDownloading: this.isDownloadingUpdate,
         };
+    }
+
+    private extractReleaseNotesUrl(releaseNotes: string): string | null {
+        const notionLinkPattern = /<p>\s*notion:\s*<a[^>]+href="([^"]+)"[^>]*>/i;
+        const notionLinkMatch = notionLinkPattern.exec(releaseNotes);
+        if (notionLinkMatch?.[1]) {
+            return notionLinkMatch[1];
+        }
+
+        const fallbackPattern = /<a[^>]+href="([^"]*notion\.so[^"]*)"[^>]*>/i;
+        const fallbackMatch = fallbackPattern.exec(releaseNotes);
+        return fallbackMatch?.[1] ?? null;
     }
 
     public async showPendingDialogsIfNeeded(): Promise<void> {
@@ -147,6 +234,24 @@ export class Updater {
         }
 
         this.updateDialogDismissed = true;
+        this.broadcastStatus();
+    }
+
+    public async downloadUpdate(): Promise<void> {
+        if (this.updateDownloaded || !this.updateAvailable || this.isDownloadingUpdate) {
+            return;
+        }
+
+        this.isDownloadingUpdate = true;
+        this.broadcastStatus();
+
+        try {
+            await autoUpdater.downloadUpdate();
+        } catch (err) {
+            this.isDownloadingUpdate = false;
+            this.broadcastStatus();
+            throw err;
+        }
     }
 
     private async notifyUpdateReady(): Promise<void> {
@@ -156,6 +261,16 @@ export class Updater {
         }
 
         this.desktop.ipc.postMessageToWindow(mainWindow, "updater:update-downloaded");
+    }
+
+    private broadcastUpdateAvailable(): void {
+        this.desktop.ipc.broadcast("updater:update-available");
+    }
+
+    private broadcastStatus(): void {
+        void this.getStatus().then((status) => {
+            this.desktop.ipc.broadcast("updater:status-changed", status);
+        });
     }
 
     private async focusMainWindow(): Promise<BrowserWindow | null> {

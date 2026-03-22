@@ -581,3 +581,4 @@ if (!binding) {
 }
 module.exports = binding
 module.exports.extractArchive = binding.extractArchive
+module.exports.hasSingleTopLevelDirectory = binding.hasSingleTopLevelDirectory
