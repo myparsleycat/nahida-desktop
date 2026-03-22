@@ -52,6 +52,8 @@ function RouteComponent() {
   const appStatus = useGlobalStore((state) => state.appStatus);
   const updateAvailable = useGlobalStore((state) => state.updateAvailable);
   const updateDownloaded = useGlobalStore((state) => state.updateDownloaded);
+  const shouldPromptForUpdate = useGlobalStore((state) => state.shouldPromptForUpdate);
+  const updaterMode = useGlobalStore((state) => state.updaterMode);
   const updaterChecking = useGlobalStore((state) => state.updaterChecking);
   const updaterDownloading = useGlobalStore((state) => state.updaterDownloading);
   const hasWindowsDesktopFeatures = supportsWindowsDesktopFeatures(appStatus?.platform);
@@ -153,6 +155,9 @@ function RouteComponent() {
             ? t("page.setting.gen.application.autoUpdateModes.off.title")
             : t("updater.status.idle");
 
+  const shouldOfferManualDownload =
+    updateAvailable && !updateDownloaded && (shouldPromptForUpdate || updaterMode === "notify");
+
   const handleUpdateAction = async () => {
     setIsUpdaterActionPending(true);
 
@@ -162,7 +167,9 @@ function RouteComponent() {
         return;
       }
 
-      await window.api.invoke("updater:downloadUpdate");
+      if (shouldOfferManualDownload) {
+        await window.api.invoke("updater:downloadUpdate");
+      }
     } finally {
       setIsUpdaterActionPending(false);
     }
@@ -239,7 +246,7 @@ function RouteComponent() {
               </span>
               <p className="text-xs text-muted-foreground">{updaterStatusText}</p>
             </div>
-            {(updateAvailable || updateDownloaded) && (
+            {(shouldOfferManualDownload || updateDownloaded) && (
               <Button
                 type="button"
                 variant="outline"

@@ -26,6 +26,8 @@ export function Titlebar({ title }: TitlebarProps) {
   const { t } = useTranslation();
   const updateAvailable = useGlobalStore((state) => state.updateAvailable);
   const updateDownloaded = useGlobalStore((state) => state.updateDownloaded);
+  const shouldPromptForUpdate = useGlobalStore((state) => state.shouldPromptForUpdate);
+  const updaterMode = useGlobalStore((state) => state.updaterMode);
   const updaterDownloading = useGlobalStore((state) => state.updaterDownloading);
   const [isUpdateActionPending, setIsUpdateActionPending] = useState(false);
 
@@ -40,8 +42,9 @@ export function Titlebar({ title }: TitlebarProps) {
   );
 
   const { hideMinimize, hideMaximize } = configEntry?.[1] || {};
-  const shouldShowUpdateButton = (updateAvailable || updateDownloaded) && !configEntry;
-  const isDownloadAction = updateAvailable && !updateDownloaded;
+  const shouldOfferManualDownload =
+    updateAvailable && !updateDownloaded && (shouldPromptForUpdate || updaterMode === "notify");
+  const shouldShowUpdateButton = (shouldOfferManualDownload || updateDownloaded) && !configEntry;
 
   if (titlebarStyle === "native") return null;
 
@@ -78,7 +81,7 @@ export function Titlebar({ title }: TitlebarProps) {
             onClick={async () => {
               setIsUpdateActionPending(true);
               try {
-                if (isDownloadAction) {
+                if (shouldOfferManualDownload) {
                   await window.api.invoke("updater:downloadUpdate");
                 } else {
                   await window.api.invoke("updater:installUpdate");
@@ -89,7 +92,7 @@ export function Titlebar({ title }: TitlebarProps) {
             }}
           >
             <DownloadIcon />
-            {isDownloadAction
+            {shouldOfferManualDownload
               ? t("updater.titlebar.downloadAction")
               : t("updater.titlebar.action")}
           </Button>
