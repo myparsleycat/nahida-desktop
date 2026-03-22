@@ -149,7 +149,9 @@ function RouteComponent() {
         ? t("updater.status.downloaded")
         : updateAvailable
           ? t("updater.status.available")
-          : t("updater.status.idle");
+          : settings.autoUpdateMode === "off"
+            ? t("page.setting.gen.application.autoUpdateModes.off.title")
+            : t("updater.status.idle");
 
   const handleUpdateAction = async () => {
     setIsUpdaterActionPending(true);
