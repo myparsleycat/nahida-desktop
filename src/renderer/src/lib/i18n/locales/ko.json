@@ -184,6 +184,7 @@
         "extract_archive_path": {
           "title": "압축 해제 경로 선택",
           "description": "{{fileName}} 안에 단일 최상위 폴더가 있을 때 어떤 구조로 해제할지 선택해 주세요.",
+          "cancel": "취소",
           "flatten_single_root": "최상위 폴더 제거",
           "flatten_single_root_example": "예: mod.zip/a/b/mod.ini -> b/mod.ini",
           "keep_archive_root": "압축 내부 경로 유지",

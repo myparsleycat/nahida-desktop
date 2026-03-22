@@ -184,6 +184,7 @@
         "extract_archive_path": {
           "title": "选择解压路径",
           "description": "当 {{fileName}} 内只有一个顶层文件夹时，请选择解压后的目录结构。",
+          "cancel": "取消",
           "flatten_single_root": "移除顶层文件夹",
           "flatten_single_root_example": "示例：mod.zip/a/b/mod.ini -> b/mod.ini",
           "keep_archive_root": "保留压缩包路径",

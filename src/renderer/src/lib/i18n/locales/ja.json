@@ -185,6 +185,7 @@
         "extract_archive_path": {
           "title": "解凍パスを選択",
           "description": "{{fileName}} に単一の最上位フォルダーがある場合、どの構成で解凍するか選択してください。",
+          "cancel": "キャンセル",
           "flatten_single_root": "最上位フォルダーを除去",
           "flatten_single_root_example": "例: mod.zip/a/b/mod.ini -> b/mod.ini",
           "keep_archive_root": "圧縮内のパスを維持",

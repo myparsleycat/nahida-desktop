@@ -8,6 +8,7 @@ import ModSidebar from "@renderer/components/mod/sidebar";
 import {
   AlertDialog,
   AlertDialogAction,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -203,7 +204,7 @@ function ModRouteContent() {
           }
         }}
       >
-        <AlertDialogContent onEscapeKeyDown={(e) => e.preventDefault()}>
+        <AlertDialogContent onEscapeKeyDown={closeArchiveExtractDialog}>
           <AlertDialogHeader>
             <AlertDialogTitle>{t("page.mod.dialog.extract_archive_path.title")}</AlertDialogTitle>
             <AlertDialogDescription>
@@ -223,7 +224,10 @@ function ModRouteContent() {
               </div>
             </div>
           </AlertDialogHeader>
-          <AlertDialogFooter className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <AlertDialogFooter className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <AlertDialogCancel onClick={closeArchiveExtractDialog}>
+              {t("page.mod.dialog.extract_archive_path.cancel")}
+            </AlertDialogCancel>
             <AlertDialogAction onClick={confirmArchiveExtractDialog}>
               {t("page.mod.dialog.extract_archive_path.flatten_single_root")}
             </AlertDialogAction>
