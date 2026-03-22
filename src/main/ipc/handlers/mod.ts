@@ -171,7 +171,7 @@ export function registerModHandlers(desktop: NahidaDesktop) {
     });
 
     rh("mod:hasSingleTopLevelDirectory", async (archivePath: string) => {
-        return desktop.service.archive.hasSingleTopLevelDirectory(archivePath);
+        return await desktop.service.archive.hasSingleTopLevelDirectory(archivePath);
     });
 
     rh("mod:copyFolder", async (folderPath: string, groupPath: string) => {

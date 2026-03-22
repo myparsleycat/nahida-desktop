@@ -11,4 +11,4 @@ export interface ExtractProgress {
   message: string
 }
 
-export declare function hasSingleTopLevelDirectory(archivePath: string): boolean
+export declare function hasSingleTopLevelDirectory(archivePath: string): Promise<boolean>

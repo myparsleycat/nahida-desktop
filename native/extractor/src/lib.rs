@@ -300,44 +300,48 @@ pub fn extract_archive(
 }
 
 #[napi]
-pub fn has_single_top_level_directory(archive_path: String) -> Result<bool> {
-    let source_file = File::open(&archive_path)
-        .map_err(|e| Error::from_reason(format!("Failed to open archive: {}", e)))?;
-    let iterator = ArchiveIterator::from_read(source_file)
-        .map_err(|e| Error::from_reason(format!("Failed to inspect archive: {}", e)))?;
+pub async fn has_single_top_level_directory(archive_path: String) -> Result<bool> {
+    napi::tokio::task::spawn_blocking(move || -> Result<bool> {
+        let source_file = File::open(&archive_path)
+            .map_err(|e| Error::from_reason(format!("Failed to open archive: {}", e)))?;
+        let iterator = ArchiveIterator::from_read(source_file)
+            .map_err(|e| Error::from_reason(format!("Failed to inspect archive: {}", e)))?;
 
-    let mut top_level_entries: HashMap<String, bool> = HashMap::new();
+        let mut top_level_entries: HashMap<String, bool> = HashMap::new();
 
-    for content in iterator {
-        let ArchiveContents::StartOfEntry(name, _stat) = content else {
-            continue;
-        };
+        for content in iterator {
+            let ArchiveContents::StartOfEntry(name, _stat) = content else {
+                continue;
+            };
 
-        let normalized = normalize_archive_entry_name(&name);
-        if normalized.is_empty() {
-            continue;
+            let normalized = normalize_archive_entry_name(&name);
+            if normalized.is_empty() {
+                continue;
+            }
+
+            let mut segments = normalized.split('/').filter(|segment| !segment.is_empty());
+            let Some(top_level_name) = segments.next() else {
+                continue;
+            };
+
+            let has_nested_segments = segments.next().is_some();
+            if !has_nested_segments && is_ignored_top_level_entry(top_level_name) {
+                continue;
+            }
+
+            let is_dir = has_nested_segments || is_directory_entry(&name);
+            top_level_entries
+                .entry(top_level_name.to_string())
+                .and_modify(|existing| *existing = *existing || is_dir)
+                .or_insert(is_dir);
+
+            if top_level_entries.len() > 1 {
+                return Ok(false);
+            }
         }
 
-        let mut segments = normalized.split('/').filter(|segment| !segment.is_empty());
-        let Some(top_level_name) = segments.next() else {
-            continue;
-        };
-
-        let has_nested_segments = segments.next().is_some();
-        if !has_nested_segments && is_ignored_top_level_entry(top_level_name) {
-            continue;
-        }
-
-        let is_dir = has_nested_segments || is_directory_entry(&name);
-        top_level_entries
-            .entry(top_level_name.to_string())
-            .and_modify(|existing| *existing = *existing || is_dir)
-            .or_insert(is_dir);
-
-        if top_level_entries.len() > 1 {
-            return Ok(false);
-        }
-    }
-
-    Ok(matches!(top_level_entries.into_values().next(), Some(true)))
+        Ok(matches!(top_level_entries.into_values().next(), Some(true)))
+    })
+    .await
+    .map_err(|e| Error::from_reason(format!("Failed to inspect archive: {}", e)))?
 }

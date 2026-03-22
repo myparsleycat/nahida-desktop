@@ -9,8 +9,8 @@ interface ExtractOptions {
 export class ArchiveService {
     constructor(desktop: NahidaDesktop) {}
 
-    hasSingleTopLevelDirectory(archivePath: string): boolean {
-        return hasSingleTopLevelDirectory(archivePath);
+    async hasSingleTopLevelDirectory(archivePath: string) {
+        return await hasSingleTopLevelDirectory(archivePath);
     }
 
     async extract(
