@@ -166,8 +166,12 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return await desktop.service.mod.fn.setExpandedGroups(paths);
     });
 
-    rh("mod:extractArchive", async (archivePath: string, groupPath: string) => {
-        return await desktop.service.mod.fn.extractArchiveToGroup(archivePath, groupPath);
+    rh("mod:extractArchive", async (archivePath: string, groupPath: string, mode) => {
+        return await desktop.service.mod.fn.extractArchiveToGroup(archivePath, groupPath, mode);
+    });
+
+    rh("mod:hasSingleTopLevelDirectory", async (archivePath: string) => {
+        return desktop.service.archive.hasSingleTopLevelDirectory(archivePath);
     });
 
     rh("mod:copyFolder", async (folderPath: string, groupPath: string) => {

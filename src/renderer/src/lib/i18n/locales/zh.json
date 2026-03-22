@@ -181,6 +181,14 @@
         "persist-subgroups": "指定为子文件夹"
       },
       "dialog": {
+        "extract_archive_path": {
+          "title": "选择解压路径",
+          "description": "当 {{fileName}} 内只有一个顶层文件夹时，请选择解压后的目录结构。",
+          "flatten_single_root": "移除顶层文件夹",
+          "flatten_single_root_example": "示例：mod.zip/a/b/mod.ini -> b/mod.ini",
+          "keep_archive_root": "保留压缩包路径",
+          "keep_archive_root_example": "示例：mod.zip/a/b/mod.ini -> a/b/mod.ini"
+        },
         "add-game": {
           "title": "添加游戏",
           "name_input_placeholder": "游戏名称 (例如：原神)",
@@ -476,6 +484,13 @@
         "title": "模组",
         "mod_management": {
           "title": "模组管理",
+          "archiveExtractPathMode": "压缩包解压路径",
+          "archiveExtractPathModeDescription": "当压缩包内只有一个顶层文件夹时，选择其解压路径处理方式。",
+          "archiveExtractPathModes": {
+            "flatten_single_root": "移除顶层文件夹",
+            "keep_archive_root": "保留压缩包路径",
+            "ask_every_time": "每次询问"
+          },
           "deleteArchiveAfterExtract": "解压后删除压缩包",
           "deleteArchiveAfterExtractDescription": "将压缩文件解压到模组文件夹后删除源文件",
           "moveFolderInsteadOfCopy": "移动文件夹而非复制",

@@ -1,8 +1,12 @@
 import { Logger } from "@renderer/lib/logger";
 import { modStore } from "@renderer/store/mod";
+import type {
+    ArchiveExtractPathMode,
+    ResolvedArchiveExtractPathMode,
+} from "@shared/mod";
 import type { QueryClient } from "@tanstack/react-query";
 import path from "path-browserify";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 const SUPPORTED_ARCHIVE_EXTENSIONS = [".zip", ".rar", ".7z"];
@@ -23,6 +27,91 @@ export function useModDragDrop(
     game: string,
 ) {
     const [isDragging, setIsDragging] = useState(false);
+    const [archiveExtractDialogFileName, setArchiveExtractDialogFileName] = useState<
+        string | null
+    >(null);
+    const archivePromptQueueRef = useRef<
+        {
+            fileName: string;
+            resolve: (mode: ResolvedArchiveExtractPathMode) => void;
+        }[]
+    >([]);
+    const activeArchivePromptRef = useRef<{
+        fileName: string;
+        resolve: (mode: ResolvedArchiveExtractPathMode) => void;
+    } | null>(null);
+
+    const resolveArchivePrompt = (mode: ResolvedArchiveExtractPathMode) => {
+        const activePrompt = activeArchivePromptRef.current;
+        if (!activePrompt) {
+            return;
+        }
+
+        activeArchivePromptRef.current = null;
+        setArchiveExtractDialogFileName(null);
+        activePrompt.resolve(mode);
+
+        const nextPrompt = archivePromptQueueRef.current.shift();
+        if (!nextPrompt) {
+            return;
+        }
+
+        activeArchivePromptRef.current = nextPrompt;
+        setArchiveExtractDialogFileName(nextPrompt.fileName);
+    };
+
+    const enqueueArchivePrompt = (fileName: string): Promise<ResolvedArchiveExtractPathMode> => {
+        return new Promise((resolve) => {
+            const request = { fileName, resolve };
+
+            if (!activeArchivePromptRef.current) {
+                activeArchivePromptRef.current = request;
+                setArchiveExtractDialogFileName(fileName);
+                return;
+            }
+
+            archivePromptQueueRef.current.push(request);
+        });
+    };
+
+    const resolveArchiveExtractMode = async (
+        fileName: string,
+        filePath: string,
+    ): Promise<ResolvedArchiveExtractPathMode> => {
+        const mode = (await window.api.invoke(
+            "setting:mod:getArchiveExtractPathMode",
+        )) as ArchiveExtractPathMode;
+
+        if (mode === "ask_every_time") {
+            const hasSingleTopLevelDirectory = await window.api.invoke(
+                "mod:hasSingleTopLevelDirectory",
+                filePath,
+            );
+
+            if (!hasSingleTopLevelDirectory) {
+                return "flatten_single_root";
+            }
+
+            return enqueueArchivePrompt(fileName);
+        }
+
+        return mode;
+    };
+
+    useEffect(() => {
+        return () => {
+            if (activeArchivePromptRef.current) {
+                activeArchivePromptRef.current.resolve("flatten_single_root");
+                activeArchivePromptRef.current = null;
+            }
+
+            for (const pendingPrompt of archivePromptQueueRef.current) {
+                pendingPrompt.resolve("flatten_single_root");
+            }
+
+            archivePromptQueueRef.current = [];
+        };
+    }, []);
 
     const isArchive = (filePath: string): boolean => {
         const ext = path.extname(filePath).toLowerCase();
@@ -109,26 +198,31 @@ export function useModDragDrop(
                 }
 
                 if (isArch) {
-                    toast.promise(window.api.invoke("mod:extractArchive", filePath, targetPath), {
-                        loading: `${file.name} 압축 해제 중...`,
-                        success: () => {
-                            queryClient.invalidateQueries({
-                                queryKey: ["characters", game],
-                            });
-                            queryClient.invalidateQueries({
-                                queryKey: ["modGroup", currentSelectedGroup?.path],
-                            });
-                            return `${file.name} 압축 해제 완료`;
+                    const extractMode = await resolveArchiveExtractMode(file.name, filePath);
+
+                    toast.promise(
+                        window.api.invoke("mod:extractArchive", filePath, targetPath, extractMode),
+                        {
+                            loading: `${file.name} 압축 해제 중...`,
+                            success: () => {
+                                queryClient.invalidateQueries({
+                                    queryKey: ["characters", game],
+                                });
+                                queryClient.invalidateQueries({
+                                    queryKey: ["modGroup", currentSelectedGroup?.path],
+                                });
+                                return `${file.name} 압축 해제 완료`;
+                            },
+                            error: (error) => {
+                                Logger.error(error, "ModDragDrop:extractArchive");
+                                if (error.message?.includes("ALREADY_EXISTS")) {
+                                    const folderName = error.message.split(":")[1];
+                                    return `이미 존재하는 폴더입니다: ${folderName}`;
+                                }
+                                return `${file.name} 압축 해제 실패`;
+                            },
                         },
-                        error: (error) => {
-                            Logger.error(error, "ModDragDrop:extractArchive");
-                            if (error.message?.includes("ALREADY_EXISTS")) {
-                                const folderName = error.message.split(":")[1];
-                                return `이미 존재하는 폴더입니다: ${folderName}`;
-                            }
-                            return `${file.name} 압축 해제 실패`;
-                        },
-                    });
+                    );
                 } else if (isDir || (allowImages && isImg)) {
                     toast.promise(window.api.invoke("mod:copyFolder", filePath, targetPath), {
                         loading: `${file.name} 처리 중...`,
@@ -185,5 +279,9 @@ export function useModDragDrop(
         handleDragOver,
         handleDrop,
         handleFilesDrop,
+        archiveExtractDialogFileName,
+        confirmArchiveExtractDialog: () => resolveArchivePrompt("flatten_single_root"),
+        keepArchiveRootDialog: () => resolveArchivePrompt("keep_archive_root"),
+        closeArchiveExtractDialog: () => resolveArchivePrompt("flatten_single_root"),
     };
 }

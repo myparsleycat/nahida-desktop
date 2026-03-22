@@ -1,9 +1,10 @@
 #![deny(clippy::all)]
 
-use compress_tools::{uncompress_archive, Ownership};
+use compress_tools::{uncompress_archive, ArchiveContents, ArchiveIterator, Ownership};
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_derive::napi;
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -19,10 +20,18 @@ pub struct ExtractProgress {
     pub message: String,
 }
 
+#[allow(non_snake_case)]
+#[napi(object)]
+pub struct ExtractOptions {
+    #[allow(non_snake_case)]
+    pub flattenSingleRoot: Option<bool>,
+}
+
 #[derive(Clone)]
 pub struct ExtractorTask {
     pub archive: String,
     pub destination: String,
+    pub flatten_single_root: bool,
     pub on_progress: Option<Arc<ThreadsafeFunction<ExtractProgress>>>,
 }
 
@@ -60,6 +69,18 @@ fn emit_progress(
             ThreadsafeFunctionCallMode::NonBlocking,
         );
     }
+}
+
+fn normalize_archive_entry_name(name: &str) -> String {
+    name.replace('\\', "/").trim_start_matches("./").trim_matches('/').to_string()
+}
+
+fn is_ignored_top_level_entry(name: &str) -> bool {
+    matches!(name.to_ascii_lowercase().as_str(), "desktop.ini" | "thumbs.db")
+}
+
+fn is_directory_entry(name: &str) -> bool {
+    name.ends_with('/') || name.ends_with('\\')
 }
 
 struct ProgressReader<R> {
@@ -204,7 +225,7 @@ impl Task for ExtractorTask {
                 })
                 .collect();
 
-            if valid_entries.len() == 1 {
+            if self.flatten_single_root && valid_entries.len() == 1 {
                 let single_entry = valid_entries[0];
                 if let Ok(file_type) = single_entry.file_type() {
                     if file_type.is_dir() {
@@ -265,11 +286,58 @@ impl Task for ExtractorTask {
 pub fn extract_archive(
     archive_path: String,
     destination_path: String,
+    options: Option<ExtractOptions>,
     on_progress: Option<ThreadsafeFunction<ExtractProgress>>,
 ) -> AsyncTask<ExtractorTask> {
     AsyncTask::new(ExtractorTask {
         archive: archive_path,
         destination: destination_path,
+        flatten_single_root: options
+            .and_then(|opts| opts.flattenSingleRoot)
+            .unwrap_or(true),
         on_progress: on_progress.map(Arc::new),
     })
+}
+
+#[napi]
+pub fn has_single_top_level_directory(archive_path: String) -> Result<bool> {
+    let source_file = File::open(&archive_path)
+        .map_err(|e| Error::from_reason(format!("Failed to open archive: {}", e)))?;
+    let iterator = ArchiveIterator::from_read(source_file)
+        .map_err(|e| Error::from_reason(format!("Failed to inspect archive: {}", e)))?;
+
+    let mut top_level_entries: HashMap<String, bool> = HashMap::new();
+
+    for content in iterator {
+        let ArchiveContents::StartOfEntry(name, _stat) = content else {
+            continue;
+        };
+
+        let normalized = normalize_archive_entry_name(&name);
+        if normalized.is_empty() {
+            continue;
+        }
+
+        let mut segments = normalized.split('/').filter(|segment| !segment.is_empty());
+        let Some(top_level_name) = segments.next() else {
+            continue;
+        };
+
+        let has_nested_segments = segments.next().is_some();
+        if !has_nested_segments && is_ignored_top_level_entry(top_level_name) {
+            continue;
+        }
+
+        let is_dir = has_nested_segments || is_directory_entry(&name);
+        top_level_entries
+            .entry(top_level_name.to_string())
+            .and_modify(|existing| *existing = *existing || is_dir)
+            .or_insert(is_dir);
+
+        if top_level_entries.len() > 1 {
+            return Ok(false);
+        }
+    }
+
+    Ok(matches!(top_level_entries.into_values().next(), Some(true)))
 }

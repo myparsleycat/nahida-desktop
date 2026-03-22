@@ -1,4 +1,3 @@
-import { WindowsOnlyRoute } from "@renderer/components/windows-only-route";
 import { DownloadConfirmationOverlay } from "@renderer/components/download-confirmation-overlay";
 import { ContentHeader } from "@renderer/components/mod/content-header";
 import { DeleteGameDialog } from "@renderer/components/mod/delete-game-dialog";
@@ -6,7 +5,17 @@ import { ModGrid } from "@renderer/components/mod/mod-grid";
 import { ModList } from "@renderer/components/mod/mod-list";
 import { PresetManagementDialog } from "@renderer/components/mod/preset-management-dialog";
 import ModSidebar from "@renderer/components/mod/sidebar";
-import { useTitlebar } from "@renderer/hooks/use-titlebar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@renderer/components/ui/alert-dialog";
+import { Label } from "@renderer/components/ui/label";
+import { WindowsOnlyRoute } from "@renderer/components/windows-only-route";
 import { useCharacters, useGames } from "@renderer/hooks/use-mod-data";
 import { useModDragDrop } from "@renderer/hooks/use-mod-drag-drop";
 import {
@@ -15,6 +24,7 @@ import {
   useModWatcherEvents,
 } from "@renderer/hooks/use-mod-events";
 import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
+import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { useModStore } from "@renderer/store/mod";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
@@ -53,8 +63,17 @@ function ModRouteContent() {
   useModWatcherEvents(selectedGame, selectedGroupData?.path, queryClient);
   useModShortcuts();
 
-  const { isDragging, handleDragEnter, handleDragLeave, handleDragOver, handleDrop } =
-    useModDragDrop(selectedGroupData?.path, queryClient, selectedGame || "");
+  const {
+    isDragging,
+    handleDragEnter,
+    handleDragLeave,
+    handleDragOver,
+    handleDrop,
+    archiveExtractDialogFileName,
+    confirmArchiveExtractDialog,
+    keepArchiveRootDialog,
+    closeArchiveExtractDialog,
+  } = useModDragDrop(selectedGroupData?.path, queryClient, selectedGame || "");
 
   const initExpandedGroups = useModStore((s) => s.initExpandedGroups);
 
@@ -175,6 +194,45 @@ function ModRouteContent() {
       <PresetManagementDialog />
 
       <DeleteGameDialog />
+
+      <AlertDialog
+        open={archiveExtractDialogFileName !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeArchiveExtractDialog();
+          }
+        }}
+      >
+        <AlertDialogContent onEscapeKeyDown={(e) => e.preventDefault()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("page.mod.dialog.extract_archive_path.title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("page.mod.dialog.extract_archive_path.description", {
+                fileName: archiveExtractDialogFileName ?? "",
+              })}
+            </AlertDialogDescription>
+            <div className="mt-2 text-left text-sm w-full space-y-2">
+              <div className="space-y-1 rounded-md border bg-muted/30 p-3">
+                <Label>{t("page.mod.dialog.extract_archive_path.flatten_single_root")}</Label>
+                <p>{t("page.mod.dialog.extract_archive_path.flatten_single_root_example")}</p>
+              </div>
+
+              <div className="space-y-1 rounded-md border bg-muted/30 p-3">
+                <Label>{t("page.mod.dialog.extract_archive_path.keep_archive_root")}</Label>
+                <p>{t("page.mod.dialog.extract_archive_path.keep_archive_root_example")}</p>
+              </div>
+            </div>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <AlertDialogAction onClick={confirmArchiveExtractDialog}>
+              {t("page.mod.dialog.extract_archive_path.flatten_single_root")}
+            </AlertDialogAction>
+            <AlertDialogAction onClick={keepArchiveRootDialog}>
+              {t("page.mod.dialog.extract_archive_path.keep_archive_root")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

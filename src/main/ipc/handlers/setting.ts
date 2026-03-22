@@ -103,6 +103,15 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         return await d.setting.mod.getDeleteArchiveAfterExtract();
     });
 
+    rh("setting:mod:getArchiveExtractPathMode", async () => {
+        return await d.setting.mod.getArchiveExtractPathMode();
+    });
+
+    rh("setting:mod:setArchiveExtractPathMode", async (mode) => {
+        await d.setting.mod.setArchiveExtractPathMode(mode);
+        d.ipc.broadcast("mod:update-settings");
+    });
+
     rh("setting:mod:setDeleteArchiveAfterExtract", async (enabled) => {
         await d.setting.mod.setDeleteArchiveAfterExtract(enabled);
         d.ipc.broadcast("mod:update-settings");

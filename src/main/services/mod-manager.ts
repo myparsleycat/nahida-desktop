@@ -1,6 +1,7 @@
 import path from "node:path";
 import { db } from "@backend/lib/db";
 import { getCharactersFolder, getMods, sendF10 } from "@native/native-mod";
+import type { ResolvedArchiveExtractPathMode } from "@shared/mod";
 import type { ApplyPresetResult, FolderGroup, Preset } from "@shared/types.gen";
 import { GAME_MATCH_CASES } from "@shared/xxmi-match";
 import { and, eq, ne } from "drizzle-orm";
@@ -1011,14 +1012,23 @@ export class ModManager {
                 });
         },
 
-        extractArchiveToGroup: async (archivePath: string, groupPath: string): Promise<void> => {
+        extractArchiveToGroup: async (
+            archivePath: string,
+            groupPath: string,
+            mode?: ResolvedArchiveExtractPathMode,
+        ): Promise<void> => {
             const deleteAfterExtract =
                 await this.desktop.setting.mod.getDeleteArchiveAfterExtract();
+            const extractMode =
+                mode ?? (await this.desktop.setting.mod.getArchiveExtractPathMode());
 
             try {
                 const finalTargetPath = await this.desktop.service.archive.extract(
                     archivePath,
                     groupPath,
+                    {
+                        flattenSingleRoot: extractMode !== "keep_archive_root",
+                    },
                 );
 
                 this.desktop.logger.info(

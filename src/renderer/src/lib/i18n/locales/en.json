@@ -181,6 +181,14 @@
         "persist-subgroups": "Persist subgroups"
       },
       "dialog": {
+        "extract_archive_path": {
+          "title": "Choose extraction path",
+          "description": "Choose the extracted folder structure when {{fileName}} contains a single top-level folder.",
+          "flatten_single_root": "Remove top-level folder",
+          "flatten_single_root_example": "Example: mod.zip/a/b/mod.ini -> b/mod.ini",
+          "keep_archive_root": "Keep archive paths",
+          "keep_archive_root_example": "Example: mod.zip/a/b/mod.ini -> a/b/mod.ini"
+        },
         "add-game": {
           "title": "Add Game",
           "name_input_placeholder": "Game Name (e.g. Genshin)",
@@ -475,6 +483,13 @@
         "title": "Mod",
         "mod_management": {
           "title": "Mod Management",
+          "archiveExtractPathMode": "Archive extraction path",
+          "archiveExtractPathModeDescription": "Choose how archives with a single top-level folder should be extracted.",
+          "archiveExtractPathModes": {
+            "flatten_single_root": "Remove top-level folder",
+            "keep_archive_root": "Keep archive paths",
+            "ask_every_time": "Ask every time"
+          },
           "deleteArchiveAfterExtract": "Delete archive after extraction",
           "deleteArchiveAfterExtractDescription": "Delete the original archive file after extracting it to the mod folder",
           "moveFolderInsteadOfCopy": "Move folder instead of copy",

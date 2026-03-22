@@ -1,5 +1,6 @@
 import type { NahidaDesktop } from "@main/index";
 import { imageCache, setting } from "@main/internal/db/schema";
+import { ARCHIVE_EXTRACT_PATH_MODES, type ArchiveExtractPathMode } from "@shared/mod";
 import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import type { AutoUpdateMode } from "@shared/updater";
 import AutoLaunch from "auto-launch";
@@ -385,6 +386,39 @@ export class Setting {
     };
 
     mod = {
+        getArchiveExtractPathMode: async (): Promise<ArchiveExtractPathMode> => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "mod_archive_extract_path_mode"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db.insert(setting).values({
+                    key: "mod_archive_extract_path_mode",
+                    value: "flatten_single_root",
+                });
+                return "flatten_single_root";
+            }
+
+            if (ARCHIVE_EXTRACT_PATH_MODES.includes(qr.value as ArchiveExtractPathMode)) {
+                return qr.value as ArchiveExtractPathMode;
+            }
+
+            return "flatten_single_root";
+        },
+
+        setArchiveExtractPathMode: async (mode: ArchiveExtractPathMode) => {
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({
+                    key: "mod_archive_extract_path_mode",
+                    value: mode,
+                })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: mode },
+                });
+        },
+
         getDeleteArchiveAfterExtract: async () => {
             const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "mod_delete_archive_after_extract"),
