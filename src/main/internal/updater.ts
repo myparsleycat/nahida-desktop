@@ -43,12 +43,17 @@ export class Updater {
 
     public initialize(): void {
         autoUpdater.on("error", (err) => {
-            this.isCheckingForUpdates = false;
-            this.isDownloadingUpdate = false;
-            this.updateDownloaded = false;
-            this.updateAvailable = false;
-            this.releaseNotesUrl = null;
-            this.updateDialogDismissed = false;
+            if (this.isDownloadingUpdate) {
+                this.isCheckingForUpdates = false;
+                this.isDownloadingUpdate = false;
+            } else {
+                this.isCheckingForUpdates = false;
+                this.isDownloadingUpdate = false;
+                this.updateDownloaded = false;
+                this.updateAvailable = false;
+                this.releaseNotesUrl = null;
+                this.updateDialogDismissed = false;
+            }
             this.broadcastStatus();
 
             this.desktop.logger.log("error", err, "updater");
