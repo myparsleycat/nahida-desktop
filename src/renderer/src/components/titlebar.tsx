@@ -17,7 +17,7 @@ interface TitlebarProps {
 
 const WINDOW_CONFIG: Record<string, { hideMinimize?: boolean; hideMaximize?: boolean }> = {
   "/report": { hideMinimize: true, hideMaximize: true },
-  "/setting": { hideMinimize: false, hideMaximize: true },
+  "/setting": { hideMinimize: true, hideMaximize: true },
   "/auth": { hideMinimize: false, hideMaximize: true },
 };
 

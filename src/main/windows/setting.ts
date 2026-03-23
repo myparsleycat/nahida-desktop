@@ -2,7 +2,8 @@ import { fileURLToPath } from "node:url";
 import { is } from "@electron-toolkit/utils";
 import type { NahidaDesktop } from "@main/index";
 import { openExternal } from "@main/services/util";
-import { BrowserWindow } from "electron";
+import { BrowserWindow, screen } from "electron";
+import { debounce } from "es-toolkit";
 import icon from "../../../resources/nahida.png?asset";
 import { focus, getDefaultWebPreferences } from "./utils";
 
@@ -72,14 +73,37 @@ export class SettingWindow {
             return this.window;
         }
 
+        const savedBounds = await this.desktop.setting.getSettingBounds();
+        let bounds = savedBounds;
+
+        if (bounds) {
+            const displays = screen.getAllDisplays();
+            const isValid = displays.some((display) => {
+                const area = display.workArea;
+                return (
+                    bounds!.x >= area.x &&
+                    bounds!.y >= area.y &&
+                    bounds!.x < area.x + area.width &&
+                    bounds!.y < area.y + area.height
+                );
+            });
+
+            if (!isValid) {
+                bounds = null;
+            }
+        }
+
         const titlebarSetting = await this.desktop.setting.general.getTitlebarStyle();
         const isNativeTitlebar = titlebarSetting === "native";
 
         this.window = new BrowserWindow({
             title: "설정",
-            width: 580,
-            height: 740,
-            resizable: false,
+            width: bounds?.width || 580,
+            height: bounds?.height || 740,
+            minWidth: 580,
+            minHeight: 740,
+            maxWidth: 1080,
+            maxHeight: 2180,
             show: false,
             frame: isNativeTitlebar,
             maximizable: false,
@@ -92,6 +116,11 @@ export class SettingWindow {
             ...(parentWindow ? { parent: parentWindow } : {}),
         });
         const window = this.window;
+        const saveBounds = debounce(async () => {
+            if (!this.window || this.window !== window) return;
+            if (window.isMaximized() || window.isMinimized() || window.isFullScreen()) return;
+            await this.desktop.setting.setSettingBounds(window.getBounds());
+        }, 1000);
 
         window.webContents.setWindowOpenHandler(({ url }) => {
             if (url.startsWith("http")) {
@@ -105,7 +134,18 @@ export class SettingWindow {
             window.show();
         });
 
+        window.on("resize", saveBounds);
+        window.on("move", saveBounds);
+
+        window.on("close", async () => {
+            saveBounds.cancel();
+            if (window.isDestroyed()) return;
+            if (window.isMaximized() || window.isMinimized() || window.isFullScreen()) return;
+            await this.desktop.setting.setSettingBounds(window.getBounds());
+        });
+
         window.on("closed", () => {
+            saveBounds.cancel();
             if (this.window === window) {
                 this.window = null;
             }
@@ -120,12 +160,9 @@ export class SettingWindow {
             // });
 
             // esm
-            window.loadFile(
-                fileURLToPath(new URL("../renderer/index.html", import.meta.url)),
-                {
-                    hash: "setting",
-                },
-            );
+            window.loadFile(fileURLToPath(new URL("../renderer/index.html", import.meta.url)), {
+                hash: "setting",
+            });
         }
 
         return window;
