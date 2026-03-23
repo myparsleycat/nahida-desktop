@@ -94,7 +94,11 @@ export function Sidebar({ className }: { className?: string }) {
                   </>
                 )}
                 <ArrowUpDownIcon
-                  className={cn(iconSize, activeTransferProgress !== null && "scale-90")}
+                  className={cn(
+                    iconSize,
+                    "transition-all duration-300",
+                    activeTransferProgress !== null && "scale-90",
+                  )}
                 />
               </Button>
             </TooltipTrigger>
