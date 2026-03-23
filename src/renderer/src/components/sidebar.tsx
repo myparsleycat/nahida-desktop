@@ -4,7 +4,7 @@ import { viewStore } from "@renderer/store/drive";
 import { useGlobalStore } from "@renderer/store/global";
 import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import type { TransferWithoutData } from "@shared/types.gen";
-import { useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpDownIcon,
   BugIcon,
@@ -22,6 +22,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 export function Sidebar({ className }: { className?: string }) {
   const navi = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
   const appStatus = useGlobalStore((state) => state.appStatus);
   const transfers = useGlobalStore((state) => state.transfers);
@@ -32,7 +33,7 @@ export function Sidebar({ className }: { className?: string }) {
     e.preventDefault();
   };
 
-  const iconSize = "size-6";
+  const iconSize = "size-7";
   const activeTransfers = transfers.filter((transfer) =>
     ["pending", "preparing", "progress"].includes(transfer.status),
   );
@@ -47,17 +48,27 @@ export function Sidebar({ className }: { className?: string }) {
     activeTransferProgress === null
       ? transferProgressCircumference
       : transferProgressCircumference * (1 - activeTransferProgress / 100);
+  const pathname = location.pathname;
+  const isTransferPage = pathname.startsWith("/transfer");
+  const isDrivePage = pathname.startsWith("/drive/drive");
+  const isSharePage = pathname.startsWith("/drive/share");
+  const isModPage = pathname.startsWith("/mod");
+  const isBackupPage = pathname.startsWith("/backup");
+  const isToolsPage = pathname.startsWith("/tools");
+  const getNavButtonClassName = (isActive: boolean) =>
+    cn("relative overflow-visible", isActive && "text-accent hover:text-accent");
 
   return (
-    <div className={`flex flex-col border-r ${className}`}>
+    <div className={`flex w-13 flex-col border-r ${className}`}>
       <div className="w-full flex flex-col h-full select-none">
         <div className="flex flex-col overflow-y-auto overflow-x-hidden dragselect-start-allowed p-2 space-y-2">
           <Tooltip disableHoverableContent={true}>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
-                size="icon"
-                className="relative overflow-visible"
+                size="icon-lg"
+                className={getNavButtonClassName(isTransferPage)}
+                aria-current={isTransferPage ? "page" : undefined}
                 onPointerDown={handlePointerDown}
                 onClick={() => {
                   navi({ to: "/transfer" });
@@ -94,7 +105,11 @@ export function Sidebar({ className }: { className?: string }) {
                   </>
                 )}
                 <ArrowUpDownIcon
-                  className={cn(iconSize, activeTransferProgress !== null && "scale-90")}
+                  className={cn(
+                    iconSize,
+                    "transition-all duration-300",
+                    activeTransferProgress !== null && "scale-90",
+                  )}
                 />
               </Button>
             </TooltipTrigger>
@@ -114,7 +129,9 @@ export function Sidebar({ className }: { className?: string }) {
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
-                    size="icon"
+                    size="icon-lg"
+                    className={getNavButtonClassName(isDrivePage)}
+                    aria-current={isDrivePage ? "page" : undefined}
                     onPointerDown={handlePointerDown}
                     onClick={() => {
                       const lastDriveId = viewStore.getState().lastDriveId;
@@ -146,7 +163,9 @@ export function Sidebar({ className }: { className?: string }) {
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
-                    size="icon"
+                    size="icon-lg"
+                    className={getNavButtonClassName(isSharePage)}
+                    aria-current={isSharePage ? "page" : undefined}
                     onPointerDown={handlePointerDown}
                     onClick={() => {
                       const lastShareId = viewStore.getState().lastShareId;
@@ -183,7 +202,9 @@ export function Sidebar({ className }: { className?: string }) {
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
+                  size="icon-lg"
+                  className={getNavButtonClassName(isModPage)}
+                  aria-current={isModPage ? "page" : undefined}
                   onPointerDown={handlePointerDown}
                   onClick={() => {
                     navi({ to: "/mod" });
@@ -203,7 +224,9 @@ export function Sidebar({ className }: { className?: string }) {
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
+                  size="icon-lg"
+                  className={getNavButtonClassName(isBackupPage)}
+                  aria-current={isBackupPage ? "page" : undefined}
                   onPointerDown={handlePointerDown}
                   onClick={() => {
                     navi({ to: "/backup" });
@@ -223,7 +246,9 @@ export function Sidebar({ className }: { className?: string }) {
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
+                  size="icon-lg"
+                  className={getNavButtonClassName(isToolsPage)}
+                  aria-current={isToolsPage ? "page" : undefined}
                   onPointerDown={handlePointerDown}
                   onClick={() => {
                     navi({ to: "/tools" });
@@ -244,7 +269,7 @@ export function Sidebar({ className }: { className?: string }) {
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
-                size="icon"
+                size="icon-lg"
                 onPointerDown={handlePointerDown}
                 onClick={() => {
                   window.api.invoke("util:openReportWindow");
@@ -262,7 +287,7 @@ export function Sidebar({ className }: { className?: string }) {
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
-                size="icon"
+                size="icon-lg"
                 onPointerDown={handlePointerDown}
                 onClick={() => {
                   window.api.invoke("window:openSetting");

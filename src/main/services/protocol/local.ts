@@ -1,9 +1,9 @@
 import { pathToFileURL } from "node:url";
-import { is } from "@electron-toolkit/utils";
 import type { NahidaDesktop } from "@main/index";
 import { imageCache } from "@main/internal/db/schema";
 import { net } from "electron";
-import { fileTypeFromFile } from "file-type/node";
+import { fileTypeFromBuffer } from "file-type/node";
+import fse from "fs-extra";
 import PQueue from "p-queue";
 import sharp from "sharp";
 
@@ -29,12 +29,12 @@ export class LocalProtocol {
             fullPath = fullPath.slice(1);
         }
 
-        const fileType = await fileTypeFromFile(fullPath);
+        const buffer = await fse.readFile(fullPath);
+        const fileType = await fileTypeFromBuffer(buffer);
 
         const convertImageMime = ["image/jpeg", "image/png", "image/webp"];
 
         const isOrig = url.searchParams.get("orig") === "true";
-        const fileUrl = pathToFileURL(fullPath).href;
 
         if (!isOrig && fileType && convertImageMime.includes(fileType.mime)) {
             const imgHash = await this.desktop.lib.utils.getFileHash(fullPath);
@@ -48,7 +48,7 @@ export class LocalProtocol {
                 return new Response(blob);
             } else {
                 const resizedImg = await this.queue.add(() =>
-                    sharp(fullPath)
+                    sharp(buffer)
                         .resize({ width: 500, height: 500, fit: "inside" })
                         .webp({ quality: 70 })
                         .toBuffer(),
@@ -69,9 +69,10 @@ export class LocalProtocol {
                 return new Response(blob);
             }
         } else {
+            const fileUrl = pathToFileURL(fullPath).href;
+
             try {
-                const response = await net.fetch(fileUrl);
-                return response;
+                return await net.fetch(fileUrl);
             } catch {
                 return new Response("not found", { status: 404 });
             }

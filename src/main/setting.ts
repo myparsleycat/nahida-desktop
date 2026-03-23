@@ -67,9 +67,9 @@ export class Setting {
         this.desktop = desktop;
     }
 
-    public async getBounds() {
+    private async getStoredBounds(key: string) {
         const qr = await this.desktop.lib.db.query.setting.findFirst({
-            where: (t, { eq }) => eq(t.key, "bounds"),
+            where: (t, { eq }) => eq(t.key, key),
         });
 
         if (!qr) return null;
@@ -79,15 +79,31 @@ export class Setting {
         return bounds;
     }
 
-    public async setBounds(bounds: Bounds) {
+    private async setStoredBounds(key: string, bounds: Bounds) {
         const value = JSON.stringify(bounds);
         await this.desktop.lib.db
             .insert(setting)
-            .values({ key: "bounds", value })
+            .values({ key, value })
             .onConflictDoUpdate({
                 target: setting.key,
                 set: { value },
             });
+    }
+
+    public async getBounds() {
+        return this.getStoredBounds("bounds");
+    }
+
+    public async setBounds(bounds: Bounds) {
+        await this.setStoredBounds("bounds", bounds);
+    }
+
+    public async getSettingBounds() {
+        return this.getStoredBounds("settingBounds");
+    }
+
+    public async setSettingBounds(bounds: Bounds) {
+        await this.setStoredBounds("settingBounds", bounds);
     }
 
     general = {

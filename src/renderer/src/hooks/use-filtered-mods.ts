@@ -4,6 +4,12 @@ import type { ModInfo } from "@shared/types.gen";
 import { disassemble, getChoseong } from "es-hangul";
 import { useMemo } from "react";
 
+const nameCollator = new Intl.Collator(undefined, {
+    numeric: true,
+    sensitivity: "base",
+    caseFirst: "false",
+});
+
 export function useFilteredMods(mods: ModInfo[], searchQuery: string) {
     const sortType = useModStore((s) => s.sortType);
     const sortOrder = useModStore((s) => s.sortOrder);
@@ -38,10 +44,7 @@ export function useFilteredMods(mods: ModInfo[], searchQuery: string) {
 
                 let comparison = 0;
                 if (sortType === "name") {
-                    comparison = a.mod.name.localeCompare(b.mod.name, undefined, {
-                        numeric: true,
-                        sensitivity: "base",
-                    });
+                    comparison = nameCollator.compare(a.mod.name, b.mod.name);
                 } else if (sortType === "date") {
                     comparison = a.mod.mtime - b.mod.mtime;
                 } else if (sortType === "size") {
