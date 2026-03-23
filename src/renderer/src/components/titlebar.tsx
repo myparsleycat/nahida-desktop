@@ -3,7 +3,6 @@ import { cn } from "@renderer/lib/utils";
 import { useGlobalStore } from "@renderer/store/global";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "@tanstack/react-router";
-import { find } from "es-toolkit/compat";
 import { DownloadIcon, MaximizeIcon, MinusIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -36,8 +35,7 @@ export function Titlebar({ title }: TitlebarProps) {
     queryFn: async () => window.api.invoke("setting:general:getTitlebarStyle"),
   });
 
-  const configEntry = find(
-    Object.entries(WINDOW_CONFIG),
+  const configEntry = Object.entries(WINDOW_CONFIG).find(
     ([route]) => location.pathname === route || location.pathname.startsWith(`${route}/`),
   );
 
