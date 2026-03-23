@@ -243,6 +243,20 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     return () => clearTimeout(timer);
   }, [searchTerm, handleSelect]);
 
+  useEffect(() => {
+    const refreshSidebar = () => {
+      setRefreshKey((prev) => prev + 1);
+    };
+
+    const removeGameListener = window.api.on("mod:update-game", refreshSidebar);
+    const removeModsListener = window.api.on("mod:update-mods", refreshSidebar);
+
+    return () => {
+      removeGameListener();
+      removeModsListener();
+    };
+  }, []);
+
   const handleItemClick = useCallback(
     (group: FolderGroup, _e: React.MouseEvent) => {
       handleSelect(group, true);

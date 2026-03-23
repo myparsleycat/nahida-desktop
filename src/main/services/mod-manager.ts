@@ -61,9 +61,9 @@ export class ModManager {
         try {
             this.gameWatcherId = await this.desktop.lib.watcher.create(
                 modFolderPath,
-                { depth: 0 },
+                { depth: 1 },
                 (event) => {
-                    if (event === "create" || event === "remove") {
+                    if (event === "create" || event === "modify" || event === "remove") {
                         if (this.desktop.window.main.window) {
                             this.desktop.ipc.postMessageToWindow(
                                 this.desktop.window.main.window,
@@ -87,9 +87,9 @@ export class ModManager {
         try {
             this.characterWatcherId = await this.desktop.lib.watcher.create(
                 characterPath,
-                { depth: 0 },
+                { depth: 1 },
                 (event) => {
-                    if (event === "modify" || event === "remove") {
+                    if (event === "create" || event === "modify" || event === "remove") {
                         if (this.desktop.window.main.window) {
                             this.desktop.ipc.postMessageToWindow(
                                 this.desktop.window.main.window,

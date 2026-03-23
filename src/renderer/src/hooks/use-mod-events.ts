@@ -50,9 +50,21 @@ export function useModWatcherEvents(
         });
 
         const removeModsListener = window.api.on("mod:update-mods", () => {
-            if (selectedGroupPath) {
-                queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
+            const invalidations: Promise<unknown>[] = [];
+
+            if (selectedGame) {
+                invalidations.push(
+                    queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] }),
+                );
             }
+
+            if (selectedGroupPath) {
+                invalidations.push(
+                    queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] }),
+                );
+            }
+
+            void Promise.all(invalidations);
         });
 
         return () => {
