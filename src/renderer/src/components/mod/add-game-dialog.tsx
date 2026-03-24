@@ -31,11 +31,11 @@ export function AddGameDialog({ onPickFolder, onAddGame }: AddGameDialogProps) {
 
   const handleAdd = () => {
     if (!newGameName.trim()) {
-      toast.error(t("page.mod.dialog.add-game.#.0"));
+      toast.warning(t("page.mod.dialog.add-game.#.0"));
       return;
     }
     if (!newGamePath.trim()) {
-      toast.error(t("page.mod.dialog.add-game.#.1"));
+      toast.warning(t("page.mod.dialog.add-game.#.1"));
       return;
     }
     onAddGame(newGameName, newGamePath);

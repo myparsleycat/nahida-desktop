@@ -85,7 +85,7 @@ export function EditGameDialog({
     }
 
     if (!editGamePath.trim()) {
-      toast.error(t("page.mod.dialog.add-game.#.1"));
+      toast.warning(t("page.mod.dialog.add-game.#.1"));
       return;
     }
 
