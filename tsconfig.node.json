@@ -1,41 +1,40 @@
 {
-  "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
-  "include": [
-    "electron.vite.config.*",
-    "plugins/**/*",
-    "src/main/**/*",
-    "src/preload/**/*",
-    "src/shared/**/*",
-    "../backend/**/*",
-    "native/**/*"
-  ],
-  "references": [
-    {
-      "path": "../backend"
-    }
-  ],
-  "compilerOptions": {
-    "composite": false,
-    "lib": ["ESNext", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
-    "types": ["electron-vite/node"],
-    "baseUrl": ".",
-    "paths": {
-      "@native/*": ["native/*"],
-      "@shared/*": ["src/shared/*"],
-      "@main/*": ["src/main/*"],
-      "@preload/*": ["src/preload/*"],
-      "@/*": ["src/*"],
-      "@backend/*": ["../backend/src/*"],
-      "elysia": ["../backend/node_modules/elysia"],
-      "@elysiajs/eden": ["../frontend/node_modules/@elysiajs/eden"]
+    "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
+    "include": [
+        "electron.vite.config.*",
+        "plugins/**/*",
+        "src/main/**/*",
+        "src/preload/**/*",
+        "src/shared/**/*",
+        "../backend/**/*",
+        "native/**/*",
+    ],
+    "references": [
+        {
+            "path": "../backend",
+        },
+    ],
+    "compilerOptions": {
+        "composite": false,
+        "lib": ["ESNext", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
+        "types": ["electron-vite/node"],
+        "paths": {
+            "@native/*": ["./native/*"],
+            "@shared/*": ["./src/shared/*"],
+            "@main/*": ["./src/main/*"],
+            "@preload/*": ["./src/preload/*"],
+            "@/*": ["./src/*"],
+            "@backend/*": ["../backend/src/*"],
+            "elysia": ["../backend/node_modules/elysia"],
+            "@elysiajs/eden": ["../frontend/node_modules/@elysiajs/eden"],
+        },
+        "moduleResolution": "bundler",
+        "allowImportingTsExtensions": true,
+        "noEmit": true,
+        "skipLibCheck": true,
+        "strict": true,
+        "noUnusedLocals": false,
+        "noUnusedParameters": false,
+        "declaration": false,
     },
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "noEmit": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "declaration": false
-  }
 }
