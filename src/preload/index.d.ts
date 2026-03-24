@@ -13,10 +13,6 @@ declare global {
                 channel: T,
                 ...args: Parameters<IpcHandlers[T]>
             ): Promise<Awaited<ReturnType<IpcHandlers[T]>>>;
-            send<T extends keyof IpcHandlers>(
-                channel: T,
-                ...args: Parameters<IpcHandlers[T]>
-            ): void;
             send(channel: IpcSendChannel, ...args: any[]): void;
             on<T extends keyof IpcEvents>(
                 channel: T,

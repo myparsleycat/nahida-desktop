@@ -1,6 +1,7 @@
 // oxlint-disable typescript/no-explicit-any
 import { electronAPI } from "@electron-toolkit/preload";
 import type { IpcHandlers, IpcEvents } from "@shared/types.gen";
+import type { IpcSendChannel } from "@shared/ipc-keys.gen";
 import { IPC_EVENT_CHANNELS, IPC_HANDLER_CHANNELS, IPC_SEND_CHANNELS } from "@shared/ipc-keys.gen";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 
@@ -15,7 +16,7 @@ const api = {
         }
         return ipcRenderer.invoke(channel, ...args) as Promise<Awaited<ReturnType<IpcHandlers[K]>>>;
     },
-    send: <K extends keyof IpcHandlers>(channel: K, ...args: Parameters<IpcHandlers[K]>) => {
+    send: <K extends IpcSendChannel>(channel: K, ...args: any[]) => {
         if (!ipcSendChannelSet.has(channel)) {
             throw new Error(`Unauthorized IPC channel: ${channel}`);
         }

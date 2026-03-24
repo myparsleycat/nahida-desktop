@@ -120,7 +120,6 @@ function generateIpc(options: IpcGeneratorOptions) {
         while ((match = rhRegex.exec(content)) !== null) {
             const channel = match[1];
             const impl = match[2];
-            sendChannels.add(channel);
 
             if (typeMap.has(channel)) {
                 channels.set(channel, typeMap.get(channel)!);
