@@ -1,5 +1,6 @@
 import { ElectronAPI } from "@electron-toolkit/preload";
 import { IpcHandlers, IpcEvents } from "../shared/types.gen";
+import { IpcSendChannel } from "../shared/ipc-keys.gen";
 
 declare global {
     interface Window {
@@ -16,6 +17,7 @@ declare global {
                 channel: T,
                 ...args: Parameters<IpcHandlers[T]>
             ): void;
+            send(channel: IpcSendChannel, ...args: any[]): void;
             on<T extends keyof IpcEvents>(
                 channel: T,
                 listener: (...args: Parameters<IpcEvents[T]>) => void,
