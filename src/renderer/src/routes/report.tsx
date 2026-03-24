@@ -3,12 +3,11 @@ import { Button } from "@renderer/components/ui/button";
 import { Checkbox } from "@renderer/components/ui/checkbox";
 import { Field, FieldGroup, FieldLabel } from "@renderer/components/ui/field";
 import { Input } from "@renderer/components/ui/input";
-import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Textarea } from "@renderer/components/ui/textarea";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { useForm } from "@tanstack/react-form";
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2Icon } from "lucide-react";
+import { Loader2Icon, SendIcon } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -91,17 +90,15 @@ function RouteComponent() {
             children={({ name, state, handleChange, handleBlur }) => (
               <Field className="flex min-h-0 flex-1 flex-col">
                 <FieldLabel htmlFor={name}>{t("page.report.fields.description")}</FieldLabel>
-                <ScrollArea className="flex-1 min-h-0 overflow-hidden rounded-lg border">
-                  <Textarea
-                    value={state.value}
-                    onChange={(e) => handleChange(e.target.value)}
-                    onBlur={handleBlur}
-                    className="min-h-full resize-none border-0 bg-transparent text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0"
-                    id={name}
-                    required
-                    maxLength={2000}
-                  />
-                </ScrollArea>
+                <Textarea
+                  value={state.value}
+                  onChange={(e) => handleChange(e.target.value)}
+                  onBlur={handleBlur}
+                  className="h-full"
+                  id={name}
+                  required
+                  maxLength={2000}
+                />
               </Field>
             )}
           />
@@ -129,15 +126,17 @@ function RouteComponent() {
           />
         </div>
 
-        <form.Subscribe
-          selector={(state) => [state.canSubmit, state.isSubmitting]}
-          children={([canSubmit, isSubmitting]) => (
-            <Button type="submit" disabled={!canSubmit} className="w-full shrink-0">
-              {isSubmitting && <Loader2Icon className="animate-spin" />}
-              {t("page.report.submit")}
-            </Button>
-          )}
-        />
+        <div className="flex justify-end items-center">
+          <form.Subscribe
+            selector={(state) => [state.canSubmit, state.isSubmitting]}
+            children={([canSubmit, isSubmitting]) => (
+              <Button type="submit" disabled={!canSubmit}>
+                {isSubmitting ? <Loader2Icon className="animate-spin" /> : <SendIcon />}
+                {t("page.report.submit")}
+              </Button>
+            )}
+          />
+        </div>
       </form>
     </div>
   );
