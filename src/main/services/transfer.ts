@@ -1,4 +1,3 @@
-import { NativeFolderLock } from "@native/native-fs";
 import type { Transfer, TransferData, TransferStatus } from "@shared/types.gen";
 import { throttle } from "es-toolkit";
 import type { NahidaDesktop } from "..";
@@ -11,7 +10,6 @@ export interface LocalTransfer extends Transfer {
     sessionStartBytes: number;
     speedSamples: Array<{ timestamp: number; bytes: number }>;
     error?: string;
-    lockPaths?: string[];
 }
 
 export class TransferService {
@@ -22,7 +20,6 @@ export class TransferService {
 
     private throttledEmits: Map<string, () => void> = new Map();
     private runners: Map<string, () => Promise<void>> = new Map();
-    private folderLocks: Map<string, NativeFolderLock[]> = new Map();
 
     constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
@@ -169,7 +166,6 @@ export class TransferService {
         restartParams,
         initialStatus,
         path,
-        lockPaths,
     }: {
         pid: string;
         currentId?: string;
@@ -180,7 +176,6 @@ export class TransferService {
         restartParams?: any;
         initialStatus: TransferStatus;
         path?: string;
-        lockPaths?: string[];
     }) {
         const totalSize = data.files.reduce((acc, cur) => acc + cur.size, 0);
         const transfer: LocalTransfer = {
@@ -205,7 +200,6 @@ export class TransferService {
             restartParams,
             completedFileUuids: new Set(),
             path,
-            lockPaths: this.normalizeLockPaths(lockPaths),
         };
 
         this.transfers.push(transfer);
@@ -214,17 +208,6 @@ export class TransferService {
             pid,
             throttle(() => this.emitUpdate(), 500),
         );
-
-        try {
-            if (transfer.lockPaths?.length) {
-                await this.acquireTransferLocks(pid, transfer.lockPaths);
-            }
-        } catch (error) {
-            this.transfers = this.transfers.filter((t) => t.pid !== pid);
-            this.throttledEmits.delete(pid);
-            this.runners.delete(pid);
-            throw error;
-        }
 
         this.checkSettingAndChangePowerSaveBlock();
         this.emitUpdate();
@@ -251,55 +234,6 @@ export class TransferService {
         }
 
         return transfer;
-    }
-
-    public setTransferLockPaths(pid: string, lockPaths?: string[]) {
-        const transfer = this.getTransferByPID(pid);
-        if (!transfer) return;
-        transfer.lockPaths = this.normalizeLockPaths(lockPaths);
-    }
-
-    public async acquireTransferLocks(pid: string, explicitPaths?: string[]) {
-        const transfer = this.getTransferByPID(pid);
-        if (!transfer) return;
-
-        const lockPaths = this.normalizeLockPaths(explicitPaths ?? transfer.lockPaths);
-        if (!lockPaths.length) return;
-
-        this.releaseTransferLocks(pid);
-
-        const acquired: NativeFolderLock[] = [];
-        try {
-            for (const lockPath of lockPaths) {
-                const lock = new NativeFolderLock(lockPath);
-                lock.lock();
-                acquired.push(lock);
-            }
-            this.folderLocks.set(pid, acquired);
-            transfer.lockPaths = lockPaths;
-        } catch (error) {
-            for (const lock of acquired) {
-                try {
-                    lock.unlock();
-                } catch {}
-            }
-            throw error;
-        }
-    }
-
-    public releaseTransferLocks(pid: string) {
-        const locks = this.folderLocks.get(pid);
-        if (!locks) return;
-
-        for (const lock of locks) {
-            try {
-                lock.unlock();
-            } catch (error) {
-                this.desktop.logger.error(error, `Transfer:releaseTransferLocks:${pid}`);
-            }
-        }
-
-        this.folderLocks.delete(pid);
     }
 
     public registerRunner(pid: string, runner: () => Promise<void>) {
@@ -352,10 +286,6 @@ export class TransferService {
 
         if (transfer.status !== "preparing") {
             transfer.status = "pending";
-        }
-
-        if (transfer.type === "upload" && transfer.lockPaths?.length) {
-            await this.acquireTransferLocks(pid, transfer.lockPaths);
         }
 
         transfer.failedFiles = 0;
@@ -414,14 +344,6 @@ export class TransferService {
         }
 
         if (updates.status) {
-            if (
-                updates.status === "completed" ||
-                updates.status === "paused" ||
-                updates.status === "canceled" ||
-                updates.status === "error"
-            ) {
-                this.releaseTransferLocks(pid);
-            }
             this.checkSettingAndChangePowerSaveBlock();
             this.emitUpdate();
         } else {
@@ -454,7 +376,6 @@ export class TransferService {
         ) {
             transfer.abortController.abort();
             transfer.status = "canceled";
-            this.releaseTransferLocks(pid);
             this.checkSettingAndChangePowerSaveBlock();
             this.emitUpdate();
         }
@@ -471,7 +392,6 @@ export class TransferService {
         ) {
             transfer.abortController.abort();
             transfer.status = "paused";
-            this.releaseTransferLocks(pid);
             this.checkSettingAndChangePowerSaveBlock();
             this.emitUpdate();
         }
@@ -484,7 +404,6 @@ export class TransferService {
             if (transfer.status === "progress" || transfer.status === "preparing") {
                 transfer.abortController.abort();
             }
-            this.releaseTransferLocks(pid);
             this.transfers.splice(index, 1);
             this.throttledEmits.delete(pid);
             this.runners.delete(pid);
@@ -523,34 +442,6 @@ export class TransferService {
             transfer.error = undefined;
             this.emitUpdate();
         }
-    }
-
-    private normalizeLockPaths(paths?: string[]) {
-        if (!paths?.length) return [];
-
-        const normalized = paths
-            .map((p) => p.trim())
-            .filter(Boolean)
-            .map((p) => p.replaceAll("/", "\\").replace(/[\\]+$/, ""))
-            .sort((a, b) => a.length - b.length);
-
-        const unique: string[] = [];
-        for (const candidate of normalized) {
-            const lowerCandidate = candidate.toLowerCase();
-            const isNested = unique.some((existing) => {
-                const lowerExisting = existing.toLowerCase();
-                return (
-                    lowerCandidate === lowerExisting ||
-                    lowerCandidate.startsWith(`${lowerExisting}\\`)
-                );
-            });
-
-            if (!isNested) {
-                unique.push(candidate);
-            }
-        }
-
-        return unique;
     }
 }
 

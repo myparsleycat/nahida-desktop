@@ -425,7 +425,6 @@ export class DriveService {
             restartParams,
             initialStatus: "preparing",
             path: paths[0],
-            lockPaths: paths,
         });
 
         return { pid, restartParams, abortController };
