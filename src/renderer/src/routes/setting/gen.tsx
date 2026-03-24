@@ -39,8 +39,6 @@ const settingsConfig = {
   language: "setting:general:getLanguage",
   autoUpdateMode: "setting:general:getAutoUpdateMode",
   runInBackground: "setting:general:getRunInBackground",
-  moveTransferPageWhenStartTransfer: "setting:general:getMoveTransferPageWhenStartTransfer",
-  powerSaveBlockInTransfer: "setting:general:getPowerSaveBlockInTransfer",
   defaultStartPage: "setting:general:getDefaultStartPage",
   titlebarStyle: "setting:general:getTitlebarStyle",
   logLevel: "setting:general:getLogLevel",
@@ -63,8 +61,6 @@ function RouteComponent() {
     language: string;
     autoUpdateMode: AutoUpdateMode;
     runInBackground: boolean;
-    moveTransferPageWhenStartTransfer: boolean;
-    powerSaveBlockInTransfer: boolean;
     defaultStartPage: string;
     titlebarStyle: string;
     logLevel: string;
@@ -436,52 +432,6 @@ function RouteComponent() {
           <CardTitle className="text-sm font-medium">{t("page.setting.gen.other.title")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.gen.other.moveTransferPageWhenStartTransfer")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.gen.other.moveTransferPageWhenStartTransferDescription")}
-              </p>
-            </div>
-            <Switch
-              checked={settings.moveTransferPageWhenStartTransfer}
-              onCheckedChange={(val) =>
-                update(
-                  "moveTransferPageWhenStartTransfer",
-                  val,
-                  "setting:general:setMoveTransferPageWhenStartTransfer",
-                )
-              }
-            />
-          </div>
-
-          <Separator />
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.gen.other.powerSaveBlockInTransfer")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.gen.other.powerSaveBlockInTransferDescription")}
-              </p>
-            </div>
-            <Switch
-              checked={settings.powerSaveBlockInTransfer}
-              onCheckedChange={(val) =>
-                update(
-                  "powerSaveBlockInTransfer",
-                  val,
-                  "setting:general:setPowerSaveBlockInTransfer",
-                )
-              }
-            />
-          </div>
-
-          <Separator />
-
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-sm font-medium">

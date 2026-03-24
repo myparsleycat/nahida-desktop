@@ -550,6 +550,12 @@
       },
       "transfer": {
         "title": "전송",
+        "concurrency": {
+          "title": "동시 전송"
+        },
+        "other": {
+          "title": "기타"
+        },
         "downloadConcurrency": {
           "title": "다운로드 동시 전송 수",
           "description": "드라이브 전송에서 동시에 다운로드할 파일 수를 설정합니다. 범위: 16~64"

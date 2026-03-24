@@ -551,6 +551,12 @@
       },
       "transfer": {
         "title": "転送",
+        "concurrency": {
+          "title": "同時転送"
+        },
+        "other": {
+          "title": "その他"
+        },
         "downloadConcurrency": {
           "title": "ダウンロード同時転送数",
           "description": "ドライブ転送で同時にダウンロードするファイル数を設定します。範囲: 16〜64"

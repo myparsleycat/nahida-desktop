@@ -65,6 +65,27 @@
           "retry_failed_files": "Retry failed files",
           "remove_from_transfer": "Remove from transfer"
         }
+      },
+      "transfer": {
+        "title": "Transfer",
+        "concurrency": {
+          "title": "Concurrency"
+        },
+        "other": {
+          "title": "Other"
+        },
+        "downloadConcurrency": {
+          "title": "Download concurrency",
+          "description": "Set the number of files to download simultaneously in drive transfers. Range: 16-64"
+        },
+        "uploadConcurrency": {
+          "title": "Upload concurrency",
+          "description": "Set the number of files to upload simultaneously in drive transfers. Range: 4-16"
+        },
+        "uploadCreateManyConcurrency": {
+          "title": "Upload metadata concurrency",
+          "description": "Set the number of requests to run simultaneously before starting file uploads. Range: 1-4"
+        }
       }
     },
     "drive": {

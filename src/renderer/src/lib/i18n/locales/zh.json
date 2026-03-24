@@ -550,6 +550,12 @@
       },
       "transfer": {
         "title": "传输",
+        "concurrency": {
+          "title": "并发传输"
+        },
+        "other": {
+          "title": "其他"
+        },
         "downloadConcurrency": {
           "title": "下载并发数",
           "description": "设置在网盘传输中可同时下载的文件数量。范围：16 到 64"
