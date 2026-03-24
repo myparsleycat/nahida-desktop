@@ -572,10 +572,22 @@ export class DownloadLib {
 
             if (!data.root) throw new Error("Root directory information was not received.");
 
-            this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
-
             const pathMap = this.fs.resolveDirectoryPaths(data.root, data.dirs, params.savePath);
+            const rootPath = pathMap.get(data.root.id);
+            if (!rootPath) {
+                throw new Error("Root download directory path could not be resolved.");
+            }
+
+            await this.desktop.lib.fs.ensureDir(rootPath);
+            this.desktop.service.transfer.setTransferLockPaths(pid, [rootPath]);
+            await this.desktop.service.transfer.acquireTransferLocks(pid, [rootPath]);
+            this.desktop.service.transfer.updateTransfer(pid, {
+                status: "progress",
+                path: rootPath,
+            });
+
             const ensuredDirs = new Set<string>();
+            ensuredDirs.add(rootPath);
 
             let downloadedBytes = initialTransferedSize ?? 0;
             let downloadedCount = initialTransferedFiles ?? 0;

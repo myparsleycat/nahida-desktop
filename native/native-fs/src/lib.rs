@@ -326,6 +326,141 @@ impl NativeWatcher {
   }
 }
 
+#[cfg(windows)]
+struct WindowsFolderLock {
+  _handle: std::os::windows::io::OwnedHandle,
+}
+
+#[cfg(windows)]
+fn normalize_windows_path(path: &str) -> String {
+  path.replace('/', "\\")
+}
+
+#[cfg(windows)]
+fn create_windows_folder_lock(path: &str) -> napi::Result<WindowsFolderLock> {
+  use std::os::windows::ffi::OsStrExt;
+  use std::os::windows::io::{FromRawHandle, OwnedHandle};
+  use windows::core::PCWSTR;
+  use windows::Win32::Foundation::{HANDLE, INVALID_HANDLE_VALUE};
+  use windows::Win32::Storage::FileSystem::{
+    CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_MODE,
+    FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+  };
+
+  let normalized_path = normalize_windows_path(path);
+  let dir_path = std::path::Path::new(&normalized_path);
+
+  if !dir_path.exists() {
+    return Err(napi::Error::new(
+      napi::Status::InvalidArg,
+      format!("Directory does not exist: {}", path),
+    ));
+  }
+
+  if !dir_path.is_dir() {
+    return Err(napi::Error::new(
+      napi::Status::InvalidArg,
+      format!("Path is not a directory: {}", path),
+    ));
+  }
+
+  let wide_path: Vec<u16> = std::ffi::OsStr::new(&normalized_path)
+    .encode_wide()
+    .chain(std::iter::once(0))
+    .collect();
+
+  let handle = unsafe {
+    CreateFileW(
+      PCWSTR(wide_path.as_ptr()),
+      0,
+      FILE_SHARE_MODE(FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0),
+      None,
+      OPEN_EXISTING,
+      FILE_FLAGS_AND_ATTRIBUTES(FILE_FLAG_BACKUP_SEMANTICS.0),
+      None,
+    )
+  }
+  .map_err(|e: windows::core::Error| {
+    napi::Error::new(napi::Status::GenericFailure, e.to_string())
+  })?;
+
+  if handle == INVALID_HANDLE_VALUE {
+    return Err(napi::Error::new(
+      napi::Status::GenericFailure,
+      format!("Failed to open directory handle: {}", path),
+    ));
+  }
+
+  let owned = unsafe { OwnedHandle::from_raw_handle(HANDLE(handle.0).0 as _) };
+  Ok(WindowsFolderLock { _handle: owned })
+}
+
+#[napi]
+pub struct NativeFolderLock {
+  path: String,
+  #[cfg(windows)]
+  handle: Option<WindowsFolderLock>,
+}
+
+#[napi]
+impl NativeFolderLock {
+  #[napi(constructor)]
+  pub fn new(path: String) -> napi::Result<Self> {
+    Ok(Self {
+      path,
+      #[cfg(windows)]
+      handle: None,
+    })
+  }
+
+  #[napi]
+  pub fn lock(&mut self) -> napi::Result<()> {
+    #[cfg(windows)]
+    {
+      if self.handle.is_some() {
+        return Ok(());
+      }
+
+      self.handle = Some(create_windows_folder_lock(&self.path)?);
+      return Ok(());
+    }
+
+    #[cfg(not(windows))]
+    {
+      Err(napi::Error::new(
+        napi::Status::GenericFailure,
+        "NativeFolderLock is only supported on Windows".to_string(),
+      ))
+    }
+  }
+
+  #[napi]
+  pub fn unlock(&mut self) {
+    #[cfg(windows)]
+    {
+      self.handle = None;
+    }
+  }
+
+  #[napi(getter, return_if_invalid)]
+  pub fn is_locked(&self) -> bool {
+    #[cfg(windows)]
+    {
+      return self.handle.is_some();
+    }
+
+    #[cfg(not(windows))]
+    {
+      false
+    }
+  }
+
+  #[napi(getter)]
+  pub fn path(&self) -> String {
+    self.path.clone()
+  }
+}
+
 #[napi(object)]
 pub struct ProcessInfo {
   pub name: String,
