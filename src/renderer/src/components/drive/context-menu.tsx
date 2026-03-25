@@ -5,6 +5,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@renderer/components/ui/context-menu";
+import { useDriveClipboardActions } from "@renderer/hooks/use-drive-clipboard";
 import { useContentMenu, useDialogStore, useSelectionStore } from "@renderer/store/drive";
 import { Content } from "@shared/types.gen";
 import { useMutation } from "@tanstack/react-query";
@@ -55,7 +56,7 @@ export function ContextMenuProvider(props: ContextMenuProviderProps) {
 }
 
 function ContextMenuContentSnippet() {
-  const { selectedItems, setSelectedItems, copyOrCuts, setCopyOrCuts } = useSelectionStore();
+  const { selectedItems, setSelectedItems } = useSelectionStore();
   const dialog = useDialogStore();
   const { t } = useTranslation();
   const { queryClient } = useRouteContext({ from: "__root__" });
@@ -65,6 +66,7 @@ function ContextMenuContentSnippet() {
     from: isSharePath ? "/drive/share/$id" : "/drive/drive/$id",
   });
   const navi = useNavigate();
+  const { copyOrCuts, handleCut, handlePaste } = useDriveClipboardActions(itemId);
 
   const trashMutation = useMutation({
     mutationKey: ["akasha", "drive", "trash"],
@@ -86,48 +88,6 @@ function ContextMenuContentSnippet() {
       .catch((err: string) => {
         toast.error(err);
       });
-  };
-
-  const handleCut = () => {
-    setCopyOrCuts("cut", selectedItems);
-    if (selectedItems.length === 1) {
-      toast.info(`"${selectedItems[0].name}"이(가) 잘라내기 상태로 설정되었습니다`);
-    } else if (selectedItems.length > 1) {
-      toast.info(
-        `"${copyOrCuts.items[0].name}"외 ${
-          copyOrCuts.items.length - 1
-        }개가 잘라내기 상태로 설정되었습니다.`,
-      );
-    }
-  };
-
-  const handelPaste = () => {
-    if (copyOrCuts.action && copyOrCuts.items.length > 0) {
-      if (copyOrCuts.action === "cut") {
-        const itemsToMove = [...copyOrCuts.items];
-
-        setCopyOrCuts(null, []);
-
-        const promise = window.api.invoke("drive:fn:moveMany", {
-          ids: itemsToMove.map((item) => item.id),
-          destId: itemId,
-        });
-
-        toast.promise(promise, {
-          loading: "File moving...",
-          success: () => {
-            queryClient.invalidateQueries({
-              queryKey: ["drive", "drive", itemId],
-            });
-            queryClient.invalidateQueries({
-              queryKey: ["drive", "share", itemId],
-            });
-            return "File moved successfully";
-          },
-          error: (err) => `File moving failed: ${err.message}`,
-        });
-      }
-    }
   };
 
   const deleteMenuItem = isSharePath ? (
@@ -161,7 +121,7 @@ function ContextMenuContentSnippet() {
           <>
             <ContextMenuSeparator />
 
-            <ContextMenuItem onClick={handelPaste}>
+            <ContextMenuItem onClick={handlePaste}>
               <ClipboardPaste size={18} />
               {t("page.drive.context_menu.paste")}
             </ContextMenuItem>

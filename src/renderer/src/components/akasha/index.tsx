@@ -10,6 +10,7 @@ import {
 import { Input } from "@renderer/components/ui/input";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { useAuth } from "@renderer/hooks/use-auth";
+import { useDriveClipboardActions } from "@renderer/hooks/use-drive-clipboard";
 import i18n from "@renderer/lib/i18n";
 import { cn } from "@renderer/lib/utils";
 import {
@@ -20,7 +21,7 @@ import {
 } from "@renderer/store/drive";
 import type { Content } from "@shared/types.gen";
 import { formatDate, formatSize, getRandInt } from "@shared/utils";
-import { useLocation, useNavigate, useParams, useRouteContext } from "@tanstack/react-router";
+import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -518,12 +519,11 @@ interface HandlerProviderProps {
 }
 
 export function HandlerProvider(props: HandlerProviderProps) {
-  const { queryClient } = useRouteContext({ from: "__root__" });
   const { children, sortedContents, queryData, currentId } = props;
   const navi = useNavigate();
   const location = useLocation();
   const dialog = useDialogStore();
-  const { selectedItems, setSelectedItems, setLastSelectedIdx, copyOrCuts, setCopyOrCuts } =
+  const { selectedItems, setSelectedItems, setLastSelectedIdx, setCopyOrCuts } =
     useSelectionStore();
   const isfocusSearchInput = useViewStore((s) => s.isfocusSearchInput);
   const setSearchInDirQuery = useViewStore((s) => s.setSearchInDirQuery);
@@ -531,6 +531,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
   const setPendingDriveRevealId = useViewStore((s) => s.setPendingDriveRevealId);
   const pendingShareRevealId = useViewStore((s) => s.pendingShareRevealId);
   const setPendingShareRevealId = useViewStore((s) => s.setPendingShareRevealId);
+  const { handleCut, handlePaste } = useDriveClipboardActions(currentId);
 
   const searchBuffer = useRef("");
   const searchTimeout = useRef<number | undefined>(undefined);
@@ -721,53 +722,18 @@ export function HandlerProvider(props: HandlerProviderProps) {
 
       if ((e.ctrlKey || e.metaKey) && e.key === "x") {
         e.preventDefault();
-        setCopyOrCuts("cut", selectedItems);
-        if (selectedItems.length === 1) {
-          toast.info(`"${selectedItems[0].name}"이(가) 잘라내기 상태로 설정되었습니다`);
-        } else if (selectedItems.length > 1) {
-          toast.info(
-            `"${copyOrCuts.items[0].name}"외 ${
-              copyOrCuts.items.length - 1
-            }개가 잘라내기 상태로 설정되었습니다.`,
-          );
-        }
+        handleCut();
       }
 
       if ((e.ctrlKey || e.metaKey) && e.key === "v") {
         e.preventDefault();
-        if (copyOrCuts.action && copyOrCuts.items.length > 0) {
-          if (copyOrCuts.action === "cut") {
-            const itemsToMove = [...copyOrCuts.items];
-
-            setCopyOrCuts(null, []);
-
-            const promise = window.api.invoke("drive:fn:moveMany", {
-              ids: itemsToMove.map((item) => item.id),
-              destId: currentId,
-            });
-
-            toast.promise(promise, {
-              loading: "File moving...",
-              success: () => {
-                queryClient.invalidateQueries({
-                  queryKey: ["drive", "drive", currentId],
-                });
-                queryClient.invalidateQueries({
-                  queryKey: ["drive", "share", currentId],
-                });
-                return "File moved successfully";
-              },
-              error: (err: any) => `File moving failed: ${err.message}`,
-            });
-          }
-        }
+        handlePaste();
       }
     },
     [
       sortedContents,
       selectedItems,
       isfocusSearchInput,
-      copyOrCuts,
       queryData.data,
       navi,
       dialog,
@@ -775,6 +741,8 @@ export function HandlerProvider(props: HandlerProviderProps) {
       setLastSelectedIdx,
       setCopyOrCuts,
       currentId,
+      handleCut,
+      handlePaste,
       location.pathname,
       scrollItemIntoCenter,
       setPendingDriveRevealId,
