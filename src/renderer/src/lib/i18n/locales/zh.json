@@ -100,7 +100,9 @@
         "rename": "重命名",
         "trash": "回收站",
         "new_dir": "创建文件夹",
-        "delete": "删除"
+        "delete": "删除",
+        "cut": "剪切",
+        "paste": "粘贴"
       },
       "dialog": {
         "common": {

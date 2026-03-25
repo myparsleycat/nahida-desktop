@@ -8,11 +8,13 @@ import {
 import { useContentMenu, useDialogStore, useSelectionStore } from "@renderer/store/drive";
 import { Content } from "@shared/types.gen";
 import { useMutation } from "@tanstack/react-query";
-import { useLocation, useNavigate, useRouteContext } from "@tanstack/react-router";
+import { useLocation, useNavigate, useParams, useRouteContext } from "@tanstack/react-router";
 import {
+  ClipboardPaste,
   DownloadIcon,
   FolderIcon,
   MousePointer2Icon,
+  ScissorsIcon,
   SquarePenIcon,
   Trash2Icon,
 } from "lucide-react";
@@ -53,15 +55,15 @@ export function ContextMenuProvider(props: ContextMenuProviderProps) {
 }
 
 function ContextMenuContentSnippet() {
-  const { selectedItems, setSelectedItems } = useSelectionStore();
+  const { selectedItems, setSelectedItems, copyOrCuts, setCopyOrCuts } = useSelectionStore();
   const dialog = useDialogStore();
   const { t } = useTranslation();
   const { queryClient } = useRouteContext({ from: "__root__" });
   const location = useLocation();
   const isSharePath = location.pathname.startsWith("/drive/share");
-  //   const { id: itemId } = useParams({
-  //     from: isSharePath ? "/drive/share/$id" : "/drive/drive/$id",
-  //   });
+  const { id: itemId } = useParams({
+    from: isSharePath ? "/drive/share/$id" : "/drive/drive/$id",
+  });
   const navi = useNavigate();
 
   const trashMutation = useMutation({
@@ -86,138 +88,161 @@ function ContextMenuContentSnippet() {
       });
   };
 
-  return selectedItems && selectedItems.length !== 0 ? (
-    <>
-      {selectedItems.length === 1 && (
-        <>
-          {selectedItems[0].isDir && (
-            <>
-              <ContextMenuItem
-                className="gap-x-2"
-                onClick={() => {
-                  navi({
-                    to: location.pathname.startsWith("/drive/share")
-                      ? "/drive/share/$id"
-                      : "/drive/drive/$id",
-                    params: { id: selectedItems[0].id },
-                  });
-                }}
-              >
-                <MousePointer2Icon size={18} />
-                {t("page.drive.context_menu.open")}
-              </ContextMenuItem>
-              <ContextMenuSeparator />
-            </>
-          )}
+  const handleCut = () => {
+    setCopyOrCuts("cut", selectedItems);
+    if (selectedItems.length === 1) {
+      toast.info(`"${selectedItems[0].name}"이(가) 잘라내기 상태로 설정되었습니다`);
+    } else if (selectedItems.length > 1) {
+      toast.info(
+        `"${copyOrCuts.items[0].name}"외 ${
+          copyOrCuts.items.length - 1
+        }개가 잘라내기 상태로 설정되었습니다.`,
+      );
+    }
+  };
 
-          {/* {selectedItems[0].mimeType?.startsWith("text") ||
-            (selectedItems[0].mimeType?.startsWith("image") && (
-              <ContextMenuItem
-                className="cugap-x-2"
-                onClick={() => {
-                  // TODO: 미리보기
-                }}
-              >
-                <EyeIcon size={18} />
-                {t("drive.ui.context_menu.preview")}
-              </ContextMenuItem>
-            ))} */}
+  const handelPaste = () => {
+    if (copyOrCuts.action && copyOrCuts.items.length > 0) {
+      if (copyOrCuts.action === "cut") {
+        const itemsToMove = [...copyOrCuts.items];
 
-          <ContextMenuItem
-            className="gap-x-2"
-            onClick={() =>
-              window.api.invoke("drive:fn:startDownload", {
-                id: selectedItems[0].id,
-                suggestedName: selectedItems[0].name,
-              })
-            }
-          >
-            <DownloadIcon size={18} />
-            {t("page.drive.context_menu.download")}
-          </ContextMenuItem>
-          <ContextMenuSeparator />
+        setCopyOrCuts(null, []);
 
-          {/* <ContextMenuItem
-            className="gap-x-2"
-            onClick={() => {
-              if (selectedItems[0]) {
-                dialog.setOpen("shareDialog", true, {
-                  id: selectedItems[0].id,
-                });
-              } else {
-                toast.warning("선택된 항목이 없습니다");
-              }
-            }}
-          >
-            <Share2Icon size={18} />
-            {t("drive.ui.context_menu.share")}
-          </ContextMenuItem>
+        const promise = window.api.invoke("drive:fn:moveMany", {
+          ids: itemsToMove.map((item) => item.id),
+          destId: itemId,
+        });
 
-          <ContextMenuItem
-            className="gap-x-2"
-            onClick={() =>
-              dialog.setOpen("notiDialog", true, {
-                id: selectedItems[0].id,
-              })
-            }
-          >
-            <BellIcon />
-            알림
-          </ContextMenuItem>
+        toast.promise(promise, {
+          loading: "File moving...",
+          success: () => {
+            queryClient.invalidateQueries({
+              queryKey: ["drive", "drive", itemId],
+            });
+            queryClient.invalidateQueries({
+              queryKey: ["drive", "share", itemId],
+            });
+            return "File moved successfully";
+          },
+          error: (err) => `File moving failed: ${err.message}`,
+        });
+      }
+    }
+  };
 
-          <ContextMenuSeparator /> */}
-
-          <ContextMenuItem
-            className="gap-x-2"
-            onClick={() =>
-              dialog.setOpen("renameDialog", true, {
-                id: selectedItems[0].id,
-              })
-            }
-          >
-            <SquarePenIcon size={18} />
-            {t("page.drive.context_menu.rename")}
-          </ContextMenuItem>
-
-          <ContextMenuSeparator />
-
-          {/* <ContextMenuItem
-            className="gap-x-2"
-            onClick={() => window.api.invoke("util:copyStr", selectedItems[0].id)}
-          >
-            <CopyIcon size={18} />
-            {t("drive.ui.context_menu.copy_id")}
-          </ContextMenuItem>
-
-          <ContextMenuSeparator /> */}
-        </>
-      )}
-
-      {isSharePath ? (
-        <ContextMenuItem className="gap-x-2" variant="destructive" onClick={handleTrashBtn}>
-          <Trash2Icon size={18} />
-          {t("page.drive.context_menu.trash")}
-        </ContextMenuItem>
-      ) : (
-        <>
-          <ContextMenuItem
-            className="gap-x-2"
-            variant="destructive"
-            onClick={() => dialog.setOpen("deleteItemsDialog", true)}
-          >
-            <Trash2Icon size={18} />
-            {t("page.drive.context_menu.delete")}
-          </ContextMenuItem>
-        </>
-      )}
-    </>
+  const deleteMenuItem = isSharePath ? (
+    <ContextMenuItem className="gap-x-2" variant="destructive" onClick={handleTrashBtn}>
+      <Trash2Icon size={18} />
+      {t("page.drive.context_menu.trash")}
+    </ContextMenuItem>
   ) : (
     <ContextMenuItem
-      className="cursor-pointer gap-x-2"
-      onClick={() => dialog.setOpen("createDirDialog", true)}
+      className="gap-x-2"
+      variant="destructive"
+      onClick={() => dialog.setOpen("deleteItemsDialog", true)}
     >
-      <FolderIcon size={18} />
-      {t("page.drive.context_menu.new_dir")}
+      <Trash2Icon size={18} />
+      {t("page.drive.context_menu.delete")}
     </ContextMenuItem>
+  );
+
+  if (!selectedItems || selectedItems.length === 0) {
+    return (
+      <>
+        <ContextMenuItem
+          className="gap-x-2"
+          onClick={() => dialog.setOpen("createDirDialog", true)}
+        >
+          <FolderIcon size={18} />
+          {t("page.drive.context_menu.new_dir")}
+        </ContextMenuItem>
+
+        {copyOrCuts.items.length > 0 && (
+          <>
+            <ContextMenuSeparator />
+
+            <ContextMenuItem onClick={handelPaste}>
+              <ClipboardPaste size={18} />
+              {t("page.drive.context_menu.paste")}
+            </ContextMenuItem>
+          </>
+        )}
+      </>
+    );
+  }
+
+  if (selectedItems.length === 1) {
+    return (
+      <>
+        {selectedItems[0].isDir && (
+          <>
+            <ContextMenuItem
+              className="gap-x-2"
+              onClick={() => {
+                navi({
+                  to: location.pathname.startsWith("/drive/share")
+                    ? "/drive/share/$id"
+                    : "/drive/drive/$id",
+                  params: { id: selectedItems[0].id },
+                });
+              }}
+            >
+              <MousePointer2Icon size={18} />
+              {t("page.drive.context_menu.open")}
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
+
+        <ContextMenuItem
+          className="gap-x-2"
+          onClick={() =>
+            window.api.invoke("drive:fn:startDownload", {
+              id: selectedItems[0].id,
+              suggestedName: selectedItems[0].name,
+            })
+          }
+        >
+          <DownloadIcon size={18} />
+          {t("page.drive.context_menu.download")}
+        </ContextMenuItem>
+
+        <ContextMenuSeparator />
+
+        <ContextMenuItem className="gpa-x-2" onClick={handleCut}>
+          <ScissorsIcon size={18} />
+          {t("page.drive.context_menu.cut")}
+        </ContextMenuItem>
+
+        <ContextMenuItem
+          className="gap-x-2"
+          onClick={() =>
+            dialog.setOpen("renameDialog", true, {
+              id: selectedItems[0].id,
+            })
+          }
+        >
+          <SquarePenIcon size={18} />
+          {t("page.drive.context_menu.rename")}
+        </ContextMenuItem>
+
+        <ContextMenuSeparator />
+
+        {deleteMenuItem}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <ContextMenuItem className="cursor-pointer gap-x-2" onClick={handleCut}>
+        <ScissorsIcon size={18} />
+        {t("page.drive.context_menu.cut")}
+      </ContextMenuItem>
+
+      <ContextMenuSeparator />
+
+      {deleteMenuItem}
+    </>
   );
 }

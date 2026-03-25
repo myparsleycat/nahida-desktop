@@ -101,7 +101,9 @@
         "rename": "名前を変更",
         "trash": "ゴミ箱",
         "new_dir": "フォルダー作成",
-        "delete": "削除"
+        "delete": "削除",
+        "cut": "切り取り",
+        "paste": "貼り付け"
       },
       "dialog": {
         "common": {

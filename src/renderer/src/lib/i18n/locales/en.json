@@ -121,7 +121,9 @@
         "rename": "Rename",
         "delete": "Delete",
         "trash": "Trash",
-        "new_dir": "Create folder"
+        "new_dir": "Create folder",
+        "cut": "Cut",
+        "paste": "Paste"
       },
       "dialog": {
         "common": {
