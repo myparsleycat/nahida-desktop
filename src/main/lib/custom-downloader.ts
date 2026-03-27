@@ -77,12 +77,23 @@ export class CustomDownloader {
 
     private parseDownloadFileName(url: string, contentDisposition?: string | null) {
         const fileNameFromDisposition = contentDisposition
-            ?.match(/filename\*?=(?:UTF-8''|")?([^";]+)"?/i)?.[1]
-            ?.trim();
+            ?.match(/filename\*\s*=\s*(?:UTF-8''|')?([^;]+)/i)?.[1]
+            ?.trim()
+            ?.replace(/^"(.*)"$/, "$1");
 
         if (fileNameFromDisposition) {
             return this.desktop.lib.fs.sanitizeWindowsFilename(
-                decodeURIComponent(fileNameFromDisposition.replace(/^"(.*)"$/, "$1")),
+                decodeURIComponent(fileNameFromDisposition),
+            );
+        }
+
+        const fileNamePlain = contentDisposition
+            ?.match(/filename\s*=\s*("?)([^";]+)\1/i)?.[2]
+            ?.trim();
+
+        if (fileNamePlain) {
+            return this.desktop.lib.fs.sanitizeWindowsFilename(
+                fileNamePlain,
             );
         }
 
