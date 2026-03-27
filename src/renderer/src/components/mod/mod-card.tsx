@@ -18,7 +18,7 @@ interface ModCardProps {
   selectedGroupPath?: string;
   onToggle: (mod: ModInfo, event?: React.MouseEvent) => void;
   isIniListExpanded: boolean;
-  onIniListExpandedChange: (modId: string, isExpanded: boolean) => void;
+  onIniListExpandedChange: (modPath: string, isExpanded: boolean) => void;
   fixTools: {
     id: string;
     name: string;
@@ -172,7 +172,7 @@ export const ModCard = memo(function ModCard({
                   style={{ cursor: "col-resize" }}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onIniListExpandedChange(mod.id, !isIniListExpanded);
+                    onIniListExpandedChange(mod.path, !isIniListExpanded);
                   }}
                 />
               </div>

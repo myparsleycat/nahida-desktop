@@ -27,6 +27,10 @@ export function ModList(_props: ModListProps) {
   const { fixTools, presets } = useModContextMenuData();
 
   const mods = useFilteredMods(activeGroup?.mods || [], searchQuery);
+  const getModRenderKey = useCallback(
+    (mod: ModInfo) => `${selectedGroupPath ?? ""}::${mod.path}`,
+    [selectedGroupPath],
+  );
   const isLoading = isPending || isPlaceholderData;
   const showSkeleton = useDelayedSkeleton(isLoading);
 
@@ -70,7 +74,7 @@ export function ModList(_props: ModListProps) {
                 <tbody>
                   {mods.map((mod) => (
                     <ModListRow
-                      key={mod.id}
+                      key={getModRenderKey(mod)}
                       mod={mod}
                       selectedGroupPath={selectedGroupPath}
                       handleToggle={handleToggle}
