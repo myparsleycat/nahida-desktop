@@ -548,6 +548,9 @@
       },
       "transfer": {
         "title": "Transfer",
+        "concurrency": {
+          "title": "Concurrency"
+        },
         "downloadConcurrency": {
           "title": "Download concurrency",
           "description": "Controls how many files can be downloaded at the same time in drive transfers. Range: 16 to 64."
@@ -559,6 +562,9 @@
         "uploadCreateManyConcurrency": {
           "title": "Upload metadata concurrency",
           "description": "Controls how many requests can run at the same time before file upload starts. Range: 1 to 4."
+        },
+        "other": {
+          "title": "Other"
         }
       },
       "xxmi": {
