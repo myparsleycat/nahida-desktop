@@ -22,13 +22,12 @@ import { useCharacters, useGames } from "@renderer/hooks/use-mod-data";
 import { useModDragDrop } from "@renderer/hooks/use-mod-drag-drop";
 import {
   useDownloadCompletionHandler,
-  useDownloadArchiveExtractPromptHandler,
   useModRefreshOnFocus,
   useModWatcherEvents,
 } from "@renderer/hooks/use-mod-events";
 import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
-import { useModStore } from "@renderer/store/mod";
+import { modStore, useModStore } from "@renderer/store/mod";
 import type { ResolvedArchiveExtractPathMode } from "@shared/mod";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
@@ -68,7 +67,6 @@ function ModRouteContent() {
 
   useModRefreshOnFocus(selectedGame, queryClient);
   useDownloadCompletionHandler(selectedGame, selectedGroupData?.path, queryClient);
-  useDownloadArchiveExtractPromptHandler();
   useModWatcherEvents(selectedGame, selectedGroupData?.path, queryClient);
   useModShortcuts();
 
@@ -91,6 +89,12 @@ function ModRouteContent() {
     mode: ResolvedArchiveExtractPathMode | null,
   ) => {
     await window.api.invoke("mod:resolveDownloadArchiveExtractPrompt", requestId, mode);
+  };
+
+  const clearArchiveExtractPromptIfCurrent = (requestId: string) => {
+    if (modStore.getState().archiveExtractPrompt?.requestId === requestId) {
+      setArchiveExtractPrompt(null);
+    }
   };
 
   const fileNameForArchiveExtractDialog =
@@ -237,9 +241,7 @@ function ModRouteContent() {
               const { requestId } = archiveExtractPrompt;
               event.preventDefault();
               void resolveDownloadArchiveExtractPrompt(requestId, null).finally(() => {
-                setArchiveExtractPrompt((current) =>
-                  current?.requestId === requestId ? null : current,
-                );
+                clearArchiveExtractPromptIfCurrent(requestId);
               });
               return;
             }
@@ -272,9 +274,7 @@ function ModRouteContent() {
                   const { requestId } = archiveExtractPrompt;
                   event.preventDefault();
                   void resolveDownloadArchiveExtractPrompt(requestId, null).finally(() => {
-                    setArchiveExtractPrompt((current) =>
-                      current?.requestId === requestId ? null : current,
-                    );
+                    clearArchiveExtractPromptIfCurrent(requestId);
                   });
                   return;
                 }
@@ -292,9 +292,7 @@ function ModRouteContent() {
                     requestId,
                     "flatten_single_root",
                   ).finally(() => {
-                    setArchiveExtractPrompt((current) =>
-                      current?.requestId === requestId ? null : current,
-                    );
+                    clearArchiveExtractPromptIfCurrent(requestId);
                   });
                   return;
                 }
@@ -312,9 +310,7 @@ function ModRouteContent() {
                     requestId,
                     "keep_archive_root",
                   ).finally(() => {
-                    setArchiveExtractPrompt((current) =>
-                      current?.requestId === requestId ? null : current,
-                    );
+                    clearArchiveExtractPromptIfCurrent(requestId);
                   });
                   return;
                 }
