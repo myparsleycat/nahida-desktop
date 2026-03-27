@@ -33,6 +33,12 @@ type Segment = {
     controller?: AbortController;
 };
 
+const createAbortError = (message = "Aborted") => {
+    const error = new Error(message);
+    error.name = "AbortError";
+    return error;
+};
+
 export class ParallelDownloader {
     private readonly minSegmentSize = 4 * 1024 * 1024;
 
@@ -501,7 +507,7 @@ export class ParallelDownloader {
 
             if (signal?.aborted) {
                 await cleanupChunks();
-                return;
+                throw createAbortError();
             }
 
             const completedSegments = segments.filter(
@@ -511,7 +517,7 @@ export class ParallelDownloader {
 
             if (signal?.aborted) {
                 await fse.remove(targetPath).catch(() => {});
-                return;
+                throw createAbortError();
             }
 
             await fse.rename(targetPath, savePath);
