@@ -67,7 +67,7 @@ function ModRouteContent() {
   const selectedGroupData = selectedGroup ?? undefined;
 
   useModRefreshOnFocus(selectedGame, queryClient);
-  useDownloadCompletionHandler(selectedGame, queryClient);
+  useDownloadCompletionHandler(selectedGame, selectedGroupData?.path, queryClient);
   useDownloadArchiveExtractPromptHandler();
   useModWatcherEvents(selectedGame, selectedGroupData?.path, queryClient);
   useModShortcuts();
