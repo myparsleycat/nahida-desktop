@@ -26,7 +26,6 @@ export function useDriveClipboardActions(destinationId: string) {
     if (copyOrCuts.action !== "cut" || copyOrCuts.items.length === 0) return;
 
     const itemsToMove: Content[] = [...copyOrCuts.items];
-    setCopyOrCuts(null, []);
 
     const promise = window.api.invoke("drive:fn:moveMany", {
       ids: itemsToMove.map((item) => item.id),
@@ -42,6 +41,7 @@ export function useDriveClipboardActions(destinationId: string) {
         queryClient.invalidateQueries({
           queryKey: ["drive", "share", destinationId],
         });
+        setCopyOrCuts(null, []);
         return "File moved successfully";
       },
       error: (err: unknown) =>
