@@ -210,6 +210,40 @@ export class CustomDownloader {
         });
     }
 
+    private createSiblingTempPath(targetPath: string, suffix: string) {
+        const parentPath = path.dirname(targetPath);
+        const baseName = path.basename(targetPath);
+
+        return path.join(parentPath, `${baseName}.${suffix}-${nanoid()}`);
+    }
+
+    private async replaceGroupWithStaging(groupPath: string, stagingPath: string) {
+        const groupExists = await fse.pathExists(groupPath);
+        const backupPath = groupExists ? this.createSiblingTempPath(groupPath, "backup") : null;
+
+        if (backupPath) {
+            await fse.move(groupPath, backupPath);
+        }
+
+        try {
+            await fse.move(stagingPath, groupPath);
+        } catch (err) {
+            await fse.remove(groupPath).catch(() => {});
+
+            if (backupPath && (await fse.pathExists(backupPath))) {
+                await fse.move(backupPath, groupPath).catch((restoreErr) => {
+                    this.desktop.logger.error(restoreErr, "CustomDownloader:restoreGroupPath");
+                });
+            }
+
+            throw err;
+        }
+
+        if (backupPath) {
+            await fse.remove(backupPath).catch(() => {});
+        }
+    }
+
     public async downloadToGroup(url: string, groupPath: string): Promise<"started"> {
         const trimmedUrl = url.trim();
 
@@ -228,7 +262,7 @@ export class CustomDownloader {
             throw new Error("Only HTTP(S) URLs are supported.");
         }
 
-        await fse.ensureDir(groupPath);
+        await fse.ensureDir(path.dirname(groupPath));
 
         const resp = await ky.head(trimmedUrl, {
             redirect: "follow",
@@ -247,8 +281,8 @@ export class CustomDownloader {
         );
 
         const archiveExt = path.extname(suggestedFileName);
-        const tempArchiveName = `${nanoid()}${archiveExt || ".zip"}`;
-        const savePath = path.join(groupPath, tempArchiveName);
+        const savePath = this.createSiblingTempPath(groupPath, `download${archiveExt || ".zip"}`);
+        const stagingPath = this.createSiblingTempPath(groupPath, "staging");
 
         const pid = nanoid();
         const abortController = new AbortController();
@@ -309,8 +343,15 @@ export class CustomDownloader {
 
                 if (abortController.signal.aborted) throw new Error("Aborted");
 
-                await this.extractDownloadedArchive(savePath, groupPath);
-                await fse.rm(savePath, { force: true });
+                await fse.ensureDir(stagingPath);
+                const extractedPath = await this.extractDownloadedArchive(savePath, stagingPath);
+                const stagedEntries = await fse.readdir(stagingPath);
+
+                if (!(await fse.pathExists(extractedPath)) || stagedEntries.length === 0) {
+                    throw new Error("Archive extraction did not produce staged content.");
+                }
+
+                await this.replaceGroupWithStaging(groupPath, stagingPath);
 
                 this.desktop.service.transfer.markFileCompleted(pid, pid);
                 this.desktop.service.transfer.updateTransfer(pid, {
@@ -328,8 +369,6 @@ export class CustomDownloader {
                     });
                 }
             } catch (err) {
-                await fse.remove(savePath).catch(() => {});
-
                 if (
                     abortController.signal.aborted ||
                     (err as Error).name === "AbortError" ||
@@ -340,6 +379,9 @@ export class CustomDownloader {
                     this.desktop.logger.error(err, "CustomDownloader:downloadToGroup");
                     this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
                 }
+            } finally {
+                await fse.remove(savePath).catch(() => {});
+                await fse.remove(stagingPath).catch(() => {});
             }
         });
 
