@@ -6,6 +6,7 @@ import { ModIniItem } from "./mod-ini-item";
 
 interface ModIniListProps {
   mod: ModInfo;
+  expanded: boolean;
   onToggleKeyUpdate: (
     modPath: string,
     iniFileName: string,
@@ -15,12 +16,18 @@ interface ModIniListProps {
   ) => void;
 }
 
-export function ModIniList({ mod, onToggleKeyUpdate }: ModIniListProps) {
+export function ModIniList({ mod, expanded, onToggleKeyUpdate }: ModIniListProps) {
   return (
-    <ScrollArea className="w-[170px] flex flex-col gap-2 overflow-y-auto">
+    <ScrollArea
+      className={cn(
+        "flex flex-col gap-2 overflow-y-auto transition-all duration-200",
+        expanded ? "w-42.5 opacity-100" : "w-0 opacity-0",
+      )}
+    >
       <div
         className={cn(
-          "p-1.5 rounded space-y-2 w-[170px]",
+          "p-1.5 rounded space-y-2 overflow-hidden transition-all duration-200",
+          expanded ? "w-42.5" : "w-0 p-0",
           "backdrop-blur-xl bg-background/10 dark:bg-background/10",
         )}
         style={{ transform: "translateZ(0)", willChange: "backdrop-filter" }}

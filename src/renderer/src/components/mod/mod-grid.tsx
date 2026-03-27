@@ -39,6 +39,9 @@ export function ModGrid(_props: ModGridProps) {
   const { data: vSettings } = useVirtualizationSettings();
 
   const [columnCount, setColumnCount] = useState(1);
+  const [iniListExpandedByModId, setIniListExpandedByModId] = useState<
+    Record<string, boolean>
+  >({});
 
   useEffect(() => {
     if (!scrollAreaRef.current) return;
@@ -87,6 +90,10 @@ export function ModGrid(_props: ModGridProps) {
     }
   }, [selectedGroupPath, searchQuery, rowVirtualizer, isVirtualizationEnabled]);
 
+  useEffect(() => {
+    setIniListExpandedByModId({});
+  }, [selectedGroupPath]);
+
   const handleToggle = useCallback(
     (mod: ModInfo, event?: React.MouseEvent) => {
       if (event && (event.ctrlKey || event.metaKey)) {
@@ -116,6 +123,16 @@ export function ModGrid(_props: ModGridProps) {
     },
     [updateToggleKeyMutation.mutate],
   );
+
+  const handleIniListExpandedChange = useCallback((modId: string, isExpanded: boolean) => {
+    setIniListExpandedByModId((prev) => {
+      if (prev[modId] === isExpanded) return prev;
+      return {
+        ...prev,
+        [modId]: isExpanded,
+      };
+    });
+  }, []);
 
   if (!selectedGroupPath) {
     return (
@@ -163,10 +180,12 @@ export function ModGrid(_props: ModGridProps) {
             >
               {mods.map((mod) => (
                 <ModCard
-                  key={mod.path}
+                  key={mod.id}
                   mod={mod}
                   selectedGroupPath={selectedGroupPath}
                   onToggle={handleToggle}
+                  isIniListExpanded={iniListExpandedByModId[mod.id] ?? true}
+                  onIniListExpandedChange={handleIniListExpandedChange}
                   fixTools={fixTools}
                   presets={presets}
                   onToggleKeyUpdate={handleToggleKeyUpdate}
@@ -207,10 +226,12 @@ export function ModGrid(_props: ModGridProps) {
                     >
                       {rowMods.map((mod) => (
                         <ModCard
-                          key={mod.path}
+                          key={mod.id}
                           mod={mod}
                           selectedGroupPath={selectedGroupPath}
                           onToggle={handleToggle}
+                          isIniListExpanded={iniListExpandedByModId[mod.id] ?? true}
+                          onIniListExpandedChange={handleIniListExpandedChange}
                           fixTools={fixTools}
                           presets={presets}
                           onToggleKeyUpdate={handleToggleKeyUpdate}
