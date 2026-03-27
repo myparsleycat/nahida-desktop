@@ -360,7 +360,10 @@ fn is_disabled_folder_name(folder_name: &str) -> bool {
 
 fn strip_disabled_prefix(folder_name: &str) -> String {
     let trimmed = folder_name.trim();
-    if trimmed.len() >= 9 && trimmed[..9].eq_ignore_ascii_case("disabled ") {
+    if trimmed
+        .get(..9)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("disabled "))
+    {
         trimmed[9..].trim().to_string()
     } else {
         trimmed.to_string()
@@ -677,5 +680,23 @@ pub fn get_mods_sync(group_path: String) -> FolderGroup {
         mods,
         preview,
         mod_count,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_disabled_prefix;
+
+    #[test]
+    fn strip_disabled_prefix_handles_ascii_prefix() {
+        assert_eq!(strip_disabled_prefix(" Disabled Example "), "Example");
+    }
+
+    #[test]
+    fn strip_disabled_prefix_does_not_panic_on_multibyte_leading_text() {
+        assert_eq!(
+            strip_disabled_prefix("仪玄-黑珍珠（1、2、3、4切换）"),
+            "仪玄-黑珍珠（1、2、3、4切换）"
+        );
     }
 }
