@@ -36,6 +36,7 @@ export interface ToggleKey {
 }
 
 export interface ModInfo {
+    id: string;
     name: string;
     path: string;
     isEnabled: boolean;

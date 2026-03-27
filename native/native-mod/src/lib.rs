@@ -1,6 +1,7 @@
 use alphanumeric_sort::compare_str;
 use napi_derive::napi;
 use rayon::prelude::*;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
@@ -123,6 +124,7 @@ pub struct IniResult {
 #[napi(object)]
 #[derive(Clone, Default)]
 pub struct ModInfo {
+    pub id: String,
     pub name: String,
     pub path: String,
     pub is_enabled: bool,
@@ -356,6 +358,33 @@ fn is_disabled_folder_name(folder_name: &str) -> bool {
         .starts_with("disabled ")
 }
 
+fn strip_disabled_prefix(folder_name: &str) -> String {
+    let trimmed = folder_name.trim();
+    if trimmed.len() >= 9 && trimmed[..9].eq_ignore_ascii_case("disabled ") {
+        trimmed[9..].trim().to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn normalize_relative_path(relative: &Path) -> String {
+    relative
+        .components()
+        .filter_map(|component| component.as_os_str().to_str())
+        .filter(|segment| !segment.is_empty())
+        .map(strip_disabled_prefix)
+        .map(|segment| segment.to_ascii_lowercase())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn build_stable_mod_id(group_path: &Path, mod_path: &Path) -> String {
+    let relative = mod_path.strip_prefix(group_path).unwrap_or(mod_path);
+    let normalized = normalize_relative_path(relative);
+    let digest = Sha256::digest(normalized.as_bytes());
+    format!("{digest:x}")
+}
+
 fn get_preview_location_priority(relative: &Path) -> i32 {
     if relative.components().count() == 1 {
         return 2;
@@ -502,7 +531,7 @@ pub fn get_characters_folder_sync(
     results
 }
 
-fn scan_mod_folder(mod_path: &Path) -> Option<ModInfo> {
+fn scan_mod_folder(group_path: &Path, mod_path: &Path) -> Option<ModInfo> {
     let folder_name = mod_path.file_name()?.to_string_lossy().to_string();
     let is_enabled = !folder_name.to_ascii_lowercase().starts_with("disabled ");
 
@@ -591,6 +620,7 @@ fn scan_mod_folder(mod_path: &Path) -> Option<ModInfo> {
     });
 
     Some(ModInfo {
+        id: build_stable_mod_id(group_path, mod_path),
         name: folder_name,
         path: mod_path.to_string_lossy().into_owned(),
         is_enabled,
@@ -631,7 +661,7 @@ pub fn get_mods_sync(group_path: String) -> FolderGroup {
         || {
             mod_folders
                 .par_iter()
-                .filter_map(|p| scan_mod_folder(p))
+                .filter_map(|p| scan_mod_folder(&group_path_buf, p))
                 .collect::<Vec<ModInfo>>()
         },
         || find_preview(&group_path_buf, 3),
