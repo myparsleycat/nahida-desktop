@@ -265,7 +265,7 @@ export class DriveService {
             data?: DownloadMetadata;
             suggestedName?: string;
             targetPath?: string;
-        }) => {
+        }): Promise<"started" | "canceled"> => {
             if (suggestedName) {
                 suggestedName = this.desktop.lib.fs.sanitizeWindowsFilename(suggestedName);
             }
@@ -280,7 +280,7 @@ export class DriveService {
                         "Download cancelled by user selection",
                         "Drive:Download",
                     );
-                    return;
+                    return "canceled";
                 }
                 savePath = this.desktop.lib.fs.sanitizePath(result.path);
             }
@@ -314,6 +314,8 @@ export class DriveService {
                         error: err instanceof Error ? err.message : String(err),
                     });
                 });
+
+                return "started";
             } catch (error) {
                 console.error("Drive:Download:Error", error);
                 this.desktop.logger.error(error, "Drive:Download:Start");

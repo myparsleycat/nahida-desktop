@@ -82,27 +82,36 @@ app.get(
                 }
 
                 const decoded = decode(new Uint8Array(event.data));
+                let downloadStatus: "started" | "canceled" | "error" = "started";
 
-                if (decoded.type === "live") {
-                    const { id, data, suggestedName } = liveData.parse(decoded);
-                    await desktop.service.drive.fn.startDownload({
-                        id,
-                        data,
-                        suggestedName,
-                    });
-                } else if (decoded.type === "gb") {
-                    const { title, fileUrl, previewUrl } = gbData.parse(decoded);
-                    await desktop.lib.customDownloader.GBDownloader({
-                        title,
-                        fileUrl,
-                        previewUrl,
-                    });
-                } else if (decoded.type === "hui") {
-                    const { title, fileUrl } = huiData.parse(decoded);
-                    await desktop.lib.customDownloader.HuiDownloader({ title, fileUrl });
+                try {
+                    if (decoded.type === "live") {
+                        const { id, data, suggestedName } = liveData.parse(decoded);
+                        downloadStatus = await desktop.service.drive.fn.startDownload({
+                            id,
+                            data,
+                            suggestedName,
+                        });
+                    } else if (decoded.type === "gb") {
+                        const { title, fileUrl, previewUrl } = gbData.parse(decoded);
+                        downloadStatus = await desktop.lib.customDownloader.GBDownloader({
+                            title,
+                            fileUrl,
+                            previewUrl,
+                        });
+                    } else if (decoded.type === "hui") {
+                        const { title, fileUrl } = huiData.parse(decoded);
+                        downloadStatus = await desktop.lib.customDownloader.HuiDownloader({
+                            title,
+                            fileUrl,
+                        });
+                    }
+                } catch (err) {
+                    downloadStatus = "error";
+                    desktop.logger.error(err, "WebSocket:Download");
                 }
 
-                ws.send("download started");
+                ws.send(`download ${downloadStatus}`);
             },
             onClose: () => {},
         };

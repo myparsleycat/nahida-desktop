@@ -79,7 +79,7 @@ export class CustomDownloader {
         fileUrl: string;
         title: string;
         previewUrl?: string | null;
-    }) {
+    }): Promise<"started" | "canceled"> {
         const { title: _title, fileUrl, previewUrl } = props;
         // const title = this.desktop.lib.fs.sanitizeWindowsFilename(_title);
 
@@ -106,7 +106,7 @@ export class CustomDownloader {
 
         const result =
             await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(suggestedFileName);
-        if (!result.path) return;
+        if (!result.path) return "canceled";
 
         const finalFileName = result.fileName || suggestedFileName;
         const savePath = path.join(result.path, finalFileName);
@@ -225,15 +225,20 @@ export class CustomDownloader {
                 }
             }
         });
+
+        return "started";
     }
 
-    public async HuiDownloader(props: { fileUrl: string; title: string }) {
+    public async HuiDownloader(props: {
+        fileUrl: string;
+        title: string;
+    }): Promise<"started" | "canceled"> {
         const { title: _title, fileUrl } = props;
         const title = this.desktop.lib.fs.sanitizeWindowsFilename(_title);
         const result = await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(title);
 
         if (!result.path) {
-            return;
+            return "canceled";
         }
 
         const resp = await ky.head(fileUrl, {
@@ -342,6 +347,8 @@ export class CustomDownloader {
                 }
             }
         });
+
+        return "started";
     }
 }
 
