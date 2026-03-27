@@ -4,7 +4,7 @@ import sha256PiscinaWorker from "@main/worker/drive/sha256-piscina.worker?module
 import { collectFiles } from "@native/native-fs";
 import type { Content } from "@shared/types.gen";
 import { chunk, groupBy, orderBy, retry, sumBy } from "es-toolkit";
-import { fileTypeFromBuffer } from "file-type/node";
+import { fileTypeFromBuffer } from "file-type";
 import fse from "fs-extra";
 import ky from "ky";
 import { nanoid } from "nanoid";

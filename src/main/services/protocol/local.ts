@@ -2,7 +2,7 @@ import { pathToFileURL } from "node:url";
 import type { NahidaDesktop } from "@main/index";
 import { imageCache } from "@main/internal/db/schema";
 import { net } from "electron";
-import { fileTypeFromBuffer } from "file-type/node";
+import { fileTypeFromBuffer } from "file-type";
 import fse from "fs-extra";
 import PQueue from "p-queue";
 import sharp from "sharp";
