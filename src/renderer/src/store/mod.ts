@@ -46,13 +46,16 @@ interface ModState {
     setSortOrder: (order: "asc" | "desc") => void;
     expandedGroups: Set<string>;
     persistentGroups: Set<string>;
+    iniListExpandedByGroupPath: Record<string, Record<string, boolean>>;
     toggleExpandedGroup: (path: string) => void;
     togglePersistentGroup: (path: string) => void;
     setExpandedGroup: (path: string, expanded: boolean) => void;
+    setIniListExpanded: (groupPath: string, modId: string, expanded: boolean) => void;
+    resetIniListExpanded: (groupPath: string) => void;
     initExpandedGroups: () => Promise<void>;
 }
 
-export const modStore = createStore<ModState>((set, get) => ({
+export const modStore = createStore<ModState>((set) => ({
     selectedGame: "",
     setSelectedGame: (selectedGame) => set({ selectedGame }),
     deletingGame: null,
@@ -99,6 +102,7 @@ export const modStore = createStore<ModState>((set, get) => ({
 
     expandedGroups: new Set<string>(),
     persistentGroups: new Set<string>(),
+    iniListExpandedByGroupPath: {},
 
     toggleExpandedGroup: (path) =>
         set((state) => {
@@ -136,6 +140,35 @@ export const modStore = createStore<ModState>((set, get) => ({
                 next.delete(path);
             }
             return { expandedGroups: next };
+        }),
+
+    setIniListExpanded: (groupPath, modId, expanded) =>
+        set((state) => {
+            const prevGroupState = state.iniListExpandedByGroupPath[groupPath] ?? {};
+            if (prevGroupState[modId] === expanded) {
+                return state;
+            }
+
+            return {
+                iniListExpandedByGroupPath: {
+                    ...state.iniListExpandedByGroupPath,
+                    [groupPath]: {
+                        ...prevGroupState,
+                        [modId]: expanded,
+                    },
+                },
+            };
+        }),
+
+    resetIniListExpanded: (groupPath) =>
+        set((state) => {
+            if (!(groupPath in state.iniListExpandedByGroupPath)) {
+                return state;
+            }
+
+            const next = { ...state.iniListExpandedByGroupPath };
+            delete next[groupPath];
+            return { iniListExpandedByGroupPath: next };
         }),
 
     initExpandedGroups: async () => {

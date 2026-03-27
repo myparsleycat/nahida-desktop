@@ -21,6 +21,8 @@ interface ModGridProps {
 export function ModGrid(_props: ModGridProps) {
   const { t } = useTranslation();
   const searchQuery = useModStore((s) => s.searchQuery);
+  const iniListExpandedByGroupPath = useModStore((s) => s.iniListExpandedByGroupPath);
+  const setIniListExpanded = useModStore((s) => s.setIniListExpanded);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // const [parent] = useAutoAnimate({ duration: 150 });
@@ -39,10 +41,6 @@ export function ModGrid(_props: ModGridProps) {
   const { data: vSettings } = useVirtualizationSettings();
 
   const [columnCount, setColumnCount] = useState(1);
-  const [iniListExpandedByModId, setIniListExpandedByModId] = useState<
-    Record<string, boolean>
-  >({});
-
   useEffect(() => {
     if (!scrollAreaRef.current) return;
 
@@ -90,10 +88,6 @@ export function ModGrid(_props: ModGridProps) {
     }
   }, [selectedGroupPath, searchQuery, rowVirtualizer, isVirtualizationEnabled]);
 
-  useEffect(() => {
-    setIniListExpandedByModId({});
-  }, [selectedGroupPath]);
-
   const handleToggle = useCallback(
     (mod: ModInfo, event?: React.MouseEvent) => {
       if (event && (event.ctrlKey || event.metaKey)) {
@@ -125,14 +119,13 @@ export function ModGrid(_props: ModGridProps) {
   );
 
   const handleIniListExpandedChange = useCallback((modId: string, isExpanded: boolean) => {
-    setIniListExpandedByModId((prev) => {
-      if (prev[modId] === isExpanded) return prev;
-      return {
-        ...prev,
-        [modId]: isExpanded,
-      };
-    });
-  }, []);
+    if (!selectedGroupPath) return;
+    setIniListExpanded(selectedGroupPath, modId, isExpanded);
+  }, [selectedGroupPath, setIniListExpanded]);
+
+  const iniListExpandedByModId = selectedGroupPath
+    ? iniListExpandedByGroupPath[selectedGroupPath] ?? {}
+    : {};
 
   if (!selectedGroupPath) {
     return (
