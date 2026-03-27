@@ -36,6 +36,7 @@ export interface ToggleKey {
 }
 
 export interface ModInfo {
+    id: string;
     name: string;
     path: string;
     isEnabled: boolean;
@@ -131,6 +132,7 @@ export type IpcHandlers = {
     "mod:createPreset": (...args: Parameters<typeof desktop.service.mod.fn.createPreset>) => ReturnType<typeof desktop.service.mod.fn.createPreset>;
     "mod:deletePreset": (...args: Parameters<typeof desktop.service.mod.fn.deletePreset>) => ReturnType<typeof desktop.service.mod.fn.deletePreset>;
     "mod:disableAll": (...args: Parameters<typeof desktop.service.mod.fn.disableAll>) => ReturnType<typeof desktop.service.mod.fn.disableAll>;
+    "mod:downloadFromUrl": (...args: Parameters<typeof desktop.lib.customDownloader.downloadToGroup>) => ReturnType<typeof desktop.lib.customDownloader.downloadToGroup>;
     "mod:enableAll": (...args: Parameters<typeof desktop.service.mod.fn.enableAll>) => ReturnType<typeof desktop.service.mod.fn.enableAll>;
     "mod:exclusiveToggle": (...args: Parameters<typeof desktop.service.mod.fn.exclusiveToggle>) => ReturnType<typeof desktop.service.mod.fn.exclusiveToggle>;
     "mod:extractArchive": (...args: Parameters<typeof desktop.service.mod.fn.extractArchiveToGroup>) => ReturnType<typeof desktop.service.mod.fn.extractArchiveToGroup>;
@@ -149,6 +151,7 @@ export type IpcHandlers = {
     "mod:pickFolder": (...args: any[]) => any;
     "mod:removeGame": (...args: Parameters<typeof desktop.service.mod.fn.removeGame>) => ReturnType<typeof desktop.service.mod.fn.removeGame>;
     "mod:rename": (...args: Parameters<typeof desktop.service.mod.fn.rename>) => ReturnType<typeof desktop.service.mod.fn.rename>;
+    "mod:resolveDownloadArchiveExtractPrompt": (...args: any[]) => any;
     "mod:selectFolder": (...args: any[]) => any;
     "mod:setExpandedGroups": (...args: Parameters<typeof desktop.service.mod.fn.setExpandedGroups>) => ReturnType<typeof desktop.service.mod.fn.setExpandedGroups>;
     "mod:setLastGame": (...args: Parameters<typeof desktop.service.mod.fn.setLastGame>) => ReturnType<typeof desktop.service.mod.fn.setLastGame>;
@@ -268,6 +271,7 @@ export type IpcEvents = {
     "fn:toast": (message: string, data?: ToastData) => void;
     "fn:navi": (path: string) => void;
     "download:completed": (data: { path: string; name: string; disableToast?: boolean }) => void;
+    "mod:archiveExtractPrompt": (data: { requestId: string; fileName: string }) => void;
     "pathSelector:modeSelect": (data: { selectionId: string; suggestedName?: string }) => void;
     "language:update": (language: string) => void;
 

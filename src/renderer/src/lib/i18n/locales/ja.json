@@ -14,7 +14,8 @@
     "unknown": "不明",
     "save": "保存",
     "close": "閉じる",
-    "rename": "名前を変更"
+    "rename": "名前を変更",
+    "download": "ダウンロード"
   },
   "page": {
     "transfer": {
@@ -101,7 +102,9 @@
         "rename": "名前を変更",
         "trash": "ゴミ箱",
         "new_dir": "フォルダー作成",
-        "delete": "削除"
+        "delete": "削除",
+        "cut": "切り取り",
+        "paste": "貼り付け"
       },
       "dialog": {
         "common": {
@@ -169,7 +172,17 @@
       "all_disabled": "すべて無効化",
       "content-header": {
         "all_enabled": "すべてのMODが有効になりました",
-        "all_disabled": "すべてのMODが無効になりました"
+        "all_disabled": "すべてのMODが無効になりました",
+        "download_dialog": {
+          "title": "URLからダウンロード",
+          "description": "入力したアーカイブURLを現在選択中のキャラクターフォルダーにダウンロードし、自動で展開します。",
+          "url_label": "ダウンロードURL",
+          "url_placeholder": "直接ダウンロードURLを入力してください",
+          "target_label": "保存先フォルダー",
+          "no_target": "左側でキャラクターフォルダーを選択してください",
+          "invalid_url": "有効なURLを入力してください。",
+          "started": "ダウンロードを開始しました。"
+        }
       },
       "character-sidebar": {
         "add-to-character": "{{name}}に追加",
@@ -551,6 +564,12 @@
       },
       "transfer": {
         "title": "転送",
+        "concurrency": {
+          "title": "同時転送"
+        },
+        "other": {
+          "title": "その他"
+        },
         "downloadConcurrency": {
           "title": "ダウンロード同時転送数",
           "description": "ドライブ転送で同時にダウンロードするファイル数を設定します。範囲: 16〜64"

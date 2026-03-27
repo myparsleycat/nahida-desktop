@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { toast } from "sonner";
+import { modStore } from "@renderer/store/mod";
 
 export function useModRefreshOnFocus(selectedGame: string | null, queryClient: QueryClient) {
     useEffect(() => {
@@ -19,22 +20,39 @@ export function useModRefreshOnFocus(selectedGame: string | null, queryClient: Q
 
 export function useDownloadCompletionHandler(
     selectedGame: string | null,
+    selectedGroupPath: string | undefined,
     queryClient: QueryClient,
 ) {
     useEffect(() => {
         const unsubscribe = window.api.on("download:completed", (data) => {
+            const invalidations: Promise<unknown>[] = [];
+
             if (selectedGame) {
-                queryClient.invalidateQueries({ queryKey: ["mods", selectedGame] });
-                if (!data.disableToast) {
-                    toast.success(`"${data.name}" 다운로드가 완료되었습니다.`);
-                }
+                invalidations.push(queryClient.invalidateQueries({ queryKey: ["mods", selectedGame] }));
+            }
+
+            if (
+                selectedGroupPath &&
+                (data.path === selectedGroupPath ||
+                    data.path.startsWith(`${selectedGroupPath}\\`) ||
+                    data.path.startsWith(`${selectedGroupPath}/`))
+            ) {
+                invalidations.push(
+                    queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] }),
+                );
+            }
+
+            void Promise.all(invalidations);
+
+            if (!data.disableToast) {
+                toast.success(`"${data.name}" 다운로드가 완료되었습니다.`);
             }
         });
 
         return () => {
             unsubscribe();
         };
-    }, [selectedGame, queryClient]);
+    }, [selectedGame, selectedGroupPath, queryClient]);
 }
 
 export function useModWatcherEvents(
@@ -72,4 +90,16 @@ export function useModWatcherEvents(
             removeModsListener();
         };
     }, [selectedGame, selectedGroupPath, queryClient]);
+}
+
+export function useDownloadArchiveExtractPromptHandler() {
+    useEffect(() => {
+        const unsubscribe = window.api.on("mod:archiveExtractPrompt", (data) => {
+            modStore.getState().setArchiveExtractPrompt(data);
+        });
+
+        return () => {
+            unsubscribe();
+        };
+    }, []);
 }

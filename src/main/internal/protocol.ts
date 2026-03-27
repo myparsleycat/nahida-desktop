@@ -1,5 +1,5 @@
 import path from "node:path";
-import { fileTypeFromBuffer } from "file-type/node";
+import { fileTypeFromBuffer } from "file-type";
 import fse from "fs-extra";
 import type { NahidaDesktop } from "..";
 
@@ -148,4 +148,3 @@ async function streamToBuffer(stream: any): Promise<Buffer> {
         stream.on("end", () => resolve(Buffer.concat(chunks)));
     });
 }
-

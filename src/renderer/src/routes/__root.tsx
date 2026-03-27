@@ -14,6 +14,7 @@ import {
 import { Button } from "@renderer/components/ui/button";
 import { Toaster } from "@renderer/components/ui/sonner";
 import { useGlobalEvents } from "@renderer/hooks/use-global-events";
+import { useDownloadArchiveExtractPromptHandler } from "@renderer/hooks/use-mod-events";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { cn } from "@renderer/lib/utils";
 import { useGlobalStore } from "@renderer/store/global";
@@ -99,6 +100,8 @@ function RootComponent() {
   const setTransfers = useGlobalStore((state) => state.setTransfers);
   const { i18n } = useTranslation();
   const { screenHeight, titlebarStyle } = useTitlebar();
+
+  useDownloadArchiveExtractPromptHandler();
 
   useEffect(() => {
     const removeStatusListener = window.api.on("updater:status-changed", (status) => {

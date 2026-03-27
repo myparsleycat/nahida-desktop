@@ -20,6 +20,7 @@ export interface IniResult {
 }
 
 export interface ModInfo {
+  id: string
   name: string
   path: string
   isEnabled: boolean

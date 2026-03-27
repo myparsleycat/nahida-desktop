@@ -4,7 +4,6 @@ import {
   AkashaSkeleton,
   ContentMenuGrid,
   ContentMenuList,
-  ContextMenuProvider,
   HandlerProvider,
 } from "@renderer/components/akasha";
 import {
@@ -15,6 +14,7 @@ import {
   RenameDialog,
 } from "@renderer/components/akasha/dialogs";
 import { Center, ServerCrash } from "@renderer/components/common";
+import { ContextMenuProvider } from "@renderer/components/drive/context-menu";
 import { AliceLoader } from "@renderer/components/loaders";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { useDrag } from "@renderer/hooks/drive";

@@ -58,7 +58,7 @@ export function DownloadConfirmationOverlay() {
   return (
     <div
       className="fixed right-0 bottom-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]"
-      style={{ left: "305px", top: "76px" }}
+      style={{ left: "308px", top: "76px" }}
       onClick={(e) => {
         e.stopPropagation();
       }}

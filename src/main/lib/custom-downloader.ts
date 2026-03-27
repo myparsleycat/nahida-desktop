@@ -1,5 +1,6 @@
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
+import type { ArchiveExtractPathMode, ResolvedArchiveExtractPathMode } from "@shared/mod";
 import type { TransferData } from "@shared/types.gen";
 import { Notification } from "electron";
 import { throttle } from "es-toolkit";
@@ -12,6 +13,13 @@ import { ParallelDownloader } from "./parallel-downloader";
 export class CustomDownloader {
     public desktop: NahidaDesktop;
     private readonly downloader: ParallelDownloader;
+    private readonly pendingArchiveExtractPrompts = new Map<
+        string,
+        {
+            resolve: (mode: ResolvedArchiveExtractPathMode) => void;
+            reject: (error: Error) => void;
+        }
+    >();
 
     public constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
@@ -75,11 +83,316 @@ export class CustomDownloader {
         }
     }
 
+    private parseDownloadFileName(url: string, contentDisposition?: string | null) {
+        const fileNameFromDisposition = contentDisposition
+            ?.match(/filename\*\s*=\s*(?:UTF-8''|')?([^;]+)/i)?.[1]
+            ?.trim()
+            ?.replace(/^"(.*)"$/, "$1");
+
+        if (fileNameFromDisposition) {
+            return this.desktop.lib.fs.sanitizeWindowsFilename(
+                decodeURIComponent(fileNameFromDisposition),
+            );
+        }
+
+        const fileNamePlain = contentDisposition
+            ?.match(/filename\s*=\s*("?)([^";]+)\1/i)?.[2]
+            ?.trim();
+
+        if (fileNamePlain) {
+            return this.desktop.lib.fs.sanitizeWindowsFilename(
+                fileNamePlain,
+            );
+        }
+
+        try {
+            const pathname = new URL(url).pathname;
+            const rawFileName = pathname.split("/").pop() || "download.zip";
+            return this.desktop.lib.fs.sanitizeWindowsFilename(decodeURIComponent(rawFileName));
+        } catch {
+            return "download.zip";
+        }
+    }
+
+    private async promptForArchiveExtractMode(
+        archivePath: string,
+    ): Promise<ResolvedArchiveExtractPathMode> {
+        return new Promise((resolve, reject) => {
+            const requestId = nanoid();
+            const fileName = path.basename(archivePath);
+
+            this.pendingArchiveExtractPrompts.set(requestId, {
+                resolve,
+                reject,
+            });
+
+            const sendPrompt = () => {
+                const mainWindow = this.desktop.window.main.window;
+                if (!mainWindow) {
+                    const pending = this.pendingArchiveExtractPrompts.get(requestId);
+                    if (pending) {
+                        pending.reject(new Error("Main window not found"));
+                        this.pendingArchiveExtractPrompts.delete(requestId);
+                    }
+                    return;
+                }
+
+                this.desktop.ipc.postMessageToWindow(mainWindow, "mod:archiveExtractPrompt", {
+                    requestId,
+                    fileName,
+                });
+                this.desktop.window.main.focus();
+            };
+
+            const mainWindow = this.desktop.window.main.window;
+            if (!mainWindow) {
+                this.desktop.window.main.createMainWindow().then((window) => {
+                    if (window?.webContents.isLoading()) {
+                        window.webContents.once("did-finish-load", () => {
+                            setTimeout(sendPrompt, 500);
+                        });
+                    } else {
+                        sendPrompt();
+                    }
+                });
+                return;
+            }
+
+            sendPrompt();
+        });
+    }
+
+    private async resolveArchiveExtractMode(
+        archivePath: string,
+    ): Promise<ResolvedArchiveExtractPathMode> {
+        const extractMode: ArchiveExtractPathMode =
+            await this.desktop.setting.mod.getArchiveExtractPathMode();
+
+        if (extractMode !== "ask_every_time") {
+            return extractMode;
+        }
+
+        const hasSingleTopLevelDirectory =
+            await this.desktop.service.archive.hasSingleTopLevelDirectory(archivePath);
+
+        if (!hasSingleTopLevelDirectory) {
+            return "flatten_single_root";
+        }
+
+        return await this.promptForArchiveExtractMode(archivePath);
+    }
+
+    public resolveArchiveExtractPrompt(
+        requestId: string,
+        mode: ResolvedArchiveExtractPathMode | null,
+    ): void {
+        const pending = this.pendingArchiveExtractPrompts.get(requestId);
+        if (!pending) {
+            throw new Error("Pending archive extract prompt not found");
+        }
+
+        this.pendingArchiveExtractPrompts.delete(requestId);
+
+        if (!mode) {
+            pending.reject(new Error("Aborted"));
+            return;
+        }
+
+        pending.resolve(mode);
+    }
+
+    private async extractDownloadedArchive(archivePath: string, groupPath: string) {
+        const extractMode = await this.resolveArchiveExtractMode(archivePath);
+        const flattenSingleRoot = extractMode === "flatten_single_root";
+
+        return await this.desktop.service.archive.extract(archivePath, groupPath, {
+            flattenSingleRoot,
+        });
+    }
+
+    private createSiblingTempPath(targetPath: string, suffix: string) {
+        const parentPath = path.dirname(targetPath);
+        const baseName = path.basename(targetPath);
+
+        return path.join(parentPath, `${baseName}.${suffix}-${nanoid()}`);
+    }
+
+    private async replaceGroupWithStaging(groupPath: string, stagingPath: string) {
+        const groupExists = await fse.pathExists(groupPath);
+        const backupPath = groupExists ? this.createSiblingTempPath(groupPath, "backup") : null;
+
+        if (backupPath) {
+            await fse.move(groupPath, backupPath);
+        }
+
+        try {
+            await fse.move(stagingPath, groupPath);
+        } catch (err) {
+            await fse.remove(groupPath).catch(() => {});
+
+            if (backupPath && (await fse.pathExists(backupPath))) {
+                await fse.move(backupPath, groupPath).catch((restoreErr) => {
+                    this.desktop.logger.error(restoreErr, "CustomDownloader:restoreGroupPath");
+                });
+            }
+
+            throw err;
+        }
+
+        if (backupPath) {
+            await fse.remove(backupPath).catch(() => {});
+        }
+    }
+
+    public async downloadToGroup(url: string, groupPath: string): Promise<"started"> {
+        const trimmedUrl = url.trim();
+
+        if (!trimmedUrl) {
+            throw new Error("Download URL is required.");
+        }
+
+        let parsedUrl: URL;
+        try {
+            parsedUrl = new URL(trimmedUrl);
+        } catch {
+            throw new Error("Invalid download URL.");
+        }
+
+        if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+            throw new Error("Only HTTP(S) URLs are supported.");
+        }
+
+        await fse.ensureDir(path.dirname(groupPath));
+
+        const resp = await ky.head(trimmedUrl, {
+            redirect: "follow",
+            throwHttpErrors: false,
+            headers: await this.desktop.httpService.getHeaders(trimmedUrl),
+            // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
+            dispatcher: await this.desktop.httpService.getAgent(),
+        });
+
+        const realFileUrl = resp.ok ? resp.url : trimmedUrl;
+        const fileSizeHeader = resp.headers.get("Content-Length");
+        const fileSize = fileSizeHeader ? Number(fileSizeHeader) : undefined;
+        const suggestedFileName = this.parseDownloadFileName(
+            realFileUrl,
+            resp.headers.get("Content-Disposition"),
+        );
+
+        const archiveExt = path.extname(suggestedFileName);
+        const savePath = this.createSiblingTempPath(groupPath, `download${archiveExt || ".zip"}`);
+        const stagingPath = this.createSiblingTempPath(groupPath, "staging");
+
+        const pid = nanoid();
+        const abortController = new AbortController();
+
+        const transferData: TransferData = {
+            root: {
+                id: pid,
+                parentId: null,
+                name: suggestedFileName,
+            },
+            files: [
+                {
+                    id: pid,
+                    fileId: pid,
+                    parentId: pid,
+                    name: suggestedFileName,
+                    size: fileSize ?? 0,
+                    compAlg: null,
+                    url: realFileUrl,
+                },
+            ],
+            dirs: [],
+        };
+
+        await this.desktop.service.transfer.createTransfer({
+            pid,
+            type: "download",
+            data: transferData,
+            abortController,
+            name: suggestedFileName,
+            initialStatus: "pending",
+            path: groupPath,
+        });
+
+        this.desktop.service.transfer.registerRunner(pid, async () => {
+            try {
+                this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
+
+                let downloadedBytes = 0;
+                const throttledUpdate = throttle((bytes: number) => {
+                    this.desktop.service.transfer.updateTransfer(pid, {
+                        transferedSize: bytes,
+                    });
+                }, 100);
+
+                await this.downloadFile({
+                    url: realFileUrl,
+                    savePath,
+                    fileSize,
+                    signal: abortController.signal,
+                    onProgress: (bytes) => {
+                        downloadedBytes += bytes;
+                        throttledUpdate(downloadedBytes);
+                    },
+                });
+
+                throttledUpdate.flush();
+
+                if (abortController.signal.aborted) throw new Error("Aborted");
+
+                await fse.ensureDir(stagingPath);
+                const extractedPath = await this.extractDownloadedArchive(savePath, stagingPath);
+                const stagedEntries = await fse.readdir(stagingPath);
+
+                if (!(await fse.pathExists(extractedPath)) || stagedEntries.length === 0) {
+                    throw new Error("Archive extraction did not produce staged content.");
+                }
+
+                await this.replaceGroupWithStaging(groupPath, stagingPath);
+
+                this.desktop.service.transfer.markFileCompleted(pid, pid);
+                this.desktop.service.transfer.updateTransfer(pid, {
+                    status: "completed",
+                    progress: 100,
+                    transferedSize: fileSize ?? downloadedBytes,
+                    transferedFiles: 1,
+                });
+
+                const mainWindow = this.desktop.window.main.window;
+                if (mainWindow) {
+                    this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
+                        path: groupPath,
+                        name: suggestedFileName,
+                    });
+                }
+            } catch (err) {
+                if (
+                    abortController.signal.aborted ||
+                    (err as Error).name === "AbortError" ||
+                    (err as Error).message === "Aborted"
+                ) {
+                    this.desktop.service.transfer.updateTransfer(pid, { status: "canceled" });
+                } else {
+                    this.desktop.logger.error(err, "CustomDownloader:downloadToGroup");
+                    this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
+                }
+            } finally {
+                await fse.remove(savePath).catch(() => {});
+                await fse.remove(stagingPath).catch(() => {});
+            }
+        });
+
+        return "started";
+    }
+
     public async GBDownloader(props: {
         fileUrl: string;
         title: string;
         previewUrl?: string | null;
-    }) {
+    }): Promise<"started" | "canceled"> {
         const { title: _title, fileUrl, previewUrl } = props;
         // const title = this.desktop.lib.fs.sanitizeWindowsFilename(_title);
 
@@ -106,7 +419,7 @@ export class CustomDownloader {
 
         const result =
             await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(suggestedFileName);
-        if (!result.path) return;
+        if (!result.path) return "canceled";
 
         const finalFileName = result.fileName || suggestedFileName;
         const savePath = path.join(result.path, finalFileName);
@@ -225,15 +538,20 @@ export class CustomDownloader {
                 }
             }
         });
+
+        return "started";
     }
 
-    public async HuiDownloader(props: { fileUrl: string; title: string }) {
+    public async HuiDownloader(props: {
+        fileUrl: string;
+        title: string;
+    }): Promise<"started" | "canceled"> {
         const { title: _title, fileUrl } = props;
         const title = this.desktop.lib.fs.sanitizeWindowsFilename(_title);
         const result = await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(title);
 
         if (!result.path) {
-            return;
+            return "canceled";
         }
 
         const resp = await ky.head(fileUrl, {
@@ -342,6 +660,8 @@ export class CustomDownloader {
                 }
             }
         });
+
+        return "started";
     }
 }
 

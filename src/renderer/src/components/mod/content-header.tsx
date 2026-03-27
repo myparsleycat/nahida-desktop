@@ -4,6 +4,7 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
 import { Input } from "@renderer/components/ui/input";
@@ -25,6 +26,9 @@ import {
   ArrowUp10,
   ArrowUpAZ,
   ArrowUpWideNarrow,
+  CircleIcon,
+  CircleOffIcon,
+  DownloadIcon,
   EllipsisIcon,
   FolderIcon,
   LayoutGridIcon,
@@ -40,6 +44,7 @@ export function ContentHeader() {
   const searchValue = useModStore((s) => s.searchQuery);
   const onSearchChange = useModStore((s) => s.setSearchQuery);
   const selectedGroup = useModStore((s) => s.selectedGroup);
+  const setIsCustomDownloadDialogOpen = useModStore((s) => s.setIsCustomDownloadDialogOpen);
   const queryClient = useQueryClient();
 
   const sortType = useModStore((s) => s.sortType);
@@ -115,7 +120,7 @@ export function ContentHeader() {
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="relative w-[180px]">
+        <div className="relative w-45">
           <Input
             id="mod-search-input"
             className="h-8 pr-8 text-sm"
@@ -130,7 +135,7 @@ export function ContentHeader() {
 
         <div className="flex items-center gap-1">
           <Select value={sortType} onValueChange={handleSortTypeChange}>
-            <SelectTrigger className="w-[80px]">
+            <SelectTrigger className="w-20">
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
@@ -181,17 +186,32 @@ export function ContentHeader() {
               <EllipsisIcon />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent>
+          <DropdownMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={handleEnableAll}>
+                <CircleIcon />
                 {t("page.mod.all_enabled")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleDisableAll}>
+                <CircleOffIcon />
                 {t("page.mod.all_disabled")}
               </DropdownMenuItem>
             </DropdownMenuGroup>
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuItem
+              disabled={!groupPath}
+              onClick={() => {
+                setIsCustomDownloadDialogOpen(true);
+              }}
+            >
+              <DownloadIcon />
+              {t("g.download")}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
       </div>
     </div>
   );

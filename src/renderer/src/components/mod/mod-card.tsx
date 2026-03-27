@@ -17,6 +17,8 @@ interface ModCardProps {
   mod: ModInfo;
   selectedGroupPath?: string;
   onToggle: (mod: ModInfo, event?: React.MouseEvent) => void;
+  isIniListExpanded: boolean;
+  onIniListExpandedChange: (modId: string, isExpanded: boolean) => void;
   fixTools: {
     id: string;
     name: string;
@@ -40,6 +42,8 @@ export const ModCard = memo(function ModCard({
   mod,
   selectedGroupPath,
   onToggle,
+  isIniListExpanded,
+  onIniListExpandedChange,
   fixTools,
   presets,
   onToggleKeyUpdate,
@@ -120,7 +124,7 @@ export const ModCard = memo(function ModCard({
     >
       <div
         className={cn(
-          "rounded-sm overflow-hidden border-border/75 cursor-pointer p-1 h-[400px] relative hover:shadow-lg transition-shadow duration-150",
+          "rounded-sm overflow-hidden border-border/75 cursor-pointer p-1 h-100 relative hover:shadow-lg transition-shadow duration-150",
           getModColorClass(mod.isEnabled),
         )}
         onMouseDown={(e) => {
@@ -159,8 +163,25 @@ export const ModCard = memo(function ModCard({
 
           {mod.inis.length > 0 && (
             <>
-              <Separator orientation="vertical" />
-              <ModIniList mod={mod} onToggleKeyUpdate={onToggleKeyUpdate} />
+              <div className="relative flex items-stretch">
+                <Separator orientation="vertical" />
+                <button
+                  type="button"
+                  aria-label={isIniListExpanded ? "Collapse ini list" : "Expand ini list"}
+                  className="absolute inset-y-0 left-1/2 z-10 w-6 -translate-x-1/2 bg-transparent pointer-events-auto"
+                  style={{ cursor: "col-resize" }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onIniListExpandedChange(mod.id, !isIniListExpanded);
+                  }}
+                />
+              </div>
+
+              <ModIniList
+                mod={mod}
+                expanded={isIniListExpanded}
+                onToggleKeyUpdate={onToggleKeyUpdate}
+              />
             </>
           )}
         </div>

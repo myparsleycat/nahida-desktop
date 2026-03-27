@@ -12,6 +12,7 @@ import { Label } from "@renderer/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -84,7 +85,7 @@ export function EditGameDialog({
     }
 
     if (!editGamePath.trim()) {
-      toast.error(t("page.mod.dialog.add-game.#.1"));
+      toast.warning(t("page.mod.dialog.add-game.#.1"));
       return;
     }
 
@@ -113,14 +114,16 @@ export function EditGameDialog({
                 <SelectValue placeholder={t("g.select")} />
               </SelectTrigger>
               <SelectContent aria-describedby={undefined} position="popper">
-                <SelectItem value={NO_IMPORTER_VALUE}>
-                  {t("page.mod.dialog.edit-game.no_importer")}
-                </SelectItem>
-                {enabledImporters.map((importer) => (
-                  <SelectItem key={importer.key} value={importer.key}>
-                    {importer.key}
+                <SelectGroup>
+                  <SelectItem value={NO_IMPORTER_VALUE}>
+                    {t("page.mod.dialog.edit-game.no_importer")}
                   </SelectItem>
-                ))}
+                  {enabledImporters.map((importer) => (
+                    <SelectItem key={importer.key} value={importer.key}>
+                      {importer.key}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
           </div>

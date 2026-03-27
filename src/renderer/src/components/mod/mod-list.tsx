@@ -70,7 +70,7 @@ export function ModList(_props: ModListProps) {
                 <tbody>
                   {mods.map((mod) => (
                     <ModListRow
-                      key={mod.path}
+                      key={mod.id}
                       mod={mod}
                       selectedGroupPath={selectedGroupPath}
                       handleToggle={handleToggle}

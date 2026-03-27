@@ -1,12 +1,5 @@
 import { Button, buttonVariants } from "@renderer/components/ui/button";
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@renderer/components/ui/context-menu";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
@@ -17,6 +10,7 @@ import {
 import { Input } from "@renderer/components/ui/input";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { useAuth } from "@renderer/hooks/use-auth";
+import { useDriveClipboardActions } from "@renderer/hooks/use-drive-clipboard";
 import i18n from "@renderer/lib/i18n";
 import { cn } from "@renderer/lib/utils";
 import {
@@ -27,8 +21,7 @@ import {
 } from "@renderer/store/drive";
 import type { Content } from "@shared/types.gen";
 import { formatDate, formatSize, getRandInt } from "@shared/utils";
-import { useMutation } from "@tanstack/react-query";
-import { useLocation, useNavigate, useParams, useRouteContext } from "@tanstack/react-router";
+import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -42,10 +35,7 @@ import {
   LayoutGridIcon,
   ListIcon,
   LoaderIcon,
-  MousePointer2Icon,
   SearchIcon,
-  SquarePenIcon,
-  Trash2Icon,
   UploadIcon,
 } from "lucide-react";
 import type React from "react";
@@ -56,7 +46,7 @@ import { PreviewModal } from "./preview-modal";
 
 export interface Ancestor {
   id: string;
-  parentId: string | null;
+  parentId?: string | null;
   name: string;
   depth: number;
 }
@@ -276,215 +266,6 @@ export function AkashaHeadButtons() {
   );
 }
 
-function ContextMenuContentSnippet() {
-  const { selectedItems, setSelectedItems } = useSelectionStore();
-  const dialog = useDialogStore();
-  const { t } = useTranslation();
-  const { queryClient } = useRouteContext({ from: "__root__" });
-  const location = useLocation();
-  const isSharePath = location.pathname.startsWith("/drive/share");
-  const { id: itemId } = useParams({
-    from: isSharePath ? "/drive/share/$id" : "/drive/drive/$id",
-  });
-  const navi = useNavigate();
-
-  const trashMutation = useMutation({
-    mutationKey: ["akasha", "drive", "trash"],
-    mutationFn: async ({ items }: { items: Content[] }) => {
-      const ids = items.map((item) => item.id);
-      await window.api.invoke("drive:delete:items", ids, "trash");
-      return;
-    },
-  });
-
-  const handleTrashBtn = async (e: React.MouseEvent) => {
-    return trashMutation
-      .mutateAsync({ items: selectedItems })
-      .then(async () => {
-        toast.success(`${selectedItems.length}개의 파일 및 디렉토리가 휴지통으로 이동되었습니다`);
-        setSelectedItems([]);
-        await queryClient.invalidateQueries();
-      })
-      .catch((err: string) => {
-        toast.error(err);
-      });
-  };
-
-  return selectedItems && selectedItems.length !== 0 ? (
-    <>
-      {selectedItems.length === 1 && (
-        <>
-          {selectedItems[0].isDir && (
-            <>
-              <ContextMenuItem
-                className="gap-x-2"
-                onClick={() => {
-                  navi({
-                    to: location.pathname.startsWith("/drive/share")
-                      ? "/drive/share/$id"
-                      : "/drive/drive/$id",
-                    params: { id: selectedItems[0].id },
-                  });
-                }}
-              >
-                <MousePointer2Icon size={18} />
-                {t("page.drive.context_menu.open")}
-              </ContextMenuItem>
-              <ContextMenuSeparator />
-            </>
-          )}
-
-          {/* {selectedItems[0].mimeType?.startsWith("text") ||
-            (selectedItems[0].mimeType?.startsWith("image") && (
-              <ContextMenuItem
-                className="cugap-x-2"
-                onClick={() => {
-                  // TODO: 미리보기
-                }}
-              >
-                <EyeIcon size={18} />
-                {t("drive.ui.context_menu.preview")}
-              </ContextMenuItem>
-            ))} */}
-
-          <ContextMenuItem
-            className="gap-x-2"
-            onClick={() =>
-              window.api.invoke("drive:fn:startDownload", {
-                id: selectedItems[0].id,
-                suggestedName: selectedItems[0].name,
-              })
-            }
-          >
-            <DownloadIcon size={18} />
-            {t("page.drive.context_menu.download")}
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-
-          {/* <ContextMenuItem
-            className="gap-x-2"
-            onClick={() => {
-              if (selectedItems[0]) {
-                dialog.setOpen("shareDialog", true, {
-                  id: selectedItems[0].id,
-                });
-              } else {
-                toast.warning("선택된 항목이 없습니다");
-              }
-            }}
-          >
-            <Share2Icon size={18} />
-            {t("drive.ui.context_menu.share")}
-          </ContextMenuItem>
-
-          <ContextMenuItem
-            className="gap-x-2"
-            onClick={() =>
-              dialog.setOpen("notiDialog", true, {
-                id: selectedItems[0].id,
-              })
-            }
-          >
-            <BellIcon />
-            알림
-          </ContextMenuItem>
-
-          <ContextMenuSeparator /> */}
-
-          <ContextMenuItem
-            className="gap-x-2"
-            onClick={() =>
-              dialog.setOpen("renameDialog", true, {
-                id: selectedItems[0].id,
-              })
-            }
-          >
-            <SquarePenIcon size={18} />
-            {t("page.drive.context_menu.rename")}
-          </ContextMenuItem>
-
-          <ContextMenuSeparator />
-
-          {/* <ContextMenuItem
-            className="gap-x-2"
-            onClick={() => window.api.invoke("util:copyStr", selectedItems[0].id)}
-          >
-            <CopyIcon size={18} />
-            {t("drive.ui.context_menu.copy_id")}
-          </ContextMenuItem>
-
-          <ContextMenuSeparator /> */}
-        </>
-      )}
-
-      {isSharePath ? (
-        <ContextMenuItem className="gap-x-2" variant="destructive" onClick={handleTrashBtn}>
-          <Trash2Icon size={18} />
-          {t("page.drive.context_menu.trash")}
-        </ContextMenuItem>
-      ) : (
-        <>
-          <ContextMenuItem
-            className="gap-x-2"
-            variant="destructive"
-            onClick={() => dialog.setOpen("deleteItemsDialog", true)}
-          >
-            <Trash2Icon size={18} />
-            {t("page.drive.context_menu.delete")}
-          </ContextMenuItem>
-        </>
-      )}
-    </>
-  ) : (
-    <ContextMenuItem
-      className="cursor-pointer gap-x-2"
-      onClick={() => dialog.setOpen("createDirDialog", true)}
-    >
-      <FolderIcon size={18} />
-      {t("page.drive.context_menu.new_dir")}
-    </ContextMenuItem>
-  );
-}
-
-interface ContextMenuProviderProps {
-  children: React.ReactNode;
-}
-
-export function ContextMenuProvider(props: ContextMenuProviderProps) {
-  const { children } = props;
-  const { selection } = useContentMenu();
-
-  const handleEmptyAreaClick = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    if (!target.closest(".sorted-contents")) {
-      selection.setSelectedItems([]);
-      selection.setLastSelectedIdx(null);
-    }
-  };
-
-  return (
-    <ContextMenu>
-      <ContextMenuTrigger
-        className="overflow-y-auto overflow-x-hidden flex-1"
-        onClick={handleEmptyAreaClick}
-        onContextMenu={handleEmptyAreaClick}
-      >
-        {children}
-      </ContextMenuTrigger>
-
-      <ContextMenuContent className="flex-1">
-        <ContextMenuContentSnippet />
-      </ContextMenuContent>
-    </ContextMenu>
-  );
-}
-
-interface ContentMenuProps {
-  sortedContents: Content[];
-  isFetching: boolean;
-  itemId: string;
-}
-
 function ListHead() {
   const sortType = useViewStore((s) => s.sortType);
   const setSortType = useViewStore((s) => s.setSortType);
@@ -566,6 +347,12 @@ function ListHead() {
       </tr>
     </thead>
   );
+}
+
+interface ContentMenuProps {
+  sortedContents: Content[];
+  isFetching: boolean;
+  itemId: string;
 }
 
 export function ContentMenuList(props: ContentMenuProps) {
@@ -732,12 +519,11 @@ interface HandlerProviderProps {
 }
 
 export function HandlerProvider(props: HandlerProviderProps) {
-  const { queryClient } = useRouteContext({ from: "__root__" });
   const { children, sortedContents, queryData, currentId } = props;
   const navi = useNavigate();
   const location = useLocation();
   const dialog = useDialogStore();
-  const { selectedItems, setSelectedItems, setLastSelectedIdx, copyOrCuts, setCopyOrCuts } =
+  const { selectedItems, setSelectedItems, setLastSelectedIdx, setCopyOrCuts } =
     useSelectionStore();
   const isfocusSearchInput = useViewStore((s) => s.isfocusSearchInput);
   const setSearchInDirQuery = useViewStore((s) => s.setSearchInDirQuery);
@@ -745,6 +531,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
   const setPendingDriveRevealId = useViewStore((s) => s.setPendingDriveRevealId);
   const pendingShareRevealId = useViewStore((s) => s.pendingShareRevealId);
   const setPendingShareRevealId = useViewStore((s) => s.setPendingShareRevealId);
+  const { handleCut, handlePaste } = useDriveClipboardActions(currentId);
 
   const searchBuffer = useRef("");
   const searchTimeout = useRef<number | undefined>(undefined);
@@ -935,53 +722,18 @@ export function HandlerProvider(props: HandlerProviderProps) {
 
       if ((e.ctrlKey || e.metaKey) && e.key === "x") {
         e.preventDefault();
-        setCopyOrCuts("cut", selectedItems);
-        if (selectedItems.length === 1) {
-          toast.info(`"${selectedItems[0].name}"이(가) 잘라내기 상태로 설정되었습니다`);
-        } else if (selectedItems.length > 1) {
-          toast.info(
-            `"${copyOrCuts.items[0].name}"외 ${
-              copyOrCuts.items.length - 1
-            }개가 잘라내기 상태로 설정되었습니다.`,
-          );
-        }
+        handleCut();
       }
 
       if ((e.ctrlKey || e.metaKey) && e.key === "v") {
         e.preventDefault();
-        if (copyOrCuts.action && copyOrCuts.items.length > 0) {
-          if (copyOrCuts.action === "cut") {
-            const itemsToMove = [...copyOrCuts.items];
-
-            setCopyOrCuts(null, []);
-
-            const promise = window.api.invoke("drive:fn:moveMany", {
-              ids: itemsToMove.map((item) => item.id),
-              destId: currentId,
-            });
-
-            toast.promise(promise, {
-              loading: "File moving...",
-              success: () => {
-                queryClient.invalidateQueries({
-                  queryKey: ["drive", "drive", currentId],
-                });
-                queryClient.invalidateQueries({
-                  queryKey: ["drive", "share", currentId],
-                });
-                return "File moved successfully";
-              },
-              error: (err: any) => `File moving failed: ${err.message}`,
-            });
-          }
-        }
+        handlePaste();
       }
     },
     [
       sortedContents,
       selectedItems,
       isfocusSearchInput,
-      copyOrCuts,
       queryData.data,
       navi,
       dialog,
@@ -989,6 +741,8 @@ export function HandlerProvider(props: HandlerProviderProps) {
       setLastSelectedIdx,
       setCopyOrCuts,
       currentId,
+      handleCut,
+      handlePaste,
       location.pathname,
       scrollItemIntoCenter,
       setPendingDriveRevealId,

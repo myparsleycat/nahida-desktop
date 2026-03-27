@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { Input } from "@renderer/components/ui/input";
 import { Separator } from "@renderer/components/ui/separator";
+import { Switch } from "@renderer/components/ui/switch";
 import { useSettings } from "@renderer/hooks/use-settings";
 import { createFileRoute } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
@@ -13,6 +14,8 @@ const settingsConfig = {
   downloadConcurrency: "setting:transfer:getDownloadConcurrency",
   uploadConcurrency: "setting:transfer:getUploadConcurrency",
   uploadCreateManyConcurrency: "setting:transfer:getUploadCreateManyConcurrency",
+  moveTransferPageWhenStartTransfer: "setting:general:getMoveTransferPageWhenStartTransfer",
+  powerSaveBlockInTransfer: "setting:general:getPowerSaveBlockInTransfer",
 } as const;
 
 const DOWNLOAD_MIN_MAX = [16, 64];
@@ -33,6 +36,8 @@ function RouteComponent() {
     downloadConcurrency: number;
     uploadConcurrency: number;
     uploadCreateManyConcurrency: number;
+    moveTransferPageWhenStartTransfer: boolean;
+    powerSaveBlockInTransfer: boolean;
   }>(settingsConfig);
 
   if (isLoading) {
@@ -67,7 +72,9 @@ function RouteComponent() {
     <div className="space-y-6 p-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-medium">{t("page.setting.transfer.title")}</CardTitle>
+          <CardTitle className="text-sm font-medium">
+            {t("page.setting.transfer.concurrency.title")}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between gap-6">
@@ -166,6 +173,57 @@ function RouteComponent() {
                 }
               }}
               className="w-28"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">{t("page.setting.transfer.other.title")}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-6">
+            <div className="space-y-0.5">
+              <span className="text-sm font-medium">
+                {t("page.setting.gen.other.moveTransferPageWhenStartTransfer")}
+              </span>
+              <p className="text-xs text-muted-foreground">
+                {t("page.setting.gen.other.moveTransferPageWhenStartTransferDescription")}
+              </p>
+            </div>
+            <Switch
+              checked={settings.moveTransferPageWhenStartTransfer}
+              onCheckedChange={(val) =>
+                update(
+                  "moveTransferPageWhenStartTransfer",
+                  val,
+                  "setting:general:setMoveTransferPageWhenStartTransfer",
+                )
+              }
+            />
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between gap-6">
+            <div className="space-y-0.5">
+              <span className="text-sm font-medium">
+                {t("page.setting.gen.other.powerSaveBlockInTransfer")}
+              </span>
+              <p className="text-xs text-muted-foreground">
+                {t("page.setting.gen.other.powerSaveBlockInTransferDescription")}
+              </p>
+            </div>
+            <Switch
+              checked={settings.powerSaveBlockInTransfer}
+              onCheckedChange={(val) =>
+                update(
+                  "powerSaveBlockInTransfer",
+                  val,
+                  "setting:general:setPowerSaveBlockInTransfer",
+                )
+              }
             />
           </div>
         </CardContent>

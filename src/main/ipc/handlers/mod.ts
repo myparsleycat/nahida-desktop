@@ -92,6 +92,17 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return await desktop.service.mod.fn.disableAll(groupPath);
     });
 
+    rh("mod:downloadFromUrl", async (url: string, groupPath: string) => {
+        return await desktop.lib.customDownloader.downloadToGroup(url, groupPath);
+    });
+
+    rh(
+        "mod:resolveDownloadArchiveExtractPrompt",
+        async (requestId: string, mode) => {
+            desktop.lib.customDownloader.resolveArchiveExtractPrompt(requestId, mode);
+        },
+    );
+
     rh(
         "mod:updateToggleKey",
         async (

@@ -14,7 +14,8 @@
     "unknown": "Unknown",
     "save": "Save",
     "close": "Close",
-    "rename": "Rename"
+    "rename": "Rename",
+    "download": "Download"
   },
   "page": {
     "transfer": {
@@ -65,6 +66,27 @@
           "retry_failed_files": "Retry failed files",
           "remove_from_transfer": "Remove from transfer"
         }
+      },
+      "transfer": {
+        "title": "Transfer",
+        "concurrency": {
+          "title": "Concurrency"
+        },
+        "other": {
+          "title": "Other"
+        },
+        "downloadConcurrency": {
+          "title": "Download concurrency",
+          "description": "Set the number of files to download simultaneously in drive transfers. Range: 16-64"
+        },
+        "uploadConcurrency": {
+          "title": "Upload concurrency",
+          "description": "Set the number of files to upload simultaneously in drive transfers. Range: 4-16"
+        },
+        "uploadCreateManyConcurrency": {
+          "title": "Upload metadata concurrency",
+          "description": "Set the number of requests to run simultaneously before starting file uploads. Range: 1-4"
+        }
       }
     },
     "drive": {
@@ -100,7 +122,9 @@
         "rename": "Rename",
         "delete": "Delete",
         "trash": "Trash",
-        "new_dir": "Create folder"
+        "new_dir": "Create folder",
+        "cut": "Cut",
+        "paste": "Paste"
       },
       "dialog": {
         "common": {
@@ -168,7 +192,17 @@
       "all_disabled": "Disable all",
       "content-header": {
         "all_enabled": "All mods enabled",
-        "all_disabled": "All mods disabled"
+        "all_disabled": "All mods disabled",
+        "download_dialog": {
+          "title": "Download from URL",
+          "description": "Download the archive to the selected character folder and extract it automatically.",
+          "url_label": "Download URL",
+          "url_placeholder": "Enter a direct download URL",
+          "target_label": "Target folder",
+          "no_target": "Select a character folder on the left",
+          "invalid_url": "Enter a valid URL.",
+          "started": "Download started."
+        }
       },
       "character-sidebar": {
         "add-to-character": "Add to {{name}}",
@@ -514,6 +548,9 @@
       },
       "transfer": {
         "title": "Transfer",
+        "concurrency": {
+          "title": "Concurrency"
+        },
         "downloadConcurrency": {
           "title": "Download concurrency",
           "description": "Controls how many files can be downloaded at the same time in drive transfers. Range: 16 to 64."
@@ -525,6 +562,9 @@
         "uploadCreateManyConcurrency": {
           "title": "Upload metadata concurrency",
           "description": "Controls how many requests can run at the same time before file upload starts. Range: 1 to 4."
+        },
+        "other": {
+          "title": "Other"
         }
       },
       "xxmi": {
