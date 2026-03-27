@@ -66,11 +66,19 @@ export function ModGrid(_props: ModGridProps) {
   }, [scrollAreaRef.current]);
 
   const rows = useMemo(() => chunk(mods, columnCount), [mods, columnCount]);
+  const getModRenderKey = useCallback(
+    (mod: ModInfo) => `${selectedGroupPath ?? ""}::${mod.path}`,
+    [selectedGroupPath],
+  );
   const isVirtualizationEnabled =
     (vSettings?.enabled ?? true) && mods.length >= (vSettings?.threshold ?? 30);
 
   const rowVirtualizer = useVirtualizer({
     count: isVirtualizationEnabled ? rows.length : 0,
+    getItemKey: (index) => {
+      const rowMods = rows[index] ?? [];
+      return `${selectedGroupPath ?? ""}::${JSON.stringify(rowMods.map((mod) => mod.path))}`;
+    },
     getScrollElement: () =>
       scrollAreaRef.current?.querySelector("[data-radix-scroll-area-viewport]") || null,
     estimateSize: useCallback(() => 400 + 12, []), // card height (400) + gap (12)
@@ -173,11 +181,11 @@ export function ModGrid(_props: ModGridProps) {
             >
               {mods.map((mod) => (
                 <ModCard
-                  key={mod.id}
+                  key={getModRenderKey(mod)}
                   mod={mod}
                   selectedGroupPath={selectedGroupPath}
                   onToggle={handleToggle}
-                  isIniListExpanded={iniListExpandedByModId[mod.id] ?? true}
+                  isIniListExpanded={iniListExpandedByModId[mod.path] ?? true}
                   onIniListExpandedChange={handleIniListExpandedChange}
                   fixTools={fixTools}
                   presets={presets}
@@ -219,11 +227,11 @@ export function ModGrid(_props: ModGridProps) {
                     >
                       {rowMods.map((mod) => (
                         <ModCard
-                          key={mod.id}
+                          key={getModRenderKey(mod)}
                           mod={mod}
                           selectedGroupPath={selectedGroupPath}
                           onToggle={handleToggle}
-                          isIniListExpanded={iniListExpandedByModId[mod.id] ?? true}
+                          isIniListExpanded={iniListExpandedByModId[mod.path] ?? true}
                           onIniListExpandedChange={handleIniListExpandedChange}
                           fixTools={fixTools}
                           presets={presets}
