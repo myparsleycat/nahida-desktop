@@ -77,7 +77,7 @@ export function ModGrid(_props: ModGridProps) {
     count: isVirtualizationEnabled ? rows.length : 0,
     getItemKey: (index) => {
       const rowMods = rows[index] ?? [];
-      return `${selectedGroupPath ?? ""}::${rowMods.map((mod) => mod.path).join("|")}`;
+      return `${selectedGroupPath ?? ""}::${JSON.stringify(rowMods.map((mod) => mod.path))}`;
     },
     getScrollElement: () =>
       scrollAreaRef.current?.querySelector("[data-radix-scroll-area-viewport]") || null,
