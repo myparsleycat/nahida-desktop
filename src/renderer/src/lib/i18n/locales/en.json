@@ -192,7 +192,17 @@
       "all_disabled": "Disable all",
       "content-header": {
         "all_enabled": "All mods enabled",
-        "all_disabled": "All mods disabled"
+        "all_disabled": "All mods disabled",
+        "download_dialog": {
+          "title": "Download from URL",
+          "description": "Download the archive to the selected character folder and extract it automatically.",
+          "url_label": "Download URL",
+          "url_placeholder": "Enter a direct download URL",
+          "target_label": "Target folder",
+          "no_target": "Select a character folder on the left",
+          "invalid_url": "Enter a valid URL.",
+          "started": "Download started."
+        }
       },
       "character-sidebar": {
         "add-to-character": "Add to {{name}}",

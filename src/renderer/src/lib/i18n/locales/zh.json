@@ -171,7 +171,17 @@
       "all_disabled": "全部禁用",
       "content-header": {
         "all_enabled": "所有模组已启用",
-        "all_disabled": "所有模组已禁用"
+        "all_disabled": "所有模组已禁用",
+        "download_dialog": {
+          "title": "通过 URL 下载",
+          "description": "将输入的压缩包 URL 下载到当前选中的角色文件夹，并自动解压。",
+          "url_label": "下载 URL",
+          "url_placeholder": "请输入直接下载链接",
+          "target_label": "目标文件夹",
+          "no_target": "请先在左侧选择角色文件夹",
+          "invalid_url": "请输入有效的 URL。",
+          "started": "已开始下载。"
+        }
       },
       "character-sidebar": {
         "add-to-character": "添加到 {{name}}",

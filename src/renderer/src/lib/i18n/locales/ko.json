@@ -171,7 +171,17 @@
       "all_disabled": "모두 비활성화",
       "content-header": {
         "all_enabled": "모든 모드가 활성화되었습니다",
-        "all_disabled": "모든 모드가 비활성화되었습니다"
+        "all_disabled": "모든 모드가 비활성화되었습니다",
+        "download_dialog": {
+          "title": "URL로 다운로드",
+          "description": "입력한 압축 파일 URL을 현재 선택한 캐릭터 폴더에 다운로드하고 자동으로 압축을 해제합니다.",
+          "url_label": "다운로드 URL",
+          "url_placeholder": "직접 다운로드 URL을 입력하세요",
+          "target_label": "대상 폴더",
+          "no_target": "왼쪽에서 캐릭터 폴더를 선택하세요",
+          "invalid_url": "올바른 URL을 입력하세요.",
+          "started": "다운로드를 시작했습니다."
+        }
       },
       "character-sidebar": {
         "add-to-character": "{{name}}에 추가",

@@ -132,6 +132,7 @@ export type IpcHandlers = {
     "mod:createPreset": (...args: Parameters<typeof desktop.service.mod.fn.createPreset>) => ReturnType<typeof desktop.service.mod.fn.createPreset>;
     "mod:deletePreset": (...args: Parameters<typeof desktop.service.mod.fn.deletePreset>) => ReturnType<typeof desktop.service.mod.fn.deletePreset>;
     "mod:disableAll": (...args: Parameters<typeof desktop.service.mod.fn.disableAll>) => ReturnType<typeof desktop.service.mod.fn.disableAll>;
+    "mod:downloadFromUrl": (...args: Parameters<typeof desktop.lib.customDownloader.downloadToGroup>) => ReturnType<typeof desktop.lib.customDownloader.downloadToGroup>;
     "mod:enableAll": (...args: Parameters<typeof desktop.service.mod.fn.enableAll>) => ReturnType<typeof desktop.service.mod.fn.enableAll>;
     "mod:exclusiveToggle": (...args: Parameters<typeof desktop.service.mod.fn.exclusiveToggle>) => ReturnType<typeof desktop.service.mod.fn.exclusiveToggle>;
     "mod:extractArchive": (...args: Parameters<typeof desktop.service.mod.fn.extractArchiveToGroup>) => ReturnType<typeof desktop.service.mod.fn.extractArchiveToGroup>;

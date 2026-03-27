@@ -172,7 +172,17 @@
       "all_disabled": "すべて無効化",
       "content-header": {
         "all_enabled": "すべてのMODが有効になりました",
-        "all_disabled": "すべてのMODが無効になりました"
+        "all_disabled": "すべてのMODが無効になりました",
+        "download_dialog": {
+          "title": "URLからダウンロード",
+          "description": "入力したアーカイブURLを現在選択中のキャラクターフォルダーにダウンロードし、自動で展開します。",
+          "url_label": "ダウンロードURL",
+          "url_placeholder": "直接ダウンロードURLを入力してください",
+          "target_label": "保存先フォルダー",
+          "no_target": "左側でキャラクターフォルダーを選択してください",
+          "invalid_url": "有効なURLを入力してください。",
+          "started": "ダウンロードを開始しました。"
+        }
       },
       "character-sidebar": {
         "add-to-character": "{{name}}に追加",

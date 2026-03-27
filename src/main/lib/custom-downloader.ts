@@ -75,6 +75,171 @@ export class CustomDownloader {
         }
     }
 
+    private parseDownloadFileName(url: string, contentDisposition?: string | null) {
+        const fileNameFromDisposition = contentDisposition
+            ?.match(/filename\*?=(?:UTF-8''|")?([^";]+)"?/i)?.[1]
+            ?.trim();
+
+        if (fileNameFromDisposition) {
+            return this.desktop.lib.fs.sanitizeWindowsFilename(
+                decodeURIComponent(fileNameFromDisposition.replace(/^"(.*)"$/, "$1")),
+            );
+        }
+
+        try {
+            const pathname = new URL(url).pathname;
+            const rawFileName = pathname.split("/").pop() || "download.zip";
+            return this.desktop.lib.fs.sanitizeWindowsFilename(decodeURIComponent(rawFileName));
+        } catch {
+            return "download.zip";
+        }
+    }
+
+    private async extractDownloadedArchive(archivePath: string, groupPath: string) {
+        const extractMode = await this.desktop.setting.mod.getArchiveExtractPathMode();
+        const flattenSingleRoot = extractMode !== "keep_archive_root";
+
+        return await this.desktop.service.archive.extract(archivePath, groupPath, {
+            flattenSingleRoot,
+        });
+    }
+
+    public async downloadToGroup(url: string, groupPath: string): Promise<"started"> {
+        const trimmedUrl = url.trim();
+
+        if (!trimmedUrl) {
+            throw new Error("Download URL is required.");
+        }
+
+        let parsedUrl: URL;
+        try {
+            parsedUrl = new URL(trimmedUrl);
+        } catch {
+            throw new Error("Invalid download URL.");
+        }
+
+        if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+            throw new Error("Only HTTP(S) URLs are supported.");
+        }
+
+        await fse.ensureDir(groupPath);
+
+        const resp = await ky.head(trimmedUrl, {
+            redirect: "follow",
+            throwHttpErrors: false,
+            headers: await this.desktop.httpService.getHeaders(trimmedUrl),
+            // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
+            dispatcher: await this.desktop.httpService.getAgent(),
+        });
+
+        const realFileUrl = resp.ok ? resp.url : trimmedUrl;
+        const fileSizeHeader = resp.headers.get("Content-Length");
+        const fileSize = fileSizeHeader ? Number(fileSizeHeader) : undefined;
+        const suggestedFileName = this.parseDownloadFileName(
+            realFileUrl,
+            resp.headers.get("Content-Disposition"),
+        );
+
+        const archiveExt = path.extname(suggestedFileName);
+        const tempArchiveName = `${nanoid()}${archiveExt || ".zip"}`;
+        const savePath = path.join(groupPath, tempArchiveName);
+
+        const pid = nanoid();
+        const abortController = new AbortController();
+
+        const transferData: TransferData = {
+            root: {
+                id: pid,
+                parentId: null,
+                name: suggestedFileName,
+            },
+            files: [
+                {
+                    id: pid,
+                    fileId: pid,
+                    parentId: pid,
+                    name: suggestedFileName,
+                    size: fileSize ?? 0,
+                    compAlg: null,
+                    url: realFileUrl,
+                },
+            ],
+            dirs: [],
+        };
+
+        await this.desktop.service.transfer.createTransfer({
+            pid,
+            type: "download",
+            data: transferData,
+            abortController,
+            name: suggestedFileName,
+            initialStatus: "pending",
+            path: groupPath,
+        });
+
+        this.desktop.service.transfer.registerRunner(pid, async () => {
+            try {
+                this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
+
+                let downloadedBytes = 0;
+                const throttledUpdate = throttle((bytes: number) => {
+                    this.desktop.service.transfer.updateTransfer(pid, {
+                        transferedSize: bytes,
+                    });
+                }, 100);
+
+                await this.downloadFile({
+                    url: realFileUrl,
+                    savePath,
+                    fileSize,
+                    signal: abortController.signal,
+                    onProgress: (bytes) => {
+                        downloadedBytes += bytes;
+                        throttledUpdate(downloadedBytes);
+                    },
+                });
+
+                throttledUpdate.flush();
+
+                if (abortController.signal.aborted) throw new Error("Aborted");
+
+                await this.extractDownloadedArchive(savePath, groupPath);
+                await fse.rm(savePath, { force: true });
+
+                this.desktop.service.transfer.markFileCompleted(pid, pid);
+                this.desktop.service.transfer.updateTransfer(pid, {
+                    status: "completed",
+                    progress: 100,
+                    transferedSize: fileSize ?? downloadedBytes,
+                    transferedFiles: 1,
+                });
+
+                const mainWindow = this.desktop.window.main.window;
+                if (mainWindow) {
+                    this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
+                        path: groupPath,
+                        name: suggestedFileName,
+                    });
+                }
+            } catch (err) {
+                await fse.remove(savePath).catch(() => {});
+
+                if (
+                    abortController.signal.aborted ||
+                    (err as Error).name === "AbortError" ||
+                    (err as Error).message === "Aborted"
+                ) {
+                    this.desktop.service.transfer.updateTransfer(pid, { status: "canceled" });
+                } else {
+                    this.desktop.logger.error(err, "CustomDownloader:downloadToGroup");
+                    this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
+                }
+            }
+        });
+
+        return "started";
+    }
+
     public async GBDownloader(props: {
         fileUrl: string;
         title: string;

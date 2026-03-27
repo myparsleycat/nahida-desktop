@@ -34,6 +34,8 @@ interface ModState {
     setEditGameImporter: (importer: string | null) => void;
     isEditGameDialogOpen: boolean;
     setIsEditGameDialogOpen: (open: boolean) => void;
+    isCustomDownloadDialogOpen: boolean;
+    setIsCustomDownloadDialogOpen: (open: boolean) => void;
     downloadMode: { downloadId: string; suggestedName?: string } | null;
     setDownloadMode: (mode: { downloadId: string; suggestedName?: string } | null) => void;
     searchQuery: string;
@@ -89,6 +91,9 @@ export const modStore = createStore<ModState>((set) => ({
     setEditGameImporter: (editGameImporter) => set({ editGameImporter }),
     isEditGameDialogOpen: false,
     setIsEditGameDialogOpen: (isEditGameDialogOpen) => set({ isEditGameDialogOpen }),
+    isCustomDownloadDialogOpen: false,
+    setIsCustomDownloadDialogOpen: (isCustomDownloadDialogOpen) =>
+        set({ isCustomDownloadDialogOpen }),
     downloadMode: null,
     setDownloadMode: (downloadMode) => set({ downloadMode }),
     searchQuery: "",

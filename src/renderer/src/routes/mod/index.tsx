@@ -1,4 +1,5 @@
 import { DownloadConfirmationOverlay } from "@renderer/components/download-confirmation-overlay";
+import { CustomDownloadDialog } from "@renderer/components/mod/custom-download-dialog";
 import { ContentHeader } from "@renderer/components/mod/content-header";
 import { DeleteGameDialog } from "@renderer/components/mod/delete-game-dialog";
 import { ModGrid } from "@renderer/components/mod/mod-grid";
@@ -52,6 +53,8 @@ function ModRouteContent() {
   const setSelectedGame = useModStore((s) => s.setSelectedGame);
   const selectedGroup = useModStore((s) => s.selectedGroup);
   const setSelectedGroup = useModStore((s) => s.setSelectedGroup);
+  const isCustomDownloadDialogOpen = useModStore((s) => s.isCustomDownloadDialogOpen);
+  const setIsCustomDownloadDialogOpen = useModStore((s) => s.setIsCustomDownloadDialogOpen);
   const downloadMode = useModStore((s) => s.downloadMode);
   const viewMode = useModStore((s) => s.viewMode);
 
@@ -195,6 +198,13 @@ function ModRouteContent() {
       <PresetManagementDialog />
 
       <DeleteGameDialog />
+
+      <CustomDownloadDialog
+        open={isCustomDownloadDialogOpen}
+        onOpenChange={setIsCustomDownloadDialogOpen}
+        groupName={selectedGroup?.name}
+        groupPath={selectedGroup?.path}
+      />
 
       <AlertDialog
         open={archiveExtractDialogFileName !== null}
