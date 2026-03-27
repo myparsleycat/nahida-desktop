@@ -87,21 +87,10 @@ function ModRouteContent() {
   const initExpandedGroups = useModStore((s) => s.initExpandedGroups);
 
   const resolveDownloadArchiveExtractPrompt = async (
+    requestId: string,
     mode: ResolvedArchiveExtractPathMode | null,
   ) => {
-    if (!archiveExtractPrompt) {
-      return;
-    }
-
-    try {
-      await window.api.invoke(
-        "mod:resolveDownloadArchiveExtractPrompt",
-        archiveExtractPrompt.requestId,
-        mode,
-      );
-    } finally {
-      setArchiveExtractPrompt(null);
-    }
+    await window.api.invoke("mod:resolveDownloadArchiveExtractPrompt", requestId, mode);
   };
 
   const fileNameForArchiveExtractDialog =
@@ -236,18 +225,22 @@ function ModRouteContent() {
         open={fileNameForArchiveExtractDialog !== null}
         onOpenChange={(open) => {
           if (!open) {
-            if (archiveExtractPrompt) {
-              void resolveDownloadArchiveExtractPrompt(null);
-            } else {
+            if (!archiveExtractPrompt) {
               closeArchiveExtractDialog();
             }
           }
         }}
       >
         <AlertDialogContent
-          onEscapeKeyDown={() => {
+          onEscapeKeyDown={(event) => {
             if (archiveExtractPrompt) {
-              void resolveDownloadArchiveExtractPrompt(null);
+              const { requestId } = archiveExtractPrompt;
+              event.preventDefault();
+              void resolveDownloadArchiveExtractPrompt(requestId, null).finally(() => {
+                setArchiveExtractPrompt((current) =>
+                  current?.requestId === requestId ? null : current,
+                );
+              });
               return;
             }
             closeArchiveExtractDialog();
@@ -274,9 +267,15 @@ function ModRouteContent() {
           </AlertDialogHeader>
           <AlertDialogFooter className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <AlertDialogCancel
-              onClick={() => {
+              onClick={(event) => {
                 if (archiveExtractPrompt) {
-                  void resolveDownloadArchiveExtractPrompt(null);
+                  const { requestId } = archiveExtractPrompt;
+                  event.preventDefault();
+                  void resolveDownloadArchiveExtractPrompt(requestId, null).finally(() => {
+                    setArchiveExtractPrompt((current) =>
+                      current?.requestId === requestId ? null : current,
+                    );
+                  });
                   return;
                 }
                 closeArchiveExtractDialog();
@@ -285,9 +284,18 @@ function ModRouteContent() {
               {t("page.mod.dialog.extract_archive_path.cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
+              onClick={(event) => {
                 if (archiveExtractPrompt) {
-                  void resolveDownloadArchiveExtractPrompt("flatten_single_root");
+                  const { requestId } = archiveExtractPrompt;
+                  event.preventDefault();
+                  void resolveDownloadArchiveExtractPrompt(
+                    requestId,
+                    "flatten_single_root",
+                  ).finally(() => {
+                    setArchiveExtractPrompt((current) =>
+                      current?.requestId === requestId ? null : current,
+                    );
+                  });
                   return;
                 }
                 confirmArchiveExtractDialog();
@@ -296,9 +304,18 @@ function ModRouteContent() {
               {t("page.mod.dialog.extract_archive_path.flatten_single_root")}
             </AlertDialogAction>
             <AlertDialogAction
-              onClick={() => {
+              onClick={(event) => {
                 if (archiveExtractPrompt) {
-                  void resolveDownloadArchiveExtractPrompt("keep_archive_root");
+                  const { requestId } = archiveExtractPrompt;
+                  event.preventDefault();
+                  void resolveDownloadArchiveExtractPrompt(
+                    requestId,
+                    "keep_archive_root",
+                  ).finally(() => {
+                    setArchiveExtractPrompt((current) =>
+                      current?.requestId === requestId ? null : current,
+                    );
+                  });
                   return;
                 }
                 keepArchiveRootDialog();
