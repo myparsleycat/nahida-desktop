@@ -14,7 +14,8 @@
     "unknown": "Unknown",
     "save": "Save",
     "close": "Close",
-    "rename": "Rename"
+    "rename": "Rename",
+    "download": "Download"
   },
   "page": {
     "transfer": {

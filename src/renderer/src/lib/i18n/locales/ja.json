@@ -14,7 +14,8 @@
     "unknown": "不明",
     "save": "保存",
     "close": "閉じる",
-    "rename": "名前を変更"
+    "rename": "名前を変更",
+    "download": "ダウンロード"
   },
   "page": {
     "transfer": {
