@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { toast } from "sonner";
+import { modStore } from "@renderer/store/mod";
 
 export function useModRefreshOnFocus(selectedGame: string | null, queryClient: QueryClient) {
     useEffect(() => {
@@ -72,4 +73,16 @@ export function useModWatcherEvents(
             removeModsListener();
         };
     }, [selectedGame, selectedGroupPath, queryClient]);
+}
+
+export function useDownloadArchiveExtractPromptHandler() {
+    useEffect(() => {
+        const unsubscribe = window.api.on("mod:archiveExtractPrompt", (data) => {
+            modStore.getState().setArchiveExtractPrompt(data);
+        });
+
+        return () => {
+            unsubscribe();
+        };
+    }, []);
 }

@@ -97,6 +97,13 @@ export function registerModHandlers(desktop: NahidaDesktop) {
     });
 
     rh(
+        "mod:resolveDownloadArchiveExtractPrompt",
+        async (requestId: string, mode) => {
+            desktop.lib.customDownloader.resolveArchiveExtractPrompt(requestId, mode);
+        },
+    );
+
+    rh(
         "mod:updateToggleKey",
         async (
             modPath: string,

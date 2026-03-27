@@ -151,6 +151,7 @@ export type IpcHandlers = {
     "mod:pickFolder": (...args: any[]) => any;
     "mod:removeGame": (...args: Parameters<typeof desktop.service.mod.fn.removeGame>) => ReturnType<typeof desktop.service.mod.fn.removeGame>;
     "mod:rename": (...args: Parameters<typeof desktop.service.mod.fn.rename>) => ReturnType<typeof desktop.service.mod.fn.rename>;
+    "mod:resolveDownloadArchiveExtractPrompt": (...args: Parameters<typeof desktop.lib.customDownloader.resolveArchiveExtractPrompt>) => ReturnType<typeof desktop.lib.customDownloader.resolveArchiveExtractPrompt>;
     "mod:selectFolder": (...args: any[]) => any;
     "mod:setExpandedGroups": (...args: Parameters<typeof desktop.service.mod.fn.setExpandedGroups>) => ReturnType<typeof desktop.service.mod.fn.setExpandedGroups>;
     "mod:setLastGame": (...args: Parameters<typeof desktop.service.mod.fn.setLastGame>) => ReturnType<typeof desktop.service.mod.fn.setLastGame>;
@@ -270,6 +271,7 @@ export type IpcEvents = {
     "fn:toast": (message: string, data?: ToastData) => void;
     "fn:navi": (path: string) => void;
     "download:completed": (data: { path: string; name: string; disableToast?: boolean }) => void;
+    "mod:archiveExtractPrompt": (data: { requestId: string; fileName: string }) => void;
     "pathSelector:modeSelect": (data: { selectionId: string; suggestedName?: string }) => void;
     "language:update": (language: string) => void;
 

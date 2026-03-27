@@ -1,5 +1,6 @@
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
+import type { ArchiveExtractPathMode, ResolvedArchiveExtractPathMode } from "@shared/mod";
 import type { TransferData } from "@shared/types.gen";
 import { Notification } from "electron";
 import { throttle } from "es-toolkit";
@@ -12,6 +13,13 @@ import { ParallelDownloader } from "./parallel-downloader";
 export class CustomDownloader {
     public desktop: NahidaDesktop;
     private readonly downloader: ParallelDownloader;
+    private readonly pendingArchiveExtractPrompts = new Map<
+        string,
+        {
+            resolve: (mode: ResolvedArchiveExtractPathMode) => void;
+            reject: (error: Error) => void;
+        }
+    >();
 
     public constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
@@ -106,9 +114,96 @@ export class CustomDownloader {
         }
     }
 
+    private async promptForArchiveExtractMode(
+        archivePath: string,
+    ): Promise<ResolvedArchiveExtractPathMode> {
+        return new Promise((resolve, reject) => {
+            const requestId = nanoid();
+            const fileName = path.basename(archivePath);
+
+            this.pendingArchiveExtractPrompts.set(requestId, {
+                resolve,
+                reject,
+            });
+
+            const sendPrompt = () => {
+                const mainWindow = this.desktop.window.main.window;
+                if (!mainWindow) {
+                    const pending = this.pendingArchiveExtractPrompts.get(requestId);
+                    if (pending) {
+                        pending.reject(new Error("Main window not found"));
+                        this.pendingArchiveExtractPrompts.delete(requestId);
+                    }
+                    return;
+                }
+
+                this.desktop.ipc.postMessageToWindow(mainWindow, "mod:archiveExtractPrompt", {
+                    requestId,
+                    fileName,
+                });
+                this.desktop.window.main.focus();
+            };
+
+            const mainWindow = this.desktop.window.main.window;
+            if (!mainWindow) {
+                this.desktop.window.main.createMainWindow().then((window) => {
+                    if (window?.webContents.isLoading()) {
+                        window.webContents.once("did-finish-load", () => {
+                            setTimeout(sendPrompt, 500);
+                        });
+                    } else {
+                        sendPrompt();
+                    }
+                });
+                return;
+            }
+
+            sendPrompt();
+        });
+    }
+
+    private async resolveArchiveExtractMode(
+        archivePath: string,
+    ): Promise<ResolvedArchiveExtractPathMode> {
+        const extractMode: ArchiveExtractPathMode =
+            await this.desktop.setting.mod.getArchiveExtractPathMode();
+
+        if (extractMode !== "ask_every_time") {
+            return extractMode;
+        }
+
+        const hasSingleTopLevelDirectory =
+            await this.desktop.service.archive.hasSingleTopLevelDirectory(archivePath);
+
+        if (!hasSingleTopLevelDirectory) {
+            return "flatten_single_root";
+        }
+
+        return await this.promptForArchiveExtractMode(archivePath);
+    }
+
+    public resolveArchiveExtractPrompt(
+        requestId: string,
+        mode: ResolvedArchiveExtractPathMode | null,
+    ): void {
+        const pending = this.pendingArchiveExtractPrompts.get(requestId);
+        if (!pending) {
+            throw new Error("Pending archive extract prompt not found");
+        }
+
+        this.pendingArchiveExtractPrompts.delete(requestId);
+
+        if (!mode) {
+            pending.reject(new Error("Aborted"));
+            return;
+        }
+
+        pending.resolve(mode);
+    }
+
     private async extractDownloadedArchive(archivePath: string, groupPath: string) {
-        const extractMode = await this.desktop.setting.mod.getArchiveExtractPathMode();
-        const flattenSingleRoot = extractMode !== "keep_archive_root";
+        const extractMode = await this.resolveArchiveExtractMode(archivePath);
+        const flattenSingleRoot = extractMode === "flatten_single_root";
 
         return await this.desktop.service.archive.extract(archivePath, groupPath, {
             flattenSingleRoot,

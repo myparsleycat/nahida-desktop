@@ -38,6 +38,10 @@ interface ModState {
     setIsCustomDownloadDialogOpen: (open: boolean) => void;
     downloadMode: { downloadId: string; suggestedName?: string } | null;
     setDownloadMode: (mode: { downloadId: string; suggestedName?: string } | null) => void;
+    archiveExtractPrompt: { requestId: string; fileName: string } | null;
+    setArchiveExtractPrompt: (
+        prompt: { requestId: string; fileName: string } | null,
+    ) => void;
     searchQuery: string;
     setSearchQuery: (query: string) => void;
     viewMode: "grid" | "list";
@@ -96,6 +100,8 @@ export const modStore = createStore<ModState>((set) => ({
         set({ isCustomDownloadDialogOpen }),
     downloadMode: null,
     setDownloadMode: (downloadMode) => set({ downloadMode }),
+    archiveExtractPrompt: null,
+    setArchiveExtractPrompt: (archiveExtractPrompt) => set({ archiveExtractPrompt }),
     searchQuery: "",
     setSearchQuery: (searchQuery) => set({ searchQuery }),
     viewMode: "grid",
