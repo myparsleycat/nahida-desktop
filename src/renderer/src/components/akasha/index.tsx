@@ -271,6 +271,14 @@ function ListHead() {
   const setSortType = useViewStore((s) => s.setSortType);
   const { t } = useTranslation();
 
+  const handleSortButtonClick = (
+    e: React.MouseEvent<HTMLButtonElement>,
+    field: "NAME" | "SIZE" | "DATE",
+  ) => {
+    handleSort(field);
+    e.currentTarget.blur();
+  };
+
   const handleSort = (field: "NAME" | "SIZE" | "DATE") => {
     if (!sortType.startsWith(field)) {
       const defaultDirection = field === "NAME" ? "ASC" : "DESC";
@@ -288,7 +296,7 @@ function ListHead() {
         <th className="pl-3 font-normal text-left align-middle w-full">
           <button
             className="flex flex-row items-center w-full justify-start"
-            onClick={() => handleSort("NAME")}
+            onClick={(e) => handleSortButtonClick(e, "NAME")}
           >
             <div
               className={cn(
@@ -308,7 +316,7 @@ function ListHead() {
         <th className="px-2 font-normal align-middle whitespace-nowrap w-[1%]">
           <button
             className="flex flex-row items-center w-full justify-end"
-            onClick={() => handleSort("SIZE")}
+            onClick={(e) => handleSortButtonClick(e, "SIZE")}
           >
             <div
               className={cn(
@@ -328,7 +336,7 @@ function ListHead() {
         <th className="pr-3 font-normal align-middle whitespace-nowrap w-[1%]">
           <button
             className="flex flex-row items-center w-full justify-end"
-            onClick={() => handleSort("DATE")}
+            onClick={(e) => handleSortButtonClick(e, "DATE")}
           >
             <div
               className={cn(
