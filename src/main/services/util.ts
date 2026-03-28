@@ -5,7 +5,6 @@ import { eden } from "@main/client";
 import isDev from "@main/internal/isDev";
 import { nahidaLogsPath } from "@main/internal/logger";
 import type { AppStatus, PathMetadata } from "@shared/types.gen";
-import { trim } from "es-toolkit";
 import {
     BrowserWindow,
     clipboard,
@@ -16,6 +15,7 @@ import {
     shell,
 } from "electron";
 import { app } from "electron/main";
+import { trim } from "es-toolkit";
 import fse from "fs-extra";
 import { desktop } from "..";
 

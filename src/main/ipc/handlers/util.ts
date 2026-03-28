@@ -17,7 +17,7 @@ import {
 import type { MessageBoxOptions, OpenExternalOptions } from "electron";
 import { rh } from "../helper";
 
-export function registerUtilHandlers(_desktop: NahidaDesktop) {
+export function registerUtilHandlers(desktop: NahidaDesktop) {
     rh("util:getAppStatus", getAppStatus);
     rh("util:showModal", async (options: MessageBoxOptions) => await showModal(options));
     rh(
@@ -34,4 +34,5 @@ export function registerUtilHandlers(_desktop: NahidaDesktop) {
     rh("util:showOpenDialog", showOpenDialog);
     rh("util:openReportWindow", openReportWindow);
     rh("util:submitReport", submitReport);
+    rh("util:fs:rename", async (oldPath, newPath) => await desktop.lib.fs.rename(oldPath, newPath));
 }
