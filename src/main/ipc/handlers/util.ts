@@ -34,5 +34,4 @@ export function registerUtilHandlers(desktop: NahidaDesktop) {
     rh("util:showOpenDialog", showOpenDialog);
     rh("util:openReportWindow", openReportWindow);
     rh("util:submitReport", submitReport);
-    rh("util:fs:rename", async (oldPath, newPath) => await desktop.lib.fs.rename(oldPath, newPath));
 }
