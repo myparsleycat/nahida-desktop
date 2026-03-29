@@ -9,7 +9,7 @@ import Upload, {
     type UploadConflictStrategy,
     type UploadParams,
 } from "@main/lib/upload";
-import { LinkData } from "@main/server";
+import type { LinkData } from "@main/server";
 import { dialog } from "electron";
 import { retry } from "es-toolkit";
 import fse from "fs-extra";
@@ -265,7 +265,7 @@ export class DriveService {
         }: {
             id: string;
             data?: DownloadMetadata;
-            link: LinkData;
+            link?: LinkData;
             suggestedName?: string;
             targetPath?: string;
         }): Promise<"started" | "canceled"> => {
@@ -581,7 +581,7 @@ export class DriveService {
         restartParams: DownloadParams;
         abortController: AbortController;
         data?: DownloadMetadata;
-        link: LinkData;
+        link?: LinkData;
         suggestedName?: string;
         savePath: string;
     }) {

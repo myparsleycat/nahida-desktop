@@ -4,7 +4,7 @@ import { pipeline } from "node:stream/promises";
 import type { ReadableStream } from "node:stream/web";
 import { createGunzip, createZstdDecompress } from "node:zlib";
 import { eden } from "@main/client";
-import { LinkData } from "@main/server";
+import type { LinkData } from "@main/server";
 import type { TransferData } from "@shared/types.gen";
 import { decode } from "cbor-x";
 import { retry, throttle } from "es-toolkit";
@@ -69,7 +69,7 @@ class DownloadStreamer {
         signal,
     }: {
         id: string;
-        link: LinkData;
+        link?: LinkData;
         signal: AbortSignal;
     }): Promise<DownloadMetadata> {
         const { data: stream, error } = await eden.akasha.dir.download.get({
@@ -545,7 +545,7 @@ export class DownloadLib {
         signal,
     }: {
         id: string;
-        link: LinkData;
+        link?: LinkData;
         signal: AbortSignal;
     }) {
         return this.streamer.fetchMetadata({ id, link, signal });
@@ -557,7 +557,7 @@ export class DownloadLib {
         signal,
     }: {
         id: string;
-        link: LinkData;
+        link?: LinkData;
         signal: AbortSignal;
     }): Promise<DownloadMetadata> {
         const data = await this.startStreamingDownload({ id, link, signal });
