@@ -9,6 +9,7 @@ import Upload, {
     type UploadConflictStrategy,
     type UploadParams,
 } from "@main/lib/upload";
+import type { LinkData } from "@main/server";
 import { dialog } from "electron";
 import { retry } from "es-toolkit";
 import fse from "fs-extra";
@@ -258,11 +259,13 @@ export class DriveService {
         startDownload: async ({
             id,
             data,
+            link,
             suggestedName,
             targetPath,
         }: {
             id: string;
             data?: DownloadMetadata;
+            link?: LinkData;
             suggestedName?: string;
             targetPath?: string;
         }): Promise<"started" | "canceled"> => {
@@ -305,6 +308,7 @@ export class DriveService {
                     restartParams,
                     abortController,
                     data,
+                    link,
                     suggestedName,
                     savePath,
                 }).catch((err) => {
@@ -568,6 +572,7 @@ export class DriveService {
         restartParams,
         abortController,
         data,
+        link,
         suggestedName,
         savePath,
     }: {
@@ -576,11 +581,12 @@ export class DriveService {
         restartParams: DownloadParams;
         abortController: AbortController;
         data?: DownloadMetadata;
+        link?: LinkData;
         suggestedName?: string;
         savePath: string;
     }) {
         if (!data) {
-            data = await this.download.getDownloadUrl(id, abortController.signal);
+            data = await this.download.getDownloadUrl({ id, link, signal: abortController.signal });
         }
 
         if (data.root) {

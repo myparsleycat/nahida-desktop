@@ -10,35 +10,17 @@ import { desktop } from "..";
 
 const uploadTypes = z.enum(["live", "gb", "hui"]);
 
+const linkData = z
+    .object({
+        linkId: z.string(),
+        token: z.string(),
+    })
+    .optional();
+
 const liveData = z.object({
     type: uploadTypes,
     id: z.string(),
-    data: z.object({
-        root: z.object({
-            id: z.string(),
-            parentId: z.string().nullable(),
-            name: z.string(),
-        }),
-        files: z.array(
-            z.object({
-                id: z.string(),
-                fileId: z.string(),
-                parentId: z.string().nullable(),
-                name: z.string(),
-                size: z.number(),
-                compAlg: z.enum(["gzip", "zstd"]).nullable(),
-                url: z.string(),
-            }),
-        ),
-        dirs: z.array(
-            z.object({
-                id: z.string(),
-                parentId: z.string().nullable(),
-                name: z.string(),
-            }),
-        ),
-        totalBytes: z.number(),
-    }),
+    link: linkData,
     suggestedName: z.string().optional(),
 });
 
@@ -54,6 +36,8 @@ const huiData = z.object({
     title: z.string(),
     fileUrl: z.string(),
 });
+
+export type LinkData = z.infer<typeof linkData>;
 
 export const app = new Hono()
     .use(cors())
@@ -86,10 +70,17 @@ app.get(
 
                 try {
                     if (decoded.type === "live") {
-                        const { id, data, suggestedName } = liveData.parse(decoded);
+                        const { id, link, suggestedName } = liveData.parse(decoded);
+
+                        const isLoggedIn = await desktop.service.auth.isLoggedIn();
+                        if (!link && !isLoggedIn) {
+                            ws.send(`unauthorized`);
+                            return;
+                        }
+
                         downloadStatus = await desktop.service.drive.fn.startDownload({
                             id,
-                            data,
+                            link,
                             suggestedName,
                         });
                     } else if (decoded.type === "gb") {

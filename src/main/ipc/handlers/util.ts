@@ -17,7 +17,7 @@ import {
 import type { MessageBoxOptions, OpenExternalOptions } from "electron";
 import { rh } from "../helper";
 
-export function registerUtilHandlers(_desktop: NahidaDesktop) {
+export function registerUtilHandlers(desktop: NahidaDesktop) {
     rh("util:getAppStatus", getAppStatus);
     rh("util:showModal", async (options: MessageBoxOptions) => await showModal(options));
     rh(
