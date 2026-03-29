@@ -4,13 +4,13 @@ import { pipeline } from "node:stream/promises";
 import type { ReadableStream } from "node:stream/web";
 import { createGunzip, createZstdDecompress } from "node:zlib";
 import { eden } from "@main/client";
+import { LinkData } from "@main/server";
 import type { TransferData } from "@shared/types.gen";
 import { decode } from "cbor-x";
 import { retry, throttle } from "es-toolkit";
 import fse from "fs-extra";
 import ky from "ky";
 import ms from "ms";
-import { nanoid } from "nanoid";
 import PQueue from "p-queue";
 import type { NahidaDesktop } from "..";
 import { zstdDecompressAsync } from "./compressor";
@@ -63,8 +63,24 @@ class DownloadStreamer {
         return JSON.parse(data.data);
     }
 
-    public async fetchMetadata(uuid: string, signal: AbortSignal): Promise<DownloadMetadata> {
-        const { data: stream, error } = await eden.akasha.dir.download.get({ query: { uuid } });
+    public async fetchMetadata({
+        id,
+        link,
+        signal,
+    }: {
+        id: string;
+        link: LinkData;
+        signal: AbortSignal;
+    }): Promise<DownloadMetadata> {
+        const { data: stream, error } = await eden.akasha.dir.download.get({
+            query: {
+                uuid: id,
+                ...(link && { linkId: link.linkId }),
+            },
+            headers: {
+                ...(link && { "nhd-link-token": link.token }),
+            },
+        });
         if (error) throw error;
 
         const downloadData: Omit<DownloadMetadata, "root"> = {
@@ -523,27 +539,34 @@ export class DownloadLib {
         this.fileQueue.clear();
     }
 
-    public async startStreamingDownload(uuid: string, signal: AbortSignal) {
-        return this.streamer.fetchMetadata(uuid, signal);
+    public async startStreamingDownload({
+        id,
+        link,
+        signal,
+    }: {
+        id: string;
+        link: LinkData;
+        signal: AbortSignal;
+    }) {
+        return this.streamer.fetchMetadata({ id, link, signal });
     }
 
-    public async getDownloadUrl(id: string, signal: AbortSignal): Promise<DownloadMetadata> {
-        const data = await this.startStreamingDownload(id, signal);
+    public async getDownloadUrl({
+        id,
+        link,
+        signal,
+    }: {
+        id: string;
+        link: LinkData;
+        signal: AbortSignal;
+    }): Promise<DownloadMetadata> {
+        const data = await this.startStreamingDownload({ id, link, signal });
         return {
             root: data.root,
             files: data.files,
             dirs: [data.root, ...data.dirs],
             totalBytes: data.totalBytes,
         };
-    }
-
-    public async prepareDownload(id: string, _name: string) {
-        const pid = nanoid();
-        const abort = new AbortController();
-        const getDownloadUrlsPromise = this.getDownloadUrl(id, abort.signal);
-
-        const data = await getDownloadUrlsPromise;
-        return { pid, abort, data };
     }
 
     public async executeDownload({
