@@ -235,7 +235,6 @@ export type IpcHandlers = {
     "util:copyStr": (...args: Parameters<typeof import("@main/services/util").copyStr>) => ReturnType<typeof import("@main/services/util").copyStr>;
     "util:fs:metadata": (...args: Parameters<typeof import("@main/services/util").getPathMetadata>) => ReturnType<typeof import("@main/services/util").getPathMetadata>;
     "util:fs:mkdir": (...args: Parameters<typeof import("@main/services/util").mkdir>) => ReturnType<typeof import("@main/services/util").mkdir>;
-    "util:fs:rename": (...args: Parameters<typeof desktop.lib.fs.rename>) => ReturnType<typeof desktop.lib.fs.rename>;
     "util:fs:trash": (...args: Parameters<typeof import("@main/services/util").trash>) => ReturnType<typeof import("@main/services/util").trash>;
     "util:getAppStatus": (...args: Parameters<typeof import("@main/services/util").getAppStatus>) => ReturnType<typeof import("@main/services/util").getAppStatus>;
     "util:getClipboardFiles": (...args: Parameters<typeof import("@main/services/util").getClipboardFiles>) => ReturnType<typeof import("@main/services/util").getClipboardFiles>;
