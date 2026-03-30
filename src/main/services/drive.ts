@@ -555,7 +555,7 @@ export class DriveService {
             pid,
             type: "download",
             currentId,
-            data: { root: { id: "", parentId: null, name: "Loading..." }, files: [], dirs: [] },
+            data: { root: { id: "", parentId: null, name: "Loading" }, files: [], dirs: [] },
             abortController,
             name: "Preparing Download...",
             restartParams,
