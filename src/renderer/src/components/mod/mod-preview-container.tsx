@@ -3,6 +3,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@renderer/components/ui/context-menu";
 import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
@@ -39,7 +40,12 @@ export function ModPreviewContainer({ mod, selectedGroupPath, onPaste }: ModPrev
           <ImageIcon className="w-12 h-12 text-muted-foreground/50" />
           <div className="flex flex-col items-center gap-1">
             <span className="text-sm text-muted-foreground">{t("page.mod.no-preview")}</span>
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={handlePasteClick}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={handlePasteClick}
+            >
               <ClipboardIcon className="w-3 h-3" />
               {t("page.mod.context-menu.paste-preview")}
             </Button>
@@ -67,10 +73,6 @@ export function ModPreviewContainer({ mod, selectedGroupPath, onPaste }: ModPrev
         <ContextMenu>
           <ContextMenuTrigger>{previewContent}</ContextMenuTrigger>
           <ContextMenuContent onClick={(e) => e.stopPropagation()}>
-            <ContextMenuItem onClick={handlePasteClick}>
-              <ClipboardIcon />
-              {t("page.mod.context-menu.paste-preview")}
-            </ContextMenuItem>
             <ContextMenuItem
               onClick={() => {
                 if (!mod.preview) return;
@@ -84,6 +86,14 @@ export function ModPreviewContainer({ mod, selectedGroupPath, onPaste }: ModPrev
               <ImageIcon />
               {t("page.mod.context-menu.open-preview-viewer")}
             </ContextMenuItem>
+
+            <ContextMenuSeparator />
+
+            <ContextMenuItem onClick={handlePasteClick}>
+              <ClipboardIcon />
+              {t("page.mod.context-menu.paste-preview")}
+            </ContextMenuItem>
+
             <ContextMenuItem variant="destructive" onClick={handleDelete}>
               <TrashIcon />
               {t("page.mod.context-menu.delete-preview")}
