@@ -70,10 +70,25 @@ export async function pasteModPreview({
     const items = await navigator.clipboard.read();
     for (const item of items) {
       if (item.types.includes("image/png") || item.types.includes("image/jpeg")) {
-        const blob = await item.getType(item.types.find((t) => t.startsWith("image/"))!);
+        const type = item.types.find((t) => t.startsWith("image/"));
+        if (!type) {
+          continue;
+        }
+
+        const blob = await item.getType(type);
         const reader = new FileReader();
+        reader.onerror = () => {
+          console.error(reader.error);
+          toast.error(i18n.t("page.mod.toast.paste-preview.save-error"));
+        };
         reader.onloadend = () => {
-          const base64data = reader.result as string;
+          const base64data = reader.result;
+          if (typeof base64data !== "string") {
+            console.error("Failed to read clipboard image as data URL");
+            toast.error(i18n.t("page.mod.toast.paste-preview.save-error"));
+            return;
+          }
+
           const promise = window.api.invoke("mod:pastePreview", modPath, base64data, "base64");
           toast.promise(promise, {
             loading: i18n.t("page.mod.toast.paste-preview.saving"),
