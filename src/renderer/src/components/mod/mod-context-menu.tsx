@@ -34,6 +34,7 @@ import { cn } from "@renderer/lib/utils";
 import type { ModInfo } from "@renderer/types/mod";
 import { useRouteContext } from "@tanstack/react-router";
 import {
+  ClipboardIcon,
   ChevronRightIcon,
   FolderIcon,
   ImageIcon,
@@ -58,6 +59,7 @@ interface ModContextMenuProps {
     id: string;
     name: string;
   }[];
+  onPaste?: () => void;
   children: ReactNode;
 }
 
@@ -70,6 +72,7 @@ export function ModContextMenu({
   selectedGroupPath,
   fixTools,
   presets,
+  onPaste,
   children,
 }: ModContextMenuProps) {
   const { t } = useTranslation();
@@ -189,28 +192,38 @@ export function ModContextMenu({
       <ContextMenu>
         <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
         <ContextMenuContent className="w-48">
-          {mod.preview?.match(/\.(jpeg|jpg|gif|png|webp|bmp|mp4|webm|ogg)$/i) && (
+          {(mod.preview?.match(/\.(jpeg|jpg|gif|png|webp|bmp|mp4|webm|ogg)$/i) || onPaste) && (
             <>
               <ContextMenuGroup>
                 <ContextMenuLabel>Preview</ContextMenuLabel>
-                <ContextMenuItem
-                  onClick={() => {
-                    if (!mod.preview) return;
+                {mod.preview?.match(/\.(jpeg|jpg|gif|png|webp|bmp|mp4|webm|ogg)$/i) && (
+                  <ContextMenuItem
+                    onClick={() => {
+                      if (!mod.preview) return;
 
-                    window.api.invoke("util:openExternal", mod.preview).catch((error) => {
-                      toast.error("Failed to open external", {
-                        description: error.message,
+                      window.api.invoke("util:openExternal", mod.preview).catch((error) => {
+                        toast.error("Failed to open external", {
+                          description: error.message,
+                        });
                       });
-                    });
-                  }}
-                >
-                  <ImageIcon className="mr-2 size-4" />
-                  {t("page.mod.context-menu.open-preview-viewer")}
-                </ContextMenuItem>
-                <ContextMenuItem variant="destructive" onClick={handleDeletePreview}>
-                  <TrashIcon className="mr-2 size-4" />
-                  {t("page.mod.context-menu.delete-preview")}
-                </ContextMenuItem>
+                    }}
+                  >
+                    <ImageIcon className="mr-2 size-4" />
+                    {t("page.mod.context-menu.open-preview-viewer")}
+                  </ContextMenuItem>
+                )}
+                {onPaste && (
+                  <ContextMenuItem onClick={onPaste}>
+                    <ClipboardIcon className="mr-2 size-4" />
+                    {t("page.mod.context-menu.paste-preview")}
+                  </ContextMenuItem>
+                )}
+                {mod.preview && (
+                  <ContextMenuItem variant="destructive" onClick={handleDeletePreview}>
+                    <TrashIcon className="mr-2 size-4" />
+                    {t("page.mod.context-menu.delete-preview")}
+                  </ContextMenuItem>
+                )}
               </ContextMenuGroup>
               <ContextMenuSeparator />
             </>
