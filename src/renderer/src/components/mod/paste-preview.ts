@@ -38,9 +38,13 @@ export async function pasteModPreview({
           success: i18n.t("page.mod.toast.paste-preview.success"),
           error: i18n.t("page.mod.toast.paste-preview.copy-error"),
         });
-        promise.then(() => {
-          queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
-        });
+        promise
+          .then(() => {
+            queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
+          })
+          .catch((error) => {
+            console.error(error);
+          });
         return;
       }
     }
@@ -53,9 +57,13 @@ export async function pasteModPreview({
         success: i18n.t("page.mod.toast.paste-preview.success"),
         error: i18n.t("page.mod.toast.paste-preview.download-error"),
       });
-      promise.then(() => {
-        queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
-      });
+      promise
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
+        })
+        .catch((error) => {
+          console.error(error);
+        });
       return;
     }
 
@@ -72,9 +80,13 @@ export async function pasteModPreview({
             success: i18n.t("page.mod.toast.paste-preview.success"),
             error: i18n.t("page.mod.toast.paste-preview.save-error"),
           });
-          promise.then(() => {
-            queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
-          });
+          promise
+            .then(() => {
+              queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
+            })
+            .catch((error) => {
+              console.error(error);
+            });
         };
         reader.readAsDataURL(blob);
         return;
