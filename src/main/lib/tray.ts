@@ -24,7 +24,7 @@ export class TrayManager {
                 label: "Setting",
                 type: "normal",
                 click: async () => {
-                    this.desktop.window.setting.focus();
+                    await this.desktop.window.main.focusAndNavigate("/setting/gen");
                 },
             },
             { type: "separator" },
