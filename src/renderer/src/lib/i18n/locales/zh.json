@@ -336,7 +336,18 @@
         "trash-success": "删除成功",
         "trash-error": "删除失败",
         "value-required": "请输入数值。",
-        "rename-success": "模组重命名成功"
+        "rename-success": "模组重命名成功",
+        "paste-preview": {
+          "copying": "正在复制预览...",
+          "success": "预览已更新",
+          "copy-error": "复制预览失败",
+          "downloading": "正在下载预览...",
+          "download-error": "下载预览失败",
+          "saving": "正在保存预览...",
+          "save-error": "保存预览失败",
+          "no-image": "剪贴板中没有图片、图片 URL 或图片文件。",
+          "clipboard-error": "读取剪贴板失败。"
+        }
       },
       "log-dialog": {
         "title": "日志",

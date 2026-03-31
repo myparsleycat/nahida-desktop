@@ -337,7 +337,18 @@
         "trash-success": "削除完了",
         "trash-error": "削除失敗",
         "value-required": "値を入力してください。",
-        "rename-success": "MOD名を変更しました"
+        "rename-success": "MOD名を変更しました",
+        "paste-preview": {
+          "copying": "プレビューをコピー中...",
+          "success": "プレビューを更新しました",
+          "copy-error": "プレビューのコピーに失敗しました",
+          "downloading": "プレビューをダウンロード中...",
+          "download-error": "プレビューのダウンロードに失敗しました",
+          "saving": "プレビューを保存中...",
+          "save-error": "プレビューの保存に失敗しました",
+          "no-image": "クリップボードに画像、画像URL、または画像ファイルがありません。",
+          "clipboard-error": "クリップボードの読み取りに失敗しました。"
+        }
       },
       "log-dialog": {
         "title": "ログ",

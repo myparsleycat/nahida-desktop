@@ -1,3 +1,4 @@
+import i18n from "@renderer/lib/i18n";
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -19,9 +20,9 @@ export async function pasteModPreview({
       if (filePath.match(/\.(jpeg|jpg|gif|png|webp|bmp)$/i)) {
         const promise = window.api.invoke("mod:pastePreview", modPath, filePath, "path");
         toast.promise(promise, {
-          loading: "Copying preview...",
-          success: "Preview updated",
-          error: "Failed to copy preview",
+          loading: i18n.t("page.mod.toast.paste-preview.copying"),
+          success: i18n.t("page.mod.toast.paste-preview.success"),
+          error: i18n.t("page.mod.toast.paste-preview.copy-error"),
         });
         promise.then(() => {
           queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
@@ -34,9 +35,9 @@ export async function pasteModPreview({
     if (text?.startsWith("http") && text.match(/\.(jpeg|jpg|gif|png|webp|bmp)$/i)) {
       const promise = window.api.invoke("mod:pastePreview", modPath, text, "url");
       toast.promise(promise, {
-        loading: "Downloading preview...",
-        success: "Preview updated",
-        error: "Failed to download preview",
+        loading: i18n.t("page.mod.toast.paste-preview.downloading"),
+        success: i18n.t("page.mod.toast.paste-preview.success"),
+        error: i18n.t("page.mod.toast.paste-preview.download-error"),
       });
       promise.then(() => {
         queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
@@ -53,9 +54,9 @@ export async function pasteModPreview({
           const base64data = reader.result as string;
           const promise = window.api.invoke("mod:pastePreview", modPath, base64data, "base64");
           toast.promise(promise, {
-            loading: "Saving preview...",
-            success: "Preview updated",
-            error: "Failed to save preview",
+            loading: i18n.t("page.mod.toast.paste-preview.saving"),
+            success: i18n.t("page.mod.toast.paste-preview.success"),
+            error: i18n.t("page.mod.toast.paste-preview.save-error"),
           });
           promise.then(() => {
             queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
@@ -66,9 +67,9 @@ export async function pasteModPreview({
       }
     }
 
-    toast.warning("클립보드에 이미지, 이미지 URL, 또는 이미지 파일이 없습니다.");
+    toast.warning(i18n.t("page.mod.toast.paste-preview.no-image"));
   } catch (error) {
     console.error(error);
-    toast.error("클립보드를 읽는데 실패했습니다.");
+    toast.error(i18n.t("page.mod.toast.paste-preview.clipboard-error"));
   }
 }

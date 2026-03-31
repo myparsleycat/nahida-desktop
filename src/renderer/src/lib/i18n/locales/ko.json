@@ -336,7 +336,18 @@
         "trash-success": "삭제 완료",
         "trash-error": "삭제 실패",
         "value-required": "값을 입력해주세요.",
-        "rename-success": "모드 이름이 변경되었습니다"
+        "rename-success": "모드 이름이 변경되었습니다",
+        "paste-preview": {
+          "copying": "프리뷰 복사 중...",
+          "success": "프리뷰가 업데이트되었습니다",
+          "copy-error": "프리뷰 복사에 실패했습니다",
+          "downloading": "프리뷰 다운로드 중...",
+          "download-error": "프리뷰 다운로드에 실패했습니다",
+          "saving": "프리뷰 저장 중...",
+          "save-error": "프리뷰 저장에 실패했습니다",
+          "no-image": "클립보드에 이미지, 이미지 URL 또는 이미지 파일이 없습니다.",
+          "clipboard-error": "클립보드를 읽지 못했습니다."
+        }
       },
       "log-dialog": {
         "title": "로그",
