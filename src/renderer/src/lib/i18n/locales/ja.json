@@ -261,6 +261,11 @@
           "title": "プレビューを削除しますか？",
           "description": "「{{name}}」のプレビューを削除しますか？削除したプレビューはゴミ箱から復元できます。"
         },
+        "overwrite-preview": {
+          "title": "既存のプレビューを上書きしますか？",
+          "description": "「{{name}}」にはすでにプレビューがあります。続行すると既存のプレビューが新しい画像で上書きされます。",
+          "confirm": "上書き"
+        },
         "add-preset": {
           "name-placeholder": "プリセット名",
           "description-placeholder": "説明（任意）",

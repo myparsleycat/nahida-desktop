@@ -260,6 +260,11 @@
           "title": "要删除预览吗？",
           "description": "确定要删除“{{name}}”的预览吗？删除后的预览可以从回收站恢复。"
         },
+        "overwrite-preview": {
+          "title": "要覆盖现有预览吗？",
+          "description": "“{{name}}”已经有预览了。继续后会用新图片覆盖现有预览。",
+          "confirm": "覆盖"
+        },
         "add-preset": {
           "name-placeholder": "预设名称",
           "description-placeholder": "说明（可选）",

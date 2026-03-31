@@ -280,6 +280,11 @@
           "title": "Delete Preview",
           "description": "Are you sure you want to delete the preview for \"{{name}}\"? It can be restored from the recycle bin."
         },
+        "overwrite-preview": {
+          "title": "Overwrite Existing Preview?",
+          "description": "\"{{name}}\" already has a preview. Continue to replace it with the new image.",
+          "confirm": "Overwrite"
+        },
         "add-preset": {
           "title": "Create New Preset",
           "name-placeholder": "Preset name",

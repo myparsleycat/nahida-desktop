@@ -8,6 +8,20 @@ interface PasteModPreviewOptions {
   queryClient: QueryClient;
 }
 
+export function hasModPreviewFile(modPath: string, previewPath?: string) {
+  if (!previewPath) return false;
+
+  const normalizedModPath = modPath.replace(/\\/g, "/").replace(/\/+$/, "");
+  const normalizedPreviewPath = previewPath.replace(/\\/g, "/");
+
+  if (!normalizedPreviewPath.startsWith(`${normalizedModPath}/`)) {
+    return false;
+  }
+
+  const relativePreviewPath = normalizedPreviewPath.slice(normalizedModPath.length + 1);
+  return /^preview\.[^/]+$/i.test(relativePreviewPath);
+}
+
 export async function pasteModPreview({
   modPath,
   selectedGroupPath,

@@ -1,3 +1,13 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@renderer/components/ui/alert-dialog";
 import { Button } from "@renderer/components/ui/button";
 import {
   ContextMenu,
@@ -10,23 +20,36 @@ import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
 import type { ModInfo } from "@renderer/types/mod";
 import { useRouteContext } from "@tanstack/react-router";
 import { ClipboardIcon, ImageIcon, TrashIcon } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { hasModPreviewFile } from "./paste-preview";
 import { Preview } from "./preview";
 
 interface ModPreviewContainerProps {
   mod: ModInfo;
   selectedGroupPath?: string;
-  onPaste: () => void;
+  onPaste: () => void | Promise<void>;
 }
 
 export function ModPreviewContainer({ mod, selectedGroupPath, onPaste }: ModPreviewContainerProps) {
   const { t } = useTranslation();
   const { queryClient } = useRouteContext({ from: "__root__" });
   const { confirmTrash, confirmTrashDialog } = useConfirmTrash();
+  const [showPasteConfirmDialog, setShowPasteConfirmDialog] = useState(false);
+
+  const handlePaste = () => {
+    void onPaste();
+  };
+
   const handlePasteClick = (e?: React.SyntheticEvent) => {
     e?.stopPropagation();
-    onPaste();
+    if (hasModPreviewFile(mod.path, mod.preview)) {
+      setShowPasteConfirmDialog(true);
+      return;
+    }
+
+    handlePaste();
   };
 
   const previewContent = (
@@ -103,6 +126,22 @@ export function ModPreviewContainer({ mod, selectedGroupPath, onPaste }: ModPrev
       ) : (
         previewContent
       )}
+      <AlertDialog open={showPasteConfirmDialog} onOpenChange={setShowPasteConfirmDialog}>
+        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("page.mod.dialog.overwrite-preview.title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("page.mod.dialog.overwrite-preview.description", { name: mod.name })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={handlePaste}>
+              {t("page.mod.dialog.overwrite-preview.confirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {confirmTrashDialog}
     </div>
   );

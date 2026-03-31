@@ -1,6 +1,9 @@
 import {
   AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
   AlertDialogContent,
+  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
@@ -45,6 +48,7 @@ import {
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { hasModPreviewFile } from "./paste-preview";
 
 interface ModContextMenuProps {
   mod: ModInfo;
@@ -59,7 +63,7 @@ interface ModContextMenuProps {
     id: string;
     name: string;
   }[];
-  onPaste?: () => void;
+  onPaste?: () => void | Promise<void>;
   children: ReactNode;
 }
 
@@ -81,6 +85,7 @@ export function ModContextMenu({
   const { confirmTrash, confirmTrashDialog } = useConfirmTrash();
 
   const [showLogModal, setShowLogModal] = useState(false);
+  const [showPasteConfirmDialog, setShowPasteConfirmDialog] = useState(false);
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [renameValue, setRenameValue] = useState(getRenameDefaultValue(mod.name));
   const [logs, setLogs] = useState<string[]>([]);
@@ -170,6 +175,21 @@ export function ModContextMenu({
     });
   };
 
+  const handlePaste = () => {
+    void onPaste?.();
+  };
+
+  const handlePasteClick = () => {
+    if (!onPaste) return;
+
+    if (hasModPreviewFile(mod.path, mod.preview)) {
+      setShowPasteConfirmDialog(true);
+      return;
+    }
+
+    handlePaste();
+  };
+
   const handleRenameSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const nextName = renameValue.trim();
@@ -213,7 +233,7 @@ export function ModContextMenu({
                   </ContextMenuItem>
                 )}
                 {onPaste && (
-                  <ContextMenuItem onClick={onPaste}>
+                  <ContextMenuItem onClick={handlePasteClick}>
                     <ClipboardIcon className="mr-2 size-4" />
                     {t("page.mod.context-menu.paste-preview")}
                   </ContextMenuItem>
@@ -287,6 +307,23 @@ export function ModContextMenu({
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+
+      <AlertDialog open={showPasteConfirmDialog} onOpenChange={setShowPasteConfirmDialog}>
+        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("page.mod.dialog.overwrite-preview.title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("page.mod.dialog.overwrite-preview.description", { name: mod.name })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={handlePaste}>
+              {t("page.mod.dialog.overwrite-preview.confirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={showRenameDialog} onOpenChange={setShowRenameDialog}>
         <DialogContent aria-describedby={undefined} onClick={(e) => e.stopPropagation()}>
