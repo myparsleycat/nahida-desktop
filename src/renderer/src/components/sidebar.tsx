@@ -55,6 +55,7 @@ export function Sidebar({ className }: { className?: string }) {
   const isModPage = pathname.startsWith("/mod");
   const isBackupPage = pathname.startsWith("/backup");
   const isToolsPage = pathname.startsWith("/tools");
+  const isSettingPage = pathname.startsWith("/setting");
   const getNavButtonClassName = (isActive: boolean) =>
     cn("relative overflow-visible", isActive && "text-accent hover:text-accent");
 
@@ -288,9 +289,11 @@ export function Sidebar({ className }: { className?: string }) {
               <Button
                 variant="ghost"
                 size="icon-lg"
+                className={getNavButtonClassName(isSettingPage)}
+                aria-current={isSettingPage ? "page" : undefined}
                 onPointerDown={handlePointerDown}
                 onClick={() => {
-                  window.api.invoke("window:openSetting");
+                  navi({ to: "/setting/gen" });
                 }}
               >
                 <SettingsIcon className={cn(iconSize)} />

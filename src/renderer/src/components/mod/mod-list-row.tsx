@@ -2,7 +2,9 @@ import i18n from "@renderer/lib/i18n";
 import { cn } from "@renderer/lib/utils";
 import type { ModInfo } from "@renderer/types/mod";
 import { formatDate, formatSize } from "@shared/utils";
+import { useRouteContext } from "@tanstack/react-router";
 import { FolderIcon } from "lucide-react";
+import { pasteModPreview } from "./paste-preview";
 import { ModContextMenu } from "./mod-context-menu";
 import { ModPreviewLightbox } from "./mod-preview-lightbox";
 import { getModColorClass } from "./utils";
@@ -28,12 +30,16 @@ export function ModListRow({
     name: string;
   }[];
 }) {
+  const { queryClient } = useRouteContext({ from: "__root__" });
+  const handlePaste = () => pasteModPreview({ modPath: mod.path, selectedGroupPath, queryClient });
+
   return (
     <ModContextMenu
       mod={mod}
       selectedGroupPath={selectedGroupPath}
       fixTools={fixTools}
       presets={presets}
+      onPaste={handlePaste}
     >
       <tr
         className={cn(

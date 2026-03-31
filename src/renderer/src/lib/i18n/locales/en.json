@@ -280,6 +280,11 @@
           "title": "Delete Preview",
           "description": "Are you sure you want to delete the preview for \"{{name}}\"? It can be restored from the recycle bin."
         },
+        "overwrite-preview": {
+          "title": "Overwrite Existing Preview?",
+          "description": "\"{{name}}\" already has a preview. Continue to replace it with the new image.",
+          "confirm": "Overwrite"
+        },
         "add-preset": {
           "title": "Create New Preset",
           "name-placeholder": "Preset name",
@@ -356,7 +361,18 @@
         "trash-success": "Deleted successfully",
         "trash-error": "Failed to delete",
         "value-required": "Please enter a value.",
-        "rename-success": "Mod renamed successfully"
+        "rename-success": "Mod renamed successfully",
+        "paste-preview": {
+          "copying": "Copying preview...",
+          "success": "Preview updated",
+          "copy-error": "Failed to copy preview",
+          "downloading": "Downloading preview...",
+          "download-error": "Failed to download preview",
+          "saving": "Saving preview...",
+          "save-error": "Failed to save preview",
+          "no-image": "No image, image URL, or image file found in the clipboard.",
+          "clipboard-error": "Failed to read the clipboard."
+        }
       },
       "log-dialog": {
         "title": "Log",

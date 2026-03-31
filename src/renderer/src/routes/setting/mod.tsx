@@ -100,7 +100,7 @@ function ModSettingsRouteContent() {
                 <span className="text-sm font-medium">
                   {t("page.setting.mod.mod_management.archiveExtractPathMode")}
                 </span>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {t("page.setting.mod.mod_management.archiveExtractPathModeDescription")}
                 </p>
               </div>
@@ -140,7 +140,7 @@ function ModSettingsRouteContent() {
                 <span className="text-sm font-medium">
                   {t("page.setting.mod.mod_management.deleteArchiveAfterExtract")}
                 </span>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {t("page.setting.mod.mod_management.deleteArchiveAfterExtractDescription")}
                 </p>
               </div>
@@ -163,7 +163,7 @@ function ModSettingsRouteContent() {
                 <span className="text-sm font-medium">
                   {t("page.setting.mod.mod_management.moveFolderInsteadOfCopy")}
                 </span>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {t("page.setting.mod.mod_management.moveFolderInsteadOfCopyDescription")}
                 </p>
               </div>
@@ -182,7 +182,7 @@ function ModSettingsRouteContent() {
                 <span className="text-sm font-medium">
                   {t("page.setting.mod.mod_management.searchModPreview")}
                 </span>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {t("page.setting.mod.mod_management.searchModPreviewDescription")}
                 </p>
               </div>

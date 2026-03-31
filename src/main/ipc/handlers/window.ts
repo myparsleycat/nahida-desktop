@@ -4,7 +4,7 @@ import { rh } from "../helper";
 
 export function registerWindowHandlers(d: NahidaDesktop) {
     rh("window:openSetting", async () => {
-        d.window.setting.createSettingWindow();
+        await d.window.main.focusAndNavigate("/setting/gen");
     });
 
     ipcMain.on("window-control", (event, command) => {

@@ -295,8 +295,7 @@ export class Setting {
             for (const window of windows) {
                 window.close();
             }
-            await this.desktop.window.main.createMainWindow();
-            this.desktop.window.setting.focus();
+            await this.desktop.window.main.focusAndNavigate("/setting/gen");
         },
 
         getAutoUpdateMode: async (): Promise<AutoUpdateMode> => {

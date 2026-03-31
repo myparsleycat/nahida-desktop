@@ -25,7 +25,24 @@ export class MainWindow {
         }
     }
 
-    async createMainWindow() {
+    public async focusAndNavigate(path: string) {
+        let window = this.window;
+        if (!window || window.isDestroyed()) {
+            window = await this.createMainWindow(path);
+        }
+
+        if (!window || window.isDestroyed()) {
+            return null;
+        }
+
+        focus(window);
+        if (!window.webContents.isLoadingMainFrame()) {
+            this.desktop.ipc.postMessageToWindow(window, "fn:navi", path);
+        }
+        return window;
+    }
+
+    async createMainWindow(initialRoute?: string) {
         if (this.window?.isDestroyed()) {
             this.window = null;
         }
@@ -121,13 +138,17 @@ export class MainWindow {
         });
 
         if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-            this.window.loadURL(process.env["ELECTRON_RENDERER_URL"]);
+            const baseUrl = process.env["ELECTRON_RENDERER_URL"];
+            const routeUrl = initialRoute ? `${baseUrl}/#${initialRoute}` : baseUrl;
+            this.window.loadURL(routeUrl);
         } else {
             // cjs
             // this.window.loadFile(path.join(__dirname, "../renderer/index.html"));
 
             // esm
-            this.window.loadFile(fileURLToPath(new URL("../renderer/index.html", import.meta.url)));
+            this.window.loadFile(fileURLToPath(new URL("../renderer/index.html", import.meta.url)), {
+                hash: initialRoute ? initialRoute.slice(1) : undefined,
+            });
         }
 
         this.window.on("blur", () => {
@@ -139,8 +160,6 @@ export class MainWindow {
             if (!this.window) return;
             this.desktop.ipc.postMessageToWindow(this.window, "window:focus");
         });
-
-        await this.desktop.window.setting.recreateWithMainParentIfNeeded();
 
         // this.window.webContents.openDevTools();
         return this.window;

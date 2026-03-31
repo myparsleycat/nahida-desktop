@@ -38,7 +38,6 @@ import Setting from "./setting";
 import LoginWindow from "./windows/login";
 import MainWindow from "./windows/main";
 import ReportWindow from "./windows/report";
-import SettingWindow from "./windows/setting";
 import { startServer } from "./server";
 
 if (IS_ELECTRON) {
@@ -69,7 +68,6 @@ export class NahidaDesktop {
     public window: {
         main: MainWindow;
         auth: LoginWindow;
-        setting: SettingWindow;
         report: ReportWindow;
     };
     public lib: {
@@ -104,7 +102,6 @@ export class NahidaDesktop {
         this.window = {
             main: new MainWindow(this),
             auth: new LoginWindow(this),
-            setting: new SettingWindow(this),
             report: new ReportWindow(this),
         };
         this.lib = {
