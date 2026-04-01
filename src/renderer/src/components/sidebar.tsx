@@ -34,12 +34,12 @@ export function Sidebar({ className }: { className?: string }) {
   };
 
   const iconSize = "size-7";
-  const activeTransfers = transfers.filter((transfer) =>
-    ["pending", "preparing", "progress"].includes(transfer.status),
+  const transfersWithVisibleProgress = transfers.filter((transfer) =>
+    ["preparing", "progress"].includes(transfer.status),
   );
-  const activeTransferCount = activeTransfers.length;
+  const activeTransferCount = transfersWithVisibleProgress.length;
   const activeTransferProgress =
-    activeTransferCount === 0 ? null : getAggregateTransferProgress(activeTransfers);
+    activeTransferCount === 0 ? null : getAggregateTransferProgress(transfersWithVisibleProgress);
   const transferProgressLabel =
     activeTransferProgress === null ? null : `${Math.round(activeTransferProgress)}%`;
   const transferProgressRadius = 15;
