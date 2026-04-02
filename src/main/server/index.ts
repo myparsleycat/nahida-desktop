@@ -22,6 +22,34 @@ const liveData = z.object({
     id: z.string(),
     link: linkData,
     suggestedName: z.string().optional(),
+    data: z
+        .object({
+            root: z.object({
+                id: z.string(),
+                parentId: z.string().nullable(),
+                name: z.string(),
+            }),
+            files: z.array(
+                z.object({
+                    id: z.string(),
+                    fileId: z.string(),
+                    parentId: z.string().nullable(),
+                    name: z.string(),
+                    size: z.number(),
+                    compAlg: z.enum(["gzip", "zstd"]).nullable(),
+                    url: z.string(),
+                }),
+            ),
+            dirs: z.array(
+                z.object({
+                    id: z.string(),
+                    parentId: z.string().nullable(),
+                    name: z.string(),
+                }),
+            ),
+            totalBytes: z.number(),
+        })
+        .optional(),
 });
 
 const gbData = z.object({
@@ -70,7 +98,7 @@ app.get(
 
                 try {
                     if (decoded.type === "live") {
-                        const { id, link, suggestedName } = liveData.parse(decoded);
+                        const { id, link, suggestedName, data } = liveData.parse(decoded);
 
                         const isLoggedIn = await desktop.service.auth.isLoggedIn();
                         if (!link && !isLoggedIn) {
@@ -82,6 +110,7 @@ app.get(
                             id,
                             link,
                             suggestedName,
+                            data,
                         });
                     } else if (decoded.type === "gb") {
                         const { title, fileUrl, previewUrl } = gbData.parse(decoded);
