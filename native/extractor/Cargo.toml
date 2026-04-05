@@ -11,6 +11,7 @@ crate-type = ["cdylib"]
 napi = { version = "3.0.0", features = ["async"] }
 napi-derive = "3.0.0"
 compress-tools = "0.15.1"
+libc = "0.2"
 
 [build-dependencies]
 napi-build = "2"
