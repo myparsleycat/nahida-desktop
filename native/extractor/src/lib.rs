@@ -1,13 +1,12 @@
 #![deny(clippy::all)]
 
-use compress_tools::{uncompress_archive, ArchiveContents, ArchiveIterator, Ownership};
+use compress_tools::{uncompress_archive_file, ArchiveContents, ArchiveIterator};
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_derive::napi;
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::{Read, Seek, SeekFrom};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::{
     atomic::{AtomicU8, Ordering},
     Arc,
@@ -83,72 +82,148 @@ fn is_directory_entry(name: &str) -> bool {
     name.ends_with('/') || name.ends_with('\\')
 }
 
-struct ProgressReader<R> {
-    inner: R,
-    total_bytes: u64,
-    processed_bytes: u64,
-    last_percent: Arc<AtomicU8>,
-    callback: Option<Arc<ThreadsafeFunction<ExtractProgress>>>,
+fn is_directory_stat(stat: &libc::stat) -> bool {
+    let mode = u32::from(stat.st_mode);
+    (mode & libc::S_IFMT as u32) == libc::S_IFDIR as u32
 }
 
-impl<R> ProgressReader<R> {
-    fn new(
-        inner: R,
-        total_bytes: u64,
-        callback: Option<Arc<ThreadsafeFunction<ExtractProgress>>>,
-        last_percent: Arc<AtomicU8>,
-    ) -> Self {
-        Self {
-            inner,
-            total_bytes,
-            processed_bytes: 0,
-            last_percent,
-            callback,
+fn sanitize_entry_path(name: &str) -> Result<PathBuf> {
+    let normalized = normalize_archive_entry_name(name);
+    let path = Path::new(&normalized);
+
+    if normalized.is_empty() {
+        return Err(Error::from_reason("Archive entry has empty path"));
+    }
+
+    let sanitized = path
+        .strip_prefix("/")
+        .unwrap_or(path)
+        .components()
+        .try_fold(PathBuf::new(), |mut acc, component| match component {
+            Component::Normal(segment) => {
+                acc.push(segment);
+                Ok(acc)
+            }
+            Component::CurDir => Ok(acc),
+            Component::ParentDir => Err(Error::from_reason(
+                "Archive entry uses an unsafe relative path",
+            )),
+            Component::Prefix(_) | Component::RootDir => Ok(acc),
+        })?;
+
+    if sanitized.as_os_str().is_empty() {
+        return Err(Error::from_reason("Archive entry resolves to an empty path"));
+    }
+
+    Ok(sanitized)
+}
+
+fn should_skip_entry(name: &str) -> bool {
+    let normalized = normalize_archive_entry_name(name);
+    if normalized.is_empty() {
+        return true;
+    }
+
+    let mut segments = normalized.split('/').filter(|segment| !segment.is_empty());
+    let Some(top_level_name) = segments.next() else {
+        return true;
+    };
+
+    !segments.next().is_some() && is_ignored_top_level_entry(top_level_name)
+}
+
+fn extract_archive_entries(
+    archive_path: &Path,
+    temp_folder: &Path,
+    callback: &Option<Arc<ThreadsafeFunction<ExtractProgress>>>,
+    last_percent: &Arc<AtomicU8>,
+) -> Result<()> {
+    let source_file = File::open(archive_path)
+        .map_err(|e| Error::from_reason(format!("Failed to open archive: {}", e)))?;
+    let mut iterator = ArchiveIterator::from_read(source_file)
+        .map_err(|e| Error::from_reason(format!("Failed to inspect archive: {}", e)))?;
+
+    let mut file_entries = Vec::new();
+
+    while let Some(content) = iterator.next_header() {
+        match content {
+            ArchiveContents::StartOfEntry(name, stat) => {
+                if should_skip_entry(&name) {
+                    continue;
+                }
+
+                let is_dir = is_directory_entry(&name) || is_directory_stat(&stat);
+                if is_dir {
+                    let relative_path = sanitize_entry_path(&name)?;
+                    fs::create_dir_all(temp_folder.join(relative_path)).map_err(|e| {
+                        Error::from_reason(format!(
+                            "Failed to create extracted directory {}: {}",
+                            name, e
+                        ))
+                    })?;
+                } else {
+                    file_entries.push(name);
+                }
+            }
+            ArchiveContents::Err(e) => {
+                return Err(Error::from_reason(format!(
+                    "Failed to inspect archive entry: {}",
+                    e
+                )));
+            }
+            _ => {}
         }
     }
 
-    fn report_if_needed(&self) {
-        if self.total_bytes == 0 {
-            return;
+    if file_entries.is_empty() {
+        return Ok(());
+    }
+
+    let total_files = file_entries.len() as u32;
+
+    for (index, entry_name) in file_entries.into_iter().enumerate() {
+        let relative_path = sanitize_entry_path(&entry_name)?;
+        let target_path = temp_folder.join(&relative_path);
+
+        if let Some(parent) = target_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| {
+                Error::from_reason(format!(
+                    "Failed to create extraction folder for {}: {}",
+                    entry_name, e
+                ))
+            })?;
         }
 
-        let raw_percent = ((self.processed_bytes.saturating_mul(90)) / self.total_bytes) as u32;
-        let capped_percent = raw_percent.clamp(1, 90) as u8;
-        let prev = self.last_percent.load(Ordering::Relaxed);
+        let source_file = File::open(archive_path)
+            .map_err(|e| Error::from_reason(format!("Failed to reopen archive: {}", e)))?;
+        let mut output_file = File::create(&target_path).map_err(|e| {
+            Error::from_reason(format!(
+                "Failed to create extracted file {}: {}",
+                target_path.display(),
+                e
+            ))
+        })?;
 
-        if capped_percent > prev
-            && self
-                .last_percent
-                .compare_exchange(prev, capped_percent, Ordering::Relaxed, Ordering::Relaxed)
+        uncompress_archive_file(source_file, &mut output_file, &entry_name).map_err(|e| {
+            Error::from_reason(format!("Failed to extract archive entry {}: {}", entry_name, e))
+        })?;
+
+        let raw_percent = (((index as u32 + 1) * 90) / total_files).clamp(1, 90) as u8;
+        let prev = last_percent.load(Ordering::Relaxed);
+        if raw_percent > prev
+            && last_percent
+                .compare_exchange(prev, raw_percent, Ordering::Relaxed, Ordering::Relaxed)
                 .is_ok()
         {
             emit_progress(
-                &self.callback,
-                capped_percent as u32,
-                format!("Extracting... {}%", capped_percent),
+                callback,
+                raw_percent as u32,
+                format!("Extracting... {}%", raw_percent),
             );
         }
     }
-}
 
-impl<R: Read> Read for ProgressReader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let read = self.inner.read(buf)?;
-        if read > 0 {
-            self.processed_bytes = self.processed_bytes.saturating_add(read as u64);
-            self.report_if_needed();
-        }
-        Ok(read)
-    }
-}
-
-impl<R: Seek> Seek for ProgressReader<R> {
-    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
-        let next = self.inner.seek(pos)?;
-        self.processed_bytes = next;
-        self.report_if_needed();
-        Ok(next)
-    }
+    Ok(())
 }
 
 #[napi]
@@ -181,20 +256,16 @@ impl Task for ExtractorTask {
             Error::from_reason(format!("Extraction failed: {}", e))
         };
 
-        let source_file = File::open(archive_path).map_err(|e| cleanup_temp(&e))?;
-        let archive_size = source_file.metadata().map(|m| m.len()).unwrap_or(0);
-
         let last_percent = Arc::new(AtomicU8::new(0));
-        let mut source = ProgressReader::new(
-            source_file,
-            archive_size,
-            self.on_progress.clone(),
-            last_percent.clone(),
-        );
 
         emit_progress(&self.on_progress, 1, "Starting extraction");
 
-        if let Err(e) = uncompress_archive(&mut source, &temp_folder, Ownership::Ignore) {
+        if let Err(e) = extract_archive_entries(
+            archive_path,
+            &temp_folder,
+            &self.on_progress,
+            &last_percent,
+        ) {
             return Err(cleanup_temp(&e));
         }
 
@@ -304,12 +375,12 @@ pub async fn has_single_top_level_directory(archive_path: String) -> Result<bool
     napi::tokio::task::spawn_blocking(move || -> Result<bool> {
         let source_file = File::open(&archive_path)
             .map_err(|e| Error::from_reason(format!("Failed to open archive: {}", e)))?;
-        let iterator = ArchiveIterator::from_read(source_file)
+        let mut iterator = ArchiveIterator::from_read(source_file)
             .map_err(|e| Error::from_reason(format!("Failed to inspect archive: {}", e)))?;
 
         let mut top_level_entries: HashMap<String, bool> = HashMap::new();
 
-        for content in iterator {
+        while let Some(content) = iterator.next_header() {
             let ArchiveContents::StartOfEntry(name, _stat) = content else {
                 continue;
             };
