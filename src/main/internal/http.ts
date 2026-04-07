@@ -5,10 +5,16 @@ import type { NahidaDesktop } from "../index";
 
 const NHD_PREFIXES = ["http://localhost", "https://api.nahida.live"];
 
+interface FetcherOptions extends RequestInit {}
+
 export class DesktopHttpService {
     private cachedAgent: Agent | null = null;
 
     constructor(private readonly desktop: NahidaDesktop) {}
+
+    private isNHD(url: string) {
+        return NHD_PREFIXES.some((prefix) => url.startsWith(prefix));
+    }
 
     public async getAgent() {
         if (this.cachedAgent) {
@@ -29,16 +35,15 @@ export class DesktopHttpService {
 
     public async getHeaders(url: string) {
         const token = await this.desktop.service.auth.getToken();
-        const isNHD = NHD_PREFIXES.some((prefix) => url.startsWith(prefix));
         return {
-            ...(token && isNHD && { Authorization: `Bearer ${token}` }),
+            ...(token && this.isNHD(url) && { Authorization: `Bearer ${token}` }),
             Origin: "https://nahida.live",
             "User-Agent": `Nahida Desktop/${appVersion}`,
         };
     }
 
-    public async fetcher(url: string, options?: RequestInit) {
-        const isNHD = NHD_PREFIXES.some((prefix) => url.startsWith(prefix));
+    public async fetcher(url: string, options?: FetcherOptions) {
+        const isNHD = this.isNHD(url);
 
         const resp = await ky(url, {
             ...options,
