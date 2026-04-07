@@ -54,13 +54,13 @@ export class DesktopHttpService {
             dispatcher: await this.getAgent(),
             hooks: {
                 afterResponse: [
-                    async (_req, _opt, response) => {
+                    async ({ response }) => {
                         if (response.status === 401 && isNHD) {
                             await this.desktop.service.auth.getSession();
                         }
                     },
 
-                    (_request, _options, response) => {
+                    ({ response }) => {
                         if (response.status === 524) {
                             return new Response("cloudflare timeout. but it's ok", { status: 200 });
                         } else {
@@ -70,8 +70,8 @@ export class DesktopHttpService {
                 ],
 
                 beforeError: [
-                    async (error) => {
-                        const { response } = error;
+                    // @ts-expect-error
+                    async ({ response, error }) => {
                         if (response && response.status === 524) {
                             return error;
                         }
