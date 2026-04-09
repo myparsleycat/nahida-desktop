@@ -12,7 +12,7 @@ import { useEnabledImporters, usePresets } from "@renderer/hooks/use-mod-data";
 import { useModStore } from "@renderer/store/mod";
 import type { GameConfig } from "@shared/types.gen";
 import { useLocation } from "@tanstack/react-router";
-import { PencilIcon, PlayIcon, Trash2Icon } from "lucide-react";
+import { PencilIcon, PlayIcon } from "lucide-react";
 import { memo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -91,8 +91,8 @@ export const GamePresetSelector = memo(function GamePresetSelector({
             </Button>
           )}
           <Select value={selectedGame || ""} onValueChange={handleGameSelect}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select a Game" />
+            <SelectTrigger className="w-full" disabled={games.length < 1}>
+              <SelectValue placeholder={games.length > 0 ? "Select a Game" : "No games"} />
             </SelectTrigger>
             <SelectContent
               position="popper"
@@ -100,7 +100,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
               aria-describedby={undefined}
             >
               <SelectGroup>
-                <SelectLabel>Games</SelectLabel>
+                <SelectLabel>{games.length > 0 ? "Games" : "No games"}</SelectLabel>
                 {games.map((game, idx) => (
                   <div
                     key={idx.toString()}
@@ -144,8 +144,8 @@ export const GamePresetSelector = memo(function GamePresetSelector({
             }
           }}
         >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select a Preset" />
+          <SelectTrigger className="w-full" disabled={presets.length < 1}>
+            <SelectValue placeholder={presets.length > 0 ? "Select a preset" : "No presets"} />
           </SelectTrigger>
           <SelectContent
             position="popper"
@@ -153,7 +153,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
             aria-describedby={undefined}
           >
             <SelectGroup>
-              <SelectLabel>Preset</SelectLabel>
+              <SelectLabel>{presets.length > 0 ? "Presets" : "No presets"}</SelectLabel>
               {presets.map((preset) => (
                 <SelectItem key={preset.id} value={preset.id}>
                   {preset.isLegacy
