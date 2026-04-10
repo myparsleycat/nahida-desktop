@@ -47,7 +47,7 @@
     "es-hangul": "^2.3.8",
     "es-toolkit": "^1.45.1",
     "fast-glob": "^3.3.3",
-    "file-type": "^22.0.0",
+    "file-type": "^22.0.1",
     "filename-reserved-regex": "^4.0.0",
     "filesize": "^11.0.15",
     "fs-extra": "^11.3.4",
