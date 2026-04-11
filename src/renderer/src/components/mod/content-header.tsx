@@ -57,6 +57,7 @@ export function ContentHeader() {
 
   const groupName = selectedGroup?.name || "";
   const groupPath = selectedGroup?.path;
+  const hasSelectedGroup = Boolean(groupPath);
 
   const handleEnableAll = async () => {
     if (!groupPath) return;
@@ -188,11 +189,11 @@ export function ContentHeader() {
           </DropdownMenuTrigger>
           <DropdownMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={handleEnableAll}>
+              <DropdownMenuItem disabled={!hasSelectedGroup} onClick={handleEnableAll}>
                 <CircleIcon />
                 {t("page.mod.all_enabled")}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleDisableAll}>
+              <DropdownMenuItem disabled={!hasSelectedGroup} onClick={handleDisableAll}>
                 <CircleOffIcon />
                 {t("page.mod.all_disabled")}
               </DropdownMenuItem>
@@ -201,7 +202,7 @@ export function ContentHeader() {
             <DropdownMenuSeparator />
 
             <DropdownMenuItem
-              disabled={!groupPath}
+              disabled={!hasSelectedGroup}
               onClick={() => {
                 setIsCustomDownloadDialogOpen(true);
               }}

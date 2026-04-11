@@ -1,6 +1,6 @@
 import { DownloadConfirmationOverlay } from "@renderer/components/download-confirmation-overlay";
-import { CustomDownloadDialog } from "@renderer/components/mod/custom-download-dialog";
 import { ContentHeader } from "@renderer/components/mod/content-header";
+import { CustomDownloadDialog } from "@renderer/components/mod/custom-download-dialog";
 import { DeleteGameDialog } from "@renderer/components/mod/delete-game-dialog";
 import { ModGrid } from "@renderer/components/mod/mod-grid";
 import { ModList } from "@renderer/components/mod/mod-list";
@@ -189,7 +189,7 @@ function ModRouteContent() {
           onDragOver={handleDragOver}
           onDrop={handleDrop}
         >
-          <ContentHeader />
+          {selectedGroup && <ContentHeader />}
 
           {viewMode === "grid" ? (
             <ModGrid isDragging={isDragging} />
@@ -306,12 +306,11 @@ function ModRouteContent() {
                 if (archiveExtractPrompt) {
                   const { requestId } = archiveExtractPrompt;
                   event.preventDefault();
-                  void resolveDownloadArchiveExtractPrompt(
-                    requestId,
-                    "keep_archive_root",
-                  ).finally(() => {
-                    clearArchiveExtractPromptIfCurrent(requestId);
-                  });
+                  void resolveDownloadArchiveExtractPrompt(requestId, "keep_archive_root").finally(
+                    () => {
+                      clearArchiveExtractPromptIfCurrent(requestId);
+                    },
+                  );
                   return;
                 }
                 keepArchiveRootDialog();

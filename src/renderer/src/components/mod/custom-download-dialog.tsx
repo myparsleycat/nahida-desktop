@@ -8,10 +8,11 @@ import {
   DialogTitle,
 } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
-import { DownloadIcon } from "lucide-react";
+import { DownloadIcon, LoaderIcon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import isURL from "validator/lib/isURL";
 
 interface CustomDownloadDialogProps {
   open: boolean;
@@ -29,6 +30,8 @@ export function CustomDownloadDialog({
   const { t } = useTranslation();
   const [url, setUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const trimmedUrl = url.trim();
+  const isValidUrl = isURL(trimmedUrl);
 
   useEffect(() => {
     if (!open) {
@@ -38,15 +41,12 @@ export function CustomDownloadDialog({
   }, [open]);
 
   const handleDownload = async () => {
-    const trimmedUrl = url.trim();
     if (!groupPath || !trimmedUrl) {
       return;
     }
 
-    try {
-      new URL(trimmedUrl);
-    } catch {
-      toast.error(t("page.mod.content-header.download_dialog.invalid_url"));
+    if (!isValidUrl) {
+      toast.warning(t("page.mod.content-header.download_dialog.invalid_url"));
       return;
     }
 
@@ -94,19 +94,33 @@ export function CustomDownloadDialog({
             <p className="text-sm font-medium">
               {t("page.mod.content-header.download_dialog.target_label")}
             </p>
-            <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
-              {groupName || t("page.mod.content-header.download_dialog.no_target")}
-            </p>
+            <Input
+              readOnly
+              hideFocusRing
+              value={groupName || t("page.mod.content-header.download_dialog.no_target")}
+            />
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
-            {t("g.cancel")}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => onOpenChange(false)}
+            disabled={isSubmitting}
+          >
+            <XIcon />
           </Button>
-          <Button onClick={handleDownload} disabled={!groupPath || !url.trim() || isSubmitting}>
-            <DownloadIcon className="mr-2 size-4" />
-            {t("g.download")}
+          <Button
+            onClick={handleDownload}
+            disabled={!groupPath || !trimmedUrl || !isValidUrl || isSubmitting}
+            size="icon"
+          >
+            {isSubmitting ? (
+              <LoaderIcon className="size-4 animate-spin" />
+            ) : (
+              <DownloadIcon className="size-4" />
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

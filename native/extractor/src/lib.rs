@@ -34,6 +34,33 @@ pub struct ExtractorTask {
     pub on_progress: Option<Arc<ThreadsafeFunction<ExtractProgress>>>,
 }
 
+struct TempExtractionDir {
+    path: PathBuf,
+    keep: bool,
+}
+
+impl TempExtractionDir {
+    fn new(path: PathBuf) -> Self {
+        Self { path, keep: false }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn disarm(&mut self) {
+        self.keep = true;
+    }
+}
+
+impl Drop for TempExtractionDir {
+    fn drop(&mut self) {
+        if !self.keep {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+}
+
 fn get_unique_folder_name(base_path: &Path, folder_name: &str) -> PathBuf {
     let mut target_path = base_path.join(folder_name);
 
@@ -75,7 +102,7 @@ fn normalize_archive_entry_name(name: &str) -> String {
 }
 
 fn is_ignored_top_level_entry(name: &str) -> bool {
-    matches!(name.to_ascii_lowercase().as_str(), "desktop.ini" | "thumbs.db")
+    name.eq_ignore_ascii_case("desktop.ini") || name.eq_ignore_ascii_case("thumbs.db")
 }
 
 fn is_directory_entry(name: &str) -> bool {
@@ -242,19 +269,14 @@ impl Task for ExtractorTask {
             .unwrap_or_default()
             .as_nanos();
 
-        let temp_folder = dest_path.join(format!(
+        let mut temp_folder = TempExtractionDir::new(dest_path.join(format!(
             ".extract_temp_{}_{}",
             std::process::id(),
             timestamp
-        ));
+        )));
 
-        fs::create_dir_all(&temp_folder)
+        fs::create_dir_all(temp_folder.path())
             .map_err(|e| Error::from_reason(format!("Failed to create temp folder: {}", e)))?;
-
-        let cleanup_temp = |e: &dyn std::fmt::Display| {
-            let _ = fs::remove_dir_all(&temp_folder);
-            Error::from_reason(format!("Extraction failed: {}", e))
-        };
 
         let last_percent = Arc::new(AtomicU8::new(0));
 
@@ -262,11 +284,11 @@ impl Task for ExtractorTask {
 
         if let Err(e) = extract_archive_entries(
             archive_path,
-            &temp_folder,
+            temp_folder.path(),
             &self.on_progress,
             &last_percent,
         ) {
-            return Err(cleanup_temp(&e));
+            return Err(Error::from_reason(format!("Extraction failed: {}", e)));
         }
 
         if last_percent.load(Ordering::Relaxed) < 92 {
@@ -274,7 +296,7 @@ impl Task for ExtractorTask {
             emit_progress(&self.on_progress, 92, "Finalizing extracted files");
         }
 
-        let mut current_path = temp_folder.clone();
+        let mut current_path = temp_folder.path().to_path_buf();
         let mut target_folder_name = archive_path
             .file_stem()
             .and_then(|s| s.to_str())
@@ -284,7 +306,7 @@ impl Task for ExtractorTask {
         loop {
             let entries: Vec<std::fs::DirEntry> = match fs::read_dir(&current_path) {
                 Ok(dir) => dir.filter_map(|e| e.ok()).collect(),
-                Err(e) => return Err(cleanup_temp(&e)),
+                Err(e) => return Err(Error::from_reason(format!("Extraction failed: {}", e))),
             };
 
             let valid_entries: Vec<&std::fs::DirEntry> = entries
@@ -326,19 +348,22 @@ impl Task for ExtractorTask {
             emit_progress(&self.on_progress, 97, "Moving extracted contents");
         }
 
-        if current_path != temp_folder {
+        if current_path != temp_folder.path() {
             if let Err(e) = fs::rename(&current_path, &target_path) {
-                return Err(cleanup_temp(&format!(
+                return Err(Error::from_reason(format!(
                     "Failed to move extracted folder: {}",
                     e
                 )));
             }
-            let _ = fs::remove_dir_all(&temp_folder);
-        } else if let Err(e) = fs::rename(&temp_folder, &target_path) {
-            return Err(cleanup_temp(&format!(
-                "Failed to rename temp folder: {}",
-                e
-            )));
+        } else {
+            if let Err(e) = fs::rename(temp_folder.path(), &target_path) {
+                return Err(Error::from_reason(format!(
+                    "Failed to rename temp folder: {}",
+                    e
+                )));
+            }
+
+            temp_folder.disarm();
         }
 
         let final_path = target_path.to_string_lossy().to_string();
@@ -381,7 +406,7 @@ pub async fn has_single_top_level_directory(archive_path: String) -> Result<bool
         let mut top_level_entries: HashMap<String, bool> = HashMap::new();
 
         while let Some(content) = iterator.next_header() {
-            let ArchiveContents::StartOfEntry(name, _stat) = content else {
+            let ArchiveContents::StartOfEntry(name, stat) = content else {
                 continue;
             };
 
@@ -400,7 +425,7 @@ pub async fn has_single_top_level_directory(archive_path: String) -> Result<bool
                 continue;
             }
 
-            let is_dir = has_nested_segments || is_directory_entry(&name);
+            let is_dir = has_nested_segments || is_directory_entry(&name) || is_directory_stat(&stat);
             top_level_entries
                 .entry(top_level_name.to_string())
                 .and_modify(|existing| *existing = *existing || is_dir)
