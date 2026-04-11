@@ -63,7 +63,6 @@ function RouteComponent() {
     },
     queryFn: async () => {
       const data = await window.api.invoke("drive:get:item", id);
-      console.log(data);
       return data;
     },
   });
