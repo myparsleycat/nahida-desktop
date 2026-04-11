@@ -355,14 +355,16 @@ impl Task for ExtractorTask {
                     e
                 )));
             }
-        } else if let Err(e) = fs::rename(temp_folder.path(), &target_path) {
-            return Err(Error::from_reason(format!(
-                "Failed to rename temp folder: {}",
-                e
-            )));
-        }
+        } else {
+            if let Err(e) = fs::rename(temp_folder.path(), &target_path) {
+                return Err(Error::from_reason(format!(
+                    "Failed to rename temp folder: {}",
+                    e
+                )));
+            }
 
-        temp_folder.disarm();
+            temp_folder.disarm();
+        }
 
         let final_path = target_path.to_string_lossy().to_string();
 
