@@ -526,6 +526,8 @@
           "deleteArchiveAfterExtractDescription": "圧縮ファイルをMODフォルダーに解凍した後、元の圧縮ファイルを削除します",
           "moveFolderInsteadOfCopy": "コピーの代わりに移動",
           "moveFolderInsteadOfCopyDescription": "フォルダーをMODフォルダーにドロップする際、コピーせずに移動します (元ファイル削除)",
+          "copyShaderFixesOnEnable": "有効化時にShaderFixesをコピー",
+          "copyShaderFixesOnEnableDescription": "MODを有効化するとき、MOD内のShaderFixesファイルを有効なImporterのShaderFixesフォルダーへコピーします。",
           "searchModPreview": "サブフォルダからモッドプレビューを検索",
           "searchModPreviewDescription": "キャラクター フォルダにプレビュー画像がない場合、モッド フォルダ内からプレビュー画像を検索します。"
         },

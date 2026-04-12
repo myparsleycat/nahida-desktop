@@ -31,6 +31,7 @@ const settingsConfig = {
   virtualizationEnabled: "setting:mod:getVirtualizationEnabled",
   virtualizationThreshold: "setting:mod:getVirtualizationThreshold",
   searchModPreview: "setting:mod:getSearchModPreview",
+  copyShaderFixesOnEnable: "setting:mod:getCopyShaderFixesOnEnable",
 } as const;
 
 function RouteComponent() {
@@ -53,6 +54,7 @@ function ModSettingsRouteContent() {
     virtualizationEnabled: boolean;
     virtualizationThreshold: number;
     searchModPreview: boolean;
+    copyShaderFixesOnEnable: boolean;
   }>(settingsConfig);
 
   if (isLoading) {
@@ -171,6 +173,25 @@ function ModSettingsRouteContent() {
                 checked={settings.moveFolderInsteadOfCopy}
                 onCheckedChange={(val) =>
                   update("moveFolderInsteadOfCopy", val, "setting:mod:setMoveFolderInsteadOfCopy")
+                }
+              />
+            </div>
+
+            <Separator />
+
+            <div className="flex items-center justify-between space-x-4">
+              <div className="space-y-0.5">
+                <span className="text-sm font-medium">
+                  {t("page.setting.mod.mod_management.copyShaderFixesOnEnable")}
+                </span>
+                <p className="text-xs text-muted-foreground">
+                  {t("page.setting.mod.mod_management.copyShaderFixesOnEnableDescription")}
+                </p>
+              </div>
+              <Switch
+                checked={settings.copyShaderFixesOnEnable}
+                onCheckedChange={(val) =>
+                  update("copyShaderFixesOnEnable", val, "setting:mod:setCopyShaderFixesOnEnable")
                 }
               />
             </div>

@@ -545,6 +545,8 @@
           "deleteArchiveAfterExtractDescription": "Delete the original archive file after extracting it to the mod folder",
           "moveFolderInsteadOfCopy": "Move folder instead of copy",
           "moveFolderInsteadOfCopyDescription": "Move instead of copy when dropping a folder into the mod folder (deletes original)",
+          "copyShaderFixesOnEnable": "Copy ShaderFixes on enable",
+          "copyShaderFixesOnEnableDescription": "Copy ShaderFixes files from the mod into the active Importer's ShaderFixes folder when enabling a mod.",
           "searchModPreview": "Search Preview in Subfolders",
           "searchModPreviewDescription": "If no preview image exists in the character folder, search for preview images inside mod folders."
         },

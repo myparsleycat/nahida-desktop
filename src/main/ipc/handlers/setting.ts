@@ -153,6 +153,15 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         d.ipc.broadcast("mod:update-settings");
     });
 
+    rh("setting:mod:getCopyShaderFixesOnEnable", async () => {
+        return await d.setting.mod.getCopyShaderFixesOnEnable();
+    });
+
+    rh("setting:mod:setCopyShaderFixesOnEnable", async (enabled) => {
+        await d.setting.mod.setCopyShaderFixesOnEnable(enabled);
+        d.ipc.broadcast("mod:update-settings");
+    });
+
     rh("setting:transfer:getDownloadConcurrency", async () => {
         return await d.setting.transfer.getDownloadConcurrency();
     });
