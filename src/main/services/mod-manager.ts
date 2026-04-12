@@ -54,6 +54,11 @@ interface ShaderFixesTargetRecord {
     modKeys: string[];
 }
 
+interface ShaderFixesFileCandidate {
+    file: string;
+    sourcePath: string;
+}
+
 const MOD_PRESET_ITEM_INSERT_BATCH_SIZE = 100;
 const MOD_PRESET_VERSION = 2;
 const SHADER_FIXES_DIR_NAME = "ShaderFixes";
@@ -257,6 +262,58 @@ export class ModManager {
         await this.deleteAppState(this.getShaderFixesTargetStateKey(targetKey));
     }
 
+    private normalizeShaderFixesRelativePath(targetPath: string): string {
+        return targetPath
+            .split(/[\\/]+/)
+            .filter(Boolean)
+            .join("/");
+    }
+
+    private async getShaderFixesFileCandidates(
+        modPath: string,
+    ): Promise<ShaderFixesFileCandidate[]> {
+        const shaderDirectories = await fg(`**/${SHADER_FIXES_DIR_NAME}`, {
+            cwd: modPath,
+            onlyDirectories: true,
+            dot: true,
+            caseSensitiveMatch: false,
+        });
+
+        if (shaderDirectories.length === 0) return [];
+
+        const uniqueShaderDirectories = Array.from(new Set(shaderDirectories)).sort((a, b) => {
+            const aIsRootShaderDirectory =
+                this.normalizeShaderFixesRelativePath(a).toUpperCase() ===
+                SHADER_FIXES_DIR_NAME.toUpperCase();
+            const bIsRootShaderDirectory =
+                this.normalizeShaderFixesRelativePath(b).toUpperCase() ===
+                SHADER_FIXES_DIR_NAME.toUpperCase();
+
+            if (aIsRootShaderDirectory && !bIsRootShaderDirectory) return -1;
+            if (bIsRootShaderDirectory && !aIsRootShaderDirectory) return 1;
+            return a.localeCompare(b);
+        });
+        const candidates: ShaderFixesFileCandidate[] = [];
+
+        for (const shaderDirectory of uniqueShaderDirectories) {
+            const shaderPath = path.join(modPath, shaderDirectory);
+            const files = await fg("**/*", {
+                cwd: shaderPath,
+                onlyFiles: true,
+                dot: true,
+            });
+
+            for (const file of files.sort((a, b) => a.localeCompare(b))) {
+                candidates.push({
+                    file: this.normalizeShaderFixesRelativePath(file),
+                    sourcePath: path.join(shaderPath, file),
+                });
+            }
+        }
+
+        return candidates;
+    }
+
     private async handleShaders(modPath: string, enable: boolean): Promise<string[]> {
         return await this.withShaderOperationLock(async () => {
             return await this.handleShadersLocked(modPath, enable);
@@ -264,13 +321,12 @@ export class ModManager {
     }
 
     private async handleShadersLocked(modPath: string, enable: boolean): Promise<string[]> {
-        const modShaderPath = path.join(modPath, SHADER_FIXES_DIR_NAME);
-        if (!(await fse.pathExists(modShaderPath))) return [];
+        const shaderFiles = await this.getShaderFixesFileCandidates(modPath);
+        if (shaderFiles.length === 0) return [];
 
         const globalShaderPath = await this.getGlobalShaderFixesPath(modPath);
         if (!globalShaderPath) return [];
 
-        const shaderFiles = await fse.readdir(modShaderPath);
         const processedFiles: string[] = [];
 
         try {
@@ -282,8 +338,7 @@ export class ModManager {
                 };
 
                 await fse.ensureDir(globalShaderPath);
-                for (const file of shaderFiles) {
-                    const source = path.join(modShaderPath, file);
+                for (const { file, sourcePath: source } of shaderFiles) {
                     const target = path.join(globalShaderPath, file);
                     const hash = await this.hashFile(source);
                     const targetKey = this.getShaderFixesTargetKey(target);
