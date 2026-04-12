@@ -402,13 +402,15 @@ export class ModManager {
 
                     if (targetExists) {
                         const currentHash = await this.hashFile(target);
-                        if (
-                            targetRecord?.hash === hash &&
-                            currentHash === hash &&
-                            !targetRecord.modKeys.includes(modKey)
-                        ) {
-                            targetRecord.modKeys.push(modKey);
-                            await this.writeShaderFixesTargetRecord(targetKey, targetRecord);
+                        if (currentHash === hash) {
+                            await this.writeShaderFixesTargetRecord(targetKey, {
+                                targetPath: target,
+                                hash,
+                                modKeys:
+                                    targetRecord?.hash === hash
+                                        ? Array.from(new Set([...targetRecord.modKeys, modKey]))
+                                        : [modKey],
+                            });
                             manifest.files.push({ file, targetPath: target, targetKey, hash });
                             await this.writeShaderFixesModManifest(manifest);
                         }
