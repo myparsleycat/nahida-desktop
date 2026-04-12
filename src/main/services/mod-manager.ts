@@ -48,6 +48,11 @@ interface ShaderFixesModManifest {
     files: ShaderFixesModManifestFile[];
 }
 
+interface ShaderFixesModMarker {
+    version: number;
+    modKey: string;
+}
+
 interface ShaderFixesTargetRecord {
     targetPath: string;
     hash: string;
@@ -62,6 +67,8 @@ interface ShaderFixesFileCandidate {
 const MOD_PRESET_ITEM_INSERT_BATCH_SIZE = 100;
 const MOD_PRESET_VERSION = 2;
 const SHADER_FIXES_DIR_NAME = "ShaderFixes";
+const SHADER_FIXES_MOD_MARKER_FILE = ".nahida-shader-fixes.json";
+const SHADER_FIXES_MOD_MARKER_VERSION = 1;
 const SHADER_FIXES_MOD_STATE_PREFIX = "mod_shader_fixes:mod:";
 const SHADER_FIXES_TARGET_STATE_PREFIX = "mod_shader_fixes:target:";
 const DISABLED_PREFIX_REGEX = /^disabled\s+/i;
@@ -147,8 +154,56 @@ export class ModManager {
             .digest("hex");
     }
 
-    private getShaderFixesModKey(modPath: string): string {
-        return this.hashString(this.normalizeRelativePath(path.resolve(modPath)));
+    private getShaderFixesModMarkerPath(modPath: string): string {
+        return path.join(modPath, SHADER_FIXES_MOD_MARKER_FILE);
+    }
+
+    private async readShaderFixesModMarker(modPath: string): Promise<ShaderFixesModMarker | null> {
+        try {
+            const marker = await fse.readJson(this.getShaderFixesModMarkerPath(modPath));
+            if (
+                marker &&
+                marker.version === SHADER_FIXES_MOD_MARKER_VERSION &&
+                typeof marker.modKey === "string" &&
+                marker.modKey.length > 0
+            ) {
+                return marker;
+            }
+        } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+                this.desktop.logger.error(error, `Mod:readShaderFixesModMarker:${modPath}`);
+            }
+        }
+
+        return null;
+    }
+
+    private async writeShaderFixesModMarker(modPath: string, modKey: string): Promise<void> {
+        await fse.writeJson(
+            this.getShaderFixesModMarkerPath(modPath),
+            {
+                version: SHADER_FIXES_MOD_MARKER_VERSION,
+                modKey,
+            } satisfies ShaderFixesModMarker,
+            { spaces: 2 },
+        );
+    }
+
+    private async deleteShaderFixesModMarker(modPath: string): Promise<void> {
+        await fse.remove(this.getShaderFixesModMarkerPath(modPath));
+    }
+
+    private async getShaderFixesModKey(modPath: string, create: true): Promise<string>;
+    private async getShaderFixesModKey(modPath: string, create?: false): Promise<string | null>;
+    private async getShaderFixesModKey(modPath: string, create = false): Promise<string | null> {
+        const marker = await this.readShaderFixesModMarker(modPath);
+        if (marker) return marker.modKey;
+
+        if (!create) return null;
+
+        const modKey = nanoid();
+        await this.writeShaderFixesModMarker(modPath, modKey);
+        return modKey;
     }
 
     private getShaderFixesModStateKey(modKey: string): string {
@@ -331,7 +386,7 @@ export class ModManager {
 
         try {
             if (enable) {
-                const modKey = this.getShaderFixesModKey(modPath);
+                const modKey = await this.getShaderFixesModKey(modPath, true);
                 const manifest: ShaderFixesModManifest = {
                     modKey,
                     files: [],
@@ -378,11 +433,17 @@ export class ModManager {
                     await this.writeShaderFixesModManifest(manifest);
                 } else {
                     await this.deleteShaderFixesModManifest(modKey);
+                    await this.deleteShaderFixesModMarker(modPath);
                 }
             } else {
-                const modKey = this.getShaderFixesModKey(modPath);
+                const modKey = await this.getShaderFixesModKey(modPath);
+                if (!modKey) return [];
+
                 const manifest = await this.readShaderFixesModManifest(modKey);
-                if (!manifest) return [];
+                if (!manifest) {
+                    await this.deleteShaderFixesModMarker(modPath);
+                    return [];
+                }
 
                 for (const file of manifest.files) {
                     const targetRecord = await this.readShaderFixesTargetRecord(file.targetKey);
@@ -409,6 +470,7 @@ export class ModManager {
                 }
 
                 await this.deleteShaderFixesModManifest(modKey);
+                await this.deleteShaderFixesModMarker(modPath);
             }
         } catch (err) {
             const shaderError = err instanceof Error ? err : new Error(String(err));
