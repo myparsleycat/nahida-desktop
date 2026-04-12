@@ -75,27 +75,36 @@ export class ModManager {
         const shaderFiles = await fse.readdir(modShaderPath);
         const processedFiles: string[] = [];
 
-        if (enable) {
-            for (const file of shaderFiles) {
-                const target = path.join(globalShaderPath, file);
-                if (await fse.pathExists(target)) {
-                    throw new Error(`SHADER_EXISTS:${file}`);
+        try {
+            if (enable) {
+                for (const file of shaderFiles) {
+                    const target = path.join(globalShaderPath, file);
+                    if (await fse.pathExists(target)) {
+                        throw new Error(`SHADER_EXISTS:${file}`);
+                    }
                 }
-            }
-            await fse.ensureDir(globalShaderPath);
-            for (const file of shaderFiles) {
-                await fse.copy(path.join(modShaderPath, file), path.join(globalShaderPath, file));
-                processedFiles.push(file);
-            }
-        } else {
-            for (const file of shaderFiles) {
-                const target = path.join(globalShaderPath, file);
-                if (await fse.pathExists(target)) {
-                    await fse.remove(target);
+                await fse.ensureDir(globalShaderPath);
+                for (const file of shaderFiles) {
                     processedFiles.push(file);
+                    await fse.copy(
+                        path.join(modShaderPath, file),
+                        path.join(globalShaderPath, file),
+                    );
+                }
+            } else {
+                for (const file of shaderFiles) {
+                    const target = path.join(globalShaderPath, file);
+                    if (await fse.pathExists(target)) {
+                        processedFiles.push(file);
+                        await fse.remove(target);
+                    }
                 }
             }
+        } catch (err) {
+            const shaderError = err instanceof Error ? err : new Error(String(err));
+            throw Object.assign(shaderError, { processedFiles });
         }
+
         return processedFiles;
     }
 
@@ -523,10 +532,13 @@ export class ModManager {
 
             if (DISABLED_PREFIX_REGEX.test(folderName)) {
                 const baseFolderName = trim(folderName.replace(DISABLED_PREFIX_REGEX, ""));
-                const processedShaders = await this.handleShaders(modPath, true);
+                let processedShaders: string[] = [];
                 try {
+                    processedShaders = await this.handleShaders(modPath, true);
                     return await this.renameWithUniqueName(modPath, baseFolderName);
                 } catch (err) {
+                    processedShaders =
+                        (err as { processedFiles?: string[] }).processedFiles ?? processedShaders;
                     const globalShaderPath = await this.getGlobalShaderFixesPath(modPath);
                     if (globalShaderPath) {
                         for (const file of processedShaders) {
@@ -544,10 +556,13 @@ export class ModManager {
 
             if (!DISABLED_PREFIX_REGEX.test(folderName)) {
                 const baseFolderName = `DISABLED ${folderName}`;
-                const processedShaders = await this.handleShaders(modPath, false);
+                let processedShaders: string[] = [];
                 try {
+                    processedShaders = await this.handleShaders(modPath, false);
                     return await this.renameWithUniqueName(modPath, baseFolderName);
                 } catch (err) {
+                    processedShaders =
+                        (err as { processedFiles?: string[] }).processedFiles ?? processedShaders;
                     const globalShaderPath = await this.getGlobalShaderFixesPath(modPath);
                     const modShaderPath = path.join(modPath, SHADER_FIXES_DIR_NAME);
                     if (globalShaderPath && (await fse.pathExists(modShaderPath))) {
