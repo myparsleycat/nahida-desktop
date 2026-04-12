@@ -525,6 +525,8 @@
           "deleteArchiveAfterExtractDescription": "将压缩文件解压到模组文件夹后删除源文件",
           "moveFolderInsteadOfCopy": "移动文件夹而非复制",
           "moveFolderInsteadOfCopyDescription": "将文件夹拖入模组文件夹时进行移动而非复制 (删除源文件)",
+          "copyShaderFixesOnEnable": "启用时复制 ShaderFixes",
+          "copyShaderFixesOnEnableDescription": "启用模组时，将模组中的 ShaderFixes 文件复制到已激活导入器的 ShaderFixes 文件夹。",
           "searchModPreview": "在子文件夹中搜索模组预览",
           "searchModPreviewDescription": "如果角色文件夹中没有预览图像，则在模组文件夹内部搜索预览图像。"
         },

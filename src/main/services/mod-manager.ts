@@ -956,19 +956,24 @@ export class ModManager {
             if (DISABLED_PREFIX_REGEX.test(folderName)) {
                 const baseFolderName = trim(folderName.replace(DISABLED_PREFIX_REGEX, ""));
                 let processedShaders: string[] = [];
+                const copyShaderFixes = await this.desktop.setting.mod.getCopyShaderFixesOnEnable();
                 try {
-                    processedShaders = await this.handleShaders(modPath, true);
+                    if (copyShaderFixes) {
+                        processedShaders = await this.handleShaders(modPath, true);
+                    }
                     return await this.renameWithUniqueName(modPath, baseFolderName);
                 } catch (err) {
                     processedShaders =
                         (err as { processedFiles?: string[] }).processedFiles ?? processedShaders;
-                    try {
-                        await this.rollbackEnabledShaders(modPath, processedShaders);
-                    } catch (rollbackError) {
-                        this.desktop.logger.error(
-                            rollbackError,
-                            `Mod:enable:rollbackShaders:${modPath}`,
-                        );
+                    if (copyShaderFixes) {
+                        try {
+                            await this.rollbackEnabledShaders(modPath, processedShaders);
+                        } catch (rollbackError) {
+                            this.desktop.logger.error(
+                                rollbackError,
+                                `Mod:enable:rollbackShaders:${modPath}`,
+                            );
+                        }
                     }
 
                     throw err;

@@ -81,13 +81,10 @@ export class Setting {
 
     private async setStoredBounds(key: string, bounds: Bounds) {
         const value = JSON.stringify(bounds);
-        await this.desktop.lib.db
-            .insert(setting)
-            .values({ key, value })
-            .onConflictDoUpdate({
-                target: setting.key,
-                set: { value },
-            });
+        await this.desktop.lib.db.insert(setting).values({ key, value }).onConflictDoUpdate({
+            target: setting.key,
+            set: { value },
+        });
     }
 
     public async getBounds() {
@@ -562,6 +559,31 @@ export class Setting {
             await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "mod_search_mod_preview", value: String(enabled) })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(enabled) },
+                });
+        },
+
+        getCopyShaderFixesOnEnable: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "mod_copy_shader_fixes_on_enable"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db
+                    .insert(setting)
+                    .values({ key: "mod_copy_shader_fixes_on_enable", value: "true" });
+                return true;
+            }
+
+            return qr.value === "true";
+        },
+
+        setCopyShaderFixesOnEnable: async (enabled: boolean) => {
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({ key: "mod_copy_shader_fixes_on_enable", value: String(enabled) })
                 .onConflictDoUpdate({
                     target: setting.key,
                     set: { value: String(enabled) },
