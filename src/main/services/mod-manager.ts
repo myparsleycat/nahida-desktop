@@ -56,8 +56,10 @@ export class ModManager {
         if (!matchedGame) return null;
 
         const importers = this.desktop.service.xxmi.getEnabledImporters();
-        const importer = importers.find((i) => i.key.toUpperCase() === matchedGame.game.toUpperCase());
-        
+        const importer = importers.find(
+            (i) => i.key.toUpperCase() === matchedGame.game.toUpperCase(),
+        );
+
         if (!importer) return null;
 
         return path.join(importer.importerFolder, SHADER_FIXES_DIR_NAME);
@@ -518,12 +520,10 @@ export class ModManager {
 
         enable: async (modPath: string): Promise<string> => {
             const folderName = path.basename(modPath);
-            let processedShaders: string[] = [];
-
-            processedShaders = await this.handleShaders(modPath, true);
 
             if (DISABLED_PREFIX_REGEX.test(folderName)) {
                 const baseFolderName = trim(folderName.replace(DISABLED_PREFIX_REGEX, ""));
+                const processedShaders = await this.handleShaders(modPath, true);
                 try {
                     return await this.renameWithUniqueName(modPath, baseFolderName);
                 } catch (err) {
@@ -541,12 +541,10 @@ export class ModManager {
 
         disable: async (modPath: string): Promise<string> => {
             const folderName = path.basename(modPath);
-            let processedShaders: string[] = [];
-
-            processedShaders = await this.handleShaders(modPath, false);
 
             if (!DISABLED_PREFIX_REGEX.test(folderName)) {
                 const baseFolderName = `DISABLED ${folderName}`;
+                const processedShaders = await this.handleShaders(modPath, false);
                 try {
                     return await this.renameWithUniqueName(modPath, baseFolderName);
                 } catch (err) {
@@ -554,7 +552,10 @@ export class ModManager {
                     const modShaderPath = path.join(modPath, SHADER_FIXES_DIR_NAME);
                     if (globalShaderPath && (await fse.pathExists(modShaderPath))) {
                         for (const file of processedShaders) {
-                            await fse.copy(path.join(modShaderPath, file), path.join(globalShaderPath, file));
+                            await fse.copy(
+                                path.join(modShaderPath, file),
+                                path.join(globalShaderPath, file),
+                            );
                         }
                     }
                     throw err;
