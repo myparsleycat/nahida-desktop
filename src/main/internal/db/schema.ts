@@ -6,6 +6,12 @@ export const setting = sqliteTable("setting", {
     value: text(),
 });
 
+export const appState = sqliteTable("app_state", {
+    key: text().primaryKey(),
+    value: text().notNull(),
+    updatedAt: text("updated_at").notNull(),
+});
+
 export const gamePaths = sqliteTable("game_paths", {
     game: text().primaryKey(),
     modFolderPath: text().notNull(),
