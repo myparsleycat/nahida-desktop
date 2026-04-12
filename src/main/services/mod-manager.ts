@@ -375,6 +375,43 @@ export class ModManager {
         });
     }
 
+    private async rollbackEnabledShaders(
+        modPath: string,
+        processedShaders: string[],
+    ): Promise<void> {
+        await this.withShaderOperationLock(async () => {
+            let rollbackError: unknown = null;
+            try {
+                await this.handleShadersLocked(modPath, false);
+            } catch (error) {
+                rollbackError = error;
+            }
+
+            if (processedShaders.length === 0) {
+                if (rollbackError) throw rollbackError;
+                return;
+            }
+
+            const globalShaderPath = await this.getGlobalShaderFixesPath(modPath);
+            if (!globalShaderPath) {
+                if (rollbackError) throw rollbackError;
+                return;
+            }
+
+            for (const file of processedShaders) {
+                const target = path.join(globalShaderPath, file);
+                const targetKey = this.getShaderFixesTargetKey(target);
+                const targetRecord = await this.readShaderFixesTargetRecord(targetKey);
+
+                if (!targetRecord) {
+                    await fse.remove(target);
+                }
+            }
+
+            if (rollbackError) throw rollbackError;
+        });
+    }
+
     private async handleShadersLocked(modPath: string, enable: boolean): Promise<string[]> {
         const shaderFiles = await this.getShaderFixesFileCandidates(modPath);
         if (shaderFiles.length === 0) return [];
@@ -926,7 +963,7 @@ export class ModManager {
                     processedShaders =
                         (err as { processedFiles?: string[] }).processedFiles ?? processedShaders;
                     try {
-                        await this.handleShaders(modPath, false);
+                        await this.rollbackEnabledShaders(modPath, processedShaders);
                     } catch (rollbackError) {
                         this.desktop.logger.error(
                             rollbackError,
@@ -934,14 +971,6 @@ export class ModManager {
                         );
                     }
 
-                    if (processedShaders.length > 0) {
-                        const globalShaderPath = await this.getGlobalShaderFixesPath(modPath);
-                        if (globalShaderPath) {
-                            for (const file of processedShaders) {
-                                await fse.remove(path.join(globalShaderPath, file));
-                            }
-                        }
-                    }
                     throw err;
                 }
             }
