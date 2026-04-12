@@ -1,9 +1,8 @@
 import path from "node:path";
-import { db } from "@backend/lib/db";
 import { getCharactersFolder, getMods, sendF10 } from "@native/native-mod";
 import type { ArchiveExtractPathMode, ResolvedArchiveExtractPathMode } from "@shared/mod";
 import type { ApplyPresetResult, FolderGroup, Preset } from "@shared/types.gen";
-import { GAME_MATCH_CASES } from "@shared/xxmi-match";
+import { GAME_MATCH_CASES, getMatchingImporter } from "@shared/xxmi-match";
 import { and, eq, ne } from "drizzle-orm";
 import { trim } from "es-toolkit";
 import fg from "fast-glob";
@@ -51,18 +50,47 @@ export class ModManager {
     }
 
     private async getGlobalShaderFixesPath(modPath: string): Promise<string | null> {
+        const importers = this.desktop.service.xxmi.getEnabledImporters();
+        const modImporter = this.getModImporter(modPath, importers);
+        if (modImporter) {
+            return path.join(modImporter.importerFolder, SHADER_FIXES_DIR_NAME);
+        }
+
         const games = await this.get.games();
-        const matchedGame = games.find((g) => modPath.startsWith(g.modFolderPath));
+        const matchedGame = games.find((g) => this.isSameOrChildPath(g.modFolderPath, modPath));
         if (!matchedGame) return null;
 
-        const importers = this.desktop.service.xxmi.getEnabledImporters();
-        const importer = importers.find(
-            (i) => i.key.toUpperCase() === matchedGame.game.toUpperCase(),
-        );
+        const importerKey =
+            matchedGame.importer ??
+            getMatchingImporter(
+                matchedGame.game,
+                importers.map((i) => i.key),
+            );
+        const importer = importers.find((i) => i.key.toUpperCase() === importerKey?.toUpperCase());
 
         if (!importer) return null;
 
         return path.join(importer.importerFolder, SHADER_FIXES_DIR_NAME);
+    }
+
+    private getModImporter<T extends { key: string; importerFolder: string }>(
+        modPath: string,
+        importers: T[],
+    ): T | null {
+        const importersByKey = new Map(importers.map((i) => [i.key.toUpperCase(), i]));
+
+        let currentPath = path.resolve(modPath);
+        let parentPath = path.dirname(currentPath);
+
+        while (parentPath !== currentPath) {
+            const importer = importersByKey.get(path.basename(parentPath).toUpperCase());
+            if (importer) return importer;
+
+            currentPath = parentPath;
+            parentPath = path.dirname(currentPath);
+        }
+
+        return null;
     }
 
     private async handleShaders(modPath: string, enable: boolean): Promise<string[]> {
@@ -175,6 +203,18 @@ export class ModManager {
 
     private normalizeModPath(modPath: string): string {
         return path.normalize(modPath).toLowerCase();
+    }
+
+    private isSameOrChildPath(parentPath: string, targetPath: string): boolean {
+        const relativePath = path.relative(
+            this.normalizeModPath(path.resolve(parentPath)),
+            this.normalizeModPath(path.resolve(targetPath)),
+        );
+
+        return (
+            relativePath === "" ||
+            (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
+        );
     }
 
     private normalizeRelativePath(targetPath: string): string {
