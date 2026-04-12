@@ -1542,6 +1542,7 @@ export class ModManager {
                     );
                 } else {
                     await fse.copy(folderPath, targetPath);
+                    await this.deleteShaderFixesModManifest(targetPath);
                     this.desktop.logger.info(
                         `Copied folder ${folderPath} to ${targetPath}`,
                         "Mod:copyFolderToGroup",
