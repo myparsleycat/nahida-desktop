@@ -10,7 +10,7 @@ import fg from "fast-glob";
 import fse from "fs-extra";
 import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "..";
-import { appState, gamePaths, modPresetItems, modPresets, setting } from "../internal/db/schema";
+import { gamePaths, modPresetItems, modPresets, setting } from "../internal/db/schema";
 
 interface PresetSnapshotItemRecord {
     modKey: string;
@@ -44,19 +44,9 @@ interface ShaderFixesModManifestFile {
 }
 
 interface ShaderFixesModManifest {
-    modKey: string;
-    files: ShaderFixesModManifestFile[];
-}
-
-interface ShaderFixesModMarker {
     version: number;
     modKey: string;
-}
-
-interface ShaderFixesTargetRecord {
-    targetPath: string;
-    hash: string;
-    modKeys: string[];
+    files: ShaderFixesModManifestFile[];
 }
 
 interface ShaderFixesFileCandidate {
@@ -64,13 +54,16 @@ interface ShaderFixesFileCandidate {
     sourcePath: string;
 }
 
+interface ShaderFixesProcessedFile extends ShaderFixesModManifestFile {
+    modKey: string;
+    createdTarget: boolean;
+}
+
 const MOD_PRESET_ITEM_INSERT_BATCH_SIZE = 100;
 const MOD_PRESET_VERSION = 2;
 const SHADER_FIXES_DIR_NAME = "ShaderFixes";
 const SHADER_FIXES_MOD_MARKER_FILE = ".nahida-shader-fixes.json";
 const SHADER_FIXES_MOD_MARKER_VERSION = 1;
-const SHADER_FIXES_MOD_STATE_PREFIX = "mod_shader_fixes:mod:";
-const SHADER_FIXES_TARGET_STATE_PREFIX = "mod_shader_fixes:target:";
 const DISABLED_PREFIX_REGEX = /^disabled\s+/i;
 
 export class ModManager {
@@ -154,167 +147,146 @@ export class ModManager {
             .digest("hex");
     }
 
-    private getShaderFixesModMarkerPath(modPath: string): string {
+    private getShaderFixesModManifestPath(modPath: string): string {
         return path.join(modPath, SHADER_FIXES_MOD_MARKER_FILE);
     }
 
-    private async readShaderFixesModMarker(modPath: string): Promise<ShaderFixesModMarker | null> {
+    private validateShaderFixesModManifest(
+        manifest: Partial<ShaderFixesModManifest> | null,
+    ): ShaderFixesModManifest | null {
+        if (
+            !manifest ||
+            manifest.version !== SHADER_FIXES_MOD_MARKER_VERSION ||
+            typeof manifest.modKey !== "string" ||
+            manifest.modKey.length === 0
+        ) {
+            return null;
+        }
+
+        const files = Array.isArray(manifest.files)
+            ? manifest.files.filter(
+                  (file): file is ShaderFixesModManifestFile =>
+                      typeof file.file === "string" &&
+                      typeof file.targetPath === "string" &&
+                      typeof file.targetKey === "string" &&
+                      typeof file.hash === "string",
+              )
+            : [];
+
+        return {
+            version: SHADER_FIXES_MOD_MARKER_VERSION,
+            modKey: manifest.modKey,
+            files,
+        };
+    }
+
+    private async readShaderFixesModManifestFile(
+        manifestPath: string,
+    ): Promise<ShaderFixesModManifest | null> {
         try {
-            const marker = await fse.readJson(this.getShaderFixesModMarkerPath(modPath));
-            if (
-                marker &&
-                marker.version === SHADER_FIXES_MOD_MARKER_VERSION &&
-                typeof marker.modKey === "string" &&
-                marker.modKey.length > 0
-            ) {
-                return marker;
-            }
+            return this.validateShaderFixesModManifest(await fse.readJson(manifestPath));
         } catch (error) {
             if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-                this.desktop.logger.error(error, `Mod:readShaderFixesModMarker:${modPath}`);
+                this.desktop.logger.error(
+                    error,
+                    `Mod:readShaderFixesModManifestFile:${manifestPath}`,
+                );
             }
         }
 
         return null;
     }
 
-    private async writeShaderFixesModMarker(modPath: string, modKey: string): Promise<void> {
-        await fse.writeJson(
-            this.getShaderFixesModMarkerPath(modPath),
-            {
-                version: SHADER_FIXES_MOD_MARKER_VERSION,
-                modKey,
-            } satisfies ShaderFixesModMarker,
-            { spaces: 2 },
+    private async readShaderFixesModManifest(
+        modPath: string,
+    ): Promise<ShaderFixesModManifest | null> {
+        return await this.readShaderFixesModManifestFile(
+            this.getShaderFixesModManifestPath(modPath),
         );
     }
 
-    private async deleteShaderFixesModMarker(modPath: string): Promise<void> {
-        await fse.remove(this.getShaderFixesModMarkerPath(modPath));
+    private async writeShaderFixesModManifest(
+        modPath: string,
+        manifest: ShaderFixesModManifest,
+    ): Promise<void> {
+        await fse.writeJson(this.getShaderFixesModManifestPath(modPath), manifest, { spaces: 2 });
+    }
+
+    private async deleteShaderFixesModManifest(modPath: string): Promise<void> {
+        await fse.remove(this.getShaderFixesModManifestPath(modPath));
+    }
+
+    private async getShaderFixesManifestSearchRoots(modPath: string): Promise<string[]> {
+        const roots = new Set<string>();
+        roots.add(path.dirname(modPath));
+
+        try {
+            for (const game of await this.get.games()) {
+                roots.add(game.modFolderPath);
+            }
+        } catch (error) {
+            this.desktop.logger.error(error, "Mod:getShaderFixesManifestSearchRoots:games");
+        }
+
+        for (const importer of this.desktop.service.xxmi.getEnabledImporters()) {
+            roots.add(importer.importerFolder);
+        }
+
+        const existingRoots: string[] = [];
+        for (const root of roots) {
+            if (await fse.pathExists(root)) {
+                existingRoots.push(root);
+            }
+        }
+        return existingRoots;
+    }
+
+    private async hasOtherShaderFixesOwner(
+        modPath: string,
+        modKey: string,
+        targetKey: string,
+    ): Promise<boolean> {
+        for (const root of await this.getShaderFixesManifestSearchRoots(modPath)) {
+            const manifestFiles = await fg(`**/${SHADER_FIXES_MOD_MARKER_FILE}`, {
+                cwd: root,
+                onlyFiles: true,
+                dot: true,
+                ignore: [`**/${SHADER_FIXES_DIR_NAME}/**`],
+            });
+
+            for (const manifestFile of manifestFiles) {
+                const manifest = await this.readShaderFixesModManifestFile(
+                    path.join(root, manifestFile),
+                );
+                if (!manifest || manifest.modKey === modKey) continue;
+                if (manifest.files.some((file) => file.targetKey === targetKey)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private async getShaderFixesModKey(modPath: string, create: true): Promise<string>;
     private async getShaderFixesModKey(modPath: string, create?: false): Promise<string | null>;
     private async getShaderFixesModKey(modPath: string, create = false): Promise<string | null> {
-        const marker = await this.readShaderFixesModMarker(modPath);
-        if (marker) return marker.modKey;
+        const manifest = await this.readShaderFixesModManifest(modPath);
+        if (manifest) return manifest.modKey;
 
         if (!create) return null;
 
         const modKey = nanoid();
-        await this.writeShaderFixesModMarker(modPath, modKey);
+        await this.writeShaderFixesModManifest(modPath, {
+            version: SHADER_FIXES_MOD_MARKER_VERSION,
+            modKey,
+            files: [],
+        });
         return modKey;
-    }
-
-    private getShaderFixesModStateKey(modKey: string): string {
-        return `${SHADER_FIXES_MOD_STATE_PREFIX}${modKey}`;
     }
 
     private getShaderFixesTargetKey(targetPath: string): string {
         return this.hashString(this.normalizeModPath(path.resolve(targetPath)));
-    }
-
-    private getShaderFixesTargetStateKey(targetKey: string): string {
-        return `${SHADER_FIXES_TARGET_STATE_PREFIX}${targetKey}`;
-    }
-
-    private async readAppStateJson<T>(key: string): Promise<T | null> {
-        const result = await this.desktop.lib.db.query.appState.findFirst({
-            where: eq(appState.key, key),
-        });
-        if (!result?.value) return null;
-
-        try {
-            return JSON.parse(result.value) as T;
-        } catch (error) {
-            this.desktop.logger.error(error, `Mod:readAppStateJson:${key}`);
-            return null;
-        }
-    }
-
-    private async writeAppStateJson(key: string, value: unknown): Promise<void> {
-        const serializedValue = JSON.stringify(value);
-        await this.desktop.lib.db
-            .insert(appState)
-            .values({ key, value: serializedValue, updatedAt: new Date().toISOString() })
-            .onConflictDoUpdate({
-                target: appState.key,
-                set: { value: serializedValue, updatedAt: new Date().toISOString() },
-            });
-    }
-
-    private async deleteAppState(key: string): Promise<void> {
-        await this.desktop.lib.db.delete(appState).where(eq(appState.key, key));
-    }
-
-    private async readShaderFixesModManifest(
-        modKey: string,
-    ): Promise<ShaderFixesModManifest | null> {
-        const manifest = await this.readAppStateJson<Partial<ShaderFixesModManifest>>(
-            this.getShaderFixesModStateKey(modKey),
-        );
-
-        if (!manifest || manifest.modKey !== modKey || !Array.isArray(manifest.files)) {
-            return null;
-        }
-
-        const files = manifest.files.filter(
-            (file): file is ShaderFixesModManifestFile =>
-                typeof file.file === "string" &&
-                typeof file.targetPath === "string" &&
-                typeof file.targetKey === "string" &&
-                typeof file.hash === "string",
-        );
-
-        return {
-            modKey,
-            files,
-        };
-    }
-
-    private async writeShaderFixesModManifest(manifest: ShaderFixesModManifest): Promise<void> {
-        await this.writeAppStateJson(this.getShaderFixesModStateKey(manifest.modKey), manifest);
-    }
-
-    private async deleteShaderFixesModManifest(modKey: string): Promise<void> {
-        await this.deleteAppState(this.getShaderFixesModStateKey(modKey));
-    }
-
-    private async readShaderFixesTargetRecord(
-        targetKey: string,
-    ): Promise<ShaderFixesTargetRecord | null> {
-        const record = await this.readAppStateJson<Partial<ShaderFixesTargetRecord>>(
-            this.getShaderFixesTargetStateKey(targetKey),
-        );
-
-        if (
-            !record ||
-            typeof record.targetPath !== "string" ||
-            typeof record.hash !== "string" ||
-            !Array.isArray(record.modKeys)
-        ) {
-            return null;
-        }
-
-        return {
-            targetPath: record.targetPath,
-            hash: record.hash,
-            modKeys: record.modKeys.filter(
-                (modKey, index, modKeys): modKey is string =>
-                    typeof modKey === "string" && modKeys.indexOf(modKey) === index,
-            ),
-        };
-    }
-
-    private async writeShaderFixesTargetRecord(
-        targetKey: string,
-        record: ShaderFixesTargetRecord,
-    ): Promise<void> {
-        await this.writeAppStateJson(this.getShaderFixesTargetStateKey(targetKey), record);
-    }
-
-    private async deleteShaderFixesTargetRecord(targetKey: string): Promise<void> {
-        await this.deleteAppState(this.getShaderFixesTargetStateKey(targetKey));
     }
 
     private normalizeShaderFixesRelativePath(targetPath: string): string {
@@ -369,7 +341,10 @@ export class ModManager {
         return candidates;
     }
 
-    private async handleShaders(modPath: string, enable: boolean): Promise<string[]> {
+    private async handleShaders(
+        modPath: string,
+        enable: boolean,
+    ): Promise<ShaderFixesProcessedFile[]> {
         return await this.withShaderOperationLock(async () => {
             return await this.handleShadersLocked(modPath, enable);
         });
@@ -377,34 +352,31 @@ export class ModManager {
 
     private async rollbackEnabledShaders(
         modPath: string,
-        processedShaders: string[],
+        processedShaders: ShaderFixesProcessedFile[],
     ): Promise<void> {
         await this.withShaderOperationLock(async () => {
             let rollbackError: unknown = null;
-            try {
-                await this.handleShadersLocked(modPath, false);
-            } catch (error) {
-                rollbackError = error;
+
+            for (const file of [...processedShaders].reverse()) {
+                try {
+                    if (file.createdTarget && (await fse.pathExists(file.targetPath))) {
+                        const currentHash = await this.hashFile(file.targetPath);
+                        if (currentHash === file.hash) {
+                            await fse.remove(file.targetPath);
+                        }
+                    }
+                } catch (error) {
+                    rollbackError = error;
+                }
             }
 
-            if (processedShaders.length === 0) {
-                if (rollbackError) throw rollbackError;
-                return;
-            }
-
-            const globalShaderPath = await this.getGlobalShaderFixesPath(modPath);
-            if (!globalShaderPath) {
-                if (rollbackError) throw rollbackError;
-                return;
-            }
-
-            for (const file of processedShaders) {
-                const target = path.join(globalShaderPath, file);
-                const targetKey = this.getShaderFixesTargetKey(target);
-                const targetRecord = await this.readShaderFixesTargetRecord(targetKey);
-
-                if (!targetRecord) {
-                    await fse.remove(target);
+            const modKey =
+                processedShaders[0]?.modKey ?? (await this.getShaderFixesModKey(modPath));
+            if (modKey) {
+                try {
+                    await this.deleteShaderFixesModManifest(modPath);
+                } catch (error) {
+                    rollbackError = error;
                 }
             }
 
@@ -412,19 +384,23 @@ export class ModManager {
         });
     }
 
-    private async handleShadersLocked(modPath: string, enable: boolean): Promise<string[]> {
+    private async handleShadersLocked(
+        modPath: string,
+        enable: boolean,
+    ): Promise<ShaderFixesProcessedFile[]> {
         const shaderFiles = await this.getShaderFixesFileCandidates(modPath);
         if (shaderFiles.length === 0) return [];
 
         const globalShaderPath = await this.getGlobalShaderFixesPath(modPath);
         if (!globalShaderPath) return [];
 
-        const processedFiles: string[] = [];
+        const processedFiles: ShaderFixesProcessedFile[] = [];
 
         try {
             if (enable) {
                 const modKey = await this.getShaderFixesModKey(modPath, true);
                 const manifest: ShaderFixesModManifest = {
+                    version: SHADER_FIXES_MOD_MARKER_VERSION,
                     modKey,
                     files: [],
                 };
@@ -434,82 +410,59 @@ export class ModManager {
                     const target = path.join(globalShaderPath, file);
                     const hash = await this.hashFile(source);
                     const targetKey = this.getShaderFixesTargetKey(target);
-                    const targetRecord = await this.readShaderFixesTargetRecord(targetKey);
                     const targetExists = await fse.pathExists(target);
 
                     if (targetExists) {
                         const currentHash = await this.hashFile(target);
                         if (currentHash === hash) {
-                            await this.writeShaderFixesTargetRecord(targetKey, {
-                                targetPath: target,
-                                hash,
-                                modKeys:
-                                    targetRecord?.hash === hash
-                                        ? Array.from(new Set([...targetRecord.modKeys, modKey]))
-                                        : [modKey],
-                            });
-                            manifest.files.push({ file, targetPath: target, targetKey, hash });
-                            await this.writeShaderFixesModManifest(manifest);
+                            const manifestFile = { file, targetPath: target, targetKey, hash };
+                            manifest.files.push(manifestFile);
+                            processedFiles.push({ ...manifestFile, modKey, createdTarget: false });
+                            await this.writeShaderFixesModManifest(modPath, manifest);
                         }
                         continue;
                     }
 
-                    processedFiles.push(file);
                     await fse.copy(source, target);
-                    await this.writeShaderFixesTargetRecord(targetKey, {
-                        targetPath: target,
-                        hash,
-                        modKeys:
-                            targetRecord?.hash === hash
-                                ? Array.from(new Set([...targetRecord.modKeys, modKey]))
-                                : [modKey],
-                    });
-                    manifest.files.push({ file, targetPath: target, targetKey, hash });
-                    await this.writeShaderFixesModManifest(manifest);
+                    const manifestFile = { file, targetPath: target, targetKey, hash };
+                    manifest.files.push(manifestFile);
+                    processedFiles.push({ ...manifestFile, modKey, createdTarget: true });
+                    await this.writeShaderFixesModManifest(modPath, manifest);
                 }
 
                 if (manifest.files.length > 0) {
-                    await this.writeShaderFixesModManifest(manifest);
+                    await this.writeShaderFixesModManifest(modPath, manifest);
                 } else {
-                    await this.deleteShaderFixesModManifest(modKey);
-                    await this.deleteShaderFixesModMarker(modPath);
+                    await this.deleteShaderFixesModManifest(modPath);
                 }
             } else {
                 const modKey = await this.getShaderFixesModKey(modPath);
                 if (!modKey) return [];
 
-                const manifest = await this.readShaderFixesModManifest(modKey);
+                const manifest = await this.readShaderFixesModManifest(modPath);
                 if (!manifest) {
-                    await this.deleteShaderFixesModMarker(modPath);
+                    await this.deleteShaderFixesModManifest(modPath);
                     return [];
                 }
 
                 for (const file of manifest.files) {
-                    const targetRecord = await this.readShaderFixesTargetRecord(file.targetKey);
-                    if (targetRecord) {
-                        const nextModKeys = targetRecord.modKeys.filter((key) => key !== modKey);
-                        if (nextModKeys.length > 0) {
-                            await this.writeShaderFixesTargetRecord(file.targetKey, {
-                                ...targetRecord,
-                                modKeys: nextModKeys,
-                            });
-                            continue;
-                        }
-                    }
+                    const hasOtherOwner = await this.hasOtherShaderFixesOwner(
+                        modPath,
+                        modKey,
+                        file.targetKey,
+                    );
+                    if (hasOtherOwner) continue;
 
                     if (await fse.pathExists(file.targetPath)) {
                         const currentHash = await this.hashFile(file.targetPath);
                         if (currentHash === file.hash) {
-                            processedFiles.push(file.file);
+                            processedFiles.push({ ...file, modKey, createdTarget: true });
                             await fse.remove(file.targetPath);
                         }
                     }
-
-                    await this.deleteShaderFixesTargetRecord(file.targetKey);
                 }
 
-                await this.deleteShaderFixesModManifest(modKey);
-                await this.deleteShaderFixesModMarker(modPath);
+                await this.deleteShaderFixesModManifest(modPath);
             }
         } catch (err) {
             const shaderError = err instanceof Error ? err : new Error(String(err));
@@ -955,7 +908,7 @@ export class ModManager {
 
             if (DISABLED_PREFIX_REGEX.test(folderName)) {
                 const baseFolderName = trim(folderName.replace(DISABLED_PREFIX_REGEX, ""));
-                let processedShaders: string[] = [];
+                let processedShaders: ShaderFixesProcessedFile[] = [];
                 const copyShaderFixes = await this.desktop.setting.mod.getCopyShaderFixesOnEnable();
                 try {
                     if (copyShaderFixes) {
@@ -964,7 +917,8 @@ export class ModManager {
                     return await this.renameWithUniqueName(modPath, baseFolderName);
                 } catch (err) {
                     processedShaders =
-                        (err as { processedFiles?: string[] }).processedFiles ?? processedShaders;
+                        (err as { processedFiles?: ShaderFixesProcessedFile[] }).processedFiles ??
+                        processedShaders;
                     if (copyShaderFixes) {
                         try {
                             await this.rollbackEnabledShaders(modPath, processedShaders);
