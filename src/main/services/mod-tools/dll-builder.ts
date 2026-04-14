@@ -11,6 +11,20 @@ import type { NahidaDesktop } from "@/main";
 
 const execAsync = promisify(exec);
 
+type ExecBuildError = Error & {
+    code?: number | string;
+    signal?: NodeJS.Signals;
+    stdout?: string | Buffer;
+    stderr?: string | Buffer;
+};
+
+type BuildD3DResult = {
+    success: boolean;
+    errorMessage?: string;
+};
+
+const TARGET_DLL_NAME = "d3d11.dll";
+
 export class DllBuilder {
     private readonly VS_EDITIONS = ["Community", "Professional", "Enterprise", "Insiders"];
     private readonly VS_VERSIONS = ["2025", "2022", "18", "17"];
@@ -18,6 +32,7 @@ export class DllBuilder {
 
     private isBuilding = false;
     private currentProgress = "";
+    private currentErrorMessage = "";
 
     private releasesCache: Record<string, string[]> = {
         SpectrumQT: ["master"],
@@ -34,6 +49,7 @@ export class DllBuilder {
         return {
             isBuilding: this.isBuilding,
             progress: this.currentProgress,
+            errorMessage: this.currentErrorMessage,
         };
     }
 
@@ -101,8 +117,9 @@ export class DllBuilder {
         return this.releasesCache[provider] || ["master"];
     }
 
-    private updateProgress(code: string) {
+    private updateProgress(code: string, errorMessage = "") {
         this.currentProgress = code;
+        this.currentErrorMessage = errorMessage;
         this.desktop.ipc.broadcast("tools:progress", code);
     }
 
@@ -116,9 +133,9 @@ export class DllBuilder {
         version: string;
         importerKey: string;
         importerPath?: string;
-    }) {
+    }): Promise<BuildD3DResult> {
         if (this.isBuilding) {
-            return false;
+            return { success: false };
         }
 
         this.isBuilding = true;
@@ -126,7 +143,22 @@ export class DllBuilder {
         if (!importerPath || !(await fse.pathExists(importerPath))) {
             this.updateProgress("XXMI_ERR_GIMI_NOT_FOUND");
             this.isBuilding = false;
-            return false;
+            return { success: false };
+        }
+
+        const finalDestination = path.join(importerPath, TARGET_DLL_NAME);
+        const destinationCheck = await this.desktop.lib.fs.isPathWritable(
+            finalDestination,
+            { detailed: true, parentPath: importerPath },
+        );
+        if (!destinationCheck.writable) {
+            const errorCode = destinationCheck.locked
+                ? "XXMI_ERR_DLL_IN_USE"
+                : "XXMI_ERR_DLL_NOT_WRITABLE";
+            const errorMessage = this.desktop.lib.fs.formatProcessList(destinationCheck.processes);
+            this.updateProgress(errorCode, errorMessage);
+            this.isBuilding = false;
+            return { success: false, errorMessage };
         }
 
         this.updateProgress("XXMI_FIND_VS");
@@ -134,7 +166,7 @@ export class DllBuilder {
         if (!vcvarsPath) {
             this.updateProgress("XXMI_ERR_VS_NOT_FOUND");
             this.isBuilding = false;
-            return false;
+            return { success: false };
         }
 
         const tempDir = path.join(os.tmpdir(), "nahida-tools-d3d-build");
@@ -150,18 +182,28 @@ export class DllBuilder {
             const buildSuccess = await this.executeMsBuild(vcvarsPath, projectPath);
             if (!buildSuccess) {
                 this.isBuilding = false;
-                return false;
+                return { success: false };
             }
 
-            const builtDllPath = path.join(projectPath, "x64", "Release", "d3d11.dll");
+            const builtDllPath = path.join(projectPath, "x64", "Release", TARGET_DLL_NAME);
             if (!(await fse.pathExists(builtDllPath))) {
                 this.updateProgress("XXMI_ERR_DLL_NOT_FOUND");
                 this.isBuilding = false;
-                return false;
+                return { success: false };
             }
 
-            const finalDestination = path.join(importerPath, "d3d11.dll");
-            await fse.copy(builtDllPath, finalDestination, { overwrite: true });
+            try {
+                await fse.copy(builtDllPath, finalDestination, { overwrite: true });
+            } catch (error) {
+                const lockInfo = await this.desktop.lib.fs.isLockedPathError(error, finalDestination);
+                if (lockInfo.isLocked) {
+                    const errorMessage = this.desktop.lib.fs.formatProcessList(lockInfo.processes);
+                    this.updateProgress("XXMI_ERR_DLL_IN_USE", errorMessage);
+                    this.isBuilding = false;
+                    return { success: false, errorMessage };
+                }
+                throw error;
+            }
 
             const xxmiPath = await this.desktop.service.xxmi.getXXMIPath();
             if (xxmiPath) {
@@ -175,12 +217,13 @@ export class DllBuilder {
             );
 
             this.isBuilding = false;
-            return true;
+            return { success: true };
         } catch (error) {
             this.desktop.logger.error(error, "DllBuilder:buildNewD3DDLL");
-            this.updateProgress("XXMI_ERR_BUILD_FAILED");
+            const errorMessage = this.extractBuildErrorMessage(error);
+            this.updateProgress("XXMI_ERR_BUILD_FAILED", errorMessage);
             this.isBuilding = false;
-            return false;
+            return { success: false, errorMessage };
         } finally {
             await fse.remove(tempDir).catch(() => {});
         }
@@ -262,14 +305,70 @@ export class DllBuilder {
     }
 
     private async executeMsBuild(vcvarsPath: string, projectPath: string): Promise<boolean> {
-        const buildCommand = `"${vcvarsPath}" && cd /d "${projectPath}" && msbuild StereovisionHacks.sln /p:Configuration=Release /p:Platform=x64`;
+        const buildCommand = [
+            `"${vcvarsPath}"`,
+            `cd /d "${projectPath}"`,
+            "msbuild StereovisionHacks.sln /nologo /verbosity:minimal /consoleloggerparameters:ErrorsOnly /p:Configuration=Release /p:Platform=x64",
+        ].join(" && ");
 
         try {
-            await execAsync(buildCommand);
+            await execAsync(buildCommand, { maxBuffer: 1024 * 1024 * 20 });
             return true;
         } catch (e) {
-            throw new Error(`Build failed: ${(e as Error).message}`);
+            const error = e as ExecBuildError;
+            const stderr = this.formatBuildOutput(error.stderr);
+            const stdout = this.formatBuildOutput(error.stdout);
+            const details = [
+                `Build failed: ${error.message}`,
+                `Command: ${buildCommand}`,
+                `Project path: ${projectPath}`,
+                `Exit code: ${error.code ?? "unknown"}`,
+                `Signal: ${error.signal ?? "none"}`,
+                stderr ? `stderr:\n${stderr}` : "stderr: <empty>",
+                stdout ? `stdout:\n${stdout}` : "stdout: <empty>",
+            ];
+
+            throw new Error(details.join("\n"));
         }
+    }
+
+    private formatBuildOutput(output?: string | Buffer): string {
+        if (!output) {
+            return "";
+        }
+
+        const text = Buffer.isBuffer(output) ? output.toString("utf8") : output;
+        const trimmed = text.trim();
+        if (!trimmed) {
+            return "";
+        }
+
+        const lines = trimmed.split(/\r?\n/);
+        const maxLines = 120;
+        const omitted = lines.length - maxLines;
+        const tail = omitted > 0 ? lines.slice(-maxLines) : lines;
+
+        return omitted > 0
+            ? `[showing last ${maxLines} lines, omitted ${omitted} earlier lines]\n${tail.join("\n")}`
+            : tail.join("\n");
+    }
+
+    private extractBuildErrorMessage(error: unknown): string {
+        const message = error instanceof Error ? error.message : String(error);
+        const lines = message
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean);
+        const errorLines = lines.filter((line) => /\berror\s+[A-Z]+\d+:/i.test(line));
+
+        if (errorLines.length > 0) {
+            return errorLines.slice(0, 12).join("\n");
+        }
+
+        const outputIndex = lines.findIndex((line) => line === "stdout:" || line === "stderr:");
+        const fallbackLines = outputIndex >= 0 ? lines.slice(outputIndex + 1) : lines;
+
+        return fallbackLines.slice(-12).join("\n");
     }
 
     private async generateUnsafeModeSignature(xxmiPath: string) {

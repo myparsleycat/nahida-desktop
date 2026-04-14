@@ -379,6 +379,8 @@
           "XXMI_ERR_VS_NOT_FOUND": "Visual Studio 環境 (vcvars64.bat) が見つかりません。C++ ビルドツールがインストールされていることを確認してください。",
           "XXMI_BUILDING": "D3D11 DLL をビルド中...",
           "XXMI_ERR_DLL_NOT_FOUND": "ビルドされた d3d11.dll ファイルが見つかりません。",
+          "XXMI_ERR_DLL_NOT_WRITABLE": "対象 Importer に d3d11.dll を書き込めません。フォルダーの権限を確認してください。",
+          "XXMI_ERR_DLL_IN_USE": "d3d11.dll を置き換えられません。先にゲームを終了してからもう一度お試しください。",
           "XXMI_BUILD_SUCCESS": "d3d11.dll が正常に適用されました。",
           "XXMI_ERR_BUILD_FAILED": "ビルド中に予期しないエラーが発生しました。",
           "XXMI_DOWNLOAD_REPO": "XXMI ソースコードをダウンロード中...",

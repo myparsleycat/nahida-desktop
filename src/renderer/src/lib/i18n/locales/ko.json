@@ -378,6 +378,8 @@
           "XXMI_ERR_VS_NOT_FOUND": "Visual Studio 환경(vcvars64.bat)을 찾을 수 없습니다. C++ 빌드 도구가 설치되어 있는지 확인하세요.",
           "XXMI_BUILDING": "D3D11 DLL 빌드 중...",
           "XXMI_ERR_DLL_NOT_FOUND": "빌드된 d3d11.dll 파일을 찾을 수 없습니다.",
+          "XXMI_ERR_DLL_NOT_WRITABLE": "대상 Importer에 d3d11.dll을 쓸 수 없습니다. 폴더 권한을 확인하세요.",
+          "XXMI_ERR_DLL_IN_USE": "d3d11.dll을 교체할 수 없습니다. 게임을 먼저 종료한 뒤 다시 시도하세요.",
           "XXMI_BUILD_SUCCESS": "d3d11.dll이 성공적으로 적용되었습니다.",
           "XXMI_ERR_BUILD_FAILED": "빌드 중 예기치 않은 오류가 발생했습니다.",
           "XXMI_DOWNLOAD_REPO": "XXMI 소스 코드 다운로드 중...",

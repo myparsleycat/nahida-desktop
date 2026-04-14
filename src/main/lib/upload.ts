@@ -13,6 +13,7 @@ import Piscina from "piscina";
 import type { NahidaDesktop } from "..";
 
 const CHUNK_SIZE = 100;
+const UPLOAD_STREAM_CHUNK_SIZE = 64 * 1024;
 
 export type FilesComponent = {
     FID: string;
@@ -68,6 +69,7 @@ export type UploadParams = {
 export class UploadLib {
     private readonly desktop: NahidaDesktop;
     private readonly fileQueue: PQueue = new PQueue({ concurrency: 8 });
+    private readonly textEncoder = new TextEncoder();
 
     public constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
@@ -278,38 +280,53 @@ export class UploadLib {
     }) {
         const uploadUrl = eden2url.akasha.file.upload.url();
 
-        const formData = new FormData();
-        formData.append(
-            "file",
-            fileToUpload instanceof Blob ? fileToUpload : new Blob([new Uint8Array(fileToUpload)]),
-            name,
-        );
-        formData.append("sha256", sha256);
-        formData.append("key", key);
-        formData.append("name", name);
-        if (part) formData.append("part", part);
-        if (compAlg) formData.append("comp-alg", compAlg);
-        if (parentId) formData.append("parent", parentId);
+        const boundary = `----nahida-desktop-${nanoid()}`;
+        const fields: Array<[string, string]> = [
+            ["sha256", sha256],
+            ["key", key],
+            ["name", name],
+        ];
+        if (part) fields.push(["part", part]);
+        if (compAlg) fields.push(["comp-alg", compAlg]);
+        if (parentId) fields.push(["parent", parentId]);
 
         let lastTransferredBytes = 0;
+        const normalizedFile =
+            fileToUpload instanceof Blob
+                ? new Uint8Array(await fileToUpload.arrayBuffer())
+                : new Uint8Array(fileToUpload);
+        const multipart = this.createMultipartUploadBody({
+            boundary,
+            fields,
+            file: normalizedFile,
+            filename: name,
+            onProgress: (bytes) => {
+                lastTransferredBytes += bytes;
+                onProgress?.(bytes);
+            },
+        });
 
         try {
             const response = await ky.post(uploadUrl, {
-                body: formData,
-                headers: await this.desktop.httpService.getHeaders(uploadUrl),
+                body: multipart.body,
+                headers: {
+                    ...(await this.desktop.httpService.getHeaders(uploadUrl)),
+                    "Content-Type": `multipart/form-data; boundary=${boundary}`,
+                    "Content-Length": String(multipart.contentLength),
+                },
                 signal,
                 throwHttpErrors: false,
                 timeout: 100000,
-                onUploadProgress: (progress) => {
-                    if (onProgress) {
-                        const incremental = progress.transferredBytes - lastTransferredBytes;
-                        lastTransferredBytes = progress.transferredBytes;
-                        if (incremental > 0) {
-                            onProgress(incremental);
-                        }
-                    }
+                // @ts-expect-error - duplex is required by Node/undici for streaming request bodies.
+                duplex: "half",
+                hooks: {
+                    beforeRequest: [
+                        () => {
+                            lastTransferredBytes = 0;
+                        },
+                    ],
                 },
-                // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
+                // @ts-ignore - dispatcher is not in the type definition, but it's passed through to fetch.
                 dispatcher: await this.desktop.httpService.getAgent(),
             });
 
@@ -324,6 +341,87 @@ export class UploadLib {
             }
             throw error;
         }
+    }
+
+    private createMultipartUploadBody({
+        boundary,
+        fields,
+        file,
+        filename,
+        onProgress,
+    }: {
+        boundary: string;
+        fields: Array<[string, string]>;
+        file: Uint8Array;
+        filename: string;
+        onProgress?: (bytes: number) => void;
+    }) {
+        const encode = (value: string) => this.textEncoder.encode(value);
+        const escapeHeaderValue = (value: string) =>
+            value
+                .replaceAll("\\", "\\\\")
+                .replaceAll('"', '\\"')
+                .replaceAll("\r", "")
+                .replaceAll("\n", "");
+
+        const fieldParts: Uint8Array[] = [];
+        for (const [fieldName, fieldValue] of fields) {
+            fieldParts.push(
+                encode(
+                    `\r\n--${boundary}\r\nContent-Disposition: form-data; name="${escapeHeaderValue(fieldName)}"\r\n\r\n${fieldValue}`,
+                ),
+            );
+        }
+
+        const fileHeader = encode(
+            `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${escapeHeaderValue(filename)}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+        );
+        const fileFooter = encode(`\r\n--${boundary}--\r\n`);
+        const contentLength =
+            fieldParts.reduce((total, part) => total + part.byteLength, 0) +
+            fileHeader.byteLength +
+            file.byteLength +
+            fileFooter.byteLength;
+
+        let fieldIndex = 0;
+        let fileOffset = 0;
+        let sentFileHeader = false;
+        let sentFileFooter = false;
+
+        const body = new ReadableStream<Uint8Array>({
+            pull(controller) {
+                if (!sentFileHeader) {
+                    controller.enqueue(fileHeader);
+                    sentFileHeader = true;
+                    return;
+                }
+
+                if (fileOffset < file.byteLength) {
+                    const end = Math.min(fileOffset + UPLOAD_STREAM_CHUNK_SIZE, file.byteLength);
+                    const chunk = file.subarray(fileOffset, end);
+                    fileOffset = end;
+                    controller.enqueue(chunk);
+                    onProgress?.(chunk.byteLength);
+                    return;
+                }
+
+                if (fieldIndex < fieldParts.length) {
+                    controller.enqueue(fieldParts[fieldIndex]);
+                    fieldIndex++;
+                    return;
+                }
+
+                if (!sentFileFooter) {
+                    controller.enqueue(fileFooter);
+                    sentFileFooter = true;
+                    return;
+                }
+
+                controller.close();
+            },
+        });
+
+        return { body, contentLength };
     }
 
     private async uploadLargeFile(
@@ -418,6 +516,33 @@ export class UploadLib {
 
         const compAlg = zstdFile ? "zstd" : undefined;
         let fileToUpload: Buffer = zstdFile || fileBuffer;
+        let uploadedPayloadBytes = 0;
+        let reportedOriginalBytes = 0;
+        const reportOriginalFileProgress = (bytes: number) => {
+            if (!onProgress) return;
+
+            if (bytes < 0) {
+                uploadedPayloadBytes = 0;
+                if (reportedOriginalBytes > 0) {
+                    onProgress(-reportedOriginalBytes);
+                    reportedOriginalBytes = 0;
+                }
+                return;
+            }
+
+            uploadedPayloadBytes += bytes;
+            const payloadSize = Math.max(1, fileToUpload.byteLength);
+            const targetOriginalBytes = Math.min(
+                file.size,
+                Math.floor((uploadedPayloadBytes / payloadSize) * file.size),
+            );
+            const incremental = targetOriginalBytes - reportedOriginalBytes;
+
+            if (incremental > 0) {
+                reportedOriginalBytes = targetOriginalBytes;
+                onProgress(incremental);
+            }
+        };
 
         await retry(
             async () => {
@@ -430,7 +555,7 @@ export class UploadLib {
                     fileToUpload,
                     compAlg,
                     signal,
-                    onProgress,
+                    onProgress: reportOriginalFileProgress,
                 });
 
                 if (!response.ok) {

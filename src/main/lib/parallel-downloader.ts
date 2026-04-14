@@ -1,5 +1,5 @@
 // oxlint-disable typescript/no-explicit-any
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { retry } from "es-toolkit";
 import fse from "fs-extra";
@@ -111,8 +111,6 @@ export class ParallelDownloader {
         onProgress?: (transferredBytes: number, incrementalBytes: number) => void;
         preservePartialOnAbort?: () => boolean;
     }): Promise<void> {
-        let lastTransferredBytes = 0;
-
         const requestHeaders: Record<string, string> = {
             Range: `bytes=${start}-${end}`,
             ...headers,
@@ -126,15 +124,6 @@ export class ParallelDownloader {
             signal,
             throwHttpErrors: false,
             timeout: 100000,
-            onDownloadProgress: (progress) => {
-                if (onProgress) {
-                    const incremental = progress.transferredBytes - lastTransferredBytes;
-                    lastTransferredBytes = progress.transferredBytes;
-                    if (incremental > 0) {
-                        onProgress(progress.transferredBytes, incremental);
-                    }
-                }
-            },
             // @ts-expect-error
             dispatcher: await this.options.getAgent(),
         });
@@ -146,8 +135,19 @@ export class ParallelDownloader {
         if (!response.body) throw new Error("No response body");
 
         const fileStream = fse.createWriteStream(chunkPath);
+        let transferredBytes = 0;
+        const progressStream = new Transform({
+            transform(chunk: Buffer, _encoding, callback) {
+                transferredBytes += chunk.byteLength;
+                onProgress?.(transferredBytes, chunk.byteLength);
+                callback(null, chunk);
+            },
+        });
+
         try {
-            await pipeline(Readable.fromWeb(response.body as any), fileStream, { signal });
+            await pipeline(Readable.fromWeb(response.body as any), progressStream, fileStream, {
+                signal,
+            });
         } catch (pipeErr) {
             fileStream.destroy();
             if (!preservePartialOnAbort?.()) {
@@ -187,10 +187,14 @@ export class ParallelDownloader {
                 fileStream.on("error", reject);
             });
 
-            await Promise.all(orderedSegments.map((segment) => fse.remove(segment.chunkPath).catch(() => {})));
+            await Promise.all(
+                orderedSegments.map((segment) => fse.remove(segment.chunkPath).catch(() => {})),
+            );
         } catch (err) {
             fileStream.destroy();
-            await Promise.all(orderedSegments.map((segment) => fse.remove(segment.chunkPath).catch(() => {})));
+            await Promise.all(
+                orderedSegments.map((segment) => fse.remove(segment.chunkPath).catch(() => {})),
+            );
             throw err;
         }
     }
@@ -288,9 +292,10 @@ export class ParallelDownloader {
             return;
         }
 
-        const midpoint = remainingBytes >= this.minSegmentSize * 2
-            ? remainingStart + Math.ceil(remainingBytes / 2) - 1
-            : originalEnd;
+        const midpoint =
+            remainingBytes >= this.minSegmentSize * 2
+                ? remainingStart + Math.ceil(remainingBytes / 2) - 1
+                : originalEnd;
 
         const newRanges =
             midpoint < originalEnd
@@ -331,9 +336,7 @@ export class ParallelDownloader {
         const targetPath = `${savePath}.ntmp`;
 
         let concurrency =
-            maxChunks && maxChunks > 0
-                ? maxChunks
-                : this.calculateChunkCount(fileSize, maxChunks);
+            maxChunks && maxChunks > 0 ? maxChunks : this.calculateChunkCount(fileSize, maxChunks);
         const chunkSize =
             options.chunkSize && options.chunkSize > 0
                 ? options.chunkSize
@@ -469,7 +472,11 @@ export class ParallelDownloader {
                             retries: 2,
                             delay: (attempt) => 2 ** attempt * 1000,
                             shouldRetry: (err: any) =>
-                                !(err.name === "AbortError" || signal?.aborted || segment.splitRequested),
+                                !(
+                                    err.name === "AbortError" ||
+                                    signal?.aborted ||
+                                    segment.splitRequested
+                                ),
                             signal,
                         },
                     );

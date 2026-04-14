@@ -30,6 +30,7 @@ export default function D3D11Builder() {
 
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState("");
+  const [buildErrorMessage, setBuildErrorMessage] = useState("");
   const [isUpdating, setIsUpdating] = useState(true);
 
   useEffect(() => {
@@ -47,6 +48,7 @@ export default function D3D11Builder() {
               : state.progress
             : "",
         );
+        setBuildErrorMessage(state.errorMessage || "");
       }
     });
 
@@ -62,6 +64,9 @@ export default function D3D11Builder() {
 
     const removeListener = window.api.on("tools:progress", (code: string) => {
       setProgress(code);
+      if (!code.startsWith("XXMI_ERR_")) {
+        setBuildErrorMessage("");
+      }
       if (code === "XXMI_BUILD_SUCCESS" || code.startsWith("XXMI_ERR_")) {
         setIsRunning(false);
       }
@@ -96,6 +101,7 @@ export default function D3D11Builder() {
 
     setIsRunning(true);
     setProgress("XXMI_INIT");
+    setBuildErrorMessage("");
     try {
       const result = await window.api.invoke("tools:buildNewD3DDLL", {
         provider,
@@ -103,12 +109,14 @@ export default function D3D11Builder() {
         importerKey: selectedImporterKey,
         importerPath: selectedImporter,
       });
-      if (result === false) {
+      if (result?.success === false) {
+        setBuildErrorMessage(result && typeof result === "object" ? result.errorMessage || "" : "");
         setIsRunning(false);
       }
     } catch (e) {
       console.error(e);
       setProgress(`Error: ${e}`);
+      setBuildErrorMessage(e instanceof Error ? e.message : String(e));
       setIsRunning(false);
     }
   };
@@ -214,23 +222,30 @@ export default function D3D11Builder() {
             className={`flex items-center gap-2 text-sm font-medium animate-in fade-in ${progress.includes("ERR") || progress.includes("Error") ? "text-destructive" : "text-muted-foreground"}`}
           >
             {isRunning ? (
-              <Loader2Icon className="size-5 animate-spin" />
+              <Loader2Icon className="size-5 shrink-0 animate-spin" />
             ) : progress.includes("ERR") || progress.includes("Error") ? (
-              <CircleXIcon className="size-5" />
+              <CircleXIcon className="size-5 shrink-0" />
             ) : progress.includes("SUCCESS") ? (
-              <CircleCheckIcon className="size-5" />
+              <CircleCheckIcon className="size-5 shrink-0" />
             ) : null}
 
-            <p>
-              {progress.startsWith("XXMI_") || progress.startsWith("page.tools.")
-                ? t(
-                    progress.startsWith("page.tools.")
-                      ? progress
-                      : `page.tools.d3d11_builder.progress.${progress}`,
-                    progress,
-                  )
-                : progress}
-            </p>
+            <div className="min-w-0">
+              <p>
+                {progress.startsWith("XXMI_") || progress.startsWith("page.tools.")
+                  ? t(
+                      progress.startsWith("page.tools.")
+                        ? progress
+                        : `page.tools.d3d11_builder.progress.${progress}`,
+                      progress,
+                    )
+                  : progress}
+              </p>
+              {buildErrorMessage && (
+                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap wrap-break-word rounded border bg-muted/40 p-2 text-xs font-mono text-destructive">
+                  {buildErrorMessage}
+                </pre>
+              )}
+            </div>
           </div>
         </div>
       )}
