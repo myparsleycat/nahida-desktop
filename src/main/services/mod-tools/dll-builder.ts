@@ -23,6 +23,8 @@ type BuildD3DResult = {
     errorMessage?: string;
 };
 
+const TARGET_DLL_NAME = "d3d11.dll";
+
 export class DllBuilder {
     private readonly VS_EDITIONS = ["Community", "Professional", "Enterprise", "Insiders"];
     private readonly VS_VERSIONS = ["2025", "2022", "18", "17"];
@@ -144,6 +146,21 @@ export class DllBuilder {
             return { success: false };
         }
 
+        const finalDestination = path.join(importerPath, TARGET_DLL_NAME);
+        const destinationCheck = await this.desktop.lib.fs.isPathWritable(
+            finalDestination,
+            { detailed: true, parentPath: importerPath },
+        );
+        if (!destinationCheck.writable) {
+            const errorCode = destinationCheck.locked
+                ? "XXMI_ERR_DLL_IN_USE"
+                : "XXMI_ERR_DLL_NOT_WRITABLE";
+            const errorMessage = this.desktop.lib.fs.formatProcessList(destinationCheck.processes);
+            this.updateProgress(errorCode, errorMessage);
+            this.isBuilding = false;
+            return { success: false, errorMessage };
+        }
+
         this.updateProgress("XXMI_FIND_VS");
         const vcvarsPath = await this.findVsDevCmd();
         if (!vcvarsPath) {
@@ -168,15 +185,25 @@ export class DllBuilder {
                 return { success: false };
             }
 
-            const builtDllPath = path.join(projectPath, "x64", "Release", "d3d11.dll");
+            const builtDllPath = path.join(projectPath, "x64", "Release", TARGET_DLL_NAME);
             if (!(await fse.pathExists(builtDllPath))) {
                 this.updateProgress("XXMI_ERR_DLL_NOT_FOUND");
                 this.isBuilding = false;
                 return { success: false };
             }
 
-            const finalDestination = path.join(importerPath, "d3d11.dll");
-            await fse.copy(builtDllPath, finalDestination, { overwrite: true });
+            try {
+                await fse.copy(builtDllPath, finalDestination, { overwrite: true });
+            } catch (error) {
+                const lockInfo = await this.desktop.lib.fs.isLockedPathError(error, finalDestination);
+                if (lockInfo.isLocked) {
+                    const errorMessage = this.desktop.lib.fs.formatProcessList(lockInfo.processes);
+                    this.updateProgress("XXMI_ERR_DLL_IN_USE", errorMessage);
+                    this.isBuilding = false;
+                    return { success: false, errorMessage };
+                }
+                throw error;
+            }
 
             const xxmiPath = await this.desktop.service.xxmi.getXXMIPath();
             if (xxmiPath) {

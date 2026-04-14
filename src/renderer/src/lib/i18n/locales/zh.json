@@ -378,6 +378,8 @@
           "XXMI_ERR_VS_NOT_FOUND": "未找到 Visual Studio 环境 (vcvars64.bat)。请确认已安装 C++ 构建工具。",
           "XXMI_BUILDING": "正在构建 D3D11 DLL...",
           "XXMI_ERR_DLL_NOT_FOUND": "未找到已构建的 d3d11.dll 文件。",
+          "XXMI_ERR_DLL_NOT_WRITABLE": "无法将 d3d11.dll 写入目标 Importer。请检查文件夹权限。",
+          "XXMI_ERR_DLL_IN_USE": "无法替换 d3d11.dll。请先关闭游戏，然后重试。",
           "XXMI_BUILD_SUCCESS": "d3d11.dll 已成功应用。",
           "XXMI_ERR_BUILD_FAILED": "构建过程中发生意外错误。",
           "XXMI_DOWNLOAD_REPO": "正在下载 XXMI 源代码...",

@@ -398,6 +398,8 @@
           "XXMI_ERR_VS_NOT_FOUND": "Could not find the Visual Studio environment (vcvars64.bat). Please make sure the C++ build tools are installed.",
           "XXMI_BUILDING": "Building D3D11 DLL...",
           "XXMI_ERR_DLL_NOT_FOUND": "Could not find the built d3d11.dll file.",
+          "XXMI_ERR_DLL_NOT_WRITABLE": "Cannot write d3d11.dll to the target Importer. Check the folder permissions.",
+          "XXMI_ERR_DLL_IN_USE": "Cannot replace d3d11.dll. Close the game first, then try again.",
           "XXMI_BUILD_SUCCESS": "d3d11.dll was applied successfully.",
           "XXMI_ERR_BUILD_FAILED": "An unexpected error occurred during the build.",
           "XXMI_DOWNLOAD_REPO": "Downloading XXMI source code...",
