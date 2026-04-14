@@ -6,6 +6,7 @@ import type { ArchiveExtractPathMode, ResolvedArchiveExtractPathMode } from "@sh
 import type { TransferData } from "@shared/types.gen";
 import { Notification } from "electron";
 import { throttle } from "es-toolkit";
+import { fileTypeFromFile } from "file-type";
 import fse from "fs-extra";
 import ky from "ky";
 import { nanoid } from "nanoid";
@@ -239,8 +240,41 @@ export class CustomDownloader {
         return archiveExt ?? (path.extname(fileName) || ".download");
     }
 
-    private isArchiveFile(filePath: string) {
-        return /\.(zip|7z|rar)$/i.test(filePath);
+    private isArchiveFileName(fileName: string) {
+        return /\.(zip|7z|rar)$/i.test(fileName);
+    }
+
+    private async isArchiveByResponseOrContent(props: {
+        headers?: Headers;
+        originalFileName?: string;
+        filePath: string;
+    }) {
+        const { headers, originalFileName, filePath } = props;
+        const archiveExts = new Set(["zip", "7z", "rar"]);
+        const archiveMimes = new Set([
+            "application/zip",
+            "application/x-zip-compressed",
+            "application/x-7z-compressed",
+            "application/vnd.rar",
+            "application/x-rar-compressed",
+        ]);
+
+        if (originalFileName && this.isArchiveFileName(originalFileName)) {
+            return true;
+        }
+
+        const contentDisposition = headers?.get("Content-Disposition");
+        if (contentDisposition && this.isArchiveFileName(contentDisposition)) {
+            return true;
+        }
+
+        const contentType = headers?.get("Content-Type")?.split(";")[0]?.trim().toLowerCase();
+        if (contentType && archiveMimes.has(contentType)) {
+            return true;
+        }
+
+        const fileType = await fileTypeFromFile(filePath);
+        return !!fileType && archiveExts.has(fileType.ext);
     }
 
     private async replaceGroupWithStaging(groupPath: string, stagingPath: string) {
@@ -371,7 +405,11 @@ export class CustomDownloader {
                 if (abortController.signal.aborted) throw new Error("Aborted");
 
                 await fse.ensureDir(stagingPath);
-                const shouldExtract = this.isArchiveFile(savePath);
+                const shouldExtract = await this.isArchiveByResponseOrContent({
+                    headers: resp.headers,
+                    originalFileName: suggestedFileName,
+                    filePath: savePath,
+                });
                 const extractedPath = shouldExtract
                     ? await this.extractDownloadedArchive(savePath, stagingPath)
                     : path.join(stagingPath, suggestedFileName);
@@ -452,8 +490,10 @@ export class CustomDownloader {
 
         const realFileUrl = resp.url;
         const fileSize = this.parseContentLength(resp.headers.get("Content-Length"));
-        const fileName = realFileUrl.split("/").pop()?.split("?")[0] || "";
-        const suggestedFileName = this.desktop.lib.fs.sanitizeWindowsFilename(fileName);
+        const suggestedFileName = this.parseDownloadFileName(
+            realFileUrl,
+            resp.headers.get("Content-Disposition"),
+        );
 
         const result =
             await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(suggestedFileName);
@@ -521,7 +561,11 @@ export class CustomDownloader {
 
                 if (abortController.signal.aborted) throw new Error("Aborted");
 
-                const shouldExtract = this.isArchiveFile(savePath);
+                const shouldExtract = await this.isArchiveByResponseOrContent({
+                    headers: resp.headers,
+                    originalFileName: suggestedFileName,
+                    filePath: savePath,
+                });
                 const finalPath = shouldExtract ? await this.extractGBArchive(savePath) : savePath;
 
                 let previewPromise: Promise<void> | null = null;
@@ -661,7 +705,16 @@ export class CustomDownloader {
 
                 if (abortController.signal.aborted) throw new Error("Aborted");
 
-                if (this.isArchiveFile(savePath)) {
+                const shouldExtract = await this.isArchiveByResponseOrContent({
+                    headers: resp.headers,
+                    originalFileName: this.parseDownloadFileName(
+                        resp.url || fileUrl,
+                        resp.headers.get("Content-Disposition"),
+                    ),
+                    filePath: savePath,
+                });
+
+                if (shouldExtract) {
                     await this.desktop.service.archive.extract(savePath, path.dirname(savePath));
                     await fse.rm(savePath, { force: true });
                 }
