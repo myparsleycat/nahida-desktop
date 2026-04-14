@@ -1,5 +1,7 @@
 import path from "node:path";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import type { ReadableStream } from "node:stream/web";
 import type { ArchiveExtractPathMode, ResolvedArchiveExtractPathMode } from "@shared/mod";
 import type { TransferData } from "@shared/types.gen";
 import { Notification } from "electron";
@@ -53,19 +55,9 @@ export class CustomDownloader {
             });
         } else {
             const fileStream = fse.createWriteStream(savePath);
-            let lastTransferredBytes = 0;
 
             const resp = await ky.get(url, {
                 signal,
-                onDownloadProgress(progress, _chunk) {
-                    if (onProgress) {
-                        const incremental = progress.transferredBytes - lastTransferredBytes;
-                        lastTransferredBytes = progress.transferredBytes;
-                        if (incremental > 0) {
-                            onProgress(incremental);
-                        }
-                    }
-                },
                 headers: await this.desktop.httpService.getHeaders(url),
                 // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
                 dispatcher: await this.desktop.httpService.getAgent(),
@@ -73,14 +65,34 @@ export class CustomDownloader {
             if (!resp.ok) {
                 throw new Error(`Failed to download file: ${resp.statusText}`);
             }
+
             try {
-                await pipeline(resp.body as ReadableStream, fileStream, { signal });
+                if (!resp.body) {
+                    throw new Error("No response body");
+                }
+                const source = Readable.fromWeb(resp.body as unknown as ReadableStream);
+                const progressStream = new Transform({
+                    transform(chunk: Buffer, _encoding, callback) {
+                        onProgress?.(chunk.byteLength);
+                        callback(null, chunk);
+                    },
+                });
+                await pipeline(source, progressStream, fileStream, { signal });
             } catch (err) {
                 fileStream.destroy();
                 await fse.remove(savePath).catch(() => {});
                 throw err;
             }
         }
+    }
+
+    private parseContentLength(contentLength?: string | null) {
+        if (!contentLength) {
+            return undefined;
+        }
+
+        const size = Number(contentLength);
+        return Number.isFinite(size) && size > 0 ? size : undefined;
     }
 
     private parseDownloadFileName(url: string, contentDisposition?: string | null) {
@@ -100,17 +112,15 @@ export class CustomDownloader {
             ?.trim();
 
         if (fileNamePlain) {
-            return this.desktop.lib.fs.sanitizeWindowsFilename(
-                fileNamePlain,
-            );
+            return this.desktop.lib.fs.sanitizeWindowsFilename(fileNamePlain);
         }
 
         try {
             const pathname = new URL(url).pathname;
-            const rawFileName = pathname.split("/").pop() || "download.zip";
+            const rawFileName = pathname.split("/").pop() || "download";
             return this.desktop.lib.fs.sanitizeWindowsFilename(decodeURIComponent(rawFileName));
         } catch {
-            return "download.zip";
+            return "download";
         }
     }
 
@@ -210,11 +220,27 @@ export class CustomDownloader {
         });
     }
 
+    private async extractGBArchive(archivePath: string) {
+        const targetPath = path.dirname(archivePath);
+        const extractedPath = await this.desktop.service.archive.extract(archivePath, targetPath);
+        await fse.rm(archivePath, { force: true });
+        return extractedPath;
+    }
+
     private createSiblingTempPath(targetPath: string, suffix: string) {
         const parentPath = path.dirname(targetPath);
         const baseName = path.basename(targetPath);
 
         return path.join(parentPath, `${baseName}.${suffix}-${nanoid()}`);
+    }
+
+    private getDownloadTempExtension(fileName: string) {
+        const archiveExt = fileName.match(/\.(tar\.gz|tar\.bz2|tar\.xz|tgz|tbz2|txz)$/i)?.[0];
+        return archiveExt ?? (path.extname(fileName) || ".download");
+    }
+
+    private isArchiveFile(filePath: string) {
+        return /\.(zip|7z|rar)$/i.test(filePath);
     }
 
     private async replaceGroupWithStaging(groupPath: string, stagingPath: string) {
@@ -273,15 +299,16 @@ export class CustomDownloader {
         });
 
         const realFileUrl = resp.ok ? resp.url : trimmedUrl;
-        const fileSizeHeader = resp.headers.get("Content-Length");
-        const fileSize = fileSizeHeader ? Number(fileSizeHeader) : undefined;
+        const fileSize = this.parseContentLength(resp.headers.get("Content-Length"));
         const suggestedFileName = this.parseDownloadFileName(
             realFileUrl,
             resp.headers.get("Content-Disposition"),
         );
 
-        const archiveExt = path.extname(suggestedFileName);
-        const savePath = this.createSiblingTempPath(groupPath, `download${archiveExt || ".zip"}`);
+        const savePath = this.createSiblingTempPath(
+            groupPath,
+            `download${this.getDownloadTempExtension(suggestedFileName)}`,
+        );
         const stagingPath = this.createSiblingTempPath(groupPath, "staging");
 
         const pid = nanoid();
@@ -344,11 +371,19 @@ export class CustomDownloader {
                 if (abortController.signal.aborted) throw new Error("Aborted");
 
                 await fse.ensureDir(stagingPath);
-                const extractedPath = await this.extractDownloadedArchive(savePath, stagingPath);
+                const shouldExtract = this.isArchiveFile(savePath);
+                const extractedPath = shouldExtract
+                    ? await this.extractDownloadedArchive(savePath, stagingPath)
+                    : path.join(stagingPath, suggestedFileName);
+
+                if (!shouldExtract) {
+                    await fse.move(savePath, extractedPath, { overwrite: true });
+                }
+
                 const stagedEntries = await fse.readdir(stagingPath);
 
                 if (!(await fse.pathExists(extractedPath)) || stagedEntries.length === 0) {
-                    throw new Error("Archive extraction did not produce staged content.");
+                    throw new Error("Downloaded file did not produce staged content.");
                 }
 
                 await this.replaceGroupWithStaging(groupPath, stagingPath);
@@ -399,6 +434,9 @@ export class CustomDownloader {
         const respPromise = ky.head(fileUrl, {
             redirect: "follow",
             throwHttpErrors: false,
+            headers: await this.desktop.httpService.getHeaders(fileUrl),
+            // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
+            dispatcher: await this.desktop.httpService.getAgent(),
         });
 
         new Notification({
@@ -413,7 +451,7 @@ export class CustomDownloader {
         }
 
         const realFileUrl = resp.url;
-        const fileSize = Number(resp.headers.get("Content-Length"));
+        const fileSize = this.parseContentLength(resp.headers.get("Content-Length"));
         const fileName = realFileUrl.split("/").pop()?.split("?")[0] || "";
         const suggestedFileName = this.desktop.lib.fs.sanitizeWindowsFilename(fileName);
 
@@ -439,7 +477,7 @@ export class CustomDownloader {
                     fileId: pid,
                     parentId: pid,
                     name: finalFileName,
-                    size: fileSize,
+                    size: fileSize ?? 0,
                     compAlg: null,
                     url: realFileUrl,
                 },
@@ -483,13 +521,8 @@ export class CustomDownloader {
 
                 if (abortController.signal.aborted) throw new Error("Aborted");
 
-                const extractedPath = path.dirname(savePath);
-                const finalPath = await this.desktop.service.archive.extract(
-                    savePath,
-                    extractedPath,
-                );
-                console.log("finalPath", finalPath);
-                await fse.rm(savePath, { force: true });
+                const shouldExtract = this.isArchiveFile(savePath);
+                const finalPath = shouldExtract ? await this.extractGBArchive(savePath) : savePath;
 
                 let previewPromise: Promise<void> | null = null;
                 if (previewUrl) {
@@ -505,7 +538,7 @@ export class CustomDownloader {
                 this.desktop.service.transfer.updateTransfer(pid, {
                     status: "completed",
                     progress: 100,
-                    transferedSize: fileSize,
+                    transferedSize: fileSize ?? downloadedBytes,
                     transferedFiles: 1,
                 });
 
@@ -567,7 +600,7 @@ export class CustomDownloader {
 
         const finalFileName = result.fileName || title;
         const savePath = path.join(result.path, finalFileName);
-        const fileSize = Number(resp.headers.get("Content-Length"));
+        const fileSize = this.parseContentLength(resp.headers.get("Content-Length"));
 
         const pid = nanoid();
         const abortController = new AbortController();
@@ -584,7 +617,7 @@ export class CustomDownloader {
                     fileId: pid,
                     parentId: pid,
                     name: finalFileName,
-                    size: fileSize,
+                    size: fileSize ?? 0,
                     compAlg: null,
                     url: fileUrl,
                 },
@@ -628,15 +661,17 @@ export class CustomDownloader {
 
                 if (abortController.signal.aborted) throw new Error("Aborted");
 
-                await this.desktop.service.archive.extract(savePath, path.dirname(savePath));
-                await fse.rm(savePath, { force: true });
+                if (this.isArchiveFile(savePath)) {
+                    await this.desktop.service.archive.extract(savePath, path.dirname(savePath));
+                    await fse.rm(savePath, { force: true });
+                }
 
                 this.desktop.service.transfer.markFileCompleted(pid, pid);
 
                 this.desktop.service.transfer.updateTransfer(pid, {
                     status: "completed",
                     progress: 100,
-                    transferedSize: fileSize,
+                    transferedSize: fileSize ?? downloadedBytes,
                     transferedFiles: 1,
                 });
 
