@@ -567,10 +567,11 @@ export class CustomDownloader {
                     filePath: savePath,
                 });
                 const finalPath = shouldExtract ? await this.extractGBArchive(savePath) : savePath;
+                const finalDir = shouldExtract ? finalPath : path.dirname(finalPath);
 
                 let previewPromise: Promise<void> | null = null;
                 if (previewUrl) {
-                    const previewSavePath = path.join(finalPath, "preview.jpg");
+                    const previewSavePath = path.join(finalDir, "preview.jpg");
                     previewPromise = this.downloadFile({
                         url: previewUrl,
                         savePath: previewSavePath,
