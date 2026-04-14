@@ -111,7 +111,7 @@ export class FS {
 
         let handle: Awaited<ReturnType<typeof fsp.open>> | undefined;
         try {
-            handle = await fsp.open(filePath, "r+");
+            handle = await fsp.open(filePath, "a");
             return {
                 writable: true,
                 exists,
