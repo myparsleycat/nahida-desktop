@@ -48,8 +48,8 @@ export async function renameWithUniqueName(
     baseFolderName: string,
 ): Promise<string> {
     const parentPath = path.dirname(modPath);
-    const existingNames = await fsLib.readdir(parentPath);
-    const newFolderName = fsLib.getUniqueName(baseFolderName, existingNames);
+    const existingFolderNames = await fsLib.listDirectories(parentPath);
+    const newFolderName = fsLib.getUniqueName(baseFolderName, existingFolderNames);
     const newPath = path.join(parentPath, newFolderName);
 
     await fsLib.rename(modPath, newPath);
