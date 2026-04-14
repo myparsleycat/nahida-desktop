@@ -1,6 +1,7 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { getLockingProcesses } from "@native/native-fs";
+import type { ProcessInfo } from "@native/native-fs";
 import fg from "fast-glob";
 import fse from "fs-extra";
 import type { NahidaDesktop } from "..";
@@ -20,6 +21,13 @@ export interface ReaddirOptions {
 export interface FileSearchOptions {
     extensions?: string[];
     limit?: number;
+}
+
+export interface FileWriteAccessResult {
+    writable: boolean;
+    exists: boolean;
+    locked: boolean;
+    processes: ProcessInfo[];
 }
 
 // oxlint-disable-next-line no-control-regex
@@ -49,13 +57,82 @@ export class FS {
         return uniqueName;
     }
 
-    public async isPathWritable(pathStr: string) {
+    public async isPathWritable(pathStr: string): Promise<boolean>;
+    public async isPathWritable(
+        pathStr: string,
+        options: { detailed: true; parentPath?: string },
+    ): Promise<FileWriteAccessResult>;
+    public async isPathWritable(
+        pathStr: string,
+        options?: { detailed: true; parentPath?: string },
+    ) {
+        if (options?.detailed) {
+            return this.getFileWriteAccess(pathStr, options.parentPath);
+        }
+
         try {
             await fse.access(pathStr, fse.constants.W_OK | fse.constants.X_OK);
             return true;
         } catch {
             return false;
         }
+    }
+
+    private async getFileWriteAccess(filePath: string, parentPath = path.dirname(filePath)) {
+        const fallbackResult: FileWriteAccessResult = {
+            writable: false,
+            exists: false,
+            locked: false,
+            processes: [],
+        };
+
+        try {
+            await fse.access(parentPath, fse.constants.W_OK | fse.constants.X_OK);
+        } catch {
+            return fallbackResult;
+        }
+
+        const exists = await fse.pathExists(filePath);
+        if (!exists) {
+            return { ...fallbackResult, writable: true };
+        }
+
+        try {
+            await fse.access(filePath, fse.constants.W_OK);
+        } catch {
+            const processes = await this.getLockingProcessesSafe(filePath);
+            return {
+                writable: false,
+                exists,
+                locked: processes.length > 0,
+                processes,
+            };
+        }
+
+        let handle: Awaited<ReturnType<typeof fsp.open>> | undefined;
+        try {
+            handle = await fsp.open(filePath, "r+");
+            return {
+                writable: true,
+                exists,
+                locked: false,
+                processes: [],
+            };
+        } catch (error) {
+            const lockInfo = await this.isLockedPathError(error, filePath);
+            return {
+                writable: false,
+                exists,
+                locked: lockInfo.isLocked,
+                processes: lockInfo.processes,
+            };
+        } finally {
+            await handle?.close().catch(() => {});
+        }
+    }
+
+    public formatProcessList(processes: ProcessInfo[]) {
+        return processes.map((proc) => `${proc.name} (${proc.pid})`).join(", ");
     }
 
     public async isPathReadable(pathStr: string) {
@@ -90,12 +167,16 @@ export class FS {
             return { isLocked: false, processes: [] };
         }
 
+        const processes = await this.getLockingProcessesSafe(pathStr);
+        return { isLocked, processes };
+    }
+
+    private async getLockingProcessesSafe(pathStr: string) {
         try {
-            const processes = await getLockingProcesses(pathStr);
-            return { isLocked, processes };
+            return await getLockingProcesses(pathStr);
         } catch (e) {
             this.desktop.logger.error(e, "FS:isLockedPathError:getLockingProcesses");
-            return { isLocked, processes: [] };
+            return [];
         }
     }
 
