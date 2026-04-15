@@ -659,13 +659,13 @@
       "idle": "최신 버전을 사용 중입니다.",
       "checking": "업데이트를 확인하는 중입니다...",
       "downloading": "업데이트를 다운로드하는 중입니다...",
-      "available": "새 업데이트가 있습니다. 원할 때 다운로드할 수 있습니다.",
+      "available": "새 업데이트가 있습니다. 원할 때 다운로드할 수 있습니다.{{versionRangeText}}",
       "downloaded": "업데이트를 설치할 준비가 되었습니다."
     },
     "toast": {
       "available": {
         "title": "새로운 버전이 출시되었습니다.",
-        "description": "Nahida Desktop의 새로운 버전이 출시되었습니다. 다시 시작하여 업데이트하세요.",
+        "description": "Nahida Desktop의 새로운 버전이 출시되었습니다. 다시 시작하여 업데이트하세요.{{versionRangeText}}",
         "action": "업데이트",
         "releaseNotes": "패치 노트 열기"
       },

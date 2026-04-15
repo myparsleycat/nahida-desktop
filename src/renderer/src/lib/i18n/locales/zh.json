@@ -659,13 +659,13 @@
       "idle": "你当前使用的是最新版本。",
       "checking": "正在检查更新...",
       "downloading": "正在下载更新...",
-      "available": "发现新更新。你可以在方便时下载。",
+      "available": "发现新更新。你可以在方便时下载。{{versionRangeText}}",
       "downloaded": "更新已准备好安装。"
     },
     "toast": {
       "available": {
         "title": "有新版本可用。",
-        "description": "Nahida Desktop 有新版本可用。请重新启动以完成更新。",
+        "description": "Nahida Desktop 有新版本可用。请重新启动以完成更新。{{versionRangeText}}",
         "action": "更新",
         "releaseNotes": "打开补丁说明"
       },

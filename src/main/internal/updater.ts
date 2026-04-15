@@ -51,6 +51,7 @@ export class Updater {
                 this.isDownloadingUpdate = false;
                 this.updateDownloaded = false;
                 this.updateAvailable = false;
+                this.releaseVersion = null;
                 this.releaseNotesUrl = null;
                 this.updateDialogDismissed = false;
             }
@@ -74,6 +75,7 @@ export class Updater {
             this.isDownloadingUpdate = false;
             this.updateDownloaded = false;
             this.updateAvailable = false;
+            this.releaseVersion = null;
             this.releaseNotesUrl = null;
             this.updateDialogDismissed = false;
             this.broadcastStatus();
@@ -202,6 +204,7 @@ export class Updater {
             mode,
             updateAvailable: this.updateAvailable,
             updateDownloaded: this.updateDownloaded,
+            releaseVersion: this.releaseVersion,
             releaseNotesUrl: this.releaseNotesUrl,
             shouldPromptForUpdate: this.updateDownloaded && !this.updateDialogDismissed,
             isChecking: this.isCheckingForUpdates,

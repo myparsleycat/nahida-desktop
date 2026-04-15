@@ -660,13 +660,13 @@
       "idle": "最新バージョンを使用しています。",
       "checking": "アップデートを確認しています...",
       "downloading": "アップデートをダウンロードしています...",
-      "available": "新しいアップデートがあります。準備ができたらダウンロードできます。",
+      "available": "新しいアップデートがあります。準備ができたらダウンロードできます。{{versionRangeText}}",
       "downloaded": "アップデートをインストールする準備ができました。"
     },
     "toast": {
       "available": {
         "title": "新しいバージョンが利用可能です。",
-        "description": "Nahida Desktop の新しいバージョンが利用可能です。再起動して更新してください。",
+        "description": "Nahida Desktop の新しいバージョンが利用可能です。再起動して更新してください。{{versionRangeText}}",
         "action": "更新",
         "releaseNotes": "パッチノートを開く"
       },

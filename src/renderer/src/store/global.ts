@@ -10,6 +10,7 @@ interface GlobalStore {
     setUpdateAvailable: (updateAvailable: boolean) => void;
     updateDownloaded: boolean;
     setUpdateDownloaded: (updateDownloaded: boolean) => void;
+    releaseVersion: string | null;
     releaseNotesUrl: string | null;
     shouldPromptForUpdate: boolean;
     setShouldPromptForUpdate: (shouldPromptForUpdate: boolean) => void;
@@ -36,6 +37,7 @@ export const globalStore = createStore<GlobalStore>((set) => {
             setUpdateAvailable: (updateAvailable) => set({ updateAvailable }),
             updateDownloaded: false,
             setUpdateDownloaded: (updateDownloaded) => set({ updateDownloaded }),
+            releaseVersion: null,
             releaseNotesUrl: null,
             shouldPromptForUpdate: false,
             setShouldPromptForUpdate: (shouldPromptForUpdate) => set({ shouldPromptForUpdate }),
@@ -50,6 +52,7 @@ export const globalStore = createStore<GlobalStore>((set) => {
                     updaterMode: status.mode,
                     updateAvailable: status.updateAvailable,
                     updateDownloaded: status.updateDownloaded,
+                    releaseVersion: status.releaseVersion,
                     releaseNotesUrl: status.releaseNotesUrl,
                     shouldPromptForUpdate: status.shouldPromptForUpdate,
                     updaterChecking: status.isChecking,
