@@ -64,7 +64,7 @@ function UpdateAlertDialog() {
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+          <AlertDialogCancel>{t("g.later")}</AlertDialogCancel>
           {releaseNotesUrl && (
             <Button
               variant="outline"

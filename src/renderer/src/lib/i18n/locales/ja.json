@@ -15,7 +15,8 @@
     "save": "保存",
     "close": "閉じる",
     "rename": "名前を変更",
-    "download": "ダウンロード"
+    "download": "ダウンロード",
+    "later": "後で"
   },
   "page": {
     "transfer": {
