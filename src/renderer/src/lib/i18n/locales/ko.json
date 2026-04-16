@@ -368,6 +368,8 @@
         "version": "버전",
         "version_hint": "빌드에 실패할 경우 버전을 낮춰 재시도해 보세요.",
         "loading": "불러오는 중...",
+        "load_failed": "버전을 불러오지 못했습니다.",
+        "no_versions": "사용 가능한 버전이 없습니다.",
         "target_importer": "대상 Importer",
         "no_importer": "사용 가능한 Importer가 없습니다",
         "select_importer_msg": "대상 Importer를 선택해주세요.",

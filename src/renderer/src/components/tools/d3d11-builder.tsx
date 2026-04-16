@@ -20,7 +20,7 @@ export default function D3D11Builder() {
   const { t } = useTranslation();
 
   const [provider, setProvider] = useState("SpectrumQT");
-  const [versions, setVersions] = useState<string[]>([]);
+  const [versions, setVersions] = useState<string[] | null>(null);
   const [version, setVersion] = useState("");
 
   const [importers, setImporters] = useState<XXMIImporter[]>([]);
@@ -31,6 +31,7 @@ export default function D3D11Builder() {
   const [progress, setProgress] = useState("");
   const [buildErrorMessage, setBuildErrorMessage] = useState("");
   const [isUpdating, setIsUpdating] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const versionsRequestId = useRef(0);
 
   useEffect(() => {
@@ -86,15 +87,18 @@ export default function D3D11Builder() {
 
         setVersions(v);
         setVersion(v[0] ?? "");
+        setFetchError(false);
       } catch {
         if (versionsRequestId.current !== requestId) return;
 
-        setVersions([]);
         setVersion("");
+        setFetchError(true);
       }
     };
     if (!isUpdating) {
-      setVersions([]);
+      setVersions(null);
+      setVersion("");
+      setFetchError(false);
       fetchVersions();
     }
   }, [provider, isUpdating]);
@@ -167,10 +171,18 @@ export default function D3D11Builder() {
             {t("page.tools.d3d11_builder.version")}
           </label>
           <div className="flex flex-wrap gap-2">
-            {versions.length === 0 ? (
+            {fetchError ? (
+              <div className="px-3 py-1.5 rounded text-xs text-destructive flex items-center gap-2">
+                <CircleXIcon className="w-3 h-3" /> {t("page.tools.d3d11_builder.load_failed")}
+              </div>
+            ) : versions === null ? (
               <div className="px-3 py-1.5 rounded text-xs text-muted-foreground flex items-center gap-2">
                 <Loader2Icon className="w-3 h-3 animate-spin" />{" "}
                 {t("page.tools.d3d11_builder.loading")}
+              </div>
+            ) : versions.length === 0 ? (
+              <div className="px-3 py-1.5 rounded text-xs text-muted-foreground">
+                {t("page.tools.d3d11_builder.no_versions")}
               </div>
             ) : (
               <Select value={version} onValueChange={setVersion}>
@@ -263,7 +275,13 @@ export default function D3D11Builder() {
       <div className="flex items-center gap-4">
         <Button
           onClick={handleBuild}
-          disabled={isRunning || !selectedImporter || versions.length === 0}
+          disabled={
+            isRunning ||
+            !selectedImporter ||
+            fetchError ||
+            versions === null ||
+            versions.length === 0
+          }
           variant="outline"
         >
           {isRunning

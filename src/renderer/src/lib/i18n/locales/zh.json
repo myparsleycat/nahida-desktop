@@ -368,6 +368,8 @@
         "version": "版本",
         "version_hint": "如果构建失败，请尝试降低版本后重试。",
         "loading": "加载中...",
+        "load_failed": "版本加载失败。",
+        "no_versions": "没有可用版本。",
         "target_importer": "目标 Importer",
         "no_importer": "没有可用的 Importer",
         "select_importer_msg": "请选择目标 Importer。",

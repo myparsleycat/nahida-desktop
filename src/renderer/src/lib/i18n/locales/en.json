@@ -388,6 +388,8 @@
         "version": "Version",
         "version_hint": "If the build fails, try again with an earlier version.",
         "loading": "Loading...",
+        "load_failed": "Failed to load versions.",
+        "no_versions": "No versions available.",
         "target_importer": "Target Importer",
         "no_importer": "No available Importer",
         "select_importer_msg": "Please select a target Importer.",
