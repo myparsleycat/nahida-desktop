@@ -23,7 +23,12 @@ type BuildD3DResult = {
     errorMessage?: string;
 };
 
+type GitHubRelease = {
+    tag_name?: unknown;
+};
+
 const TARGET_DLL_NAME = "d3d11.dll";
+const NON_RELEASE_VERSION_NAMES = new Set(["main", "master"]);
 
 export class DllBuilder {
     private readonly VS_EDITIONS = ["Community", "Professional", "Enterprise", "Insiders"];
@@ -35,8 +40,8 @@ export class DllBuilder {
     private currentErrorMessage = "";
 
     private releasesCache: Record<string, string[]> = {
-        SpectrumQT: ["master"],
-        myparsleycat: ["master"],
+        SpectrumQT: [],
+        myparsleycat: [],
     };
     private readonly releasesFetchedAt: Partial<Record<string, number>> = {};
     private readonly releasesFetchInFlight: Partial<Record<string, Promise<void>>> = {};
@@ -99,22 +104,26 @@ export class DllBuilder {
             });
 
             if (!resp.ok) {
-                this.releasesCache[provider] = ["master"];
+                this.releasesCache[provider] = [];
                 return;
             }
 
-            // oxlint-disable-next-line typescript/no-explicit-any
-            const releases = (await resp.json()) as any[];
-            // oxlint-disable-next-line typescript/no-explicit-any
-            this.releasesCache[provider] = ["master", ...releases.map((r: any) => r.tag_name)];
+            const releases = (await resp.json()) as GitHubRelease[];
+            this.releasesCache[provider] = releases
+                .map((release) => release.tag_name)
+                .filter(
+                    (tagName): tagName is string =>
+                        typeof tagName === "string" &&
+                        !NON_RELEASE_VERSION_NAMES.has(tagName.toLowerCase()),
+                );
         } catch (error) {
             this.desktop.logger.error(error, "DllBuilder:fetchProviderReleases");
-            this.releasesCache[provider] = ["master"];
+            this.releasesCache[provider] = [];
         }
     }
 
     public getProviderReleases(provider: string) {
-        return this.releasesCache[provider] || ["master"];
+        return this.releasesCache[provider] || [];
     }
 
     private updateProgress(code: string, errorMessage = "") {
@@ -278,10 +287,7 @@ export class DllBuilder {
         version: string,
     ): Promise<string> {
         const owner = provider === "myparsleycat" ? "myparsleycat" : "SpectrumQT";
-        const url =
-            version === "master"
-                ? `https://github.com/${owner}/XXMI-Libs-Package/archive/refs/heads/master.zip`
-                : `https://github.com/${owner}/XXMI-Libs-Package/archive/refs/tags/${version}.zip`;
+        const url = `https://github.com/${owner}/XXMI-Libs-Package/archive/refs/tags/${version}.zip`;
 
         const zipPath = path.join(targetDir, "repo.zip");
 
