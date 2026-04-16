@@ -32,6 +32,7 @@ import Auth from "./services/auth";
 import { DriveService } from "./services/drive";
 import type ModManager from "./services/mod-manager";
 import type { ModTools } from "./services/mod-tools";
+import { StartupCleanupService } from "./services/startup-cleanup";
 import TransferService from "./services/transfer";
 import type { XXMI } from "./services/xxmi";
 import Setting from "./setting";
@@ -91,6 +92,7 @@ export class NahidaDesktop {
         modTools: ModTools;
         archive: ArchiveService;
         xxmi: XXMI;
+        startupCleanup: StartupCleanupService;
     };
     public constructor() {
         this.userAgent = `Nahida Desktop/${app.getVersion()}`;
@@ -125,6 +127,7 @@ export class NahidaDesktop {
             modTools: undefined as unknown as ModTools,
             archive: new ArchiveService(this),
             xxmi: undefined as unknown as XXMI,
+            startupCleanup: new StartupCleanupService(this),
         };
     }
 
@@ -167,6 +170,7 @@ export class NahidaDesktop {
 
         // init db
         await InitDB(this.lib.db);
+        await this.service.startupCleanup.runAll();
 
         // init lang
         const lang = await this.lib.db.query.setting.findFirst({

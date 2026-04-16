@@ -4,9 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
+import { appState } from "@main/internal/db/schema";
+import { eq } from "drizzle-orm";
 import fse from "fs-extra";
 import ky from "ky";
 import ms from "ms";
+import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "@/main";
 
 const execAsync = promisify(exec);
@@ -29,6 +32,14 @@ type GitHubRelease = {
 
 const TARGET_DLL_NAME = "d3d11.dll";
 const NON_RELEASE_VERSION_NAMES = new Set(["main", "master"]);
+const D3D_BUILD_STATE_KEY_PREFIX = "mod_tools:d3d_build:";
+const D3D_BUILD_TEMP_DIR_NAME = "nahida-tools-d3d-build";
+const D3D_BUILD_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+type D3DBuildState = {
+    id: string;
+    tempDir: string;
+};
 
 export class DllBuilder {
     private readonly VS_EDITIONS = ["Community", "Professional", "Enterprise", "Insiders"];
@@ -44,6 +55,10 @@ export class DllBuilder {
     private readonly releasesFetchInFlight: Partial<Record<string, Promise<boolean>>> = {};
 
     constructor(private readonly desktop: NahidaDesktop) {
+        this.desktop.service.startupCleanup.register({
+            name: "mod-tools:d3d-build",
+            run: () => this.cleanupStaleBuildDirs(),
+        });
         this.updateReleases();
     }
 
@@ -185,11 +200,13 @@ export class DllBuilder {
             return { success: false };
         }
 
-        const tempDir = path.join(os.tmpdir(), "nahida-tools-d3d-build");
-        await fse.ensureDir(tempDir);
-        await fse.emptyDir(tempDir);
+        const buildId = nanoid();
+        const tempDir = this.getBuildTempDir(buildId);
 
         try {
+            await this.trackBuildTempDir(buildId, tempDir);
+            await fse.ensureDir(tempDir);
+
             const projectPath = await this.prepareSourceCode(tempDir, provider, version);
 
             this.updateProgress("XXMI_BUILDING");
@@ -245,6 +262,71 @@ export class DllBuilder {
             return { success: false, errorMessage };
         } finally {
             await fse.remove(tempDir).catch(() => {});
+            await this.untrackBuildTempDir(buildId).catch((error) => {
+                this.desktop.logger.error(error, "DllBuilder:untrackBuildTempDir");
+            });
+        }
+    }
+
+    private getBuildStateKey(buildId: string) {
+        return `${D3D_BUILD_STATE_KEY_PREFIX}${buildId}`;
+    }
+
+    private getBuildTempRoot() {
+        return path.join(os.tmpdir(), D3D_BUILD_TEMP_DIR_NAME);
+    }
+
+    private getBuildTempDir(buildId: string) {
+        return path.join(this.getBuildTempRoot(), buildId);
+    }
+
+    private async trackBuildTempDir(buildId: string, tempDir: string) {
+        const state: D3DBuildState = { id: buildId, tempDir };
+        await this.desktop.lib.db
+            .insert(appState)
+            .values({
+                key: this.getBuildStateKey(buildId),
+                value: JSON.stringify(state),
+                updatedAt: new Date().toISOString(),
+            })
+            .onConflictDoUpdate({
+                target: appState.key,
+                set: {
+                    value: JSON.stringify(state),
+                    updatedAt: new Date().toISOString(),
+                },
+            });
+    }
+
+    private async untrackBuildTempDir(buildId: string) {
+        await this.desktop.lib.db
+            .delete(appState)
+            .where(eq(appState.key, this.getBuildStateKey(buildId)));
+    }
+
+    private async cleanupStaleBuildDirs() {
+        const states = (await this.desktop.lib.db.select().from(appState)).filter((state) =>
+            state.key.startsWith(D3D_BUILD_STATE_KEY_PREFIX),
+        );
+
+        for (const state of states) {
+            const buildId = state.key.slice(D3D_BUILD_STATE_KEY_PREFIX.length);
+            if (!D3D_BUILD_ID_PATTERN.test(buildId)) {
+                this.desktop.logger.warn(
+                    `Skipping invalid D3D build state key: ${state.key}`,
+                    "DllBuilder:cleanupStaleBuildDirs",
+                );
+                await this.desktop.lib.db.delete(appState).where(eq(appState.key, state.key));
+                continue;
+            }
+
+            await fse.remove(this.getBuildTempDir(buildId)).catch((error) => {
+                this.desktop.logger.warn(
+                    `Failed to remove stale D3D build temp dir for ${buildId}: ${error}`,
+                    "DllBuilder:cleanupStaleBuildDirs",
+                );
+            });
+            await this.desktop.lib.db.delete(appState).where(eq(appState.key, state.key));
         }
     }
 
