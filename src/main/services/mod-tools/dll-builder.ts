@@ -39,12 +39,9 @@ export class DllBuilder {
     private currentProgress = "";
     private currentErrorMessage = "";
 
-    private releasesCache: Record<string, string[]> = {
-        SpectrumQT: [],
-        myparsleycat: [],
-    };
+    private releasesCache: Partial<Record<string, string[]>> = {};
     private readonly releasesFetchedAt: Partial<Record<string, number>> = {};
-    private readonly releasesFetchInFlight: Partial<Record<string, Promise<void>>> = {};
+    private readonly releasesFetchInFlight: Partial<Record<string, Promise<boolean>>> = {};
 
     constructor(private readonly desktop: NahidaDesktop) {
         this.updateReleases();
@@ -68,22 +65,24 @@ export class DllBuilder {
     private async fetchProviderReleases(provider: string) {
         const inFlight = this.releasesFetchInFlight[provider];
         if (inFlight) {
-            await inFlight;
-            return;
+            return inFlight;
         }
 
         const now = Date.now();
         const lastFetchedAt = this.releasesFetchedAt[provider] ?? 0;
         if (now - lastFetchedAt < this.RELEASES_FETCH_COOLDOWN_MS) {
-            return;
+            return true;
         }
 
         const fetchPromise = this.fetchProviderReleasesInternal(provider);
         this.releasesFetchInFlight[provider] = fetchPromise;
 
         try {
-            await fetchPromise;
-            this.releasesFetchedAt[provider] = Date.now();
+            const success = await fetchPromise;
+            if (success) {
+                this.releasesFetchedAt[provider] = Date.now();
+            }
+            return success;
         } finally {
             delete this.releasesFetchInFlight[provider];
         }
@@ -104,8 +103,11 @@ export class DllBuilder {
             });
 
             if (!resp.ok) {
-                this.releasesCache[provider] = [];
-                return;
+                this.desktop.logger.warn(
+                    `Failed to fetch releases for ${provider}: ${resp.status} ${resp.statusText}`,
+                    "DllBuilder:fetchProviderReleases",
+                );
+                return false;
             }
 
             const releases = (await resp.json()) as GitHubRelease[];
@@ -116,14 +118,19 @@ export class DllBuilder {
                         typeof tagName === "string" &&
                         !NON_RELEASE_VERSION_NAMES.has(tagName.toLowerCase()),
                 );
+            return true;
         } catch (error) {
             this.desktop.logger.error(error, "DllBuilder:fetchProviderReleases");
-            this.releasesCache[provider] = [];
+            return false;
         }
     }
 
-    public getProviderReleases(provider: string) {
-        return this.releasesCache[provider] || [];
+    public async getProviderReleases(provider: string) {
+        if (!this.releasesCache[provider]) {
+            await this.fetchProviderReleases(provider);
+        }
+
+        return this.releasesCache[provider] ?? [];
     }
 
     private updateProgress(code: string, errorMessage = "") {
@@ -156,10 +163,10 @@ export class DllBuilder {
         }
 
         const finalDestination = path.join(importerPath, TARGET_DLL_NAME);
-        const destinationCheck = await this.desktop.lib.fs.isPathWritable(
-            finalDestination,
-            { detailed: true, parentPath: importerPath },
-        );
+        const destinationCheck = await this.desktop.lib.fs.isPathWritable(finalDestination, {
+            detailed: true,
+            parentPath: importerPath,
+        });
         if (!destinationCheck.writable) {
             const errorCode = destinationCheck.locked
                 ? "XXMI_ERR_DLL_IN_USE"
@@ -204,7 +211,10 @@ export class DllBuilder {
             try {
                 await fse.copy(builtDllPath, finalDestination, { overwrite: true });
             } catch (error) {
-                const lockInfo = await this.desktop.lib.fs.isLockedPathError(error, finalDestination);
+                const lockInfo = await this.desktop.lib.fs.isLockedPathError(
+                    error,
+                    finalDestination,
+                );
                 if (lockInfo.isLocked) {
                     const errorMessage = this.desktop.lib.fs.formatProcessList(lockInfo.processes);
                     this.updateProgress("XXMI_ERR_DLL_IN_USE", errorMessage);
