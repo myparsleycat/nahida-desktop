@@ -296,8 +296,13 @@ export class DllBuilder {
         provider: string,
         version: string,
     ): Promise<string> {
+        const selectedVersion = version?.trim();
+        if (!selectedVersion) {
+            throw new Error("No version selected");
+        }
+
         const owner = provider === "myparsleycat" ? "myparsleycat" : "SpectrumQT";
-        const url = `https://github.com/${owner}/XXMI-Libs-Package/archive/refs/tags/${version}.zip`;
+        const url = `https://github.com/${owner}/XXMI-Libs-Package/archive/refs/tags/${selectedVersion}.zip`;
 
         const zipPath = path.join(targetDir, "repo.zip");
 
