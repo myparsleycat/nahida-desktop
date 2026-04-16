@@ -366,6 +366,7 @@
         "description": "根据所选版本构建将注入到游戏进程中的 DLL",
         "provider": "提供方",
         "version": "版本",
+        "version_hint": "如果构建失败，请尝试降低版本后重试。",
         "loading": "加载中...",
         "target_importer": "目标 Importer",
         "no_importer": "没有可用的 Importer",

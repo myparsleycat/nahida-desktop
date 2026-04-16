@@ -386,6 +386,7 @@
         "description": "Builds the DLL to be injected into the game process for the selected version",
         "provider": "Provider",
         "version": "Version",
+        "version_hint": "If the build fails, try again with an earlier version.",
         "loading": "Loading...",
         "target_importer": "Target Importer",
         "no_importer": "No available Importer",

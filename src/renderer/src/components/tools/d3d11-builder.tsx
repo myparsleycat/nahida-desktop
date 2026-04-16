@@ -1,4 +1,3 @@
-// oxlint-disable jsx_a11y/label-has-associated-control
 import { Button } from "@renderer/components/ui/button";
 import {
   Select,
@@ -80,10 +79,10 @@ export default function D3D11Builder() {
       try {
         const v: string[] = await window.api.invoke("tools:getProviderReleases", provider);
         setVersions(v);
-        setVersion("master");
+        setVersion(v[0] ?? "");
       } catch {
-        setVersions(["master"]);
-        setVersion("master");
+        setVersions([]);
+        setVersion("");
       }
     };
     if (!isUpdating) {
@@ -182,6 +181,9 @@ export default function D3D11Builder() {
               </Select>
             )}
           </div>
+          <p className="text-xs text-muted-foreground">
+            {t("page.tools.d3d11_builder.version_hint")}
+          </p>
         </div>
 
         <div className="space-y-2 md:col-span-2 mt-2">
