@@ -23,7 +23,12 @@ type BuildD3DResult = {
     errorMessage?: string;
 };
 
+type GitHubRelease = {
+    tag_name?: unknown;
+};
+
 const TARGET_DLL_NAME = "d3d11.dll";
+const NON_RELEASE_VERSION_NAMES = new Set(["main", "master"]);
 
 export class DllBuilder {
     private readonly VS_EDITIONS = ["Community", "Professional", "Enterprise", "Insiders"];
@@ -34,12 +39,9 @@ export class DllBuilder {
     private currentProgress = "";
     private currentErrorMessage = "";
 
-    private releasesCache: Record<string, string[]> = {
-        SpectrumQT: ["master"],
-        myparsleycat: ["master"],
-    };
+    private releasesCache: Partial<Record<string, string[]>> = {};
     private readonly releasesFetchedAt: Partial<Record<string, number>> = {};
-    private readonly releasesFetchInFlight: Partial<Record<string, Promise<void>>> = {};
+    private readonly releasesFetchInFlight: Partial<Record<string, Promise<boolean>>> = {};
 
     constructor(private readonly desktop: NahidaDesktop) {
         this.updateReleases();
@@ -63,22 +65,24 @@ export class DllBuilder {
     private async fetchProviderReleases(provider: string) {
         const inFlight = this.releasesFetchInFlight[provider];
         if (inFlight) {
-            await inFlight;
-            return;
+            return inFlight;
         }
 
         const now = Date.now();
         const lastFetchedAt = this.releasesFetchedAt[provider] ?? 0;
         if (now - lastFetchedAt < this.RELEASES_FETCH_COOLDOWN_MS) {
-            return;
+            return true;
         }
 
         const fetchPromise = this.fetchProviderReleasesInternal(provider);
         this.releasesFetchInFlight[provider] = fetchPromise;
 
         try {
-            await fetchPromise;
-            this.releasesFetchedAt[provider] = Date.now();
+            const success = await fetchPromise;
+            if (success) {
+                this.releasesFetchedAt[provider] = Date.now();
+            }
+            return success;
         } finally {
             delete this.releasesFetchInFlight[provider];
         }
@@ -99,22 +103,34 @@ export class DllBuilder {
             });
 
             if (!resp.ok) {
-                this.releasesCache[provider] = ["master"];
-                return;
+                this.desktop.logger.warn(
+                    `Failed to fetch releases for ${provider}: ${resp.status} ${resp.statusText}`,
+                    "DllBuilder:fetchProviderReleases",
+                );
+                return false;
             }
 
-            // oxlint-disable-next-line typescript/no-explicit-any
-            const releases = (await resp.json()) as any[];
-            // oxlint-disable-next-line typescript/no-explicit-any
-            this.releasesCache[provider] = ["master", ...releases.map((r: any) => r.tag_name)];
+            const releases = (await resp.json()) as GitHubRelease[];
+            this.releasesCache[provider] = releases
+                .map((release) => release.tag_name)
+                .filter(
+                    (tagName): tagName is string =>
+                        typeof tagName === "string" &&
+                        !NON_RELEASE_VERSION_NAMES.has(tagName.toLowerCase()),
+                );
+            return true;
         } catch (error) {
             this.desktop.logger.error(error, "DllBuilder:fetchProviderReleases");
-            this.releasesCache[provider] = ["master"];
+            return false;
         }
     }
 
-    public getProviderReleases(provider: string) {
-        return this.releasesCache[provider] || ["master"];
+    public async getProviderReleases(provider: string) {
+        if (!this.releasesCache[provider]) {
+            await this.fetchProviderReleases(provider);
+        }
+
+        return this.releasesCache[provider] ?? [];
     }
 
     private updateProgress(code: string, errorMessage = "") {
@@ -147,10 +163,10 @@ export class DllBuilder {
         }
 
         const finalDestination = path.join(importerPath, TARGET_DLL_NAME);
-        const destinationCheck = await this.desktop.lib.fs.isPathWritable(
-            finalDestination,
-            { detailed: true, parentPath: importerPath },
-        );
+        const destinationCheck = await this.desktop.lib.fs.isPathWritable(finalDestination, {
+            detailed: true,
+            parentPath: importerPath,
+        });
         if (!destinationCheck.writable) {
             const errorCode = destinationCheck.locked
                 ? "XXMI_ERR_DLL_IN_USE"
@@ -195,7 +211,10 @@ export class DllBuilder {
             try {
                 await fse.copy(builtDllPath, finalDestination, { overwrite: true });
             } catch (error) {
-                const lockInfo = await this.desktop.lib.fs.isLockedPathError(error, finalDestination);
+                const lockInfo = await this.desktop.lib.fs.isLockedPathError(
+                    error,
+                    finalDestination,
+                );
                 if (lockInfo.isLocked) {
                     const errorMessage = this.desktop.lib.fs.formatProcessList(lockInfo.processes);
                     this.updateProgress("XXMI_ERR_DLL_IN_USE", errorMessage);
@@ -277,11 +296,13 @@ export class DllBuilder {
         provider: string,
         version: string,
     ): Promise<string> {
+        const selectedVersion = version?.trim();
+        if (!selectedVersion) {
+            throw new Error("No version selected");
+        }
+
         const owner = provider === "myparsleycat" ? "myparsleycat" : "SpectrumQT";
-        const url =
-            version === "master"
-                ? `https://github.com/${owner}/XXMI-Libs-Package/archive/refs/heads/master.zip`
-                : `https://github.com/${owner}/XXMI-Libs-Package/archive/refs/tags/${version}.zip`;
+        const url = `https://github.com/${owner}/XXMI-Libs-Package/archive/refs/tags/${selectedVersion}.zip`;
 
         const zipPath = path.join(targetDir, "repo.zip");
 

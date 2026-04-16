@@ -50,6 +50,7 @@ function RouteComponent() {
   const appStatus = useGlobalStore((state) => state.appStatus);
   const updateAvailable = useGlobalStore((state) => state.updateAvailable);
   const updateDownloaded = useGlobalStore((state) => state.updateDownloaded);
+  const releaseVersion = useGlobalStore((state) => state.releaseVersion);
   const shouldPromptForUpdate = useGlobalStore((state) => state.shouldPromptForUpdate);
   const updaterMode = useGlobalStore((state) => state.updaterMode);
   const updaterChecking = useGlobalStore((state) => state.updaterChecking);
@@ -138,6 +139,8 @@ function RouteComponent() {
   const selectedAutoUpdateMode = autoUpdateModeOptions.find(
     (option) => option.value === settings.autoUpdateMode,
   );
+  const versionRangeText =
+    appStatus?.version && releaseVersion ? ` (${appStatus.version} → ${releaseVersion})` : "";
 
   const updaterStatusText = updaterChecking
     ? t("updater.status.checking")
@@ -146,7 +149,7 @@ function RouteComponent() {
       : updateDownloaded
         ? t("updater.status.downloaded")
         : updateAvailable
-          ? t("updater.status.available")
+          ? t("updater.status.available", { versionRangeText })
           : settings.autoUpdateMode === "off"
             ? t("page.setting.gen.application.autoUpdateModes.off.title")
             : t("updater.status.idle");

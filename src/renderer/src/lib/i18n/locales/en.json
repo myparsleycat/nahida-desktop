@@ -15,7 +15,8 @@
     "save": "Save",
     "close": "Close",
     "rename": "Rename",
-    "download": "Download"
+    "download": "Download",
+    "later": "Later"
   },
   "page": {
     "transfer": {
@@ -385,7 +386,10 @@
         "description": "Builds the DLL to be injected into the game process for the selected version",
         "provider": "Provider",
         "version": "Version",
+        "version_hint": "If the build fails, try again with an earlier version.",
         "loading": "Loading...",
+        "load_failed": "Failed to load versions.",
+        "no_versions": "No versions available.",
         "target_importer": "Target Importer",
         "no_importer": "No available Importer",
         "select_importer_msg": "Please select a target Importer.",
@@ -678,13 +682,13 @@
       "idle": "You're using the latest version.",
       "checking": "Checking for updates...",
       "downloading": "Downloading the update...",
-      "available": "An update is available. Download it when you're ready.",
+      "available": "An update is available. Download it when you're ready.{{versionRangeText}}",
       "downloaded": "The update is ready to install."
     },
     "toast": {
       "available": {
         "title": "A new version is available.",
-        "description": "A new version of Nahida Desktop is available. Restart to update.",
+        "description": "A new version of Nahida Desktop is available. Restart to update.{{versionRangeText}}",
         "action": "Update",
         "releaseNotes": "Open patch notes"
       },

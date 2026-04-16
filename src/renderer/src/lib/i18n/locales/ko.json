@@ -15,7 +15,8 @@
     "save": "저장",
     "close": "닫기",
     "rename": "이름 변경",
-    "download": "다운로드"
+    "download": "다운로드",
+    "later": "나중에"
   },
   "page": {
     "transfer": {
@@ -365,7 +366,10 @@
         "description": "게임 프로세스에 인젝션될 dll을 빌드합니다",
         "provider": "제공자",
         "version": "버전",
+        "version_hint": "빌드에 실패할 경우 버전을 낮춰 재시도해 보세요.",
         "loading": "불러오는 중...",
+        "load_failed": "버전을 불러오지 못했습니다.",
+        "no_versions": "사용 가능한 버전이 없습니다.",
         "target_importer": "대상 Importer",
         "no_importer": "사용 가능한 Importer가 없습니다",
         "select_importer_msg": "대상 Importer를 선택해주세요.",
@@ -658,13 +662,13 @@
       "idle": "최신 버전을 사용 중입니다.",
       "checking": "업데이트를 확인하는 중입니다...",
       "downloading": "업데이트를 다운로드하는 중입니다...",
-      "available": "새 업데이트가 있습니다. 원할 때 다운로드할 수 있습니다.",
+      "available": "새 업데이트가 있습니다. 원할 때 다운로드할 수 있습니다.{{versionRangeText}}",
       "downloaded": "업데이트를 설치할 준비가 되었습니다."
     },
     "toast": {
       "available": {
         "title": "새로운 버전이 출시되었습니다.",
-        "description": "Nahida Desktop의 새로운 버전이 출시되었습니다. 다시 시작하여 업데이트하세요.",
+        "description": "Nahida Desktop의 새로운 버전이 출시되었습니다. 다시 시작하여 업데이트하세요.{{versionRangeText}}",
         "action": "업데이트",
         "releaseNotes": "패치 노트 열기"
       },

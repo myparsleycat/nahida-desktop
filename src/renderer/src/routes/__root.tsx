@@ -25,11 +25,15 @@ import { useTranslation } from "react-i18next";
 
 function UpdateAlertDialog() {
   const { t } = useTranslation();
+  const appStatus = useGlobalStore((state) => state.appStatus);
   const open = useGlobalStore((state) => state.shouldPromptForUpdate);
+  const releaseVersion = useGlobalStore((state) => state.releaseVersion);
   const releaseNotesUrl = useGlobalStore((state) => state.releaseNotesUrl);
   const setShouldPromptForUpdate = useGlobalStore((state) => state.setShouldPromptForUpdate);
   const isDismissingRef = useRef(false);
   const skipNextDismissRef = useRef(false);
+  const versionRangeText =
+    appStatus?.version && releaseVersion ? ` (${appStatus.version} → ${releaseVersion})` : "";
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
@@ -60,11 +64,11 @@ function UpdateAlertDialog() {
         <AlertDialogHeader>
           <AlertDialogTitle>{t("updater.toast.available.title")}</AlertDialogTitle>
           <AlertDialogDescription>
-            {t("updater.toast.available.description")}
+            {t("updater.toast.available.description", { versionRangeText })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+          <AlertDialogCancel>{t("g.later")}</AlertDialogCancel>
           {releaseNotesUrl && (
             <Button
               variant="outline"
