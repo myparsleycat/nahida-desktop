@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { CircleCheckIcon, CircleXIcon, Loader2Icon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 interface XXMIImporter {
@@ -31,6 +31,7 @@ export default function D3D11Builder() {
   const [progress, setProgress] = useState("");
   const [buildErrorMessage, setBuildErrorMessage] = useState("");
   const [isUpdating, setIsUpdating] = useState(true);
+  const versionsRequestId = useRef(0);
 
   useEffect(() => {
     window.api.invoke("tools:updateReleases").finally(() => {
@@ -76,11 +77,18 @@ export default function D3D11Builder() {
 
   useEffect(() => {
     const fetchVersions = async () => {
+      const requestId = ++versionsRequestId.current;
+      const requestedProvider = provider;
+
       try {
-        const v: string[] = await window.api.invoke("tools:getProviderReleases", provider);
+        const v: string[] = await window.api.invoke("tools:getProviderReleases", requestedProvider);
+        if (versionsRequestId.current !== requestId) return;
+
         setVersions(v);
         setVersion(v[0] ?? "");
       } catch {
+        if (versionsRequestId.current !== requestId) return;
+
         setVersions([]);
         setVersion("");
       }
