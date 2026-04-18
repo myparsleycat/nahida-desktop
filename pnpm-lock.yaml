@@ -19,13 +19,13 @@ importers:
         version: 4.0.0(electron@40.8.5)
       '@hono/node-server':
         specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.12)
+        version: 1.19.14(hono@4.12.14)
       '@hono/node-ws':
         specifier: ^1.3.0
-        version: 1.3.0(@hono/node-server@1.19.14(hono@4.12.12))(hono@4.12.12)
+        version: 1.3.0(@hono/node-server@1.19.14(hono@4.12.14))(hono@4.12.14)
       '@hono/zod-validator':
         specifier: ^0.7.6
-        version: 0.7.6(hono@4.12.12)(zod@4.3.6)
+        version: 0.7.6(hono@4.12.14)(zod@4.3.6)
       auto-launch:
         specifier: ^5.0.6
         version: 5.0.6
@@ -72,14 +72,14 @@ importers:
         specifier: ^11.3.4
         version: 11.3.4
       hono:
-        specifier: ^4.12.12
-        version: 4.12.12
+        specifier: ^4.12.14
+        version: 4.12.14
       html-to-text:
         specifier: ^9.0.5
         version: 9.0.5
       koffi:
-        specifier: ^2.15.6
-        version: 2.15.6
+        specifier: ^2.16.0
+        version: 2.16.0
       ky:
         specifier: ^2.0.1
         version: 2.0.1
@@ -87,8 +87,8 @@ importers:
         specifier: ^2.1.3
         version: 2.1.3
       nanoid:
-        specifier: ^5.1.7
-        version: 5.1.7
+        specifier: ^5.1.9
+        version: 5.1.9
       p-limit:
         specifier: ^7.3.0
         version: 7.3.0
@@ -157,14 +157,14 @@ importers:
         specifier: ^5.99.0
         version: 5.99.0(react@19.2.5)
       '@tanstack/react-router':
-        specifier: ^1.168.21
-        version: 1.168.21(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        specifier: ^1.168.22
+        version: 1.168.22(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@tanstack/react-virtual':
         specifier: ^3.13.23
         version: 3.13.23(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@tanstack/router-plugin':
         specifier: ^1.167.22
-        version: 1.167.22(@tanstack/react-router@1.168.21(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(vite@8.0.8(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0))
+        version: 1.167.22(@tanstack/react-router@1.168.22(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(vite@8.0.8(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0))
       '@types/auto-launch':
         specifier: ^5.0.5
         version: 5.0.5
@@ -2507,8 +2507,8 @@ packages:
     peerDependencies:
       react: ^18 || ^19
 
-  '@tanstack/react-router@1.168.21':
-    resolution: {integrity: sha512-slnitYiHHmU52eMWtW8JbV9EMT5q6mRMbTA5yepBmJAnj5WZDrDRsLY/TuUrdD97A4W7/25tEQRoqc1G2X0oCw==}
+  '@tanstack/react-router@1.168.22':
+    resolution: {integrity: sha512-W2LyfkfJtDCf//jOjZeUBWwOVl8iDRVTECpGHa2M28MT3T5/VVnjgicYNHR/ax0Filk1iU67MRjcjHheTYvK1Q==}
     engines: {node: '>=20.19'}
     peerDependencies:
       react: '>=18.0.0 || >=19.0.0'
@@ -3535,8 +3535,8 @@ packages:
     resolution: {integrity: sha512-0hJU9SCPvmMzIBdZFqNPXWa6dqh7WdH0cII9y+CyS8rG3nL48Bclra9HmKhVVUHyPWNH5Y7xDwAB7bfgSjkUMQ==}
     engines: {node: '>= 0.4'}
 
-  hono@4.12.12:
-    resolution: {integrity: sha512-p1JfQMKaceuCbpJKAPKVqyqviZdS0eUxH9v82oWo1kb9xjQ5wA6iP3FNVAPDFlz5/p7d45lO+BpSk1tuSZMF4Q==}
+  hono@4.12.14:
+    resolution: {integrity: sha512-am5zfg3yu6sqn5yjKBNqhnTX7Cv+m00ox+7jbaKkrLMRJ4rAdldd1xPd/JzbBWspqaQv6RSTrgFN95EsfhC+7w==}
     engines: {node: '>=16.9.0'}
 
   hosted-git-info@4.1.0:
@@ -3709,8 +3709,8 @@ packages:
   keyv@4.5.4:
     resolution: {integrity: sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==}
 
-  koffi@2.15.6:
-    resolution: {integrity: sha512-WQBpM5uo74UQ17UpsFN+PUOrQQg4/nYdey4SGVluQun2drYYfePziLLWdSmFb4wSdWlJC1aimXQnjhPCheRKuw==}
+  koffi@2.16.0:
+    resolution: {integrity: sha512-h/2NJueOKWd0YYycEOWDspomizgNfuOKf/V7ZE2fytvuRtHoY9Tb+y4x6GJ6pFqaVndWn9dLK+sCI14eWtu5rA==}
 
   ky@2.0.1:
     resolution: {integrity: sha512-HJPEjEpQPZQ5M3G5eu90/LWZDwysCnvqcfbLvq9FUvfizBZRi58WEixswyyI32LOLcFQd43w7kcfgkCPFxDt/Q==}
@@ -3975,8 +3975,8 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
-  nanoid@5.1.7:
-    resolution: {integrity: sha512-ua3NDgISf6jdwezAheMOk4mbE1LXjm1DfMUDMuJf4AqxLFK3ccGpgWizwa5YV7Yz9EpXwEaWoRXSb/BnV0t5dQ==}
+  nanoid@5.1.9:
+    resolution: {integrity: sha512-ZUvP7KeBLe3OZ1ypw6dI/TzYJuvHP77IM4Ry73waSQTLn8/g8rpdjfyVAh7t1/+FjBtG4lCP42MEbDxOsRpBMw==}
     engines: {node: ^18 || >=20}
     hasBin: true
 
@@ -5429,22 +5429,22 @@ snapshots:
 
   '@formkit/auto-animate@0.9.0': {}
 
-  '@hono/node-server@1.19.14(hono@4.12.12)':
+  '@hono/node-server@1.19.14(hono@4.12.14)':
     dependencies:
-      hono: 4.12.12
+      hono: 4.12.14
 
-  '@hono/node-ws@1.3.0(@hono/node-server@1.19.14(hono@4.12.12))(hono@4.12.12)':
+  '@hono/node-ws@1.3.0(@hono/node-server@1.19.14(hono@4.12.14))(hono@4.12.14)':
     dependencies:
-      '@hono/node-server': 1.19.14(hono@4.12.12)
-      hono: 4.12.12
+      '@hono/node-server': 1.19.14(hono@4.12.14)
+      hono: 4.12.14
       ws: 8.20.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@hono/zod-validator@0.7.6(hono@4.12.12)(zod@4.3.6)':
+  '@hono/zod-validator@0.7.6(hono@4.12.14)(zod@4.3.6)':
     dependencies:
-      hono: 4.12.12
+      hono: 4.12.14
       zod: 4.3.6
 
   '@img/colour@1.1.0': {}
@@ -6733,7 +6733,7 @@ snapshots:
       '@tanstack/query-core': 5.99.0
       react: 19.2.5
 
-  '@tanstack/react-router@1.168.21(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
+  '@tanstack/react-router@1.168.22(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
     dependencies:
       '@tanstack/history': 1.161.6
       '@tanstack/react-store': 0.9.3(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -6775,7 +6775,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@tanstack/router-plugin@1.167.22(@tanstack/react-router@1.168.21(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(vite@8.0.8(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0))':
+  '@tanstack/router-plugin@1.167.22(@tanstack/react-router@1.168.22(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(vite@8.0.8(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0))':
     dependencies:
       '@babel/core': 7.29.0
       '@babel/plugin-syntax-jsx': 7.28.6(@babel/core@7.29.0)
@@ -6791,7 +6791,7 @@ snapshots:
       unplugin: 2.3.11
       zod: 3.25.76
     optionalDependencies:
-      '@tanstack/react-router': 1.168.21(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@tanstack/react-router': 1.168.22(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       vite: 8.0.8(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.6.1)(tsx@4.21.0)
     transitivePeerDependencies:
       - supports-color
@@ -7899,7 +7899,7 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
-  hono@4.12.12: {}
+  hono@4.12.14: {}
 
   hosted-git-info@4.1.0:
     dependencies:
@@ -8060,7 +8060,7 @@ snapshots:
     dependencies:
       json-buffer: 3.0.1
 
-  koffi@2.15.6: {}
+  koffi@2.16.0: {}
 
   ky@2.0.1: {}
 
@@ -8278,7 +8278,7 @@ snapshots:
 
   nanoid@3.3.11: {}
 
-  nanoid@5.1.7: {}
+  nanoid@5.1.9: {}
 
   napi-build-utils@2.0.0: {}
 
