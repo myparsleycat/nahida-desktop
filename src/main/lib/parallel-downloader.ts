@@ -10,7 +10,6 @@ export interface ParallelDownloadOptions {
     url: string;
     savePath: string;
     fileSize: number;
-    token?: string;
     headers?: Record<string, string>;
     signal?: AbortSignal;
     onProgress?: (bytes: number) => void;
@@ -128,8 +127,11 @@ export class ParallelDownloader {
             dispatcher: await this.options.getAgent(),
         });
 
-        if (!response.ok && response.status !== 206) {
-            throw new Error(`Chunk download failed: ${response.statusText} (${response.status})`);
+        if (response.status !== 206) {
+            await response.body?.cancel().catch(() => {});
+            throw new Error(
+                `Chunk download failed: expected 206 Partial Content, got ${response.statusText} (${response.status})`,
+            );
         }
 
         if (!response.body) throw new Error("No response body");
@@ -175,9 +177,27 @@ export class ParallelDownloader {
 
                 const chunkStream = fse.createReadStream(segment.chunkPath);
                 await new Promise<void>((resolve, reject) => {
+                    let settled = false;
+                    const settle = (error?: Error) => {
+                        if (settled) return;
+                        settled = true;
+                        chunkStream.off("end", onEnd);
+                        chunkStream.off("error", onError);
+                        fileStream.off("error", onError);
+
+                        if (error) {
+                            reject(error);
+                            return;
+                        }
+                        resolve();
+                    };
+                    const onEnd = () => settle();
+                    const onError = (error: Error) => settle(error);
+
+                    chunkStream.on("end", onEnd);
+                    chunkStream.on("error", onError);
+                    fileStream.on("error", onError);
                     chunkStream.pipe(fileStream, { end: false });
-                    chunkStream.on("end", resolve);
-                    chunkStream.on("error", reject);
                 });
             }
 
@@ -446,8 +466,10 @@ export class ParallelDownloader {
 
                 try {
                     await retry(
-                        () =>
-                            this.downloadChunk({
+                        () => {
+                            segment.transferredBytes = 0;
+
+                            return this.downloadChunk({
                                 url,
                                 headers,
                                 start: segment.start,
@@ -467,7 +489,8 @@ export class ParallelDownloader {
                                     }
                                 },
                                 preservePartialOnAbort: () => segment.splitRequested,
-                            }),
+                            });
+                        },
                         {
                             retries: 2,
                             delay: (attempt) => 2 ** attempt * 1000,
