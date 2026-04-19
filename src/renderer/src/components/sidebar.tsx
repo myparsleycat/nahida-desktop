@@ -3,7 +3,7 @@ import { cn } from "@renderer/lib/utils";
 import { viewStore } from "@renderer/store/drive";
 import { useGlobalStore } from "@renderer/store/global";
 import { supportsWindowsDesktopFeatures } from "@shared/platform";
-import type { TransferWithoutData } from "@shared/types.gen";
+import { getAggregateTransferProgress } from "@shared/transfer-progress";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpDownIcon,
@@ -34,12 +34,7 @@ export function Sidebar({ className }: { className?: string }) {
   };
 
   const iconSize = "size-7";
-  const transfersWithVisibleProgress = transfers.filter((transfer) =>
-    ["preparing", "progress"].includes(transfer.status),
-  );
-  const activeTransferCount = transfersWithVisibleProgress.length;
-  const activeTransferProgress =
-    activeTransferCount === 0 ? null : getAggregateTransferProgress(transfersWithVisibleProgress);
+  const activeTransferProgress = getAggregateTransferProgress(transfers);
   const transferProgressLabel =
     activeTransferProgress === null ? null : `${Math.round(activeTransferProgress)}%`;
   const transferProgressRadius = 15;
@@ -307,15 +302,4 @@ export function Sidebar({ className }: { className?: string }) {
       </div>
     </div>
   );
-}
-
-function getAggregateTransferProgress(transfers: TransferWithoutData[]) {
-  const totalSize = transfers.reduce((sum, transfer) => sum + transfer.totalSize, 0);
-  if (totalSize > 0) {
-    const transferredSize = transfers.reduce((sum, transfer) => sum + transfer.transferedSize, 0);
-    return Math.max(0, Math.min(100, (transferredSize / totalSize) * 100));
-  }
-
-  const totalProgress = transfers.reduce((sum, transfer) => sum + transfer.progress, 0);
-  return Math.max(0, Math.min(100, totalProgress / Math.max(transfers.length, 1)));
 }
