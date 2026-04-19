@@ -724,7 +724,8 @@ export class Setting {
                 const value = normalizeDriveNameSortPolicy(null);
                 await this.desktop.lib.db
                     .insert(setting)
-                    .values({ key: "drive_name_sort_policy", value });
+                    .values({ key: "drive_name_sort_policy", value })
+                    .onConflictDoNothing();
                 return value;
             }
 
