@@ -8,6 +8,7 @@ export interface LocalTransfer extends Transfer {
     abortController: AbortController;
     restartParams?: any;
     completedFileUuids?: Set<string>;
+    createdOrder: number;
     sessionStartBytes: number;
     speedSamples: Array<{ timestamp: number; bytes: number }>;
     error?: string;
@@ -19,6 +20,7 @@ export class TransferService {
     private isPowerSaveBlockerActive: boolean = false;
     private transfers: LocalTransfer[] = [];
     private queueGroupSequence = 0;
+    private transferSequence = 0;
 
     private throttledEmits: Map<string, () => void> = new Map();
     private runners: Map<string, () => Promise<void>> = new Map();
@@ -125,27 +127,37 @@ export class TransferService {
         transfer.queueGroupId = this.createQueueGroupId();
     }
 
-    private emitUpdate() {
-        const safeTransfers = this.transfers.map((t) => {
+    private getSafeTransfers(newestFirst = false) {
+        const transfers = newestFirst
+            ? [...this.transfers].sort((a, b) => b.createdOrder - a.createdOrder)
+            : this.transfers;
+
+        return transfers.map((t) => {
             const {
-                abortController,
-                restartParams,
-                completedFileUuids,
-                sessionStartBytes,
-                data,
+                abortController: _abortController,
+                restartParams: _restartParams,
+                completedFileUuids: _completedFileUuids,
+                createdOrder: _createdOrder,
+                sessionStartBytes: _sessionStartBytes,
+                data: _data,
                 ...rest
             } = t;
             return rest;
         });
+    }
+
+    private emitUpdate() {
+        const safeTransfers = this.getSafeTransfers(true);
         this.syncMainWindowProgressBar();
         this.desktop.window.main.window?.webContents.send("transfer:update", safeTransfers);
     }
 
     public getAllTransfer() {
-        return this.transfers.map((t) => {
-            const { abortController, restartParams, sessionStartBytes, data, ...rest } = t;
-            return rest;
-        });
+        return this.getSafeTransfers();
+    }
+
+    public getDisplayTransfers() {
+        return this.getSafeTransfers(true);
     }
 
     public getTransferByPID(pid: string) {
@@ -217,6 +229,7 @@ export class TransferService {
             eta: 0,
             abortController,
             startTime: Date.now(),
+            createdOrder: ++this.transferSequence,
             sessionStartBytes: 0,
             speedSamples: [],
             data,
@@ -324,7 +337,9 @@ export class TransferService {
 
     public updateTransfer(
         pid: string,
-        updates: Partial<Omit<LocalTransfer, "pid" | "type" | "data" | "startTime">>,
+        updates: Partial<
+            Omit<LocalTransfer, "pid" | "type" | "data" | "startTime" | "createdOrder">
+        >,
     ) {
         const transfer = this.transfers.find((t) => t.pid === pid);
         if (!transfer) return;

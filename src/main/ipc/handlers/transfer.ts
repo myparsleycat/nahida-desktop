@@ -3,7 +3,7 @@ import { rh } from "@main/ipc/helper";
 
 export function registerTransferHandlers(d: NahidaDesktop) {
     rh("transfer:list", async () => {
-        return d.service.transfer.getAllTransfer();
+        return d.service.transfer.getDisplayTransfers();
     });
 
     rh("transfer:cancel", async (pid) => {
