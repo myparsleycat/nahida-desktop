@@ -1,5 +1,10 @@
 import { getAggregateTransferProgress, isOpenTransferQueueStatus } from "@shared/transfer-progress";
-import type { Transfer, TransferData, TransferStatus } from "@shared/types.gen";
+import type {
+    Transfer,
+    TransferData,
+    TransferStatus,
+    TransferWithoutData,
+} from "@shared/types.gen";
 import { throttle } from "es-toolkit";
 import type { NahidaDesktop } from "..";
 
@@ -127,7 +132,7 @@ export class TransferService {
         transfer.queueGroupId = this.createQueueGroupId();
     }
 
-    private getSafeTransfers(newestFirst = false) {
+    private getSafeTransfers(newestFirst = false): TransferWithoutData[] {
         const transfers = newestFirst
             ? [...this.transfers].sort((a, b) => b.createdOrder - a.createdOrder)
             : this.transfers;
@@ -146,17 +151,17 @@ export class TransferService {
         });
     }
 
-    private emitUpdate() {
-        const safeTransfers = this.getSafeTransfers(true);
+    private emitUpdate(): void {
+        const safeTransfers: TransferWithoutData[] = this.getSafeTransfers(true);
         this.syncMainWindowProgressBar();
         this.desktop.window.main.window?.webContents.send("transfer:update", safeTransfers);
     }
 
-    public getAllTransfer() {
+    public getAllTransfer(): TransferWithoutData[] {
         return this.getSafeTransfers();
     }
 
-    public getDisplayTransfers() {
+    public getDisplayTransfers(): TransferWithoutData[] {
         return this.getSafeTransfers(true);
     }
 

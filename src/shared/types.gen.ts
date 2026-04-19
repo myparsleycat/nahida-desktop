@@ -268,7 +268,7 @@ export type IpcEvents = {
     "window:blur": () => void;
     "window:focus": () => void;
 
-    "transfer:update": (transfers: Transfer[]) => void;
+    "transfer:update": (transfers: TransferWithoutData[]) => void;
 
     "fn:toast": (message: string, data?: ToastData) => void;
     "fn:navi": (path: string) => void;
