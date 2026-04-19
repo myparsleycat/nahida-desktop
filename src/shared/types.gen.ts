@@ -2,7 +2,6 @@ import { Treaty } from "@elysiajs/eden";
 import { eden } from "@main/client";
 import { desktop } from "@main/index";
 import { Session } from "./schemas/auth";
-import "./types-check";
 
 export interface AppStatus {
     version: string;
@@ -224,7 +223,7 @@ export type IpcHandlers = {
     "tools:updateReleases": (...args: Parameters<typeof desktop.service.modTools.dllBuilder.updateReleases>) => ReturnType<typeof desktop.service.modTools.dllBuilder.updateReleases>;
     "transfer:cancel": (...args: Parameters<typeof desktop.service.transfer.cancelTransfer>) => ReturnType<typeof desktop.service.transfer.cancelTransfer>;
     "transfer:clear": (...args: any[]) => any;
-    "transfer:list": (...args: Parameters<typeof desktop.service.transfer.getAllTransfer>) => ReturnType<typeof desktop.service.transfer.getAllTransfer>;
+    "transfer:list": (...args: Parameters<typeof desktop.service.transfer.getDisplayTransfers>) => ReturnType<typeof desktop.service.transfer.getDisplayTransfers>;
     "transfer:pause": (...args: any[]) => any;
     "transfer:pause-all": (...args: any[]) => any;
     "transfer:resume": (...args: any[]) => any;
