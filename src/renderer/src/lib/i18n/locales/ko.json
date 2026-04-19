@@ -450,6 +450,7 @@
         "mod": "모드",
         "account": "계정",
         "advanced": "고급",
+        "drive": "드라이브",
         "transfer": "전송"
       },
       "gen": {
@@ -604,6 +605,21 @@
         "uploadCreateManyConcurrency": {
           "title": "업로드 메타데이터 동시 요청 수",
           "description": "파일 업로드를 시작하기 전에 동시에 실행할 요청 수를 설정합니다. 범위: 1~4"
+        }
+      },
+      "drive": {
+        "title": "드라이브",
+        "sorting": {
+          "title": "정렬"
+        },
+        "nameSortPolicy": {
+          "title": "이름 정렬 정책",
+          "description": "드라이브에서 이름순으로 정렬할 때 공백과 숫자를 처리하는 방식을 선택합니다.",
+          "select": "정렬 정책 선택",
+          "options": {
+            "natural_ignore_spacing": "자연 정렬 + 공백 무시",
+            "natural": "기본 자연 정렬"
+          }
         }
       }
     },

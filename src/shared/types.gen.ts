@@ -165,6 +165,8 @@ export type IpcHandlers = {
     "pathSelector:selectModManagerPath": (...args: Parameters<typeof desktop.lib.pathSelector.selectModManagerPath>) => ReturnType<typeof desktop.lib.pathSelector.selectModManagerPath>;
     "setting:advanced:getAll": (...args: Parameters<typeof desktop.setting.advanced.getAll>) => ReturnType<typeof desktop.setting.advanced.getAll>;
     "setting:advanced:set": (...args: Parameters<typeof desktop.setting.advanced.set>) => ReturnType<typeof desktop.setting.advanced.set>;
+    "setting:drive:getNameSortPolicy": (...args: Parameters<typeof desktop.setting.drive.getNameSortPolicy>) => ReturnType<typeof desktop.setting.drive.getNameSortPolicy>;
+    "setting:drive:setNameSortPolicy": (...args: any[]) => any;
     "setting:general:clearImageCache": (...args: Parameters<typeof desktop.setting.general.clearImageCache>) => ReturnType<typeof desktop.setting.general.clearImageCache>;
     "setting:general:getAutoUpdateMode": (...args: Parameters<typeof desktop.setting.general.getAutoUpdateMode>) => ReturnType<typeof desktop.setting.general.getAutoUpdateMode>;
     "setting:general:getDefaultStartPage": (...args: Parameters<typeof desktop.setting.general.getDefaultStartPage>) => ReturnType<typeof desktop.setting.general.getDefaultStartPage>;
@@ -279,6 +281,7 @@ export type IpcEvents = {
     "mod:update-game": () => void;
     "mod:update-mods": () => void;
     "mod:update-settings": () => void;
+    "drive:update-settings": () => void;
 
     "auth:update": (session: Session | null) => void;
     "setting:update": (data: { key: string; value: any }) => void;

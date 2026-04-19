@@ -1,5 +1,6 @@
 import type { NahidaDesktop } from "@main/index";
 import { imageCache, setting } from "@main/internal/db/schema";
+import { normalizeDriveNameSortPolicy, type DriveNameSortPolicy } from "@shared/drive";
 import { ARCHIVE_EXTRACT_PATH_MODES, type ArchiveExtractPathMode } from "@shared/mod";
 import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import type { AutoUpdateMode } from "@shared/updater";
@@ -706,6 +707,37 @@ export class Setting {
             await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "transfer_upload_create_many_concurrency", value })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value },
+                });
+        },
+    };
+
+    drive = {
+        getNameSortPolicy: async (): Promise<DriveNameSortPolicy> => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "drive_name_sort_policy"),
+            });
+
+            if (!qr) {
+                const value = normalizeDriveNameSortPolicy(null);
+                await this.desktop.lib.db
+                    .insert(setting)
+                    .values({ key: "drive_name_sort_policy", value })
+                    .onConflictDoNothing();
+                return value;
+            }
+
+            return normalizeDriveNameSortPolicy(qr.value);
+        },
+
+        setNameSortPolicy: async (policy: DriveNameSortPolicy) => {
+            const value = normalizeDriveNameSortPolicy(policy);
+
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({ key: "drive_name_sort_policy", value })
                 .onConflictDoUpdate({
                     target: setting.key,
                     set: { value },

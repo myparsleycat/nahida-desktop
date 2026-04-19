@@ -450,6 +450,7 @@
         "mod": "模组",
         "account": "账户",
         "advanced": "高级设置",
+        "drive": "网盘",
         "transfer": "Transfer"
       },
       "gen": {
@@ -604,6 +605,21 @@
         "uploadCreateManyConcurrency": {
           "title": "上传元数据并发请求数",
           "description": "设置在开始文件上传前可同时执行的 请求数量。范围：1 到 4"
+        }
+      },
+      "drive": {
+        "title": "网盘",
+        "sorting": {
+          "title": "排序"
+        },
+        "nameSortPolicy": {
+          "title": "名称排序策略",
+          "description": "选择在网盘按名称排序时如何处理空格和数字。",
+          "select": "选择排序策略",
+          "options": {
+            "natural_ignore_spacing": "自然排序 + 忽略空格",
+            "natural": "默认自然排序"
+          }
         }
       }
     },

@@ -451,6 +451,7 @@
         "mod": "MOD",
         "account": "ID",
         "advanced": "詳細",
+        "drive": "ドライブ",
         "transfer": "Transfer"
       },
       "gen": {
@@ -605,6 +606,21 @@
         "uploadCreateManyConcurrency": {
           "title": "アップロードメタデータ同時リクエスト数",
           "description": "ファイルアップロード開始前に同時実行する リクエスト数を設定します。範囲: 1〜4"
+        }
+      },
+      "drive": {
+        "title": "ドライブ",
+        "sorting": {
+          "title": "並び替え"
+        },
+        "nameSortPolicy": {
+          "title": "名前の並び替えポリシー",
+          "description": "ドライブで名前順に並び替えるときの空白と数字の扱いを選択します。",
+          "select": "並び替えポリシーを選択",
+          "options": {
+            "natural_ignore_spacing": "自然順 + 空白を無視",
+            "natural": "標準の自然順"
+          }
         }
       }
     },
