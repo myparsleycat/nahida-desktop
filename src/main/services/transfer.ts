@@ -1,3 +1,4 @@
+import { getAggregateTransferProgress, isOpenTransferQueueStatus } from "@shared/transfer-progress";
 import type { Transfer, TransferData, TransferStatus } from "@shared/types.gen";
 import { throttle } from "es-toolkit";
 import type { NahidaDesktop } from "..";
@@ -17,6 +18,7 @@ export class TransferService {
     private isQueueRunning: boolean = false;
     private isPowerSaveBlockerActive: boolean = false;
     private transfers: LocalTransfer[] = [];
+    private queueGroupSequence = 0;
 
     private throttledEmits: Map<string, () => void> = new Map();
     private runners: Map<string, () => Promise<void>> = new Map();
@@ -55,14 +57,6 @@ export class TransferService {
         const mainWindow = this.desktop.window.main.window;
         if (!mainWindow) return;
 
-        const queueStatuses: TransferStatus[] = [
-            "completed",
-            "progress",
-            "preparing",
-            "pending",
-            "paused",
-            "error",
-        ];
         const remainingTransfers = this.transfers.filter(
             (t) => t.status !== "completed" && t.status !== "canceled",
         );
@@ -71,17 +65,7 @@ export class TransferService {
             return;
         }
 
-        const queueTransfers = this.transfers.filter((t) => queueStatuses.includes(t.status));
-        if (queueTransfers.length === 0) {
-            mainWindow.setProgressBar(-1);
-            return;
-        }
-
-        const totalProgress = queueTransfers.reduce((sum, transfer) => {
-            if (transfer.status === "completed") return sum + 100;
-            return sum + Math.min(100, transfer.progress || 0);
-        }, 0);
-
+        const aggregateProgress = getAggregateTransferProgress(this.transfers);
         let mode: "normal" | "indeterminate" | "error" | "paused" = "normal";
 
         if (remainingTransfers.some((t) => t.status === "progress")) {
@@ -96,7 +80,49 @@ export class TransferService {
             mode = "error";
         }
 
-        mainWindow.setProgressBar(totalProgress / (queueTransfers.length * 100), { mode });
+        const progress = aggregateProgress ?? this.getFallbackWindowProgress(remainingTransfers);
+        if (progress === null) {
+            mainWindow.setProgressBar(-1);
+            return;
+        }
+
+        mainWindow.setProgressBar(progress / 100, { mode });
+    }
+
+    private getFallbackWindowProgress(transfers: LocalTransfer[]) {
+        if (transfers.length === 0) return null;
+
+        const totalSize = transfers.reduce((sum, transfer) => sum + transfer.totalSize, 0);
+        if (totalSize > 0) {
+            const transferredSize = transfers.reduce(
+                (sum, transfer) =>
+                    sum + Math.max(0, Math.min(transfer.transferedSize, transfer.totalSize)),
+                0,
+            );
+            return Math.max(0, Math.min(100, (transferredSize / totalSize) * 100));
+        }
+
+        const totalProgress = transfers.reduce(
+            (sum, transfer) => sum + Math.max(0, Math.min(100, transfer.progress || 0)),
+            0,
+        );
+        return Math.max(0, Math.min(100, totalProgress / transfers.length));
+    }
+
+    private createQueueGroupId() {
+        if (!this.transfers.some((transfer) => isOpenTransferQueueStatus(transfer.status))) {
+            this.queueGroupSequence += 1;
+        }
+
+        return this.queueGroupSequence;
+    }
+
+    private moveTransferToCurrentQueueGroup(transfer: LocalTransfer) {
+        if (isOpenTransferQueueStatus(transfer.status) && transfer.queueGroupId !== undefined) {
+            return;
+        }
+
+        transfer.queueGroupId = this.createQueueGroupId();
     }
 
     private emitUpdate() {
@@ -181,6 +207,7 @@ export class TransferService {
         const transfer: LocalTransfer = {
             pid,
             type,
+            queueGroupId: this.createQueueGroupId(),
             currentId,
             status: initialStatus,
             totalSize,
@@ -285,6 +312,7 @@ export class TransferService {
         }
 
         if (transfer.status !== "preparing") {
+            this.moveTransferToCurrentQueueGroup(transfer);
             transfer.status = "pending";
         }
 

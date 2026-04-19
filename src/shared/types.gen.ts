@@ -366,6 +366,7 @@ export interface TransferData {
 export interface Transfer {
     pid: string;
     type: "upload" | "download";
+    queueGroupId?: number;
     currentId?: string;
     status: TransferStatus;
     totalSize: number;
