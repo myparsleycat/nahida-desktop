@@ -470,7 +470,8 @@
         "transfer": "Transfer",
         "mod": "Mod",
         "account": "Account",
-        "advanced": "Advanced"
+        "advanced": "Advanced",
+        "drive": "Drive"
       },
       "gen": {
         "application": {
@@ -589,6 +590,21 @@
         },
         "other": {
           "title": "Other"
+        }
+      },
+      "drive": {
+        "title": "Drive",
+        "sorting": {
+          "title": "Sorting"
+        },
+        "nameSortPolicy": {
+          "title": "Name sort policy",
+          "description": "Choose how spaces and numbers are handled when sorting drive items by name.",
+          "select": "Select sort policy",
+          "options": {
+            "natural_ignore_spacing": "Natural sort + ignore spaces",
+            "natural": "Default natural sort"
+          }
         }
       },
       "xxmi": {

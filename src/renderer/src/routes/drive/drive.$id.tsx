@@ -19,6 +19,7 @@ import { AliceLoader } from "@renderer/components/loaders";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { useDrag } from "@renderer/hooks/drive";
 import { useDriveUploadRefresh } from "@renderer/hooks/use-drive-upload-refresh";
+import { useDriveNameSortPolicy } from "@renderer/hooks/use-settings";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { getSearchScore } from "@renderer/lib/sejong";
 import { commonSort } from "@renderer/lib/utils";
@@ -47,6 +48,7 @@ function RouteComponent() {
   const setSearchInDirQuery = useViewStore((s) => s.setSearchInDirQuery);
   const sortType = useViewStore((s) => s.sortType);
   const layout = useViewStore((s) => s.layout);
+  const { data: nameSortPolicy = "natural_ignore_spacing" } = useDriveNameSortPolicy();
 
   useDriveUploadRefresh(id, ["drive", "drive", id]);
 
@@ -83,8 +85,8 @@ function RouteComponent() {
 
   const rawContents = useMemo(() => {
     if (!query.data?.children) return [];
-    return commonSort([...query.data.children], sortType);
-  }, [query.data?.children, sortType]);
+    return commonSort([...query.data.children], sortType, nameSortPolicy);
+  }, [query.data?.children, sortType, nameSortPolicy]);
 
   const sortedContents = useMemo(() => {
     if (!rawContents) return [];

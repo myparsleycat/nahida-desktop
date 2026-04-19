@@ -1,3 +1,4 @@
+import type { DriveNameSortPolicy } from "@shared/drive";
 import type { IpcHandlers } from "@shared/types.gen";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
@@ -94,6 +95,24 @@ export function useSearchModPreviewSetting() {
         queryKey: ["settings", "mod", "searchModPreview"],
         queryFn: async () => {
             return await window.api.invoke("setting:mod:getSearchModPreview");
+        },
+    });
+}
+
+export function useDriveNameSortPolicy() {
+    const queryClient = useQueryClient();
+
+    useEffect(() => {
+        const removeListener = window.api.on("drive:update-settings", () => {
+            queryClient.invalidateQueries({ queryKey: ["settings", "drive", "nameSortPolicy"] });
+        });
+        return () => removeListener();
+    }, [queryClient]);
+
+    return useQuery({
+        queryKey: ["settings", "drive", "nameSortPolicy"],
+        queryFn: async (): Promise<DriveNameSortPolicy> => {
+            return await window.api.invoke("setting:drive:getNameSortPolicy");
         },
     });
 }

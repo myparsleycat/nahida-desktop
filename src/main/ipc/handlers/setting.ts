@@ -186,6 +186,15 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         return await d.setting.transfer.setUploadCreateManyConcurrency(concurrency);
     });
 
+    rh("setting:drive:getNameSortPolicy", async () => {
+        return await d.setting.drive.getNameSortPolicy();
+    });
+
+    rh("setting:drive:setNameSortPolicy", async (policy) => {
+        await d.setting.drive.setNameSortPolicy(policy);
+        d.ipc.broadcast("drive:update-settings");
+    });
+
     if (supportsWindowsDesktopFeatures(process.platform)) {
         rh("setting:xxmi:getPersistToggles", async () => {
             return await d.setting.xxmi.getPersistToggles();
