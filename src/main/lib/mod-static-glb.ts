@@ -276,6 +276,7 @@ async function findIni(input: string): Promise<string> {
         absolute: true,
         onlyFiles: true,
         ignore: ["**/merged.ini"],
+        caseSensitiveMatch: false,
     });
 
     if (candidates.length === 0) {
@@ -973,6 +974,7 @@ async function findRecursive(
         cwd: path.resolve(root),
         absolute: true,
         onlyFiles: true,
+        caseSensitiveMatch: false,
     });
 
     return matches.find((file) => predicate(file)) ?? null;
