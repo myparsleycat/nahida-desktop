@@ -34,8 +34,10 @@ export function ModelViewerDialog({
         className="flex min-w-[90vw] max-h-[90vh] h-full flex-col gap-3 p-3 focus:outline-none focus-visible:outline-none"
         onClick={(e) => e.stopPropagation()}
       >
-        <DialogHeader>
-          <DialogTitle>{source?.name || "Model Viewer"}</DialogTitle>
+        <DialogHeader className="pr-10">
+          <DialogTitle className="truncate" title={source?.name}>
+            {source?.name || "Model Viewer"}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border bg-muted/30">
