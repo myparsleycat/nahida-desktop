@@ -10,10 +10,10 @@
             http-equiv="Content-Security-Policy"
             content="
       default-src *;
-      connect-src *;
+      connect-src * blob: local:;
       script-src * 'unsafe-inline';
       style-src * 'unsafe-inline';
-      img-src * data: blob: nahida: nahida-app:;
+      img-src * data: blob: nahida: nahida-app: local:;
       media-src * nahida: nahida-app:;
     "
         />
