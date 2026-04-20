@@ -214,8 +214,20 @@ export function ModContextMenu({
       });
       setShowModelViewer(true);
     } catch (error) {
+      const rawMsg = error instanceof Error ? error.message : String(error);
+
+      const lastErrorIndex = rawMsg.lastIndexOf("Error");
+
+      const msg =
+        lastErrorIndex !== -1
+          ? rawMsg
+              .slice(lastErrorIndex + "Error".length)
+              .replace(/^:\s*/, "")
+              .trim()
+          : rawMsg;
+
       toast.error("Failed to open model viewer", {
-        description: error instanceof Error ? error.message : String(error),
+        description: msg,
       });
     } finally {
       setIsConvertingModel(false);
