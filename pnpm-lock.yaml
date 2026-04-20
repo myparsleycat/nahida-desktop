@@ -198,6 +198,9 @@ importers:
       '@types/path-browserify':
         specifier: ^1.0.3
         version: 1.0.3
+      '@types/pngjs':
+        specifier: ^6.0.5
+        version: 6.0.5
       '@types/react':
         specifier: ^19.2.14
         version: 19.2.14
@@ -2655,6 +2658,9 @@ packages:
 
   '@types/plist@3.0.5':
     resolution: {integrity: sha512-E6OCaRmAe4WDmWNsL/9RMqdkkzDCY1etutkflWk4c+AcjDU07Pcz1fQwTX0TQz+Pxqn9i4L1TU3UFpjnrcDgxA==}
+
+  '@types/pngjs@6.0.5':
+    resolution: {integrity: sha512-0k5eKfrA83JOZPppLtS2C7OUtyNAl2wKNxfyYl9Q5g9lPkgBl/9hNyAu6HuEH2J4XmIv2znEpkDd0SaZVxW6iQ==}
 
   '@types/react-dom@19.2.3':
     resolution: {integrity: sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==}
@@ -6966,6 +6972,10 @@ snapshots:
       '@types/node': 24.12.2
       xmlbuilder: 15.1.1
     optional: true
+
+  '@types/pngjs@6.0.5':
+    dependencies:
+      '@types/node': 24.12.2
 
   '@types/react-dom@19.2.3(@types/react@19.2.14)':
     dependencies:
