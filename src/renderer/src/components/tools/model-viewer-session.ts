@@ -37,7 +37,15 @@ export function suppressModelViewerFocusOutline(element: HTMLElement | null): vo
 
         const style = document.createElement("style");
         style.dataset.nhdFocusOutline = "true";
-        style.textContent = ".userInput { outline: none !important; }";
+        style.textContent = `
+            .userInput:focus:not(:focus-visible) {
+                outline: none !important;
+            }
+
+            .userInput:focus-visible {
+                outline: auto !important;
+            }
+        `;
         shadowRoot.appendChild(style);
     });
 }

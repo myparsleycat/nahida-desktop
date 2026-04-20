@@ -1,9 +1,9 @@
-import React from "react";
-import "@google/model-viewer";
 import { Button } from "@renderer/components/ui/button";
+import "@google/model-viewer";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeftIcon, FolderOpenIcon } from "lucide-react";
+import React from "react";
 import { suppressModelViewerFocusOutline } from "./model-viewer-session";
 
 function toLocalUrl(filePath: string) {
@@ -11,13 +11,7 @@ function toLocalUrl(filePath: string) {
   return `local://${encodeURI(normalized).replaceAll("#", "%23").replaceAll("?", "%3F")}`;
 }
 
-export function ModelViewerPage({
-  path,
-  name,
-}: {
-  path: string;
-  name: string;
-}) {
+export function ModelViewerPage({ path, name }: { path: string; name: string }) {
   const { Titlebar } = useTitlebar();
   const modelName = name || "Model Viewer";
   const modelSrc = path ? toLocalUrl(path) : "";
@@ -57,8 +51,7 @@ export function ModelViewerPage({
             <>
               <model-viewer
                 ref={suppressModelViewerFocusOutline}
-                className="absolute inset-0 h-full w-full focus:outline-none focus-visible:outline-none"
-                style={{ outline: "none" }}
+                className="absolute inset-0 h-full w-full"
                 src={modelSrc}
                 ar
                 ar-modes="webxr scene-viewer quick-look"

@@ -42,8 +42,7 @@ export function ModelViewerDialog({
           {objectUrl ? (
             <model-viewer
               ref={suppressModelViewerFocusOutline}
-              className="absolute inset-0 h-full w-full focus:outline-none focus-visible:outline-none"
-              style={{ outline: "none" }}
+              className="absolute inset-0 h-full w-full"
               src={objectUrl}
               ar
               ar-modes="webxr scene-viewer quick-look"
