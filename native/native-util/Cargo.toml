@@ -8,12 +8,15 @@ version = "0.1.0"
 crate-type = ["cdylib"]
 
 [dependencies]
+ddsfile = "0.5.2"
+image = { version = "0.25.8", default-features = false, features = ["png"] }
+image_dds = { version = "0.7.2", default-features = false, features = ["ddsfile", "image"] }
 jwalk = "0.8.1"
+lazy_static = "1.4.0"
 napi = { version = "3.0.0", features = ["async"] }
 napi-derive = "3.0.0"
 rayon = "1.11.0"
 sysinfo = "0.38.1"
-lazy_static = "1.4.0"
 
 [dependencies.windows]
 version = "0.52.0"

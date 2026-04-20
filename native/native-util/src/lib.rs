@@ -1,7 +1,14 @@
+use ddsfile::Dds;
+use image::ImageFormat;
 use jwalk::WalkDir;
+use napi::bindgen_prelude::AsyncTask;
+use napi::Task;
 use napi_derive::napi;
 use rayon::prelude::*;
 use std::collections::HashSet;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
@@ -40,6 +47,78 @@ impl Drop for HandleWrapper {
             let _ = CloseHandle(self.0);
         }
     }
+}
+
+pub struct ConvertDdsToPngTask {
+    input_path: PathBuf,
+    output_path: PathBuf,
+}
+
+#[napi]
+impl Task for ConvertDdsToPngTask {
+    type Output = ();
+    type JsValue = ();
+
+    fn compute(&mut self) -> napi::Result<Self::Output> {
+        let file = File::open(&self.input_path).map_err(|error| {
+            napi::Error::from_reason(format!(
+                "Failed to open DDS file '{}': {}",
+                self.input_path.display(),
+                error
+            ))
+        })?;
+
+        let mut reader = BufReader::new(file);
+        let dds = Dds::read(&mut reader).map_err(|error| {
+            napi::Error::from_reason(format!(
+                "Failed to read DDS file '{}': {}",
+                self.input_path.display(),
+                error
+            ))
+        })?;
+
+        let image = image_dds::image_from_dds(&dds, 0).map_err(|error| {
+            napi::Error::from_reason(format!(
+                "Failed to decode DDS file '{}': {}",
+                self.input_path.display(),
+                error
+            ))
+        })?;
+
+        if let Some(parent) = self.output_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| {
+                napi::Error::from_reason(format!(
+                    "Failed to create output directory '{}': {}",
+                    parent.display(),
+                    error
+                ))
+            })?;
+        }
+
+        image
+            .save_with_format(&self.output_path, ImageFormat::Png)
+            .map_err(|error| {
+                napi::Error::from_reason(format!(
+                    "Failed to save PNG file '{}': {}",
+                    self.output_path.display(),
+                    error
+                ))
+            })?;
+
+        Ok(())
+    }
+
+    fn resolve(&mut self, _: napi::Env, _: Self::Output) -> napi::Result<Self::JsValue> {
+        Ok(())
+    }
+}
+
+#[napi]
+pub fn convert_dds_to_png(input_path: String, output_path: String) -> AsyncTask<ConvertDdsToPngTask> {
+    AsyncTask::new(ConvertDdsToPngTask {
+        input_path: PathBuf::from(input_path),
+        output_path: PathBuf::from(output_path),
+    })
 }
 
 #[napi]

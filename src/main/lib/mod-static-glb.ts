@@ -1,9 +1,11 @@
+import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
-import { convertDdsToPng } from "@marcuth/dds-to-png";
+import { convertDdsToPng } from "@native/native-util";
 import { decodeImage, parseDDSHeader } from "dds-ktx-parser";
 import fg from "fast-glob";
 import fse from "fs-extra";
+import pLimit from "p-limit";
 import { PNG } from "pngjs";
 import type { Logger } from "../internal/logger";
 
@@ -613,17 +615,21 @@ async function buildMaterials(
         } => candidate !== null,
     );
 
+    const texturePrepareConcurrency = Math.max(1, Math.min(os.availableParallelism(), 8));
+    const limitTexturePreparation = pLimit(texturePrepareConcurrency);
     const prepareTasks = new Map<string, Promise<PreparedTexture | null>>();
     for (const candidate of candidates) {
         if (!prepareTasks.has(candidate.texturePath)) {
             prepareTasks.set(
                 candidate.texturePath,
-                prepareTexturePng(
-                    options,
-                    candidate.texturePath,
-                    textureOutDir,
-                    candidate.diffuseResourceName,
-                    warn,
+                limitTexturePreparation(() =>
+                    prepareTexturePng(
+                        options,
+                        candidate.texturePath,
+                        textureOutDir,
+                        candidate.diffuseResourceName,
+                        warn,
+                    ),
                 ),
             );
         }
