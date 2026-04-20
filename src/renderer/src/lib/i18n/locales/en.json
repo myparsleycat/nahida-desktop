@@ -431,6 +431,34 @@
           "description": "Press the key combination to set"
         }
       },
+      "static_glb_converter": {
+        "title": "Static GLB Converter",
+        "description": "Convert an XXMI/GIMI mod into a static GLB using matching asset layout files.",
+        "asset_layout_path": "Asset layout path",
+        "asset_layout_placeholder": "Folder containing .fmt or *-vb0.txt files",
+        "asset_layout_hint": "This path is saved and reused when opening a model from the mod manager.",
+        "target_mod_path": "Target mod path",
+        "target_mod_placeholder": "Mod folder or .ini path",
+        "output_glb_path": "Output GLB path",
+        "output_glb_placeholder": "Where the .glb file will be written",
+        "include_tangents": "Include tangents",
+        "include_tangents_description": "Useful for some viewers, but can expose bad tangent data in older exports.",
+        "debug_mode": "Debug mode",
+        "debug_mode_description": "Saves extracted textures in a \"texture-cache\" folder next to the GLB.",
+        "browse": "Browse",
+        "folder": "Folder",
+        "converting": "Converting",
+        "convert_to_glb": "Convert to GLB",
+        "open_in_model_viewer": "Open in Model Viewer",
+        "result_written": "Wrote {{meshCount}} mesh(es)",
+        "result_warnings": "{{warningCount}} warning(s)",
+        "toast": {
+          "save_asset_path_failed": "Failed to save asset path",
+          "created": "Static GLB created",
+          "created_description": "{{meshCount}} mesh(es), {{warningCount}} warning(s)",
+          "failed": "Static GLB conversion failed"
+        }
+      },
       "fix-tool-manager": {
         "presets": {},
         "builder": {

@@ -1,4 +1,8 @@
 import {
+  ModelViewerDialog,
+  type ModelViewerDialogSource,
+} from "@renderer/components/tools/model-viewer-dialog";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -37,10 +41,12 @@ import { cn } from "@renderer/lib/utils";
 import type { ModInfo } from "@renderer/types/mod";
 import { useRouteContext } from "@tanstack/react-router";
 import {
+  BoxIcon,
   ClipboardIcon,
   ChevronRightIcon,
   FolderIcon,
   ImageIcon,
+  Loader2Icon,
   PencilIcon,
   TerminalSquareIcon,
   TrashIcon,
@@ -90,6 +96,9 @@ export function ModContextMenu({
   const [renameValue, setRenameValue] = useState(getRenameDefaultValue(mod.name));
   const [logs, setLogs] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [isConvertingModel, setIsConvertingModel] = useState(false);
+  const [modelViewerSource, setModelViewerSource] = useState<ModelViewerDialogSource | null>(null);
+  const [showModelViewer, setShowModelViewer] = useState(false);
   const [inputCmd, setInputCmd] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -121,6 +130,12 @@ export function ModContextMenu({
   const invalidateModGroup = async () => {
     await queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
   };
+
+  useEffect(() => {
+    return () => {
+      void cleanupModelViewerSource(modelViewerSource);
+    };
+  }, [modelViewerSource]);
 
   const handleRun = async (type: "tool" | "preset", id: string) => {
     setShowLogModal(true);
@@ -173,6 +188,38 @@ export function ModContextMenu({
         await invalidateModGroup();
       },
     });
+  };
+
+  const cleanupModelViewerSource = async (source: ModelViewerDialogSource | null) => {
+    if (!source?.glbPath) {
+      return;
+    }
+
+    try {
+      await window.api.invoke("tools:cleanupStaticGlbViewerFile", source.glbPath);
+    } catch (error) {
+      console.warn("Failed to clean up model viewer file", error);
+    }
+  };
+
+  const handleOpenModelViewer = async () => {
+    if (isConvertingModel) return;
+
+    setIsConvertingModel(true);
+    try {
+      const result = await window.api.invoke("tools:convertStaticGlbForViewer", mod.path);
+      setModelViewerSource({
+        glbPath: result.glbPath,
+        name: result.name,
+      });
+      setShowModelViewer(true);
+    } catch (error) {
+      toast.error("Failed to open model viewer", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setIsConvertingModel(false);
+    }
   };
 
   const handlePaste = () => {
@@ -295,6 +342,14 @@ export function ModContextMenu({
           >
             <FolderIcon className="mr-2 size-4" />
             {t("page.mod.context-menu.open-folder")}
+          </ContextMenuItem>
+          <ContextMenuItem disabled={isConvertingModel} onClick={handleOpenModelViewer}>
+            {isConvertingModel ? (
+              <Loader2Icon className="mr-2 size-4 animate-spin" />
+            ) : (
+              <BoxIcon className="mr-2 size-4" />
+            )}
+            Model Viewer
           </ContextMenuItem>
           <ContextMenuItem onClick={() => setShowRenameDialog(true)}>
             <PencilIcon className="mr-2 size-4" />
@@ -438,6 +493,17 @@ export function ModContextMenu({
         </AlertDialogContent>
       </AlertDialog>
       {confirmTrashDialog}
+      <ModelViewerDialog
+        open={showModelViewer}
+        onOpenChange={(open) => {
+          setShowModelViewer(open);
+          if (!open) {
+            void cleanupModelViewerSource(modelViewerSource);
+            setModelViewerSource(null);
+          }
+        }}
+        source={modelViewerSource}
+      />
     </>
   );
 }

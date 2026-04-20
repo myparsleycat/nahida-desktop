@@ -411,6 +411,34 @@
           "description": "按下键盘组合以设置快捷键"
         }
       },
+      "static_glb_converter": {
+        "title": "静态 GLB 转换器",
+        "description": "使用匹配的资源布局文件，将 XXMI/GIMI 模组转换为静态 GLB。",
+        "asset_layout_path": "资源布局路径",
+        "asset_layout_placeholder": "包含 .fmt 或 *-vb0.txt 文件的文件夹",
+        "asset_layout_hint": "此路径会被保存，并在从模组管理器打开模型时重复使用。",
+        "target_mod_path": "目标模组路径",
+        "target_mod_placeholder": "模组文件夹或 .ini 路径",
+        "output_glb_path": "输出 GLB 路径",
+        "output_glb_placeholder": ".glb 文件将写入的位置",
+        "browse": "浏览",
+        "folder": "文件夹",
+        "include_tangents": "包含切线",
+        "include_tangents_description": "对某些查看器有帮助，但可能会暴露旧导出中的错误切线数据。",
+        "debug_mode": "调试模式",
+        "debug_mode_description": "会将提取的纹理保存到 GLB 旁边的 \"texture-cache\" 文件夹中。",
+        "converting": "转换中",
+        "convert_to_glb": "转换为 GLB",
+        "open_in_model_viewer": "在模型查看器中打开",
+        "result_written": "已写入 {{meshCount}} 个网格",
+        "result_warnings": "{{warningCount}} 个警告",
+        "toast": {
+          "save_asset_path_failed": "保存资源路径失败",
+          "created": "静态 GLB 已创建",
+          "created_description": "{{meshCount}} 个网格，{{warningCount}} 个警告",
+          "failed": "静态 GLB 转换失败"
+        }
+      },
       "fix-tool-manager": {
         "presets": {},
         "builder": {

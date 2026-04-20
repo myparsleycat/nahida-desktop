@@ -1,4 +1,5 @@
 import D3D11Builder from "@renderer/components/tools/d3d11-builder";
+import StaticGlbConverter from "@renderer/components/tools/static-glb-converter";
 import TogglePersistence from "@renderer/components/tools/toggle-persistence";
 import ToggleViewerGenerator from "@renderer/components/tools/toggle-viewer-generator";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
@@ -32,6 +33,10 @@ const toolPages: ToolPage[] = [
   {
     name: "Toggle Viewer Generator",
     component: () => <ToggleViewerGenerator />,
+  },
+  {
+    name: "Static GLB Converter",
+    component: () => <StaticGlbConverter />,
   },
   {
     name: "Fix Tool Manager",
