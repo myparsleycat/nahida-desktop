@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { convertDdsToPng } from "@marcuth/dds-to-png";
 import { decodeImage, parseDDSHeader } from "dds-ktx-parser";
+import fg from "fast-glob";
 import { PNG } from "pngjs";
 import type { Logger } from "../internal/logger";
 
@@ -267,12 +268,12 @@ function findIni(input: string): string {
     const stat = fs.statSync(resolved);
     if (stat.isFile()) return resolved;
 
-    const candidates = fs
-        .readdirSync(resolved)
-        .filter(
-            (file) => file.toLowerCase().endsWith(".ini") && file.toLowerCase() !== "merged.ini",
-        )
-        .map((file) => path.resolve(resolved, file));
+    const candidates = fg.sync("**/*.ini", {
+        cwd: resolved,
+        absolute: true,
+        onlyFiles: true,
+        ignore: ["**/merged.ini"],
+    });
 
     if (candidates.length === 0) {
         throw new Error(`No .ini found in ${input}`);
