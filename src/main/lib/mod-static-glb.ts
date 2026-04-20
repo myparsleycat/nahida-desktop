@@ -565,41 +565,84 @@ async function buildMaterials(
 
     options.logger?.debug(`Building materials. Cache dir: ${textureOutDir}`, "StaticGLB");
 
-    for (const binding of textureBindings) {
-        if (!binding.diffuseResourceName) {
-            options.logger?.debug(
-                `Binding for ${binding.ibResourceName} has no diffuse resource name`,
-                "StaticGLB",
+    const candidates: Array<{
+        binding: TextureBinding;
+        diffuseResourceName: string;
+        texturePath: string;
+    }> = (
+        await Promise.all(
+            textureBindings.map(async (binding) => {
+                const diffuseResourceName = binding.diffuseResourceName;
+                if (!diffuseResourceName) {
+                    options.logger?.debug(
+                        `Binding for ${binding.ibResourceName} has no diffuse resource name`,
+                        "StaticGLB",
+                    );
+                    return null;
+                }
+
+                const textureResource = resourcesByName.get(normalizeKey(diffuseResourceName));
+                if (!textureResource?.filename) {
+                    options.logger?.debug(
+                        `Texture resource ${diffuseResourceName} not found or has no filename`,
+                        "StaticGLB",
+                    );
+                    return null;
+                }
+
+                const texturePath = path.resolve(modDir, textureResource.filename);
+                if (!(await fse.pathExists(texturePath))) {
+                    warn(`Texture file not found: ${texturePath}`);
+                    return null;
+                }
+
+                return {
+                    binding,
+                    diffuseResourceName,
+                    texturePath,
+                };
+            }),
+        )
+    ).filter(
+        (
+            candidate,
+        ): candidate is {
+            binding: TextureBinding;
+            diffuseResourceName: string;
+            texturePath: string;
+        } => candidate !== null,
+    );
+
+    const prepareTasks = new Map<string, Promise<PreparedTexture | null>>();
+    for (const candidate of candidates) {
+        if (!prepareTasks.has(candidate.texturePath)) {
+            prepareTasks.set(
+                candidate.texturePath,
+                prepareTexturePng(
+                    options,
+                    candidate.texturePath,
+                    textureOutDir,
+                    candidate.diffuseResourceName,
+                    warn,
+                ),
             );
-            continue;
         }
+    }
 
-        const textureResource = resourcesByName.get(normalizeKey(binding.diffuseResourceName));
-        if (!textureResource?.filename) {
-            options.logger?.debug(
-                `Texture resource ${binding.diffuseResourceName} not found or has no filename`,
-                "StaticGLB",
-            );
-            continue;
-        }
-
-        const texturePath = path.resolve(modDir, textureResource.filename);
-        if (!(await fse.pathExists(texturePath))) {
-            warn(`Texture file not found: ${texturePath}`);
-            continue;
-        }
-
-        let cached = textureCache.get(texturePath);
+    for (const candidate of candidates) {
+        let cached = textureCache.get(candidate.texturePath);
         if (!cached) {
-            const texture = await prepareTexturePng(
-                options,
-                texturePath,
-                textureOutDir,
-                binding.diffuseResourceName,
-                warn,
-            );
+            const prepareTask = prepareTasks.get(candidate.texturePath);
+            if (!prepareTask) {
+                continue;
+            }
+
+            const texture = await prepareTask;
             if (!texture) {
-                options.logger?.debug(`Failed to prepare texture ${texturePath}`, "StaticGLB");
+                options.logger?.debug(
+                    `Failed to prepare texture ${candidate.texturePath}`,
+                    "StaticGLB",
+                );
                 continue;
             }
 
@@ -615,7 +658,7 @@ async function buildMaterials(
             );
             const textureIndex = builder.addTexture(imageIndex);
             const materialIndex = builder.addMaterial({
-                name: binding.diffuseResourceName,
+                name: candidate.diffuseResourceName,
                 pbrMetallicRoughness: {
                     baseColorTexture: { index: textureIndex },
                     metallicFactor: 0,
@@ -632,13 +675,15 @@ async function buildMaterials(
 
             cached = {
                 materialIndex,
-                textureResourceName: binding.diffuseResourceName,
+                textureResourceName: candidate.diffuseResourceName,
                 pngPath: texture.pngPath,
             };
-            textureCache.set(texturePath, cached);
+            textureCache.set(candidate.texturePath, cached);
         }
 
-        materialByIb.set(normalizeKey(binding.ibResourceName), cached);
+        if (cached) {
+            materialByIb.set(normalizeKey(candidate.binding.ibResourceName), cached);
+        }
     }
 
     return materialByIb;
