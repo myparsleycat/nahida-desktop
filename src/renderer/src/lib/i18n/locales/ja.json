@@ -412,6 +412,34 @@
           "description": "設定するキーの組み合わせを押してください"
         }
       },
+      "static_glb_converter": {
+        "title": "Static GLB コンバーター",
+        "description": "一致するアセットレイアウトファイルを使って、XXMI/GIMI MOD を静的 GLB に変換します。",
+        "asset_layout_path": "アセットレイアウトのパス",
+        "asset_layout_placeholder": ".fmt または *-vb0.txt ファイルを含むフォルダー",
+        "asset_layout_hint": "このパスは保存され、MOD マネージャーからモデルを開くときに再利用されます。",
+        "target_mod_path": "対象 MOD パス",
+        "target_mod_placeholder": "MOD フォルダーまたは .ini パス",
+        "output_glb_path": "出力 GLB パス",
+        "output_glb_placeholder": ".glb ファイルの出力先",
+        "browse": "参照",
+        "folder": "フォルダー",
+        "include_tangents": "タンジェントを含める",
+        "include_tangents_description": "一部のビューアーでは有用ですが、古いエクスポートでは不正なタンジェントデータが露出する場合があります。",
+        "debug_mode": "デバッグモード",
+        "debug_mode_description": "抽出したテクスチャを GLB の隣にある \"texture-cache\" フォルダーへ保存します。",
+        "converting": "変換中",
+        "convert_to_glb": "GLB に変換",
+        "open_in_model_viewer": "モデルビューアーで開く",
+        "result_written": "{{meshCount}} 個のメッシュを書き込みました",
+        "result_warnings": "{{warningCount}} 件の警告",
+        "toast": {
+          "save_asset_path_failed": "アセットパスの保存に失敗しました",
+          "created": "Static GLB を作成しました",
+          "created_description": "{{meshCount}} 個のメッシュ、{{warningCount}} 件の警告",
+          "failed": "Static GLB の変換に失敗しました"
+        }
+      },
       "fix-tool-manager": {
         "presets": {},
         "builder": {

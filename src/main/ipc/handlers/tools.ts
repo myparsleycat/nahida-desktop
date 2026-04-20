@@ -1,5 +1,6 @@
 import type { NahidaDesktop } from "@main/index";
 import { rh } from "@main/ipc/helper";
+import type { StaticGlbConvertInput } from "@main/services/mod-tools/static-glb";
 
 export function registerToolsHandlers(d: NahidaDesktop) {
     rh(
@@ -27,4 +28,14 @@ export function registerToolsHandlers(d: NahidaDesktop) {
         d.service.modTools.dllBuilder.getProviderReleases(provider),
     );
     rh("tools:updateReleases", () => d.service.modTools.dllBuilder.updateReleases());
+    rh("tools:getStaticGlbAssetPath", () => d.service.modTools.staticGlb.getAssetPath());
+    rh("tools:setStaticGlbAssetPath", (assetPath: string) =>
+        d.service.modTools.staticGlb.setAssetPath(assetPath),
+    );
+    rh("tools:convertStaticGlb", (input: StaticGlbConvertInput) =>
+        d.service.modTools.staticGlb.convert(input),
+    );
+    rh("tools:convertStaticGlbForViewer", (modPath: string) =>
+        d.service.modTools.staticGlb.convertForViewer(modPath),
+    );
 }

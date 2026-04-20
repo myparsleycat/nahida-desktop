@@ -411,6 +411,34 @@
           "description": "설정할 단축키 조합을 누르세요"
         }
       },
+      "static_glb_converter": {
+        "title": "정적 GLB 변환기",
+        "description": "매칭되는 asset layout 파일을 사용해 XXMI/GIMI 모드를 정적 GLB로 변환합니다.",
+        "asset_layout_path": "에셋 레이아웃 경로",
+        "asset_layout_placeholder": ".fmt 또는 *-vb0.txt 파일이 들어 있는 폴더",
+        "asset_layout_hint": "이 경로는 저장되며, 모드 매니저에서 모델을 열 때 재사용됩니다.",
+        "target_mod_path": "대상 모드 경로",
+        "target_mod_placeholder": "모드 폴더 또는 .ini 경로",
+        "output_glb_path": "출력 GLB 경로",
+        "output_glb_placeholder": ".glb 파일이 저장될 위치",
+        "browse": "찾아보기",
+        "folder": "폴더",
+        "include_tangents": "탄젠트 포함",
+        "include_tangents_description": "일부 뷰어에서는 유용하지만, 오래된 내보내기에서는 잘못된 탄젠트 데이터가 드러날 수 있습니다.",
+        "debug_mode": "디버그 모드",
+        "debug_mode_description": "GLB 옆에 있는 \"texture-cache\" 폴더에 추출된 텍스처를 저장합니다.",
+        "converting": "변환 중",
+        "convert_to_glb": "GLB로 변환",
+        "open_in_model_viewer": "모델 뷰어에서 열기",
+        "result_written": "{{meshCount}}개 메시를 저장했습니다",
+        "result_warnings": "경고 {{warningCount}}개",
+        "toast": {
+          "save_asset_path_failed": "에셋 경로를 저장하지 못했습니다",
+          "created": "정적 GLB가 생성되었습니다",
+          "created_description": "{{meshCount}}개 메시, 경고 {{warningCount}}개",
+          "failed": "정적 GLB 변환에 실패했습니다"
+        }
+      },
       "fix-tool-manager": {
         "presets": {},
         "builder": {

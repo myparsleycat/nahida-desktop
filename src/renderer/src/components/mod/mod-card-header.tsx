@@ -5,6 +5,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@renderer/components/ui/alert-dialog";
+import {
+  ModelViewerDialog,
+  type ModelViewerDialogSource,
+} from "@renderer/components/tools/model-viewer-dialog";
 import { Button, buttonVariants } from "@renderer/components/ui/button";
 import {
   DropdownMenu,
@@ -23,14 +27,17 @@ import { cn } from "@renderer/lib/utils";
 import type { ModInfo } from "@renderer/types/mod";
 import { useRouteContext } from "@tanstack/react-router";
 import {
+  BoxIcon,
   ChevronRightIcon,
   FolderIcon,
+  Loader2Icon,
   TerminalSquareIcon,
   TrashIcon,
   WrenchIcon,
 } from "lucide-react";
 import { memo, useEffect, useRef, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 interface ModCardHeaderProps {
   mod: ModInfo;
@@ -51,6 +58,9 @@ export const ModCardHeader = memo(function ModCardHeader({
   const [showLogModal, setShowLogModal] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [isConvertingModel, setIsConvertingModel] = useState(false);
+  const [modelViewerSource, setModelViewerSource] = useState<ModelViewerDialogSource | null>(null);
+  const [showModelViewer, setShowModelViewer] = useState(false);
   const [inputCmd, setInputCmd] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -116,21 +126,43 @@ export const ModCardHeader = memo(function ModCardHeader({
     });
   };
 
+  const handleOpenModelViewer = async (e: MouseEvent) => {
+    e.stopPropagation();
+    if (isConvertingModel) return;
+
+    setIsConvertingModel(true);
+    try {
+      const result = await window.api.invoke("tools:convertStaticGlbForViewer", mod.path);
+      setModelViewerSource({
+        glbBase64: result.glbBase64,
+        name: result.name,
+      });
+      setShowModelViewer(true);
+    } catch (error) {
+      toast.error("Failed to open model viewer", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setIsConvertingModel(false);
+    }
+  };
+
   return (
-    <div className="flex items-center justify-between pb-1 relative z-10">
-      <span className="text-sm truncate font-semibold">
-        {mod.name.replace(/disabled/gi, "").trim()}
-      </span>
-      <div className="flex items-center gap-1">
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className={cn(
-              buttonVariants({ variant: "ghost", size: "icon" }),
-              "size-7 hover:bg-accent/20",
-            )}
-          >
-            <WrenchIcon />
-          </DropdownMenuTrigger>
+    <>
+      <div className="flex items-center justify-between pb-1 relative z-10">
+        <span className="text-sm truncate font-semibold">
+          {mod.name.replace(/disabled/gi, "").trim()}
+        </span>
+        <div className="flex items-center gap-1">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "icon" }),
+                "size-7 hover:bg-accent/20",
+              )}
+            >
+              <WrenchIcon />
+            </DropdownMenuTrigger>
           <DropdownMenuContent
             onClick={(e) => e.stopPropagation()}
             onCloseAutoFocus={(e) => e.preventDefault()}
@@ -188,6 +220,17 @@ export const ModCardHeader = memo(function ModCardHeader({
           variant="ghost"
           size="icon"
           className="size-7 hover:bg-accent/20"
+          disabled={isConvertingModel}
+          onClick={handleOpenModelViewer}
+          title="Model Viewer"
+        >
+          {isConvertingModel ? <Loader2Icon className="animate-spin" /> : <BoxIcon />}
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7 hover:bg-accent/20"
           onClick={(e) => {
             e.stopPropagation();
             window.api.invoke("util:openCmd", mod.path);
@@ -196,7 +239,12 @@ export const ModCardHeader = memo(function ModCardHeader({
           <TerminalSquareIcon />
         </Button>
 
-        <Button variant="ghost" size="icon" className="size-7 hover:bg-accent/20" onClick={handleDelete}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7 hover:bg-accent/20"
+          onClick={handleDelete}
+        >
           <TrashIcon />
         </Button>
 
@@ -289,6 +337,17 @@ export const ModCardHeader = memo(function ModCardHeader({
         </AlertDialogContent>
       </AlertDialog>
       {confirmTrashDialog}
-    </div>
+      </div>
+      <ModelViewerDialog
+        open={showModelViewer}
+        onOpenChange={(open) => {
+          setShowModelViewer(open);
+          if (!open) {
+            setModelViewerSource(null);
+          }
+        }}
+        source={modelViewerSource}
+      />
+    </>
   );
 });
