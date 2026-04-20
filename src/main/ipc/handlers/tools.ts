@@ -38,4 +38,7 @@ export function registerToolsHandlers(d: NahidaDesktop) {
     rh("tools:convertStaticGlbForViewer", (modPath: string) =>
         d.service.modTools.staticGlb.convertForViewer(modPath),
     );
+    rh("tools:cleanupStaticGlbViewerFile", (glbPath: string) =>
+        d.service.modTools.staticGlb.cleanupViewerFile(glbPath),
+    );
 }

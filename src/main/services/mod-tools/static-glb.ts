@@ -10,6 +10,7 @@ import { app } from "electron";
 import fse from "fs-extra";
 
 const ASSET_PATH_SETTING_KEY = "mod_static_glb_asset_path";
+const MODEL_VIEWER_TEMP_PREFIX = "nhd-model-viewer-";
 
 export type StaticGlbConvertInput = {
     modPath: string;
@@ -26,14 +27,19 @@ export type StaticGlbViewerResult = ConvertModToGlbResult & {
 
 export type StaticGlbPreviewResult = {
     iniPath: string;
-    glbBase64: string;
+    glbPath: string;
     meshCount: number;
     warningCount: number;
     name: string;
 };
 
 export class StaticGlb {
-    constructor(private readonly desktop: NahidaDesktop) {}
+    constructor(private readonly desktop: NahidaDesktop) {
+        this.desktop.service.startupCleanup.register({
+            name: "mod-tools:static-glb-viewer",
+            run: () => this.cleanupStaleViewerTempDirs(),
+        });
+    }
 
     public async getAssetPath(): Promise<string> {
         const saved = await this.desktop.lib.db.query.setting.findFirst({
@@ -106,7 +112,9 @@ export class StaticGlb {
         }
 
         const modName = path.basename(modPath.replace(/[\\/]+$/, ""));
-        const textureCacheDir = await fse.mkdtemp(path.join(app.getPath("temp"), "nhd-model-viewer-"));
+        const tempDir = await fse.mkdtemp(path.join(app.getPath("temp"), MODEL_VIEWER_TEMP_PREFIX));
+        const textureCacheDir = path.join(tempDir, "textures");
+        const glbPath = path.join(tempDir, `${sanitizeModelViewerFileName(modName)}.glb`);
         const warnings: string[] = [];
 
         try {
@@ -121,6 +129,8 @@ export class StaticGlb {
                 },
             });
 
+            await fse.writeFile(glbPath, result.glb);
+
             if (warnings.length > 0) {
                 this.desktop.window.main.window?.webContents.send(
                     "fn:toast",
@@ -131,11 +141,14 @@ export class StaticGlb {
 
             return {
                 iniPath: result.iniPath,
-                glbBase64: result.glb.toString("base64"),
+                glbPath,
                 meshCount: result.meshCount,
                 warningCount: result.warningCount,
                 name: modName,
             };
+        } catch (error) {
+            await this.cleanupViewerFile(glbPath);
+            throw error;
         } finally {
             await fse.remove(textureCacheDir).catch((error) => {
                 this.desktop.logger.warn(
@@ -147,6 +160,67 @@ export class StaticGlb {
             });
         }
     }
+
+    public async cleanupViewerFile(glbPath: string): Promise<void> {
+        if (!glbPath) {
+            return;
+        }
+
+        const resolvedPath = path.resolve(glbPath);
+        const tempRoot = path.resolve(app.getPath("temp"));
+
+        if (!resolvedPath.startsWith(tempRoot + path.sep)) {
+            this.desktop.logger.warn(
+                `Skipped cleanup for non-temp model viewer GLB: ${resolvedPath}`,
+                "StaticGlb.cleanupViewerFile",
+            );
+            return;
+        }
+
+        const viewerTempDir = path.dirname(resolvedPath);
+        const viewerTempDirName = path.basename(viewerTempDir);
+
+        if (!viewerTempDirName.startsWith(MODEL_VIEWER_TEMP_PREFIX)) {
+            this.desktop.logger.warn(
+                `Skipped cleanup for unexpected model viewer temp directory: ${viewerTempDir}`,
+                "StaticGlb.cleanupViewerFile",
+            );
+            return;
+        }
+
+        await fse.remove(viewerTempDir).catch((error) => {
+            this.desktop.logger.warn(
+                `Failed to remove model viewer temp directory: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+                "StaticGlb.cleanupViewerFile",
+            );
+        });
+    }
+
+    private async cleanupStaleViewerTempDirs(): Promise<void> {
+        const tempRoot = path.resolve(app.getPath("temp"));
+        const tempEntries = await fse.readdir(tempRoot, { withFileTypes: true }).catch((error) => {
+            this.desktop.logger.warn(
+                `Failed to read temp directory for model viewer cleanup: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+                "StaticGlb.cleanupStaleViewerTempDirs",
+            );
+            return [];
+        });
+
+        await Promise.all(
+            tempEntries
+                .filter(
+                    (entry) =>
+                        entry.isDirectory() && entry.name.startsWith(MODEL_VIEWER_TEMP_PREFIX),
+                )
+                .map((entry) =>
+                    this.cleanupViewerFile(path.join(tempRoot, entry.name, "stale.glb")),
+                ),
+        );
+    }
 }
 
 function ensureGlbExtension(filePath: string): string {
@@ -155,4 +229,17 @@ function ensureGlbExtension(filePath: string): string {
     }
 
     return `${filePath}.glb`;
+}
+
+function sanitizeModelViewerFileName(name: string): string {
+    const sanitized = Array.from(name, (char) => {
+        const codePoint = char.codePointAt(0) ?? 0;
+        const isControlCharacter = codePoint <= 0x1f;
+        const isReservedCharacter = '<>:"/\\|?*'.includes(char);
+        return isControlCharacter || isReservedCharacter ? "_" : char;
+    })
+        .join("")
+        .trim();
+
+    return sanitized || "model-viewer";
 }

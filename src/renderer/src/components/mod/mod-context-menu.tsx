@@ -1,4 +1,8 @@
 import {
+  ModelViewerDialog,
+  type ModelViewerDialogSource,
+} from "@renderer/components/tools/model-viewer-dialog";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -9,10 +13,6 @@ import {
   AlertDialogTitle,
 } from "@renderer/components/ui/alert-dialog";
 import { Button } from "@renderer/components/ui/button";
-import {
-  ModelViewerDialog,
-  type ModelViewerDialogSource,
-} from "@renderer/components/tools/model-viewer-dialog";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -131,6 +131,12 @@ export function ModContextMenu({
     await queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
   };
 
+  useEffect(() => {
+    return () => {
+      void cleanupModelViewerSource(modelViewerSource);
+    };
+  }, [modelViewerSource]);
+
   const handleRun = async (type: "tool" | "preset", id: string) => {
     setShowLogModal(true);
     setLogs([]);
@@ -184,6 +190,18 @@ export function ModContextMenu({
     });
   };
 
+  const cleanupModelViewerSource = async (source: ModelViewerDialogSource | null) => {
+    if (!source?.glbPath) {
+      return;
+    }
+
+    try {
+      await window.api.invoke("tools:cleanupStaticGlbViewerFile", source.glbPath);
+    } catch (error) {
+      console.warn("Failed to clean up model viewer file", error);
+    }
+  };
+
   const handleOpenModelViewer = async () => {
     if (isConvertingModel) return;
 
@@ -191,7 +209,7 @@ export function ModContextMenu({
     try {
       const result = await window.api.invoke("tools:convertStaticGlbForViewer", mod.path);
       setModelViewerSource({
-        glbBase64: result.glbBase64,
+        glbPath: result.glbPath,
         name: result.name,
       });
       setShowModelViewer(true);
@@ -480,6 +498,7 @@ export function ModContextMenu({
         onOpenChange={(open) => {
           setShowModelViewer(open);
           if (!open) {
+            void cleanupModelViewerSource(modelViewerSource);
             setModelViewerSource(null);
           }
         }}

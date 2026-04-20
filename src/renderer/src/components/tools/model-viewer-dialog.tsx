@@ -1,10 +1,10 @@
 import "@google/model-viewer";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@renderer/components/ui/dialog";
 import { useEffect, useState } from "react";
-import { base64GlbToObjectUrl, suppressModelViewerFocusOutline } from "./model-viewer-session";
+import { modelViewerSourceToUrl, suppressModelViewerFocusOutline } from "./model-viewer-session";
 
 export type ModelViewerDialogSource = {
-  glbBase64: string;
+  glbPath: string;
   name: string;
 };
 
@@ -20,18 +20,13 @@ export function ModelViewerDialog({
   const [objectUrl, setObjectUrl] = useState("");
 
   useEffect(() => {
-    if (!source?.glbBase64) {
+    if (!source?.glbPath) {
       setObjectUrl("");
       return;
     }
 
-    const nextObjectUrl = base64GlbToObjectUrl(source.glbBase64);
-    setObjectUrl(nextObjectUrl);
-
-    return () => {
-      URL.revokeObjectURL(nextObjectUrl);
-    };
-  }, [source?.glbBase64]);
+    setObjectUrl(modelViewerSourceToUrl(source.glbPath));
+  }, [source?.glbPath]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
