@@ -1,7 +1,11 @@
-import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { convertDdsToPng } from "@marcuth/dds-to-png";
+import { pipeline } from "node:stream/promises";
+import { convertDdsToPng } from "@native/native-util";
 import { decodeImage, parseDDSHeader } from "dds-ktx-parser";
+import fg from "fast-glob";
+import fse from "fs-extra";
+import pLimit from "p-limit";
 import { PNG } from "pngjs";
 import type { Logger } from "../internal/logger";
 
@@ -136,8 +140,8 @@ export async function convertModToGlb(
             textureCacheDir,
         });
 
-        fs.mkdirSync(outputDir, { recursive: true });
-        fs.writeFileSync(options.outputPath, glbResult.glb);
+        await fse.mkdir(outputDir, { recursive: true });
+        await fse.writeFile(options.outputPath, glbResult.glb);
 
         return {
             iniPath: glbResult.iniPath,
@@ -146,8 +150,8 @@ export async function convertModToGlb(
             warningCount: glbResult.warningCount,
         };
     } finally {
-        if (!isDebug && fs.existsSync(textureCacheDir)) {
-            fs.rmSync(textureCacheDir, { recursive: true, force: true });
+        if (!isDebug && (await fse.pathExists(textureCacheDir))) {
+            await fse.rm(textureCacheDir, { recursive: true, force: true });
         }
     }
 }
@@ -162,11 +166,11 @@ async function buildModGlb(
     options: ConvertModToGlbBufferOptions,
 ): Promise<ConvertModToGlbBufferResult> {
     const warning = createWarningCollector(options.onWarning);
-    const iniPath = findIni(options.modPath);
+    const iniPath = await findIni(options.modPath);
     const modDir = path.dirname(iniPath);
-    const sections = parseIni(fs.readFileSync(iniPath, "utf8"));
+    const sections = parseIni(await fse.readFile(iniPath, "utf8"));
     const resources = collectResources(sections);
-    const bufferGroups = collectBufferGroups(modDir, resources, warning.warn);
+    const bufferGroups = await collectBufferGroups(modDir, resources, warning.warn);
     const textureBindings = collectTextureBindings(sections);
     const ibResources = collectIbResources(resources, bufferGroups, textureBindings);
 
@@ -197,14 +201,14 @@ async function buildModGlb(
             continue;
         }
 
-        const fmt = loadFmtForIb(modDir, options.assetPath, ib, group.stride);
+        const fmt = await loadFmtForIb(modDir, options.assetPath, ib, group.stride);
         const ibPath = path.resolve(modDir, ib.filename);
-        if (!fs.existsSync(ibPath)) {
+        if (!(await fse.pathExists(ibPath))) {
             warning.warn(`Missing IB file: ${ibPath}`);
             continue;
         }
 
-        const indices = decodeIndices(fs.readFileSync(ibPath), ib.format || fmt.indexFormat);
+        const indices = decodeIndices(await fse.readFile(ibPath), ib.format || fmt.indexFormat);
         if (indices.length === 0) {
             warning.warn(`Empty IB file: ${ibPath}`);
             continue;
@@ -262,17 +266,18 @@ function createWarningCollector(onWarning?: (message: string) => void) {
     };
 }
 
-function findIni(input: string): string {
+async function findIni(input: string): Promise<string> {
     const resolved = path.resolve(input);
-    const stat = fs.statSync(resolved);
+    const stat = await fse.stat(resolved);
     if (stat.isFile()) return resolved;
 
-    const candidates = fs
-        .readdirSync(resolved)
-        .filter(
-            (file) => file.toLowerCase().endsWith(".ini") && file.toLowerCase() !== "merged.ini",
-        )
-        .map((file) => path.resolve(resolved, file));
+    const candidates = await fg("**/*.ini", {
+        cwd: resolved,
+        absolute: true,
+        onlyFiles: true,
+        ignore: ["**/merged.ini"],
+        caseSensitiveMatch: false,
+    });
 
     if (candidates.length === 0) {
         throw new Error(`No .ini found in ${input}`);
@@ -333,11 +338,11 @@ function collectResources(sections: IniSection[]): Resource[] {
         }));
 }
 
-function collectBufferGroups(
+async function collectBufferGroups(
     modDir: string,
     resources: Resource[],
     warn: (message: string) => void,
-): BufferGroup[] {
+): Promise<BufferGroup[]> {
     const byKey = new Map<
         string,
         { position?: Resource; blend?: Resource; texcoord?: Resource; single?: Resource }
@@ -367,23 +372,23 @@ function collectBufferGroups(
     for (const [key, group] of byKey) {
         if (group.single?.filename && group.single.stride) {
             const filePath = path.resolve(modDir, group.single.filename);
-            if (!fs.existsSync(filePath)) {
+            if (!(await fse.pathExists(filePath))) {
                 warn(`Missing vertex buffer file: ${filePath}`);
                 continue;
             }
             groups.push({
                 key,
                 vbFilename: group.single.filename,
-                vbBytes: fs.readFileSync(filePath),
+                vbBytes: await fse.readFile(filePath),
                 stride: group.single.stride,
             });
             continue;
         }
 
         if (group.position?.filename && group.blend?.filename && group.texcoord?.filename) {
-            const position = readResourceBytes(modDir, group.position);
-            const blend = readResourceBytes(modDir, group.blend);
-            const texcoord = readResourceBytes(modDir, group.texcoord);
+            const position = await readResourceBytes(modDir, group.position);
+            const blend = await readResourceBytes(modDir, group.blend);
+            const texcoord = await readResourceBytes(modDir, group.texcoord);
             const stride = group.position.stride! + group.blend.stride! + group.texcoord.stride!;
             const vertexCount = Math.min(
                 Math.floor(position.length / group.position.stride!),
@@ -425,10 +430,10 @@ function ensureGroup<T>(map: Map<string, T>, key: string): T {
     return value;
 }
 
-function readResourceBytes(modDir: string, resource: Resource): Buffer {
+async function readResourceBytes(modDir: string, resource: Resource): Promise<Buffer> {
     const filePath = path.resolve(modDir, resource.filename!);
-    if (!fs.existsSync(filePath)) throw new Error(`Missing resource file: ${filePath}`);
-    return fs.readFileSync(filePath);
+    if (!(await fse.pathExists(filePath))) throw new Error(`Missing resource file: ${filePath}`);
+    return await fse.readFile(filePath);
 }
 
 function collectIbResources(
@@ -563,41 +568,88 @@ async function buildMaterials(
 
     options.logger?.debug(`Building materials. Cache dir: ${textureOutDir}`, "StaticGLB");
 
-    for (const binding of textureBindings) {
-        if (!binding.diffuseResourceName) {
-            options.logger?.debug(
-                `Binding for ${binding.ibResourceName} has no diffuse resource name`,
-                "StaticGLB",
+    const candidates: Array<{
+        binding: TextureBinding;
+        diffuseResourceName: string;
+        texturePath: string;
+    }> = (
+        await Promise.all(
+            textureBindings.map(async (binding) => {
+                const diffuseResourceName = binding.diffuseResourceName;
+                if (!diffuseResourceName) {
+                    options.logger?.debug(
+                        `Binding for ${binding.ibResourceName} has no diffuse resource name`,
+                        "StaticGLB",
+                    );
+                    return null;
+                }
+
+                const textureResource = resourcesByName.get(normalizeKey(diffuseResourceName));
+                if (!textureResource?.filename) {
+                    options.logger?.debug(
+                        `Texture resource ${diffuseResourceName} not found or has no filename`,
+                        "StaticGLB",
+                    );
+                    return null;
+                }
+
+                const texturePath = path.resolve(modDir, textureResource.filename);
+                if (!(await fse.pathExists(texturePath))) {
+                    warn(`Texture file not found: ${texturePath}`);
+                    return null;
+                }
+
+                return {
+                    binding,
+                    diffuseResourceName,
+                    texturePath,
+                };
+            }),
+        )
+    ).filter(
+        (
+            candidate,
+        ): candidate is {
+            binding: TextureBinding;
+            diffuseResourceName: string;
+            texturePath: string;
+        } => candidate !== null,
+    );
+
+    const texturePrepareConcurrency = Math.max(1, Math.min(os.availableParallelism(), 8));
+    const limitTexturePreparation = pLimit(texturePrepareConcurrency);
+    const prepareTasks = new Map<string, Promise<PreparedTexture | null>>();
+    for (const candidate of candidates) {
+        if (!prepareTasks.has(candidate.texturePath)) {
+            prepareTasks.set(
+                candidate.texturePath,
+                limitTexturePreparation(() =>
+                    prepareTexturePng(
+                        options,
+                        candidate.texturePath,
+                        textureOutDir,
+                        candidate.diffuseResourceName,
+                        warn,
+                    ),
+                ),
             );
-            continue;
         }
+    }
 
-        const textureResource = resourcesByName.get(normalizeKey(binding.diffuseResourceName));
-        if (!textureResource?.filename) {
-            options.logger?.debug(
-                `Texture resource ${binding.diffuseResourceName} not found or has no filename`,
-                "StaticGLB",
-            );
-            continue;
-        }
-
-        const texturePath = path.resolve(modDir, textureResource.filename);
-        if (!fs.existsSync(texturePath)) {
-            warn(`Texture file not found: ${texturePath}`);
-            continue;
-        }
-
-        let cached = textureCache.get(texturePath);
+    for (const candidate of candidates) {
+        let cached = textureCache.get(candidate.texturePath);
         if (!cached) {
-            const texture = await prepareTexturePng(
-                options,
-                texturePath,
-                textureOutDir,
-                binding.diffuseResourceName,
-                warn,
-            );
+            const prepareTask = prepareTasks.get(candidate.texturePath);
+            if (!prepareTask) {
+                continue;
+            }
+
+            const texture = await prepareTask;
             if (!texture) {
-                options.logger?.debug(`Failed to prepare texture ${texturePath}`, "StaticGLB");
+                options.logger?.debug(
+                    `Failed to prepare texture ${candidate.texturePath}`,
+                    "StaticGLB",
+                );
                 continue;
             }
 
@@ -607,13 +659,13 @@ async function buildMaterials(
             );
 
             const imageIndex = builder.addImage(
-                fs.readFileSync(texture.pngPath),
+                await fse.readFile(texture.pngPath),
                 "image/png",
                 path.basename(texture.pngPath),
             );
             const textureIndex = builder.addTexture(imageIndex);
             const materialIndex = builder.addMaterial({
-                name: binding.diffuseResourceName,
+                name: candidate.diffuseResourceName,
                 pbrMetallicRoughness: {
                     baseColorTexture: { index: textureIndex },
                     metallicFactor: 0,
@@ -630,13 +682,15 @@ async function buildMaterials(
 
             cached = {
                 materialIndex,
-                textureResourceName: binding.diffuseResourceName,
+                textureResourceName: candidate.diffuseResourceName,
                 pngPath: texture.pngPath,
             };
-            textureCache.set(texturePath, cached);
+            textureCache.set(candidate.texturePath, cached);
         }
 
-        materialByIb.set(normalizeKey(binding.ibResourceName), cached);
+        if (cached) {
+            materialByIb.set(normalizeKey(candidate.binding.ibResourceName), cached);
+        }
     }
 
     return materialByIb;
@@ -653,7 +707,7 @@ async function prepareTexturePng(
     if (!pngPath) return null;
 
     try {
-        const png = PNG.sync.read(fs.readFileSync(pngPath));
+        const png = await readPngAsync(pngPath);
         const alpha = analyzeAlpha(png);
         if (!alpha.hasAlpha) {
             return { pngPath, invertedAlpha: false };
@@ -665,8 +719,8 @@ async function prepareTexturePng(
                 textureOutDir,
                 `${path.basename(pngPath, path.extname(pngPath))}-alpha-inverted.png`,
             );
-            fs.mkdirSync(textureOutDir, { recursive: true });
-            fs.writeFileSync(invertedPath, PNG.sync.write(png));
+            await fse.mkdir(textureOutDir, { recursive: true });
+            await writePngAsync(png, invertedPath);
             const correctedAlpha = analyzeAlpha(png);
             return {
                 pngPath: invertedPath,
@@ -758,6 +812,24 @@ function invertPngAlpha(png: PNG): void {
     }
 }
 
+async function readPngAsync(pngPath: string): Promise<PNG> {
+    const buffer = await fse.readFile(pngPath);
+    return await new Promise((resolve, reject) => {
+        new PNG().parse(buffer, (error, png) => {
+            if (error || !png) {
+                reject(error ?? new Error(`Failed to parse PNG: ${pngPath}`));
+                return;
+            }
+
+            resolve(png);
+        });
+    });
+}
+
+async function writePngAsync(png: PNG, pngPath: string): Promise<void> {
+    await pipeline(png.pack(), fse.createWriteStream(pngPath));
+}
+
 async function convertTextureToPng(
     options: ConvertModToGlbBufferOptions,
     texturePath: string,
@@ -778,7 +850,7 @@ async function convertTextureToPng(
     }
 
     options.logger?.debug(`Converting DDS to PNG: ${texturePath} -> ${textureOutDir}`, "StaticGLB");
-    fs.mkdirSync(textureOutDir, { recursive: true });
+    await fse.mkdir(textureOutDir, { recursive: true });
 
     const pngPath = path.join(
         textureOutDir,
@@ -790,7 +862,7 @@ async function convertTextureToPng(
         return pngPath;
     } catch {
         try {
-            convertDdsToPngFallback(texturePath, pngPath);
+            await convertDdsToPngFallback(texturePath, pngPath);
             return pngPath;
         } catch (fallbackError) {
             warn(
@@ -803,8 +875,8 @@ async function convertTextureToPng(
     }
 }
 
-function convertDdsToPngFallback(texturePath: string, pngPath: string): void {
-    const dds = fs.readFileSync(texturePath);
+async function convertDdsToPngFallback(texturePath: string, pngPath: string): Promise<void> {
+    const dds = await fse.readFile(texturePath);
     const info = parseDDSHeader(dds);
     if (!info || !info.layers[0]) {
         throw new Error("DDS header could not be parsed");
@@ -813,7 +885,7 @@ function convertDdsToPngFallback(texturePath: string, pngPath: string): void {
     const rgba = decodeImage(dds, info.format, info.layers[0]);
     const png = new PNG({ width: info.shape.width, height: info.shape.height });
     png.data.set(rgba);
-    fs.writeFileSync(pngPath, PNG.sync.write(png));
+    await writePngAsync(png, pngPath);
 }
 
 function trimResourcePrefix(value: string): string {
@@ -841,50 +913,43 @@ function normalizeKey(value: string): string {
     return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function loadFmtForIb(modDir: string, assetDir: string, ib: IbResource, stride: number): FmtLayout {
+async function loadFmtForIb(
+    modDir: string,
+    assetDir: string,
+    ib: IbResource,
+    stride: number,
+): Promise<FmtLayout> {
     const stem = path.basename(ib.filename, path.extname(ib.filename));
     const localFmt = path.resolve(modDir, `${stem}.fmt`);
-    if (fs.existsSync(localFmt)) {
-        return parseFmt(fs.readFileSync(localFmt, "utf8"), stride, ib.format);
+    if (await fse.pathExists(localFmt)) {
+        return parseFmt(await fse.readFile(localFmt, "utf8"), stride, ib.format);
     }
 
-    const assetFmt = findRecursive(assetDir, (file) => {
+    const assetFmt = await findRecursive(assetDir, "**/*.fmt", (file) => {
         const lower = path.basename(file).toLowerCase();
-        return lower.endsWith(".fmt") && normalizeKey(lower).includes(normalizeKey(stem));
+        return normalizeKey(lower).includes(normalizeKey(stem));
     });
     if (assetFmt) {
-        return parseFmt(fs.readFileSync(assetFmt, "utf8"), stride, ib.format);
+        return parseFmt(await fse.readFile(assetFmt, "utf8"), stride, ib.format);
     }
 
-    let vb0Txt = findRecursive(assetDir, (file) => {
+    let vb0Txt = await findRecursive(assetDir, "**/*.txt", (file) => {
         const lower = path.basename(file).toLowerCase();
-        return (
-            lower.endsWith(".txt") &&
-            lower.includes("vb0") &&
-            normalizeKey(lower).includes(normalizeKey(stem))
-        );
+        return lower.includes("vb0") && normalizeKey(lower).includes(normalizeKey(stem));
     });
 
     if (!vb0Txt) {
         const ibHash = normalizeKey(ib.overrideHash || ib.key || stem);
-        const ibTxt = findRecursive(assetDir, (file) => {
+        const ibTxt = await findRecursive(assetDir, "**/*.txt", (file) => {
             const lower = path.basename(file).toLowerCase();
-            return (
-                lower.endsWith(".txt") &&
-                lower.includes("-ib=") &&
-                normalizeKey(lower).includes(ibHash)
-            );
+            return lower.includes("-ib=") && normalizeKey(lower).includes(ibHash);
         });
 
         if (ibTxt) {
             const ibBase = path.basename(ibTxt).replace(/-ib=.*$/i, "");
-            vb0Txt = findRecursive(assetDir, (file) => {
+            vb0Txt = await findRecursive(assetDir, "**/*.txt", (file) => {
                 const lower = path.basename(file).toLowerCase();
-                return (
-                    lower.endsWith(".txt") &&
-                    lower.includes("vb0") &&
-                    lower.startsWith(ibBase.toLowerCase())
-                );
+                return lower.includes("vb0") && lower.startsWith(ibBase.toLowerCase());
             });
         }
     }
@@ -894,26 +959,25 @@ function loadFmtForIb(modDir: string, assetDir: string, ib: IbResource, stride: 
     }
 
     return parseFmt(
-        extractFmtFromVb0(fs.readFileSync(vb0Txt, "utf8"), stride, ib.format),
+        extractFmtFromVb0(await fse.readFile(vb0Txt, "utf8"), stride, ib.format),
         stride,
         ib.format,
     );
 }
 
-function findRecursive(root: string, predicate: (file: string) => boolean): string | null {
-    const stack = [path.resolve(root)];
-    while (stack.length > 0) {
-        const dir = stack.pop()!;
-        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-            const full = path.join(dir, entry.name);
-            if (entry.isDirectory()) {
-                stack.push(full);
-            } else if (entry.isFile() && predicate(full)) {
-                return full;
-            }
-        }
-    }
-    return null;
+async function findRecursive(
+    root: string,
+    pattern: string | string[],
+    predicate: (file: string) => boolean,
+): Promise<string | null> {
+    const matches = await fg(pattern, {
+        cwd: path.resolve(root),
+        absolute: true,
+        onlyFiles: true,
+        caseSensitiveMatch: false,
+    });
+
+    return matches.find((file) => predicate(file)) ?? null;
 }
 
 function extractFmtFromVb0(text: string, stride: number, indexFormat: string): string {

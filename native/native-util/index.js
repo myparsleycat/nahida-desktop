@@ -580,6 +580,7 @@ if (!binding) {
   throw new Error('Loaded native binding has no exports')
 }
 module.exports = binding
+module.exports.convertDdsToPng = binding.convertDdsToPng
 module.exports.findFileAcrossDrives = binding.findFileAcrossDrives
 module.exports.getHwndsForPid = binding.getHwndsForPid
 module.exports.getPreviousPids = binding.getPreviousPids

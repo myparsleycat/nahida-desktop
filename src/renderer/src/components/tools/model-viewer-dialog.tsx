@@ -31,11 +31,13 @@ export function ModelViewerDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="flex h-[min(82vh,760px)] min-w-[min(92vw,1120px)] flex-col gap-3 p-3 focus:outline-none focus-visible:outline-none"
+        className="flex min-w-[90vw] max-h-[90vh] h-full flex-col gap-3 p-3 focus:outline-none focus-visible:outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <DialogHeader className="pr-10">
-          <DialogTitle>{source?.name || "Model Viewer"}</DialogTitle>
+          <DialogTitle className="truncate" title={source?.name}>
+            {source?.name || "Model Viewer"}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border bg-muted/30">
@@ -44,8 +46,6 @@ export function ModelViewerDialog({
               ref={suppressModelViewerFocusOutline}
               className="absolute inset-0 h-full w-full"
               src={objectUrl}
-              ar
-              ar-modes="webxr scene-viewer quick-look"
               camera-controls
               tone-mapping="neutral"
               shadow-intensity="1"

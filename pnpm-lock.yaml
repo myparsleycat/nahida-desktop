@@ -26,9 +26,6 @@ importers:
       '@hono/zod-validator':
         specifier: ^0.7.6
         version: 0.7.6(hono@4.12.14)(zod@4.3.6)
-      '@marcuth/dds-to-png':
-        specifier: ^0.0.4
-        version: 0.0.4
       auto-launch:
         specifier: ^5.0.6
         version: 5.0.6
@@ -198,6 +195,9 @@ importers:
       '@types/path-browserify':
         specifier: ^1.0.3
         version: 1.0.3
+      '@types/pngjs':
+        specifier: ^6.0.5
+        version: 6.0.5
       '@types/react':
         specifier: ^19.2.14
         version: 19.2.14
@@ -1184,9 +1184,6 @@ packages:
   '@malept/flatpak-bundler@0.4.0':
     resolution: {integrity: sha512-9QOtNffcOF/c1seMCDnjckb3R9WHcG34tky+FHpNKKCW0wc/scYLwMtO+ptyGUfMW0/b/n4qRiALlaFHc9Oj7Q==}
     engines: {node: '>= 10.0.0'}
-
-  '@marcuth/dds-to-png@0.0.4':
-    resolution: {integrity: sha512-jkCkLRNfHPGCi8CldEIScX7BNqNtiTGijog501DjACp7wl2GPMm67FPh9DAqoq6kbebp1UxyU5PLT0uU7FAMfg==}
 
   '@monogrid/gainmap-js@3.4.0':
     resolution: {integrity: sha512-2Z0FATFHaoYJ8b+Y4y4Hgfn3FRFwuU5zRrk+9dFWp4uGAdHGqVEdP7HP+gLA3X469KXHmfupJaUbKo1b/aDKIg==}
@@ -2656,6 +2653,9 @@ packages:
   '@types/plist@3.0.5':
     resolution: {integrity: sha512-E6OCaRmAe4WDmWNsL/9RMqdkkzDCY1etutkflWk4c+AcjDU07Pcz1fQwTX0TQz+Pxqn9i4L1TU3UFpjnrcDgxA==}
 
+  '@types/pngjs@6.0.5':
+    resolution: {integrity: sha512-0k5eKfrA83JOZPppLtS2C7OUtyNAl2wKNxfyYl9Q5g9lPkgBl/9hNyAu6HuEH2J4XmIv2znEpkDd0SaZVxW6iQ==}
+
   '@types/react-dom@19.2.3':
     resolution: {integrity: sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==}
     peerDependencies:
@@ -3017,10 +3017,6 @@ packages:
 
   dds-ktx-parser@1.0.1:
     resolution: {integrity: sha512-LAw7m22ajVMS71PrT0UQYipz90C1FzpuMEKUV6dl+trhaq96yX/TBJo4gUeeCVbveykfM2GfbU3o4j1MarnYSw==}
-
-  dds-parser@1.0.1:
-    resolution: {integrity: sha512-T7/hvdtB96hZkm6vBkzXtyIR06kU4bHtpkn8S5v1d6cHkc4oJIgOLzWF/8XydXb27423H39q7CDbzLmOqJYmEQ==}
-    engines: {node: '>=4.0.0'}
 
   debug@4.4.3:
     resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
@@ -5664,11 +5660,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@marcuth/dds-to-png@0.0.4':
-    dependencies:
-      dds-parser: 1.0.1
-      pngjs: 7.0.0
-
   '@monogrid/gainmap-js@3.4.0(three@0.182.0)':
     dependencies:
       promise-worker-transferable: 1.0.4
@@ -6967,6 +6958,10 @@ snapshots:
       xmlbuilder: 15.1.1
     optional: true
 
+  '@types/pngjs@6.0.5':
+    dependencies:
+      '@types/node': 24.12.2
+
   '@types/react-dom@19.2.3(@types/react@19.2.14)':
     dependencies:
       '@types/react': 19.2.14
@@ -7379,8 +7374,6 @@ snapshots:
   date-fns@4.1.0: {}
 
   dds-ktx-parser@1.0.1: {}
-
-  dds-parser@1.0.1: {}
 
   debug@4.4.3:
     dependencies:
