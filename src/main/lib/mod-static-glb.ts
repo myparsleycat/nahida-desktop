@@ -1396,11 +1396,21 @@ function collectSlotVariableBindings(
 
         const variable = normalizeKey(incrementMatch[1]);
         const defaultValue = Number(defaultVariables.get(variable) ?? 0);
-        const maxMatch = clickedSection.lines.find((line) =>
-            new RegExp(`^if\\s+\\$${escapeRegex(variable)}\\s*>\\s*(\\d+)$`, "i").test(line.trim()),
+        const variablePattern = escapeRegex(variable);
+        const assignmentPattern = new RegExp(`^\\s*\\$${variablePattern}\\s*=\\s*(\\d+)\\s*$`, "i");
+        const conditionPattern = new RegExp(
+            `^\\s*(?:if|elif)\\s+\\$${variablePattern}\\s*>\\s*(\\d+)\\s*$`,
+            "i",
         );
-        const maxValueMatch = maxMatch?.trim().match(/>\s*(\d+)$/);
-        const maxValue = maxValueMatch ? Number(maxValueMatch[1]) : defaultValue;
+        const assignedValues = clickedSection.lines
+            .map((line) => line.match(assignmentPattern))
+            .filter((match): match is RegExpMatchArray => match !== null)
+            .map((match) => Number(match[1]));
+        const conditionalValues = clickedSection.lines
+            .map((line) => line.match(conditionPattern))
+            .filter((match): match is RegExpMatchArray => match !== null)
+            .map((match) => Number(match[1]));
+        const maxValue = Math.max(defaultValue, ...assignedValues, ...conditionalValues);
         const values = Array.from({ length: maxValue + 1 }, (_, index) => index);
         bindings.push({
             slot: currentSlot,
