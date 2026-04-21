@@ -142,7 +142,7 @@ export async function convertModToGlb(
             textureCacheDir,
         });
 
-        await fse.mkdir(outputDir, { recursive: true });
+        await fse.ensureDir(outputDir);
         await fse.writeFile(options.outputPath, glbResult.glb);
 
         return {
@@ -893,7 +893,7 @@ async function prepareTexturePng(
                 textureOutDir,
                 `${path.basename(pngPath, path.extname(pngPath))}-alpha-inverted.png`,
             );
-            await fse.mkdir(textureOutDir, { recursive: true });
+            await fse.ensureDir(textureOutDir);
             await writePngAsync(png, invertedPath);
             const correctedAlpha = analyzeAlpha(png);
             return {
@@ -1024,7 +1024,7 @@ async function convertTextureToPng(
     }
 
     options.logger?.debug(`Converting DDS to PNG: ${texturePath} -> ${textureOutDir}`, "StaticGLB");
-    await fse.mkdir(textureOutDir, { recursive: true });
+    await fse.ensureDir(textureOutDir);
 
     const pngPath = path.join(
         textureOutDir,
