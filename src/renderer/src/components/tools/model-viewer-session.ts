@@ -90,6 +90,9 @@ export function suppressModelViewerFocusOutline(element: HTMLElement | null): vo
         return;
     }
 
+    element.tabIndex = -1;
+    element.style.outline = "none";
+
     requestAnimationFrame(() => {
         const shadowRoot = element.shadowRoot;
         if (!shadowRoot || shadowRoot.querySelector("style[data-nhd-focus-outline]")) {
@@ -99,12 +102,22 @@ export function suppressModelViewerFocusOutline(element: HTMLElement | null): vo
         const style = document.createElement("style");
         style.dataset.nhdFocusOutline = "true";
         style.textContent = `
+            :host {
+                outline: none !important;
+            }
+
+            :host(:focus),
+            :host(:focus-visible) {
+                outline: none !important;
+            }
+
+            .userInput:focus,
             .userInput:focus:not(:focus-visible) {
                 outline: none !important;
             }
 
             .userInput:focus-visible {
-                outline: auto !important;
+                outline: none !important;
             }
         `;
         shadowRoot.appendChild(style);

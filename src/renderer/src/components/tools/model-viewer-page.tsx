@@ -68,6 +68,7 @@ export function ModelViewerPage({
               <model-viewer
                 ref={suppressModelViewerFocusOutline}
                 className="absolute inset-0 h-full w-full"
+                tabIndex={-1}
                 src={modelSrc}
                 ar
                 ar-modes="webxr scene-viewer quick-look"

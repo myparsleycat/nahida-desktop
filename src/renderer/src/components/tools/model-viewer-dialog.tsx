@@ -322,6 +322,7 @@ export function ModelViewerDialog({
                         ? "z-10 opacity-100"
                         : "pointer-events-none z-0 opacity-0",
                     )}
+                    tabIndex={-1}
                     src={viewerUrls[index]}
                     camera-controls
                     interaction-prompt="none"
