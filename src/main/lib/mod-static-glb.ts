@@ -61,6 +61,7 @@ type IbResource = {
 type TextureBinding = {
     ibResourceName: string;
     diffuseResourceName?: string;
+    textureResourceNames?: string[];
     overrideHash?: string;
 };
 
@@ -125,6 +126,15 @@ type PreparedTexture = {
     alphaMode?: "MASK";
     alphaCutoff?: number;
     invertedAlpha: boolean;
+    selectionScore: number;
+    srgbConfidence: "srgb" | "linear" | "unknown";
+};
+
+type TextureSelectionAnalysis = {
+    isLikelyFlatColor: boolean;
+    isLikelySrgb: boolean | null;
+    isLikelyNormalMap: boolean;
+    srgbConfidence: "srgb" | "linear" | "unknown";
 };
 
 type GlTf = {
@@ -196,6 +206,9 @@ const GL_COMPONENT = {
     UNSIGNED_INT: 5125,
     FLOAT: 5126,
 } as const;
+
+const DDS_SRGB_DXGI_FORMATS = new Set([29, 72, 75, 78, 91, 93, 99]);
+const DDS_LINEAR_DXGI_FORMATS = new Set([28, 71, 74, 77, 80, 83, 87, 88, 95, 98]);
 
 const variantArtifactManifestLocks = new Map<string, Promise<void>>();
 
@@ -957,6 +970,7 @@ function collectTextureBindings(
         bindings.push({
             ibResourceName: trimResourcePrefix(ibValue),
             diffuseResourceName,
+            textureResourceNames,
             overrideHash: section.values.hash?.trim(),
         });
     }
@@ -1563,46 +1577,54 @@ async function buildMaterials(
     }> = (
         await Promise.all(
             textureBindings.map(async (binding) => {
-                const diffuseResourceName = binding.diffuseResourceName;
-                if (!diffuseResourceName) {
+                const resourceNames = collectMaterialTextureCandidateNames(binding, resources);
+                if (resourceNames.length === 0) {
                     options.logger?.debug(
-                        `Binding for ${binding.ibResourceName} has no diffuse resource name`,
+                        `Binding for ${binding.ibResourceName} has no texture candidates`,
                         "StaticGLB",
                     );
-                    return null;
+                    return [];
                 }
 
-                const textureResource = resourcesByName.get(normalizeKey(diffuseResourceName));
-                if (!textureResource?.filename) {
-                    options.logger?.debug(
-                        `Texture resource ${diffuseResourceName} not found or has no filename`,
-                        "StaticGLB",
-                    );
-                    return null;
-                }
+                const resolved = await Promise.all(
+                    resourceNames.map(async (diffuseResourceName) => {
+                        const textureResource = resourcesByName.get(
+                            normalizeKey(diffuseResourceName),
+                        );
+                        if (!textureResource?.filename) {
+                            options.logger?.debug(
+                                `Texture resource ${diffuseResourceName} not found or has no filename`,
+                                "StaticGLB",
+                            );
+                            return null;
+                        }
 
-                const texturePath = path.resolve(modDir, textureResource.filename);
-                if (!(await fse.pathExists(texturePath))) {
-                    warn(`Texture file not found: ${texturePath}`);
-                    return null;
-                }
+                        const texturePath = path.resolve(modDir, textureResource.filename);
+                        if (!(await fse.pathExists(texturePath))) {
+                            warn(`Texture file not found: ${texturePath}`);
+                            return null;
+                        }
 
-                return {
-                    binding,
-                    diffuseResourceName,
-                    texturePath,
-                };
+                        return {
+                            binding,
+                            diffuseResourceName,
+                            texturePath,
+                        };
+                    }),
+                );
+
+                return resolved.filter(
+                    (
+                        candidate,
+                    ): candidate is {
+                        binding: TextureBinding;
+                        diffuseResourceName: string;
+                        texturePath: string;
+                    } => candidate !== null,
+                );
             }),
         )
-    ).filter(
-        (
-            candidate,
-        ): candidate is {
-            binding: TextureBinding;
-            diffuseResourceName: string;
-            texturePath: string;
-        } => candidate !== null,
-    );
+    ).flat();
 
     const texturePrepareConcurrency = Math.max(1, Math.min(os.availableParallelism(), 8));
     const limitTexturePreparation = pLimit(texturePrepareConcurrency);
@@ -1624,9 +1646,23 @@ async function buildMaterials(
         }
     }
 
+    const candidatesByIb = new Map<string, typeof candidates>();
     for (const candidate of candidates) {
-        let cached = textureCache.get(candidate.texturePath);
-        if (!cached) {
+        const key = normalizeKey(candidate.binding.ibResourceName);
+        const current = candidatesByIb.get(key);
+        if (current) {
+            current.push(candidate);
+        } else {
+            candidatesByIb.set(key, [candidate]);
+        }
+    }
+
+    for (const [ibKey, bindingCandidates] of candidatesByIb) {
+        const preparedCandidates: Array<{
+            candidate: (typeof candidates)[number];
+            texture: PreparedTexture;
+        }> = [];
+        for (const candidate of bindingCandidates) {
             const prepareTask = prepareTasks.get(candidate.texturePath);
             if (!prepareTask) {
                 continue;
@@ -1641,8 +1677,39 @@ async function buildMaterials(
                 continue;
             }
 
+            preparedCandidates.push({ candidate, texture });
+        }
+
+        const selected = preparedCandidates.sort((left, right) => {
+            if (right.texture.selectionScore !== left.texture.selectionScore) {
+                return right.texture.selectionScore - left.texture.selectionScore;
+            }
+            return (
+                textureNamePriority(right.candidate.diffuseResourceName) -
+                textureNamePriority(left.candidate.diffuseResourceName)
+            );
+        })[0];
+
+        if (!selected) {
+            continue;
+        }
+
+        options.logger?.debug(
+            `Texture candidates for ${ibKey}: ${preparedCandidates
+                .map(
+                    ({ candidate, texture }) =>
+                        `${candidate.diffuseResourceName}=${texture.selectionScore}[${texture.srgbConfidence}]`,
+                )
+                .join(", ")} | selected=${selected.candidate.diffuseResourceName}`,
+            "StaticGLB",
+        );
+
+        let cached = textureCache.get(selected.candidate.texturePath);
+        if (!cached) {
+            const texture = selected.texture;
+
             options.logger?.debug(
-                `Prepared texture: ${texture.pngPath} (inverted: ${texture.invertedAlpha})`,
+                `Prepared texture: ${texture.pngPath} (inverted: ${texture.invertedAlpha}, score: ${texture.selectionScore})`,
                 "StaticGLB",
             );
 
@@ -1653,7 +1720,7 @@ async function buildMaterials(
             );
             const textureIndex = builder.addTexture(imageIndex);
             const materialIndex = builder.addMaterial({
-                name: candidate.diffuseResourceName,
+                name: selected.candidate.diffuseResourceName,
                 pbrMetallicRoughness: {
                     baseColorTexture: { index: textureIndex },
                     metallicFactor: 0,
@@ -1670,14 +1737,14 @@ async function buildMaterials(
 
             cached = {
                 materialIndex,
-                textureResourceName: candidate.diffuseResourceName,
+                textureResourceName: selected.candidate.diffuseResourceName,
                 pngPath: texture.pngPath,
             };
-            textureCache.set(candidate.texturePath, cached);
+            textureCache.set(selected.candidate.texturePath, cached);
         }
 
         if (cached) {
-            materialByIb.set(normalizeKey(candidate.binding.ibResourceName), cached);
+            materialByIb.set(ibKey, cached);
         }
     }
 
@@ -1697,8 +1764,14 @@ async function prepareTexturePng(
     try {
         const png = await readPngAsync(pngPath);
         const alpha = analyzeAlpha(png);
+        const selectionAnalysis = analyzeTextureSelection(texturePath, resourceName, png);
         if (!alpha.hasAlpha) {
-            return { pngPath, invertedAlpha: false };
+            return {
+                pngPath,
+                invertedAlpha: false,
+                selectionScore: scoreTextureSelection(resourceName, selectionAnalysis),
+                srgbConfidence: selectionAnalysis.srgbConfidence,
+            };
         }
 
         if (shouldInvertAlpha(resourceName, texturePath, alpha)) {
@@ -1714,6 +1787,8 @@ async function prepareTexturePng(
                 pngPath: invertedPath,
                 ...materialAlphaMode(correctedAlpha),
                 invertedAlpha: true,
+                selectionScore: scoreTextureSelection(resourceName, selectionAnalysis),
+                srgbConfidence: selectionAnalysis.srgbConfidence,
             };
         }
 
@@ -1721,6 +1796,8 @@ async function prepareTexturePng(
             pngPath,
             ...materialAlphaMode(alpha),
             invertedAlpha: false,
+            selectionScore: scoreTextureSelection(resourceName, selectionAnalysis),
+            srgbConfidence: selectionAnalysis.srgbConfidence,
         };
     } catch (error) {
         warn(
@@ -1728,8 +1805,189 @@ async function prepareTexturePng(
                 error instanceof Error ? error.message : String(error)
             }`,
         );
-        return { pngPath, invertedAlpha: false };
+        return {
+            pngPath,
+            invertedAlpha: false,
+            selectionScore: scoreTextureSelection(resourceName, {
+                isLikelyFlatColor: false,
+                isLikelySrgb: readDdsSrgbState(texturePath),
+                isLikelyNormalMap: false,
+                srgbConfidence: classifySrgbConfidence(readDdsSrgbState(texturePath)),
+            }),
+            srgbConfidence: classifySrgbConfidence(readDdsSrgbState(texturePath)),
+        };
     }
+}
+
+function collectMaterialTextureCandidateNames(
+    binding: TextureBinding,
+    _resources: Resource[],
+): string[] {
+    const ordered = new Set<string>();
+    for (const resourceName of binding.textureResourceNames ?? []) {
+        ordered.add(resourceName);
+    }
+    if (ordered.size === 0 && binding.diffuseResourceName) {
+        ordered.add(binding.diffuseResourceName);
+    }
+    return Array.from(ordered);
+}
+
+function textureNamePriority(resourceName: string): number {
+    const key = normalizeKey(resourceName);
+    let score = 0;
+
+    if (key.includes("basecolor") || key.includes("albedo")) score += 80;
+    if (key.includes("diffuse")) score += 60;
+    if (key.includes("color")) score += 25;
+    if (key.includes("shadow")) score -= 20;
+    if (key.includes("lightmap")) score -= 12;
+    if (key.includes("light")) score -= 10;
+    if (key.includes("metal") || key.includes("rough") || key.includes("ao")) score -= 24;
+    if (key.includes("mask")) score -= 28;
+    if (key.includes("normal") || key.includes("bump")) score -= 60;
+
+    return score;
+}
+
+function analyzeTextureSelection(
+    texturePath: string,
+    resourceName: string,
+    png: PNG,
+): TextureSelectionAnalysis {
+    const color = analyzeTextureColor(png);
+    const nameKey = normalizeKey(resourceName);
+    const isLikelySrgb = readDdsSrgbState(texturePath);
+    const isLikelyNormalMap =
+        color.meanB >= 0.7 &&
+        Math.abs(color.meanR - 0.5) <= 0.18 &&
+        Math.abs(color.meanG - 0.5) <= 0.18 &&
+        color.blueDominance >= 0.12 &&
+        color.channelRangeMax <= 72 &&
+        color.luminanceStdDev <= 0.12;
+
+    return {
+        isLikelyFlatColor:
+            color.channelRangeMax <= 12 ||
+            (color.luminanceStdDev <= 0.035 &&
+                color.channelRangeMax <= 24 &&
+                !nameKey.includes("shadow")),
+        isLikelySrgb,
+        isLikelyNormalMap,
+        srgbConfidence: classifySrgbConfidence(isLikelySrgb),
+    };
+}
+
+function analyzeTextureColor(png: PNG): {
+    channelRangeMax: number;
+    luminanceStdDev: number;
+    meanR: number;
+    meanG: number;
+    meanB: number;
+    blueDominance: number;
+} {
+    let minR = 255;
+    let minG = 255;
+    let minB = 255;
+    let maxR = 0;
+    let maxG = 0;
+    let maxB = 0;
+    let count = 0;
+    let sumR = 0;
+    let sumG = 0;
+    let sumB = 0;
+    let luminanceSum = 0;
+    let luminanceSquareSum = 0;
+    const stride = Math.max(1, Math.floor(Math.sqrt((png.width * png.height) / 4096)));
+
+    for (let y = 0; y < png.height; y += stride) {
+        for (let x = 0; x < png.width; x += stride) {
+            const offset = (y * png.width + x) * 4;
+            const r = png.data[offset];
+            const g = png.data[offset + 1];
+            const b = png.data[offset + 2];
+            minR = Math.min(minR, r);
+            minG = Math.min(minG, g);
+            minB = Math.min(minB, b);
+            maxR = Math.max(maxR, r);
+            maxG = Math.max(maxG, g);
+            maxB = Math.max(maxB, b);
+            sumR += r;
+            sumG += g;
+            sumB += b;
+            const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+            luminanceSum += luminance;
+            luminanceSquareSum += luminance * luminance;
+            count++;
+        }
+    }
+
+    const mean = count > 0 ? luminanceSum / count : 0;
+    const variance = count > 0 ? Math.max(0, luminanceSquareSum / count - mean * mean) : 0;
+    const meanR = count > 0 ? sumR / count / 255 : 0;
+    const meanG = count > 0 ? sumG / count / 255 : 0;
+    const meanB = count > 0 ? sumB / count / 255 : 0;
+    return {
+        channelRangeMax: Math.max(maxR - minR, maxG - minG, maxB - minB),
+        luminanceStdDev: Math.sqrt(variance),
+        meanR,
+        meanG,
+        meanB,
+        blueDominance: meanB - Math.max(meanR, meanG),
+    };
+}
+
+function scoreTextureSelection(resourceName: string, analysis: TextureSelectionAnalysis): number {
+    let score = textureNamePriority(resourceName);
+    if (analysis.srgbConfidence === "srgb") score += 120;
+    if (analysis.srgbConfidence === "linear") score -= 120;
+    if (analysis.isLikelyNormalMap) score -= 120;
+    if (analysis.isLikelyFlatColor) score -= 80;
+    else score += 20;
+    return score;
+}
+
+function classifySrgbConfidence(isLikelySrgb: boolean | null): "srgb" | "linear" | "unknown" {
+    if (isLikelySrgb === true) return "srgb";
+    if (isLikelySrgb === false) return "linear";
+    return "unknown";
+}
+
+function readDdsSrgbState(texturePath: string): boolean | null {
+    if (path.extname(texturePath).toLowerCase() !== ".dds") {
+        return null;
+    }
+
+    try {
+        const header = Buffer.alloc(148);
+        const handle = fse.openSync(texturePath, "r");
+        try {
+            const bytesRead = fse.readSync(handle, header, 0, header.length, 0);
+            return parseDdsSrgbState(header.subarray(0, bytesRead));
+        } finally {
+            fse.closeSync(handle);
+        }
+    } catch {
+        return null;
+    }
+}
+
+function parseDdsSrgbState(bytes: Buffer): boolean | null {
+    if (bytes.length < 148 || bytes.toString("ascii", 0, 4) !== "DDS ") {
+        return null;
+    }
+
+    const fourCC = bytes.toString("ascii", 84, 88);
+    if (fourCC !== "DX10") {
+        return null;
+    }
+
+    const dxgiFormat = bytes.readUInt32LE(128);
+    return DDS_SRGB_DXGI_FORMATS.has(dxgiFormat)
+        ? true
+        : DDS_LINEAR_DXGI_FORMATS.has(dxgiFormat)
+          ? false
+          : null;
 }
 
 function analyzeAlpha(png: PNG): {
