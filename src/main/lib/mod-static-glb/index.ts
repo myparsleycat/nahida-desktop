@@ -2157,7 +2157,7 @@ function stripIbResourceSuffix(value: string): string {
         "",
     );
     const numericSuffix = extractNumericSuffix(value);
-    return `${meshRemoved}${numericSuffix ? `.${suffixToString(numericSuffix)}` : ""}`;
+    return `${meshRemoved}${numericSuffix !== null ? `.${suffixToString(numericSuffix)}` : ""}`;
 }
 
 function extractNumericSuffix(value: string): number | null {
@@ -2172,7 +2172,23 @@ function suffixToString(value: number): string {
 function keyMatchesIb(groupKey: string, ibKey: string): boolean {
     const a = normalizeKey(groupKey);
     const b = normalizeKey(ibKey);
-    return a === b || a.includes(b) || b.includes(a);
+    if (a === b) {
+        return true;
+    }
+
+    const groupSuffix = extractNumericSuffix(groupKey);
+    const ibSuffix = extractNumericSuffix(ibKey);
+    if (groupSuffix !== null || ibSuffix !== null) {
+        if (groupSuffix !== ibSuffix) {
+            return false;
+        }
+
+        const groupBase = normalizeKey(groupKey.replace(/\.\d+$/i, ""));
+        const ibBase = normalizeKey(ibKey.replace(/\.\d+$/i, ""));
+        return groupBase === ibBase || groupBase.includes(ibBase) || ibBase.includes(groupBase);
+    }
+
+    return a.includes(b) || b.includes(a);
 }
 
 function normalizeKey(value: string): string {
