@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { convertDdsToPng } from "@native/native-util";
@@ -24,8 +25,8 @@ import {
     scoreTextureSelection,
     shouldInvertAlpha,
     type StaticGlbTextureFormat,
-    textureUsesAlpha,
     textureNamePriority,
+    textureUsesAlpha,
     writeJpegAsync,
     writePngAsync,
 } from "./texture-utils";
@@ -1550,6 +1551,28 @@ function escapeRegex(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function createTextureCacheBaseName(texturePath: string): string {
+    const extensionless = path.basename(texturePath, path.extname(texturePath));
+    const digest = crypto
+        .createHash("sha256")
+        .update(path.resolve(texturePath))
+        .digest("hex")
+        .slice(0, 12);
+    return `${extensionless}-${digest}`;
+}
+
+async function isCacheUpToDate(cachePath: string, sourcePath: string): Promise<boolean> {
+    try {
+        const [cacheStat, sourceStat] = await Promise.all([
+            fse.stat(cachePath),
+            fse.stat(sourcePath),
+        ]);
+        return cacheStat.mtimeMs >= sourceStat.mtimeMs;
+    } catch {
+        return false;
+    }
+}
+
 async function buildMaterials(
     builder: GlbBuilder,
     options: ConvertModToGlbBufferOptions,
@@ -1874,20 +1897,26 @@ async function convertTextureToPng(
         return null;
     }
 
-    options.logger?.debug(`Converting DDS to PNG: ${texturePath} -> ${textureOutDir}`, "StaticGLB");
     await fse.ensureDir(textureOutDir);
 
-    const pngPath = path.join(
-        textureOutDir,
-        `${path.basename(texturePath, path.extname(texturePath))}.png`,
-    );
+    const pngPath = path.join(textureOutDir, `${createTextureCacheBaseName(texturePath)}.png`);
+
+    if (await isCacheUpToDate(pngPath, texturePath)) {
+        options.logger?.debug(`Reusing cached PNG for texture: ${texturePath}`, "StaticGLB");
+        return pngPath;
+    }
 
     try {
         await convertDdsToPng(texturePath, pngPath);
+        options.logger?.debug(`Converted DDS to PNG: ${texturePath} -> ${pngPath}`, "StaticGLB");
         return pngPath;
     } catch {
         try {
             await convertDdsToPngFallback(texturePath, pngPath);
+            options.logger?.debug(
+                `Converted DDS to PNG (fallback): ${texturePath} -> ${pngPath}`,
+                "StaticGLB",
+            );
             return pngPath;
         } catch (fallbackError) {
             warn(
@@ -1901,11 +1930,7 @@ async function convertTextureToPng(
 }
 
 function resolveTextureFormatOption(format?: StaticGlbTextureFormat): StaticGlbTextureFormat {
-    if (
-        format === "png" ||
-        format === "jpeg-safe" ||
-        format === "jpeg-force"
-    ) {
+    if (format === "png" || format === "jpeg-safe" || format === "jpeg-force") {
         return format;
     }
 
@@ -1936,8 +1961,11 @@ async function writePreparedTextureImage(input: {
 
         const pngOutputPath = path.join(
             input.textureOutDir,
-            `${path.basename(input.texturePath, path.extname(input.texturePath))}-prepared.png`,
+            `${createTextureCacheBaseName(input.texturePath)}-prepared.png`,
         );
+        if (await isCacheUpToDate(pngOutputPath, input.sourcePngPath)) {
+            return pngOutputPath;
+        }
         await fse.ensureDir(input.textureOutDir);
         await writePngAsync(input.png, pngOutputPath);
         return pngOutputPath;
@@ -1945,8 +1973,11 @@ async function writePreparedTextureImage(input: {
 
     const jpegOutputPath = path.join(
         input.textureOutDir,
-        `${path.basename(input.texturePath, path.extname(input.texturePath))}.jpg`,
+        `${createTextureCacheBaseName(input.texturePath)}-q${input.jpegQuality}.jpg`,
     );
+    if (await isCacheUpToDate(jpegOutputPath, input.sourcePngPath)) {
+        return jpegOutputPath;
+    }
     await fse.ensureDir(input.textureOutDir);
     await writeJpegAsync(input.png, jpegOutputPath, input.jpegQuality);
     return jpegOutputPath;
