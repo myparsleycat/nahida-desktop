@@ -1938,7 +1938,7 @@ function resolveTextureFormatOption(format?: StaticGlbTextureFormat): StaticGlbT
 }
 
 function normalizeJpegQualityOption(quality?: number): number {
-    if (!Number.isFinite(quality)) {
+    if (quality === undefined || !Number.isFinite(quality)) {
         return DEFAULT_JPEG_QUALITY;
     }
 
