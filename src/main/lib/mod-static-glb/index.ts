@@ -1,6 +1,5 @@
 import os from "node:os";
 import path from "node:path";
-import { pipeline } from "node:stream/promises";
 import { convertDdsToPng } from "@native/native-util";
 import { decodeImage, parseDDSHeader } from "dds-ktx-parser";
 import fg from "fast-glob";
@@ -9,7 +8,23 @@ import { nanoid } from "nanoid";
 import pLimit from "p-limit";
 import { PNG } from "pngjs";
 import writeFileAtomic from "write-file-atomic";
-import type { Logger } from "../internal/logger";
+import type { Logger } from "../../internal/logger";
+import { GlbBuilder } from "./builder";
+import { evaluateIniCondition, evaluateIniNumericExpression } from "./ini-expression";
+import {
+    analyzeAlpha,
+    analyzeTextureSelection,
+    classifySrgbConfidence,
+    invertPngAlpha,
+    materialAlphaMode,
+    type PreparedTexture,
+    readDdsSrgbState,
+    readPngAsync,
+    scoreTextureSelection,
+    shouldInvertAlpha,
+    textureNamePriority,
+    writePngAsync,
+} from "./texture-utils";
 
 type IniSection = {
     header: string;
@@ -48,6 +63,13 @@ type BufferGroup = {
     vbFilename: string;
     vbBytes: Buffer;
     stride: number;
+};
+
+type BufferResourceGroup = {
+    position?: Resource;
+    blend?: Resource;
+    texcoord?: Resource;
+    single?: Resource;
 };
 
 type IbResource = {
@@ -121,36 +143,6 @@ export type ConvertModVariantArtifactsResult = {
     manifest: StaticGlbVariantManifest;
 };
 
-type PreparedTexture = {
-    pngPath: string;
-    alphaMode?: "MASK";
-    alphaCutoff?: number;
-    invertedAlpha: boolean;
-    selectionScore: number;
-    srgbConfidence: "srgb" | "linear" | "unknown";
-};
-
-type TextureSelectionAnalysis = {
-    isLikelyFlatColor: boolean;
-    isLikelySrgb: boolean | null;
-    isLikelyNormalMap: boolean;
-    srgbConfidence: "srgb" | "linear" | "unknown";
-};
-
-type GlTf = {
-    asset: { version: "2.0"; generator: string };
-    scene: number;
-    scenes: Array<{ nodes: number[] }>;
-    nodes: Array<{ mesh: number; name: string }>;
-    meshes: Array<{ name: string; primitives: unknown[] }>;
-    buffers: Array<{ byteLength: number }>;
-    bufferViews: Array<Record<string, unknown>>;
-    accessors: Array<Record<string, unknown>>;
-    materials?: Array<Record<string, unknown>>;
-    images?: Array<Record<string, unknown>>;
-    textures?: Array<Record<string, unknown>>;
-};
-
 export type ConvertModToGlbOptions = {
     modPath: string;
     assetPath: string;
@@ -184,7 +176,17 @@ type DrawInstruction = {
     indexCount: number;
     startIndex: number;
     baseVertex: number;
-    condition?: string;
+    condition?: IniConditionClause[];
+};
+
+type IniConditionClause = {
+    expression: string;
+    expected: boolean;
+};
+
+type IniBranchFrame = {
+    activeClauses: IniConditionClause[];
+    inverseClauses: IniConditionClause[];
 };
 
 type TextureOverrideBinding = TextureBinding & {
@@ -198,19 +200,9 @@ type SlotVariableBinding = {
     values: VariableStateValue[];
 };
 
-const GL_COMPONENT = {
-    BYTE: 5120,
-    UNSIGNED_BYTE: 5121,
-    SHORT: 5122,
-    UNSIGNED_SHORT: 5123,
-    UNSIGNED_INT: 5125,
-    FLOAT: 5126,
-} as const;
-
-const DDS_SRGB_DXGI_FORMATS = new Set([29, 72, 75, 78, 91, 93, 99]);
-const DDS_LINEAR_DXGI_FORMATS = new Set([28, 71, 74, 77, 80, 83, 87, 88, 95, 98]);
-
 const variantArtifactManifestLocks = new Map<string, Promise<void>>();
+const normalizeKeyCache = new Map<string, string>();
+const MAX_NORMALIZE_KEY_CACHE = 4096;
 
 async function withVariantArtifactManifestLock<T>(
     artifactRoot: string,
@@ -221,10 +213,11 @@ async function withVariantArtifactManifestLock<T>(
     const current = new Promise<void>((resolve) => {
         release = resolve;
     });
-    const queued = previous.then(() => current);
+    // Store the tail promise so later callers queue behind the currently scheduled operation.
+    const queued = previous.catch(() => undefined).then(() => current);
     variantArtifactManifestLocks.set(artifactRoot, queued);
 
-    await previous;
+    await previous.catch(() => undefined);
     try {
         return await operation();
     } finally {
@@ -371,7 +364,7 @@ export async function convertModToVariantArtifacts(
             states,
         };
         const manifestPath = path.join(artifactRoot, "manifest.json");
-        await fse.writeJson(manifestPath, manifest, { spaces: 2 });
+        await writeVariantManifestAtomic(manifestPath, manifest);
 
         return {
             iniPath: analysis.iniPath,
@@ -383,7 +376,7 @@ export async function convertModToVariantArtifacts(
             manifest,
         };
     } finally {
-        if (await fse.pathExists(textureCacheDir)) {
+        if (!options.debug && (await fse.pathExists(textureCacheDir))) {
             await fse.rm(textureCacheDir, { recursive: true, force: true });
         }
     }
@@ -440,19 +433,26 @@ export async function resolveVariantStateArtifact(
             const glbPath = path.join(glbDir, `${sanitizeStateKey(key)}.glb`);
             await fse.writeFile(glbPath, result.glb);
 
-            manifest = (await fse.readJson(manifestPath)) as StaticGlbVariantManifest;
             const current = manifest.states.find((entry) => entry.key === key);
             if (!current) {
-                manifest.states.push({
+                const entry = {
                     key,
                     values: options.state,
                     glbPath,
-                });
+                };
+                manifest.states.push(entry);
                 await writeVariantManifestAtomic(manifestPath, manifest);
+                return {
+                    glbPath,
+                    manifestPath,
+                    manifest,
+                    meshCount: result.meshCount,
+                    warningCount: result.warningCount,
+                };
             }
 
             return {
-                glbPath: current?.glbPath ?? glbPath,
+                glbPath: current.glbPath,
                 manifestPath,
                 manifest,
                 meshCount: result.meshCount,
@@ -721,8 +721,20 @@ function parseIni(text: string): IniSection[] {
 }
 
 function stripInlineComment(value: string): string {
-    const semicolon = value.indexOf(" ;");
-    if (semicolon >= 0) return value.slice(0, semicolon).trim();
+    let quote: '"' | "'" | null = null;
+    for (let index = 0; index < value.length; index++) {
+        const current = value[index];
+        if ((current === '"' || current === "'") && value[index - 1] !== "\\") {
+            quote = quote === current ? null : quote ? quote : (current as '"' | "'");
+            continue;
+        }
+        if (quote) {
+            continue;
+        }
+        if (current === ";" && index > 0 && /\s/.test(value[index - 1])) {
+            return value.slice(0, index).trim();
+        }
+    }
     return value;
 }
 
@@ -743,10 +755,7 @@ async function collectBufferGroups(
     resources: Resource[],
     warn: (message: string) => void,
 ): Promise<BufferGroup[]> {
-    const byKey = new Map<
-        string,
-        { position?: Resource; blend?: Resource; texcoord?: Resource; single?: Resource }
-    >();
+    const byKey = new Map<string, BufferResourceGroup>();
 
     for (const resource of resources) {
         if (!resource.filename || !resource.stride) continue;
@@ -755,17 +764,17 @@ async function collectBufferGroups(
             const [, prefix, kind, suffix = ""] = typedMatch;
             const key = `${prefix}${suffix}`;
             if (/position/i.test(kind)) {
-                ensureGroup(byKey, key).position = resource;
+                ensureBufferResourceGroup(byKey, key).position = resource;
             } else if (/blend/i.test(kind)) {
-                ensureGroup(byKey, key).blend = resource;
+                ensureBufferResourceGroup(byKey, key).blend = resource;
             } else {
-                ensureGroup(byKey, key).texcoord = resource;
+                ensureBufferResourceGroup(byKey, key).texcoord = resource;
             }
         } else if (
             resource.filename.toLowerCase().endsWith(".buf") ||
             resource.filename.toLowerCase().endsWith(".vb")
         ) {
-            ensureGroup(byKey, resource.name).single = resource;
+            ensureBufferResourceGroup(byKey, resource.name).single = resource;
         }
     }
 
@@ -787,33 +796,39 @@ async function collectBufferGroups(
         }
 
         if (group.position?.filename && group.blend?.filename && group.texcoord?.filename) {
-            const position = await readResourceBytes(modDir, group.position);
-            const blend = await readResourceBytes(modDir, group.blend);
-            const texcoord = await readResourceBytes(modDir, group.texcoord);
-            const stride = group.position.stride! + group.blend.stride! + group.texcoord.stride!;
+            const positionResource = group.position;
+            const blendResource = group.blend;
+            const texcoordResource = group.texcoord;
+            const [position, blend, texcoord] = await Promise.all([
+                readResourceBytes(modDir, positionResource),
+                readResourceBytes(modDir, blendResource),
+                readResourceBytes(modDir, texcoordResource),
+            ]);
+            const positionStride = positionResource.stride;
+            const blendStride = blendResource.stride;
+            const texcoordStride = texcoordResource.stride;
+            if (
+                positionStride === undefined ||
+                blendStride === undefined ||
+                texcoordStride === undefined
+            ) {
+                warn(`Skipping incomplete interleaved buffer group: ${key}`);
+                continue;
+            }
+            const stride = positionStride + blendStride + texcoordStride;
             const vertexCount = Math.min(
-                Math.floor(position.length / group.position.stride!),
-                Math.floor(blend.length / group.blend.stride!),
-                Math.floor(texcoord.length / group.texcoord.stride!),
+                Math.floor(position.length / positionStride),
+                Math.floor(blend.length / blendStride),
+                Math.floor(texcoord.length / texcoordStride),
             );
             const vb = Buffer.alloc(vertexCount * stride);
             for (let i = 0; i < vertexCount; i++) {
                 let offset = i * stride;
-                position.copy(
-                    vb,
-                    offset,
-                    i * group.position.stride!,
-                    (i + 1) * group.position.stride!,
-                );
-                offset += group.position.stride!;
-                blend.copy(vb, offset, i * group.blend.stride!, (i + 1) * group.blend.stride!);
-                offset += group.blend.stride!;
-                texcoord.copy(
-                    vb,
-                    offset,
-                    i * group.texcoord.stride!,
-                    (i + 1) * group.texcoord.stride!,
-                );
+                position.copy(vb, offset, i * positionStride, (i + 1) * positionStride);
+                offset += positionStride;
+                blend.copy(vb, offset, i * blendStride, (i + 1) * blendStride);
+                offset += blendStride;
+                texcoord.copy(vb, offset, i * texcoordStride, (i + 1) * texcoordStride);
             }
             groups.push({ key, vbFilename: `${key}.vb`, vbBytes: vb, stride });
         }
@@ -822,10 +837,13 @@ async function collectBufferGroups(
     return groups;
 }
 
-function ensureGroup<T>(map: Map<string, T>, key: string): T {
+function ensureBufferResourceGroup(
+    map: Map<string, BufferResourceGroup>,
+    key: string,
+): BufferResourceGroup {
     let value = map.get(key);
     if (!value) {
-        value = {} as T;
+        value = {};
         map.set(key, value);
     }
     return value;
@@ -997,28 +1015,37 @@ function collectSectionDrawInstructions(
     variables: Map<string, number | string>,
 ): DrawInstruction[] {
     const instructions: DrawInstruction[] = [];
-    const stack: Array<{ active: string; inverse?: string }> = [];
+    const stack: IniBranchFrame[] = [];
 
     for (const rawLine of lines) {
         const trimmed = rawLine.trim();
         const lower = trimmed.toLowerCase();
 
         if (lower.startsWith("if ")) {
-            stack.push({ active: trimmed.slice(3).trim() });
+            const expression = trimmed.slice(3).trim();
+            stack.push({
+                // Each frame carries the clauses required for the current branch and the
+                // accumulated inverse used by later `elif` / `else` branches.
+                activeClauses: [{ expression, expected: true }],
+                inverseClauses: [{ expression, expected: false }],
+            });
             continue;
         }
 
         if (lower.startsWith("elif ") || lower.startsWith("else if ")) {
             const previous = stack.pop();
-            const current = (
+            const expression = (
                 lower.startsWith("elif ") ? trimmed.slice(5) : trimmed.slice(8)
             ).trim();
-            const inverse = previous?.active ? `!(${previous.active})` : undefined;
             stack.push({
-                active: inverse ? `${inverse} && (${current})` : current,
-                inverse: previous?.inverse
-                    ? `${previous.inverse} && !(${current})`
-                    : `!(${current})`,
+                activeClauses: [
+                    ...(previous?.inverseClauses ?? []),
+                    { expression, expected: true },
+                ],
+                inverseClauses: [
+                    ...(previous?.inverseClauses ?? []),
+                    { expression, expected: false },
+                ],
             });
             continue;
         }
@@ -1027,7 +1054,8 @@ function collectSectionDrawInstructions(
             const previous = stack.pop();
             if (!previous) continue;
             stack.push({
-                active: previous.inverse || `!(${previous.active})`,
+                activeClauses: previous.inverseClauses,
+                inverseClauses: [],
             });
             continue;
         }
@@ -1040,19 +1068,19 @@ function collectSectionDrawInstructions(
         const drawMatch = trimmed.match(/^drawindexed\s*=\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)$/i);
         if (!drawMatch) continue;
 
-        const indexCount = evaluateIniNumericExpression(drawMatch[1], variables);
-        const startIndex = evaluateIniNumericExpression(drawMatch[2], variables);
-        const baseVertex = evaluateIniNumericExpression(drawMatch[3], variables);
+        const indexCount = evaluateIniNumericExpression(drawMatch[1], variables, normalizeKey);
+        const startIndex = evaluateIniNumericExpression(drawMatch[2], variables, normalizeKey);
+        const baseVertex = evaluateIniNumericExpression(drawMatch[3], variables, normalizeKey);
         if (indexCount === null || startIndex === null || baseVertex === null) {
             continue;
         }
 
-        const activeConditions = stack.map((entry) => entry.active).filter(Boolean);
+        const activeConditions = stack.flatMap((entry) => entry.activeClauses);
         instructions.push({
             indexCount,
             startIndex,
             baseVertex,
-            condition: activeConditions.length > 0 ? activeConditions.join(" && ") : undefined,
+            condition: activeConditions.length > 0 ? activeConditions : undefined,
         });
     }
 
@@ -1067,7 +1095,13 @@ function buildIndicesForState(
 ): Uint32Array {
     const activeDraws = bindings.flatMap((binding) =>
         binding.draws.filter(
-            (draw) => !draw.condition || evaluateIniCondition(draw.condition, variables),
+            (draw) =>
+                !draw.condition ||
+                draw.condition.every(
+                    (clause) =>
+                        evaluateIniCondition(clause.expression, variables, normalizeKey) ===
+                        clause.expected,
+                ),
         ),
     );
 
@@ -1197,7 +1231,7 @@ function resolveAssignmentFromSection(
         if (lower.startsWith("if ")) {
             const parentActive = isActive();
             const matched = parentActive
-                ? evaluateIniCondition(trimmed.slice(3), variables)
+                ? evaluateIniCondition(trimmed.slice(3), variables, normalizeKey)
                 : false;
             branchActive.push(matched);
             branchMatched.push(matched);
@@ -1211,7 +1245,7 @@ function resolveAssignmentFromSection(
             const expression = lower.startsWith("elif ") ? trimmed.slice(5) : trimmed.slice(8);
             const matched =
                 parentActive && !branchMatched[depth]
-                    ? evaluateIniCondition(expression, variables)
+                    ? evaluateIniCondition(expression, variables, normalizeKey)
                     : false;
             branchActive[depth] = matched;
             branchMatched[depth] = branchMatched[depth] || matched;
@@ -1270,53 +1304,6 @@ function resolveAssignmentFromSection(
     }
 
     return assignments;
-}
-
-function evaluateIniCondition(
-    expression: string,
-    variables: Map<string, number | string>,
-): boolean {
-    const jsExpression = substituteIniExpressionTokens(expression, variables);
-
-    if (!/^[\d\s()+\-*/%<>=!&|."'\\]+$/.test(jsExpression)) {
-        return false;
-    }
-
-    try {
-        return !!Function(`"use strict"; return (${jsExpression});`)();
-    } catch {
-        return false;
-    }
-}
-
-function evaluateIniNumericExpression(
-    expression: string,
-    variables: Map<string, number | string>,
-): number | null {
-    const jsExpression = substituteIniExpressionTokens(expression, variables);
-    if (!/^[\d\s()+\-*/%<>=!&|.]+$/.test(jsExpression)) {
-        return null;
-    }
-
-    try {
-        const value = Function(`"use strict"; return (${jsExpression});`)();
-        return typeof value === "number" && Number.isFinite(value) ? value : null;
-    } catch {
-        return null;
-    }
-}
-
-function substituteIniExpressionTokens(
-    expression: string,
-    variables: Map<string, number | string>,
-): string {
-    return expression.replace(/\$?[A-Za-z_\\][A-Za-z0-9_\\.\\]*/g, (token) => {
-        const lower = token.toLowerCase();
-        if (["true", "false"].includes(lower)) return lower;
-        if (/^\d/.test(token)) return token;
-        const value = variables.get(normalizeKey(token)) ?? 0;
-        return typeof value === "number" ? String(value) : JSON.stringify(String(value));
-    });
 }
 
 function mergeVariableState(
@@ -1577,7 +1564,7 @@ async function buildMaterials(
     }> = (
         await Promise.all(
             textureBindings.map(async (binding) => {
-                const resourceNames = collectMaterialTextureCandidateNames(binding, resources);
+                const resourceNames = collectMaterialTextureCandidateNames(binding);
                 if (resourceNames.length === 0) {
                     options.logger?.debug(
                         `Binding for ${binding.ibResourceName} has no texture candidates`,
@@ -1685,8 +1672,8 @@ async function buildMaterials(
                 return right.texture.selectionScore - left.texture.selectionScore;
             }
             return (
-                textureNamePriority(right.candidate.diffuseResourceName) -
-                textureNamePriority(left.candidate.diffuseResourceName)
+                textureNamePriority(right.candidate.diffuseResourceName, normalizeKey) -
+                textureNamePriority(left.candidate.diffuseResourceName, normalizeKey)
             );
         })[0];
 
@@ -1764,17 +1751,26 @@ async function prepareTexturePng(
     try {
         const png = await readPngAsync(pngPath);
         const alpha = analyzeAlpha(png);
-        const selectionAnalysis = analyzeTextureSelection(texturePath, resourceName, png);
+        const selectionAnalysis = await analyzeTextureSelection(
+            texturePath,
+            resourceName,
+            png,
+            normalizeKey,
+        );
         if (!alpha.hasAlpha) {
             return {
                 pngPath,
                 invertedAlpha: false,
-                selectionScore: scoreTextureSelection(resourceName, selectionAnalysis),
+                selectionScore: scoreTextureSelection(
+                    resourceName,
+                    selectionAnalysis,
+                    normalizeKey,
+                ),
                 srgbConfidence: selectionAnalysis.srgbConfidence,
             };
         }
 
-        if (shouldInvertAlpha(resourceName, texturePath, alpha)) {
+        if (shouldInvertAlpha(resourceName, texturePath, alpha, normalizeKey)) {
             invertPngAlpha(png);
             const invertedPath = path.join(
                 textureOutDir,
@@ -1787,7 +1783,11 @@ async function prepareTexturePng(
                 pngPath: invertedPath,
                 ...materialAlphaMode(correctedAlpha),
                 invertedAlpha: true,
-                selectionScore: scoreTextureSelection(resourceName, selectionAnalysis),
+                selectionScore: scoreTextureSelection(
+                    resourceName,
+                    selectionAnalysis,
+                    normalizeKey,
+                ),
                 srgbConfidence: selectionAnalysis.srgbConfidence,
             };
         }
@@ -1796,10 +1796,12 @@ async function prepareTexturePng(
             pngPath,
             ...materialAlphaMode(alpha),
             invertedAlpha: false,
-            selectionScore: scoreTextureSelection(resourceName, selectionAnalysis),
+            selectionScore: scoreTextureSelection(resourceName, selectionAnalysis, normalizeKey),
             srgbConfidence: selectionAnalysis.srgbConfidence,
         };
     } catch (error) {
+        const isLikelySrgb = await readDdsSrgbState(texturePath);
+        const srgbConfidence = classifySrgbConfidence(isLikelySrgb);
         warn(
             `Could not inspect texture alpha ${pngPath}: ${
                 error instanceof Error ? error.message : String(error)
@@ -1808,21 +1810,22 @@ async function prepareTexturePng(
         return {
             pngPath,
             invertedAlpha: false,
-            selectionScore: scoreTextureSelection(resourceName, {
-                isLikelyFlatColor: false,
-                isLikelySrgb: readDdsSrgbState(texturePath),
-                isLikelyNormalMap: false,
-                srgbConfidence: classifySrgbConfidence(readDdsSrgbState(texturePath)),
-            }),
-            srgbConfidence: classifySrgbConfidence(readDdsSrgbState(texturePath)),
+            selectionScore: scoreTextureSelection(
+                resourceName,
+                {
+                    isLikelyFlatColor: false,
+                    isLikelySrgb,
+                    isLikelyNormalMap: false,
+                    srgbConfidence,
+                },
+                normalizeKey,
+            ),
+            srgbConfidence,
         };
     }
 }
 
-function collectMaterialTextureCandidateNames(
-    binding: TextureBinding,
-    _resources: Resource[],
-): string[] {
+function collectMaterialTextureCandidateNames(binding: TextureBinding): string[] {
     const ordered = new Set<string>();
     for (const resourceName of binding.textureResourceNames ?? []) {
         ordered.add(resourceName);
@@ -1831,249 +1834,6 @@ function collectMaterialTextureCandidateNames(
         ordered.add(binding.diffuseResourceName);
     }
     return Array.from(ordered);
-}
-
-function textureNamePriority(resourceName: string): number {
-    const key = normalizeKey(resourceName);
-    let score = 0;
-
-    if (key.includes("basecolor") || key.includes("albedo")) score += 80;
-    if (key.includes("diffuse")) score += 60;
-    if (key.includes("color")) score += 25;
-    if (key.includes("shadow")) score -= 20;
-    if (key.includes("lightmap")) score -= 12;
-    if (key.includes("light")) score -= 10;
-    if (key.includes("metal") || key.includes("rough") || key.includes("ao")) score -= 24;
-    if (key.includes("mask")) score -= 28;
-    if (key.includes("normal") || key.includes("bump")) score -= 60;
-
-    return score;
-}
-
-function analyzeTextureSelection(
-    texturePath: string,
-    resourceName: string,
-    png: PNG,
-): TextureSelectionAnalysis {
-    const color = analyzeTextureColor(png);
-    const nameKey = normalizeKey(resourceName);
-    const isLikelySrgb = readDdsSrgbState(texturePath);
-    const isLikelyNormalMap =
-        color.meanB >= 0.7 &&
-        Math.abs(color.meanR - 0.5) <= 0.18 &&
-        Math.abs(color.meanG - 0.5) <= 0.18 &&
-        color.blueDominance >= 0.12 &&
-        color.channelRangeMax <= 72 &&
-        color.luminanceStdDev <= 0.12;
-
-    return {
-        isLikelyFlatColor:
-            color.channelRangeMax <= 12 ||
-            (color.luminanceStdDev <= 0.035 &&
-                color.channelRangeMax <= 24 &&
-                !nameKey.includes("shadow")),
-        isLikelySrgb,
-        isLikelyNormalMap,
-        srgbConfidence: classifySrgbConfidence(isLikelySrgb),
-    };
-}
-
-function analyzeTextureColor(png: PNG): {
-    channelRangeMax: number;
-    luminanceStdDev: number;
-    meanR: number;
-    meanG: number;
-    meanB: number;
-    blueDominance: number;
-} {
-    let minR = 255;
-    let minG = 255;
-    let minB = 255;
-    let maxR = 0;
-    let maxG = 0;
-    let maxB = 0;
-    let count = 0;
-    let sumR = 0;
-    let sumG = 0;
-    let sumB = 0;
-    let luminanceSum = 0;
-    let luminanceSquareSum = 0;
-    const stride = Math.max(1, Math.floor(Math.sqrt((png.width * png.height) / 4096)));
-
-    for (let y = 0; y < png.height; y += stride) {
-        for (let x = 0; x < png.width; x += stride) {
-            const offset = (y * png.width + x) * 4;
-            const r = png.data[offset];
-            const g = png.data[offset + 1];
-            const b = png.data[offset + 2];
-            minR = Math.min(minR, r);
-            minG = Math.min(minG, g);
-            minB = Math.min(minB, b);
-            maxR = Math.max(maxR, r);
-            maxG = Math.max(maxG, g);
-            maxB = Math.max(maxB, b);
-            sumR += r;
-            sumG += g;
-            sumB += b;
-            const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-            luminanceSum += luminance;
-            luminanceSquareSum += luminance * luminance;
-            count++;
-        }
-    }
-
-    const mean = count > 0 ? luminanceSum / count : 0;
-    const variance = count > 0 ? Math.max(0, luminanceSquareSum / count - mean * mean) : 0;
-    const meanR = count > 0 ? sumR / count / 255 : 0;
-    const meanG = count > 0 ? sumG / count / 255 : 0;
-    const meanB = count > 0 ? sumB / count / 255 : 0;
-    return {
-        channelRangeMax: Math.max(maxR - minR, maxG - minG, maxB - minB),
-        luminanceStdDev: Math.sqrt(variance),
-        meanR,
-        meanG,
-        meanB,
-        blueDominance: meanB - Math.max(meanR, meanG),
-    };
-}
-
-function scoreTextureSelection(resourceName: string, analysis: TextureSelectionAnalysis): number {
-    let score = textureNamePriority(resourceName);
-    if (analysis.srgbConfidence === "srgb") score += 120;
-    if (analysis.srgbConfidence === "linear") score -= 120;
-    if (analysis.isLikelyNormalMap) score -= 120;
-    if (analysis.isLikelyFlatColor) score -= 80;
-    else score += 20;
-    return score;
-}
-
-function classifySrgbConfidence(isLikelySrgb: boolean | null): "srgb" | "linear" | "unknown" {
-    if (isLikelySrgb === true) return "srgb";
-    if (isLikelySrgb === false) return "linear";
-    return "unknown";
-}
-
-function readDdsSrgbState(texturePath: string): boolean | null {
-    if (path.extname(texturePath).toLowerCase() !== ".dds") {
-        return null;
-    }
-
-    try {
-        const header = Buffer.alloc(148);
-        const handle = fse.openSync(texturePath, "r");
-        try {
-            const bytesRead = fse.readSync(handle, header, 0, header.length, 0);
-            return parseDdsSrgbState(header.subarray(0, bytesRead));
-        } finally {
-            fse.closeSync(handle);
-        }
-    } catch {
-        return null;
-    }
-}
-
-function parseDdsSrgbState(bytes: Buffer): boolean | null {
-    if (bytes.length < 148 || bytes.toString("ascii", 0, 4) !== "DDS ") {
-        return null;
-    }
-
-    const fourCC = bytes.toString("ascii", 84, 88);
-    if (fourCC !== "DX10") {
-        return null;
-    }
-
-    const dxgiFormat = bytes.readUInt32LE(128);
-    return DDS_SRGB_DXGI_FORMATS.has(dxgiFormat)
-        ? true
-        : DDS_LINEAR_DXGI_FORMATS.has(dxgiFormat)
-          ? false
-          : null;
-}
-
-function analyzeAlpha(png: PNG): {
-    hasAlpha: boolean;
-    lowRatio: number;
-    highRatio: number;
-    partialRatio: number;
-    lowAlphaRgbMean: number;
-} {
-    const pixelCount = png.width * png.height;
-    let low = 0;
-    let high = 0;
-    let partial = 0;
-    let lowAlphaRgbTotal = 0;
-
-    for (let offset = 0; offset < png.data.length; offset += 4) {
-        const alpha = png.data[offset + 3];
-        if (alpha <= 16) {
-            low++;
-            lowAlphaRgbTotal +=
-                (png.data[offset] + png.data[offset + 1] + png.data[offset + 2]) / 3;
-        } else if (alpha >= 239) {
-            high++;
-        } else {
-            partial++;
-        }
-    }
-
-    return {
-        hasAlpha: low > 0 || partial > 0,
-        lowRatio: pixelCount > 0 ? low / pixelCount : 0,
-        highRatio: pixelCount > 0 ? high / pixelCount : 0,
-        partialRatio: pixelCount > 0 ? partial / pixelCount : 0,
-        lowAlphaRgbMean: low > 0 ? lowAlphaRgbTotal / low : 0,
-    };
-}
-
-function materialAlphaMode(
-    alpha: ReturnType<typeof analyzeAlpha>,
-): Pick<PreparedTexture, "alphaMode" | "alphaCutoff"> {
-    if (isCutoutAlpha(alpha)) {
-        return { alphaMode: "MASK", alphaCutoff: 0.5 };
-    }
-
-    return {};
-}
-
-function isCutoutAlpha(alpha: ReturnType<typeof analyzeAlpha>): boolean {
-    return alpha.lowRatio >= 0.005 && alpha.highRatio >= 0.5 && alpha.partialRatio <= 0.02;
-}
-
-function shouldInvertAlpha(
-    resourceName: string,
-    texturePath: string,
-    alpha: ReturnType<typeof analyzeAlpha>,
-): boolean {
-    const key = normalizeKey(`${resourceName} ${path.basename(texturePath)}`);
-    if (key.includes("invertalpha") || key.includes("alphainvert")) {
-        return true;
-    }
-
-    return alpha.lowRatio >= 0.95 && alpha.highRatio <= 0.03 && alpha.lowAlphaRgbMean >= 8;
-}
-
-function invertPngAlpha(png: PNG): void {
-    for (let offset = 3; offset < png.data.length; offset += 4) {
-        png.data[offset] = 255 - png.data[offset];
-    }
-}
-
-async function readPngAsync(pngPath: string): Promise<PNG> {
-    const buffer = await fse.readFile(pngPath);
-    return await new Promise((resolve, reject) => {
-        new PNG().parse(buffer, (error, png) => {
-            if (error || !png) {
-                reject(error ?? new Error(`Failed to parse PNG: ${pngPath}`));
-                return;
-            }
-
-            resolve(png);
-        });
-    });
-}
-
-async function writePngAsync(png: PNG, pngPath: string): Promise<void> {
-    await pipeline(png.pack(), fse.createWriteStream(pngPath));
 }
 
 async function convertTextureToPng(
@@ -2293,7 +2053,16 @@ function keyMatchesIb(groupKey: string, ibKey: string): boolean {
 }
 
 function normalizeKey(value: string): string {
-    return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const cached = normalizeKeyCache.get(value);
+    if (cached) {
+        return cached;
+    }
+    const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (normalizeKeyCache.size >= MAX_NORMALIZE_KEY_CACHE) {
+        normalizeKeyCache.clear();
+    }
+    normalizeKeyCache.set(value, normalized);
+    return normalized;
 }
 
 async function loadFmtForIb(
@@ -2540,7 +2309,10 @@ function buildPrimitive(
 
     return {
         attributes,
-        indices: builder.addAccessorFromIndices(removeDegenerateTriangles(indices, warn)),
+        indices: builder.addAccessorFromIndices(
+            removeDegenerateTriangles(indices, warn),
+            vertexCount,
+        ),
         mode: 4,
     };
 }
@@ -2622,7 +2394,6 @@ function removeDegenerateTriangles(
     indices: Uint32Array,
     warn: (message: string) => void,
 ): Uint32Array {
-    const out: number[] = [];
     let removed = 0;
     for (let i = 0; i + 2 < indices.length; i += 3) {
         const a = indices[i + 0];
@@ -2630,14 +2401,29 @@ function removeDegenerateTriangles(
         const c = indices[i + 2];
         if (a === b || b === c || a === c) {
             removed++;
-            continue;
         }
-        out.push(a, b, c);
     }
     if (removed > 0) {
         warn(`Removed ${removed} degenerate triangles`);
     }
-    return Uint32Array.from(out);
+    if (removed === 0) {
+        return indices;
+    }
+
+    const out = new Uint32Array(indices.length - removed * 3);
+    let offset = 0;
+    for (let i = 0; i + 2 < indices.length; i += 3) {
+        const a = indices[i + 0];
+        const b = indices[i + 1];
+        const c = indices[i + 2];
+        if (a === b || b === c || a === c) {
+            continue;
+        }
+        out[offset++] = a;
+        out[offset++] = b;
+        out[offset++] = c;
+    }
+    return out;
 }
 
 function readDxgiValues(bytes: Buffer, offset: number, format: string): number[] {
@@ -2717,171 +2503,4 @@ function halfToFloat(h: number): number {
 
 function range(count: number): number[] {
     return Array.from({ length: count }, (_, i) => i);
-}
-
-class GlbBuilder {
-    private chunks: Buffer[] = [];
-    private gltf: GlTf = {
-        asset: { version: "2.0", generator: "Nahida Desktop static mod GLB converter" },
-        scene: 0,
-        scenes: [{ nodes: [] }],
-        nodes: [],
-        meshes: [],
-        buffers: [{ byteLength: 0 }],
-        bufferViews: [],
-        accessors: [],
-    };
-
-    addMesh(name: string, primitive: Record<string, unknown>) {
-        const meshIndex = this.gltf.meshes.length;
-        this.gltf.meshes.push({ name, primitives: [primitive] });
-        const nodeIndex = this.gltf.nodes.length;
-        this.gltf.nodes.push({ mesh: meshIndex, name });
-        this.gltf.scenes[0].nodes.push(nodeIndex);
-    }
-
-    meshCount(): number {
-        return this.gltf.meshes.length;
-    }
-
-    addAccessorFromFloat32(
-        data: Float32Array,
-        type: "VEC2" | "VEC3" | "VEC4",
-        withMinMax: boolean,
-    ): number {
-        const buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-        const bufferView = this.addBufferView(buffer, 34962);
-        const accessor: Record<string, unknown> = {
-            bufferView,
-            byteOffset: 0,
-            componentType: GL_COMPONENT.FLOAT,
-            count: data.length / typeWidth(type),
-            type,
-        };
-        if (withMinMax) {
-            const { min, max } = minMax(data, typeWidth(type));
-            accessor.min = min;
-            accessor.max = max;
-        }
-        this.gltf.accessors.push(accessor);
-        return this.gltf.accessors.length - 1;
-    }
-
-    addAccessorFromIndices(indices: Uint32Array): number {
-        const useUint16 = indices.every((value) => value <= 65535);
-        let buffer: Buffer;
-        let componentType: number;
-        if (useUint16) {
-            const compact = new Uint16Array(indices.length);
-            compact.set(indices);
-            buffer = Buffer.from(compact.buffer);
-            componentType = GL_COMPONENT.UNSIGNED_SHORT;
-        } else {
-            buffer = Buffer.from(indices.buffer, indices.byteOffset, indices.byteLength);
-            componentType = GL_COMPONENT.UNSIGNED_INT;
-        }
-        const bufferView = this.addBufferView(buffer, 34963);
-        this.gltf.accessors.push({
-            bufferView,
-            byteOffset: 0,
-            componentType,
-            count: indices.length,
-            type: "SCALAR",
-        });
-        return this.gltf.accessors.length - 1;
-    }
-
-    addImage(data: Buffer, mimeType: string, name?: string): number {
-        const bufferView = this.addBufferView(data);
-        this.gltf.images ??= [];
-        this.gltf.images.push({
-            ...(name ? { name } : {}),
-            bufferView,
-            mimeType,
-        });
-        return this.gltf.images.length - 1;
-    }
-
-    addTexture(source: number): number {
-        this.gltf.textures ??= [];
-        this.gltf.textures.push({ source });
-        return this.gltf.textures.length - 1;
-    }
-
-    addMaterial(material: Record<string, unknown>): number {
-        this.gltf.materials ??= [];
-        this.gltf.materials.push(material);
-        return this.gltf.materials.length - 1;
-    }
-
-    toGlb(): Buffer {
-        const bin = Buffer.concat(this.chunks);
-        this.gltf.buffers[0].byteLength = bin.length;
-        const json = Buffer.from(JSON.stringify(this.gltf), "utf8");
-        const jsonPadded = padBuffer(json, 0x20);
-        const binPadded = padBuffer(bin, 0x00);
-
-        const totalLength = 12 + 8 + jsonPadded.length + 8 + binPadded.length;
-        const out = Buffer.alloc(totalLength);
-        let offset = 0;
-        out.writeUInt32LE(0x46546c67, offset);
-        offset += 4;
-        out.writeUInt32LE(2, offset);
-        offset += 4;
-        out.writeUInt32LE(totalLength, offset);
-        offset += 4;
-        out.writeUInt32LE(jsonPadded.length, offset);
-        offset += 4;
-        out.writeUInt32LE(0x4e4f534a, offset);
-        offset += 4;
-        jsonPadded.copy(out, offset);
-        offset += jsonPadded.length;
-        out.writeUInt32LE(binPadded.length, offset);
-        offset += 4;
-        out.writeUInt32LE(0x004e4942, offset);
-        offset += 4;
-        binPadded.copy(out, offset);
-        return out;
-    }
-
-    private addBufferView(data: Buffer, target?: number): number {
-        const aligned = padBuffer(data, 0x00);
-        const byteOffset = this.chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-        this.chunks.push(aligned);
-        this.gltf.bufferViews.push({
-            buffer: 0,
-            byteOffset,
-            byteLength: data.length,
-            ...(target ? { target } : {}),
-        });
-        return this.gltf.bufferViews.length - 1;
-    }
-}
-
-function typeWidth(type: "SCALAR" | "VEC2" | "VEC3" | "VEC4"): number {
-    if (type === "SCALAR") return 1;
-    if (type === "VEC2") return 2;
-    if (type === "VEC3") return 3;
-    return 4;
-}
-
-function minMax(data: Float32Array, width: number): { min: number[]; max: number[] } {
-    const min = Array(width).fill(Number.POSITIVE_INFINITY);
-    const max = Array(width).fill(Number.NEGATIVE_INFINITY);
-    for (let i = 0; i < data.length; i += width) {
-        for (let c = 0; c < width; c++) {
-            const value = data[i + c];
-            min[c] = Math.min(min[c], value);
-            max[c] = Math.max(max[c], value);
-        }
-    }
-    return { min, max };
-}
-
-function padBuffer(buffer: Buffer, fill: number): Buffer {
-    const paddedLength = (buffer.length + 3) & ~3;
-    if (paddedLength === buffer.length) return buffer;
-    const out = Buffer.alloc(paddedLength, fill);
-    buffer.copy(out);
-    return out;
 }
