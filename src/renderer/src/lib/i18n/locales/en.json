@@ -493,6 +493,7 @@
         "menu": {
           "model": "Model",
           "texture": "Texture",
+          "renderer": "Renderer",
           "rotate": "Rotate",
           "reset": "Reset"
         },

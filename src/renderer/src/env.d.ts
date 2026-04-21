@@ -1,8 +1,8 @@
 /// <reference types="vite/client" />
 
-import type { ModelViewerElement } from "@google/model-viewer";
 import type { DetailedHTMLProps, HTMLAttributes } from "react";
 import "react";
+import type { ModelViewerElement } from "@google/model-viewer";
 
 type ModelViewerProps = DetailedHTMLProps<
   HTMLAttributes<ModelViewerElement>,

@@ -474,6 +474,7 @@
         "menu": {
           "model": "モデル",
           "texture": "テクスチャ",
+          "renderer": "レンダラー",
           "rotate": "回転",
           "reset": "リセット"
         },

@@ -473,6 +473,7 @@
         "menu": {
           "model": "모델",
           "texture": "텍스처",
+          "renderer": "렌더러",
           "rotate": "회전",
           "reset": "초기화"
         },
