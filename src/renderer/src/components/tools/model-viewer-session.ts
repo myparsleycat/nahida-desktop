@@ -24,6 +24,67 @@ export function cleanupModelViewerUrl(url: string): void {
     }
 }
 
+type ModelViewerOrbit = {
+    toString(): string;
+};
+
+type ModelViewerTarget = {
+    toString(): string;
+};
+
+export type ModelViewerElement = HTMLElement & {
+    cameraOrbit?: string;
+    cameraTarget?: string;
+    fieldOfView?: string;
+    jumpCameraToGoal?: () => void;
+    getCameraOrbit?: () => ModelViewerOrbit;
+    getCameraTarget?: () => ModelViewerTarget;
+    getFieldOfView?: () => number;
+};
+
+export type ModelViewerCameraState = {
+    orbit: string;
+    target: string;
+    fieldOfView: string;
+};
+
+export function captureModelViewerCameraState(
+    element: ModelViewerElement | null,
+): ModelViewerCameraState | null {
+    const orbit = element?.getCameraOrbit?.()?.toString();
+    const target = element?.getCameraTarget?.()?.toString();
+    const fieldOfViewValue = element?.getFieldOfView?.();
+    if (!orbit || !target || fieldOfViewValue == null || Number.isNaN(fieldOfViewValue)) {
+        return null;
+    }
+
+    return {
+        orbit,
+        target,
+        fieldOfView: `${fieldOfViewValue}deg`,
+    };
+}
+
+export function restoreModelViewerCameraState(
+    element: ModelViewerElement | null,
+    state: ModelViewerCameraState | null,
+): void {
+    if (!element || !state) {
+        return;
+    }
+
+    requestAnimationFrame(() => {
+        if (!element.isConnected) {
+            return;
+        }
+
+        element.cameraTarget = state.target;
+        element.fieldOfView = state.fieldOfView;
+        element.cameraOrbit = state.orbit;
+        element.jumpCameraToGoal?.();
+    });
+}
+
 export function suppressModelViewerFocusOutline(element: HTMLElement | null): void {
     if (!element) {
         return;

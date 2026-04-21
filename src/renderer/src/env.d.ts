@@ -1,27 +1,27 @@
 /// <reference types="vite/client" />
 
-import type React from "react";
+import type { ModelViewerElement } from "@google/model-viewer";
+import type { DetailedHTMLProps, HTMLAttributes } from "react";
+import "react";
+
+type ModelViewerProps = DetailedHTMLProps<
+  HTMLAttributes<ModelViewerElement>,
+  ModelViewerElement
+> & {
+  src?: string;
+  ar?: boolean;
+  exposure?: number | string;
+  "ar-modes"?: string;
+  "camera-controls"?: boolean;
+  "interaction-prompt"?: "auto" | "none";
+  "tone-mapping"?: string;
+  "shadow-intensity"?: number | string;
+};
 
 declare module "react" {
-    namespace JSX {
-        interface IntrinsicElements {
-            "model-viewer": React.DetailedHTMLProps<
-                React.HTMLAttributes<HTMLElement>,
-                HTMLElement
-            > & {
-                src?: string;
-                alt?: string;
-                "camera-controls"?: boolean | string;
-                ar?: boolean | string;
-                "ar-modes"?: string;
-                "tone-mapping"?: string;
-                poster?: string;
-                "auto-rotate"?: boolean | string;
-                "environment-image"?: string;
-                exposure?: string;
-                "shadow-intensity"?: string;
-                "interaction-prompt"?: string;
-            };
-        }
+  namespace JSX {
+    interface IntrinsicElements {
+      "model-viewer": ModelViewerProps;
     }
+  }
 }

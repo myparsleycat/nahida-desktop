@@ -127,12 +127,15 @@ export const ModCardHeader = memo(function ModCardHeader({
   };
 
   const cleanupModelViewerSource = async (source: ModelViewerDialogSource | null) => {
-    if (!source?.glbPath) {
+    if (!source) {
       return;
     }
 
     try {
-      await window.api.invoke("tools:cleanupStaticGlbViewerFile", source.glbPath);
+      await window.api.invoke(
+        "tools:cleanupStaticGlbViewerFile",
+        source.mode === "variant-set" ? source.artifactRoot : source.glbPath,
+      );
     } catch (error) {
       console.warn("Failed to clean up model viewer file", error);
     }
@@ -145,10 +148,23 @@ export const ModCardHeader = memo(function ModCardHeader({
     setIsConvertingModel(true);
     try {
       const result = await window.api.invoke("tools:convertStaticGlbForViewer", mod.path);
-      setModelViewerSource({
-        glbPath: result.glbPath,
-        name: result.name,
-      });
+      setModelViewerSource(
+        result.mode === "variant-set"
+          ? {
+              mode: "variant-set",
+              artifactRoot: result.artifactRoot,
+              manifestPath: result.manifestPath,
+              manifest: result.manifest,
+              defaultGlbPath: result.defaultGlbPath,
+              activeGlbPath: result.activeGlbPath,
+              name: result.name,
+            }
+          : {
+              mode: "single",
+              glbPath: result.glbPath,
+              name: result.name,
+            },
+      );
       setShowModelViewer(true);
     } catch (error) {
       const rawMsg = error instanceof Error ? error.message : String(error);
