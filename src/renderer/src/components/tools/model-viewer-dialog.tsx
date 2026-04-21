@@ -388,6 +388,7 @@ export function ModelViewerDialog({
                             slotPath={slotPath}
                             slotHoverPath={slotHoverPath}
                             slotActivePath={slotActivePath}
+                            disabled={isViewerBusy}
                             onSelect={handleSelectValue}
                           />
                         ))}
@@ -443,6 +444,7 @@ function VariantTile({
   slotPath,
   slotHoverPath,
   slotActivePath,
+  disabled,
   onSelect,
 }: {
   variable: ModelViewerVariantManifest["variables"][number];
@@ -450,6 +452,7 @@ function VariantTile({
   slotPath?: string;
   slotHoverPath?: string;
   slotActivePath?: string;
+  disabled?: boolean;
   onSelect: (variableId: string, value: VariableStateValue) => void;
 }) {
   const isActive = String(activeValue) !== String(variable.defaultValue);
@@ -460,10 +463,13 @@ function VariantTile({
       type="button"
       className={cn(
         "relative flex aspect-square min-h-20 items-end justify-center overflow-hidden rounded-md border bg-black/20 p-2 text-white transition",
-        "hover:bg-black/30",
+        disabled ? "cursor-not-allowed opacity-60" : "hover:bg-black/30",
       )}
+      disabled={disabled}
+      aria-disabled={disabled}
+      tabIndex={disabled ? -1 : 0}
       onClick={() => {
-        if (variable.values.length === 0) {
+        if (disabled || variable.values.length === 0) {
           return;
         }
 
