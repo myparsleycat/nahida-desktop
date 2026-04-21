@@ -408,38 +408,48 @@ export function ModelViewerDialog({
                       element.dataset.nhdViewerLoadBound = "true";
                       suppressModelViewerFocusOutline(element);
                       element.addEventListener("load", () => {
-                        void applyDoubleSidedMaterials(
-                          viewerRefs.current[index],
-                          doubleSidedEnabledRef.current,
-                        );
-
-                        requestAnimationFrame(() => {
-                          if (initialCameraStateRef.current) {
+                        void (async () => {
+                          const viewer = viewerRefs.current[index];
+                          if (!viewer) {
                             return;
                           }
 
-                          initialCameraStateRef.current = captureModelViewerCameraState(
-                            viewerRefs.current[index],
+                          await applyDoubleSidedMaterials(
+                            viewer,
+                            doubleSidedEnabledRef.current,
                           );
-                        });
 
-                        if (loadingViewerIndexRef.current !== index) {
-                          return;
-                        }
+                          // Wait for model-viewer to finish recomputing the rotated framing
+                          // before capturing or restoring camera state.
+                          await viewer.updateFraming?.();
 
-                        restoreModelViewerCameraState(
-                          viewerRefs.current[index],
-                          pendingCameraStateRef.current,
-                        );
-                        pendingCameraStateRef.current = null;
-                        requestAnimationFrame(() => {
                           requestAnimationFrame(() => {
-                            activeViewerIndexRef.current = index;
-                            loadingViewerIndexRef.current = null;
-                            setActiveViewerIndex(index);
-                            setLoadingViewerIndex(null);
+                            if (initialCameraStateRef.current) {
+                              return;
+                            }
+
+                            initialCameraStateRef.current = captureModelViewerCameraState(
+                              viewerRefs.current[index],
+                            );
                           });
-                        });
+
+                          if (loadingViewerIndexRef.current !== index) {
+                            return;
+                          }
+
+                          restoreModelViewerCameraState(viewer, pendingCameraStateRef.current, {
+                            includeFieldOfView: false,
+                          });
+                          pendingCameraStateRef.current = null;
+                          requestAnimationFrame(() => {
+                            requestAnimationFrame(() => {
+                              activeViewerIndexRef.current = index;
+                              loadingViewerIndexRef.current = null;
+                              setActiveViewerIndex(index);
+                              setLoadingViewerIndex(null);
+                            });
+                          });
+                        })();
                       });
                       element.addEventListener("error", (event) => {
                         if (loadingViewerIndexRef.current !== index) {

@@ -76,6 +76,9 @@ export function captureModelViewerCameraState(
 export function restoreModelViewerCameraState(
     element: ModelViewerElement | null,
     state: ModelViewerCameraState | null,
+    options?: {
+        includeFieldOfView?: boolean;
+    },
 ): void {
     if (!element || !state) {
         return;
@@ -87,7 +90,9 @@ export function restoreModelViewerCameraState(
         }
 
         element.cameraTarget = state.target;
-        element.fieldOfView = state.fieldOfView;
+        if (options?.includeFieldOfView !== false) {
+            element.fieldOfView = state.fieldOfView;
+        }
         element.cameraOrbit = state.orbit;
         element.jumpCameraToGoal?.();
     });
