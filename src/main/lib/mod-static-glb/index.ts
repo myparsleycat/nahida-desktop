@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import os from "node:os";
 import path from "node:path";
+import { convertDdsToPng } from "@native/native-util";
 import {
     decodeIndices as decodeIndicesNative,
     ensureVec4 as ensureVec4Native,
@@ -11,7 +12,6 @@ import {
     readFloatAttribute as readFloatAttributeNative,
     removeDegenerateTriangles as removeDegenerateTrianglesNative,
 } from "@native/static-glb";
-import { convertDdsToPng } from "@native/native-util";
 import { decodeImage, parseDDSHeader } from "dds-ktx-parser";
 import fg from "fast-glob";
 import fse from "fs-extra";
@@ -2130,7 +2130,7 @@ function bestKeyForIb(stem: string, resourceName: string, keys: string[]): strin
     const normalizedName = normalizeKey(stripIbResourceSuffix(resourceName));
     const sorted = [...keys].sort((a, b) => b.length - a.length);
     const suffix = extractNumericSuffix(resourceName) ?? extractNumericSuffix(stem);
-    const sameSuffixKeys = suffix
+    const sameSuffixKeys = suffix !== null
         ? sorted.filter((key) => extractNumericSuffix(key) === suffix)
         : [];
 
@@ -2472,7 +2472,9 @@ function readFloatAttribute(
 }
 
 function bufferToUint32Array(buffer: Buffer): Uint32Array {
-    return new Uint32Array(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength));
+    return new Uint32Array(
+        buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
+    );
 }
 
 function uint32ArrayToBuffer(values: Uint32Array): Buffer {
@@ -2480,7 +2482,9 @@ function uint32ArrayToBuffer(values: Uint32Array): Buffer {
 }
 
 function bufferToFloat32Array(buffer: Buffer): Float32Array {
-    return new Float32Array(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength));
+    return new Float32Array(
+        buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
+    );
 }
 
 function float32ArrayToBuffer(values: Float32Array): Buffer {

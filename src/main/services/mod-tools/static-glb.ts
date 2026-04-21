@@ -6,10 +6,10 @@ import {
     convertModToGlbBuffer,
     type ConvertModToGlbResult,
     convertModToVariantArtifacts,
+    type ConvertModVariantArtifactsResult,
     createStateKey,
     resolveVariantStateArtifact,
     type StaticGlbTextureFormat,
-    type ConvertModVariantArtifactsResult,
     type StaticGlbVariantManifest,
     type VariableStateMap,
 } from "@main/lib/mod-static-glb";
@@ -60,15 +60,17 @@ export type StaticGlbVariantResult = {
     name: string;
 };
 
-export type StaticGlbViewerResult = (ConvertModToGlbResult & {
-    mode: "single";
-    glbPath: string;
-    name: string;
-}) | (ConvertModVariantArtifactsResult & {
-    mode: "variant-set";
-    glbPath: string;
-    name: string;
-});
+export type StaticGlbViewerResult =
+    | (ConvertModToGlbResult & {
+          mode: "single";
+          glbPath: string;
+          name: string;
+      })
+    | (ConvertModVariantArtifactsResult & {
+          mode: "variant-set";
+          glbPath: string;
+          name: string;
+      });
 
 export type StaticGlbPreviewResult = StaticGlbSingleResult | StaticGlbVariantResult;
 
@@ -115,7 +117,9 @@ export class StaticGlb {
         return normalizeTextureFormat(await this.getSettingValue(TEXTURE_FORMAT_SETTING_KEY));
     }
 
-    public async setTextureFormat(textureFormat: StaticGlbTextureFormat): Promise<StaticGlbTextureFormat> {
+    public async setTextureFormat(
+        textureFormat: StaticGlbTextureFormat,
+    ): Promise<StaticGlbTextureFormat> {
         const normalized = normalizeTextureFormat(textureFormat);
         await this.saveSettingValue(TEXTURE_FORMAT_SETTING_KEY, normalized);
         return normalized;
@@ -149,8 +153,12 @@ export class StaticGlb {
         }
 
         const savedTextureSettings = await this.getTextureSettings();
-        const textureFormat = normalizeTextureFormat(input.textureFormat ?? savedTextureSettings.textureFormat);
-        const jpegQuality = normalizeJpegQuality(input.jpegQuality ?? savedTextureSettings.jpegQuality);
+        const textureFormat = normalizeTextureFormat(
+            input.textureFormat ?? savedTextureSettings.textureFormat,
+        );
+        const jpegQuality = normalizeJpegQuality(
+            input.jpegQuality ?? savedTextureSettings.jpegQuality,
+        );
 
         await this.setAssetPath(assetPath);
         await Promise.all([this.setTextureFormat(textureFormat), this.setJpegQuality(jpegQuality)]);
@@ -456,11 +464,7 @@ function sanitizeModelViewerFileName(name: string): string {
 }
 
 function normalizeTextureFormat(value?: string | null): StaticGlbTextureFormat {
-    if (
-        value === "png" ||
-        value === "jpeg-safe" ||
-        value === "jpeg-force"
-    ) {
+    if (value === "png" || value === "jpeg-safe" || value === "jpeg-force") {
         return value;
     }
 
