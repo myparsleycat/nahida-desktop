@@ -8,12 +8,9 @@ import { nanoid } from "nanoid";
 import pLimit from "p-limit";
 import { PNG } from "pngjs";
 import writeFileAtomic from "write-file-atomic";
-import type { Logger } from "../internal/logger";
-import { GlbBuilder } from "./mod-static-glb-builder";
-import {
-    evaluateIniCondition,
-    evaluateIniNumericExpression,
-} from "./mod-static-glb-ini-expression";
+import type { Logger } from "../../internal/logger";
+import { GlbBuilder } from "./builder";
+import { evaluateIniCondition, evaluateIniNumericExpression } from "./ini-expression";
 import {
     analyzeAlpha,
     analyzeTextureSelection,
@@ -27,7 +24,7 @@ import {
     shouldInvertAlpha,
     textureNamePriority,
     writePngAsync,
-} from "./mod-static-glb-texture-utils";
+} from "./texture-utils";
 
 type IniSection = {
     header: string;
