@@ -324,6 +324,7 @@ export function ModelViewerDialog({
                     )}
                     src={viewerUrls[index]}
                     camera-controls
+                    interaction-prompt="none"
                     tone-mapping="neutral"
                     shadow-intensity="1"
                     exposure="1"

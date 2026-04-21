@@ -72,6 +72,7 @@ export function ModelViewerPage({
                 ar
                 ar-modes="webxr scene-viewer quick-look"
                 camera-controls
+                interaction-prompt="none"
                 tone-mapping="neutral"
                 shadow-intensity="1"
                 exposure="1"
