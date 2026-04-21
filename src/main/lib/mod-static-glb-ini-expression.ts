@@ -252,7 +252,7 @@ function parseIniUnary(
     normalizeKey: (value: string) => string,
 ): IniExpressionValue {
     if (matchIniOperator(state, "!")) {
-        return !Boolean(parseIniUnary(state, normalizeKey));
+        return !parseIniUnary(state, normalizeKey);
     }
     if (matchIniOperator(state, "-")) {
         return -toIniNumber(parseIniUnary(state, normalizeKey));
