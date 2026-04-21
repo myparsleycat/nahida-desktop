@@ -303,6 +303,18 @@ export function ModelViewerDialog({
                           });
                         });
                       });
+                      element.addEventListener("error", (event) => {
+                        if (loadingViewerIndexRef.current !== index) {
+                          return;
+                        }
+
+                        const activeIndex = activeViewerIndexRef.current;
+                        pendingCameraStateRef.current = null;
+                        loadingViewerIndexRef.current = null;
+                        setActiveViewerIndex(activeIndex);
+                        setLoadingViewerIndex(null);
+                        console.error("Failed to load model-viewer source", event);
+                      });
                     }}
                     className={cn(
                       "absolute inset-0 h-full w-full transition-opacity duration-200",
