@@ -205,6 +205,7 @@ type SlotVariableBinding = {
 
 const variantArtifactManifestLocks = new Map<string, Promise<void>>();
 const normalizeKeyCache = new Map<string, string>();
+const MAX_NORMALIZE_KEY_CACHE = 4096;
 
 async function withVariantArtifactManifestLock<T>(
     artifactRoot: string,
@@ -215,6 +216,7 @@ async function withVariantArtifactManifestLock<T>(
     const current = new Promise<void>((resolve) => {
         release = resolve;
     });
+    // Store the tail promise so later callers queue behind the currently scheduled operation.
     const queued = previous.catch(() => undefined).then(() => current);
     variantArtifactManifestLocks.set(artifactRoot, queued);
 
@@ -1025,6 +1027,8 @@ function collectSectionDrawInstructions(
         if (lower.startsWith("if ")) {
             const expression = trimmed.slice(3).trim();
             stack.push({
+                // Each frame carries the clauses required for the current branch and the
+                // accumulated inverse used by later `elif` / `else` branches.
                 activeClauses: [{ expression, expected: true }],
                 inverseClauses: [{ expression, expected: false }],
             });
@@ -2057,7 +2061,7 @@ function normalizeKey(value: string): string {
         return cached;
     }
     const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (normalizeKeyCache.size >= 4096) {
+    if (normalizeKeyCache.size >= MAX_NORMALIZE_KEY_CACHE) {
         normalizeKeyCache.clear();
     }
     normalizeKeyCache.set(value, normalized);

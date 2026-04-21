@@ -22,6 +22,7 @@ export type TextureSelectionAnalysis = {
 const DDS_SRGB_DXGI_FORMATS = new Set([29, 72, 75, 78, 91, 93, 99]);
 const DDS_LINEAR_DXGI_FORMATS = new Set([28, 71, 74, 77, 80, 83, 87, 88, 95, 98]);
 const ddsSrgbStateCache = new Map<string, Promise<boolean | null>>();
+const MAX_DDS_SRGB_CACHE = 1024;
 
 export async function analyzeTextureSelection(
     texturePath: string,
@@ -71,6 +72,9 @@ export async function readDdsSrgbState(texturePath: string): Promise<boolean | n
         }
     })();
 
+    if (ddsSrgbStateCache.size >= MAX_DDS_SRGB_CACHE) {
+        ddsSrgbStateCache.clear();
+    }
     ddsSrgbStateCache.set(texturePath, pending);
     return pending;
 }
