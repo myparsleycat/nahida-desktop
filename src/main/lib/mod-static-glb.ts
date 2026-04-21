@@ -12,6 +12,7 @@ import type { Logger } from "../internal/logger";
 type IniSection = {
     header: string;
     name: string;
+    lines: string[];
     values: Record<string, string>;
 };
 
@@ -303,6 +304,7 @@ function parseIni(text: string): IniSection[] {
             current = {
                 header: kindMatch ? kindMatch[1] : full,
                 name: kindMatch ? kindMatch[2] : full,
+                lines: [],
                 values: {},
             };
             sections.push(current);
@@ -310,6 +312,7 @@ function parseIni(text: string): IniSection[] {
         }
 
         if (!current) continue;
+        current.lines.push(stripInlineComment(line));
         const eq = line.indexOf("=");
         if (eq < 0) continue;
         const key = line.slice(0, eq).trim();
@@ -472,14 +475,22 @@ function collectIbResources(
 
 function collectTextureBindings(sections: IniSection[]): TextureBinding[] {
     const bindings: TextureBinding[] = [];
+    const sectionByFullName = new Map(
+        sections.map((section) => [normalizeKey(getSectionFullName(section)), section]),
+    );
+    const defaultVariables = collectDefaultIniVariables(sections);
     const overrideTextureResources = sections
         .filter((section) => section.header === "TextureOverride")
         .map((section) => {
-            const thisValue = section.values.this;
-            if (!thisValue || !thisValue.toLowerCase().startsWith("resource")) return null;
+            const resourceName = resolveSectionResourceName(
+                section,
+                sectionByFullName,
+                defaultVariables,
+            );
+            if (!resourceName) return null;
             return {
                 sectionName: section.name,
-                resourceName: trimResourcePrefix(thisValue),
+                resourceName,
             };
         })
         .filter((entry): entry is { sectionName: string; resourceName: string } => !!entry);
@@ -505,6 +516,7 @@ function collectTextureBindings(sections: IniSection[]): TextureBinding[] {
                 const lower = name.toLowerCase();
                 return !lower.includes("normal") && !lower.includes("light");
             }) ||
+            resolveSectionResourceName(section, sectionByFullName, defaultVariables) ||
             resolveOverrideDiffuseResource(
                 section.name,
                 trimResourcePrefix(ibValue),
@@ -531,8 +543,9 @@ function resolveOverrideDiffuseResource(
     const familyStem = ibStem.replace(/(?<=[a-z0-9])[A-Z]$/g, "");
 
     const preferred = overrideTextureResources.filter((entry) => {
+        const sectionLower = entry.sectionName.toLowerCase();
         const resourceLower = entry.resourceName.toLowerCase();
-        return resourceLower.includes("diffuse");
+        return sectionLower.includes("diffuse") || resourceLower.includes("diffuse");
     });
 
     return (
@@ -542,12 +555,175 @@ function resolveOverrideDiffuseResource(
         preferred.find((entry) =>
             entry.sectionName.toLowerCase().startsWith(sectionName.toLowerCase()),
         )?.resourceName ||
+        preferred.find((entry) =>
+            entry.sectionName.toLowerCase().startsWith(familyStem.toLowerCase()),
+        )?.resourceName ||
         preferred.find((entry) => entry.resourceName.toLowerCase().startsWith(ibStem.toLowerCase()))
             ?.resourceName ||
         preferred.find((entry) =>
             entry.resourceName.toLowerCase().startsWith(familyStem.toLowerCase()),
         )?.resourceName
     );
+}
+
+function getSectionFullName(section: IniSection): string {
+    return `${section.header}${section.name}`;
+}
+
+function collectDefaultIniVariables(sections: IniSection[]): Map<string, number | string> {
+    const variables = new Map<string, number | string>();
+    for (const section of sections) {
+        if (section.header !== "Constants") continue;
+        for (const line of section.lines) {
+            const match = line.match(
+                /^(?:global|local)(?:\s+persist)?\s+([$\w\\.\\]+)(?:\s*=\s*(.+))?$/i,
+            );
+            if (!match) continue;
+            variables.set(normalizeKey(match[1]), parseIniScalar(match[2]));
+        }
+    }
+    return variables;
+}
+
+function parseIniScalar(value?: string): number | string {
+    if (!value) return 0;
+    const trimmed = value.trim();
+    if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+        return Number(trimmed);
+    }
+    return trimmed;
+}
+
+function resolveSectionResourceName(
+    section: IniSection,
+    sectionByFullName: Map<string, IniSection>,
+    defaultVariables: Map<string, number | string>,
+    visited = new Set<string>(),
+): string | undefined {
+    const directThis = section.values.this;
+    if (directThis?.toLowerCase().startsWith("resource")) {
+        return trimResourcePrefix(directThis);
+    }
+
+    const directRun = section.values.run;
+    if (directRun) {
+        const fromRun = resolveResourceFromCommandList(
+            directRun,
+            sectionByFullName,
+            defaultVariables,
+            visited,
+        );
+        if (fromRun) return fromRun;
+    }
+
+    return undefined;
+}
+
+function resolveResourceFromCommandList(
+    sectionName: string,
+    sectionByFullName: Map<string, IniSection>,
+    defaultVariables: Map<string, number | string>,
+    visited = new Set<string>(),
+): string | undefined {
+    const normalizedName = normalizeKey(sectionName);
+    if (visited.has(normalizedName)) return undefined;
+    visited.add(normalizedName);
+
+    const section = sectionByFullName.get(normalizedName);
+    if (!section) return undefined;
+
+    const branchActive: boolean[] = [];
+    const branchMatched: boolean[] = [];
+    const isActive = () => branchActive.every(Boolean);
+
+    for (const line of section.lines) {
+        const trimmed = line.trim();
+        const lower = trimmed.toLowerCase();
+
+        if (lower.startsWith("if ")) {
+            const parentActive = isActive();
+            const matched = parentActive
+                ? evaluateIniCondition(trimmed.slice(3), defaultVariables)
+                : false;
+            branchActive.push(matched);
+            branchMatched.push(matched);
+            continue;
+        }
+
+        if (lower.startsWith("elif ")) {
+            if (branchActive.length === 0) continue;
+            const depth = branchActive.length - 1;
+            const parentActive = branchActive.slice(0, depth).every(Boolean);
+            const matched =
+                parentActive && !branchMatched[depth]
+                    ? evaluateIniCondition(trimmed.slice(5), defaultVariables)
+                    : false;
+            branchActive[depth] = matched;
+            branchMatched[depth] = branchMatched[depth] || matched;
+            continue;
+        }
+
+        if (lower === "else") {
+            if (branchActive.length === 0) continue;
+            const depth = branchActive.length - 1;
+            const parentActive = branchActive.slice(0, depth).every(Boolean);
+            branchActive[depth] = parentActive && !branchMatched[depth];
+            branchMatched[depth] = true;
+            continue;
+        }
+
+        if (lower === "endif") {
+            branchActive.pop();
+            branchMatched.pop();
+            continue;
+        }
+
+        if (!isActive()) continue;
+
+        const thisMatch = trimmed.match(/^this\s*=\s*(.+)$/i);
+        if (thisMatch?.[1]?.trim().toLowerCase().startsWith("resource")) {
+            return trimResourcePrefix(thisMatch[1].trim());
+        }
+
+        const runMatch = trimmed.match(/^run\s*=\s*(.+)$/i);
+        if (runMatch) {
+            const nested = resolveResourceFromCommandList(
+                runMatch[1].trim(),
+                sectionByFullName,
+                defaultVariables,
+                new Set(visited),
+            );
+            if (nested) return nested;
+        }
+    }
+
+    return undefined;
+}
+
+function evaluateIniCondition(
+    expression: string,
+    defaultVariables: Map<string, number | string>,
+): boolean {
+    const jsExpression = expression.replace(
+        /\$?[A-Za-z_\\][A-Za-z0-9_\\.\\]*/g,
+        (token) => {
+            const lower = token.toLowerCase();
+            if (["true", "false"].includes(lower)) return lower;
+            if (/^\d/.test(token)) return token;
+            const value = defaultVariables.get(normalizeKey(token)) ?? 0;
+            return typeof value === "number" ? String(value) : JSON.stringify(String(value));
+        },
+    );
+
+    if (!/^[\d\s()+\-*/%<>=!&|."'\\]+$/.test(jsExpression)) {
+        return false;
+    }
+
+    try {
+        return !!Function(`"use strict"; return (${jsExpression});`)();
+    } catch {
+        return false;
+    }
 }
 
 async function buildMaterials(
