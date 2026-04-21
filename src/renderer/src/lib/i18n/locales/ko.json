@@ -463,6 +463,26 @@
           "failed": "정적 GLB 변환에 실패했습니다"
         }
       },
+      "model_viewer": {
+        "title": "모델 뷰어",
+        "toggle_viewer": "토글 뷰어",
+        "open_file": "파일 열기",
+        "convert_first": "먼저 모드를 GLB로 변환한 뒤 여기에서 여세요.",
+        "generating_selected_state": "선택한 상태 생성 중",
+        "model_data_unavailable": "모델 데이터를 사용할 수 없습니다.",
+        "menu": {
+          "model": "모델",
+          "rotate": "회전",
+          "reset": "초기화"
+        },
+        "rotate_actions": {
+          "Left 90°": "왼쪽으로 90°",
+          "Right 90°": "오른쪽으로 90°",
+          "Up 90°": "위로 90°",
+          "Down 90°": "아래로 90°",
+          "Flip 180°": "180° 뒤집기"
+        }
+      },
       "fix-tool-manager": {
         "title": "Fix Tool Manager",
         "presets": {},

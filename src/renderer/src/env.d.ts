@@ -11,6 +11,7 @@ type ModelViewerProps = DetailedHTMLProps<
   src?: string;
   ar?: boolean;
   exposure?: number | string;
+  orientation?: string;
   "ar-modes"?: string;
   "camera-controls"?: boolean;
   "interaction-prompt"?: "auto" | "none";

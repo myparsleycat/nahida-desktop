@@ -483,6 +483,26 @@
           "failed": "Static GLB conversion failed"
         }
       },
+      "model_viewer": {
+        "title": "Model Viewer",
+        "toggle_viewer": "Toggle Viewer",
+        "open_file": "Open File",
+        "convert_first": "Convert a mod to GLB first, then open it here.",
+        "generating_selected_state": "Generating selected state",
+        "model_data_unavailable": "Model data is not available.",
+        "menu": {
+          "model": "Model",
+          "rotate": "Rotate",
+          "reset": "Reset"
+        },
+        "rotate_actions": {
+          "Left 90°": "Left 90°",
+          "Right 90°": "Right 90°",
+          "Up 90°": "Up 90°",
+          "Down 90°": "Down 90°",
+          "Flip 180°": "Flip 180°"
+        }
+      },
       "fix-tool-manager": {
         "title": "Fix Tool Manager",
         "presets": {},

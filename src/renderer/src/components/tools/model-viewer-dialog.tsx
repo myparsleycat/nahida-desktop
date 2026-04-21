@@ -1,10 +1,21 @@
 import "@google/model-viewer";
 import { Button } from "@renderer/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@renderer/components/ui/dialog";
+import {
+  Menubar,
+  MenubarContent,
+  MenubarGroup,
+  MenubarItem,
+  MenubarLabel,
+  MenubarMenu,
+  MenubarSeparator,
+  MenubarTrigger,
+} from "@renderer/components/ui/menubar";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { cn } from "@renderer/lib/utils";
 import { Loader2Icon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   captureModelViewerCameraState,
@@ -17,6 +28,16 @@ import {
 } from "./model-viewer-session";
 
 type VariableStateValue = number | string;
+type ModelRotationAction = { label: string; delta: [number, number, number] };
+
+const DEFAULT_MODEL_ORIENTATION = "0deg 0deg 0deg";
+const MODEL_ROTATION_ACTIONS: ModelRotationAction[] = [
+  { label: "Left 90°", delta: [0, 0, -90] },
+  { label: "Right 90°", delta: [0, 0, 90] },
+  { label: "Up 90°", delta: [0, -90, 0] },
+  { label: "Down 90°", delta: [0, 90, 0] },
+  { label: "Flip 180°", delta: [0, 0, 180] },
+];
 
 type ModelViewerVariantManifest = {
   defaultState: Record<string, VariableStateValue>;
@@ -67,17 +88,20 @@ export function ModelViewerDialog({
   onOpenChange: (open: boolean) => void;
   source: ModelViewerDialogSource | null;
 }) {
+  const { t } = useTranslation();
   const [activeState, setActiveState] = useState<Record<string, VariableStateValue>>({});
   const [manifest, setManifest] = useState<ModelViewerVariantManifest | null>(null);
   const [isResolving, setIsResolving] = useState(false);
   const [viewerUrls, setViewerUrls] = useState<[string, string]>(["", ""]);
   const [activeViewerIndex, setActiveViewerIndex] = useState<0 | 1>(0);
   const [loadingViewerIndex, setLoadingViewerIndex] = useState<0 | 1 | null>(null);
+  const [modelOrientation, setModelOrientation] = useState(DEFAULT_MODEL_ORIENTATION);
   const viewerRefs = useRef<[ModelViewerElement | null, ModelViewerElement | null]>([null, null]);
   const viewerUrlsRef = useRef<[string, string]>(["", ""]);
   const activeViewerIndexRef = useRef<0 | 1>(0);
   const loadingViewerIndexRef = useRef<0 | 1 | null>(null);
   const pendingCameraStateRef = useRef<ModelViewerCameraState | null>(null);
+  const initialCameraStateRef = useRef<ModelViewerCameraState | null>(null);
   const openRef = useRef(open);
   const sourceRef = useRef(source);
   const pendingVariantRequestRef = useRef<{
@@ -119,14 +143,27 @@ export function ModelViewerDialog({
   }, [source]);
 
   useEffect(() => {
+    for (const viewer of viewerRefs.current) {
+      if (!viewer) {
+        continue;
+      }
+
+      viewer.orientation = modelOrientation;
+      void viewer.updateFraming?.();
+    }
+  }, [modelOrientation]);
+
+  useEffect(() => {
     if (!source) {
       setActiveState({});
       setManifest(null);
+      setModelOrientation(DEFAULT_MODEL_ORIENTATION);
       activeViewerIndexRef.current = 0;
       loadingViewerIndexRef.current = null;
       setActiveViewerIndex(0);
       setLoadingViewerIndex(null);
       pendingCameraStateRef.current = null;
+      initialCameraStateRef.current = null;
       setViewerUrl(0, "");
       setViewerUrl(1, "");
       return;
@@ -135,11 +172,13 @@ export function ModelViewerDialog({
     if (source.mode === "single") {
       setActiveState({});
       setManifest(null);
+      setModelOrientation(DEFAULT_MODEL_ORIENTATION);
       activeViewerIndexRef.current = 0;
       loadingViewerIndexRef.current = null;
       setActiveViewerIndex(0);
       setLoadingViewerIndex(null);
       pendingCameraStateRef.current = null;
+      initialCameraStateRef.current = null;
       setViewerUrl(0, source.glbPath);
       setViewerUrl(1, "");
       return;
@@ -147,14 +186,35 @@ export function ModelViewerDialog({
 
     setActiveState(source.manifest.defaultState);
     setManifest(source.manifest);
+    setModelOrientation(DEFAULT_MODEL_ORIENTATION);
     activeViewerIndexRef.current = 0;
     loadingViewerIndexRef.current = null;
     setActiveViewerIndex(0);
     setLoadingViewerIndex(null);
     pendingCameraStateRef.current = null;
+    initialCameraStateRef.current = null;
     setViewerUrl(0, source.activeGlbPath || source.defaultGlbPath);
     setViewerUrl(1, "");
   }, [source]);
+
+  const rotateModel = (delta: [number, number, number]) => {
+    setModelOrientation((currentOrientation) => {
+      const [roll, pitch, yaw] = parseOrientation(currentOrientation);
+      return formatOrientation([
+        roll + delta[0],
+        pitch + delta[1],
+        yaw + delta[2],
+      ]);
+    });
+  };
+
+  const handleResetView = () => {
+    setModelOrientation(DEFAULT_MODEL_ORIENTATION);
+    restoreModelViewerCameraState(
+      viewerRefs.current[activeViewerIndexRef.current],
+      initialCameraStateRef.current,
+    );
+  };
 
   const handleSelectValue = async (variableId: string, value: VariableStateValue) => {
     if (!source || source.mode !== "variant-set" || isResolving || loadingViewerIndex !== null) {
@@ -255,9 +315,33 @@ export function ModelViewerDialog({
       >
         <DialogHeader className="pr-10">
           <DialogTitle className="truncate" title={source?.name}>
-            {source?.name || "Model Viewer"}
+            {source?.name || t("page.tools.model_viewer.title")}
           </DialogTitle>
         </DialogHeader>
+
+        <Menubar>
+          <MenubarMenu>
+            <MenubarTrigger>{t("page.tools.model_viewer.menu.model")}</MenubarTrigger>
+            <MenubarContent>
+              <MenubarGroup>
+                <MenubarLabel className="text-xs text-muted-foreground">
+                  {t("page.tools.model_viewer.menu.rotate")}
+                </MenubarLabel>
+                {MODEL_ROTATION_ACTIONS.map((action) => (
+                  <MenubarItem key={action.label} onClick={() => rotateModel(action.delta)}>
+                    {t(`page.tools.model_viewer.rotate_actions.${action.label}`)}
+                  </MenubarItem>
+                ))}
+              </MenubarGroup>
+              <MenubarSeparator />
+              <MenubarGroup>
+                <MenubarItem onClick={handleResetView}>
+                  {t("page.tools.model_viewer.menu.reset")}
+                </MenubarItem>
+              </MenubarGroup>
+            </MenubarContent>
+          </MenubarMenu>
+        </Menubar>
 
         <div
           className={cn(
@@ -285,6 +369,16 @@ export function ModelViewerDialog({
                       element.dataset.nhdViewerLoadBound = "true";
                       suppressModelViewerFocusOutline(element);
                       element.addEventListener("load", () => {
+                        requestAnimationFrame(() => {
+                          if (initialCameraStateRef.current) {
+                            return;
+                          }
+
+                          initialCameraStateRef.current = captureModelViewerCameraState(
+                            viewerRefs.current[index],
+                          );
+                        });
+
                         if (loadingViewerIndexRef.current !== index) {
                           return;
                         }
@@ -329,6 +423,7 @@ export function ModelViewerDialog({
                     tone-mapping="neutral"
                     shadow-intensity="1"
                     exposure="1"
+                    orientation={modelOrientation}
                   >
                     <div className="progress-bar hide" slot="progress-bar">
                       <div className="update-bar"></div>
@@ -344,17 +439,19 @@ export function ModelViewerDialog({
                   <div
                     className={cn(
                       "inline-flex items-center gap-2 rounded-md border bg-background/90 px-3 py-2 text-sm text-foreground shadow-sm transition-all duration-200",
-                      isViewerBusy ? "translate-y-0 scale-100 opacity-100" : "translate-y-1 scale-95 opacity-0",
+                      isViewerBusy
+                        ? "translate-y-0 scale-100 opacity-100"
+                        : "translate-y-1 scale-95 opacity-0",
                     )}
                   >
-                      <Loader2Icon className="size-4 animate-spin" />
-                      Generating selected state
+                    <Loader2Icon className="size-4 animate-spin" />
+                    {t("page.tools.model_viewer.generating_selected_state")}
                   </div>
                 </div>
               </>
             ) : (
               <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
-                Model data is not available.
+                {t("page.tools.model_viewer.model_data_unavailable")}
               </div>
             )}
           </div>
@@ -368,7 +465,9 @@ export function ModelViewerDialog({
               aria-busy={isViewerBusy}
             >
               <div className="border-b px-4 py-3">
-                <div className="text-sm font-medium">Toggle Viewer</div>
+                <div className="text-sm font-medium">
+                  {t("page.tools.model_viewer.toggle_viewer")}
+                </div>
               </div>
               <ScrollArea className="min-h-0 flex-1">
                 <div className="p-4">
@@ -514,4 +613,22 @@ function createStateKey(state: Record<string, VariableStateValue>): string {
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, value]) => `${key.toLowerCase()}=${String(value)}`)
     .join("&");
+}
+
+function parseOrientation(orientation: string): [number, number, number] {
+  const [roll = "0deg", pitch = "0deg", yaw = "0deg"] = orientation.split(/\s+/);
+  return [roll, pitch, yaw].map((value) => Number.parseFloat(value) || 0) as [
+    number,
+    number,
+    number,
+  ];
+}
+
+function formatOrientation([roll, pitch, yaw]: [number, number, number]): string {
+  return [roll, pitch, yaw].map((value) => `${normalizeDegrees(value)}deg`).join(" ");
+}
+
+function normalizeDegrees(value: number): number {
+  const normalized = ((value % 360) + 360) % 360;
+  return normalized > 180 ? normalized - 360 : normalized;
 }

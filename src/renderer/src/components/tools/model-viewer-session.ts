@@ -36,7 +36,9 @@ export type ModelViewerElement = HTMLElement & {
     cameraOrbit?: string;
     cameraTarget?: string;
     fieldOfView?: string;
+    orientation?: string;
     jumpCameraToGoal?: () => void;
+    updateFraming?: () => Promise<void>;
     getCameraOrbit?: () => ModelViewerOrbit;
     getCameraTarget?: () => ModelViewerTarget;
     getFieldOfView?: () => number;

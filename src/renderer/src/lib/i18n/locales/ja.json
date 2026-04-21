@@ -464,6 +464,26 @@
           "failed": "Static GLB の変換に失敗しました"
         }
       },
+      "model_viewer": {
+        "title": "モデルビューアー",
+        "toggle_viewer": "トグルビューアー",
+        "open_file": "ファイルを開く",
+        "convert_first": "先に MOD を GLB に変換してから、ここで開いてください。",
+        "generating_selected_state": "選択した状態を生成中",
+        "model_data_unavailable": "モデルデータを利用できません。",
+        "menu": {
+          "model": "モデル",
+          "rotate": "回転",
+          "reset": "リセット"
+        },
+        "rotate_actions": {
+          "Left 90°": "左に 90°",
+          "Right 90°": "右に 90°",
+          "Up 90°": "上に 90°",
+          "Down 90°": "下に 90°",
+          "Flip 180°": "180° 反転"
+        }
+      },
       "fix-tool-manager": {
         "title": "Fix Tool Manager",
         "presets": {},

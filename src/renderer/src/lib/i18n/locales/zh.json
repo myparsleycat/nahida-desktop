@@ -463,6 +463,26 @@
           "failed": "静态 GLB 转换失败"
         }
       },
+      "model_viewer": {
+        "title": "模型查看器",
+        "toggle_viewer": "切换查看器",
+        "open_file": "打开文件",
+        "convert_first": "请先将模组转换为 GLB，然后再在这里打开。",
+        "generating_selected_state": "正在生成所选状态",
+        "model_data_unavailable": "模型数据不可用。",
+        "menu": {
+          "model": "模型",
+          "rotate": "旋转",
+          "reset": "重置"
+        },
+        "rotate_actions": {
+          "Left 90°": "向左旋转 90°",
+          "Right 90°": "向右旋转 90°",
+          "Up 90°": "向上旋转 90°",
+          "Down 90°": "向下旋转 90°",
+          "Flip 180°": "翻转 180°"
+        }
+      },
       "fix-tool-manager": {
         "title": "Fix Tool Manager",
         "presets": {},
