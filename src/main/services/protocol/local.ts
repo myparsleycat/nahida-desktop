@@ -1,7 +1,6 @@
-import { pathToFileURL } from "node:url";
+import path from "node:path";
 import type { NahidaDesktop } from "@main/index";
 import { imageCache } from "@main/internal/db/schema";
-import { net } from "electron";
 import { fileTypeFromBuffer } from "file-type";
 import fse from "fs-extra";
 import PQueue from "p-queue";
@@ -69,15 +68,57 @@ export class LocalProtocol {
                 return new Response(blob);
             }
         } else {
-            const fileUrl = pathToFileURL(fullPath).href;
-
-            try {
-                return await net.fetch(fileUrl);
-            } catch {
-                return new Response("not found", { status: 404 });
-            }
+            return new Response(buffer, {
+                headers: {
+                    "Content-Type": resolveMimeType(fullPath, fileType),
+                    "Content-Length": buffer.byteLength.toString(),
+                    "Accept-Ranges": "bytes",
+                },
+            });
         }
     };
+}
+
+function resolveMimeType(
+    fullPath: string,
+    fileType: Awaited<ReturnType<typeof fileTypeFromBuffer>>,
+): string {
+    if (fileType?.mime) {
+        return fileType.mime;
+    }
+
+    const ext = path.extname(fullPath).toLowerCase();
+    switch (ext) {
+        case ".glb":
+            return "model/gltf-binary";
+        case ".gltf":
+            return "model/gltf+json";
+        case ".png":
+            return "image/png";
+        case ".jpg":
+        case ".jpeg":
+            return "image/jpeg";
+        case ".webp":
+            return "image/webp";
+        case ".gif":
+            return "image/gif";
+        case ".bmp":
+            return "image/bmp";
+        case ".avif":
+            return "image/avif";
+        case ".mp4":
+            return "video/mp4";
+        case ".webm":
+            return "video/webm";
+        case ".mov":
+            return "video/quicktime";
+        case ".avi":
+            return "video/x-msvideo";
+        case ".mkv":
+            return "video/x-matroska";
+        default:
+            return "application/octet-stream";
+    }
 }
 
 export default LocalProtocol;
