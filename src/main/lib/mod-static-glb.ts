@@ -207,8 +207,8 @@ const GL_COMPONENT = {
     FLOAT: 5126,
 } as const;
 
-const DDS_SRGB_DXGI_FORMATS = new Set([72, 75, 78, 91, 93, 95, 99]);
-const DDS_LINEAR_DXGI_FORMATS = new Set([71, 74, 77, 80, 83, 98]);
+const DDS_SRGB_DXGI_FORMATS = new Set([29, 72, 75, 78, 91, 93, 99]);
+const DDS_LINEAR_DXGI_FORMATS = new Set([28, 71, 74, 77, 80, 83, 87, 88, 95, 98]);
 
 const variantArtifactManifestLocks = new Map<string, Promise<void>>();
 
