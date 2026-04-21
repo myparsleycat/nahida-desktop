@@ -423,20 +423,18 @@
         "output_glb_placeholder": ".glb 파일이 저장될 위치",
         "texture_format": "텍스처 형식",
         "texture_format_options": {
-          "auto": "자동",
           "png": "PNG",
           "jpeg_safe": "JPEG (알파 안전)",
           "jpeg_force": "JPEG (전체 강제)"
         },
         "texture_format_descriptions": {
-          "auto": "알파 보존이 필요한 텍스처만 PNG를 사용하고, 나머지는 JPEG로 인코딩합니다.",
           "png": "모든 텍스처를 PNG로 유지합니다.",
           "jpeg-safe": "기본은 JPEG를 사용하고, 알파가 필요한 텍스처만 PNG로 유지합니다.",
           "jpeg-force": "알파 텍스처를 포함해 모든 텍스처를 JPEG로 강제 인코딩합니다."
         },
         "jpeg_quality": "JPEG 품질",
         "jpeg_quality_hint": "선택한 모드에서 JPEG를 쓸 때 적용됩니다. 범위: 1-100.",
-        "jpeg_quality_disabled_hint": "JPEG 품질은 자동 또는 JPEG 모드에서만 사용됩니다.",
+        "jpeg_quality_disabled_hint": "JPEG 품질은 JPEG 모드에서만 사용됩니다.",
         "browse": "찾아보기",
         "folder": "폴더",
         "include_tangents": "탄젠트 포함",

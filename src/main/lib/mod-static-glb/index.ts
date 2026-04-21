@@ -212,7 +212,7 @@ type SlotVariableBinding = {
 const variantArtifactManifestLocks = new Map<string, Promise<void>>();
 const normalizeKeyCache = new Map<string, string>();
 const MAX_NORMALIZE_KEY_CACHE = 4096;
-const DEFAULT_TEXTURE_FORMAT: StaticGlbTextureFormat = "auto";
+const DEFAULT_TEXTURE_FORMAT: StaticGlbTextureFormat = "jpeg-safe";
 const DEFAULT_JPEG_QUALITY = 85;
 
 async function withVariantArtifactManifestLock<T>(
@@ -1902,7 +1902,6 @@ async function convertTextureToPng(
 
 function resolveTextureFormatOption(format?: StaticGlbTextureFormat): StaticGlbTextureFormat {
     if (
-        format === "auto" ||
         format === "png" ||
         format === "jpeg-safe" ||
         format === "jpeg-force"

@@ -16,9 +16,9 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ScrollArea } from "../ui/scroll-area";
 
-type TextureFormat = "auto" | "png" | "jpeg-safe" | "jpeg-force";
+type TextureFormat = "png" | "jpeg-safe" | "jpeg-force";
 
-const JPEG_TEXTURE_FORMATS: TextureFormat[] = ["auto", "jpeg-safe", "jpeg-force"];
+const JPEG_TEXTURE_FORMATS: TextureFormat[] = ["jpeg-safe", "jpeg-force"];
 
 function clampJpegQuality(value: number) {
   if (!Number.isFinite(value)) {
@@ -43,7 +43,7 @@ export default function StaticGlbConverter() {
   const [assetPath, setAssetPath] = useState("");
   const [modPath, setModPath] = useState("");
   const [outputPath, setOutputPath] = useState("");
-  const [textureFormat, setTextureFormat] = useState<TextureFormat>("auto");
+  const [textureFormat, setTextureFormat] = useState<TextureFormat>("jpeg-safe");
   const [jpegQuality, setJpegQuality] = useState(85);
   const [includeTangents, setIncludeTangents] = useState(false);
   const [debug, setDebug] = useState(false);
@@ -282,9 +282,6 @@ export default function StaticGlbConverter() {
                 </SelectTrigger>
                 <SelectContent position="popper">
                   <SelectGroup>
-                    <SelectItem value="auto">
-                      {t("page.tools.static_glb_converter.texture_format_options.auto")}
-                    </SelectItem>
                     <SelectItem value="png">
                       {t("page.tools.static_glb_converter.texture_format_options.png")}
                     </SelectItem>

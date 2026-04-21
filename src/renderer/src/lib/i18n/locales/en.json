@@ -443,20 +443,18 @@
         "output_glb_placeholder": "Where the .glb file will be written",
         "texture_format": "Texture format",
         "texture_format_options": {
-          "auto": "Auto",
           "png": "PNG",
           "jpeg_safe": "JPEG (safe alpha fallback)",
           "jpeg_force": "JPEG (force all textures)"
         },
         "texture_format_descriptions": {
-          "auto": "Use PNG only when alpha must be preserved. Otherwise encode textures as JPEG.",
           "png": "Keep every texture as PNG.",
           "jpeg-safe": "Prefer JPEG, but keep alpha-dependent textures as PNG.",
           "jpeg-force": "Encode every texture as JPEG, including alpha textures."
         },
         "jpeg_quality": "JPEG quality",
         "jpeg_quality_hint": "Used whenever the selected mode writes JPEG textures. Range: 1-100.",
-        "jpeg_quality_disabled_hint": "JPEG quality is only used for Auto or JPEG modes.",
+        "jpeg_quality_disabled_hint": "JPEG quality is only used for JPEG modes.",
         "include_tangents": "Include tangents",
         "include_tangents_description": "Useful for some viewers, but can expose bad tangent data in older exports.",
         "debug_mode": "Debug mode",

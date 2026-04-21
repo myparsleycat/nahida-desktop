@@ -20,7 +20,7 @@ const ASSET_PATH_SETTING_KEY = "mod_static_glb_asset_path";
 const TEXTURE_FORMAT_SETTING_KEY = "mod_static_glb_texture_format";
 const JPEG_QUALITY_SETTING_KEY = "mod_static_glb_jpeg_quality";
 const MODEL_VIEWER_TEMP_PREFIX = "nhd-model-viewer-";
-const DEFAULT_TEXTURE_FORMAT: StaticGlbTextureFormat = "auto";
+const DEFAULT_TEXTURE_FORMAT: StaticGlbTextureFormat = "jpeg-safe";
 const DEFAULT_JPEG_QUALITY = 85;
 
 export type StaticGlbConvertInput = {
@@ -457,7 +457,6 @@ function sanitizeModelViewerFileName(name: string): string {
 
 function normalizeTextureFormat(value?: string | null): StaticGlbTextureFormat {
     if (
-        value === "auto" ||
         value === "png" ||
         value === "jpeg-safe" ||
         value === "jpeg-force"

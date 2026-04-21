@@ -37,7 +37,7 @@ export function registerToolsHandlers(d: NahidaDesktop) {
     );
     rh("tools:getStaticGlbTextureSettings", () => d.service.modTools.staticGlb.getTextureSettings());
     rh("tools:setStaticGlbTextureFormat", (textureFormat: StaticGlbConvertInput["textureFormat"]) =>
-        d.service.modTools.staticGlb.setTextureFormat(textureFormat ?? "auto"),
+        d.service.modTools.staticGlb.setTextureFormat(textureFormat ?? "jpeg-safe"),
     );
     rh("tools:setStaticGlbJpegQuality", (jpegQuality: number) =>
         d.service.modTools.staticGlb.setJpegQuality(jpegQuality),

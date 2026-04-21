@@ -4,7 +4,7 @@ import fse from "fs-extra";
 import { PNG } from "pngjs";
 import sharp from "sharp";
 
-export type StaticGlbTextureFormat = "auto" | "png" | "jpeg-safe" | "jpeg-force";
+export type StaticGlbTextureFormat = "png" | "jpeg-safe" | "jpeg-force";
 
 export type PreparedTexture = {
     imagePath: string;
