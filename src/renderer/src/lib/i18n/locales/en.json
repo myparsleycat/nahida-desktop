@@ -381,6 +381,15 @@
       }
     },
     "tools": {
+      "dashboard": {
+        "sidebar_title": "Mod Tools",
+        "tools_label": "Tools",
+        "toggle_sidebar": "Toggle sidebar",
+        "empty_title": "Developer Tools",
+        "empty_description": "Select a tool from the sidebar or pick one below to get started.",
+        "external_page": "External page",
+        "inline_tool": "Inline tool"
+      },
       "d3d11_builder": {
         "title": "Build d3d11.dll",
         "description": "Builds the DLL to be injected into the game process for the selected version",
@@ -441,6 +450,20 @@
         "target_mod_placeholder": "Mod folder or .ini path",
         "output_glb_path": "Output GLB path",
         "output_glb_placeholder": "Where the .glb file will be written",
+        "texture_format": "Texture format",
+        "texture_format_options": {
+          "png": "PNG",
+          "jpeg_safe": "JPEG (safe alpha fallback)",
+          "jpeg_force": "JPEG (force all textures)"
+        },
+        "texture_format_descriptions": {
+          "png": "Keep every texture as PNG.",
+          "jpeg-safe": "Prefer JPEG, but keep alpha-dependent textures as PNG.",
+          "jpeg-force": "Encode every texture as JPEG, including alpha textures."
+        },
+        "jpeg_quality": "JPEG quality",
+        "jpeg_quality_hint": "Used whenever the selected mode writes JPEG textures. Range: 1-100.",
+        "jpeg_quality_disabled_hint": "JPEG quality is only used for JPEG modes.",
         "include_tangents": "Include tangents",
         "include_tangents_description": "Useful for some viewers, but can expose bad tangent data in older exports.",
         "debug_mode": "Debug mode",
@@ -454,12 +477,35 @@
         "result_warnings": "{{warningCount}} warning(s)",
         "toast": {
           "save_asset_path_failed": "Failed to save asset path",
+          "save_texture_settings_failed": "Failed to save texture settings",
           "created": "Static GLB created",
           "created_description": "{{meshCount}} mesh(es), {{warningCount}} warning(s)",
           "failed": "Static GLB conversion failed"
         }
       },
+      "model_viewer": {
+        "title": "Model Viewer",
+        "toggle_viewer": "Toggle Viewer",
+        "open_file": "Open File",
+        "convert_first": "Convert a mod to GLB first, then open it here.",
+        "generating_selected_state": "Generating selected state",
+        "model_data_unavailable": "Model data is not available.",
+        "menu": {
+          "model": "Model",
+          "texture": "Texture",
+          "rotate": "Rotate",
+          "reset": "Reset"
+        },
+        "rotate_actions": {
+          "Left 90°": "Left 90°",
+          "Right 90°": "Right 90°",
+          "Up 90°": "Up 90°",
+          "Down 90°": "Down 90°",
+          "Flip 180°": "Flip 180°"
+        }
+      },
       "fix-tool-manager": {
+        "title": "Fix Tool Manager",
         "presets": {},
         "builder": {
           "left": {

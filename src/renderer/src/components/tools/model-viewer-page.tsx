@@ -3,6 +3,7 @@ import { Button } from "@renderer/components/ui/button";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeftIcon, FolderOpenIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { suppressModelViewerFocusOutline } from "./model-viewer-session";
 
 function toLocalUrl(filePath: string) {
@@ -21,8 +22,9 @@ export function ModelViewerPage({
   manifestPath?: string;
   artifactRoot?: string;
 }) {
+  const { t } = useTranslation();
   const { Titlebar } = useTitlebar();
-  const modelName = name || "Model Viewer";
+  const modelName = name || t("page.tools.model_viewer.title");
   const modelSrc = path ? toLocalUrl(path) : "";
   const sourceContext = {
     artifactRoot: artifactRoot || "",
@@ -39,7 +41,7 @@ export function ModelViewerPage({
             <Button asChild variant="ghost" size="sm" className="h-8 gap-1">
               <Link to="/tools">
                 <ArrowLeftIcon className="size-4" />
-                Tools
+                {t("page.tools.dashboard.tools_label")}
               </Link>
             </Button>
             <div className="min-w-0 text-sm">
@@ -57,7 +59,7 @@ export function ModelViewerPage({
               onClick={() => window.api.invoke("util:openPath", displayPath)}
             >
               <FolderOpenIcon className="size-4" />
-              Open File
+              {t("page.tools.model_viewer.open_file")}
             </Button>
           )}
         </header>
@@ -68,6 +70,7 @@ export function ModelViewerPage({
               <model-viewer
                 ref={suppressModelViewerFocusOutline}
                 className="absolute inset-0 h-full w-full"
+                tabIndex={-1}
                 src={modelSrc}
                 ar
                 ar-modes="webxr scene-viewer quick-look"
@@ -84,7 +87,7 @@ export function ModelViewerPage({
             </>
           ) : (
             <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
-              Convert a mod to GLB first, then open it here.
+              {t("page.tools.model_viewer.convert_first")}
             </div>
           )}
         </main>

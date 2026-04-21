@@ -1,6 +1,17 @@
+import crypto from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { convertDdsToPng } from "@native/native-util";
+import {
+    decodeIndices as decodeIndicesNative,
+    ensureVec4 as ensureVec4Native,
+    interleaveVertexBuffers,
+    mergeDrawIndices,
+    normalizeTangentArray as normalizeTangentArrayNative,
+    normalizeVec3Array as normalizeVec3ArrayNative,
+    readFloatAttribute as readFloatAttributeNative,
+    removeDegenerateTriangles as removeDegenerateTrianglesNative,
+} from "@native/static-glb";
 import { decodeImage, parseDDSHeader } from "dds-ktx-parser";
 import fg from "fast-glob";
 import fse from "fs-extra";
@@ -20,11 +31,17 @@ import {
     type PreparedTexture,
     readDdsSrgbState,
     readPngAsync,
+    resolveTextureMimeType,
     scoreTextureSelection,
     shouldInvertAlpha,
+    type StaticGlbTextureFormat,
     textureNamePriority,
+    textureUsesAlpha,
+    writeJpegAsync,
     writePngAsync,
 } from "./texture-utils";
+
+export type { StaticGlbTextureFormat } from "./texture-utils";
 
 type IniSection = {
     header: string;
@@ -90,7 +107,8 @@ type TextureBinding = {
 type MaterialBinding = {
     materialIndex: number;
     textureResourceName: string;
-    pngPath: string;
+    imagePath: string;
+    mimeType: "image/png" | "image/jpeg";
 };
 
 export type VariableStateValue = number | string;
@@ -147,6 +165,8 @@ export type ConvertModToGlbOptions = {
     modPath: string;
     assetPath: string;
     outputPath: string;
+    textureFormat?: StaticGlbTextureFormat;
+    jpegQuality?: number;
     includeTangents?: boolean;
     debug?: boolean;
     logger?: Logger;
@@ -203,6 +223,8 @@ type SlotVariableBinding = {
 const variantArtifactManifestLocks = new Map<string, Promise<void>>();
 const normalizeKeyCache = new Map<string, string>();
 const MAX_NORMALIZE_KEY_CACHE = 4096;
+const DEFAULT_TEXTURE_FORMAT: StaticGlbTextureFormat = "jpeg-safe";
+const DEFAULT_JPEG_QUALITY = 85;
 
 async function withVariantArtifactManifestLock<T>(
     artifactRoot: string,
@@ -821,14 +843,16 @@ async function collectBufferGroups(
                 Math.floor(blend.length / blendStride),
                 Math.floor(texcoord.length / texcoordStride),
             );
-            const vb = Buffer.alloc(vertexCount * stride);
-            for (let i = 0; i < vertexCount; i++) {
-                let offset = i * stride;
-                position.copy(vb, offset, i * positionStride, (i + 1) * positionStride);
-                offset += positionStride;
-                blend.copy(vb, offset, i * blendStride, (i + 1) * blendStride);
-                offset += blendStride;
-                texcoord.copy(vb, offset, i * texcoordStride, (i + 1) * texcoordStride);
+            const vb = interleaveVertexBuffers(
+                position,
+                positionStride,
+                blend,
+                blendStride,
+                texcoord,
+                texcoordStride,
+            );
+            if (vb.length !== vertexCount * stride) {
+                throw new Error(`Unexpected interleaved buffer length for ${key}`);
             }
             groups.push({ key, vbFilename: `${key}.vb`, vbBytes: vb, stride });
         }
@@ -1109,20 +1133,11 @@ function buildIndicesForState(
         return indices;
     }
 
-    const merged: number[] = [];
-    for (const draw of activeDraws) {
-        const endIndex = draw.startIndex + draw.indexCount;
-        if (draw.startIndex < 0 || endIndex > indices.length) {
-            warn(`Skipping invalid draw range start=${draw.startIndex} count=${draw.indexCount}`);
-            continue;
-        }
-
-        for (let index = draw.startIndex; index < endIndex; index++) {
-            merged.push(indices[index] + draw.baseVertex);
-        }
+    const result = mergeDrawIndices(uint32ArrayToBuffer(indices), activeDraws);
+    for (const message of result.invalidRanges) {
+        warn(message);
     }
-
-    return merged.length > 0 ? Uint32Array.from(merged) : indices;
+    return bufferToUint32Array(result.indices);
 }
 
 function resolveOverrideDiffuseResource(
@@ -1539,6 +1554,28 @@ function escapeRegex(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function createTextureCacheBaseName(texturePath: string): string {
+    const extensionless = path.basename(texturePath, path.extname(texturePath));
+    const digest = crypto
+        .createHash("sha256")
+        .update(path.resolve(texturePath))
+        .digest("hex")
+        .slice(0, 12);
+    return `${extensionless}-${digest}`;
+}
+
+async function isCacheUpToDate(cachePath: string, sourcePath: string): Promise<boolean> {
+    try {
+        const [cacheStat, sourceStat] = await Promise.all([
+            fse.stat(cachePath),
+            fse.stat(sourcePath),
+        ]);
+        return cacheStat.mtimeMs >= sourceStat.mtimeMs;
+    } catch {
+        return false;
+    }
+}
+
 async function buildMaterials(
     builder: GlbBuilder,
     options: ConvertModToGlbBufferOptions,
@@ -1621,7 +1658,7 @@ async function buildMaterials(
             prepareTasks.set(
                 candidate.texturePath,
                 limitTexturePreparation(() =>
-                    prepareTexturePng(
+                    prepareTextureImage(
                         options,
                         candidate.texturePath,
                         textureOutDir,
@@ -1696,14 +1733,14 @@ async function buildMaterials(
             const texture = selected.texture;
 
             options.logger?.debug(
-                `Prepared texture: ${texture.pngPath} (inverted: ${texture.invertedAlpha}, score: ${texture.selectionScore})`,
+                `Prepared texture: ${texture.imagePath} (${texture.mimeType}, alpha: ${texture.usesAlpha}, inverted: ${texture.invertedAlpha}, score: ${texture.selectionScore})`,
                 "StaticGLB",
             );
 
             const imageIndex = builder.addImage(
-                await fse.readFile(texture.pngPath),
-                "image/png",
-                path.basename(texture.pngPath),
+                await fse.readFile(texture.imagePath),
+                texture.mimeType,
+                path.basename(texture.imagePath),
             );
             const textureIndex = builder.addTexture(imageIndex);
             const materialIndex = builder.addMaterial({
@@ -1725,7 +1762,8 @@ async function buildMaterials(
             cached = {
                 materialIndex,
                 textureResourceName: selected.candidate.diffuseResourceName,
-                pngPath: texture.pngPath,
+                imagePath: texture.imagePath,
+                mimeType: texture.mimeType,
             };
             textureCache.set(selected.candidate.texturePath, cached);
         }
@@ -1738,7 +1776,7 @@ async function buildMaterials(
     return materialByIb;
 }
 
-async function prepareTexturePng(
+async function prepareTextureImage(
     options: ConvertModToGlbBufferOptions,
     texturePath: string,
     textureOutDir: string,
@@ -1757,45 +1795,37 @@ async function prepareTexturePng(
             png,
             normalizeKey,
         );
-        if (!alpha.hasAlpha) {
-            return {
-                pngPath,
-                invertedAlpha: false,
-                selectionScore: scoreTextureSelection(
-                    resourceName,
-                    selectionAnalysis,
-                    normalizeKey,
-                ),
-                srgbConfidence: selectionAnalysis.srgbConfidence,
-            };
+        let finalAlpha = alpha;
+        let invertedAlpha = false;
+
+        if (alpha.hasAlpha && shouldInvertAlpha(resourceName, texturePath, alpha, normalizeKey)) {
+            invertPngAlpha(png);
+            finalAlpha = analyzeAlpha(png);
+            invertedAlpha = true;
         }
 
-        if (shouldInvertAlpha(resourceName, texturePath, alpha, normalizeKey)) {
-            invertPngAlpha(png);
-            const invertedPath = path.join(
-                textureOutDir,
-                `${path.basename(pngPath, path.extname(pngPath))}-alpha-inverted.png`,
-            );
-            await fse.ensureDir(textureOutDir);
-            await writePngAsync(png, invertedPath);
-            const correctedAlpha = analyzeAlpha(png);
-            return {
-                pngPath: invertedPath,
-                ...materialAlphaMode(correctedAlpha),
-                invertedAlpha: true,
-                selectionScore: scoreTextureSelection(
-                    resourceName,
-                    selectionAnalysis,
-                    normalizeKey,
-                ),
-                srgbConfidence: selectionAnalysis.srgbConfidence,
-            };
-        }
+        const alphaSettings = materialAlphaMode(finalAlpha);
+        const usesAlpha = textureUsesAlpha(finalAlpha);
+        const mimeType = resolveTextureMimeType(
+            resolveTextureFormatOption(options.textureFormat),
+            usesAlpha,
+        );
+        const imagePath = await writePreparedTextureImage({
+            png,
+            sourcePngPath: pngPath,
+            texturePath,
+            textureOutDir,
+            mimeType,
+            jpegQuality: normalizeJpegQualityOption(options.jpegQuality),
+            reuseSourcePng: !invertedAlpha,
+        });
 
         return {
-            pngPath,
-            ...materialAlphaMode(alpha),
-            invertedAlpha: false,
+            imagePath,
+            mimeType,
+            ...alphaSettings,
+            usesAlpha,
+            invertedAlpha,
             selectionScore: scoreTextureSelection(resourceName, selectionAnalysis, normalizeKey),
             srgbConfidence: selectionAnalysis.srgbConfidence,
         };
@@ -1807,8 +1837,23 @@ async function prepareTexturePng(
                 error instanceof Error ? error.message : String(error)
             }`,
         );
+        const mimeType = resolveTextureMimeType(
+            resolveTextureFormatOption(options.textureFormat),
+            null,
+        );
+        const imagePath =
+            mimeType === "image/png"
+                ? pngPath
+                : await convertPngToJpeg(
+                      pngPath,
+                      texturePath,
+                      textureOutDir,
+                      normalizeJpegQualityOption(options.jpegQuality),
+                  );
         return {
-            pngPath,
+            imagePath,
+            mimeType,
+            usesAlpha: mimeType === "image/png",
             invertedAlpha: false,
             selectionScore: scoreTextureSelection(
                 resourceName,
@@ -1855,20 +1900,26 @@ async function convertTextureToPng(
         return null;
     }
 
-    options.logger?.debug(`Converting DDS to PNG: ${texturePath} -> ${textureOutDir}`, "StaticGLB");
     await fse.ensureDir(textureOutDir);
 
-    const pngPath = path.join(
-        textureOutDir,
-        `${path.basename(texturePath, path.extname(texturePath))}.png`,
-    );
+    const pngPath = path.join(textureOutDir, `${createTextureCacheBaseName(texturePath)}.png`);
+
+    if (await isCacheUpToDate(pngPath, texturePath)) {
+        options.logger?.debug(`Reusing cached PNG for texture: ${texturePath}`, "StaticGLB");
+        return pngPath;
+    }
 
     try {
         await convertDdsToPng(texturePath, pngPath);
+        options.logger?.debug(`Converted DDS to PNG: ${texturePath} -> ${pngPath}`, "StaticGLB");
         return pngPath;
     } catch {
         try {
             await convertDdsToPngFallback(texturePath, pngPath);
+            options.logger?.debug(
+                `Converted DDS to PNG (fallback): ${texturePath} -> ${pngPath}`,
+                "StaticGLB",
+            );
             return pngPath;
         } catch (fallbackError) {
             warn(
@@ -1879,6 +1930,78 @@ async function convertTextureToPng(
             return null;
         }
     }
+}
+
+function resolveTextureFormatOption(format?: StaticGlbTextureFormat): StaticGlbTextureFormat {
+    if (format === "png" || format === "jpeg-safe" || format === "jpeg-force") {
+        return format;
+    }
+
+    return DEFAULT_TEXTURE_FORMAT;
+}
+
+function normalizeJpegQualityOption(quality?: number): number {
+    if (quality === undefined || !Number.isFinite(quality)) {
+        return DEFAULT_JPEG_QUALITY;
+    }
+
+    return Math.max(1, Math.min(100, Math.round(quality)));
+}
+
+async function writePreparedTextureImage(input: {
+    png: PNG;
+    sourcePngPath: string;
+    texturePath: string;
+    textureOutDir: string;
+    mimeType: PreparedTexture["mimeType"];
+    jpegQuality: number;
+    reuseSourcePng: boolean;
+}): Promise<string> {
+    if (input.mimeType === "image/png") {
+        if (input.reuseSourcePng) {
+            return input.sourcePngPath;
+        }
+
+        const pngOutputPath = path.join(
+            input.textureOutDir,
+            `${createTextureCacheBaseName(input.texturePath)}-prepared.png`,
+        );
+        if (await isCacheUpToDate(pngOutputPath, input.sourcePngPath)) {
+            return pngOutputPath;
+        }
+        await fse.ensureDir(input.textureOutDir);
+        await writePngAsync(input.png, pngOutputPath);
+        return pngOutputPath;
+    }
+
+    const jpegOutputPath = path.join(
+        input.textureOutDir,
+        `${createTextureCacheBaseName(input.texturePath)}-q${input.jpegQuality}.jpg`,
+    );
+    if (await isCacheUpToDate(jpegOutputPath, input.sourcePngPath)) {
+        return jpegOutputPath;
+    }
+    await fse.ensureDir(input.textureOutDir);
+    await writeJpegAsync(input.png, jpegOutputPath, input.jpegQuality);
+    return jpegOutputPath;
+}
+
+async function convertPngToJpeg(
+    pngPath: string,
+    texturePath: string,
+    textureOutDir: string,
+    jpegQuality: number,
+): Promise<string> {
+    const png = await readPngAsync(pngPath);
+    return writePreparedTextureImage({
+        png,
+        sourcePngPath: pngPath,
+        texturePath,
+        textureOutDir,
+        mimeType: "image/jpeg",
+        jpegQuality,
+        reuseSourcePng: false,
+    });
 }
 
 async function convertDdsToPngFallback(texturePath: string, pngPath: string): Promise<void> {
@@ -2007,7 +2130,7 @@ function bestKeyForIb(stem: string, resourceName: string, keys: string[]): strin
     const normalizedName = normalizeKey(stripIbResourceSuffix(resourceName));
     const sorted = [...keys].sort((a, b) => b.length - a.length);
     const suffix = extractNumericSuffix(resourceName) ?? extractNumericSuffix(stem);
-    const sameSuffixKeys = suffix
+    const sameSuffixKeys = suffix !== null
         ? sorted.filter((key) => extractNumericSuffix(key) === suffix)
         : [];
 
@@ -2034,7 +2157,7 @@ function stripIbResourceSuffix(value: string): string {
         "",
     );
     const numericSuffix = extractNumericSuffix(value);
-    return `${meshRemoved}${numericSuffix ? `.${suffixToString(numericSuffix)}` : ""}`;
+    return `${meshRemoved}${numericSuffix !== null ? `.${suffixToString(numericSuffix)}` : ""}`;
 }
 
 function extractNumericSuffix(value: string): number | null {
@@ -2049,7 +2172,23 @@ function suffixToString(value: number): string {
 function keyMatchesIb(groupKey: string, ibKey: string): boolean {
     const a = normalizeKey(groupKey);
     const b = normalizeKey(ibKey);
-    return a === b || a.includes(b) || b.includes(a);
+    if (a === b) {
+        return true;
+    }
+
+    const groupSuffix = extractNumericSuffix(groupKey);
+    const ibSuffix = extractNumericSuffix(ibKey);
+    if (groupSuffix !== null || ibSuffix !== null) {
+        if (groupSuffix !== ibSuffix) {
+            return false;
+        }
+
+        const groupBase = normalizeKey(groupKey.replace(/\.\d+$/i, ""));
+        const ibBase = normalizeKey(ibKey.replace(/\.\d+$/i, ""));
+        return groupBase === ibBase || groupBase.includes(ibBase) || ibBase.includes(groupBase);
+    }
+
+    return a.includes(b) || b.includes(a);
 }
 
 function normalizeKey(value: string): string {
@@ -2221,18 +2360,7 @@ function completeElement(value: Partial<FmtElement>): FmtElement {
 }
 
 function decodeIndices(bytes: Buffer, format: string): Uint32Array {
-    const upper = format.toUpperCase();
-    if (upper.includes("R16_UINT")) {
-        const out = new Uint32Array(Math.floor(bytes.length / 2));
-        for (let i = 0; i < out.length; i++) out[i] = bytes.readUInt16LE(i * 2);
-        return out;
-    }
-    if (upper.includes("R32_UINT") || upper.includes("UNKNOWN")) {
-        const out = new Uint32Array(Math.floor(bytes.length / 4));
-        for (let i = 0; i < out.length; i++) out[i] = bytes.readUInt32LE(i * 4);
-        return out;
-    }
-    throw new Error(`Unsupported IB format: ${format}`);
+    return bufferToUint32Array(decodeIndicesNative(bytes, format));
 }
 
 function buildPrimitive(
@@ -2331,13 +2459,36 @@ function readFloatAttribute(
     element: FmtElement,
     width: number,
 ): Float32Array {
-    const out = new Float32Array(vertexCount * width);
-    for (let vertex = 0; vertex < vertexCount; vertex++) {
-        const base = vertex * stride + element.alignedByteOffset;
-        const values = readDxgiValues(bytes, base, element.format);
-        for (let c = 0; c < width; c++) out[vertex * width + c] = values[c] ?? 0;
-    }
-    return out;
+    return bufferToFloat32Array(
+        readFloatAttributeNative(
+            bytes,
+            stride,
+            vertexCount,
+            element.alignedByteOffset,
+            element.format,
+            width,
+        ),
+    );
+}
+
+function bufferToUint32Array(buffer: Buffer): Uint32Array {
+    return new Uint32Array(
+        buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
+    );
+}
+
+function uint32ArrayToBuffer(values: Uint32Array): Buffer {
+    return Buffer.from(values.buffer, values.byteOffset, values.byteLength);
+}
+
+function bufferToFloat32Array(buffer: Buffer): Float32Array {
+    return new Float32Array(
+        buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
+    );
+}
+
+function float32ArrayToBuffer(values: Float32Array): Buffer {
+    return Buffer.from(values.buffer, values.byteOffset, values.byteLength);
 }
 
 function ensureVec4(
@@ -2347,83 +2498,29 @@ function ensureVec4(
     fillW = 1,
 ): Float32Array {
     if (width === 4) return data;
-    const out = new Float32Array(vertexCount * 4);
-    for (let i = 0; i < vertexCount; i++) {
-        out[i * 4 + 0] = data[i * width + 0] ?? 0;
-        out[i * 4 + 1] = data[i * width + 1] ?? 0;
-        out[i * 4 + 2] = data[i * width + 2] ?? 0;
-        out[i * 4 + 3] = width > 3 ? data[i * width + 3] : fillW;
-    }
-    return out;
+    return bufferToFloat32Array(
+        ensureVec4Native(float32ArrayToBuffer(data), vertexCount, width, fillW),
+    );
 }
 
 function normalizeVec3Array(data: Float32Array): Float32Array {
-    const out = new Float32Array(data.length);
-    for (let i = 0; i < data.length; i += 3) {
-        const x = data[i + 0];
-        const y = data[i + 1];
-        const z = data[i + 2];
-        const length = Math.hypot(x, y, z);
-        if (length > 1e-8) {
-            out[i + 0] = x / length;
-            out[i + 1] = y / length;
-            out[i + 2] = z / length;
-        }
-    }
-    return out;
+    return bufferToFloat32Array(normalizeVec3ArrayNative(float32ArrayToBuffer(data)));
 }
 
 function normalizeTangentArray(data: Float32Array): Float32Array {
-    const out = new Float32Array(data.length);
-    for (let i = 0; i < data.length; i += 4) {
-        const x = data[i + 0];
-        const y = data[i + 1];
-        const z = data[i + 2];
-        const length = Math.hypot(x, y, z);
-        if (length > 1e-8) {
-            out[i + 0] = x / length;
-            out[i + 1] = y / length;
-            out[i + 2] = z / length;
-        }
-        out[i + 3] = data[i + 3] >= 0 ? 1 : -1;
-    }
-    return out;
+    return bufferToFloat32Array(normalizeTangentArrayNative(float32ArrayToBuffer(data)));
 }
 
 function removeDegenerateTriangles(
     indices: Uint32Array,
     warn: (message: string) => void,
 ): Uint32Array {
-    let removed = 0;
-    for (let i = 0; i + 2 < indices.length; i += 3) {
-        const a = indices[i + 0];
-        const b = indices[i + 1];
-        const c = indices[i + 2];
-        if (a === b || b === c || a === c) {
-            removed++;
-        }
-    }
+    const result = removeDegenerateTrianglesNative(uint32ArrayToBuffer(indices));
+    const removed = result.removed;
     if (removed > 0) {
         warn(`Removed ${removed} degenerate triangles`);
     }
-    if (removed === 0) {
-        return indices;
-    }
-
-    const out = new Uint32Array(indices.length - removed * 3);
-    let offset = 0;
-    for (let i = 0; i + 2 < indices.length; i += 3) {
-        const a = indices[i + 0];
-        const b = indices[i + 1];
-        const c = indices[i + 2];
-        if (a === b || b === c || a === c) {
-            continue;
-        }
-        out[offset++] = a;
-        out[offset++] = b;
-        out[offset++] = c;
-    }
-    return out;
+    return removed === 0 ? indices : bufferToUint32Array(result.indices);
 }
 
 function readDxgiValues(bytes: Buffer, offset: number, format: string): number[] {

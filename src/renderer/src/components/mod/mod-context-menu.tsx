@@ -377,7 +377,7 @@ export function ModContextMenu({
             ) : (
               <BoxIcon className="mr-2 size-4" />
             )}
-            Model Viewer
+            {t("page.tools.model_viewer.title")}
           </ContextMenuItem>
           <ContextMenuItem onClick={() => setShowRenameDialog(true)}>
             <PencilIcon className="mr-2 size-4" />

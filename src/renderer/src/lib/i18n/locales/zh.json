@@ -361,6 +361,15 @@
       }
     },
     "tools": {
+      "dashboard": {
+        "sidebar_title": "模组工具",
+        "tools_label": "工具",
+        "toggle_sidebar": "切换侧边栏",
+        "empty_title": "开发者工具",
+        "empty_description": "请从侧边栏选择一个工具，或点击下面的项目开始。",
+        "external_page": "外部页面",
+        "inline_tool": "内置工具"
+      },
       "d3d11_builder": {
         "title": "构建 d3d11.dll",
         "description": "根据所选版本构建将注入到游戏进程中的 DLL",
@@ -421,6 +430,20 @@
         "target_mod_placeholder": "模组文件夹或 .ini 路径",
         "output_glb_path": "输出 GLB 路径",
         "output_glb_placeholder": ".glb 文件将写入的位置",
+        "texture_format": "纹理格式",
+        "texture_format_options": {
+          "png": "PNG",
+          "jpeg_safe": "JPEG（安全保留透明）",
+          "jpeg_force": "JPEG（强制全部）"
+        },
+        "texture_format_descriptions": {
+          "png": "所有纹理都保持为 PNG。",
+          "jpeg-safe": "默认使用 JPEG，但需要透明的纹理仍保留为 PNG。",
+          "jpeg-force": "包括透明纹理在内，所有纹理都强制编码为 JPEG。"
+        },
+        "jpeg_quality": "JPEG 质量",
+        "jpeg_quality_hint": "所选模式写出 JPEG 纹理时会使用此值。范围：1-100。",
+        "jpeg_quality_disabled_hint": "JPEG 质量仅在 JPEG 模式下使用。",
         "browse": "浏览",
         "folder": "文件夹",
         "include_tangents": "包含切线",
@@ -434,12 +457,35 @@
         "result_warnings": "{{warningCount}} 个警告",
         "toast": {
           "save_asset_path_failed": "保存资源路径失败",
+          "save_texture_settings_failed": "保存纹理设置失败",
           "created": "静态 GLB 已创建",
           "created_description": "{{meshCount}} 个网格，{{warningCount}} 个警告",
           "failed": "静态 GLB 转换失败"
         }
       },
+      "model_viewer": {
+        "title": "模型查看器",
+        "toggle_viewer": "切换查看器",
+        "open_file": "打开文件",
+        "convert_first": "请先将模组转换为 GLB，然后再在这里打开。",
+        "generating_selected_state": "正在生成所选状态",
+        "model_data_unavailable": "模型数据不可用。",
+        "menu": {
+          "model": "模型",
+          "texture": "纹理",
+          "rotate": "旋转",
+          "reset": "重置"
+        },
+        "rotate_actions": {
+          "Left 90°": "向左旋转 90°",
+          "Right 90°": "向右旋转 90°",
+          "Up 90°": "向上旋转 90°",
+          "Down 90°": "向下旋转 90°",
+          "Flip 180°": "翻转 180°"
+        }
+      },
       "fix-tool-manager": {
+        "title": "Fix Tool Manager",
         "presets": {},
         "builder": {
           "left": {

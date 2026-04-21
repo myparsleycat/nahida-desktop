@@ -30,7 +30,7 @@ export default function FixToolManager() {
   };
 
   return (
-    <div className="h-full min-h-0 flex flex-col">
+    <div className="h-full min-h-0 flex flex-col p-4">
       <div className="flex rounded-xl p-1.5 w-min bg-card h-10 mb-2 shrink-0 space-x-2">
         <button
           onClick={() => setTab("presets")}

@@ -1,0 +1,10 @@
+{
+  "name": "static-glb",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "napi build --platform --release"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.2.0"
+  }
+}

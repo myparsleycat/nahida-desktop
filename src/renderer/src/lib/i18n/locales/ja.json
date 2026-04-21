@@ -362,6 +362,15 @@
       }
     },
     "tools": {
+      "dashboard": {
+        "sidebar_title": "MOD ツール",
+        "tools_label": "ツール",
+        "toggle_sidebar": "サイドバーを切り替え",
+        "empty_title": "開発者ツール",
+        "empty_description": "サイドバーからツールを選ぶか、下の項目を押して開始してください。",
+        "external_page": "外部ページ",
+        "inline_tool": "内蔵ツール"
+      },
       "d3d11_builder": {
         "title": "d3d11.dll をビルド",
         "description": "選択したバージョンに合わせて、ゲームプロセスにインジェクションされる DLL をビルドします",
@@ -422,6 +431,20 @@
         "target_mod_placeholder": "MOD フォルダーまたは .ini パス",
         "output_glb_path": "出力 GLB パス",
         "output_glb_placeholder": ".glb ファイルの出力先",
+        "texture_format": "テクスチャ形式",
+        "texture_format_options": {
+          "png": "PNG",
+          "jpeg_safe": "JPEG (アルファ安全)",
+          "jpeg_force": "JPEG (すべて強制)"
+        },
+        "texture_format_descriptions": {
+          "png": "すべてのテクスチャを PNG のまま維持します。",
+          "jpeg-safe": "基本は JPEG を使い、アルファが必要なテクスチャだけ PNG にします。",
+          "jpeg-force": "アルファテクスチャを含め、すべてのテクスチャを JPEG に強制します。"
+        },
+        "jpeg_quality": "JPEG 品質",
+        "jpeg_quality_hint": "選択したモードで JPEG を書き出す場合に適用されます。範囲: 1-100。",
+        "jpeg_quality_disabled_hint": "JPEG 品質は JPEG モードでのみ使われます。",
         "browse": "参照",
         "folder": "フォルダー",
         "include_tangents": "タンジェントを含める",
@@ -435,12 +458,35 @@
         "result_warnings": "{{warningCount}} 件の警告",
         "toast": {
           "save_asset_path_failed": "アセットパスの保存に失敗しました",
+          "save_texture_settings_failed": "テクスチャ設定の保存に失敗しました",
           "created": "Static GLB を作成しました",
           "created_description": "{{meshCount}} 個のメッシュ、{{warningCount}} 件の警告",
           "failed": "Static GLB の変換に失敗しました"
         }
       },
+      "model_viewer": {
+        "title": "モデルビューアー",
+        "toggle_viewer": "トグルビューアー",
+        "open_file": "ファイルを開く",
+        "convert_first": "先に MOD を GLB に変換してから、ここで開いてください。",
+        "generating_selected_state": "選択した状態を生成中",
+        "model_data_unavailable": "モデルデータを利用できません。",
+        "menu": {
+          "model": "モデル",
+          "texture": "テクスチャ",
+          "rotate": "回転",
+          "reset": "リセット"
+        },
+        "rotate_actions": {
+          "Left 90°": "左に 90°",
+          "Right 90°": "右に 90°",
+          "Up 90°": "上に 90°",
+          "Down 90°": "下に 90°",
+          "Flip 180°": "180° 反転"
+        }
+      },
       "fix-tool-manager": {
+        "title": "Fix Tool Manager",
         "presets": {},
         "builder": {
           "left": {

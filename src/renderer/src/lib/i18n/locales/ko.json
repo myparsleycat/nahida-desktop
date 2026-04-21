@@ -361,6 +361,15 @@
       }
     },
     "tools": {
+      "dashboard": {
+        "sidebar_title": "모드 도구",
+        "tools_label": "도구",
+        "toggle_sidebar": "사이드바 전환",
+        "empty_title": "개발자 도구",
+        "empty_description": "사이드바에서 도구를 선택하거나 아래 항목을 눌러 시작하세요.",
+        "external_page": "외부 페이지",
+        "inline_tool": "내장 도구"
+      },
       "d3d11_builder": {
         "title": "d3d11.dll 빌드",
         "description": "게임 프로세스에 인젝션될 dll을 빌드합니다",
@@ -421,6 +430,20 @@
         "target_mod_placeholder": "모드 폴더 또는 .ini 경로",
         "output_glb_path": "출력 GLB 경로",
         "output_glb_placeholder": ".glb 파일이 저장될 위치",
+        "texture_format": "텍스처 형식",
+        "texture_format_options": {
+          "png": "PNG",
+          "jpeg_safe": "JPEG (알파 안전)",
+          "jpeg_force": "JPEG (전체 강제)"
+        },
+        "texture_format_descriptions": {
+          "png": "모든 텍스처를 PNG로 유지합니다.",
+          "jpeg-safe": "기본은 JPEG를 사용하고, 알파가 필요한 텍스처만 PNG로 유지합니다.",
+          "jpeg-force": "알파 텍스처를 포함해 모든 텍스처를 JPEG로 강제 인코딩합니다."
+        },
+        "jpeg_quality": "JPEG 품질",
+        "jpeg_quality_hint": "선택한 모드에서 JPEG를 쓸 때 적용됩니다. 범위: 1-100.",
+        "jpeg_quality_disabled_hint": "JPEG 품질은 JPEG 모드에서만 사용됩니다.",
         "browse": "찾아보기",
         "folder": "폴더",
         "include_tangents": "탄젠트 포함",
@@ -434,12 +457,35 @@
         "result_warnings": "경고 {{warningCount}}개",
         "toast": {
           "save_asset_path_failed": "에셋 경로를 저장하지 못했습니다",
+          "save_texture_settings_failed": "텍스처 설정을 저장하지 못했습니다",
           "created": "정적 GLB가 생성되었습니다",
           "created_description": "{{meshCount}}개 메시, 경고 {{warningCount}}개",
           "failed": "정적 GLB 변환에 실패했습니다"
         }
       },
+      "model_viewer": {
+        "title": "모델 뷰어",
+        "toggle_viewer": "토글 뷰어",
+        "open_file": "파일 열기",
+        "convert_first": "먼저 모드를 GLB로 변환한 뒤 여기에서 여세요.",
+        "generating_selected_state": "선택한 상태 생성 중",
+        "model_data_unavailable": "모델 데이터를 사용할 수 없습니다.",
+        "menu": {
+          "model": "모델",
+          "texture": "텍스처",
+          "rotate": "회전",
+          "reset": "초기화"
+        },
+        "rotate_actions": {
+          "Left 90°": "왼쪽으로 90°",
+          "Right 90°": "오른쪽으로 90°",
+          "Up 90°": "위로 90°",
+          "Down 90°": "아래로 90°",
+          "Flip 180°": "180° 뒤집기"
+        }
+      },
       "fix-tool-manager": {
+        "title": "Fix Tool Manager",
         "presets": {},
         "builder": {
           "left": {

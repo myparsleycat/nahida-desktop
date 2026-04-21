@@ -5,56 +5,56 @@ import ToggleViewerGenerator from "@renderer/components/tools/toggle-viewer-gene
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { cn } from "@renderer/lib/utils";
 import { Link } from "@tanstack/react-router";
-import { ChevronRight, Wrench, ExternalLink, Menu, X } from "lucide-react";
+import { ChevronRight, ExternalLink, Menu, Wrench, X } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import FixToolManager from "./fix-tool-manger";
 
 type ToolPage =
   | {
-      name: string;
+      nameKey: string;
+      initials: string;
       component: () => React.ReactNode;
       path?: never;
     }
   | {
-      name: string;
+      nameKey: string;
+      initials: string;
       path: string;
       component?: never;
     };
 
 const toolPages: ToolPage[] = [
   {
-    name: "D3D11 Builder",
+    nameKey: "page.tools.d3d11_builder.title",
+    initials: "D3",
     component: () => <D3D11Builder />,
   },
   {
-    name: "Toggle Persistence",
+    nameKey: "page.setting.xxmi.persistToggles",
+    initials: "TP",
     component: () => <TogglePersistence />,
   },
   {
-    name: "Toggle Viewer Generator",
+    nameKey: "page.tools.toggle_viewer_generator.title",
+    initials: "TV",
     component: () => <ToggleViewerGenerator />,
   },
   {
-    name: "Static GLB Converter",
+    nameKey: "page.tools.static_glb_converter.title",
+    initials: "SG",
     component: () => <StaticGlbConverter />,
   },
   {
-    name: "Fix Tool Manager",
+    nameKey: "page.tools.fix-tool-manager.title",
+    initials: "FT",
     component: () => <FixToolManager />,
   },
 ];
 
-function getToolInitials(name: string) {
-  return name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
 export default function ToolsPage() {
   const { screenHeight } = useTitlebar();
+  const { t } = useTranslation();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -76,31 +76,32 @@ export default function ToolsPage() {
             <Wrench className="h-3.5 w-3.5 text-accent" />
           </div>
           <span className="text-sm font-semibold text-sidebar-foreground tracking-tight">
-            Mod Tools
+            {t("page.tools.dashboard.sidebar_title")}
           </span>
         </div>
 
         <nav className="flex-1 overflow-y-auto py-3 px-2">
           <p className="px-2 mb-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-            Tools
+            {t("page.tools.dashboard.tools_label")}
           </p>
           <ul className="space-y-0.5">
             {toolPages.map((tool, index) => {
               const isActive = activeIndex === index;
               const isExternal = !!tool.path;
+              const toolName = t(tool.nameKey);
 
               if (isExternal) {
                 return (
-                  <li key={tool.name}>
+                  <li key={tool.nameKey}>
                     <Link
                       to={tool.path}
                       className="flex items-center justify-between gap-2 rounded-md px-2 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors group"
                     >
                       <div className="flex items-center gap-2.5">
                         <span className="flex h-5 w-5 items-center justify-center rounded bg-secondary text-[9px] font-bold text-muted-foreground font-mono">
-                          {getToolInitials(tool.name)}
+                          {tool.initials}
                         </span>
-                        <span className="text-xs">{tool.name}</span>
+                        <span className="text-xs">{toolName}</span>
                       </div>
                       <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                     </Link>
@@ -109,7 +110,7 @@ export default function ToolsPage() {
               }
 
               return (
-                <li key={tool.name}>
+                <li key={tool.nameKey}>
                   <button
                     onClick={() => setActiveIndex(index)}
                     className={`w-full flex items-center justify-between gap-2 rounded-md px-2 py-2 text-sm transition-colors ${
@@ -126,9 +127,9 @@ export default function ToolsPage() {
                             : "bg-secondary text-muted-foreground"
                         }`}
                       >
-                        {getToolInitials(tool.name)}
+                        {tool.initials}
                       </span>
-                      <span className="text-xs">{tool.name}</span>
+                      <span className="text-xs">{toolName}</span>
                     </div>
                     {isActive && <ChevronRight className="h-3 w-3 text-accent shrink-0" />}
                   </button>
@@ -144,7 +145,7 @@ export default function ToolsPage() {
           <button
             onClick={() => setSidebarOpen((v) => !v)}
             className="md:hidden p-1.5 rounded hover:bg-secondary transition-colors"
-            aria-label="Toggle sidebar"
+            aria-label={t("page.tools.dashboard.toggle_sidebar")}
           >
             {sidebarOpen ? (
               <X className="h-4 w-4 text-muted-foreground" />
@@ -154,45 +155,48 @@ export default function ToolsPage() {
           </button>
 
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-            <span className="text-foreground font-medium">Tools</span>
+            <span className="text-foreground font-medium">{t("page.tools.dashboard.tools_label")}</span>
             {activeTool && (
               <>
                 <span>/</span>
-                <span className="text-foreground">{activeTool.name}</span>
+                <span className="text-foreground">{t(activeTool.nameKey)}</span>
               </>
             )}
           </div>
         </header>
 
-        <main className="flex-1 min-h-0 overflow-hidden p-4">
+        <main className="flex-1 min-h-0 overflow-hidden">
           {activeTool && activeTool.component ? (
             <div className="h-full min-h-0">{activeTool.component()}</div>
           ) : (
             <div className="max-w-3xl mx-auto space-y-6 overflow-y-auto h-full">
               <div>
                 <h1 className="text-xl font-semibold text-foreground text-balance">
-                  Developer Tools
+                  {t("page.tools.dashboard.empty_title")}
                 </h1>
                 <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-                  Select a tool from the sidebar or pick one below to get started.
+                  {t("page.tools.dashboard.empty_description")}
                 </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {toolPages.map((tool, index) => {
                   const isExternal = !!tool.path;
+                  const toolName = t(tool.nameKey);
 
                   if (isExternal) {
                     return (
-                      <Link key={tool.name} to={tool.path}>
+                      <Link key={tool.nameKey} to={tool.path}>
                         <div className="group flex items-center justify-between p-4 rounded-lg border border-border bg-card hover:border-accent/40 hover:bg-card/80 transition-all cursor-pointer">
                           <div className="flex items-center gap-3">
                             <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-sm font-bold font-mono text-muted-foreground">
-                              {getToolInitials(tool.name)}
+                              {tool.initials}
                             </div>
                             <div>
-                              <p className="text-sm font-medium text-foreground">{tool.name}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">External page</p>
+                              <p className="text-sm font-medium text-foreground">{toolName}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {t("page.tools.dashboard.external_page")}
+                              </p>
                             </div>
                           </div>
                           <ExternalLink className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -203,17 +207,19 @@ export default function ToolsPage() {
 
                   return (
                     <button
-                      key={tool.name}
+                      key={tool.nameKey}
                       onClick={() => setActiveIndex(index)}
                       className="group flex items-center justify-between p-4 rounded-lg border border-border bg-card hover:border-accent/40 hover:bg-card/80 transition-all text-left"
                     >
                       <div className="flex items-center gap-3">
                         <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-sm font-bold font-mono text-muted-foreground group-hover:bg-accent/20 group-hover:text-accent transition-colors">
-                          {getToolInitials(tool.name)}
+                          {tool.initials}
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-foreground">{tool.name}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">Inline tool</p>
+                          <p className="text-sm font-medium text-foreground">{toolName}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {t("page.tools.dashboard.inline_tool")}
+                          </p>
                         </div>
                       </div>
                       <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:text-accent transition-all" />
