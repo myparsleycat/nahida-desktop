@@ -1,29 +1,6 @@
 {
   "name": "static-glb",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "license": "MIT",
-  "browser": "browser.js",
-  "keywords": [
-    "napi-rs",
-    "NAPI",
-    "N-API",
-    "Rust",
-    "node-addon",
-    "node-addon-api"
-  ],
-  "files": [
-    "index.d.ts",
-    "index.js",
-    "browser.js"
-  ],
-  "napi": {
-    "binaryName": "static-glb",
-    "targets": [
-      "x86_64-pc-windows-msvc"
-    ]
-  },
   "scripts": {
     "build": "napi build --platform --release"
   },
