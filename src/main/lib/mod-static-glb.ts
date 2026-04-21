@@ -5,6 +5,7 @@ import { convertDdsToPng } from "@native/native-util";
 import { decodeImage, parseDDSHeader } from "dds-ktx-parser";
 import fg from "fast-glob";
 import fse from "fs-extra";
+import { nanoid } from "nanoid";
 import pLimit from "p-limit";
 import { PNG } from "pngjs";
 import type { Logger } from "../internal/logger";
@@ -133,7 +134,7 @@ export async function convertModToGlb(
     const outputDir = path.dirname(path.resolve(options.outputPath));
     const textureCacheDir = isDebug
         ? path.resolve(outputDir, "texture-cache")
-        : path.resolve(outputDir, `.texture-cache-${Math.random().toString(36).slice(2)}`);
+        : path.resolve(outputDir, `.texture-cache-${nanoid()}`);
 
     try {
         const glbResult = await buildModGlb({
@@ -704,16 +705,13 @@ function evaluateIniCondition(
     expression: string,
     defaultVariables: Map<string, number | string>,
 ): boolean {
-    const jsExpression = expression.replace(
-        /\$?[A-Za-z_\\][A-Za-z0-9_\\.\\]*/g,
-        (token) => {
-            const lower = token.toLowerCase();
-            if (["true", "false"].includes(lower)) return lower;
-            if (/^\d/.test(token)) return token;
-            const value = defaultVariables.get(normalizeKey(token)) ?? 0;
-            return typeof value === "number" ? String(value) : JSON.stringify(String(value));
-        },
-    );
+    const jsExpression = expression.replace(/\$?[A-Za-z_\\][A-Za-z0-9_\\.\\]*/g, (token) => {
+        const lower = token.toLowerCase();
+        if (["true", "false"].includes(lower)) return lower;
+        if (/^\d/.test(token)) return token;
+        const value = defaultVariables.get(normalizeKey(token)) ?? 0;
+        return typeof value === "number" ? String(value) : JSON.stringify(String(value));
+    });
 
     if (!/^[\d\s()+\-*/%<>=!&|."'\\]+$/.test(jsExpression)) {
         return false;
