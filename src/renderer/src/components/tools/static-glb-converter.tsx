@@ -312,40 +312,37 @@ export default function StaticGlbConverter() {
                 onChange={(e) => void handleJpegQualityChange(e.target.value)}
                 disabled={isRunning || !usesJpeg}
               />
-              <p className="text-xs text-muted-foreground">
-                {usesJpeg
-                  ? t("page.tools.static_glb_converter.jpeg_quality_hint")
-                  : t("page.tools.static_glb_converter.jpeg_quality_disabled_hint")}
-              </p>
             </div>
           </div>
 
-          <div className="flex items-center justify-between rounded-md border bg-background/40 p-3">
-            <div>
-              <div className="text-sm font-medium">
-                {t("page.tools.static_glb_converter.include_tangents")}
+          <div className="flex w-full flex-row gap-2">
+            <div className="flex flex-1 items-center justify-between rounded-md border bg-background/40 p-3">
+              <div>
+                <div className="text-sm font-medium">
+                  {t("page.tools.static_glb_converter.include_tangents")}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {t("page.tools.static_glb_converter.include_tangents_description")}
+                </div>
               </div>
-              <div className="text-xs text-muted-foreground">
-                {t("page.tools.static_glb_converter.include_tangents_description")}
-              </div>
+              <Switch
+                checked={includeTangents}
+                onCheckedChange={setIncludeTangents}
+                disabled={isRunning}
+              />
             </div>
-            <Switch
-              checked={includeTangents}
-              onCheckedChange={setIncludeTangents}
-              disabled={isRunning}
-            />
-          </div>
 
-          <div className="flex items-center justify-between rounded-md border bg-background/40 p-3">
-            <div>
-              <div className="text-sm font-medium">
-                {t("page.tools.static_glb_converter.debug_mode")}
-              </div>
-              {/*<div className="text-xs text-muted-foreground">
+            <div className="flex flex-1 items-center justify-between rounded-md border bg-background/40 p-3">
+              <div>
+                <div className="text-sm font-medium">
+                  {t("page.tools.static_glb_converter.debug_mode")}
+                </div>
+                {/*<div className="text-xs text-muted-foreground">
               {t("page.tools.static_glb_converter.debug_mode_description")}
             </div>*/}
+              </div>
+              <Switch checked={debug} onCheckedChange={setDebug} disabled={isRunning} />
             </div>
-            <Switch checked={debug} onCheckedChange={setDebug} disabled={isRunning} />
           </div>
         </div>
 
