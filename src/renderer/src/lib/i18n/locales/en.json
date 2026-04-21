@@ -492,6 +492,7 @@
         "model_data_unavailable": "Model data is not available.",
         "menu": {
           "model": "Model",
+          "texture": "Texture",
           "rotate": "Rotate",
           "reset": "Reset"
         },

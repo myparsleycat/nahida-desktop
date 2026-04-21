@@ -472,6 +472,7 @@
         "model_data_unavailable": "모델 데이터를 사용할 수 없습니다.",
         "menu": {
           "model": "모델",
+          "texture": "텍스처",
           "rotate": "회전",
           "reset": "초기화"
         },

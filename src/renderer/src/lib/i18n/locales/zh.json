@@ -472,6 +472,7 @@
         "model_data_unavailable": "模型数据不可用。",
         "menu": {
           "model": "模型",
+          "texture": "纹理",
           "rotate": "旋转",
           "reset": "重置"
         },

@@ -37,6 +37,12 @@ export type ModelViewerElement = HTMLElement & {
     cameraTarget?: string;
     fieldOfView?: string;
     orientation?: string;
+    model?: {
+        materials?: Array<{
+            ensureLoaded?: () => Promise<void>;
+            setDoubleSided?: (doubleSided: boolean) => void;
+        }>;
+    };
     jumpCameraToGoal?: () => void;
     updateFraming?: () => Promise<void>;
     getCameraOrbit?: () => ModelViewerOrbit;

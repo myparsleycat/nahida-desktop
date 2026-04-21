@@ -473,6 +473,7 @@
         "model_data_unavailable": "モデルデータを利用できません。",
         "menu": {
           "model": "モデル",
+          "texture": "テクスチャ",
           "rotate": "回転",
           "reset": "リセット"
         },

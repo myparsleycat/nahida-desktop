@@ -3,6 +3,7 @@ import { Button } from "@renderer/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@renderer/components/ui/dialog";
 import {
   Menubar,
+  MenubarCheckboxItem,
   MenubarContent,
   MenubarGroup,
   MenubarItem,
@@ -96,7 +97,9 @@ export function ModelViewerDialog({
   const [activeViewerIndex, setActiveViewerIndex] = useState<0 | 1>(0);
   const [loadingViewerIndex, setLoadingViewerIndex] = useState<0 | 1 | null>(null);
   const [modelOrientation, setModelOrientation] = useState(DEFAULT_MODEL_ORIENTATION);
+  const [doubleSidedEnabled, setDoubleSidedEnabled] = useState(true);
   const viewerRefs = useRef<[ModelViewerElement | null, ModelViewerElement | null]>([null, null]);
+  const doubleSidedEnabledRef = useRef(true);
   const viewerUrlsRef = useRef<[string, string]>(["", ""]);
   const activeViewerIndexRef = useRef<0 | 1>(0);
   const loadingViewerIndexRef = useRef<0 | 1 | null>(null);
@@ -154,6 +157,16 @@ export function ModelViewerDialog({
   }, [modelOrientation]);
 
   useEffect(() => {
+    doubleSidedEnabledRef.current = doubleSidedEnabled;
+  }, [doubleSidedEnabled]);
+
+  useEffect(() => {
+    void Promise.allSettled(
+      viewerRefs.current.map((viewer) => applyDoubleSidedMaterials(viewer, doubleSidedEnabled)),
+    );
+  }, [doubleSidedEnabled]);
+
+  useEffect(() => {
     if (!source) {
       setActiveState({});
       setManifest(null);
@@ -200,11 +213,7 @@ export function ModelViewerDialog({
   const rotateModel = (delta: [number, number, number]) => {
     setModelOrientation((currentOrientation) => {
       const [roll, pitch, yaw] = parseOrientation(currentOrientation);
-      return formatOrientation([
-        roll + delta[0],
-        pitch + delta[1],
-        yaw + delta[2],
-      ]);
+      return formatOrientation([roll + delta[0], pitch + delta[1], yaw + delta[2]]);
     });
   };
 
@@ -307,6 +316,23 @@ export function ModelViewerDialog({
   );
   const isViewerBusy = isResolving || loadingViewerIndex !== null;
 
+  const applyDoubleSidedMaterials = async (
+    viewer: ModelViewerElement | null,
+    doubleSided: boolean,
+  ) => {
+    const materials = viewer?.model?.materials;
+    if (!materials?.length) {
+      return;
+    }
+
+    await Promise.allSettled(
+      materials.map(async (material) => {
+        await material.ensureLoaded?.();
+        material.setDoubleSided?.(doubleSided);
+      }),
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -341,6 +367,19 @@ export function ModelViewerDialog({
               </MenubarGroup>
             </MenubarContent>
           </MenubarMenu>
+          <MenubarMenu>
+            <MenubarTrigger>{t("page.tools.model_viewer.menu.texture")}</MenubarTrigger>
+            <MenubarContent>
+              <MenubarGroup>
+                <MenubarCheckboxItem
+                  checked={doubleSidedEnabled}
+                  onCheckedChange={(checked) => setDoubleSidedEnabled(checked === true)}
+                >
+                  Double Sided
+                </MenubarCheckboxItem>
+              </MenubarGroup>
+            </MenubarContent>
+          </MenubarMenu>
         </Menubar>
 
         <div
@@ -369,6 +408,11 @@ export function ModelViewerDialog({
                       element.dataset.nhdViewerLoadBound = "true";
                       suppressModelViewerFocusOutline(element);
                       element.addEventListener("load", () => {
+                        void applyDoubleSidedMaterials(
+                          viewerRefs.current[index],
+                          doubleSidedEnabledRef.current,
+                        );
+
                         requestAnimationFrame(() => {
                           if (initialCameraStateRef.current) {
                             return;
