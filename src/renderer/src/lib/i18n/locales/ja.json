@@ -422,6 +422,22 @@
         "target_mod_placeholder": "MOD フォルダーまたは .ini パス",
         "output_glb_path": "出力 GLB パス",
         "output_glb_placeholder": ".glb ファイルの出力先",
+        "texture_format": "テクスチャ形式",
+        "texture_format_options": {
+          "auto": "自動",
+          "png": "PNG",
+          "jpeg_safe": "JPEG (アルファ安全)",
+          "jpeg_force": "JPEG (すべて強制)"
+        },
+        "texture_format_descriptions": {
+          "auto": "アルファ保持が必要なテクスチャだけ PNG を使い、それ以外は JPEG にします。",
+          "png": "すべてのテクスチャを PNG のまま維持します。",
+          "jpeg-safe": "基本は JPEG を使い、アルファが必要なテクスチャだけ PNG にします。",
+          "jpeg-force": "アルファテクスチャを含め、すべてのテクスチャを JPEG に強制します。"
+        },
+        "jpeg_quality": "JPEG 品質",
+        "jpeg_quality_hint": "選択したモードで JPEG を書き出す場合に適用されます。範囲: 1-100。",
+        "jpeg_quality_disabled_hint": "JPEG 品質は自動または JPEG モードでのみ使われます。",
         "browse": "参照",
         "folder": "フォルダー",
         "include_tangents": "タンジェントを含める",
@@ -435,6 +451,7 @@
         "result_warnings": "{{warningCount}} 件の警告",
         "toast": {
           "save_asset_path_failed": "アセットパスの保存に失敗しました",
+          "save_texture_settings_failed": "テクスチャ設定の保存に失敗しました",
           "created": "Static GLB を作成しました",
           "created_description": "{{meshCount}} 個のメッシュ、{{warningCount}} 件の警告",
           "failed": "Static GLB の変換に失敗しました"

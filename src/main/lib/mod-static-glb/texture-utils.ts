@@ -2,11 +2,16 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import fse from "fs-extra";
 import { PNG } from "pngjs";
+import sharp from "sharp";
+
+export type StaticGlbTextureFormat = "auto" | "png" | "jpeg-safe" | "jpeg-force";
 
 export type PreparedTexture = {
-    pngPath: string;
+    imagePath: string;
+    mimeType: "image/png" | "image/jpeg";
     alphaMode?: "MASK";
     alphaCutoff?: number;
+    usesAlpha: boolean;
     invertedAlpha: boolean;
     selectionScore: number;
     srgbConfidence: "srgb" | "linear" | "unknown";
@@ -124,6 +129,33 @@ export function materialAlphaMode(
     return {};
 }
 
+export function textureUsesAlpha(alpha: ReturnType<typeof analyzeAlpha>): boolean {
+    if (isCutoutAlpha(alpha)) {
+        return true;
+    }
+
+    return alpha.partialRatio > 0 || alpha.lowRatio >= 0.005;
+}
+
+export function resolveTextureMimeType(
+    format: StaticGlbTextureFormat,
+    usesAlpha: boolean | null,
+): PreparedTexture["mimeType"] {
+    if (format === "png") {
+        return "image/png";
+    }
+
+    if (format === "jpeg-force") {
+        return "image/jpeg";
+    }
+
+    if (usesAlpha === null) {
+        return "image/png";
+    }
+
+    return usesAlpha ? "image/png" : "image/jpeg";
+}
+
 export function shouldInvertAlpha(
     resourceName: string,
     texturePath: string,
@@ -160,6 +192,25 @@ export async function readPngAsync(pngPath: string): Promise<PNG> {
 
 export async function writePngAsync(png: PNG, pngPath: string): Promise<void> {
     await pipeline(png.pack(), fse.createWriteStream(pngPath));
+}
+
+export async function writeJpegAsync(
+    png: PNG,
+    jpegPath: string,
+    quality: number,
+): Promise<void> {
+    await sharp(png.data, {
+        raw: {
+            width: png.width,
+            height: png.height,
+            channels: 4,
+        },
+    })
+        .jpeg({
+            quality,
+            chromaSubsampling: "4:4:4",
+        })
+        .toFile(jpegPath);
 }
 
 export function scoreTextureSelection(

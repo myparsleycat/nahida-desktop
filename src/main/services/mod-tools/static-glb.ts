@@ -8,6 +8,7 @@ import {
     convertModToVariantArtifacts,
     createStateKey,
     resolveVariantStateArtifact,
+    type StaticGlbTextureFormat,
     type ConvertModVariantArtifactsResult,
     type StaticGlbVariantManifest,
     type VariableStateMap,
@@ -16,14 +17,25 @@ import { app } from "electron";
 import fse from "fs-extra";
 
 const ASSET_PATH_SETTING_KEY = "mod_static_glb_asset_path";
+const TEXTURE_FORMAT_SETTING_KEY = "mod_static_glb_texture_format";
+const JPEG_QUALITY_SETTING_KEY = "mod_static_glb_jpeg_quality";
 const MODEL_VIEWER_TEMP_PREFIX = "nhd-model-viewer-";
+const DEFAULT_TEXTURE_FORMAT: StaticGlbTextureFormat = "auto";
+const DEFAULT_JPEG_QUALITY = 85;
 
 export type StaticGlbConvertInput = {
     modPath: string;
     assetPath?: string;
     outputPath: string;
+    textureFormat?: StaticGlbTextureFormat;
+    jpegQuality?: number;
     includeTangents?: boolean;
     debug?: boolean;
+};
+
+export type StaticGlbTextureSettings = {
+    textureFormat: StaticGlbTextureFormat;
+    jpegQuality: number;
 };
 
 export type StaticGlbSingleResult = {
@@ -78,11 +90,7 @@ export class StaticGlb {
     }
 
     public async getAssetPath(): Promise<string> {
-        const saved = await this.desktop.lib.db.query.setting.findFirst({
-            where: (t, { eq }) => eq(t.key, ASSET_PATH_SETTING_KEY),
-        });
-
-        return saved?.value || "";
+        return (await this.getSettingValue(ASSET_PATH_SETTING_KEY)) || "";
     }
 
     public async setAssetPath(assetPath: string): Promise<string> {
@@ -103,13 +111,49 @@ export class StaticGlb {
         return normalized;
     }
 
+    public async getTextureFormat(): Promise<StaticGlbTextureFormat> {
+        return normalizeTextureFormat(await this.getSettingValue(TEXTURE_FORMAT_SETTING_KEY));
+    }
+
+    public async setTextureFormat(textureFormat: StaticGlbTextureFormat): Promise<StaticGlbTextureFormat> {
+        const normalized = normalizeTextureFormat(textureFormat);
+        await this.saveSettingValue(TEXTURE_FORMAT_SETTING_KEY, normalized);
+        return normalized;
+    }
+
+    public async getJpegQuality(): Promise<number> {
+        return normalizeJpegQuality(await this.getSettingValue(JPEG_QUALITY_SETTING_KEY));
+    }
+
+    public async setJpegQuality(jpegQuality: number): Promise<number> {
+        const normalized = normalizeJpegQuality(jpegQuality);
+        await this.saveSettingValue(JPEG_QUALITY_SETTING_KEY, String(normalized));
+        return normalized;
+    }
+
+    public async getTextureSettings(): Promise<StaticGlbTextureSettings> {
+        const [textureFormat, jpegQuality] = await Promise.all([
+            this.getTextureFormat(),
+            this.getJpegQuality(),
+        ]);
+        return {
+            textureFormat,
+            jpegQuality,
+        };
+    }
+
     public async convert(input: StaticGlbConvertInput): Promise<StaticGlbViewerResult> {
         const assetPath = input.assetPath?.trim() || (await this.getAssetPath());
         if (!assetPath) {
             throw new Error("Set the static GLB asset path in Mod Tools first.");
         }
 
+        const savedTextureSettings = await this.getTextureSettings();
+        const textureFormat = normalizeTextureFormat(input.textureFormat ?? savedTextureSettings.textureFormat);
+        const jpegQuality = normalizeJpegQuality(input.jpegQuality ?? savedTextureSettings.jpegQuality);
+
         await this.setAssetPath(assetPath);
+        await Promise.all([this.setTextureFormat(textureFormat), this.setJpegQuality(jpegQuality)]);
 
         const outputPath = ensureGlbExtension(path.resolve(input.outputPath));
         const warnings: string[] = [];
@@ -119,6 +163,8 @@ export class StaticGlb {
             assetPath,
             artifactRoot,
             includeTangents: input.includeTangents,
+            textureFormat,
+            jpegQuality,
             debug: input.debug,
             logger: this.desktop.logger,
             onWarning: (message) => {
@@ -149,6 +195,8 @@ export class StaticGlb {
             assetPath,
             outputPath,
             includeTangents: input.includeTangents,
+            textureFormat,
+            jpegQuality,
             debug: input.debug,
             logger: this.desktop.logger,
             onWarning: (message) => {
@@ -178,6 +226,7 @@ export class StaticGlb {
         if (!assetPath) {
             throw new Error("Set the static GLB asset path in Mod Tools first.");
         }
+        const textureSettings = await this.getTextureSettings();
 
         if (typeof input !== "string" && input.artifactRoot && input.state) {
             const result = await resolveVariantStateArtifact({
@@ -186,6 +235,8 @@ export class StaticGlb {
                 state: input.state,
                 assetPath,
                 modPath: input.modPath || input.artifactRoot,
+                textureFormat: textureSettings.textureFormat,
+                jpegQuality: textureSettings.jpegQuality,
                 logger: this.desktop.logger,
                 onWarning: (message) => {
                     this.desktop.logger.warn(message, "StaticGlb.convertForViewer");
@@ -228,6 +279,8 @@ export class StaticGlb {
                 assetPath,
                 artifactRoot: tempDir,
                 preGenerateVariableStates: false,
+                textureFormat: textureSettings.textureFormat,
+                jpegQuality: textureSettings.jpegQuality,
                 logger: this.desktop.logger,
                 onWarning: (message) => {
                     warnings.push(message);
@@ -254,6 +307,8 @@ export class StaticGlb {
                 modPath,
                 assetPath,
                 textureCacheDir,
+                textureFormat: textureSettings.textureFormat,
+                jpegQuality: textureSettings.jpegQuality,
                 logger: this.desktop.logger,
                 onWarning: (message) => {
                     warnings.push(message);
@@ -356,6 +411,21 @@ export class StaticGlb {
                 ),
         );
     }
+
+    private async getSettingValue(key: string): Promise<string | null> {
+        const saved = await this.desktop.lib.db.query.setting.findFirst({
+            where: (t, { eq }) => eq(t.key, key),
+        });
+
+        return saved?.value ?? null;
+    }
+
+    private async saveSettingValue(key: string, value: string): Promise<void> {
+        await this.desktop.lib.db.insert(setting).values({ key, value }).onConflictDoUpdate({
+            target: setting.key,
+            set: { value },
+        });
+    }
 }
 
 function ensureGlbExtension(filePath: string): string {
@@ -383,4 +453,32 @@ function sanitizeModelViewerFileName(name: string): string {
         .trim();
 
     return sanitized || "model-viewer";
+}
+
+function normalizeTextureFormat(value?: string | null): StaticGlbTextureFormat {
+    if (
+        value === "auto" ||
+        value === "png" ||
+        value === "jpeg-safe" ||
+        value === "jpeg-force"
+    ) {
+        return value;
+    }
+
+    return DEFAULT_TEXTURE_FORMAT;
+}
+
+function normalizeJpegQuality(value?: string | number | null): number {
+    const parsed =
+        typeof value === "number"
+            ? value
+            : typeof value === "string"
+              ? Number.parseInt(value, 10)
+              : Number.NaN;
+
+    if (!Number.isFinite(parsed)) {
+        return DEFAULT_JPEG_QUALITY;
+    }
+
+    return Math.max(1, Math.min(100, Math.round(parsed)));
 }

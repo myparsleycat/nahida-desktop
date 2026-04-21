@@ -20,11 +20,17 @@ import {
     type PreparedTexture,
     readDdsSrgbState,
     readPngAsync,
+    resolveTextureMimeType,
     scoreTextureSelection,
     shouldInvertAlpha,
+    type StaticGlbTextureFormat,
+    textureUsesAlpha,
     textureNamePriority,
+    writeJpegAsync,
     writePngAsync,
 } from "./texture-utils";
+
+export type { StaticGlbTextureFormat } from "./texture-utils";
 
 type IniSection = {
     header: string;
@@ -90,7 +96,8 @@ type TextureBinding = {
 type MaterialBinding = {
     materialIndex: number;
     textureResourceName: string;
-    pngPath: string;
+    imagePath: string;
+    mimeType: "image/png" | "image/jpeg";
 };
 
 export type VariableStateValue = number | string;
@@ -147,6 +154,8 @@ export type ConvertModToGlbOptions = {
     modPath: string;
     assetPath: string;
     outputPath: string;
+    textureFormat?: StaticGlbTextureFormat;
+    jpegQuality?: number;
     includeTangents?: boolean;
     debug?: boolean;
     logger?: Logger;
@@ -203,6 +212,8 @@ type SlotVariableBinding = {
 const variantArtifactManifestLocks = new Map<string, Promise<void>>();
 const normalizeKeyCache = new Map<string, string>();
 const MAX_NORMALIZE_KEY_CACHE = 4096;
+const DEFAULT_TEXTURE_FORMAT: StaticGlbTextureFormat = "auto";
+const DEFAULT_JPEG_QUALITY = 85;
 
 async function withVariantArtifactManifestLock<T>(
     artifactRoot: string,
@@ -1621,7 +1632,7 @@ async function buildMaterials(
             prepareTasks.set(
                 candidate.texturePath,
                 limitTexturePreparation(() =>
-                    prepareTexturePng(
+                    prepareTextureImage(
                         options,
                         candidate.texturePath,
                         textureOutDir,
@@ -1696,14 +1707,14 @@ async function buildMaterials(
             const texture = selected.texture;
 
             options.logger?.debug(
-                `Prepared texture: ${texture.pngPath} (inverted: ${texture.invertedAlpha}, score: ${texture.selectionScore})`,
+                `Prepared texture: ${texture.imagePath} (${texture.mimeType}, alpha: ${texture.usesAlpha}, inverted: ${texture.invertedAlpha}, score: ${texture.selectionScore})`,
                 "StaticGLB",
             );
 
             const imageIndex = builder.addImage(
-                await fse.readFile(texture.pngPath),
-                "image/png",
-                path.basename(texture.pngPath),
+                await fse.readFile(texture.imagePath),
+                texture.mimeType,
+                path.basename(texture.imagePath),
             );
             const textureIndex = builder.addTexture(imageIndex);
             const materialIndex = builder.addMaterial({
@@ -1725,7 +1736,8 @@ async function buildMaterials(
             cached = {
                 materialIndex,
                 textureResourceName: selected.candidate.diffuseResourceName,
-                pngPath: texture.pngPath,
+                imagePath: texture.imagePath,
+                mimeType: texture.mimeType,
             };
             textureCache.set(selected.candidate.texturePath, cached);
         }
@@ -1738,7 +1750,7 @@ async function buildMaterials(
     return materialByIb;
 }
 
-async function prepareTexturePng(
+async function prepareTextureImage(
     options: ConvertModToGlbBufferOptions,
     texturePath: string,
     textureOutDir: string,
@@ -1757,45 +1769,37 @@ async function prepareTexturePng(
             png,
             normalizeKey,
         );
-        if (!alpha.hasAlpha) {
-            return {
-                pngPath,
-                invertedAlpha: false,
-                selectionScore: scoreTextureSelection(
-                    resourceName,
-                    selectionAnalysis,
-                    normalizeKey,
-                ),
-                srgbConfidence: selectionAnalysis.srgbConfidence,
-            };
+        let finalAlpha = alpha;
+        let invertedAlpha = false;
+
+        if (alpha.hasAlpha && shouldInvertAlpha(resourceName, texturePath, alpha, normalizeKey)) {
+            invertPngAlpha(png);
+            finalAlpha = analyzeAlpha(png);
+            invertedAlpha = true;
         }
 
-        if (shouldInvertAlpha(resourceName, texturePath, alpha, normalizeKey)) {
-            invertPngAlpha(png);
-            const invertedPath = path.join(
-                textureOutDir,
-                `${path.basename(pngPath, path.extname(pngPath))}-alpha-inverted.png`,
-            );
-            await fse.ensureDir(textureOutDir);
-            await writePngAsync(png, invertedPath);
-            const correctedAlpha = analyzeAlpha(png);
-            return {
-                pngPath: invertedPath,
-                ...materialAlphaMode(correctedAlpha),
-                invertedAlpha: true,
-                selectionScore: scoreTextureSelection(
-                    resourceName,
-                    selectionAnalysis,
-                    normalizeKey,
-                ),
-                srgbConfidence: selectionAnalysis.srgbConfidence,
-            };
-        }
+        const alphaSettings = materialAlphaMode(finalAlpha);
+        const usesAlpha = textureUsesAlpha(finalAlpha);
+        const mimeType = resolveTextureMimeType(
+            resolveTextureFormatOption(options.textureFormat),
+            usesAlpha,
+        );
+        const imagePath = await writePreparedTextureImage({
+            png,
+            sourcePngPath: pngPath,
+            texturePath,
+            textureOutDir,
+            mimeType,
+            jpegQuality: normalizeJpegQualityOption(options.jpegQuality),
+            reuseSourcePng: !invertedAlpha,
+        });
 
         return {
-            pngPath,
-            ...materialAlphaMode(alpha),
-            invertedAlpha: false,
+            imagePath,
+            mimeType,
+            ...alphaSettings,
+            usesAlpha,
+            invertedAlpha,
             selectionScore: scoreTextureSelection(resourceName, selectionAnalysis, normalizeKey),
             srgbConfidence: selectionAnalysis.srgbConfidence,
         };
@@ -1807,8 +1811,23 @@ async function prepareTexturePng(
                 error instanceof Error ? error.message : String(error)
             }`,
         );
+        const mimeType = resolveTextureMimeType(
+            resolveTextureFormatOption(options.textureFormat),
+            null,
+        );
+        const imagePath =
+            mimeType === "image/png"
+                ? pngPath
+                : await convertPngToJpeg(
+                      pngPath,
+                      texturePath,
+                      textureOutDir,
+                      normalizeJpegQualityOption(options.jpegQuality),
+                  );
         return {
-            pngPath,
+            imagePath,
+            mimeType,
+            usesAlpha: mimeType === "image/png",
             invertedAlpha: false,
             selectionScore: scoreTextureSelection(
                 resourceName,
@@ -1879,6 +1898,77 @@ async function convertTextureToPng(
             return null;
         }
     }
+}
+
+function resolveTextureFormatOption(format?: StaticGlbTextureFormat): StaticGlbTextureFormat {
+    if (
+        format === "auto" ||
+        format === "png" ||
+        format === "jpeg-safe" ||
+        format === "jpeg-force"
+    ) {
+        return format;
+    }
+
+    return DEFAULT_TEXTURE_FORMAT;
+}
+
+function normalizeJpegQualityOption(quality?: number): number {
+    if (!Number.isFinite(quality)) {
+        return DEFAULT_JPEG_QUALITY;
+    }
+
+    return Math.max(1, Math.min(100, Math.round(quality)));
+}
+
+async function writePreparedTextureImage(input: {
+    png: PNG;
+    sourcePngPath: string;
+    texturePath: string;
+    textureOutDir: string;
+    mimeType: PreparedTexture["mimeType"];
+    jpegQuality: number;
+    reuseSourcePng: boolean;
+}): Promise<string> {
+    if (input.mimeType === "image/png") {
+        if (input.reuseSourcePng) {
+            return input.sourcePngPath;
+        }
+
+        const pngOutputPath = path.join(
+            input.textureOutDir,
+            `${path.basename(input.texturePath, path.extname(input.texturePath))}-prepared.png`,
+        );
+        await fse.ensureDir(input.textureOutDir);
+        await writePngAsync(input.png, pngOutputPath);
+        return pngOutputPath;
+    }
+
+    const jpegOutputPath = path.join(
+        input.textureOutDir,
+        `${path.basename(input.texturePath, path.extname(input.texturePath))}.jpg`,
+    );
+    await fse.ensureDir(input.textureOutDir);
+    await writeJpegAsync(input.png, jpegOutputPath, input.jpegQuality);
+    return jpegOutputPath;
+}
+
+async function convertPngToJpeg(
+    pngPath: string,
+    texturePath: string,
+    textureOutDir: string,
+    jpegQuality: number,
+): Promise<string> {
+    const png = await readPngAsync(pngPath);
+    return writePreparedTextureImage({
+        png,
+        sourcePngPath: pngPath,
+        texturePath,
+        textureOutDir,
+        mimeType: "image/jpeg",
+        jpegQuality,
+        reuseSourcePng: false,
+    });
 }
 
 async function convertDdsToPngFallback(texturePath: string, pngPath: string): Promise<void> {

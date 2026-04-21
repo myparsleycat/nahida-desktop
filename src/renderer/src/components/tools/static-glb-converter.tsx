@@ -1,11 +1,31 @@
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@renderer/components/ui/select";
 import { Switch } from "@renderer/components/ui/switch";
 import { useNavigate } from "@tanstack/react-router";
 import { BoxIcon, CircleCheckIcon, CircleXIcon, FolderOpenIcon, Loader2Icon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
+type TextureFormat = "auto" | "png" | "jpeg-safe" | "jpeg-force";
+
+const JPEG_TEXTURE_FORMATS: TextureFormat[] = ["auto", "jpeg-safe", "jpeg-force"];
+
+function clampJpegQuality(value: number) {
+  if (!Number.isFinite(value)) {
+    return 85;
+  }
+
+  return Math.max(1, Math.min(100, Math.round(value)));
+}
 
 function basename(filePath: string) {
   return filePath.replaceAll("\\", "/").split("/").filter(Boolean).at(-1) || "mod";
@@ -22,6 +42,8 @@ export default function StaticGlbConverter() {
   const [assetPath, setAssetPath] = useState("");
   const [modPath, setModPath] = useState("");
   const [outputPath, setOutputPath] = useState("");
+  const [textureFormat, setTextureFormat] = useState<TextureFormat>("auto");
+  const [jpegQuality, setJpegQuality] = useState(85);
   const [includeTangents, setIncludeTangents] = useState(false);
   const [debug, setDebug] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -36,9 +58,15 @@ export default function StaticGlbConverter() {
   } | null>(null);
 
   useEffect(() => {
-    window.api
-      .invoke("tools:getStaticGlbAssetPath")
-      .then(setAssetPath)
+    Promise.all([
+      window.api.invoke("tools:getStaticGlbAssetPath"),
+      window.api.invoke("tools:getStaticGlbTextureSettings"),
+    ])
+      .then(([nextAssetPath, settings]) => {
+        setAssetPath(nextAssetPath);
+        setTextureFormat(settings.textureFormat);
+        setJpegQuality(clampJpegQuality(settings.jpegQuality));
+      })
       .catch(() => {});
   }, []);
 
@@ -46,6 +74,7 @@ export default function StaticGlbConverter() {
     () => assetPath.trim().length > 0 && modPath.trim().length > 0 && outputPath.trim().length > 0,
     [assetPath, modPath, outputPath],
   );
+  const usesJpeg = JPEG_TEXTURE_FORMATS.includes(textureFormat);
 
   const selectFolder = async (onSelect: (path: string) => void) => {
     const selected = await window.api.invoke("util:showOpenDialog", {
@@ -92,6 +121,8 @@ export default function StaticGlbConverter() {
         modPath,
         assetPath,
         outputPath,
+        textureFormat,
+        jpegQuality,
         includeTangents,
         debug,
       });
@@ -111,17 +142,53 @@ export default function StaticGlbConverter() {
     }
   };
 
+  const handleTextureFormatChange = async (value: TextureFormat) => {
+    const previous = textureFormat;
+    setTextureFormat(value);
+
+    try {
+      const saved = await window.api.invoke("tools:setStaticGlbTextureFormat", value);
+      setTextureFormat(saved);
+    } catch (error) {
+      setTextureFormat(previous);
+      toast.error(t("page.tools.static_glb_converter.toast.save_texture_settings_failed"), {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  const handleJpegQualityChange = async (value: string) => {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isNaN(parsed)) {
+      return;
+    }
+
+    const previous = jpegQuality;
+    const normalized = clampJpegQuality(parsed);
+    setJpegQuality(normalized);
+
+    try {
+      const saved = await window.api.invoke("tools:setStaticGlbJpegQuality", normalized);
+      setJpegQuality(clampJpegQuality(saved));
+    } catch (error) {
+      setJpegQuality(previous);
+      toast.error(t("page.tools.static_glb_converter.toast.save_texture_settings_failed"), {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
   const openResult = () => {
     if (!result) return;
-      navigate({
-        to: "/tools/model-viewer",
-        search: {
-          path: result.glbPath,
-          name: result.name,
-          manifestPath: result.manifestPath ?? "",
-          artifactRoot: result.artifactRoot ?? "",
-        },
-      });
+    navigate({
+      to: "/tools/model-viewer",
+      search: {
+        path: result.glbPath,
+        name: result.name,
+        manifestPath: result.manifestPath ?? "",
+        artifactRoot: result.artifactRoot ?? "",
+      },
+    });
   };
 
   return (
@@ -130,9 +197,9 @@ export default function StaticGlbConverter() {
         <h2 className="text-lg font-semibold text-foreground">
           {t("page.tools.static_glb_converter.title")}
         </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
+        {/* <p className="mt-1 text-sm text-muted-foreground">
           {t("page.tools.static_glb_converter.description")}
-        </p>
+        </p> */}
       </div>
 
       <div className="grid gap-4 rounded-lg border bg-card p-4">
@@ -157,9 +224,9 @@ export default function StaticGlbConverter() {
               {t("page.tools.static_glb_converter.browse")}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
+          {/* <p className="text-xs text-muted-foreground">
             {t("page.tools.static_glb_converter.asset_layout_hint")}
-          </p>
+          </p> */}
         </div>
 
         <div className="space-y-2">
@@ -205,6 +272,61 @@ export default function StaticGlbConverter() {
               <FolderOpenIcon className="size-4" />
               {t("page.tools.static_glb_converter.folder")}
             </Button>
+          </div>
+        </div>
+
+        <div className="grid gap-4 rounded-md border bg-background/40 p-3 md:grid-cols-[minmax(0,1fr)_160px]">
+          <div className="space-y-2">
+            <label className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+              {t("page.tools.static_glb_converter.texture_format")}
+            </label>
+            <Select
+              value={textureFormat}
+              onValueChange={(value) => void handleTextureFormatChange(value as TextureFormat)}
+            >
+              <SelectTrigger disabled={isRunning}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectGroup>
+                  <SelectItem value="auto">
+                    {t("page.tools.static_glb_converter.texture_format_options.auto")}
+                  </SelectItem>
+                  <SelectItem value="png">
+                    {t("page.tools.static_glb_converter.texture_format_options.png")}
+                  </SelectItem>
+                  <SelectItem value="jpeg-safe">
+                    {t("page.tools.static_glb_converter.texture_format_options.jpeg_safe")}
+                  </SelectItem>
+                  <SelectItem value="jpeg-force">
+                    {t("page.tools.static_glb_converter.texture_format_options.jpeg_force")}
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {t(`page.tools.static_glb_converter.texture_format_descriptions.${textureFormat}`)}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+              {t("page.tools.static_glb_converter.jpeg_quality")}
+            </label>
+            <Input
+              type="number"
+              min={1}
+              max={100}
+              step={1}
+              value={jpegQuality}
+              onChange={(e) => void handleJpegQualityChange(e.target.value)}
+              disabled={isRunning || !usesJpeg}
+            />
+            <p className="text-xs text-muted-foreground">
+              {usesJpeg
+                ? t("page.tools.static_glb_converter.jpeg_quality_hint")
+                : t("page.tools.static_glb_converter.jpeg_quality_disabled_hint")}
+            </p>
           </div>
         </div>
 

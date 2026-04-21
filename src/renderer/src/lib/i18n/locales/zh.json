@@ -421,6 +421,22 @@
         "target_mod_placeholder": "模组文件夹或 .ini 路径",
         "output_glb_path": "输出 GLB 路径",
         "output_glb_placeholder": ".glb 文件将写入的位置",
+        "texture_format": "纹理格式",
+        "texture_format_options": {
+          "auto": "自动",
+          "png": "PNG",
+          "jpeg_safe": "JPEG（安全保留透明）",
+          "jpeg_force": "JPEG（强制全部）"
+        },
+        "texture_format_descriptions": {
+          "auto": "仅在需要保留透明时使用 PNG，其余纹理编码为 JPEG。",
+          "png": "所有纹理都保持为 PNG。",
+          "jpeg-safe": "默认使用 JPEG，但需要透明的纹理仍保留为 PNG。",
+          "jpeg-force": "包括透明纹理在内，所有纹理都强制编码为 JPEG。"
+        },
+        "jpeg_quality": "JPEG 质量",
+        "jpeg_quality_hint": "所选模式写出 JPEG 纹理时会使用此值。范围：1-100。",
+        "jpeg_quality_disabled_hint": "JPEG 质量仅在自动或 JPEG 模式下使用。",
         "browse": "浏览",
         "folder": "文件夹",
         "include_tangents": "包含切线",
@@ -434,6 +450,7 @@
         "result_warnings": "{{warningCount}} 个警告",
         "toast": {
           "save_asset_path_failed": "保存资源路径失败",
+          "save_texture_settings_failed": "保存纹理设置失败",
           "created": "静态 GLB 已创建",
           "created_description": "{{meshCount}} 个网格，{{warningCount}} 个警告",
           "failed": "静态 GLB 转换失败"
