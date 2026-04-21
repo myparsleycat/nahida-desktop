@@ -10,10 +10,25 @@ function toLocalUrl(filePath: string) {
   return `local://${encodeURI(normalized).replaceAll("#", "%23").replaceAll("?", "%3F")}`;
 }
 
-export function ModelViewerPage({ path, name }: { path: string; name: string }) {
+export function ModelViewerPage({
+  path,
+  name,
+  manifestPath,
+  artifactRoot,
+}: {
+  path: string;
+  name: string;
+  manifestPath?: string;
+  artifactRoot?: string;
+}) {
   const { Titlebar } = useTitlebar();
   const modelName = name || "Model Viewer";
   const modelSrc = path ? toLocalUrl(path) : "";
+  const sourceContext = {
+    artifactRoot: artifactRoot || "",
+    manifestPath: manifestPath || "",
+  };
+  const displayPath = sourceContext.artifactRoot || path;
 
   return (
     <>
@@ -29,15 +44,17 @@ export function ModelViewerPage({ path, name }: { path: string; name: string }) 
             </Button>
             <div className="min-w-0 text-sm">
               <div className="truncate font-medium">{modelName}</div>
-              {path && <div className="truncate text-xs text-muted-foreground">{path}</div>}
+              {displayPath && (
+                <div className="truncate text-xs text-muted-foreground">{displayPath}</div>
+              )}
             </div>
           </div>
-          {path && (
+          {displayPath && (
             <Button
               variant="outline"
               size="sm"
               className="h-8 shrink-0 gap-1"
-              onClick={() => window.api.invoke("util:openPath", path)}
+              onClick={() => window.api.invoke("util:openPath", displayPath)}
             >
               <FolderOpenIcon className="size-4" />
               Open File

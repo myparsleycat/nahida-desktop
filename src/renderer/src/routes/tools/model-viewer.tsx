@@ -12,7 +12,14 @@ export const Route = createFileRoute("/tools/model-viewer")({
 });
 
 function RouteComponent() {
-  const { path, name } = Route.useSearch();
+  const { path, name, manifestPath, artifactRoot } = Route.useSearch();
 
-  return <ModelViewerPage path={path} name={name} />;
+  return (
+    <ModelViewerPage
+      path={path}
+      name={name}
+      manifestPath={manifestPath}
+      artifactRoot={artifactRoot}
+    />
+  );
 }
