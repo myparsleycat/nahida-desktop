@@ -6,6 +6,7 @@ import {
     convertModToGlbBuffer,
     type ConvertModToGlbResult,
     convertModToVariantArtifacts,
+    createStateKey,
     resolveVariantStateArtifact,
     type ConvertModVariantArtifactsResult,
     type StaticGlbVariantManifest,
@@ -369,13 +370,6 @@ function stripGlbExtension(filePath: string): string {
     return path.extname(filePath).toLowerCase() === ".glb"
         ? filePath.slice(0, -path.extname(filePath).length)
         : filePath;
-}
-
-function createStateKey(state: VariableStateMap): string {
-    return Object.entries(state)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, value]) => `${key.toLowerCase()}=${String(value)}`)
-        .join("&");
 }
 
 function sanitizeModelViewerFileName(name: string): string {

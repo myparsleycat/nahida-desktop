@@ -1523,7 +1523,7 @@ function humanizeVariableLabel(id: string): string {
         .join(" ");
 }
 
-function createStateKey(state: VariableStateMap): string {
+export function createStateKey(state: VariableStateMap): string {
     return Object.entries(state)
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([key, value]) => `${normalizeKey(key)}=${String(value)}`)
