@@ -26,10 +26,13 @@ export default function StaticGlbConverter() {
   const [debug, setDebug] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<{
+    mode: "single" | "variant-set";
     glbPath: string;
     meshCount: number;
     warningCount: number;
     name: string;
+    manifestPath?: string;
+    artifactRoot?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -110,13 +113,15 @@ export default function StaticGlbConverter() {
 
   const openResult = () => {
     if (!result) return;
-    navigate({
-      to: "/tools/model-viewer",
-      search: {
-        path: result.glbPath,
-        name: result.name,
-      },
-    });
+      navigate({
+        to: "/tools/model-viewer",
+        search: {
+          path: result.glbPath,
+          name: result.name,
+          manifestPath: result.manifestPath ?? "",
+          artifactRoot: result.artifactRoot ?? "",
+        },
+      });
   };
 
   return (
@@ -261,7 +266,9 @@ export default function StaticGlbConverter() {
                 meshCount: result.meshCount,
               })}
             </div>
-            <div className="truncate text-xs text-muted-foreground">{result.glbPath}</div>
+            <div className="truncate text-xs text-muted-foreground">
+              {result.mode === "variant-set" ? result.artifactRoot : result.glbPath}
+            </div>
             {result.warningCount > 0 && (
               <div className="mt-1 text-xs text-yellow-500">
                 {t("page.tools.static_glb_converter.result_warnings", {

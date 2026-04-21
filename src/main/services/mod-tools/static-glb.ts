@@ -5,6 +5,11 @@ import {
     convertModToGlb,
     convertModToGlbBuffer,
     type ConvertModToGlbResult,
+    convertModToVariantArtifacts,
+    resolveVariantStateArtifact,
+    type ConvertModVariantArtifactsResult,
+    type StaticGlbVariantManifest,
+    type VariableStateMap,
 } from "@main/lib/mod-static-glb";
 import { app } from "electron";
 import fse from "fs-extra";
@@ -20,18 +25,48 @@ export type StaticGlbConvertInput = {
     debug?: boolean;
 };
 
-export type StaticGlbViewerResult = ConvertModToGlbResult & {
-    glbPath: string;
-    name: string;
-};
-
-export type StaticGlbPreviewResult = {
+export type StaticGlbSingleResult = {
+    mode: "single";
     iniPath: string;
     glbPath: string;
     meshCount: number;
     warningCount: number;
     name: string;
 };
+
+export type StaticGlbVariantResult = {
+    mode: "variant-set";
+    iniPath: string;
+    artifactRoot: string;
+    manifestPath: string;
+    manifest: StaticGlbVariantManifest;
+    defaultGlbPath: string;
+    activeGlbPath: string;
+    meshCount: number;
+    warningCount: number;
+    name: string;
+};
+
+export type StaticGlbViewerResult = (ConvertModToGlbResult & {
+    mode: "single";
+    glbPath: string;
+    name: string;
+}) | (ConvertModVariantArtifactsResult & {
+    mode: "variant-set";
+    glbPath: string;
+    name: string;
+});
+
+export type StaticGlbPreviewResult = StaticGlbSingleResult | StaticGlbVariantResult;
+
+export type StaticGlbViewerInput =
+    | string
+    | {
+          modPath?: string;
+          artifactRoot?: string;
+          manifestPath?: string;
+          state?: VariableStateMap;
+      };
 
 export class StaticGlb {
     constructor(private readonly desktop: NahidaDesktop) {
@@ -77,6 +112,37 @@ export class StaticGlb {
 
         const outputPath = ensureGlbExtension(path.resolve(input.outputPath));
         const warnings: string[] = [];
+        const artifactRoot = path.resolve(stripGlbExtension(outputPath));
+        const variantResult = await convertModToVariantArtifacts({
+            modPath: input.modPath,
+            assetPath,
+            artifactRoot,
+            includeTangents: input.includeTangents,
+            debug: input.debug,
+            logger: this.desktop.logger,
+            onWarning: (message) => {
+                warnings.push(message);
+                this.desktop.logger.warn(message, "StaticGlb.convert");
+            },
+        });
+
+        if (variantResult) {
+            if (warnings.length > 0) {
+                this.desktop.window.main.window?.webContents.send(
+                    "fn:toast",
+                    "Static GLB conversion completed with warnings",
+                    { description: warnings.slice(0, 3).join("\n") },
+                );
+            }
+
+            return {
+                ...variantResult,
+                mode: "variant-set",
+                glbPath: variantResult.defaultGlbPath,
+                name: path.basename(variantResult.artifactRoot),
+            };
+        }
+
         const result = await convertModToGlb({
             modPath: input.modPath,
             assetPath,
@@ -100,15 +166,53 @@ export class StaticGlb {
 
         return {
             ...result,
+            mode: "single",
             glbPath: result.outputPath,
             name: path.basename(result.outputPath, ".glb"),
         };
     }
 
-    public async convertForViewer(modPath: string): Promise<StaticGlbPreviewResult> {
+    public async convertForViewer(input: StaticGlbViewerInput): Promise<StaticGlbPreviewResult> {
         const assetPath = await this.getAssetPath();
         if (!assetPath) {
             throw new Error("Set the static GLB asset path in Mod Tools first.");
+        }
+
+        if (typeof input !== "string" && input.artifactRoot && input.state) {
+            const result = await resolveVariantStateArtifact({
+                artifactRoot: input.artifactRoot,
+                manifestPath: input.manifestPath,
+                state: input.state,
+                assetPath,
+                modPath: input.modPath || input.artifactRoot,
+                logger: this.desktop.logger,
+                onWarning: (message) => {
+                    this.desktop.logger.warn(message, "StaticGlb.convertForViewer");
+                },
+            });
+
+            return {
+                mode: "variant-set",
+                iniPath: result.manifest.iniPath,
+                artifactRoot: input.artifactRoot,
+                manifestPath: result.manifestPath,
+                manifest: result.manifest,
+                defaultGlbPath:
+                    result.manifest.states.find(
+                        (entry) =>
+                            entry.key ===
+                            createStateKey(result.manifest.defaultState as VariableStateMap),
+                    )?.glbPath || result.glbPath,
+                activeGlbPath: result.glbPath,
+                meshCount: result.meshCount,
+                warningCount: result.warningCount,
+                name: result.manifest.name,
+            };
+        }
+
+        const modPath = typeof input === "string" ? input : input.modPath;
+        if (!modPath) {
+            throw new Error("Missing mod path for static GLB viewer conversion.");
         }
 
         const modName = path.basename(modPath.replace(/[\\/]+$/, ""));
@@ -118,6 +222,33 @@ export class StaticGlb {
         const warnings: string[] = [];
 
         try {
+            const variantResult = await convertModToVariantArtifacts({
+                modPath,
+                assetPath,
+                artifactRoot: tempDir,
+                preGenerateVariableStates: false,
+                logger: this.desktop.logger,
+                onWarning: (message) => {
+                    warnings.push(message);
+                    this.desktop.logger.warn(message, "StaticGlb.convertForViewer");
+                },
+            });
+
+            if (variantResult) {
+                return {
+                    mode: "variant-set",
+                    iniPath: variantResult.iniPath,
+                    artifactRoot: tempDir,
+                    manifestPath: variantResult.manifestPath,
+                    manifest: variantResult.manifest,
+                    defaultGlbPath: variantResult.defaultGlbPath,
+                    activeGlbPath: variantResult.defaultGlbPath,
+                    meshCount: variantResult.meshCount,
+                    warningCount: variantResult.warningCount,
+                    name: modName,
+                };
+            }
+
             const result = await convertModToGlbBuffer({
                 modPath,
                 assetPath,
@@ -140,6 +271,7 @@ export class StaticGlb {
             }
 
             return {
+                mode: "single",
                 iniPath: result.iniPath,
                 glbPath,
                 meshCount: result.meshCount,
@@ -161,23 +293,25 @@ export class StaticGlb {
         }
     }
 
-    public async cleanupViewerFile(glbPath: string): Promise<void> {
-        if (!glbPath) {
+    public async cleanupViewerFile(targetPath: string): Promise<void> {
+        if (!targetPath) {
             return;
         }
 
-        const resolvedPath = path.resolve(glbPath);
+        const resolvedPath = path.resolve(targetPath);
         const tempRoot = path.resolve(app.getPath("temp"));
 
         if (!resolvedPath.startsWith(tempRoot + path.sep)) {
             this.desktop.logger.warn(
-                `Skipped cleanup for non-temp model viewer GLB: ${resolvedPath}`,
+                `Skipped cleanup for non-temp model viewer artifact: ${resolvedPath}`,
                 "StaticGlb.cleanupViewerFile",
             );
             return;
         }
 
-        const viewerTempDir = path.dirname(resolvedPath);
+        const viewerTempDir = (await fse.stat(resolvedPath).catch(() => null))?.isDirectory()
+            ? resolvedPath
+            : path.dirname(resolvedPath);
         const viewerTempDirName = path.basename(viewerTempDir);
 
         if (!viewerTempDirName.startsWith(MODEL_VIEWER_TEMP_PREFIX)) {
@@ -229,6 +363,19 @@ function ensureGlbExtension(filePath: string): string {
     }
 
     return `${filePath}.glb`;
+}
+
+function stripGlbExtension(filePath: string): string {
+    return path.extname(filePath).toLowerCase() === ".glb"
+        ? filePath.slice(0, -path.extname(filePath).length)
+        : filePath;
+}
+
+function createStateKey(state: VariableStateMap): string {
+    return Object.entries(state)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, value]) => `${key.toLowerCase()}=${String(value)}`)
+        .join("&");
 }
 
 function sanitizeModelViewerFileName(name: string): string {

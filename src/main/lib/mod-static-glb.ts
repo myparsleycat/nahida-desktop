@@ -69,6 +69,56 @@ type MaterialBinding = {
     pngPath: string;
 };
 
+export type VariableStateValue = number | string;
+export type VariableStateMap = Record<string, VariableStateValue>;
+
+export type StaticGlbVariantValue = {
+    value: VariableStateValue;
+    label: string;
+};
+
+export type StaticGlbVariantVariable = {
+    id: string;
+    label: string;
+    defaultValue: VariableStateValue;
+    values: StaticGlbVariantValue[];
+    order: number;
+    slot?: number;
+    iconPath?: string;
+};
+
+export type StaticGlbViewerUiAssets = {
+    backgroundPath?: string;
+    slotPath?: string;
+    slotHoverPath?: string;
+    slotActivePath?: string;
+};
+
+export type StaticGlbVariantManifest = {
+    version: 1;
+    name: string;
+    modPath: string;
+    iniPath: string;
+    defaultState: VariableStateMap;
+    variables: StaticGlbVariantVariable[];
+    uiAssets: StaticGlbViewerUiAssets;
+    states: Array<{
+        key: string;
+        values: VariableStateMap;
+        glbPath: string;
+    }>;
+};
+
+export type ConvertModVariantArtifactsResult = {
+    iniPath: string;
+    artifactRoot: string;
+    defaultGlbPath: string;
+    meshCount: number;
+    warningCount: number;
+    manifestPath: string;
+    manifest: StaticGlbVariantManifest;
+};
+
 type PreparedTexture = {
     pngPath: string;
     alphaMode?: "MASK";
@@ -102,6 +152,7 @@ export type ConvertModToGlbOptions = {
 
 export type ConvertModToGlbBufferOptions = Omit<ConvertModToGlbOptions, "outputPath"> & {
     textureCacheDir: string;
+    variableState?: VariableStateMap;
 };
 
 export type ConvertModToGlbResult = {
@@ -116,6 +167,24 @@ export type ConvertModToGlbBufferResult = {
     glb: Buffer;
     meshCount: number;
     warningCount: number;
+};
+
+type DrawInstruction = {
+    indexCount: number;
+    startIndex: number;
+    baseVertex: number;
+    condition?: string;
+};
+
+type TextureOverrideBinding = TextureBinding & {
+    sectionName: string;
+    draws: DrawInstruction[];
+};
+
+type SlotVariableBinding = {
+    slot: number;
+    variable: string;
+    values: VariableStateValue[];
 };
 
 const GL_COMPONENT = {
@@ -164,17 +233,197 @@ export async function convertModToGlbBuffer(
     return buildModGlb(options);
 }
 
+export async function convertModToVariantArtifacts(
+    options: Omit<ConvertModToGlbOptions, "outputPath"> & {
+        artifactRoot: string;
+        preGenerateVariableStates?: boolean;
+    },
+): Promise<ConvertModVariantArtifactsResult | null> {
+    const analysis = await analyzeModVariants(options);
+    if (analysis.variables.length === 0) {
+        return null;
+    }
+
+    const artifactRoot = path.resolve(options.artifactRoot);
+    const glbDir = path.join(artifactRoot, "glb");
+    const uiDir = path.join(artifactRoot, "ui");
+    const textureCacheDir = path.join(artifactRoot, ".texture-cache");
+    await fse.ensureDir(glbDir);
+
+    const statesToGenerate = new Map<string, VariableStateMap>();
+    statesToGenerate.set(createStateKey(analysis.defaultState), analysis.defaultState);
+
+    if (options.preGenerateVariableStates !== false) {
+        for (const variable of analysis.variables) {
+            for (const entry of variable.values) {
+                const nextState = {
+                    ...analysis.defaultState,
+                    [variable.id]: entry.value,
+                };
+                statesToGenerate.set(createStateKey(nextState), nextState);
+            }
+        }
+    }
+
+    const warning = createWarningCollector(options.onWarning);
+    const states: StaticGlbVariantManifest["states"] = [];
+    let defaultGlbPath = "";
+    let meshCount = 0;
+
+    try {
+        for (const [key, state] of statesToGenerate) {
+            const glbName = `${sanitizeStateKey(key)}.glb`;
+            const glbPath = path.join(glbDir, glbName);
+            const result = await buildModGlb({
+                ...options,
+                textureCacheDir,
+                variableState: state,
+            });
+            await fse.writeFile(glbPath, result.glb);
+            meshCount = Math.max(meshCount, result.meshCount);
+            states.push({
+                key,
+                values: state,
+                glbPath,
+            });
+            if (key === createStateKey(analysis.defaultState)) {
+                defaultGlbPath = glbPath;
+            }
+        }
+
+        const uiAssets = await materializeViewerUiAssets(
+            analysis.uiAssets,
+            path.dirname(analysis.iniPath),
+            uiDir,
+            options,
+            warning.warn,
+        );
+        const variables = await Promise.all(
+            analysis.variables.map(async (variable) => ({
+                ...variable,
+                iconPath: variable.iconPath
+                    ? await materializeUiAsset(
+                          variable.iconPath,
+                          uiDir,
+                          `item-${variable.slot ?? variable.order}`,
+                          warning.warn,
+                          options,
+                      )
+                    : undefined,
+            })),
+        );
+        const manifest: StaticGlbVariantManifest = {
+            version: 1,
+            name: path.basename(path.dirname(analysis.iniPath)),
+            modPath: path.dirname(analysis.iniPath),
+            iniPath: analysis.iniPath,
+            defaultState: analysis.defaultState,
+            variables,
+            uiAssets,
+            states,
+        };
+        const manifestPath = path.join(artifactRoot, "manifest.json");
+        await fse.writeJson(manifestPath, manifest, { spaces: 2 });
+
+        return {
+            iniPath: analysis.iniPath,
+            artifactRoot,
+            defaultGlbPath,
+            meshCount,
+            warningCount: warning.count,
+            manifestPath,
+            manifest,
+        };
+    } finally {
+        if (await fse.pathExists(textureCacheDir)) {
+            await fse.rm(textureCacheDir, { recursive: true, force: true });
+        }
+    }
+}
+
+export async function resolveVariantStateArtifact(
+    options: Omit<ConvertModToGlbOptions, "outputPath"> & {
+        artifactRoot: string;
+        state: VariableStateMap;
+        manifestPath?: string;
+    },
+): Promise<{
+    glbPath: string;
+    manifestPath: string;
+    manifest: StaticGlbVariantManifest;
+    meshCount: number;
+    warningCount: number;
+}> {
+    const artifactRoot = path.resolve(options.artifactRoot);
+    const manifestPath = options.manifestPath
+        ? path.resolve(options.manifestPath)
+        : path.join(artifactRoot, "manifest.json");
+    const manifest = (await fse.readJson(manifestPath)) as StaticGlbVariantManifest;
+    const key = createStateKey(options.state);
+    const existing = manifest.states.find((entry) => entry.key === key);
+    if (existing && (await fse.pathExists(existing.glbPath))) {
+        return {
+            glbPath: existing.glbPath,
+            manifestPath,
+            manifest,
+            meshCount: 0,
+            warningCount: 0,
+        };
+    }
+
+    const textureCacheDir = path.join(artifactRoot, ".texture-cache");
+    const warning = createWarningCollector(options.onWarning);
+    const result = await buildModGlb({
+        ...options,
+        modPath: manifest.modPath,
+        textureCacheDir,
+        variableState: options.state,
+    });
+    const glbDir = path.join(artifactRoot, "glb");
+    await fse.ensureDir(glbDir);
+    const glbPath = path.join(glbDir, `${sanitizeStateKey(key)}.glb`);
+    await fse.writeFile(glbPath, result.glb);
+
+    manifest.states.push({
+        key,
+        values: options.state,
+        glbPath,
+    });
+    await fse.writeJson(manifestPath, manifest, { spaces: 2 });
+    await fse.rm(textureCacheDir, { recursive: true, force: true }).catch(() => {});
+
+    return {
+        glbPath,
+        manifestPath,
+        manifest,
+        meshCount: result.meshCount,
+        warningCount: warning.count,
+    };
+}
+
 async function buildModGlb(
     options: ConvertModToGlbBufferOptions,
 ): Promise<ConvertModToGlbBufferResult> {
     const warning = createWarningCollector(options.onWarning);
-    const iniPath = await findIni(options.modPath);
+    const { iniPath, sections } = await loadIniBundle(options.modPath);
     const modDir = path.dirname(iniPath);
-    const sections = parseIni(await fse.readFile(iniPath, "utf8"));
+    const defaultVariables = collectDefaultIniVariables(sections);
+    const resolvedVariables = mergeVariableState(defaultVariables, options.variableState);
     const resources = collectResources(sections);
     const bufferGroups = await collectBufferGroups(modDir, resources, warning.warn);
-    const textureBindings = collectTextureBindings(sections);
-    const ibResources = collectIbResources(resources, bufferGroups, textureBindings);
+    const sectionByFullName = new Map(
+        sections.map((section) => [normalizeKey(getSectionFullName(section)), section]),
+    );
+    const textureBindings = collectTextureBindings(sections, sectionByFullName, resolvedVariables);
+    const ibResources = collectIbResources(
+        sections,
+        resources,
+        bufferGroups,
+        sectionByFullName,
+        resolvedVariables,
+        textureBindings,
+    );
+    const drawBindings = collectTextureOverrideDrawBindings(sections);
 
     options.logger?.debug(
         `Found ${resources.length} resources, ${bufferGroups.length} buffer groups, ${ibResources.length} IB resources, ${textureBindings.length} texture bindings`,
@@ -215,6 +464,14 @@ async function buildModGlb(
             warning.warn(`Empty IB file: ${ibPath}`);
             continue;
         }
+        const activeIndices = buildIndicesForState(
+            drawBindings.filter(
+                (binding) => normalizeKey(binding.ibResourceName) === normalizeKey(ib.name),
+            ),
+            indices,
+            resolvedVariables,
+            warning.warn,
+        );
 
         const material = materialBindings.get(normalizeKey(ib.name));
         const primitive = buildPrimitive(
@@ -222,7 +479,7 @@ async function buildModGlb(
             group.vbBytes,
             group.stride,
             fmt,
-            indices,
+            activeIndices,
             {
                 includeTangents: !!options.includeTangents,
                 includeVertexColors: !material,
@@ -268,6 +525,36 @@ function createWarningCollector(onWarning?: (message: string) => void) {
     };
 }
 
+async function loadIniBundle(input: string): Promise<{ iniPath: string; sections: IniSection[] }> {
+    const iniPath = await findIni(input);
+    const iniText = await fse.readFile(iniPath, "utf8");
+    const sections = parseIni(iniText);
+    const mergedRefs = extractMergedIniRefs(iniText, path.dirname(iniPath));
+
+    if (mergedRefs.length === 0) {
+        return { iniPath, sections };
+    }
+
+    const extraSections = (
+        await Promise.all(
+            mergedRefs
+                .filter((refPath) => path.resolve(refPath) !== path.resolve(iniPath))
+                .map(async (refPath) => {
+                    if (!(await fse.pathExists(refPath))) {
+                        return [];
+                    }
+                    const refText = await fse.readFile(refPath, "utf8");
+                    return parseIni(refText);
+                }),
+        )
+    ).flat();
+
+    return {
+        iniPath,
+        sections: [...sections, ...extraSections],
+    };
+}
+
 async function findIni(input: string): Promise<string> {
     const resolved = path.resolve(input);
     const stat = await fse.stat(resolved);
@@ -277,7 +564,7 @@ async function findIni(input: string): Promise<string> {
         cwd: resolved,
         absolute: true,
         onlyFiles: true,
-        ignore: ["**/merged.ini"],
+        ignore: ["**/disabled*.ini"],
         caseSensitiveMatch: false,
     });
 
@@ -285,7 +572,53 @@ async function findIni(input: string): Promise<string> {
         throw new Error(`No .ini found in ${input}`);
     }
 
-    return candidates[0];
+    const scored = await Promise.all(
+        candidates.map(async (candidate) => ({
+            path: candidate,
+            score: scoreIniCandidate(candidate, await fse.readFile(candidate, "utf8")),
+        })),
+    );
+    scored.sort((left, right) => right.score - left.score || left.path.localeCompare(right.path));
+    return scored[0].path;
+}
+
+function scoreIniCandidate(candidatePath: string, text: string): number {
+    const basename = path.basename(candidatePath).toLowerCase();
+    let score = 0;
+
+    if (basename === "merged.ini") score += 120;
+    if (basename.startsWith("master") && basename.endsWith(".ini")) score += 140;
+    if (text.includes("; Merged Mod:")) score += 80;
+    if (/^\s*namespace\s*=.+$/im.test(text)) score += 60;
+
+    const persistCount = (text.match(/^\s*global\s+persist\s+\$/gim) || []).length;
+    const cycleCount = (text.match(/^\s*type\s*=\s*cycle\s*$/gim) || []).length;
+    const overrideCount = (text.match(/^\s*\[TextureOverride/gim) || []).length;
+    const resourceCount = (text.match(/^\s*\[Resource/gim) || []).length;
+
+    score += persistCount * 15;
+    score += cycleCount * 10;
+    score += Math.min(overrideCount, 50);
+    score += Math.min(resourceCount, 50);
+
+    if (/^\s*\[KeyHelp\]/im.test(text)) score -= 25;
+    if (basename.startsWith("disabled") && !text.includes("; Merged Mod:")) score -= 10;
+
+    return score;
+}
+
+function extractMergedIniRefs(text: string, baseDir: string): string[] {
+    const firstLine = text.split(/\r?\n/, 1)[0] || "";
+    const match = firstLine.match(/;\s*Merged Mod:\s*(.+)$/i);
+    if (!match) {
+        return [];
+    }
+
+    return match[1]
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .map((entry) => path.resolve(baseDir, entry));
 }
 
 function parseIni(text: string): IniSection[] {
@@ -354,16 +687,17 @@ async function collectBufferGroups(
 
     for (const resource of resources) {
         if (!resource.filename || !resource.stride) continue;
-        const lower = resource.name.toLowerCase();
-        if (lower.endsWith("position")) {
-            const key = resource.name.slice(0, -"Position".length);
-            ensureGroup(byKey, key).position = resource;
-        } else if (lower.endsWith("blend")) {
-            const key = resource.name.slice(0, -"Blend".length);
-            ensureGroup(byKey, key).blend = resource;
-        } else if (lower.endsWith("texcoord")) {
-            const key = resource.name.slice(0, -"Texcoord".length);
-            ensureGroup(byKey, key).texcoord = resource;
+        const typedMatch = resource.name.match(/^(.*?)(Position|Blend|Texcoord)(\.\d+)?$/i);
+        if (typedMatch) {
+            const [, prefix, kind, suffix = ""] = typedMatch;
+            const key = `${prefix}${suffix}`;
+            if (/position/i.test(kind)) {
+                ensureGroup(byKey, key).position = resource;
+            } else if (/blend/i.test(kind)) {
+                ensureGroup(byKey, key).blend = resource;
+            } else {
+                ensureGroup(byKey, key).texcoord = resource;
+            }
         } else if (
             resource.filename.toLowerCase().endsWith(".buf") ||
             resource.filename.toLowerCase().endsWith(".vb")
@@ -441,8 +775,11 @@ async function readResourceBytes(modDir: string, resource: Resource): Promise<Bu
 }
 
 function collectIbResources(
+    sections: IniSection[],
     resources: Resource[],
     bufferGroups: BufferGroup[],
+    sectionByFullName: Map<string, IniSection>,
+    resolvedVariables: Map<string, number | string>,
     textureBindings: TextureBinding[],
 ): IbResource[] {
     const bufferKeys = bufferGroups.map((group) => group.key);
@@ -450,13 +787,30 @@ function collectIbResources(
         textureBindings.map((binding) => [normalizeKey(binding.ibResourceName), binding]),
     );
     const referencedIbNames = new Set(bindingsByIbName.keys());
+    const activeIbNames = new Set(
+        sections
+            .filter((section) => section.header === "TextureOverride")
+            .map((section) =>
+                resolveAssignmentFromSection(
+                    section,
+                    ["ib"],
+                    sectionByFullName,
+                    resolvedVariables,
+                ).get("ib"),
+            )
+            .filter((value): value is string => !!value)
+            .map(trimResourcePrefix)
+            .map(normalizeKey),
+    );
 
     return resources
         .filter((resource) => {
             if (!resource.filename || !resource.format) return false;
 
             const lowerFilename = resource.filename.toLowerCase();
-            if (lowerFilename.endsWith(".ib")) return true;
+            if (lowerFilename.endsWith(".ib")) {
+                return activeIbNames.size === 0 || activeIbNames.has(normalizeKey(resource.name));
+            }
 
             return referencedIbNames.has(normalizeKey(resource.name));
         })
@@ -474,19 +828,19 @@ function collectIbResources(
         });
 }
 
-function collectTextureBindings(sections: IniSection[]): TextureBinding[] {
+function collectTextureBindings(
+    sections: IniSection[],
+    sectionByFullName: Map<string, IniSection>,
+    resolvedVariables: Map<string, number | string>,
+): TextureBinding[] {
     const bindings: TextureBinding[] = [];
-    const sectionByFullName = new Map(
-        sections.map((section) => [normalizeKey(getSectionFullName(section)), section]),
-    );
-    const defaultVariables = collectDefaultIniVariables(sections);
     const overrideTextureResources = sections
         .filter((section) => section.header === "TextureOverride")
         .map((section) => {
             const resourceName = resolveSectionResourceName(
                 section,
                 sectionByFullName,
-                defaultVariables,
+                resolvedVariables,
             );
             if (!resourceName) return null;
             return {
@@ -499,17 +853,43 @@ function collectTextureBindings(sections: IniSection[]): TextureBinding[] {
     for (const section of sections) {
         if (section.header !== "TextureOverride") continue;
 
-        const ibValue = section.values.ib;
+        const assignments = resolveAssignmentFromSection(
+            section,
+            [
+                "ib",
+                "this",
+                "run",
+                "ps-t0",
+                "ps-t1",
+                "ps-t2",
+                "ps-t3",
+                "ps-t4",
+                "ps-t5",
+                "ps-t6",
+                "ps-t7",
+                "ps-t8",
+                "ps-t9",
+                "ps-t10",
+                "Resource\\ZZMI\\Diffuse",
+            ],
+            sectionByFullName,
+            resolvedVariables,
+        );
+        const ibValue = assignments.get("ib") || section.values.ib;
         if (!ibValue) continue;
 
-        const textureResourceNames = Object.entries(section.values)
+        const textureResourceNames = Array.from(assignments.entries())
             .filter(([key, value]) => {
+                if (!value) return false;
+                const lowerKey = key.toLowerCase();
+                const lowerValue = value.toLowerCase();
                 return (
-                    key.toLowerCase().startsWith("ps-t") &&
-                    value.toLowerCase().startsWith("resource")
+                    (/^pst\d+$/.test(lowerKey) ||
+                        lowerKey === normalizeKey("Resource\\ZZMI\\Diffuse")) &&
+                    (lowerValue.startsWith("resource") || lowerValue.startsWith("ref resource"))
                 );
             })
-            .map(([, value]) => trimResourcePrefix(value));
+            .map(([, value]) => trimResourcePrefix(value.replace(/^ref\s+/i, "")));
 
         const diffuseResourceName =
             textureResourceNames.find((name) => name.toLowerCase().includes("diffuse")) ||
@@ -517,7 +897,7 @@ function collectTextureBindings(sections: IniSection[]): TextureBinding[] {
                 const lower = name.toLowerCase();
                 return !lower.includes("normal") && !lower.includes("light");
             }) ||
-            resolveSectionResourceName(section, sectionByFullName, defaultVariables) ||
+            resolveSectionResourceName(section, sectionByFullName, resolvedVariables) ||
             resolveOverrideDiffuseResource(
                 section.name,
                 trimResourcePrefix(ibValue),
@@ -531,6 +911,120 @@ function collectTextureBindings(sections: IniSection[]): TextureBinding[] {
         });
     }
     return bindings;
+}
+
+function collectTextureOverrideDrawBindings(sections: IniSection[]): TextureOverrideBinding[] {
+    const variables = collectDefaultIniVariables(sections);
+
+    return sections
+        .filter((section) => section.header === "TextureOverride")
+        .map((section) => ({
+            sectionName: section.name,
+            ibResourceName: trimResourcePrefix(section.values.ib || ""),
+            diffuseResourceName: undefined,
+            overrideHash: section.values.hash?.trim(),
+            draws: collectSectionDrawInstructions(section.lines, variables),
+        }))
+        .filter((binding) => !!binding.ibResourceName);
+}
+
+function collectSectionDrawInstructions(
+    lines: string[],
+    variables: Map<string, number | string>,
+): DrawInstruction[] {
+    const instructions: DrawInstruction[] = [];
+    const stack: Array<{ active: string; inverse?: string }> = [];
+
+    for (const rawLine of lines) {
+        const trimmed = rawLine.trim();
+        const lower = trimmed.toLowerCase();
+
+        if (lower.startsWith("if ")) {
+            stack.push({ active: trimmed.slice(3).trim() });
+            continue;
+        }
+
+        if (lower.startsWith("elif ") || lower.startsWith("else if ")) {
+            const previous = stack.pop();
+            const current = (
+                lower.startsWith("elif ") ? trimmed.slice(5) : trimmed.slice(8)
+            ).trim();
+            const inverse = previous?.active ? `!(${previous.active})` : undefined;
+            stack.push({
+                active: inverse ? `${inverse} && (${current})` : current,
+                inverse: previous?.inverse
+                    ? `${previous.inverse} && !(${current})`
+                    : `!(${current})`,
+            });
+            continue;
+        }
+
+        if (lower === "else") {
+            const previous = stack.pop();
+            if (!previous) continue;
+            stack.push({
+                active: previous.inverse || `!(${previous.active})`,
+            });
+            continue;
+        }
+
+        if (lower === "endif") {
+            stack.pop();
+            continue;
+        }
+
+        const drawMatch = trimmed.match(/^drawindexed\s*=\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)$/i);
+        if (!drawMatch) continue;
+
+        const indexCount = evaluateIniNumericExpression(drawMatch[1], variables);
+        const startIndex = evaluateIniNumericExpression(drawMatch[2], variables);
+        const baseVertex = evaluateIniNumericExpression(drawMatch[3], variables);
+        if (indexCount === null || startIndex === null || baseVertex === null) {
+            continue;
+        }
+
+        const activeConditions = stack.map((entry) => entry.active).filter(Boolean);
+        instructions.push({
+            indexCount,
+            startIndex,
+            baseVertex,
+            condition: activeConditions.length > 0 ? activeConditions.join(" && ") : undefined,
+        });
+    }
+
+    return instructions;
+}
+
+function buildIndicesForState(
+    bindings: TextureOverrideBinding[],
+    indices: Uint32Array,
+    variables: Map<string, number | string>,
+    warn: (message: string) => void,
+): Uint32Array {
+    const activeDraws = bindings.flatMap((binding) =>
+        binding.draws.filter(
+            (draw) => !draw.condition || evaluateIniCondition(draw.condition, variables),
+        ),
+    );
+
+    if (activeDraws.length === 0) {
+        return indices;
+    }
+
+    const merged: number[] = [];
+    for (const draw of activeDraws) {
+        const endIndex = draw.startIndex + draw.indexCount;
+        if (draw.startIndex < 0 || endIndex > indices.length) {
+            warn(`Skipping invalid draw range start=${draw.startIndex} count=${draw.indexCount}`);
+            continue;
+        }
+
+        for (let index = draw.startIndex; index < endIndex; index++) {
+            merged.push(indices[index] + draw.baseVertex);
+        }
+    }
+
+    return merged.length > 0 ? Uint32Array.from(merged) : indices;
 }
 
 function resolveOverrideDiffuseResource(
@@ -601,41 +1095,36 @@ function resolveSectionResourceName(
     defaultVariables: Map<string, number | string>,
     visited = new Set<string>(),
 ): string | undefined {
-    const directThis = section.values.this;
-    if (directThis?.toLowerCase().startsWith("resource")) {
-        return trimResourcePrefix(directThis);
-    }
-
-    const directRun = section.values.run;
-    if (directRun) {
-        const fromRun = resolveResourceFromCommandList(
-            directRun,
-            sectionByFullName,
-            defaultVariables,
-            visited,
-        );
-        if (fromRun) return fromRun;
-    }
-
-    return undefined;
+    const assignment = resolveAssignmentFromSection(
+        section,
+        ["this", "resource\\zzmi\\diffuse"],
+        sectionByFullName,
+        defaultVariables,
+        visited,
+    );
+    const directThis =
+        assignment.get("this") || assignment.get(normalizeKey("Resource\\ZZMI\\Diffuse"));
+    return directThis?.toLowerCase().includes("resource")
+        ? trimResourcePrefix(directThis.replace(/^ref\s+/i, ""))
+        : undefined;
 }
 
-function resolveResourceFromCommandList(
-    sectionName: string,
+function resolveAssignmentFromSection(
+    section: IniSection,
+    targetKeys: string[],
     sectionByFullName: Map<string, IniSection>,
-    defaultVariables: Map<string, number | string>,
+    variables: Map<string, number | string>,
     visited = new Set<string>(),
-): string | undefined {
-    const normalizedName = normalizeKey(sectionName);
-    if (visited.has(normalizedName)) return undefined;
+): Map<string, string> {
+    const wanted = new Set(targetKeys.map(normalizeKey));
+    const normalizedName = normalizeKey(getSectionFullName(section));
+    if (visited.has(normalizedName)) return new Map<string, string>();
     visited.add(normalizedName);
-
-    const section = sectionByFullName.get(normalizedName);
-    if (!section) return undefined;
 
     const branchActive: boolean[] = [];
     const branchMatched: boolean[] = [];
     const isActive = () => branchActive.every(Boolean);
+    const assignments = new Map<string, string>();
 
     for (const line of section.lines) {
         const trimmed = line.trim();
@@ -644,20 +1133,21 @@ function resolveResourceFromCommandList(
         if (lower.startsWith("if ")) {
             const parentActive = isActive();
             const matched = parentActive
-                ? evaluateIniCondition(trimmed.slice(3), defaultVariables)
+                ? evaluateIniCondition(trimmed.slice(3), variables)
                 : false;
             branchActive.push(matched);
             branchMatched.push(matched);
             continue;
         }
 
-        if (lower.startsWith("elif ")) {
+        if (lower.startsWith("elif ") || lower.startsWith("else if ")) {
             if (branchActive.length === 0) continue;
             const depth = branchActive.length - 1;
             const parentActive = branchActive.slice(0, depth).every(Boolean);
+            const expression = lower.startsWith("elif ") ? trimmed.slice(5) : trimmed.slice(8);
             const matched =
                 parentActive && !branchMatched[depth]
-                    ? evaluateIniCondition(trimmed.slice(5), defaultVariables)
+                    ? evaluateIniCondition(expression, variables)
                     : false;
             branchActive[depth] = matched;
             branchMatched[depth] = branchMatched[depth] || matched;
@@ -681,37 +1171,48 @@ function resolveResourceFromCommandList(
 
         if (!isActive()) continue;
 
-        const thisMatch = trimmed.match(/^this\s*=\s*(.+)$/i);
-        if (thisMatch?.[1]?.trim().toLowerCase().startsWith("resource")) {
-            return trimResourcePrefix(thisMatch[1].trim());
-        }
-
         const runMatch = trimmed.match(/^run\s*=\s*(.+)$/i);
         if (runMatch) {
-            const nested = resolveResourceFromCommandList(
-                runMatch[1].trim(),
+            const nestedSection = sectionByFullName.get(normalizeKey(runMatch[1].trim()));
+            if (!nestedSection) {
+                continue;
+            }
+            const nested = resolveAssignmentFromSection(
+                nestedSection,
+                targetKeys,
                 sectionByFullName,
-                defaultVariables,
+                variables,
                 new Set(visited),
             );
-            if (nested) return nested;
+            if (nested) {
+                for (const [key, value] of nested) {
+                    if (wanted.has(key)) {
+                        assignments.set(key, value);
+                    }
+                }
+            }
+        }
+
+        const assignmentMatch = trimmed.match(/^([^=]+?)\s*=\s*(.+)$/);
+        if (!assignmentMatch) {
+            continue;
+        }
+
+        const key = normalizeKey(assignmentMatch[1].trim());
+        const value = assignmentMatch[2].trim();
+        if (wanted.has(key)) {
+            assignments.set(key, value);
         }
     }
 
-    return undefined;
+    return assignments;
 }
 
 function evaluateIniCondition(
     expression: string,
-    defaultVariables: Map<string, number | string>,
+    variables: Map<string, number | string>,
 ): boolean {
-    const jsExpression = expression.replace(/\$?[A-Za-z_\\][A-Za-z0-9_\\.\\]*/g, (token) => {
-        const lower = token.toLowerCase();
-        if (["true", "false"].includes(lower)) return lower;
-        if (/^\d/.test(token)) return token;
-        const value = defaultVariables.get(normalizeKey(token)) ?? 0;
-        return typeof value === "number" ? String(value) : JSON.stringify(String(value));
-    });
+    const jsExpression = substituteIniExpressionTokens(expression, variables);
 
     if (!/^[\d\s()+\-*/%<>=!&|."'\\]+$/.test(jsExpression)) {
         return false;
@@ -722,6 +1223,259 @@ function evaluateIniCondition(
     } catch {
         return false;
     }
+}
+
+function evaluateIniNumericExpression(
+    expression: string,
+    variables: Map<string, number | string>,
+): number | null {
+    const jsExpression = substituteIniExpressionTokens(expression, variables);
+    if (!/^[\d\s()+\-*/%<>=!&|.]+$/.test(jsExpression)) {
+        return null;
+    }
+
+    try {
+        const value = Function(`"use strict"; return (${jsExpression});`)();
+        return typeof value === "number" && Number.isFinite(value) ? value : null;
+    } catch {
+        return null;
+    }
+}
+
+function substituteIniExpressionTokens(
+    expression: string,
+    variables: Map<string, number | string>,
+): string {
+    return expression.replace(/\$?[A-Za-z_\\][A-Za-z0-9_\\.\\]*/g, (token) => {
+        const lower = token.toLowerCase();
+        if (["true", "false"].includes(lower)) return lower;
+        if (/^\d/.test(token)) return token;
+        const value = variables.get(normalizeKey(token)) ?? 0;
+        return typeof value === "number" ? String(value) : JSON.stringify(String(value));
+    });
+}
+
+function mergeVariableState(
+    base: Map<string, number | string>,
+    overrides?: VariableStateMap,
+): Map<string, number | string> {
+    const merged = new Map(base);
+    if (!overrides) {
+        return merged;
+    }
+
+    for (const [key, value] of Object.entries(overrides)) {
+        merged.set(normalizeKey(key), value);
+    }
+
+    return merged;
+}
+
+async function analyzeModVariants(options: {
+    modPath: string;
+    assetPath?: string;
+    logger?: Logger;
+    onWarning?: (message: string) => void;
+}) {
+    const { iniPath, sections } = await loadIniBundle(options.modPath);
+    const modDir = path.dirname(iniPath);
+    const defaultVariables = collectDefaultIniVariables(sections);
+    const slotBindings = collectSlotVariableBindings(sections, defaultVariables);
+    const variables = (await buildVariantVariables(slotBindings, sections, modDir, options)).map(
+        (variable) => ({
+            ...variable,
+            defaultValue: defaultVariables.get(normalizeKey(variable.id)) ?? 0,
+        }),
+    );
+
+    return {
+        iniPath,
+        defaultState: mapToRecord(
+            defaultVariables,
+            variables.map((variable) => variable.id),
+        ),
+        variables,
+        uiAssets: collectViewerUiAssetPaths(sections),
+    };
+}
+
+function collectSlotVariableBindings(
+    sections: IniSection[],
+    defaultVariables: Map<string, number | string>,
+): SlotVariableBinding[] {
+    const bindings: SlotVariableBinding[] = collectKeyCycleBindings(sections);
+    const clickedSection = sections.find(
+        (section) =>
+            section.header === "CommandList" &&
+            normalizeKey(section.name) === normalizeKey("ClickedSlot"),
+    );
+    if (!clickedSection) {
+        return dedupeSlotBindings(bindings);
+    }
+
+    let currentSlot: number | null = null;
+
+    for (const rawLine of clickedSection.lines) {
+        const trimmed = rawLine.trim();
+        const slotMatch = trimmed.match(/^(?:if|elif)\s+\$clickedslot\s*==\s*(\d+)$/i);
+        if (slotMatch) {
+            currentSlot = Number(slotMatch[1]);
+            continue;
+        }
+
+        if (trimmed.toLowerCase() === "endif") {
+            currentSlot = null;
+            continue;
+        }
+
+        if (currentSlot === null) continue;
+
+        const toggleMatch = trimmed.match(/^\$([\w.]+)\s*=\s*1\s*-\s*\$\1$/i);
+        if (toggleMatch) {
+            bindings.push({
+                slot: currentSlot,
+                variable: normalizeKey(toggleMatch[1]),
+                values: [0, 1],
+            });
+            currentSlot = null;
+            continue;
+        }
+
+        const incrementMatch = trimmed.match(/^\$([\w.]+)\s*=\s*\$\1\s*\+\s*1$/i);
+        if (!incrementMatch) continue;
+
+        const variable = normalizeKey(incrementMatch[1]);
+        const defaultValue = Number(defaultVariables.get(variable) ?? 0);
+        const maxMatch = clickedSection.lines.find((line) =>
+            new RegExp(`^if\\s+\\$${escapeRegex(variable)}\\s*>\\s*(\\d+)$`, "i").test(line.trim()),
+        );
+        const maxValueMatch = maxMatch?.trim().match(/>\s*(\d+)$/);
+        const maxValue = maxValueMatch ? Number(maxValueMatch[1]) : defaultValue;
+        const values = Array.from({ length: maxValue + 1 }, (_, index) => index);
+        bindings.push({
+            slot: currentSlot,
+            variable,
+            values,
+        });
+        currentSlot = null;
+    }
+
+    return dedupeSlotBindings(bindings);
+}
+
+function collectKeyCycleBindings(sections: IniSection[]): SlotVariableBinding[] {
+    return sections
+        .filter((section) => normalizeKey(section.header).startsWith("key"))
+        .flatMap((section, index) => {
+            const type = section.values.type?.toLowerCase();
+            if (type !== "cycle") {
+                return [];
+            }
+
+            return Object.entries(section.values)
+                .filter(([key, value]) => key.startsWith("$") && value.includes(","))
+                .map(([key, value]) => ({
+                    slot: index + 1,
+                    variable: normalizeKey(key),
+                    values: value
+                        .split(",")
+                        .map((entry) => parseIniScalar(entry.trim()))
+                        .filter((entry) => entry !== ""),
+                }));
+        });
+}
+
+function dedupeSlotBindings(bindings: SlotVariableBinding[]): SlotVariableBinding[] {
+    const seen = new Set<string>();
+    return bindings.filter((binding) => {
+        const key = `${binding.slot}:${binding.variable}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+async function buildVariantVariables(
+    bindings: SlotVariableBinding[],
+    sections: IniSection[],
+    modDir: string,
+    _options: { logger?: Logger; onWarning?: (message: string) => void },
+): Promise<StaticGlbVariantVariable[]> {
+    const resourceMap = new Map(
+        sections
+            .filter((section) => section.header === "Resource" && !!section.values.filename)
+            .map((section) => [normalizeKey(section.name), section.values.filename]),
+    );
+
+    const variables: StaticGlbVariantVariable[] = [];
+
+    for (const binding of bindings.sort((a, b) => a.slot - b.slot)) {
+        const iconResource = resourceMap.get(normalizeKey(`MenuItem.${binding.slot}`));
+        variables.push({
+            id: binding.variable,
+            label: humanizeVariableLabel(binding.variable),
+            defaultValue: 0,
+            values: binding.values.map((value) => ({
+                value,
+                label: String(value),
+            })),
+            order: binding.slot,
+            slot: binding.slot,
+            iconPath: iconResource ? path.resolve(modDir, iconResource) : undefined,
+        });
+    }
+
+    return variables;
+}
+
+function collectViewerUiAssetPaths(sections: IniSection[]): StaticGlbViewerUiAssets {
+    const resourceMap = new Map(
+        sections
+            .filter((section) => section.header === "Resource" && !!section.values.filename)
+            .map((section) => [normalizeKey(section.name), section.values.filename]),
+    );
+
+    return {
+        backgroundPath: resourceMap.get(normalizeKey("MenuBG")),
+        slotPath: resourceMap.get(normalizeKey("ItemSlot")),
+        slotHoverPath: resourceMap.get(normalizeKey("ItemSlotHover.1")),
+        slotActivePath: resourceMap.get(normalizeKey("ItemSlotHover.2")),
+    };
+}
+
+function mapToRecord(
+    input: Map<string, number | string>,
+    keys: string[],
+): Record<string, VariableStateValue> {
+    const record: Record<string, VariableStateValue> = {};
+    for (const key of keys) {
+        record[key] = input.get(normalizeKey(key)) ?? 0;
+    }
+    return record;
+}
+
+function humanizeVariableLabel(id: string): string {
+    return id
+        .replace(/^\$+/, "")
+        .split(/[._-]+/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+}
+
+function createStateKey(state: VariableStateMap): string {
+    return Object.entries(state)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, value]) => `${normalizeKey(key)}=${String(value)}`)
+        .join("&");
+}
+
+function sanitizeStateKey(stateKey: string): string {
+    return stateKey.replace(/[^a-z0-9=&_-]+/gi, "_").replace(/[=&]/g, "_");
+}
+
+function escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function buildMaterials(
@@ -1062,19 +1816,156 @@ async function convertDdsToPngFallback(texturePath: string, pngPath: string): Pr
     await writePngAsync(png, pngPath);
 }
 
+async function materializeViewerUiAssets(
+    uiAssets: StaticGlbViewerUiAssets,
+    modDir: string,
+    uiDir: string,
+    options: { logger?: Logger },
+    warn: (message: string) => void,
+): Promise<StaticGlbViewerUiAssets> {
+    await fse.ensureDir(uiDir);
+
+    return {
+        backgroundPath: await materializeUiAssetPath(
+            uiAssets.backgroundPath,
+            modDir,
+            uiDir,
+            "menu-bg",
+            options,
+            warn,
+        ),
+        slotPath: await materializeUiAssetPath(
+            uiAssets.slotPath,
+            modDir,
+            uiDir,
+            "slot",
+            options,
+            warn,
+        ),
+        slotHoverPath: await materializeUiAssetPath(
+            uiAssets.slotHoverPath,
+            modDir,
+            uiDir,
+            "slot-hover",
+            options,
+            warn,
+        ),
+        slotActivePath: await materializeUiAssetPath(
+            uiAssets.slotActivePath,
+            modDir,
+            uiDir,
+            "slot-active",
+            options,
+            warn,
+        ),
+    };
+}
+
+async function materializeUiAssetPath(
+    assetPath: string | undefined,
+    modDir: string,
+    uiDir: string,
+    outputName: string,
+    options: { logger?: Logger },
+    warn: (message: string) => void,
+): Promise<string | undefined> {
+    if (!assetPath) {
+        return undefined;
+    }
+
+    return materializeUiAsset(path.resolve(modDir, assetPath), uiDir, outputName, warn, options);
+}
+
+async function materializeUiAsset(
+    sourcePath: string,
+    outputDir: string,
+    outputName: string,
+    warn?: (message: string) => void,
+    options?: { logger?: Logger },
+): Promise<string | undefined> {
+    if (!(await fse.pathExists(sourcePath))) {
+        warn?.(`Missing UI asset: ${sourcePath}`);
+        return undefined;
+    }
+
+    const extension = path.extname(sourcePath).toLowerCase();
+    const outputPath = path.join(outputDir, `${outputName}.png`);
+
+    if (extension === ".png") {
+        await fse.copyFile(sourcePath, outputPath);
+        return outputPath;
+    }
+
+    if (extension === ".dds") {
+        try {
+            await convertDdsToPng(sourcePath, outputPath);
+            return outputPath;
+        } catch {
+            try {
+                await convertDdsToPngFallback(sourcePath, outputPath);
+                return outputPath;
+            } catch (error) {
+                warn?.(
+                    `Failed to convert UI DDS ${sourcePath}: ${
+                        error instanceof Error ? error.message : String(error)
+                    }`,
+                );
+                return undefined;
+            }
+        }
+    }
+
+    options?.logger?.debug(`Skipping unsupported UI asset type: ${sourcePath}`, "StaticGLB");
+    warn?.(`Unsupported UI asset type: ${sourcePath}`);
+    return undefined;
+}
+
 function trimResourcePrefix(value: string): string {
     return value.trim().replace(/^Resource/i, "");
 }
 
 function bestKeyForIb(stem: string, resourceName: string, keys: string[]): string {
     const normalizedStem = normalizeKey(stem);
-    const normalizedName = normalizeKey(resourceName.replace(/IB$/i, ""));
+    const normalizedName = normalizeKey(stripIbResourceSuffix(resourceName));
     const sorted = [...keys].sort((a, b) => b.length - a.length);
+    const suffix = extractNumericSuffix(resourceName) ?? extractNumericSuffix(stem);
+    const sameSuffixKeys = suffix
+        ? sorted.filter((key) => extractNumericSuffix(key) === suffix)
+        : [];
+
+    if (sameSuffixKeys.length === 1) {
+        return sameSuffixKeys[0];
+    }
+
     return (
+        sameSuffixKeys.find((key) => normalizedStem.includes(normalizeKey(key))) ||
+        sameSuffixKeys.find((key) => normalizedName.includes(normalizeKey(key))) ||
+        sameSuffixKeys.find((key) => normalizeKey(key).includes(normalizedName)) ||
         sorted.find((key) => normalizedStem.includes(normalizeKey(key))) ||
         sorted.find((key) => normalizedName.includes(normalizeKey(key))) ||
+        sorted.find((key) => normalizeKey(key).includes(normalizedName)) ||
         stem
     );
+}
+
+function stripIbResourceSuffix(value: string): string {
+    const withSuffixRemoved = value.replace(/(?:\.\d+)?$/i, "");
+    const ibRemoved = withSuffixRemoved.replace(/(?:head|body|dress|hair|face|weapon)?a?ib$/i, "");
+    const meshRemoved = ibRemoved.replace(
+        /(?:head|body|dress|hair|face|weapon|cloth|skirt|shoe|arm|leg|hand|foot)$/i,
+        "",
+    );
+    const numericSuffix = extractNumericSuffix(value);
+    return `${meshRemoved}${numericSuffix ? `.${suffixToString(numericSuffix)}` : ""}`;
+}
+
+function extractNumericSuffix(value: string): number | null {
+    const match = value.match(/\.([0-9]+)$/);
+    return match ? Number(match[1]) : null;
+}
+
+function suffixToString(value: number): string {
+    return String(value);
 }
 
 function keyMatchesIb(groupKey: string, ibKey: string): boolean {
