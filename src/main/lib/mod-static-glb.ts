@@ -365,7 +365,7 @@ export async function convertModToVariantArtifacts(
             states,
         };
         const manifestPath = path.join(artifactRoot, "manifest.json");
-        await fse.writeJson(manifestPath, manifest, { spaces: 2 });
+        await writeVariantManifestAtomic(manifestPath, manifest);
 
         return {
             iniPath: analysis.iniPath,

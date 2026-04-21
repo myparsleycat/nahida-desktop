@@ -21,6 +21,7 @@ export type TextureSelectionAnalysis = {
 
 const DDS_SRGB_DXGI_FORMATS = new Set([29, 72, 75, 78, 91, 93, 99]);
 const DDS_LINEAR_DXGI_FORMATS = new Set([28, 71, 74, 77, 80, 83, 87, 88, 95, 98]);
+const ddsSrgbStateCache = new Map<string, Promise<boolean | null>>();
 
 export async function analyzeTextureSelection(
     texturePath: string,
@@ -56,12 +57,22 @@ export async function readDdsSrgbState(texturePath: string): Promise<boolean | n
         return null;
     }
 
-    try {
-        const header = await fse.readFile(texturePath);
-        return parseDdsSrgbState(header.subarray(0, 148));
-    } catch {
-        return null;
+    const cached = ddsSrgbStateCache.get(texturePath);
+    if (cached) {
+        return cached;
     }
+
+    const pending = (async () => {
+        try {
+            const header = await fse.readFile(texturePath);
+            return parseDdsSrgbState(header.subarray(0, 148));
+        } catch {
+            return null;
+        }
+    })();
+
+    ddsSrgbStateCache.set(texturePath, pending);
+    return pending;
 }
 
 export function analyzeAlpha(png: PNG): {
