@@ -361,6 +361,15 @@
       }
     },
     "tools": {
+      "dashboard": {
+        "sidebar_title": "模组工具",
+        "tools_label": "工具",
+        "toggle_sidebar": "切换侧边栏",
+        "empty_title": "开发者工具",
+        "empty_description": "请从侧边栏选择一个工具，或点击下面的项目开始。",
+        "external_page": "外部页面",
+        "inline_tool": "内置工具"
+      },
       "d3d11_builder": {
         "title": "构建 d3d11.dll",
         "description": "根据所选版本构建将注入到游戏进程中的 DLL",
@@ -455,6 +464,7 @@
         }
       },
       "fix-tool-manager": {
+        "title": "Fix Tool Manager",
         "presets": {},
         "builder": {
           "left": {

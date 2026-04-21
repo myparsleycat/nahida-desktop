@@ -361,6 +361,15 @@
       }
     },
     "tools": {
+      "dashboard": {
+        "sidebar_title": "모드 도구",
+        "tools_label": "도구",
+        "toggle_sidebar": "사이드바 전환",
+        "empty_title": "개발자 도구",
+        "empty_description": "사이드바에서 도구를 선택하거나 아래 항목을 눌러 시작하세요.",
+        "external_page": "외부 페이지",
+        "inline_tool": "내장 도구"
+      },
       "d3d11_builder": {
         "title": "d3d11.dll 빌드",
         "description": "게임 프로세스에 인젝션될 dll을 빌드합니다",
@@ -455,6 +464,7 @@
         }
       },
       "fix-tool-manager": {
+        "title": "Fix Tool Manager",
         "presets": {},
         "builder": {
           "left": {

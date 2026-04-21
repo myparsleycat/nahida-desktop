@@ -362,6 +362,15 @@
       }
     },
     "tools": {
+      "dashboard": {
+        "sidebar_title": "MOD ツール",
+        "tools_label": "ツール",
+        "toggle_sidebar": "サイドバーを切り替え",
+        "empty_title": "開発者ツール",
+        "empty_description": "サイドバーからツールを選ぶか、下の項目を押して開始してください。",
+        "external_page": "外部ページ",
+        "inline_tool": "内蔵ツール"
+      },
       "d3d11_builder": {
         "title": "d3d11.dll をビルド",
         "description": "選択したバージョンに合わせて、ゲームプロセスにインジェクションされる DLL をビルドします",
@@ -456,6 +465,7 @@
         }
       },
       "fix-tool-manager": {
+        "title": "Fix Tool Manager",
         "presets": {},
         "builder": {
           "left": {

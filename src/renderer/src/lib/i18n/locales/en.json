@@ -381,6 +381,15 @@
       }
     },
     "tools": {
+      "dashboard": {
+        "sidebar_title": "Mod Tools",
+        "tools_label": "Tools",
+        "toggle_sidebar": "Toggle sidebar",
+        "empty_title": "Developer Tools",
+        "empty_description": "Select a tool from the sidebar or pick one below to get started.",
+        "external_page": "External page",
+        "inline_tool": "Inline tool"
+      },
       "d3d11_builder": {
         "title": "Build d3d11.dll",
         "description": "Builds the DLL to be injected into the game process for the selected version",
@@ -475,6 +484,7 @@
         }
       },
       "fix-tool-manager": {
+        "title": "Fix Tool Manager",
         "presets": {},
         "builder": {
           "left": {
