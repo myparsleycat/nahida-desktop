@@ -141,9 +141,9 @@ pub fn analyze_png(data: Buffer, width: u32, height: u32) -> napi::Result<PngAna
     } else {
       0.0
     },
-    channel_range_max: ((max_r - min_r) as u32)
-      .max((max_g - min_g) as u32)
-      .max((max_b - min_b) as u32),
+    channel_range_max: (max_r.saturating_sub(min_r) as u32)
+      .max(max_g.saturating_sub(min_g) as u32)
+      .max(max_b.saturating_sub(min_b) as u32),
     luminance_std_dev: variance.sqrt(),
     mean_r,
     mean_g,
