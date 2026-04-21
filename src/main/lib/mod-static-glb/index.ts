@@ -1,6 +1,16 @@
 import crypto from "node:crypto";
 import os from "node:os";
 import path from "node:path";
+import {
+    decodeIndices as decodeIndicesNative,
+    ensureVec4 as ensureVec4Native,
+    interleaveVertexBuffers,
+    mergeDrawIndices,
+    normalizeTangentArray as normalizeTangentArrayNative,
+    normalizeVec3Array as normalizeVec3ArrayNative,
+    readFloatAttribute as readFloatAttributeNative,
+    removeDegenerateTriangles as removeDegenerateTrianglesNative,
+} from "@native/static-glb";
 import { convertDdsToPng } from "@native/native-util";
 import { decodeImage, parseDDSHeader } from "dds-ktx-parser";
 import fg from "fast-glob";
@@ -833,14 +843,16 @@ async function collectBufferGroups(
                 Math.floor(blend.length / blendStride),
                 Math.floor(texcoord.length / texcoordStride),
             );
-            const vb = Buffer.alloc(vertexCount * stride);
-            for (let i = 0; i < vertexCount; i++) {
-                let offset = i * stride;
-                position.copy(vb, offset, i * positionStride, (i + 1) * positionStride);
-                offset += positionStride;
-                blend.copy(vb, offset, i * blendStride, (i + 1) * blendStride);
-                offset += blendStride;
-                texcoord.copy(vb, offset, i * texcoordStride, (i + 1) * texcoordStride);
+            const vb = interleaveVertexBuffers(
+                position,
+                positionStride,
+                blend,
+                blendStride,
+                texcoord,
+                texcoordStride,
+            );
+            if (vb.length !== vertexCount * stride) {
+                throw new Error(`Unexpected interleaved buffer length for ${key}`);
             }
             groups.push({ key, vbFilename: `${key}.vb`, vbBytes: vb, stride });
         }
@@ -1121,20 +1133,11 @@ function buildIndicesForState(
         return indices;
     }
 
-    const merged: number[] = [];
-    for (const draw of activeDraws) {
-        const endIndex = draw.startIndex + draw.indexCount;
-        if (draw.startIndex < 0 || endIndex > indices.length) {
-            warn(`Skipping invalid draw range start=${draw.startIndex} count=${draw.indexCount}`);
-            continue;
-        }
-
-        for (let index = draw.startIndex; index < endIndex; index++) {
-            merged.push(indices[index] + draw.baseVertex);
-        }
+    const result = mergeDrawIndices(uint32ArrayToBuffer(indices), activeDraws);
+    for (const message of result.invalidRanges) {
+        warn(message);
     }
-
-    return merged.length > 0 ? Uint32Array.from(merged) : indices;
+    return bufferToUint32Array(result.indices);
 }
 
 function resolveOverrideDiffuseResource(
@@ -2341,18 +2344,7 @@ function completeElement(value: Partial<FmtElement>): FmtElement {
 }
 
 function decodeIndices(bytes: Buffer, format: string): Uint32Array {
-    const upper = format.toUpperCase();
-    if (upper.includes("R16_UINT")) {
-        const out = new Uint32Array(Math.floor(bytes.length / 2));
-        for (let i = 0; i < out.length; i++) out[i] = bytes.readUInt16LE(i * 2);
-        return out;
-    }
-    if (upper.includes("R32_UINT") || upper.includes("UNKNOWN")) {
-        const out = new Uint32Array(Math.floor(bytes.length / 4));
-        for (let i = 0; i < out.length; i++) out[i] = bytes.readUInt32LE(i * 4);
-        return out;
-    }
-    throw new Error(`Unsupported IB format: ${format}`);
+    return bufferToUint32Array(decodeIndicesNative(bytes, format));
 }
 
 function buildPrimitive(
@@ -2451,13 +2443,32 @@ function readFloatAttribute(
     element: FmtElement,
     width: number,
 ): Float32Array {
-    const out = new Float32Array(vertexCount * width);
-    for (let vertex = 0; vertex < vertexCount; vertex++) {
-        const base = vertex * stride + element.alignedByteOffset;
-        const values = readDxgiValues(bytes, base, element.format);
-        for (let c = 0; c < width; c++) out[vertex * width + c] = values[c] ?? 0;
-    }
-    return out;
+    return bufferToFloat32Array(
+        readFloatAttributeNative(
+            bytes,
+            stride,
+            vertexCount,
+            element.alignedByteOffset,
+            element.format,
+            width,
+        ),
+    );
+}
+
+function bufferToUint32Array(buffer: Buffer): Uint32Array {
+    return new Uint32Array(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength));
+}
+
+function uint32ArrayToBuffer(values: Uint32Array): Buffer {
+    return Buffer.from(values.buffer, values.byteOffset, values.byteLength);
+}
+
+function bufferToFloat32Array(buffer: Buffer): Float32Array {
+    return new Float32Array(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength));
+}
+
+function float32ArrayToBuffer(values: Float32Array): Buffer {
+    return Buffer.from(values.buffer, values.byteOffset, values.byteLength);
 }
 
 function ensureVec4(
@@ -2467,83 +2478,29 @@ function ensureVec4(
     fillW = 1,
 ): Float32Array {
     if (width === 4) return data;
-    const out = new Float32Array(vertexCount * 4);
-    for (let i = 0; i < vertexCount; i++) {
-        out[i * 4 + 0] = data[i * width + 0] ?? 0;
-        out[i * 4 + 1] = data[i * width + 1] ?? 0;
-        out[i * 4 + 2] = data[i * width + 2] ?? 0;
-        out[i * 4 + 3] = width > 3 ? data[i * width + 3] : fillW;
-    }
-    return out;
+    return bufferToFloat32Array(
+        ensureVec4Native(float32ArrayToBuffer(data), vertexCount, width, fillW),
+    );
 }
 
 function normalizeVec3Array(data: Float32Array): Float32Array {
-    const out = new Float32Array(data.length);
-    for (let i = 0; i < data.length; i += 3) {
-        const x = data[i + 0];
-        const y = data[i + 1];
-        const z = data[i + 2];
-        const length = Math.hypot(x, y, z);
-        if (length > 1e-8) {
-            out[i + 0] = x / length;
-            out[i + 1] = y / length;
-            out[i + 2] = z / length;
-        }
-    }
-    return out;
+    return bufferToFloat32Array(normalizeVec3ArrayNative(float32ArrayToBuffer(data)));
 }
 
 function normalizeTangentArray(data: Float32Array): Float32Array {
-    const out = new Float32Array(data.length);
-    for (let i = 0; i < data.length; i += 4) {
-        const x = data[i + 0];
-        const y = data[i + 1];
-        const z = data[i + 2];
-        const length = Math.hypot(x, y, z);
-        if (length > 1e-8) {
-            out[i + 0] = x / length;
-            out[i + 1] = y / length;
-            out[i + 2] = z / length;
-        }
-        out[i + 3] = data[i + 3] >= 0 ? 1 : -1;
-    }
-    return out;
+    return bufferToFloat32Array(normalizeTangentArrayNative(float32ArrayToBuffer(data)));
 }
 
 function removeDegenerateTriangles(
     indices: Uint32Array,
     warn: (message: string) => void,
 ): Uint32Array {
-    let removed = 0;
-    for (let i = 0; i + 2 < indices.length; i += 3) {
-        const a = indices[i + 0];
-        const b = indices[i + 1];
-        const c = indices[i + 2];
-        if (a === b || b === c || a === c) {
-            removed++;
-        }
-    }
+    const result = removeDegenerateTrianglesNative(uint32ArrayToBuffer(indices));
+    const removed = result.removed;
     if (removed > 0) {
         warn(`Removed ${removed} degenerate triangles`);
     }
-    if (removed === 0) {
-        return indices;
-    }
-
-    const out = new Uint32Array(indices.length - removed * 3);
-    let offset = 0;
-    for (let i = 0; i + 2 < indices.length; i += 3) {
-        const a = indices[i + 0];
-        const b = indices[i + 1];
-        const c = indices[i + 2];
-        if (a === b || b === c || a === c) {
-            continue;
-        }
-        out[offset++] = a;
-        out[offset++] = b;
-        out[offset++] = c;
-    }
-    return out;
+    return removed === 0 ? indices : bufferToUint32Array(result.indices);
 }
 
 function readDxgiValues(bytes: Buffer, offset: number, format: string): number[] {

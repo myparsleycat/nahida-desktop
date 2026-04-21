@@ -1,5 +1,6 @@
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
+import { analyzePng, invertRgbaAlpha, parseDdsSrgbState as parseDdsSrgbStateNative } from "@native/static-glb";
 import fse from "fs-extra";
 import { PNG } from "pngjs";
 import sharp from "sharp";
@@ -28,6 +29,7 @@ const DDS_SRGB_DXGI_FORMATS = new Set([29, 72, 75, 78, 91, 93, 99]);
 const DDS_LINEAR_DXGI_FORMATS = new Set([28, 71, 74, 77, 80, 83, 87, 88, 95, 98]);
 const ddsSrgbStateCache = new Map<string, Promise<boolean | null>>();
 const MAX_DDS_SRGB_CACHE = 1024;
+const pngAnalysisCache = new WeakMap<PNG, ReturnType<typeof analyzePng>>();
 
 export async function analyzeTextureSelection(
     texturePath: string,
@@ -35,7 +37,7 @@ export async function analyzeTextureSelection(
     png: PNG,
     normalizeKey: (value: string) => string,
 ): Promise<TextureSelectionAnalysis> {
-    const color = analyzeTextureColor(png);
+    const color = getPngAnalysis(png);
     const nameKey = normalizeKey(resourceName);
     const isLikelySrgb = await readDdsSrgbState(texturePath);
     const isLikelyNormalMap =
@@ -91,31 +93,13 @@ export function analyzeAlpha(png: PNG): {
     partialRatio: number;
     lowAlphaRgbMean: number;
 } {
-    const pixelCount = png.width * png.height;
-    let low = 0;
-    let high = 0;
-    let partial = 0;
-    let lowAlphaRgbTotal = 0;
-
-    for (let offset = 0; offset < png.data.length; offset += 4) {
-        const alpha = png.data[offset + 3];
-        if (alpha <= 16) {
-            low++;
-            lowAlphaRgbTotal +=
-                (png.data[offset] + png.data[offset + 1] + png.data[offset + 2]) / 3;
-        } else if (alpha >= 239) {
-            high++;
-        } else {
-            partial++;
-        }
-    }
-
+    const analysis = getPngAnalysis(png);
     return {
-        hasAlpha: low > 0 || partial > 0,
-        lowRatio: pixelCount > 0 ? low / pixelCount : 0,
-        highRatio: pixelCount > 0 ? high / pixelCount : 0,
-        partialRatio: pixelCount > 0 ? partial / pixelCount : 0,
-        lowAlphaRgbMean: low > 0 ? lowAlphaRgbTotal / low : 0,
+        hasAlpha: analysis.hasAlpha,
+        lowRatio: analysis.lowRatio,
+        highRatio: analysis.highRatio,
+        partialRatio: analysis.partialRatio,
+        lowAlphaRgbMean: analysis.lowAlphaRgbMean,
     };
 }
 
@@ -171,9 +155,9 @@ export function shouldInvertAlpha(
 }
 
 export function invertPngAlpha(png: PNG): void {
-    for (let offset = 3; offset < png.data.length; offset += 4) {
-        png.data[offset] = 255 - png.data[offset];
-    }
+    const next = invertRgbaAlpha(Buffer.from(png.data));
+    next.copy(png.data);
+    pngAnalysisCache.delete(png);
 }
 
 export async function readPngAsync(pngPath: string): Promise<PNG> {
@@ -255,66 +239,12 @@ export function textureNamePriority(
     return score;
 }
 
-function analyzeTextureColor(png: PNG): {
-    channelRangeMax: number;
-    luminanceStdDev: number;
-    meanR: number;
-    meanG: number;
-    meanB: number;
-    blueDominance: number;
-} {
-    let minR = 255;
-    let minG = 255;
-    let minB = 255;
-    let maxR = 0;
-    let maxG = 0;
-    let maxB = 0;
-    let count = 0;
-    let sumR = 0;
-    let sumG = 0;
-    let sumB = 0;
-    let luminanceSum = 0;
-    let luminanceSquareSum = 0;
-    const stride = Math.max(1, Math.floor(Math.sqrt((png.width * png.height) / 4096)));
-
-    for (let y = 0; y < png.height; y += stride) {
-        for (let x = 0; x < png.width; x += stride) {
-            const offset = (y * png.width + x) * 4;
-            const r = png.data[offset];
-            const g = png.data[offset + 1];
-            const b = png.data[offset + 2];
-            minR = Math.min(minR, r);
-            minG = Math.min(minG, g);
-            minB = Math.min(minB, b);
-            maxR = Math.max(maxR, r);
-            maxG = Math.max(maxG, g);
-            maxB = Math.max(maxB, b);
-            sumR += r;
-            sumG += g;
-            sumB += b;
-            const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-            luminanceSum += luminance;
-            luminanceSquareSum += luminance * luminance;
-            count++;
-        }
+function parseDdsSrgbState(bytes: Buffer): boolean | null {
+    const nativeValue = parseDdsSrgbStateNative(bytes);
+    if (nativeValue !== null) {
+        return nativeValue;
     }
 
-    const mean = count > 0 ? luminanceSum / count : 0;
-    const variance = count > 0 ? Math.max(0, luminanceSquareSum / count - mean * mean) : 0;
-    const meanR = count > 0 ? sumR / count / 255 : 0;
-    const meanG = count > 0 ? sumG / count / 255 : 0;
-    const meanB = count > 0 ? sumB / count / 255 : 0;
-    return {
-        channelRangeMax: Math.max(maxR - minR, maxG - minG, maxB - minB),
-        luminanceStdDev: Math.sqrt(variance),
-        meanR,
-        meanG,
-        meanB,
-        blueDominance: meanB - Math.max(meanR, meanG),
-    };
-}
-
-function parseDdsSrgbState(bytes: Buffer): boolean | null {
     if (bytes.length < 148 || bytes.toString("ascii", 0, 4) !== "DDS ") {
         return null;
     }
@@ -334,4 +264,15 @@ function parseDdsSrgbState(bytes: Buffer): boolean | null {
 
 function isCutoutAlpha(alpha: ReturnType<typeof analyzeAlpha>): boolean {
     return alpha.lowRatio >= 0.005 && alpha.highRatio >= 0.5 && alpha.partialRatio <= 0.02;
+}
+
+function getPngAnalysis(png: PNG) {
+    const cached = pngAnalysisCache.get(png);
+    if (cached) {
+        return cached;
+    }
+
+    const analysis = analyzePng(Buffer.from(png.data), png.width, png.height);
+    pngAnalysisCache.set(png, analysis);
+    return analysis;
 }
