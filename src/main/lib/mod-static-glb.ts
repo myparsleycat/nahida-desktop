@@ -8,6 +8,7 @@ import fse from "fs-extra";
 import { nanoid } from "nanoid";
 import pLimit from "p-limit";
 import { PNG } from "pngjs";
+import writeFileAtomic from "write-file-atomic";
 import type { Logger } from "../internal/logger";
 
 type IniSection = {
@@ -196,6 +197,40 @@ const GL_COMPONENT = {
     FLOAT: 5126,
 } as const;
 
+const variantArtifactManifestLocks = new Map<string, Promise<void>>();
+
+async function withVariantArtifactManifestLock<T>(
+    artifactRoot: string,
+    operation: () => Promise<T>,
+): Promise<T> {
+    const previous = variantArtifactManifestLocks.get(artifactRoot) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    const queued = previous.then(() => current);
+    variantArtifactManifestLocks.set(artifactRoot, queued);
+
+    await previous;
+    try {
+        return await operation();
+    } finally {
+        release();
+        if (variantArtifactManifestLocks.get(artifactRoot) === queued) {
+            variantArtifactManifestLocks.delete(artifactRoot);
+        }
+    }
+}
+
+async function writeVariantManifestAtomic(
+    manifestPath: string,
+    manifest: StaticGlbVariantManifest,
+): Promise<void> {
+    await writeFileAtomic(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, {
+        encoding: "utf8",
+    });
+}
+
 export async function convertModToGlb(
     options: ConvertModToGlbOptions,
 ): Promise<ConvertModToGlbResult> {
@@ -354,51 +389,66 @@ export async function resolveVariantStateArtifact(
     meshCount: number;
     warningCount: number;
 }> {
-    const artifactRoot = path.resolve(options.artifactRoot);
-    const manifestPath = options.manifestPath
-        ? path.resolve(options.manifestPath)
-        : path.join(artifactRoot, "manifest.json");
-    const manifest = (await fse.readJson(manifestPath)) as StaticGlbVariantManifest;
-    const key = createStateKey(options.state);
-    const existing = manifest.states.find((entry) => entry.key === key);
-    if (existing && (await fse.pathExists(existing.glbPath))) {
-        return {
-            glbPath: existing.glbPath,
-            manifestPath,
-            manifest,
-            meshCount: 0,
-            warningCount: 0,
-        };
-    }
+    return withVariantArtifactManifestLock(path.resolve(options.artifactRoot), async () => {
+        const artifactRoot = path.resolve(options.artifactRoot);
+        const manifestPath = options.manifestPath
+            ? path.resolve(options.manifestPath)
+            : path.join(artifactRoot, "manifest.json");
+        let manifest: StaticGlbVariantManifest;
+        try {
+            manifest = (await fse.readJson(manifestPath)) as StaticGlbVariantManifest;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(`Failed to read variant manifest at ${manifestPath}: ${message}`);
+        }
 
-    const textureCacheDir = path.join(artifactRoot, ".texture-cache");
-    const warning = createWarningCollector(options.onWarning);
-    const result = await buildModGlb({
-        ...options,
-        modPath: manifest.modPath,
-        textureCacheDir,
-        variableState: options.state,
+        const key = createStateKey(options.state);
+        const existing = manifest.states.find((entry) => entry.key === key);
+        if (existing && (await fse.pathExists(existing.glbPath))) {
+            return {
+                glbPath: existing.glbPath,
+                manifestPath,
+                manifest,
+                meshCount: 0,
+                warningCount: 0,
+            };
+        }
+
+        const textureCacheDir = path.join(artifactRoot, ".texture-cache");
+        try {
+            const result = await buildModGlb({
+                ...options,
+                modPath: manifest.modPath,
+                textureCacheDir,
+                variableState: options.state,
+            });
+            const glbDir = path.join(artifactRoot, "glb");
+            await fse.ensureDir(glbDir);
+            const glbPath = path.join(glbDir, `${sanitizeStateKey(key)}.glb`);
+            await fse.writeFile(glbPath, result.glb);
+
+            manifest = (await fse.readJson(manifestPath)) as StaticGlbVariantManifest;
+            const current = manifest.states.find((entry) => entry.key === key);
+            if (!current) {
+                manifest.states.push({
+                    key,
+                    values: options.state,
+                    glbPath,
+                });
+                await writeVariantManifestAtomic(manifestPath, manifest);
+            }
+
+            return {
+                glbPath: current?.glbPath ?? glbPath,
+                manifestPath,
+                manifest,
+                meshCount: result.meshCount,
+                warningCount: result.warningCount,
+            };
+        } finally {
+            await fse.rm(textureCacheDir, { recursive: true, force: true }).catch(() => {});
+        }
     });
-    const glbDir = path.join(artifactRoot, "glb");
-    await fse.ensureDir(glbDir);
-    const glbPath = path.join(glbDir, `${sanitizeStateKey(key)}.glb`);
-    await fse.writeFile(glbPath, result.glb);
-
-    manifest.states.push({
-        key,
-        values: options.state,
-        glbPath,
-    });
-    await fse.writeJson(manifestPath, manifest, { spaces: 2 });
-    await fse.rm(textureCacheDir, { recursive: true, force: true }).catch(() => {});
-
-    return {
-        glbPath,
-        manifestPath,
-        manifest,
-        meshCount: result.meshCount,
-        warningCount: warning.count,
-    };
 }
 
 async function buildModGlb(
