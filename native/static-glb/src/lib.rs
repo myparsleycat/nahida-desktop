@@ -276,7 +276,7 @@ pub fn merge_draw_indices(indices: Buffer, draws: Vec<DrawRange>) -> napi::Resul
   }
 
   Ok(MergeDrawIndicesResult {
-    indices: if merged.is_empty() {
+    indices: if draws.is_empty() {
       u32_vec_to_buffer(indices)
     } else {
       u32_vec_to_buffer(merged)
