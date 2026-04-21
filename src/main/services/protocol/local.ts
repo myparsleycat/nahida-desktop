@@ -68,10 +68,47 @@ export class LocalProtocol {
                 return new Response(blob);
             }
         } else {
-            return new Response(buffer, {
+            const mimeType = resolveMimeType(fullPath, fileType);
+            const totalLength = buffer.byteLength;
+            const rangeHeader = request.headers.get("range");
+
+            if (rangeHeader) {
+                const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
+                if (!match) {
+                    return new Response(null, {
+                        status: 416,
+                        headers: { "Content-Range": `bytes */${totalLength}` },
+                    });
+                }
+
+                const start = match[1]
+                    ? parseInt(match[1], 10)
+                    : totalLength - parseInt(match[2], 10);
+                const end = match[2] ? parseInt(match[2], 10) : totalLength - 1;
+
+                if (isNaN(start) || isNaN(end) || start > end || start < 0 || end >= totalLength) {
+                    return new Response(null, {
+                        status: 416,
+                        headers: { "Content-Range": `bytes */${totalLength}` },
+                    });
+                }
+
+                const slice = buffer.subarray(start, end + 1);
+                return new Response(slice as BodyInit, {
+                    status: 206,
+                    headers: {
+                        "Content-Type": mimeType,
+                        "Content-Length": slice.byteLength.toString(),
+                        "Content-Range": `bytes ${start}-${end}/${totalLength}`,
+                        "Accept-Ranges": "bytes",
+                    },
+                });
+            }
+
+            return new Response(buffer as BodyInit, {
                 headers: {
-                    "Content-Type": resolveMimeType(fullPath, fileType),
-                    "Content-Length": buffer.byteLength.toString(),
+                    "Content-Type": mimeType,
+                    "Content-Length": totalLength.toString(),
                     "Accept-Ranges": "bytes",
                 },
             });
