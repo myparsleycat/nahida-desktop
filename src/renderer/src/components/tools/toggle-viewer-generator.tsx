@@ -193,7 +193,7 @@ export default function ToggleViewerGenerator() {
   }
 
   return (
-    <div className="flex flex-col space-y-4">
+    <div className="flex flex-col space-y-4 p-4">
       <div className="flex flex-row items-center justify-between w-full p-3 rounded-lg border hover:shadow transition-shadow duration-200">
         <div className="flex flex-col space-y-1">
           <h3 className="text font-semibold">

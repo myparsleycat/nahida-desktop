@@ -125,7 +125,7 @@ export default function StaticGlbConverter() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto">
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto p-4">
       <div>
         <h2 className="text-lg font-semibold text-foreground">
           {t("page.tools.static_glb_converter.title")}

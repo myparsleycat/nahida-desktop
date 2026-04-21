@@ -5,7 +5,7 @@ import ToggleViewerGenerator from "@renderer/components/tools/toggle-viewer-gene
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { cn } from "@renderer/lib/utils";
 import { Link } from "@tanstack/react-router";
-import { ChevronRight, Wrench, ExternalLink, Menu, X } from "lucide-react";
+import { ChevronRight, ExternalLink, Menu, Wrench, X } from "lucide-react";
 import { useState } from "react";
 import FixToolManager from "./fix-tool-manger";
 
@@ -164,7 +164,7 @@ export default function ToolsPage() {
           </div>
         </header>
 
-        <main className="flex-1 min-h-0 overflow-hidden p-4">
+        <main className="flex-1 min-h-0 overflow-hidden">
           {activeTool && activeTool.component ? (
             <div className="h-full min-h-0">{activeTool.component()}</div>
           ) : (
