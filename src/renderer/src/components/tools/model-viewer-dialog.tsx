@@ -78,6 +78,13 @@ export function ModelViewerDialog({
   const activeViewerIndexRef = useRef<0 | 1>(0);
   const loadingViewerIndexRef = useRef<0 | 1 | null>(null);
   const pendingCameraStateRef = useRef<ModelViewerCameraState | null>(null);
+  const openRef = useRef(open);
+  const sourceRef = useRef(source);
+  const pendingVariantRequestRef = useRef<{
+    source: ModelViewerDialogSource;
+    viewerIndex: 0 | 1;
+    stateKey: string;
+  } | null>(null);
 
   function setViewerUrl(index: 0 | 1, sourcePath: string) {
     const nextUrl = sourcePath ? withCacheBuster(modelViewerSourceToUrl(sourcePath)) : "";
@@ -99,6 +106,17 @@ export function ModelViewerDialog({
       }
     };
   }, []);
+
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+
+  useEffect(() => {
+    sourceRef.current = source;
+    if (!source || source.mode !== "variant-set") {
+      pendingVariantRequestRef.current = null;
+    }
+  }, [source]);
 
   useEffect(() => {
     if (!source) {
@@ -164,6 +182,14 @@ export function ModelViewerDialog({
     }
 
     setIsResolving(true);
+    const expectedSource = source;
+    const expectedViewerIndex = nextViewerIndex;
+    const expectedStateKey = nextStateKey;
+    pendingVariantRequestRef.current = {
+      source: expectedSource,
+      viewerIndex: expectedViewerIndex,
+      stateKey: expectedStateKey,
+    };
     try {
       const result = await window.api.invoke("tools:convertStaticGlbForViewer", {
         artifactRoot: source.artifactRoot,
@@ -171,6 +197,15 @@ export function ModelViewerDialog({
         state: nextState,
       });
       if (result.mode !== "variant-set") {
+        return;
+      }
+      if (
+        !openRef.current ||
+        sourceRef.current !== expectedSource ||
+        pendingVariantRequestRef.current?.source !== expectedSource ||
+        pendingVariantRequestRef.current.viewerIndex !== expectedViewerIndex ||
+        pendingVariantRequestRef.current.stateKey !== expectedStateKey
+      ) {
         return;
       }
 
@@ -187,6 +222,13 @@ export function ModelViewerDialog({
         description: error instanceof Error ? error.message : String(error),
       });
     } finally {
+      if (
+        pendingVariantRequestRef.current?.source === expectedSource &&
+        pendingVariantRequestRef.current.viewerIndex === expectedViewerIndex &&
+        pendingVariantRequestRef.current.stateKey === expectedStateKey
+      ) {
+        pendingVariantRequestRef.current = null;
+      }
       setIsResolving(false);
     }
   };
