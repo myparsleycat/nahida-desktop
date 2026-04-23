@@ -408,7 +408,13 @@ export class GameBananaService {
         }
 
         if (!response.ok) {
-            throw new Error("GAMEBANANA_AUTH_FAILED");
+            if (response.status === 401 || response.status === 403) {
+                throw new Error("GAMEBANANA_AUTH_FAILED");
+            }
+
+            throw new Error(
+                `GAMEBANANA_HTTP_ERROR:${response.status}:${response.statusText || "UNKNOWN"}`,
+            );
         }
 
         return response;
