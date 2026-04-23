@@ -1,3 +1,4 @@
+import { Avatar, AvatarFallback, AvatarImage } from "@renderer/components/ui/avatar";
 import { Button } from "@renderer/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
@@ -44,8 +45,8 @@ export function CategorySidebar({
   const hasError = hasCategoryContext ? categoryOverviewError : gameOverviewError;
 
   return (
-    <Card className="flex h-full min-h-0 flex-col">
-      <CardHeader>
+    <Card className="flex h-full min-h-0 flex-col p-0">
+      <CardHeader className="pt-3">
         <div className="flex items-start justify-between gap-3">
           <div>
             <CardTitle>{t("page.gamebanana.category_panel_title")}</CardTitle>
@@ -57,9 +58,9 @@ export function CategorySidebar({
           )}
         </div>
       </CardHeader>
-      <CardContent className="min-h-0 flex-1">
-        <ScrollArea className="h-full min-h-0 pr-4">
-          <div className="space-y-2">
+      <CardContent className="min-h-0 flex-1 p-0">
+        <ScrollArea className="h-full min-h-0">
+          <div className="space-y-2 px-3 pb-3">
             {isLoading && (
               <>
                 <Skeleton className="h-12 w-full" />
@@ -83,14 +84,17 @@ export function CategorySidebar({
                     key={category._idRow}
                     type="button"
                     className={cn(
-                      "flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left transition-colors",
+                      "flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left transition-colors",
                       isActive ? "border-primary bg-primary/8" : "hover:bg-muted/50",
                     )}
                     onClick={() =>
                       category._idRow && onSelectCategory(category._idRow, category._sName)
                     }
                   >
-                    <img src={category._sIconUrl} className="size-10" />
+                    <Avatar size="lg">
+                      <AvatarImage src={category._sIconUrl} />
+                      <AvatarFallback>Icon</AvatarFallback>
+                    </Avatar>
                     <span className="truncate text-sm font-medium">{category._sName}</span>
                     {"_nItemCount" in category && typeof category._nItemCount === "number" && (
                       <span className="text-xs text-muted-foreground">
