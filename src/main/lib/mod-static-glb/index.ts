@@ -1528,7 +1528,10 @@ async function buildVariantVariables(
     const variables: StaticGlbVariantVariable[] = [];
 
     for (const binding of bindings.sort((a, b) => a.slot - b.slot)) {
-        const iconResource = resourceMap.get(normalizeKey(`MenuItem.${binding.slot}`));
+        const iconResource = findFirstResourcePath(resourceMap, [
+            `MenuItem.${binding.slot}`,
+            `MenuItem.${deriveVariableUiToken(binding.variable)}`,
+        ]);
         variables.push({
             id: binding.variable,
             label: humanizeVariableLabel(binding.variable),
@@ -1554,11 +1557,36 @@ function collectViewerUiAssetPaths(sections: IniSection[]): StaticGlbViewerUiAss
     );
 
     return {
-        backgroundPath: resourceMap.get(normalizeKey("MenuBG")),
-        slotPath: resourceMap.get(normalizeKey("ItemSlot")),
-        slotHoverPath: resourceMap.get(normalizeKey("ItemSlotHover.1")),
-        slotActivePath: resourceMap.get(normalizeKey("ItemSlotHover.2")),
+        backgroundPath: findFirstResourcePath(resourceMap, ["MenuBG", "MenuBack", "MenuPlate"]),
+        slotPath: findFirstResourcePath(resourceMap, ["ItemSlot", "ItemSlotBack"]),
+        slotHoverPath: findFirstResourcePath(resourceMap, [
+            "ItemSlotHover.1",
+            "ItemSlotHover.SlotHover",
+        ]),
+        slotActivePath: findFirstResourcePath(resourceMap, [
+            "ItemSlotHover.2",
+            "ItemSlotHover.SlotClicked",
+        ]),
     };
+}
+
+function findFirstResourcePath(
+    resourceMap: Map<string, string>,
+    candidates: string[],
+): string | undefined {
+    for (const candidate of candidates) {
+        const value = resourceMap.get(normalizeKey(candidate));
+        if (value) {
+            return value;
+        }
+    }
+    return undefined;
+}
+
+function deriveVariableUiToken(variableId: string): string {
+    const raw = variableId.replace(/^\$+/, "");
+    const trimmed = raw.replace(/^swapvar/i, "");
+    return trimmed || raw;
 }
 
 function mapToRecord(
