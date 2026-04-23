@@ -4,7 +4,6 @@ import { pipeline } from "node:stream/promises";
 import type { ReadableStream } from "node:stream/web";
 import type { ArchiveExtractPathMode, ResolvedArchiveExtractPathMode } from "@shared/mod";
 import type { TransferData } from "@shared/types.gen";
-import { Notification } from "electron";
 import { throttle } from "es-toolkit";
 import { fileTypeFromFile } from "file-type";
 import fse from "fs-extra";
@@ -476,11 +475,6 @@ export class CustomDownloader {
             // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
             dispatcher: await this.desktop.httpService.getAgent(),
         });
-
-        new Notification({
-            title: "다운로드 준비중",
-            body: "다운로드 URL을 가져오고 있습니다...",
-        }).show();
 
         const resp = await respPromise;
 
