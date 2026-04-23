@@ -5,6 +5,7 @@ import type { NahidaDesktop } from "../index";
 import { registerAuthHandlers } from "./handlers/auth";
 import { registerDriveHandlers } from "./handlers/drive";
 import { registerFixToolsManagerHandlers } from "./handlers/fix-tools-manager";
+import { registerGameBananaHandlers } from "./handlers/gamebanana";
 import { registerLoggerHandlers } from "./handlers/logger";
 import { registerModHandlers } from "./handlers/mod";
 import { registerPathSelectorHandlers } from "./handlers/path-selector";
@@ -26,6 +27,7 @@ export class IPC {
     private setupHandlers() {
         registerAuthHandlers(this.d);
         registerDriveHandlers(this.d);
+        registerGameBananaHandlers(this.d);
         registerSettingHandlers(this.d);
         registerUtilHandlers(this.d);
         registerWindowHandlers(this.d);
