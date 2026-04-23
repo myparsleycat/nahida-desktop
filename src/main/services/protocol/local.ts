@@ -28,7 +28,22 @@ export class LocalProtocol {
             fullPath = fullPath.slice(1);
         }
 
-        const buffer = await fse.readFile(fullPath);
+        let buffer: Buffer;
+        try {
+            buffer = await fse.readFile(fullPath);
+        } catch (error) {
+            if (
+                error &&
+                typeof error === "object" &&
+                "code" in error &&
+                (error.code === "ENOENT" || error.code === "ENOTDIR")
+            ) {
+                this.desktop.logger.warn(`Local file not found: ${fullPath}`, "LocalProtocol.handle");
+                return new Response("not found", { status: 404 });
+            }
+
+            throw error;
+        }
         const fileType = await fileTypeFromBuffer(buffer);
 
         const convertImageMime = ["image/jpeg", "image/png", "image/webp"];
