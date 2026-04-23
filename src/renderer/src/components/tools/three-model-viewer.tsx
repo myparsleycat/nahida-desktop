@@ -119,6 +119,18 @@ function ThreeModelScene({
     const loader = new GLTFLoader();
     let disposed = false;
 
+    if (!src) {
+      if (activeObjectRef.current) {
+        disposeObjectTree(activeObjectRef.current);
+      }
+      setModelRoot(null);
+      activeObjectRef.current = null;
+      materialRef.current = [];
+      return () => {
+        disposed = true;
+      };
+    }
+
     setModelRoot((current) => {
       if (current) {
         disposeObjectTree(current);
