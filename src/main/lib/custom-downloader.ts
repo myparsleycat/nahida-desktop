@@ -1,3 +1,4 @@
+import os from "node:os";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -303,6 +304,47 @@ export class CustomDownloader {
         }
     }
 
+    private async moveWithOverwrite(sourcePath: string, destinationPath: string) {
+        if (await fse.pathExists(destinationPath)) {
+            await fse.remove(destinationPath);
+        }
+
+        await fse.move(sourcePath, destinationPath, { overwrite: true });
+    }
+
+    private getStagingPaths(fileName: string) {
+        const stagingRoot = path.join(os.tmpdir(), "nahida-desktop-downloads");
+        const stagingPath = path.join(
+            stagingRoot,
+            `${this.desktop.lib.fs.sanitizeWindowsFilename(fileName)}.staging-${nanoid()}`,
+        );
+        const stagedDownloadPath = path.join(stagingPath, fileName);
+
+        return {
+            stagingPath,
+            stagedDownloadPath,
+        };
+    }
+
+    private getPreviewTargetDir(stagedPath: string) {
+        return path.extname(stagedPath) ? path.dirname(stagedPath) : stagedPath;
+    }
+
+    private async finalizeStagedDownload(stagingPath: string, destinationDir: string) {
+        await fse.ensureDir(destinationDir);
+
+        const stagedEntries = await fse.readdir(stagingPath);
+        if (stagedEntries.length === 0) {
+            throw new Error("Downloaded file did not produce staged content.");
+        }
+
+        for (const entry of stagedEntries) {
+            const sourcePath = path.join(stagingPath, entry);
+            const destinationPath = path.join(destinationDir, entry);
+            await this.moveWithOverwrite(sourcePath, destinationPath);
+        }
+    }
+
     public async downloadToGroup(url: string, groupPath: string): Promise<"started"> {
         const trimmedUrl = url.trim();
 
@@ -492,9 +534,10 @@ export class CustomDownloader {
         const result =
             await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(suggestedFileName);
         if (!result.path) return "canceled";
+        const destinationPath = result.path;
 
         const finalFileName = result.fileName || suggestedFileName;
-        const savePath = path.join(result.path, finalFileName);
+        const { stagingPath, stagedDownloadPath } = this.getStagingPaths(finalFileName);
 
         const pid = nanoid();
         const abortController = new AbortController();
@@ -526,12 +569,13 @@ export class CustomDownloader {
             abortController,
             name: finalFileName,
             initialStatus: "pending",
-            path: result.path,
+            path: destinationPath,
         });
 
         this.desktop.service.transfer.registerRunner(pid, async () => {
             try {
                 this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
+                await fse.ensureDir(stagingPath);
 
                 let downloadedBytes = 0;
                 const throttledUpdate = throttle((bytes: number) => {
@@ -542,7 +586,7 @@ export class CustomDownloader {
 
                 await this.downloadFile({
                     url: realFileUrl,
-                    savePath,
+                    savePath: stagedDownloadPath,
                     fileSize,
                     signal: abortController.signal,
                     onProgress: (bytes) => {
@@ -558,19 +602,24 @@ export class CustomDownloader {
                 const shouldExtract = await this.isArchiveByResponseOrContent({
                     headers: resp.headers,
                     originalFileName: suggestedFileName,
-                    filePath: savePath,
+                    filePath: stagedDownloadPath,
                 });
-                const finalPath = shouldExtract ? await this.extractGBArchive(savePath) : savePath;
-                const finalDir = shouldExtract ? finalPath : path.dirname(finalPath);
+                const stagedPath = shouldExtract
+                    ? await this.extractGBArchive(stagedDownloadPath)
+                    : stagedDownloadPath;
 
-                let previewPromise: Promise<void> | null = null;
                 if (previewUrl) {
-                    const previewSavePath = path.join(finalDir, "preview.jpg");
-                    previewPromise = this.downloadFile({
+                    const previewSavePath = path.join(
+                        this.getPreviewTargetDir(stagedPath),
+                        "preview.jpg",
+                    );
+                    await this.downloadFile({
                         url: previewUrl,
                         savePath: previewSavePath,
                     });
                 }
+
+                await this.finalizeStagedDownload(stagingPath, destinationPath);
 
                 this.desktop.service.transfer.markFileCompleted(pid, pid);
 
@@ -582,19 +631,10 @@ export class CustomDownloader {
                 });
 
                 const mainWindow = this.desktop.window.main.window;
-                if (mainWindow && result.path) {
+                if (mainWindow) {
                     this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
-                        path: result.path,
+                        path: destinationPath,
                         name: finalFileName,
-                    });
-                }
-
-                if (previewPromise && mainWindow && result.path) {
-                    await previewPromise;
-                    this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
-                        path: result.path,
-                        name: finalFileName,
-                        disableToast: true,
                     });
                 }
             } catch (err) {
@@ -608,6 +648,8 @@ export class CustomDownloader {
                     this.desktop.logger.error(err, "GameBanana:downloadFromGB");
                     this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
                 }
+            } finally {
+                await fse.remove(stagingPath).catch(() => {});
             }
         });
 
@@ -625,6 +667,7 @@ export class CustomDownloader {
         if (!result.path) {
             return "canceled";
         }
+        const destinationPath = result.path;
 
         const resp = await ky.head(fileUrl, {
             redirect: "follow",
@@ -638,7 +681,7 @@ export class CustomDownloader {
         }
 
         const finalFileName = result.fileName || title;
-        const savePath = path.join(result.path, finalFileName);
+        const { stagingPath, stagedDownloadPath } = this.getStagingPaths(finalFileName);
         const fileSize = this.parseContentLength(resp.headers.get("Content-Length"));
 
         const pid = nanoid();
@@ -671,12 +714,13 @@ export class CustomDownloader {
             abortController,
             name: title,
             initialStatus: "pending",
-            path: result.path,
+            path: destinationPath,
         });
 
         this.desktop.service.transfer.registerRunner(pid, async () => {
             try {
                 this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
+                await fse.ensureDir(stagingPath);
 
                 let downloadedBytes = 0;
                 const throttledUpdate = throttle((bytes: number) => {
@@ -687,7 +731,7 @@ export class CustomDownloader {
 
                 await this.downloadFile({
                     url: fileUrl,
-                    savePath,
+                    savePath: stagedDownloadPath,
                     fileSize,
                     signal: abortController.signal,
                     onProgress: (bytes) => {
@@ -706,13 +750,15 @@ export class CustomDownloader {
                         resp.url || fileUrl,
                         resp.headers.get("Content-Disposition"),
                     ),
-                    filePath: savePath,
+                    filePath: stagedDownloadPath,
                 });
 
                 if (shouldExtract) {
-                    await this.desktop.service.archive.extract(savePath, path.dirname(savePath));
-                    await fse.rm(savePath, { force: true });
+                    await this.desktop.service.archive.extract(stagedDownloadPath, stagingPath);
+                    await fse.rm(stagedDownloadPath, { force: true });
                 }
+
+                await this.finalizeStagedDownload(stagingPath, destinationPath);
 
                 this.desktop.service.transfer.markFileCompleted(pid, pid);
 
@@ -724,9 +770,9 @@ export class CustomDownloader {
                 });
 
                 const mainWindow = this.desktop.window.main.window;
-                if (mainWindow && result.path) {
+                if (mainWindow) {
                     this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
-                        path: result.path,
+                        path: destinationPath,
                         name: finalFileName,
                     });
                 }
@@ -741,6 +787,8 @@ export class CustomDownloader {
                     this.desktop.logger.error(err, "GameBanana:downloadFromGB");
                     this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
                 }
+            } finally {
+                await fse.remove(stagingPath).catch(() => {});
             }
         });
 
