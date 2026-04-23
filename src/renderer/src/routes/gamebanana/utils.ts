@@ -35,7 +35,7 @@ export function getSubmissionPreviewUrl(submission: { _aPreviewMedia?: PreviewMe
 
 export function getSubmissionFullPreviewUrl(submission: { _aPreviewMedia?: PreviewMedia }) {
   const preview = submission._aPreviewMedia?._aImages?.[0];
-  return preview ? resolvePreviewImageUrl(preview, "full") : undefined;
+  return preview ? resolvePreviewImageUrl(preview) : undefined;
 }
 
 export function getSubmissionPreviewImages(submission: { _aPreviewMedia?: PreviewMedia }) {
@@ -43,9 +43,9 @@ export function getSubmissionPreviewImages(submission: { _aPreviewMedia?: Previe
 
   return previews
     .map((preview, index) => {
-      const fullUrl = resolvePreviewImageUrl(preview, "full");
+      const fullUrl = resolvePreviewImageUrl(preview);
       const previewUrl = fullUrl;
-      const thumbnailUrl = resolvePreviewImageUrl(preview, "thumb");
+      const thumbnailUrl = fullUrl;
       const url = previewUrl ?? thumbnailUrl ?? fullUrl;
       if (!url) return null;
 
@@ -62,14 +62,12 @@ export function getSubmissionPreviewImages(submission: { _aPreviewMedia?: Previe
 
 function resolvePreviewImageUrl(
   preview: PreviewImage,
-  variant: "full" | "preview" | "thumb" = "full",
+  variant: "full" | "preview" = "full",
 ) {
   const candidates =
-    variant === "full"
-      ? [preview._sFile, preview._sFile800, preview._sFile530, preview._sUrl]
-      : variant === "thumb"
-        ? [preview._sFile530, preview._sFile800, preview._sFile, preview._sUrl]
-        : [preview._sFile800, preview._sFile530, preview._sFile, preview._sUrl];
+    variant === "preview"
+      ? [preview._sFile800, preview._sFile530, preview._sFile, preview._sUrl]
+      : [preview._sFile, preview._sFile800, preview._sFile530, preview._sUrl];
   const absoluteCandidate = candidates.find((value) => isAbsoluteUrl(value));
   if (absoluteCandidate) return absoluteCandidate;
 
