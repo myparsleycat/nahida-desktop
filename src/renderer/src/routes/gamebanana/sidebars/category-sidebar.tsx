@@ -1,5 +1,5 @@
 import { Button } from "@renderer/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@renderer/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { cn } from "@renderer/lib/utils";
@@ -49,13 +49,6 @@ export function CategorySidebar({
         <div className="flex items-start justify-between gap-3">
           <div>
             <CardTitle>{t("page.gamebanana.category_panel_title")}</CardTitle>
-            <CardDescription>
-              {hasCategoryContext
-                ? selectedCategoryName
-                  ? t("page.gamebanana.category_panel_description_selected", { name: selectedCategoryName })
-                  : t("page.gamebanana.category_panel_description_nested")
-                : t("page.gamebanana.category_panel_description_root")}
-            </CardDescription>
           </div>
           {hasCategoryContext && (
             <Button variant="ghost" size="sm" onClick={onResetToGameHome}>
@@ -93,8 +86,11 @@ export function CategorySidebar({
                       "flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left transition-colors",
                       isActive ? "border-primary bg-primary/8" : "hover:bg-muted/50",
                     )}
-                    onClick={() => category._idRow && onSelectCategory(category._idRow, category._sName)}
+                    onClick={() =>
+                      category._idRow && onSelectCategory(category._idRow, category._sName)
+                    }
                   >
+                    <img src={category._sIconUrl} className="size-10" />
                     <span className="truncate text-sm font-medium">{category._sName}</span>
                     {"_nItemCount" in category && typeof category._nItemCount === "number" && (
                       <span className="text-xs text-muted-foreground">
