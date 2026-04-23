@@ -1026,6 +1026,9 @@ function collectTextureBindings(
 
 function collectTextureOverrideDrawBindings(sections: IniSection[]): TextureOverrideBinding[] {
     const variables = collectDefaultIniVariables(sections);
+    const sectionByFullName = new Map(
+        sections.map((section) => [normalizeKey(getSectionFullName(section)), section]),
+    );
 
     return sections
         .filter((section) => section.header === "TextureOverride")
@@ -1034,19 +1037,27 @@ function collectTextureOverrideDrawBindings(sections: IniSection[]): TextureOver
             ibResourceName: trimResourcePrefix(section.values.ib || ""),
             diffuseResourceName: undefined,
             overrideHash: section.values.hash?.trim(),
-            draws: collectSectionDrawInstructions(section.lines, variables),
+            draws: collectSectionDrawInstructions(section, variables, sectionByFullName),
         }))
         .filter((binding) => !!binding.ibResourceName);
 }
 
 function collectSectionDrawInstructions(
-    lines: string[],
+    section: IniSection,
     variables: Map<string, number | string>,
+    sectionByFullName: Map<string, IniSection>,
+    inheritedClauses: IniConditionClause[] = [],
+    visited = new Set<string>(),
 ): DrawInstruction[] {
     const instructions: DrawInstruction[] = [];
     const stack: IniBranchFrame[] = [];
+    const normalizedName = normalizeKey(getSectionFullName(section));
+    if (visited.has(normalizedName)) {
+        return instructions;
+    }
+    visited.add(normalizedName);
 
-    for (const rawLine of lines) {
+    for (const rawLine of section.lines) {
         const trimmed = rawLine.trim();
         const lower = trimmed.toLowerCase();
 
@@ -1094,6 +1105,29 @@ function collectSectionDrawInstructions(
             continue;
         }
 
+        const runMatch = trimmed.match(/^run\s*=\s*(.+)$/i);
+        if (runMatch) {
+            const nestedSection = sectionByFullName.get(normalizeKey(runMatch[1].trim()));
+            if (!nestedSection) {
+                continue;
+            }
+
+            const activeConditions = [
+                ...inheritedClauses,
+                ...stack.flatMap((entry) => entry.activeClauses),
+            ];
+            instructions.push(
+                ...collectSectionDrawInstructions(
+                    nestedSection,
+                    variables,
+                    sectionByFullName,
+                    activeConditions,
+                    new Set(visited),
+                ),
+            );
+            continue;
+        }
+
         const drawMatch = trimmed.match(/^drawindexed\s*=\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)$/i);
         if (!drawMatch) continue;
 
@@ -1104,7 +1138,10 @@ function collectSectionDrawInstructions(
             continue;
         }
 
-        const activeConditions = stack.flatMap((entry) => entry.activeClauses);
+        const activeConditions = [
+            ...inheritedClauses,
+            ...stack.flatMap((entry) => entry.activeClauses),
+        ];
         instructions.push({
             indexCount,
             startIndex,
