@@ -37,7 +37,9 @@ export function CategorySidebar({
   onSelectCategory: (categoryId: number, categoryName: string) => void;
   onResetToGameHome: () => void;
 }) {
-  const categories = hasCategoryContext ? categoryChildren : rootCategories;
+  const categories: Array<RootCategoryItem | CategoryChildItem> = hasCategoryContext
+    ? categoryChildren
+    : rootCategories;
   const isLoading = hasCategoryContext ? isCategoryOverviewLoading : isGameOverviewLoading;
   const hasError = hasCategoryContext ? categoryOverviewError : gameOverviewError;
 
