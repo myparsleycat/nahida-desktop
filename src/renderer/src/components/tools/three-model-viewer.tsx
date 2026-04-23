@@ -120,8 +120,13 @@ function ThreeModelScene({
   const shapeKeyCacheRef = useRef<Map<string, Promise<Float32Array>>>(new Map());
 
   const rotation = useMemo(() => {
-    const [x, y, z] = parseOrientation(orientation);
-    return new Euler(MathUtils.degToRad(x), MathUtils.degToRad(y), MathUtils.degToRad(z), "XYZ");
+    const [roll, pitch, yaw] = parseOrientation(orientation);
+    return new Euler(
+      MathUtils.degToRad(pitch),
+      MathUtils.degToRad(yaw),
+      MathUtils.degToRad(roll),
+      "YXZ",
+    );
   }, [orientation]);
 
   useEffect(() => {
