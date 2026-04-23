@@ -1,5 +1,5 @@
 import path from "node:path";
-import { trim } from "es-toolkit";
+import { retry, trim } from "es-toolkit";
 import fg from "fast-glob";
 import type { NahidaDesktop } from "../..";
 import {
@@ -98,34 +98,45 @@ export class ModActionsService {
         const folderName = path.basename(modPath);
         const isEnabled = !DISABLED_PREFIX_REGEX.test(folderName);
 
-        if (!isEnabled) {
-            const groupPath = path.dirname(modPath);
-            const modFolders = await fg("*", {
-                cwd: groupPath,
-                onlyDirectories: true,
-            });
+        try {
+            if (!isEnabled) {
+                const groupPath = path.dirname(modPath);
+                const modFolders = await fg("*", {
+                    cwd: groupPath,
+                    onlyDirectories: true,
+                });
 
-            const disablePromises = modFolders.map(async (modFolderName) => {
-                const currentModPath = path.join(groupPath, modFolderName);
-                if (currentModPath === modPath) return;
+                const disablePromises = modFolders.map(async (modFolderName) => {
+                    const currentModPath = path.join(groupPath, modFolderName);
+                    if (currentModPath === modPath) return;
 
-                try {
-                    const isOtherEnabled = !DISABLED_PREFIX_REGEX.test(modFolderName);
-                    if (isOtherEnabled) {
-                        await this.disable(currentModPath);
+                    try {
+                        const isOtherEnabled = !DISABLED_PREFIX_REGEX.test(modFolderName);
+                        if (isOtherEnabled) {
+                            await this.retryExclusiveToggleOperation(
+                                () => this.disable(currentModPath),
+                                currentModPath,
+                            );
+                        }
+                    } catch (error) {
+                        this.desktop.logger.error(
+                            error,
+                            `Mod:exclusiveToggle:disable:${currentModPath}`,
+                        );
                     }
-                } catch (error) {
-                    this.desktop.logger.error(
-                        error,
-                        `Mod:exclusiveToggle:disable:${currentModPath}`,
-                    );
-                }
-            });
+                });
 
-            await Promise.all(disablePromises);
-            return await this.enable(modPath);
-        } else {
-            return await this.disable(modPath);
+                await Promise.all(disablePromises);
+                return await this.retryExclusiveToggleOperation(
+                    () => this.enable(modPath),
+                    modPath,
+                );
+            }
+
+            return await this.retryExclusiveToggleOperation(() => this.disable(modPath), modPath);
+        } catch (err) {
+            await this.throwLockedFolderError(err, modPath);
+            throw err;
         }
     }
 
@@ -218,5 +229,21 @@ export class ModActionsService {
             throw new Error(`MOD_FOLDER_LOCKED|${processNames}`);
         }
         throw new Error("MOD_FOLDER_LOCKED");
+    }
+
+    private async retryExclusiveToggleOperation<T>(
+        operation: () => Promise<T>,
+        _modPath: string,
+    ): Promise<T> {
+        return await retry(operation, {
+            retries: 2,
+            delay: (attempt) => attempt * 50,
+            shouldRetry: (error) => this.isRetryableExclusiveToggleError(error),
+        });
+    }
+
+    private isRetryableExclusiveToggleError(error: unknown): boolean {
+        const code = (error as NodeJS.ErrnoException | undefined)?.code;
+        return code === "EBUSY" || code === "EPERM" || code === "EACCES";
     }
 }

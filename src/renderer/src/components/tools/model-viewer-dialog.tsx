@@ -1,4 +1,3 @@
-import "@google/model-viewer";
 import { Button } from "@renderer/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@renderer/components/ui/dialog";
 import {
@@ -9,6 +8,8 @@ import {
   MenubarItem,
   MenubarLabel,
   MenubarMenu,
+  MenubarRadioGroup,
+  MenubarRadioItem,
   MenubarSeparator,
   MenubarTrigger,
 } from "@renderer/components/ui/menubar";
@@ -18,15 +19,16 @@ import { Loader2Icon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { GoogleModelViewer } from "./google-model-viewer";
 import {
-  captureModelViewerCameraState,
-  cleanupModelViewerUrl,
-  ModelViewerCameraState,
-  ModelViewerElement,
-  modelViewerSourceToUrl,
-  restoreModelViewerCameraState,
-  suppressModelViewerFocusOutline,
-} from "./model-viewer-session";
+  formatOrientation,
+  type ModelViewerCameraState,
+  type ModelViewerHandle,
+  type ModelViewerRenderer,
+  parseOrientation,
+} from "./model-viewer-contract";
+import { cleanupModelViewerUrl, modelViewerSourceToUrl } from "./model-viewer-session";
+import { ThreeModelViewer } from "./three-model-viewer";
 
 type VariableStateValue = number | string;
 type ModelRotationAction = { label: string; delta: [number, number, number] };
@@ -98,7 +100,8 @@ export function ModelViewerDialog({
   const [loadingViewerIndex, setLoadingViewerIndex] = useState<0 | 1 | null>(null);
   const [modelOrientation, setModelOrientation] = useState(DEFAULT_MODEL_ORIENTATION);
   const [doubleSidedEnabled, setDoubleSidedEnabled] = useState(true);
-  const viewerRefs = useRef<[ModelViewerElement | null, ModelViewerElement | null]>([null, null]);
+  const [renderer, setRenderer] = useState<ModelViewerRenderer>("google");
+  const viewerRefs = useRef<[ModelViewerHandle | null, ModelViewerHandle | null]>([null, null]);
   const doubleSidedEnabledRef = useRef(true);
   const viewerUrlsRef = useRef<[string, string]>(["", ""]);
   const activeViewerIndexRef = useRef<0 | 1>(0);
@@ -107,6 +110,7 @@ export function ModelViewerDialog({
   const initialCameraStateRef = useRef<ModelViewerCameraState | null>(null);
   const openRef = useRef(open);
   const sourceRef = useRef(source);
+  const sourceSessionKeyRef = useRef<string | null>(getSourceSessionKey(source));
   const pendingVariantRequestRef = useRef<{
     source: ModelViewerDialogSource;
     viewerIndex: 0 | 1;
@@ -139,6 +143,15 @@ export function ModelViewerDialog({
   }, [open]);
 
   useEffect(() => {
+    if (open) {
+      return;
+    }
+
+    setRenderer("google");
+    resetViewerSession({ resetOrientation: true });
+  }, [open]);
+
+  useEffect(() => {
     sourceRef.current = source;
     if (!source || source.mode !== "variant-set") {
       pendingVariantRequestRef.current = null;
@@ -146,69 +159,51 @@ export function ModelViewerDialog({
   }, [source]);
 
   useEffect(() => {
-    for (const viewer of viewerRefs.current) {
-      if (!viewer) {
-        continue;
-      }
-
-      viewer.orientation = modelOrientation;
-      void viewer.updateFraming?.();
-    }
-  }, [modelOrientation]);
-
-  useEffect(() => {
     doubleSidedEnabledRef.current = doubleSidedEnabled;
   }, [doubleSidedEnabled]);
 
   useEffect(() => {
     void Promise.allSettled(
-      viewerRefs.current.map((viewer) => applyDoubleSidedMaterials(viewer, doubleSidedEnabled)),
+      viewerRefs.current.map((viewer) => viewer?.setDoubleSided(doubleSidedEnabled)),
     );
   }, [doubleSidedEnabled]);
 
   useEffect(() => {
+    const nextSourceSessionKey = getSourceSessionKey(source);
+    const shouldResetOrientation = sourceSessionKeyRef.current !== nextSourceSessionKey;
+    sourceSessionKeyRef.current = nextSourceSessionKey;
+
     if (!source) {
+      resetViewerSession({ resetOrientation: shouldResetOrientation });
+      setRenderer("google");
       setActiveState({});
       setManifest(null);
-      setModelOrientation(DEFAULT_MODEL_ORIENTATION);
-      activeViewerIndexRef.current = 0;
-      loadingViewerIndexRef.current = null;
-      setActiveViewerIndex(0);
-      setLoadingViewerIndex(null);
-      pendingCameraStateRef.current = null;
-      initialCameraStateRef.current = null;
       setViewerUrl(0, "");
       setViewerUrl(1, "");
       return;
     }
 
     if (source.mode === "single") {
+      resetViewerSession({ resetOrientation: shouldResetOrientation });
+      setRenderer("google");
       setActiveState({});
       setManifest(null);
-      setModelOrientation(DEFAULT_MODEL_ORIENTATION);
-      activeViewerIndexRef.current = 0;
-      loadingViewerIndexRef.current = null;
-      setActiveViewerIndex(0);
-      setLoadingViewerIndex(null);
-      pendingCameraStateRef.current = null;
-      initialCameraStateRef.current = null;
       setViewerUrl(0, source.glbPath);
       setViewerUrl(1, "");
       return;
     }
 
+    resetViewerSession({ resetOrientation: shouldResetOrientation });
+    setRenderer("google");
     setActiveState(source.manifest.defaultState);
     setManifest(source.manifest);
-    setModelOrientation(DEFAULT_MODEL_ORIENTATION);
-    activeViewerIndexRef.current = 0;
-    loadingViewerIndexRef.current = null;
-    setActiveViewerIndex(0);
-    setLoadingViewerIndex(null);
-    pendingCameraStateRef.current = null;
-    initialCameraStateRef.current = null;
     setViewerUrl(0, source.activeGlbPath || source.defaultGlbPath);
     setViewerUrl(1, "");
   }, [source]);
+
+  useEffect(() => {
+    resetViewerSession({ resetOrientation: false });
+  }, [renderer]);
 
   const rotateModel = (delta: [number, number, number]) => {
     setModelOrientation((currentOrientation) => {
@@ -219,10 +214,13 @@ export function ModelViewerDialog({
 
   const handleResetView = () => {
     setModelOrientation(DEFAULT_MODEL_ORIENTATION);
-    restoreModelViewerCameraState(
-      viewerRefs.current[activeViewerIndexRef.current],
-      initialCameraStateRef.current,
-    );
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        viewerRefs.current[activeViewerIndexRef.current]?.restoreCameraState(
+          initialCameraStateRef.current,
+        );
+      });
+    });
   };
 
   const handleSelectValue = async (variableId: string, value: VariableStateValue) => {
@@ -236,9 +234,8 @@ export function ModelViewerDialog({
     };
 
     const nextViewerIndex: 0 | 1 = activeViewerIndex === 0 ? 1 : 0;
-    pendingCameraStateRef.current = captureModelViewerCameraState(
-      viewerRefs.current[activeViewerIndex],
-    );
+    pendingCameraStateRef.current =
+      viewerRefs.current[activeViewerIndex]?.captureCameraState() ?? null;
 
     const nextStateKey = createStateKey(nextState);
     const existingStateArtifact = manifest?.states.find((entry) => entry.key === nextStateKey);
@@ -316,21 +313,85 @@ export function ModelViewerDialog({
   );
   const isViewerBusy = isResolving || loadingViewerIndex !== null;
 
-  const applyDoubleSidedMaterials = async (
-    viewer: ModelViewerElement | null,
-    doubleSided: boolean,
-  ) => {
-    const materials = viewer?.model?.materials;
-    if (!materials?.length) {
+  const ActiveViewerComponent = renderer === "google" ? GoogleModelViewer : ThreeModelViewer;
+
+  function resetViewerSession(options?: { resetOrientation?: boolean }) {
+    const currentIndex = activeViewerIndexRef.current;
+    const currentUrl = viewerUrlsRef.current[currentIndex];
+    const inactiveIndex: 0 | 1 = currentIndex === 0 ? 1 : 0;
+    const inactiveUrl = viewerUrlsRef.current[inactiveIndex];
+
+    if (inactiveUrl && inactiveUrl !== currentUrl) {
+      cleanupModelViewerUrl(inactiveUrl);
+    }
+
+    viewerUrlsRef.current = [currentUrl, ""];
+    setViewerUrls(viewerUrlsRef.current);
+    if (options?.resetOrientation !== false) {
+      setModelOrientation(DEFAULT_MODEL_ORIENTATION);
+    }
+    activeViewerIndexRef.current = 0;
+    loadingViewerIndexRef.current = null;
+    setActiveViewerIndex(0);
+    setLoadingViewerIndex(null);
+    pendingCameraStateRef.current = null;
+    initialCameraStateRef.current = null;
+  }
+
+  const handleViewerLoad = (index: 0 | 1) => {
+    void (async () => {
+      const viewer = viewerRefs.current[index];
+      if (!viewer) {
+        return;
+      }
+
+      await viewer.setDoubleSided(doubleSidedEnabledRef.current);
+      const shouldRestorePendingCamera =
+        loadingViewerIndexRef.current === index && pendingCameraStateRef.current !== null;
+      if (!shouldRestorePendingCamera) {
+        await viewer.updateFraming();
+      }
+
+      requestAnimationFrame(() => {
+        if (initialCameraStateRef.current) {
+          return;
+        }
+
+        initialCameraStateRef.current = viewerRefs.current[index]?.captureCameraState() ?? null;
+      });
+
+      if (loadingViewerIndexRef.current !== index) {
+        return;
+      }
+
+      if (shouldRestorePendingCamera) {
+        viewer.restoreCameraState(pendingCameraStateRef.current, {
+          includeFieldOfView: false,
+        });
+      }
+      pendingCameraStateRef.current = null;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          activeViewerIndexRef.current = index;
+          loadingViewerIndexRef.current = null;
+          setActiveViewerIndex(index);
+          setLoadingViewerIndex(null);
+        });
+      });
+    })();
+  };
+
+  const handleViewerError = (index: 0 | 1, error: unknown) => {
+    if (loadingViewerIndexRef.current !== index) {
       return;
     }
 
-    await Promise.allSettled(
-      materials.map(async (material) => {
-        await material.ensureLoaded?.();
-        material.setDoubleSided?.(doubleSided);
-      }),
-    );
+    const activeIndex = activeViewerIndexRef.current;
+    pendingCameraStateRef.current = null;
+    loadingViewerIndexRef.current = null;
+    setActiveViewerIndex(activeIndex);
+    setLoadingViewerIndex(null);
+    console.error("Failed to load model viewer source", error);
   };
 
   return (
@@ -380,6 +441,18 @@ export function ModelViewerDialog({
               </MenubarGroup>
             </MenubarContent>
           </MenubarMenu>
+          <MenubarMenu>
+            <MenubarTrigger>{t("page.tools.model_viewer.menu.renderer")}</MenubarTrigger>
+            <MenubarContent>
+              <MenubarRadioGroup
+                value={renderer}
+                onValueChange={(value) => setRenderer(value as ModelViewerRenderer)}
+              >
+                <MenubarRadioItem value="google">@google/model-viewer</MenubarRadioItem>
+                <MenubarRadioItem value="three">Three.js</MenubarRadioItem>
+              </MenubarRadioGroup>
+            </MenubarContent>
+          </MenubarMenu>
         </Menubar>
 
         <div
@@ -392,67 +465,10 @@ export function ModelViewerDialog({
             {viewerUrls.some((url) => Boolean(url)) ? (
               <>
                 {([0, 1] as const).map((index) => (
-                  <model-viewer
+                  <ActiveViewerComponent
                     key={index}
-                    ref={(element) => {
-                      viewerRefs.current[index] = element as ModelViewerElement | null;
-                      if (!element) {
-                        return;
-                      }
-
-                      if (element.dataset.nhdViewerLoadBound === "true") {
-                        suppressModelViewerFocusOutline(element);
-                        return;
-                      }
-
-                      element.dataset.nhdViewerLoadBound = "true";
-                      suppressModelViewerFocusOutline(element);
-                      element.addEventListener("load", () => {
-                        void applyDoubleSidedMaterials(
-                          viewerRefs.current[index],
-                          doubleSidedEnabledRef.current,
-                        );
-
-                        requestAnimationFrame(() => {
-                          if (initialCameraStateRef.current) {
-                            return;
-                          }
-
-                          initialCameraStateRef.current = captureModelViewerCameraState(
-                            viewerRefs.current[index],
-                          );
-                        });
-
-                        if (loadingViewerIndexRef.current !== index) {
-                          return;
-                        }
-
-                        restoreModelViewerCameraState(
-                          viewerRefs.current[index],
-                          pendingCameraStateRef.current,
-                        );
-                        pendingCameraStateRef.current = null;
-                        requestAnimationFrame(() => {
-                          requestAnimationFrame(() => {
-                            activeViewerIndexRef.current = index;
-                            loadingViewerIndexRef.current = null;
-                            setActiveViewerIndex(index);
-                            setLoadingViewerIndex(null);
-                          });
-                        });
-                      });
-                      element.addEventListener("error", (event) => {
-                        if (loadingViewerIndexRef.current !== index) {
-                          return;
-                        }
-
-                        const activeIndex = activeViewerIndexRef.current;
-                        pendingCameraStateRef.current = null;
-                        loadingViewerIndexRef.current = null;
-                        setActiveViewerIndex(activeIndex);
-                        setLoadingViewerIndex(null);
-                        console.error("Failed to load model-viewer source", event);
-                      });
+                    ref={(viewer) => {
+                      viewerRefs.current[index] = viewer;
                     }}
                     className={cn(
                       "absolute inset-0 h-full w-full transition-opacity duration-200",
@@ -460,19 +476,11 @@ export function ModelViewerDialog({
                         ? "z-10 opacity-100"
                         : "pointer-events-none z-0 opacity-0",
                     )}
-                    tabIndex={-1}
                     src={viewerUrls[index]}
-                    camera-controls
-                    interaction-prompt="none"
-                    tone-mapping="neutral"
-                    shadow-intensity="1"
-                    exposure="1"
                     orientation={modelOrientation}
-                  >
-                    <div className="progress-bar hide" slot="progress-bar">
-                      <div className="update-bar"></div>
-                    </div>
-                  </model-viewer>
+                    onLoad={() => handleViewerLoad(index)}
+                    onError={(error) => handleViewerError(index, error)}
+                  />
                 ))}
                 <div
                   className={cn(
@@ -659,20 +667,14 @@ function createStateKey(state: Record<string, VariableStateValue>): string {
     .join("&");
 }
 
-function parseOrientation(orientation: string): [number, number, number] {
-  const [roll = "0deg", pitch = "0deg", yaw = "0deg"] = orientation.split(/\s+/);
-  return [roll, pitch, yaw].map((value) => Number.parseFloat(value) || 0) as [
-    number,
-    number,
-    number,
-  ];
-}
+function getSourceSessionKey(source: ModelViewerDialogSource | null): string | null {
+  if (!source) {
+    return null;
+  }
 
-function formatOrientation([roll, pitch, yaw]: [number, number, number]): string {
-  return [roll, pitch, yaw].map((value) => `${normalizeDegrees(value)}deg`).join(" ");
-}
+  if (source.mode === "single") {
+    return `single:${source.glbPath}`;
+  }
 
-function normalizeDegrees(value: number): number {
-  const normalized = ((value % 360) + 360) % 360;
-  return normalized > 180 ? normalized - 360 : normalized;
+  return `variant:${source.manifestPath}:${source.artifactRoot}`;
 }

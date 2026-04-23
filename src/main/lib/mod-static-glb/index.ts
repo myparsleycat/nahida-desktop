@@ -1875,7 +1875,7 @@ function collectMaterialTextureCandidateNames(binding: TextureBinding): string[]
     for (const resourceName of binding.textureResourceNames ?? []) {
         ordered.add(resourceName);
     }
-    if (ordered.size === 0 && binding.diffuseResourceName) {
+    if (binding.diffuseResourceName) {
         ordered.add(binding.diffuseResourceName);
     }
     return Array.from(ordered);

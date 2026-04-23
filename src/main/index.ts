@@ -30,6 +30,7 @@ import { registerProtocal } from "./protocals";
 import ArchiveService from "./services/archive";
 import Auth from "./services/auth";
 import { DriveService } from "./services/drive";
+import { GameBananaService } from "./services/gamebanana";
 import type ModManager from "./services/mod-manager";
 import type { ModTools } from "./services/mod-tools";
 import { StartupCleanupService } from "./services/startup-cleanup";
@@ -87,6 +88,7 @@ export class NahidaDesktop {
     public service: {
         auth: Auth;
         drive: DriveService;
+        gamebanana: GameBananaService;
         transfer: TransferService;
         mod: ModManager;
         modTools: ModTools;
@@ -122,6 +124,7 @@ export class NahidaDesktop {
         this.service = {
             auth: new Auth(this),
             drive: new DriveService(this),
+            gamebanana: new GameBananaService(this),
             transfer: new TransferService(this),
             mod: undefined as unknown as ModManager,
             modTools: undefined as unknown as ModTools,

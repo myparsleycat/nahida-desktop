@@ -7,6 +7,7 @@ import { getAggregateTransferProgress } from "@shared/transfer-progress";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpDownIcon,
+  BananaIcon,
   BugIcon,
   DatabaseBackupIcon,
   GamepadIcon,
@@ -50,6 +51,7 @@ export function Sidebar({ className }: { className?: string }) {
   const isModPage = pathname.startsWith("/mod");
   const isBackupPage = pathname.startsWith("/backup");
   const isToolsPage = pathname.startsWith("/tools");
+  const isGameBananaPage = pathname.startsWith("/gamebanana");
   const isSettingPage = pathname.startsWith("/setting");
   const getNavButtonClassName = (isActive: boolean) =>
     cn("relative overflow-visible", isActive && "text-accent hover:text-accent");
@@ -118,6 +120,99 @@ export function Sidebar({ className }: { className?: string }) {
               </div>
             </TooltipContent>
           </Tooltip>
+
+          <Tooltip disableHoverableContent={true}>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-lg"
+                className={cn(
+                  getNavButtonClassName(isGameBananaPage),
+                  isGameBananaPage && "text-yellow-500 hover:text-yellow-500",
+                )}
+                aria-current={isGameBananaPage ? "page" : undefined}
+                onPointerDown={handlePointerDown}
+                onClick={() => {
+                  navi({ to: "/gamebanana" });
+                }}
+              >
+                <BananaIcon className={cn(iconSize)} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right" hideWhenDetached={true}>
+              GameBanana
+            </TooltipContent>
+          </Tooltip>
+
+          <Separator />
+
+          {hasWindowsDesktopFeatures && (
+            <Tooltip disableHoverableContent={true}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-lg"
+                  className={getNavButtonClassName(isModPage)}
+                  aria-current={isModPage ? "page" : undefined}
+                  onPointerDown={handlePointerDown}
+                  onClick={() => {
+                    navi({ to: "/mod" });
+                  }}
+                >
+                  <GamepadIcon className={cn(iconSize)} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right" hideWhenDetached={true}>
+                {t("page.mod.title")}
+              </TooltipContent>
+            </Tooltip>
+          )}
+
+          {appStatus?.isDev && (
+            <Tooltip disableHoverableContent={true}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-lg"
+                  className={getNavButtonClassName(isBackupPage)}
+                  aria-current={isBackupPage ? "page" : undefined}
+                  onPointerDown={handlePointerDown}
+                  onClick={() => {
+                    navi({ to: "/backup" });
+                  }}
+                >
+                  <DatabaseBackupIcon className={cn(iconSize)} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right" hideWhenDetached={true}>
+                {t("page.backup.title")}
+              </TooltipContent>
+            </Tooltip>
+          )}
+
+          {hasWindowsDesktopFeatures && (
+            <Tooltip disableHoverableContent={true}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-lg"
+                  className={getNavButtonClassName(isToolsPage)}
+                  aria-current={isToolsPage ? "page" : undefined}
+                  onPointerDown={handlePointerDown}
+                  onClick={() => {
+                    navi({ to: "/tools" });
+                  }}
+                >
+                  <WrenchIcon className={cn(iconSize)} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right" hideWhenDetached={true}>
+                Tools
+              </TooltipContent>
+            </Tooltip>
+          )}
+
+          <Separator orientation="horizontal" />
 
           {session && (
             <>
@@ -192,74 +287,6 @@ export function Sidebar({ className }: { className?: string }) {
               <Separator orientation="horizontal" />
             </>
           )}
-
-          {hasWindowsDesktopFeatures && (
-            <Tooltip disableHoverableContent={true}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-lg"
-                  className={getNavButtonClassName(isModPage)}
-                  aria-current={isModPage ? "page" : undefined}
-                  onPointerDown={handlePointerDown}
-                  onClick={() => {
-                    navi({ to: "/mod" });
-                  }}
-                >
-                  <GamepadIcon className={cn(iconSize)} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right" hideWhenDetached={true}>
-                {t("page.mod.title")}
-              </TooltipContent>
-            </Tooltip>
-          )}
-
-          {appStatus?.isDev && (
-            <Tooltip disableHoverableContent={true}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-lg"
-                  className={getNavButtonClassName(isBackupPage)}
-                  aria-current={isBackupPage ? "page" : undefined}
-                  onPointerDown={handlePointerDown}
-                  onClick={() => {
-                    navi({ to: "/backup" });
-                  }}
-                >
-                  <DatabaseBackupIcon className={cn(iconSize)} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right" hideWhenDetached={true}>
-                {t("page.backup.title")}
-              </TooltipContent>
-            </Tooltip>
-          )}
-
-          {hasWindowsDesktopFeatures && (
-            <Tooltip disableHoverableContent={true}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-lg"
-                  className={getNavButtonClassName(isToolsPage)}
-                  aria-current={isToolsPage ? "page" : undefined}
-                  onPointerDown={handlePointerDown}
-                  onClick={() => {
-                    navi({ to: "/tools" });
-                  }}
-                >
-                  <WrenchIcon className={cn(iconSize)} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right" hideWhenDetached={true}>
-                Tools
-              </TooltipContent>
-            </Tooltip>
-          )}
-
-          <Separator orientation="horizontal" />
 
           <Tooltip disableHoverableContent={true}>
             <TooltipTrigger asChild>

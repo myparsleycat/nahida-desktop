@@ -1,3 +1,9 @@
+import type { ModelViewerCameraState } from "./model-viewer-contract";
+
+const ANGLED_VIEW_THETA_DEGREES = Math.atan2(0.45, 1) * (180 / Math.PI);
+const ANGLED_VIEW_PHI_DEGREES =
+    Math.acos(0.15 / Math.sqrt((0.45 ** 2) + (0.15 ** 2) + (1 ** 2))) * (180 / Math.PI);
+
 function toLocalUrl(filePath: string): string {
     const normalized = filePath.replaceAll("\\", "/");
     return `local://${encodeURI(normalized).replaceAll("#", "%23").replaceAll("?", "%3F")}`;
@@ -50,13 +56,7 @@ export type ModelViewerElement = HTMLElement & {
     getFieldOfView?: () => number;
 };
 
-export type ModelViewerCameraState = {
-    orbit: string;
-    target: string;
-    fieldOfView: string;
-};
-
-export function captureModelViewerCameraState(
+export function captureViewerCameraState(
     element: ModelViewerElement | null,
 ): ModelViewerCameraState | null {
     const orbit = element?.getCameraOrbit?.()?.toString();
@@ -73,9 +73,12 @@ export function captureModelViewerCameraState(
     };
 }
 
-export function restoreModelViewerCameraState(
+export function restoreViewerCameraState(
     element: ModelViewerElement | null,
     state: ModelViewerCameraState | null,
+    options?: {
+        includeFieldOfView?: boolean;
+    },
 ): void {
     if (!element || !state) {
         return;
@@ -87,10 +90,32 @@ export function restoreModelViewerCameraState(
         }
 
         element.cameraTarget = state.target;
-        element.fieldOfView = state.fieldOfView;
+        if (options?.includeFieldOfView !== false) {
+            element.fieldOfView = state.fieldOfView;
+        }
         element.cameraOrbit = state.orbit;
         element.jumpCameraToGoal?.();
     });
+}
+
+export const captureModelViewerCameraState = captureViewerCameraState;
+export const restoreModelViewerCameraState = restoreViewerCameraState;
+
+export function applyAngledViewerFraming(element: ModelViewerElement | null): void {
+    if (!element) {
+        return;
+    }
+
+    const orbit = element.getCameraOrbit?.()?.toString();
+    const target = element.getCameraTarget?.()?.toString();
+    const radius = orbit?.split(/\s+/)[2];
+    if (!target || !radius) {
+        return;
+    }
+
+    element.cameraTarget = target;
+    element.cameraOrbit = `${ANGLED_VIEW_THETA_DEGREES}deg ${ANGLED_VIEW_PHI_DEGREES}deg ${radius}`;
+    element.jumpCameraToGoal?.();
 }
 
 export function suppressModelViewerFocusOutline(element: HTMLElement | null): void {

@@ -360,6 +360,83 @@
         "running": "실행 중..."
       }
     },
+    "gamebanana": {
+      "title": "GameBanana",
+      "description": "지원 게임, 카테고리, 모드를 GameBanana에서 탐색합니다.",
+      "auth": {
+        "checking_title": "GameBanana 로그인 상태를 확인하는 중입니다",
+        "checking_description": "저장된 로그인 쿠키를 검사하고 필요하면 다시 로그인합니다.",
+        "required_title": "GameBanana 로그인이 필요합니다",
+        "required_description": "로그인 정보가 만료되었거나 사용할 수 없습니다. 다시 로그인해 주세요.",
+        "cancelled_title": "GameBanana 로그인이 취소되었습니다",
+        "cancelled_description": "로그인을 완료해야 GameBanana 데이터를 불러올 수 있습니다.",
+        "retry": "다시 로그인"
+      },
+      "supported_games": "지원 게임",
+      "supported_games_description": "게임을 선택하면 개요와 루트 모드 카테고리를 불러옵니다.",
+      "selected": "선택됨",
+      "root_categories": "루트 카테고리",
+      "game_menu": "게임",
+      "loading": "불러오는 중...",
+      "back_to_category": "카테고리로 돌아가기",
+      "category_panel_title": "카테고리",
+      "category_panel_description_root": "게임의 루트 카테고리를 탐색합니다.",
+      "category_panel_description_nested": "현재 카테고리의 하위 카테고리를 탐색합니다.",
+      "category_panel_description_selected": "\"{{name}}\"의 하위 카테고리를 탐색합니다.",
+      "no_categories": "표시할 카테고리가 없습니다.",
+      "stage": {
+        "game": "게임",
+        "category": "카테고리",
+        "mod": "모드"
+      },
+      "error_title": "GameBanana 데이터를 불러오지 못했습니다",
+      "game_overview_description": "선택한 게임의 개요와 주요 제출물을 확인합니다.",
+      "open_profile": "웹에서 열기",
+      "logout": "로그아웃",
+      "stats": {
+        "subscribers": "구독자",
+        "sections": "섹션",
+        "top_submissions": "주요 제출물",
+        "likes": "좋아요",
+        "posts": "댓글",
+        "views": "조회수",
+        "downloads": "다운로드"
+      },
+      "top_submissions": "주요 제출물",
+      "latest_feed": "최신 피드",
+      "latest_feed_description": "선택한 게임의 최근 제출물입니다.",
+      "category_loading": "카테고리 불러오는 중...",
+      "category_description": "하위 카테고리와 모드를 탐색합니다.",
+      "game_page": "게임 페이지",
+      "subcategories": "하위 카테고리",
+      "mods": "모드",
+      "mods_description": "선택한 카테고리의 모드 목록을 페이지별로 탐색합니다.",
+      "search_mods": "모드 검색...",
+      "previous": "이전",
+      "next": "다음",
+      "retry_later": "잠시 후 다시 시도하세요",
+      "no_results": "일치하는 모드가 없습니다.",
+      "mod_details": "모드 상세",
+      "mod_details_description": "모드를 선택하면 파일, 통계, 링크를 확인할 수 있습니다.",
+      "preview": "프리뷰",
+      "preview_description": "모드의 미리보기 이미지를 확인합니다.",
+      "no_preview_image": "프리뷰 이미지가 없습니다.",
+      "comments": "댓글",
+      "comments_description": "GameBanana 댓글을 인기순 또는 최신순으로 확인합니다.",
+      "comment_sort": {
+        "popular": "인기순",
+        "newest": "최신순"
+      },
+      "comment_replies": "답글 {{count}}개",
+      "comment_stamps": "스탬프 {{count}}개",
+      "load_more_comments": "댓글 더 보기",
+      "no_comments": "표시할 댓글이 없습니다.",
+      "select_mod_prompt": "목록에서 모드를 선택해 상세 정보를 확인하세요.",
+      "no_description": "설명이 없습니다.",
+      "files": "파일",
+      "no_files": "다운로드 가능한 파일이 없습니다.",
+      "file_downloads": "{{count}}회 다운로드"
+    },
     "tools": {
       "dashboard": {
         "sidebar_title": "모드 도구",
@@ -473,6 +550,7 @@
         "menu": {
           "model": "모델",
           "texture": "텍스처",
+          "renderer": "렌더러",
           "rotate": "회전",
           "reset": "초기화"
         },

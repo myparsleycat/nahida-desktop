@@ -380,6 +380,83 @@
         "running": "Running..."
       }
     },
+    "gamebanana": {
+      "title": "GameBanana",
+      "description": "Browse supported games, categories, and mods from GameBanana.",
+      "auth": {
+        "checking_title": "Checking your GameBanana login",
+        "checking_description": "Verifying the saved login cookie and reopening login if needed.",
+        "required_title": "GameBanana login is required",
+        "required_description": "Your saved login has expired or is no longer valid. Sign in again to continue.",
+        "cancelled_title": "GameBanana login was cancelled",
+        "cancelled_description": "Complete login to load GameBanana data.",
+        "retry": "Sign In Again"
+      },
+      "supported_games": "Supported Games",
+      "supported_games_description": "Select a game to load its overview and mod categories.",
+      "selected": "Selected",
+      "root_categories": "Root Categories",
+      "game_menu": "Game",
+      "loading": "Loading...",
+      "back_to_category": "Back to category",
+      "category_panel_title": "Categories",
+      "category_panel_description_root": "Browse the game's root categories.",
+      "category_panel_description_nested": "Browse subcategories in the current category.",
+      "category_panel_description_selected": "Browse subcategories in \"{{name}}\".",
+      "no_categories": "There are no categories to display.",
+      "stage": {
+        "game": "Game",
+        "category": "Category",
+        "mod": "Mod"
+      },
+      "error_title": "Failed to load GameBanana data",
+      "game_overview_description": "Overview and highlighted submissions for the selected game.",
+      "open_profile": "Open in Browser",
+      "logout": "Logout",
+      "stats": {
+        "subscribers": "Subscribers",
+        "sections": "Sections",
+        "top_submissions": "Top Submissions",
+        "likes": "Likes",
+        "posts": "Posts",
+        "views": "Views",
+        "downloads": "Downloads"
+      },
+      "top_submissions": "Top Submissions",
+      "latest_feed": "Latest Feed",
+      "latest_feed_description": "Recent submissions for the selected game.",
+      "category_loading": "Loading category...",
+      "category_description": "Explore subcategories and mods from this category.",
+      "game_page": "Game Page",
+      "subcategories": "Subcategories",
+      "mods": "Mods",
+      "mods_description": "Browse paged mod listings for the selected category.",
+      "search_mods": "Search mods...",
+      "previous": "Previous",
+      "next": "Next",
+      "retry_later": "Retry later",
+      "no_results": "No matching mods found.",
+      "mod_details": "Mod Details",
+      "mod_details_description": "Select a mod to inspect files, stats, and links.",
+      "preview": "Preview",
+      "preview_description": "Browse the mod's preview images.",
+      "no_preview_image": "No preview image.",
+      "comments": "Comments",
+      "comments_description": "Browse GameBanana comments by popular or newest.",
+      "comment_sort": {
+        "popular": "Popular",
+        "newest": "Newest"
+      },
+      "comment_replies": "{{count}} replies",
+      "comment_stamps": "{{count}} stamps",
+      "load_more_comments": "Load More Comments",
+      "no_comments": "There are no comments to display.",
+      "select_mod_prompt": "Select a mod from the list to view its details.",
+      "no_description": "No description available.",
+      "files": "Files",
+      "no_files": "No downloadable files listed.",
+      "file_downloads": "{{count}} downloads"
+    },
     "tools": {
       "dashboard": {
         "sidebar_title": "Mod Tools",
@@ -493,6 +570,7 @@
         "menu": {
           "model": "Model",
           "texture": "Texture",
+          "renderer": "Renderer",
           "rotate": "Rotate",
           "reset": "Reset"
         },
