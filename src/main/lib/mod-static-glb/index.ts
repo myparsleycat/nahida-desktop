@@ -335,7 +335,7 @@ export async function convertModToVariantArtifacts(
 
     try {
         for (const [key, state] of statesToGenerate) {
-            const glbName = `${sanitizeStateKey(key)}.glb`;
+            const glbName = createStateArtifactFileName(key);
             const glbPath = path.join(glbDir, glbName);
             const result = await buildModGlb({
                 ...options,
@@ -452,7 +452,7 @@ export async function resolveVariantStateArtifact(
             });
             const glbDir = path.join(artifactRoot, "glb");
             await fse.ensureDir(glbDir);
-            const glbPath = path.join(glbDir, `${sanitizeStateKey(key)}.glb`);
+            const glbPath = path.join(glbDir, createStateArtifactFileName(key));
             await fse.writeFile(glbPath, result.glb);
 
             const current = manifest.states.find((entry) => entry.key === key);
@@ -473,8 +473,13 @@ export async function resolveVariantStateArtifact(
                 };
             }
 
+            if (current.glbPath !== glbPath) {
+                current.glbPath = glbPath;
+                await writeVariantManifestAtomic(manifestPath, manifest);
+            }
+
             return {
-                glbPath: current.glbPath,
+                glbPath,
                 manifestPath,
                 manifest,
                 meshCount: result.meshCount,
@@ -1548,6 +1553,13 @@ export function createStateKey(state: VariableStateMap): string {
 
 function sanitizeStateKey(stateKey: string): string {
     return stateKey.replace(/[^a-z0-9=&_-]+/gi, "_").replace(/[=&]/g, "_");
+}
+
+function createStateArtifactFileName(stateKey: string): string {
+    const sanitized = sanitizeStateKey(stateKey).replace(/^_+|_+$/g, "");
+    const digest = crypto.createHash("sha256").update(stateKey).digest("hex").slice(0, 12);
+    const prefix = sanitized.slice(0, 80) || "state";
+    return `${prefix}-${digest}.glb`;
 }
 
 function escapeRegex(value: string): string {
