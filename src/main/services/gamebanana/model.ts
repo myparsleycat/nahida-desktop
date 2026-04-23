@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 const UrlString = z.string();
+const HttpUrlString = z.url({ protocol: /^https?$/ });
 const NumericId = z.coerce.number();
 
 const PreviewImageSchema = z.object({
@@ -47,7 +48,7 @@ const MemberSchema = z
         _sName: z.string(),
         _bIsOnline: z.boolean(),
         _bHasRipe: z.boolean(),
-        _sProfileUrl: UrlString,
+        _sProfileUrl: HttpUrlString,
         _sAvatarUrl: UrlString,
         _sMoreByUrl: UrlString.optional(),
         _sHdAvatarUrl: UrlString.optional(),
@@ -102,7 +103,7 @@ const GameSchema = z
         _idRow: NumericId,
         _sName: z.string(),
         _sAbbreviation: z.string().optional(),
-        _sProfileUrl: UrlString,
+        _sProfileUrl: HttpUrlString,
         _sIconUrl: UrlString,
         _sBannerUrl: UrlString.optional(),
         _nSubscriberCount: z.number().optional(),
@@ -119,7 +120,7 @@ const SubmissionRecordSchema = z
         _sSingularTitle: z.string().optional(),
         _sIconClasses: z.string().optional(),
         _sName: z.string(),
-        _sProfileUrl: UrlString,
+        _sProfileUrl: HttpUrlString,
         _tsDateAdded: z.number().optional(),
         _tsDateModified: z.number().optional(),
         _tsDateUpdated: z.number().optional(),
@@ -178,7 +179,7 @@ export const GameProfileSchema = z
         _sName: z.string(),
         _tsDateModified: z.number(),
         _tsDateAdded: z.number(),
-        _sProfileUrl: UrlString,
+        _sProfileUrl: HttpUrlString,
         _aPreviewMedia: PreviewMediaSchema,
         _sInitialVisibility: z.string(),
         _bHasFiles: z.boolean(),
@@ -240,7 +241,7 @@ const ModFileSchema = z
         _nFilesize: z.number(),
         _tsDateAdded: z.number(),
         _nDownloadCount: z.number(),
-        _sDownloadUrl: UrlString,
+        _sDownloadUrl: HttpUrlString,
         _sMd5Checksum: z.string().optional(),
         _sAnalysisState: z.string().optional(),
         _sAnalysisResult: z.string().optional(),
@@ -264,7 +265,7 @@ const ModCreditsAuthorSchema = z
         _idRow: NumericId.optional(),
         _sName: z.string(),
         _sUpicUrl: UrlString.optional(),
-        _sProfileUrl: UrlString.optional(),
+        _sProfileUrl: HttpUrlString.optional(),
         _sAvatarUrl: UrlString.optional(),
         _bIsOnline: z.boolean().optional(),
     })
@@ -316,7 +317,7 @@ export const ModProfileSchema = z
         _sCommentsMode: z.string(),
         _tsDateModified: z.number(),
         _tsDateAdded: z.number(),
-        _sProfileUrl: UrlString,
+        _sProfileUrl: HttpUrlString,
         _aPreviewMedia: PreviewMediaSchema,
         _nUpdatesCount: z.number(),
         _bHasUpdates: z.boolean(),
@@ -328,7 +329,7 @@ export const ModProfileSchema = z
         _bIsPorted: z.boolean(),
         _nThanksCount: z.number(),
         _sInitialVisibility: z.string(),
-        _sDownloadUrl: UrlString,
+        _sDownloadUrl: HttpUrlString,
         _nDownloadCount: z.number(),
         _aFiles: z.array(ModFileSchema),
         _nSubscriberCount: z.number(),
@@ -380,7 +381,7 @@ export const ModPostsSchema = z.object({
 
 export const MemberNavigatorPersonalSchema = z
     .object({
-        _sProfileUrl: UrlString,
+        _sProfileUrl: HttpUrlString,
         _sUsername: z.string(),
         _sAvatarUrl: UrlString,
     })
