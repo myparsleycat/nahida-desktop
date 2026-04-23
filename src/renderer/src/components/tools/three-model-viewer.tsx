@@ -2,6 +2,7 @@ import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { cn } from "@renderer/lib/utils";
 import {
+  type MutableRefObject,
   forwardRef,
   useEffect,
   useImperativeHandle,
@@ -12,6 +13,8 @@ import {
 } from "react";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import {
+  BufferAttribute,
+  BufferGeometry,
   Box3,
   type Camera,
   DoubleSide,
@@ -28,15 +31,32 @@ import {
   Vector3,
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import type { MutableRefObject } from "react";
-import type { ModelViewerHandle, ModelViewerSurfaceProps } from "./model-viewer-contract";
+import type {
+  ModelViewerHandle,
+  ModelViewerRealtimeShapeKey,
+  ModelViewerSurfaceProps,
+} from "./model-viewer-contract";
 import { parseOrientation } from "./model-viewer-contract";
 import type { ModelViewerCameraState } from "./model-viewer-contract";
+import { modelViewerSourceToUrl } from "./model-viewer-session";
 
 const DEFAULT_CAMERA_POSITION = new Vector3(0, 0, 4);
 
+type LoadedShapeKey = {
+  metadata: ModelViewerRealtimeShapeKey;
+  base: Float32Array;
+  dimensions: Array<{
+    variableId: string;
+    smaller: Float32Array;
+    bigger: Float32Array;
+  }>;
+};
+
 export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurfaceProps>(
-  function ThreeModelViewer({ className, onError, onLoad, orientation, src }, ref) {
+  function ThreeModelViewer(
+    { className, onError, onLoad, orientation, shapeKeys, src, variantState },
+    ref,
+  ) {
     const controllerRef = useRef<ModelViewerHandle | null>(null);
 
     useImperativeHandle(
@@ -65,9 +85,11 @@ export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurface
           <ThreeModelScene
             controllerRef={controllerRef}
             orientation={orientation}
+            shapeKeys={shapeKeys}
             src={src}
             onError={onError}
             onLoad={onLoad}
+            variantState={variantState}
           />
         </Canvas>
       </div>
@@ -80,7 +102,9 @@ function ThreeModelScene({
   onError,
   onLoad,
   orientation,
+  shapeKeys,
   src,
+  variantState,
 }: ModelViewerSurfaceProps & {
   controllerRef: MutableRefObject<ModelViewerHandle | null>;
 }) {
@@ -93,6 +117,7 @@ function ThreeModelScene({
   const pendingLoadIdRef = useRef(0);
   const onLoadRef = useRef(onLoad);
   const onErrorRef = useRef(onError);
+  const shapeKeyCacheRef = useRef<Map<string, Promise<Float32Array>>>(new Map());
 
   const rotation = useMemo(() => {
     const [x, y, z] = parseOrientation(orientation);
@@ -226,6 +251,37 @@ function ThreeModelScene({
     };
   }, []);
 
+  useEffect(() => {
+    if (!modelRoot || !shapeKeys?.length) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const loadedShapeKeys = (
+        await Promise.all(
+          shapeKeys.map((shapeKey) => loadShapeKey(shapeKey, shapeKeyCacheRef.current)),
+        )
+      ).filter((shapeKey): shapeKey is LoadedShapeKey => !!shapeKey);
+
+      if (cancelled || loadedShapeKeys.length === 0) {
+        return;
+      }
+
+      applyShapeKeysToScene(modelRoot, loadedShapeKeys, variantState);
+      invalidate();
+    })().catch((error) => {
+      if (!cancelled) {
+        onErrorRef.current?.(error);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [invalidate, modelRoot, shapeKeys, variantState]);
+
   return (
     <>
       <OrbitControls
@@ -239,6 +295,255 @@ function ThreeModelScene({
       </group>
     </>
   );
+}
+
+async function loadShapeKey(
+  shapeKey: ModelViewerRealtimeShapeKey,
+  cache: Map<string, Promise<Float32Array>>,
+): Promise<LoadedShapeKey | null> {
+  const [base, ...dimensionBuffers] = await Promise.all([
+    loadFloatBuffer(shapeKey.basePath, cache),
+    ...shapeKey.dimensions.flatMap((dimension) => [
+      loadFloatBuffer(dimension.smallerPath, cache),
+      loadFloatBuffer(dimension.biggerPath, cache),
+    ]),
+  ]);
+
+  if (!base) {
+    return null;
+  }
+
+  const dimensions = shapeKey.dimensions.map((dimension, index) => ({
+    variableId: dimension.variableId,
+    smaller: dimensionBuffers[index * 2]!,
+    bigger: dimensionBuffers[index * 2 + 1]!,
+  }));
+
+  return {
+    metadata: shapeKey,
+    base,
+    dimensions,
+  };
+}
+
+async function loadFloatBuffer(
+  sourcePath: string,
+  cache: Map<string, Promise<Float32Array>>,
+): Promise<Float32Array> {
+  const existing = cache.get(sourcePath);
+  if (existing) {
+    return existing;
+  }
+
+  const request = fetch(modelViewerSourceToUrl(sourcePath))
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error(`Failed to load shape key buffer: ${sourcePath}`);
+      }
+      return new Float32Array(await response.arrayBuffer());
+    })
+    .catch((error) => {
+      cache.delete(sourcePath);
+      throw error;
+    });
+  cache.set(sourcePath, request);
+  return request;
+}
+
+function applyShapeKeysToScene(
+  root: Object3D,
+  shapeKeys: LoadedShapeKey[],
+  variantState?: Record<string, number | string>,
+) {
+  root.traverse((object) => {
+    if (!(object instanceof Mesh) || !(object.geometry instanceof BufferGeometry)) {
+      return;
+    }
+
+    const shapeKey = shapeKeys.find((candidate) =>
+      candidate.metadata.targetMeshPrefixes.some((prefix) => object.name.startsWith(prefix)),
+    );
+    if (!shapeKey) {
+      return;
+    }
+
+    applyShapeKeyToGeometry(object.geometry, shapeKey, variantState);
+  });
+}
+
+function applyShapeKeyToGeometry(
+  geometry: BufferGeometry,
+  shapeKey: LoadedShapeKey,
+  variantState?: Record<string, number | string>,
+) {
+  const positionAttribute = geometry.getAttribute("position");
+  const normalAttribute = geometry.getAttribute("normal");
+  const tangentAttribute = geometry.getAttribute("tangent");
+  if (!(positionAttribute instanceof BufferAttribute)) {
+    return;
+  }
+
+  const positionArray = positionAttribute.array as Float32Array;
+  const normalArray =
+    normalAttribute instanceof BufferAttribute ? (normalAttribute.array as Float32Array) : null;
+  const tangentArray =
+    tangentAttribute instanceof BufferAttribute ? (tangentAttribute.array as Float32Array) : null;
+  const stride = shapeKey.metadata.vertexStride / 4;
+  const base = shapeKey.base;
+  const vertexCount = positionAttribute.count;
+  if (base.length < vertexCount * stride) {
+    return;
+  }
+
+  for (let index = 0; index < vertexCount; index += 1) {
+    const baseOffset = index * stride;
+    let sumPosX = 0;
+    let sumPosY = 0;
+    let sumPosZ = 0;
+    let sumNormX = 0;
+    let sumNormY = 0;
+    let sumNormZ = 0;
+    let sumTangX = 0;
+    let sumTangY = 0;
+    let sumTangZ = 0;
+    let sumTangW = 0;
+    let contributionCount = 0;
+
+    for (const dimension of shapeKey.dimensions) {
+      const rawValue = Number(variantState?.[dimension.variableId] ?? 0.5);
+      const value = Math.min(1, Math.max(0, rawValue));
+      const useSmaller = value <= 0.5;
+      const t = useSmaller ? value / 0.5 : (value - 0.5) / 0.5;
+      const source = useSmaller ? dimension.smaller : dimension.bigger;
+      const left = useSmaller ? source : base;
+      const right = useSmaller ? base : source;
+
+      const pos = lerpVec3FromBuffers(
+        left,
+        right,
+        baseOffset,
+        shapeKey.metadata.positionOffset / 4,
+        t,
+      );
+      const norm = normalizeVec3(
+        lerpVec3FromBuffers(
+          left,
+          right,
+          baseOffset,
+          shapeKey.metadata.normalOffset / 4,
+          t,
+        ),
+      );
+      const tang = normalizeVec4(
+        lerpVec4FromBuffers(
+          left,
+          right,
+          baseOffset,
+          shapeKey.metadata.tangentOffset / 4,
+          t,
+        ),
+      );
+
+      sumPosX += pos[0];
+      sumPosY += pos[1];
+      sumPosZ += pos[2];
+      sumNormX += norm[0];
+      sumNormY += norm[1];
+      sumNormZ += norm[2];
+      sumTangX += tang[0];
+      sumTangY += tang[1];
+      sumTangZ += tang[2];
+      sumTangW += tang[3];
+      contributionCount += 1;
+    }
+
+    const positionIndex = index * 3;
+    if (contributionCount === 0) {
+      positionArray[positionIndex] = base[baseOffset + shapeKey.metadata.positionOffset / 4];
+      positionArray[positionIndex + 1] =
+        base[baseOffset + shapeKey.metadata.positionOffset / 4 + 1];
+      positionArray[positionIndex + 2] =
+        base[baseOffset + shapeKey.metadata.positionOffset / 4 + 2];
+      continue;
+    }
+
+    positionArray[positionIndex] = sumPosX / contributionCount;
+    positionArray[positionIndex + 1] = sumPosY / contributionCount;
+    positionArray[positionIndex + 2] = sumPosZ / contributionCount;
+
+    if (normalArray) {
+      const normalized = normalizeVec3([sumNormX, sumNormY, sumNormZ]);
+      normalArray[positionIndex] = normalized[0];
+      normalArray[positionIndex + 1] = normalized[1];
+      normalArray[positionIndex + 2] = normalized[2];
+    }
+
+    if (tangentArray) {
+      const tangentIndex = index * 4;
+      const normalized = normalizeVec4([sumTangX, sumTangY, sumTangZ, sumTangW]);
+      tangentArray[tangentIndex] = normalized[0];
+      tangentArray[tangentIndex + 1] = normalized[1];
+      tangentArray[tangentIndex + 2] = normalized[2];
+      tangentArray[tangentIndex + 3] = normalized[3];
+    }
+  }
+
+  positionAttribute.needsUpdate = true;
+  if (normalAttribute instanceof BufferAttribute) {
+    normalAttribute.needsUpdate = true;
+  }
+  if (tangentAttribute instanceof BufferAttribute) {
+    tangentAttribute.needsUpdate = true;
+  }
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+}
+
+function lerpVec3FromBuffers(
+  left: Float32Array,
+  right: Float32Array,
+  baseOffset: number,
+  offset: number,
+  t: number,
+): [number, number, number] {
+  const index = baseOffset + offset;
+  return [
+    left[index] + (right[index] - left[index]) * t,
+    left[index + 1] + (right[index + 1] - left[index + 1]) * t,
+    left[index + 2] + (right[index + 2] - left[index + 2]) * t,
+  ];
+}
+
+function lerpVec4FromBuffers(
+  left: Float32Array,
+  right: Float32Array,
+  baseOffset: number,
+  offset: number,
+  t: number,
+): [number, number, number, number] {
+  const index = baseOffset + offset;
+  return [
+    left[index] + (right[index] - left[index]) * t,
+    left[index + 1] + (right[index + 1] - left[index + 1]) * t,
+    left[index + 2] + (right[index + 2] - left[index + 2]) * t,
+    left[index + 3] + (right[index + 3] - left[index + 3]) * t,
+  ];
+}
+
+function normalizeVec3(value: [number, number, number]): [number, number, number] {
+  const length = Math.hypot(value[0], value[1], value[2]);
+  if (!length) {
+    return [0, 0, 0];
+  }
+  return [value[0] / length, value[1] / length, value[2] / length];
+}
+
+function normalizeVec4(value: [number, number, number, number]): [number, number, number, number] {
+  const length = Math.hypot(value[0], value[1], value[2], value[3]);
+  if (!length) {
+    return [0, 0, 0, 0];
+  }
+  return [value[0] / length, value[1] / length, value[2] / length, value[3] / length];
 }
 
 function captureThreeCameraState(

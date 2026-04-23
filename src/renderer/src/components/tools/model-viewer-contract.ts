@@ -1,4 +1,19 @@
 export type ModelViewerRenderer = "google" | "three";
+export type ModelViewerVariantStateValue = number | string;
+
+export type ModelViewerRealtimeShapeKey = {
+  targetMeshPrefixes: string[];
+  basePath: string;
+  vertexStride: number;
+  positionOffset: number;
+  normalOffset: number;
+  tangentOffset: number;
+  dimensions: Array<{
+    variableId: string;
+    smallerPath: string;
+    biggerPath: string;
+  }>;
+};
 
 export type ModelViewerCameraState = {
   orbit: string;
@@ -24,6 +39,8 @@ export type ModelViewerSurfaceProps = {
   className?: string;
   orientation: string;
   src: string;
+  variantState?: Record<string, ModelViewerVariantStateValue>;
+  shapeKeys?: ModelViewerRealtimeShapeKey[];
   onError?: (error: unknown) => void;
   onLoad?: () => void;
 };

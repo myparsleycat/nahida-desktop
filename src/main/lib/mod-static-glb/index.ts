@@ -119,6 +119,29 @@ export type StaticGlbVariantValue = {
     label: string;
 };
 
+export type StaticGlbVariantSlider = {
+    min: number;
+    max: number;
+    step: number;
+};
+
+export type StaticGlbRealtimeShapeKeyDimension = {
+    variableId: string;
+    smallerPath: string;
+    biggerPath: string;
+};
+
+export type StaticGlbRealtimeShapeKey = {
+    shaderPath: string;
+    targetMeshPrefixes: string[];
+    basePath: string;
+    vertexStride: number;
+    positionOffset: number;
+    normalOffset: number;
+    tangentOffset: number;
+    dimensions: StaticGlbRealtimeShapeKeyDimension[];
+};
+
 export type StaticGlbVariantVariable = {
     id: string;
     label: string;
@@ -127,6 +150,8 @@ export type StaticGlbVariantVariable = {
     order: number;
     slot?: number;
     iconPath?: string;
+    controlType?: "buttons" | "slider";
+    slider?: StaticGlbVariantSlider;
 };
 
 export type StaticGlbViewerUiAssets = {
@@ -144,6 +169,7 @@ export type StaticGlbVariantManifest = {
     defaultState: VariableStateMap;
     variables: StaticGlbVariantVariable[];
     uiAssets: StaticGlbViewerUiAssets;
+    shapeKeys?: StaticGlbRealtimeShapeKey[];
     states: Array<{
         key: string;
         values: VariableStateMap;
@@ -383,6 +409,7 @@ export async function convertModToVariantArtifacts(
             defaultState: analysis.defaultState,
             variables,
             uiAssets,
+            shapeKeys: analysis.shapeKeys,
             states,
         };
         const manifestPath = path.join(artifactRoot, "manifest.json");
@@ -500,10 +527,10 @@ async function buildModGlb(
     const defaultVariables = collectDefaultIniVariables(sections);
     const resolvedVariables = mergeVariableState(defaultVariables, options.variableState);
     const resources = collectResources(sections);
-    const bufferGroups = await collectBufferGroups(modDir, resources, warning.warn);
     const sectionByFullName = new Map(
         sections.map((section) => [normalizeKey(getSectionFullName(section)), section]),
     );
+    const bufferGroups = await collectBufferGroups(modDir, resources, warning.warn);
     const textureBindings = collectTextureBindings(sections, sectionByFullName, resolvedVariables);
     const ibResources = collectIbResources(
         sections,
@@ -878,7 +905,10 @@ function ensureBufferResourceGroup(
     return value;
 }
 
-async function readResourceBytes(modDir: string, resource: Resource): Promise<Buffer> {
+async function readResourceBytes(
+    modDir: string,
+    resource: Resource,
+): Promise<Buffer> {
     const filePath = path.resolve(modDir, resource.filename!);
     if (!(await fse.pathExists(filePath))) throw new Error(`Missing resource file: ${filePath}`);
     return await fse.readFile(filePath);
@@ -1389,6 +1419,7 @@ async function analyzeModVariants(options: {
     const modDir = path.dirname(iniPath);
     const defaultVariables = collectDefaultIniVariables(sections);
     const slotBindings = collectSlotVariableBindings(sections, defaultVariables);
+    const resources = collectResources(sections);
     const variables = (await buildVariantVariables(slotBindings, sections, modDir, options)).map(
         (variable) => ({
             ...variable,
@@ -1404,6 +1435,7 @@ async function analyzeModVariants(options: {
         ),
         variables,
         uiAssets: collectViewerUiAssetPaths(sections),
+        shapeKeys: collectRealtimeShapeKeys(sections, resources, modDir),
     };
 }
 
@@ -1527,11 +1559,12 @@ async function buildVariantVariables(
 
     const variables: StaticGlbVariantVariable[] = [];
 
-    for (const binding of bindings.sort((a, b) => a.slot - b.slot)) {
+    for (const binding of mergeBindingsByVariable(bindings)) {
         const iconResource = findFirstResourcePath(resourceMap, [
             `MenuItem.${binding.slot}`,
             `MenuItem.${deriveVariableUiToken(binding.variable)}`,
         ]);
+        const slider = inferSliderConfig(binding.variable, binding.values);
         variables.push({
             id: binding.variable,
             label: humanizeVariableLabel(binding.variable),
@@ -1543,10 +1576,84 @@ async function buildVariantVariables(
             order: binding.slot,
             slot: binding.slot,
             iconPath: iconResource ? path.resolve(modDir, iconResource) : undefined,
+            controlType: slider ? "slider" : "buttons",
+            slider,
         });
     }
 
     return variables;
+}
+
+function mergeBindingsByVariable(bindings: SlotVariableBinding[]): SlotVariableBinding[] {
+    const merged = new Map<string, SlotVariableBinding>();
+
+    for (const binding of bindings.sort((a, b) => a.slot - b.slot)) {
+        const existing = merged.get(binding.variable);
+        if (!existing) {
+            merged.set(binding.variable, {
+                slot: binding.slot,
+                variable: binding.variable,
+                values: [...binding.values],
+            });
+            continue;
+        }
+
+        existing.slot = Math.min(existing.slot, binding.slot);
+        existing.values = mergeVariableValues(existing.values, binding.values);
+    }
+
+    return Array.from(merged.values()).sort((a, b) => a.slot - b.slot);
+}
+
+function mergeVariableValues(
+    left: VariableStateValue[],
+    right: VariableStateValue[],
+): VariableStateValue[] {
+    const merged: VariableStateValue[] = [];
+    const seen = new Set<string>();
+
+    for (const value of [...left, ...right]) {
+        const key = String(value);
+        if (seen.has(key)) {
+            continue;
+        }
+        seen.add(key);
+        merged.push(value);
+    }
+
+    if (merged.every((value) => typeof value === "number")) {
+        return [...merged].sort((a, b) => Number(a) - Number(b));
+    }
+
+    return merged;
+}
+
+function inferSliderConfig(
+    variableId: string,
+    values: VariableStateValue[],
+): StaticGlbVariantSlider | undefined {
+    const token = deriveVariableUiToken(variableId).toLowerCase();
+    if (!token.startsWith("slider")) {
+        return undefined;
+    }
+
+    const numericValues = values.filter((value): value is number => typeof value === "number");
+    if (numericValues.length < 3 || numericValues.length !== values.length) {
+        return undefined;
+    }
+
+    const sorted = [...numericValues].sort((a, b) => a - b);
+    const steps = sorted
+        .slice(1)
+        .map((value, index) => Number((value - sorted[index]).toFixed(6)))
+        .filter((step) => step > 0);
+    const step = steps.length > 0 ? Math.min(...steps) : 1;
+
+    return {
+        min: sorted[0] ?? 0,
+        max: sorted[sorted.length - 1] ?? 0,
+        step,
+    };
 }
 
 function collectViewerUiAssetPaths(sections: IniSection[]): StaticGlbViewerUiAssets {
@@ -1568,6 +1675,148 @@ function collectViewerUiAssetPaths(sections: IniSection[]): StaticGlbViewerUiAss
             "ItemSlotHover.SlotClicked",
         ]),
     };
+}
+
+function collectRealtimeShapeKeys(
+    sections: IniSection[],
+    resources: Resource[],
+    modDir: string,
+): StaticGlbRealtimeShapeKey[] {
+    const sectionByFullName = new Map(
+        sections.map((section) => [normalizeKey(getSectionFullName(section)), section]),
+    );
+    const resourceMap = new Map(resources.map((resource) => [normalizeKey(resource.name), resource]));
+    const customShaders = sections.filter(
+        (section) =>
+            section.header === "CustomShader" &&
+            section.values.cs &&
+            path.basename(section.values.cs).toLowerCase() === "shapekey.hlsl",
+    );
+    const shapeKeys: StaticGlbRealtimeShapeKey[] = [];
+
+    for (const shaderSection of customShaders) {
+        const shaderSectionName = getSectionFullName(shaderSection);
+        const outputEntry = shaderSection.lines
+            .map((line) => line.match(/^([^=]+?)\s*=\s*copy\s+ref\s+cs-u5\s*$/i))
+            .find((match): match is RegExpMatchArray => match !== null);
+        const baseEntry = shaderSection.lines
+            .map((line) => line.match(/^cs-u5\s*=\s*copy\s+(.+)$/i))
+            .find((match): match is RegExpMatchArray => match !== null);
+        if (!outputEntry || !baseEntry) {
+            continue;
+        }
+
+        const outputResource = resourceMap.get(
+            normalizeKey(trimResourcePrefix(outputEntry[1].trim())),
+        );
+        const baseResource = resourceMap.get(normalizeKey(trimResourcePrefix(baseEntry[1].trim())));
+        if (!outputResource?.filename || !baseResource?.filename) {
+            continue;
+        }
+
+        const targetMeshPrefix = deriveBufferGroupKey(outputResource.name);
+        if (!targetMeshPrefix) {
+            continue;
+        }
+
+        const callers = sections.filter((section) =>
+            section.lines.some(
+                (line) => normalizeKey(line) === normalizeKey(`run = ${shaderSectionName}`),
+            ),
+        );
+        const dimensions = new Map<string, StaticGlbRealtimeShapeKeyDimension>();
+
+        for (const caller of callers) {
+            const assignments = resolveAssignmentFromSection(
+                caller,
+                ["x88", "x89", "cs-t51", "cs-t52", "cs-t53", "cs-t54"],
+                sectionByFullName,
+                new Map(),
+            );
+            const bottomVariableId = parseVariableToken(assignments.get(normalizeKey("x88")));
+            const chestVariableId = parseVariableToken(assignments.get(normalizeKey("x89")));
+            const smallerBottom = resourceMap.get(
+                normalizeKey(
+                    trimResourcePrefix(
+                        stripCopyPrefix(assignments.get(normalizeKey("cs-t52"))),
+                    ),
+                ),
+            );
+            const biggerBottom = resourceMap.get(
+                normalizeKey(
+                    trimResourcePrefix(
+                        stripCopyPrefix(assignments.get(normalizeKey("cs-t51"))),
+                    ),
+                ),
+            );
+            const smallerChest = resourceMap.get(
+                normalizeKey(
+                    trimResourcePrefix(
+                        stripCopyPrefix(assignments.get(normalizeKey("cs-t54"))),
+                    ),
+                ),
+            );
+            const biggerChest = resourceMap.get(
+                normalizeKey(
+                    trimResourcePrefix(
+                        stripCopyPrefix(assignments.get(normalizeKey("cs-t53"))),
+                    ),
+                ),
+            );
+
+            if (bottomVariableId && smallerBottom?.filename && biggerBottom?.filename) {
+                dimensions.set(bottomVariableId, {
+                    variableId: bottomVariableId,
+                    smallerPath: path.resolve(modDir, smallerBottom.filename),
+                    biggerPath: path.resolve(modDir, biggerBottom.filename),
+                });
+            }
+
+            if (chestVariableId && smallerChest?.filename && biggerChest?.filename) {
+                dimensions.set(chestVariableId, {
+                    variableId: chestVariableId,
+                    smallerPath: path.resolve(modDir, smallerChest.filename),
+                    biggerPath: path.resolve(modDir, biggerChest.filename),
+                });
+            }
+        }
+
+        if (dimensions.size === 0) {
+            continue;
+        }
+
+        shapeKeys.push({
+            shaderPath: path.resolve(modDir, shaderSection.values.cs),
+            targetMeshPrefixes: [targetMeshPrefix],
+            basePath: path.resolve(modDir, baseResource.filename),
+            vertexStride: baseResource.stride ?? 40,
+            positionOffset: 0,
+            normalOffset: 12,
+            tangentOffset: 24,
+            dimensions: Array.from(dimensions.values()),
+        });
+    }
+
+    return shapeKeys;
+}
+
+function deriveBufferGroupKey(resourceName: string): string | undefined {
+    const typedMatch = resourceName.match(/^(.*?)(Position|Blend|Texcoord)(\.\d+)?$/i);
+    if (!typedMatch) {
+        return undefined;
+    }
+
+    const [, prefix, , suffix = ""] = typedMatch;
+    return `${prefix}${suffix}`;
+}
+
+function stripCopyPrefix(value: string | undefined): string {
+    return value?.replace(/^copy\s+/i, "").replace(/^ref\s+/i, "").trim() ?? "";
+}
+
+function parseVariableToken(value: string | undefined): string | undefined {
+    const match = value?.match(/\$([\w.]+)/);
+    return match ? normalizeKey(match[1]) : undefined;
 }
 
 function findFirstResourcePath(
