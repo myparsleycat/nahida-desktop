@@ -232,8 +232,6 @@ export class GameBananaService {
         return new Promise<void>((resolve, reject) => {
             void (async () => {
                 const parentWindow = this.getParentWindow();
-                const titlebarSetting = await this.desktop.setting.general.getTitlebarStyle();
-                const isNativeTitlebar = titlebarSetting === "native";
 
                 if (this.loginWindow && !this.loginWindow.isDestroyed()) {
                     focus(this.loginWindow);
@@ -258,10 +256,10 @@ export class GameBananaService {
                     title: "GameBanana 로그인",
                     width: 540,
                     height: 760,
-                    minWidth: 480,
-                    minHeight: 640,
+                    resizable: false,
                     show: false,
-                    frame: isNativeTitlebar,
+                    maximizable: false,
+                    minimizable: false,
                     autoHideMenuBar: true,
                     modal: !!parentWindow,
                     ...(parentWindow ? { parent: parentWindow } : {}),

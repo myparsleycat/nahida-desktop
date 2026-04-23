@@ -302,6 +302,11 @@ export function ModDetailPanel({
                         alt={preview.alt}
                         className="h-full w-full object-cover"
                         loading="lazy"
+                        style={{
+                          imageRendering: "-webkit-optimize-contrast",
+                          transform: "translateZ(0)",
+                          backfaceVisibility: "hidden",
+                        }}
                       />
                     </button>
                   ))}
