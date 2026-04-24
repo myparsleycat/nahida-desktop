@@ -70,7 +70,7 @@ function requireNative() {
   } else if (process.platform === 'android') {
     if (process.arch === 'arm64') {
       try {
-        return require('./static-glb.android-arm64.node')
+        return require('./index.android-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
@@ -86,7 +86,7 @@ function requireNative() {
       }
     } else if (process.arch === 'arm') {
       try {
-        return require('./static-glb.android-arm-eabi.node')
+        return require('./index.android-arm-eabi.node')
       } catch (e) {
         loadErrors.push(e)
       }
@@ -107,7 +107,7 @@ function requireNative() {
     if (process.arch === 'x64') {
       if (process.config?.variables?.shlib_suffix === 'dll.a' || process.config?.variables?.node_target_type === 'shared_library') {
         try {
-        return require('./static-glb.win32-x64-gnu.node')
+        return require('./index.win32-x64-gnu.node')
       } catch (e) {
         loadErrors.push(e)
       }
@@ -123,7 +123,7 @@ function requireNative() {
       }
       } else {
         try {
-        return require('./static-glb.win32-x64-msvc.node')
+        return require('./index.win32-x64-msvc.node')
       } catch (e) {
         loadErrors.push(e)
       }
@@ -140,7 +140,7 @@ function requireNative() {
       }
     } else if (process.arch === 'ia32') {
       try {
-        return require('./static-glb.win32-ia32-msvc.node')
+        return require('./index.win32-ia32-msvc.node')
       } catch (e) {
         loadErrors.push(e)
       }
@@ -156,7 +156,7 @@ function requireNative() {
       }
     } else if (process.arch === 'arm64') {
       try {
-        return require('./static-glb.win32-arm64-msvc.node')
+        return require('./index.win32-arm64-msvc.node')
       } catch (e) {
         loadErrors.push(e)
       }
@@ -175,7 +175,7 @@ function requireNative() {
     }
   } else if (process.platform === 'darwin') {
     try {
-      return require('./static-glb.darwin-universal.node')
+      return require('./index.darwin-universal.node')
     } catch (e) {
       loadErrors.push(e)
     }
@@ -191,7 +191,7 @@ function requireNative() {
     }
     if (process.arch === 'x64') {
       try {
-        return require('./static-glb.darwin-x64.node')
+        return require('./index.darwin-x64.node')
       } catch (e) {
         loadErrors.push(e)
       }
@@ -207,7 +207,7 @@ function requireNative() {
       }
     } else if (process.arch === 'arm64') {
       try {
-        return require('./static-glb.darwin-arm64.node')
+        return require('./index.darwin-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
@@ -227,7 +227,7 @@ function requireNative() {
   } else if (process.platform === 'freebsd') {
     if (process.arch === 'x64') {
       try {
-        return require('./static-glb.freebsd-x64.node')
+        return require('./index.freebsd-x64.node')
       } catch (e) {
         loadErrors.push(e)
       }
@@ -243,7 +243,7 @@ function requireNative() {
       }
     } else if (process.arch === 'arm64') {
       try {
-        return require('./static-glb.freebsd-arm64.node')
+        return require('./index.freebsd-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
@@ -264,7 +264,7 @@ function requireNative() {
     if (process.arch === 'x64') {
       if (isMusl()) {
         try {
-          return require('./static-glb.linux-x64-musl.node')
+          return require('./index.linux-x64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
@@ -280,7 +280,7 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./static-glb.linux-x64-gnu.node')
+          return require('./index.linux-x64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
@@ -298,7 +298,7 @@ function requireNative() {
     } else if (process.arch === 'arm64') {
       if (isMusl()) {
         try {
-          return require('./static-glb.linux-arm64-musl.node')
+          return require('./index.linux-arm64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
@@ -314,7 +314,7 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./static-glb.linux-arm64-gnu.node')
+          return require('./index.linux-arm64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
@@ -332,7 +332,7 @@ function requireNative() {
     } else if (process.arch === 'arm') {
       if (isMusl()) {
         try {
-          return require('./static-glb.linux-arm-musleabihf.node')
+          return require('./index.linux-arm-musleabihf.node')
         } catch (e) {
           loadErrors.push(e)
         }
@@ -348,7 +348,7 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./static-glb.linux-arm-gnueabihf.node')
+          return require('./index.linux-arm-gnueabihf.node')
         } catch (e) {
           loadErrors.push(e)
         }
@@ -366,7 +366,7 @@ function requireNative() {
     } else if (process.arch === 'loong64') {
       if (isMusl()) {
         try {
-          return require('./static-glb.linux-loong64-musl.node')
+          return require('./index.linux-loong64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
@@ -382,7 +382,7 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./static-glb.linux-loong64-gnu.node')
+          return require('./index.linux-loong64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
@@ -400,7 +400,7 @@ function requireNative() {
     } else if (process.arch === 'riscv64') {
       if (isMusl()) {
         try {
-          return require('./static-glb.linux-riscv64-musl.node')
+          return require('./index.linux-riscv64-musl.node')
         } catch (e) {
           loadErrors.push(e)
         }
@@ -416,7 +416,7 @@ function requireNative() {
         }
       } else {
         try {
-          return require('./static-glb.linux-riscv64-gnu.node')
+          return require('./index.linux-riscv64-gnu.node')
         } catch (e) {
           loadErrors.push(e)
         }
@@ -433,7 +433,7 @@ function requireNative() {
       }
     } else if (process.arch === 'ppc64') {
       try {
-        return require('./static-glb.linux-ppc64-gnu.node')
+        return require('./index.linux-ppc64-gnu.node')
       } catch (e) {
         loadErrors.push(e)
       }
@@ -449,7 +449,7 @@ function requireNative() {
       }
     } else if (process.arch === 's390x') {
       try {
-        return require('./static-glb.linux-s390x-gnu.node')
+        return require('./index.linux-s390x-gnu.node')
       } catch (e) {
         loadErrors.push(e)
       }
@@ -469,7 +469,7 @@ function requireNative() {
   } else if (process.platform === 'openharmony') {
     if (process.arch === 'arm64') {
       try {
-        return require('./static-glb.openharmony-arm64.node')
+        return require('./index.openharmony-arm64.node')
       } catch (e) {
         loadErrors.push(e)
       }
@@ -485,7 +485,7 @@ function requireNative() {
       }
     } else if (process.arch === 'x64') {
       try {
-        return require('./static-glb.openharmony-x64.node')
+        return require('./index.openharmony-x64.node')
       } catch (e) {
         loadErrors.push(e)
       }
@@ -501,7 +501,7 @@ function requireNative() {
       }
     } else if (process.arch === 'arm') {
       try {
-        return require('./static-glb.openharmony-arm.node')
+        return require('./index.openharmony-arm.node')
       } catch (e) {
         loadErrors.push(e)
       }
@@ -529,7 +529,7 @@ if (!nativeBinding || process.env.NAPI_RS_FORCE_WASI) {
   let wasiBinding = null
   let wasiBindingError = null
   try {
-    wasiBinding = require('./static-glb.wasi.cjs')
+    wasiBinding = require('./index.wasi.cjs')
     nativeBinding = wasiBinding
   } catch (err) {
     if (process.env.NAPI_RS_FORCE_WASI) {
@@ -589,5 +589,6 @@ module.exports.mergeDrawIndices = binding.mergeDrawIndices
 module.exports.normalizeTangentArray = binding.normalizeTangentArray
 module.exports.normalizeVec3Array = binding.normalizeVec3Array
 module.exports.parseDdsSrgbState = binding.parseDdsSrgbState
+module.exports.prepareTextureForMaterial = binding.prepareTextureForMaterial
 module.exports.readFloatAttribute = binding.readFloatAttribute
 module.exports.removeDegenerateTriangles = binding.removeDegenerateTriangles

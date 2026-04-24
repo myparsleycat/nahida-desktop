@@ -1,7 +1,15 @@
 #![deny(clippy::all)]
 
-use napi::bindgen_prelude::Buffer;
+use ddsfile::Dds;
+use image::codecs::jpeg::JpegEncoder;
+use image::codecs::png::PngEncoder;
+use image::{ColorType, DynamicImage, ImageEncoder, ImageReader, RgbaImage};
+use napi::bindgen_prelude::{AsyncTask, Buffer};
+use napi::Task;
 use napi_derive::napi;
+use sha2::{Digest, Sha256};
+use std::io::Cursor;
+use std::path::{Path, PathBuf};
 
 #[napi(object)]
 pub struct PngAnalysis {
@@ -37,8 +45,131 @@ pub struct RemoveDegenerateTrianglesResult {
   pub removed: u32,
 }
 
+#[napi(object)]
+pub struct PrepareTextureForMaterialInput {
+  pub texture_path: String,
+  pub resource_name: String,
+  pub texture_format: String,
+  pub jpeg_quality: u32,
+  pub allow_cache_reuse: bool,
+  pub cache_dir: String,
+}
+
+#[napi(object)]
+pub struct PrepareTextureForMaterialResult {
+  pub image: Option<Buffer>,
+  pub image_path: Option<String>,
+  pub mime_type: String,
+  pub image_extension: String,
+  pub uses_alpha: bool,
+  pub inverted_alpha: bool,
+  pub selection_score: i32,
+  pub srgb_confidence: String,
+  pub alpha_mode: Option<String>,
+  pub alpha_cutoff: Option<f64>,
+}
+
+pub struct PrepareTextureForMaterialTask {
+  input: PrepareTextureForMaterialInput,
+}
+
 #[napi]
 pub fn analyze_png(data: Buffer, width: u32, height: u32) -> napi::Result<PngAnalysis> {
+  analyze_rgba(&data, width, height)
+}
+
+#[napi(ts_return_type = "Promise<PrepareTextureForMaterialResult>")]
+pub fn prepare_texture_for_material(
+  input: PrepareTextureForMaterialInput,
+) -> AsyncTask<PrepareTextureForMaterialTask> {
+  AsyncTask::new(PrepareTextureForMaterialTask { input })
+}
+
+impl Task for PrepareTextureForMaterialTask {
+  type Output = PrepareTextureForMaterialResult;
+  type JsValue = PrepareTextureForMaterialResult;
+
+  fn compute(&mut self) -> napi::Result<Self::Output> {
+    let input = &self.input;
+    let texture_path = Path::new(&input.texture_path);
+    if input.allow_cache_reuse {
+      if let Some(cached) = read_cached_prepared_texture(input, texture_path)? {
+        return Ok(cached);
+      }
+    }
+
+    let extension = texture_path
+      .extension()
+      .and_then(|value| value.to_str())
+      .map(|value| value.to_ascii_lowercase())
+      .unwrap_or_default();
+
+    let (mut rgba, is_likely_srgb) = if extension == "dds" {
+      load_dds_rgba(texture_path)?
+    } else if extension == "png" {
+      load_png_rgba(texture_path)?
+    } else {
+      return Err(napi::Error::from_reason(format!(
+        "Unsupported texture type for GLB embedding: {}",
+        input.texture_path
+      )));
+    };
+
+    let analysis = analyze_rgba(rgba.as_raw(), rgba.width(), rgba.height())?;
+    let resource_key = normalize_key(&input.resource_name);
+    let texture_key = normalize_key(&format!(
+      "{} {}",
+      input.resource_name,
+      texture_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+    ));
+    let srgb_confidence = classify_srgb_confidence(is_likely_srgb);
+
+    let selection =
+      analyze_texture_selection_native(&analysis, &resource_key, is_likely_srgb, srgb_confidence);
+
+    let mut final_analysis = analysis;
+    let mut inverted_alpha = false;
+    if final_analysis.has_alpha && should_invert_alpha(&texture_key, &final_analysis) {
+      invert_rgba_alpha_in_place(rgba.as_mut());
+      final_analysis = analyze_rgba(rgba.as_raw(), rgba.width(), rgba.height())?;
+      inverted_alpha = true;
+    }
+
+    let uses_alpha = texture_uses_alpha(&final_analysis);
+    let mime_type = resolve_texture_mime_type(&input.texture_format, Some(uses_alpha))?;
+    let (image, image_extension) = encode_prepared_image(&rgba, &mime_type, input.jpeg_quality)?;
+    let score = score_texture_selection(&resource_key, &selection);
+    let (alpha_mode, alpha_cutoff) = material_alpha_mode(&final_analysis);
+    let mut result = PrepareTextureForMaterialResult {
+      image: Some(image.into()),
+      image_path: None,
+      mime_type,
+      image_extension,
+      uses_alpha,
+      inverted_alpha,
+      selection_score: score,
+      srgb_confidence: srgb_confidence.to_string(),
+      alpha_mode,
+      alpha_cutoff,
+    };
+
+    if let Some(cache_path) = write_cached_prepared_texture(input, texture_path, &result)? {
+      result.image = None;
+      result.image_path = Some(cache_path.to_string_lossy().into_owned());
+    }
+
+    Ok(result)
+  }
+
+  fn resolve(&mut self, _: napi::Env, output: Self::Output) -> napi::Result<Self::JsValue> {
+    Ok(output)
+  }
+}
+
+fn analyze_rgba(data: &[u8], width: u32, height: u32) -> napi::Result<PngAnalysis> {
   let pixel_count = width as usize * height as usize;
   let expected_len = pixel_count * 4;
   if data.len() < expected_len {
@@ -80,7 +211,9 @@ pub fn analyze_png(data: Buffer, width: u32, height: u32) -> napi::Result<PngAna
     }
   }
 
-  let stride = (((width as usize * height as usize) as f64 / 4096.0).sqrt().floor() as usize)
+  let stride = (((width as usize * height as usize) as f64 / 4096.0)
+    .sqrt()
+    .floor() as usize)
     .max(1);
 
   for y in (0..height as usize).step_by(stride) {
@@ -180,6 +313,586 @@ pub fn parse_dds_srgb_state(bytes: Buffer) -> Option<bool> {
   }
 }
 
+fn load_dds_rgba(texture_path: &Path) -> napi::Result<(RgbaImage, Option<bool>)> {
+  let bytes = std::fs::read(texture_path).map_err(|error| {
+    napi::Error::from_reason(format!(
+      "Failed to read DDS file '{}': {}",
+      texture_path.display(),
+      error
+    ))
+  })?;
+  let srgb = parse_dds_srgb_state(bytes[..bytes.len().min(148)].to_vec().into());
+  let mut reader = Cursor::new(&bytes);
+  let dds = Dds::read(&mut reader).map_err(|error| {
+    napi::Error::from_reason(format!(
+      "Failed to read DDS file '{}': {}",
+      texture_path.display(),
+      error
+    ))
+  })?;
+  let image = image_dds::image_from_dds(&dds, 0).map_err(|error| {
+    napi::Error::from_reason(format!(
+      "Failed to decode DDS file '{}': {}",
+      texture_path.display(),
+      error
+    ))
+  })?;
+  Ok((image, srgb))
+}
+
+fn load_png_rgba(texture_path: &Path) -> napi::Result<(RgbaImage, Option<bool>)> {
+  let image = ImageReader::open(texture_path)
+    .map_err(|error| {
+      napi::Error::from_reason(format!(
+        "Failed to open PNG file '{}': {}",
+        texture_path.display(),
+        error
+      ))
+    })?
+    .with_guessed_format()
+    .map_err(|error| {
+      napi::Error::from_reason(format!(
+        "Failed to detect image format for '{}': {}",
+        texture_path.display(),
+        error
+      ))
+    })?
+    .decode()
+    .map_err(|error| {
+      napi::Error::from_reason(format!(
+        "Failed to decode PNG file '{}': {}",
+        texture_path.display(),
+        error
+      ))
+    })?;
+  Ok((image.to_rgba8(), None))
+}
+
+fn read_cached_prepared_texture(
+  input: &PrepareTextureForMaterialInput,
+  texture_path: &Path,
+) -> napi::Result<Option<PrepareTextureForMaterialResult>> {
+  if input.cache_dir.is_empty() {
+    return Ok(None);
+  }
+
+  for cache_path in prepared_texture_cache_candidates(input, texture_path) {
+    let metadata_path = prepared_texture_metadata_path(&cache_path);
+    if !is_cache_up_to_date(&cache_path, texture_path)?
+      || !is_cache_up_to_date(&metadata_path, texture_path)?
+    {
+      continue;
+    }
+
+    let metadata = match read_prepared_texture_metadata(&metadata_path)? {
+      Some(metadata) => metadata,
+      None => continue,
+    };
+
+    return Ok(Some(PrepareTextureForMaterialResult {
+      image: None,
+      image_path: Some(cache_path.to_string_lossy().into_owned()),
+      mime_type: metadata.mime_type,
+      image_extension: metadata.image_extension,
+      uses_alpha: metadata.uses_alpha,
+      inverted_alpha: metadata.inverted_alpha,
+      selection_score: metadata.selection_score,
+      srgb_confidence: metadata.srgb_confidence,
+      alpha_mode: metadata.alpha_mode,
+      alpha_cutoff: metadata.alpha_cutoff,
+    }));
+  }
+
+  Ok(None)
+}
+
+fn write_cached_prepared_texture(
+  input: &PrepareTextureForMaterialInput,
+  texture_path: &Path,
+  result: &PrepareTextureForMaterialResult,
+) -> napi::Result<Option<PathBuf>> {
+  if input.cache_dir.is_empty() {
+    return Ok(None);
+  }
+
+  let cache_path = prepared_texture_cache_path(
+    &input.cache_dir,
+    texture_path,
+    &input.texture_path,
+    &result.mime_type,
+    &result.image_extension,
+    input.jpeg_quality,
+  );
+  if let Some(parent) = cache_path.parent() {
+    std::fs::create_dir_all(parent).map_err(|error| {
+      napi::Error::from_reason(format!(
+        "Failed to create texture cache directory '{}': {}",
+        parent.display(),
+        error
+      ))
+    })?;
+  }
+
+  let image = result.image.as_ref().ok_or_else(|| {
+    napi::Error::from_reason(
+      "Prepared texture bytes were missing while attempting to write cache".to_string(),
+    )
+  })?;
+
+  std::fs::write(&cache_path, image).map_err(|error| {
+    napi::Error::from_reason(format!(
+      "Failed to write cached texture '{}': {}",
+      cache_path.display(),
+      error
+    ))
+  })?;
+
+  let metadata = PreparedTextureMetadata {
+    mime_type: result.mime_type.clone(),
+    image_extension: result.image_extension.clone(),
+    uses_alpha: result.uses_alpha,
+    inverted_alpha: result.inverted_alpha,
+    selection_score: result.selection_score,
+    srgb_confidence: result.srgb_confidence.clone(),
+    alpha_mode: result.alpha_mode.clone(),
+    alpha_cutoff: result.alpha_cutoff,
+  };
+  let metadata_path = prepared_texture_metadata_path(&cache_path);
+  std::fs::write(&metadata_path, metadata.serialize()).map_err(|error| {
+    napi::Error::from_reason(format!(
+      "Failed to write texture cache metadata '{}': {}",
+      metadata_path.display(),
+      error
+    ))
+  })?;
+
+  Ok(Some(cache_path))
+}
+
+fn prepared_texture_cache_candidates(
+  input: &PrepareTextureForMaterialInput,
+  texture_path: &Path,
+) -> Vec<PathBuf> {
+  match input.texture_format.as_str() {
+    "png" => vec![prepared_texture_cache_path(
+      &input.cache_dir,
+      texture_path,
+      &input.texture_path,
+      "image/png",
+      "png",
+      input.jpeg_quality,
+    )],
+    "jpeg-force" => vec![prepared_texture_cache_path(
+      &input.cache_dir,
+      texture_path,
+      &input.texture_path,
+      "image/jpeg",
+      "jpg",
+      input.jpeg_quality,
+    )],
+    "jpeg-safe" => vec![
+      prepared_texture_cache_path(
+        &input.cache_dir,
+        texture_path,
+        &input.texture_path,
+        "image/png",
+        "png",
+        input.jpeg_quality,
+      ),
+      prepared_texture_cache_path(
+        &input.cache_dir,
+        texture_path,
+        &input.texture_path,
+        "image/jpeg",
+        "jpg",
+        input.jpeg_quality,
+      ),
+    ],
+    _ => Vec::new(),
+  }
+}
+
+fn prepared_texture_cache_path(
+  cache_dir: &str,
+  texture_path: &Path,
+  resolved_texture_path: &str,
+  mime_type: &str,
+  image_extension: &str,
+  jpeg_quality: u32,
+) -> PathBuf {
+  let file_name = if mime_type == "image/png" {
+    format!(
+      "{}-prepared.{}",
+      create_texture_cache_base_name(texture_path, resolved_texture_path),
+      image_extension
+    )
+  } else {
+    format!(
+      "{}-q{}.{}",
+      create_texture_cache_base_name(texture_path, resolved_texture_path),
+      jpeg_quality,
+      image_extension
+    )
+  };
+  Path::new(cache_dir).join(file_name)
+}
+
+fn prepared_texture_metadata_path(cache_path: &Path) -> PathBuf {
+  let mut file_name = cache_path
+    .file_name()
+    .and_then(|value| value.to_str())
+    .unwrap_or_default()
+    .to_string();
+  file_name.push_str(".meta");
+  cache_path.with_file_name(file_name)
+}
+
+fn create_texture_cache_base_name(texture_path: &Path, resolved_texture_path: &str) -> String {
+  let extensionless = texture_path
+    .file_stem()
+    .and_then(|value| value.to_str())
+    .filter(|value| !value.is_empty())
+    .unwrap_or("texture");
+  let mut hasher = Sha256::new();
+  hasher.update(resolved_texture_path.as_bytes());
+  let digest = hasher.finalize();
+  let digest_prefix: String = digest[..6]
+    .iter()
+    .map(|value| format!("{value:02x}"))
+    .collect();
+  format!("{extensionless}-{digest_prefix}")
+}
+
+fn is_cache_up_to_date(cache_path: &Path, source_path: &Path) -> napi::Result<bool> {
+  let cache_metadata = match std::fs::metadata(cache_path) {
+    Ok(metadata) => metadata,
+    Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+    Err(error) => {
+      return Err(napi::Error::from_reason(format!(
+        "Failed to stat cache artifact '{}': {}",
+        cache_path.display(),
+        error
+      )))
+    }
+  };
+
+  let source_metadata = std::fs::metadata(source_path).map_err(|error| {
+    napi::Error::from_reason(format!(
+      "Failed to stat source texture '{}': {}",
+      source_path.display(),
+      error
+    ))
+  })?;
+
+  let cache_mtime = cache_metadata.modified().map_err(|error| {
+    napi::Error::from_reason(format!(
+      "Failed to read cache mtime '{}': {}",
+      cache_path.display(),
+      error
+    ))
+  })?;
+  let source_mtime = source_metadata.modified().map_err(|error| {
+    napi::Error::from_reason(format!(
+      "Failed to read source texture mtime '{}': {}",
+      source_path.display(),
+      error
+    ))
+  })?;
+
+  Ok(cache_mtime >= source_mtime)
+}
+
+struct PreparedTextureMetadata {
+  mime_type: String,
+  image_extension: String,
+  uses_alpha: bool,
+  inverted_alpha: bool,
+  selection_score: i32,
+  srgb_confidence: String,
+  alpha_mode: Option<String>,
+  alpha_cutoff: Option<f64>,
+}
+
+impl PreparedTextureMetadata {
+  fn serialize(&self) -> String {
+    format!(
+      "mime_type={}\nimage_extension={}\nuses_alpha={}\ninverted_alpha={}\nselection_score={}\nsrgb_confidence={}\nalpha_mode={}\nalpha_cutoff={}\n",
+      self.mime_type,
+      self.image_extension,
+      self.uses_alpha,
+      self.inverted_alpha,
+      self.selection_score,
+      self.srgb_confidence,
+      self.alpha_mode.as_deref().unwrap_or_default(),
+      self.alpha_cutoff.map(|value| value.to_string()).unwrap_or_default(),
+    )
+  }
+
+  fn deserialize(value: &str) -> Option<Self> {
+    let mut mime_type = None;
+    let mut image_extension = None;
+    let mut uses_alpha = None;
+    let mut inverted_alpha = None;
+    let mut selection_score = None;
+    let mut srgb_confidence = None;
+    let mut alpha_mode = None;
+    let mut alpha_cutoff = None;
+
+    for line in value.lines() {
+      let (key, raw_value) = line.split_once('=')?;
+      match key {
+        "mime_type" => mime_type = Some(raw_value.to_string()),
+        "image_extension" => image_extension = Some(raw_value.to_string()),
+        "uses_alpha" => uses_alpha = raw_value.parse::<bool>().ok(),
+        "inverted_alpha" => inverted_alpha = raw_value.parse::<bool>().ok(),
+        "selection_score" => selection_score = raw_value.parse::<i32>().ok(),
+        "srgb_confidence" => srgb_confidence = Some(raw_value.to_string()),
+        "alpha_mode" => {
+          alpha_mode = if raw_value.is_empty() {
+            Some(None)
+          } else {
+            Some(Some(raw_value.to_string()))
+          }
+        }
+        "alpha_cutoff" => {
+          alpha_cutoff = if raw_value.is_empty() {
+            Some(None)
+          } else {
+            raw_value.parse::<f64>().ok().map(Some)
+          }
+        }
+        _ => {}
+      }
+    }
+
+    Some(Self {
+      mime_type: mime_type?,
+      image_extension: image_extension?,
+      uses_alpha: uses_alpha?,
+      inverted_alpha: inverted_alpha?,
+      selection_score: selection_score?,
+      srgb_confidence: srgb_confidence?,
+      alpha_mode: alpha_mode.unwrap_or(None),
+      alpha_cutoff: alpha_cutoff.unwrap_or(None),
+    })
+  }
+}
+
+fn read_prepared_texture_metadata(
+  metadata_path: &Path,
+) -> napi::Result<Option<PreparedTextureMetadata>> {
+  let contents = match std::fs::read_to_string(metadata_path) {
+    Ok(contents) => contents,
+    Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+    Err(error) => {
+      return Err(napi::Error::from_reason(format!(
+        "Failed to read texture cache metadata '{}': {}",
+        metadata_path.display(),
+        error
+      )))
+    }
+  };
+
+  Ok(PreparedTextureMetadata::deserialize(&contents))
+}
+
+fn encode_prepared_image(
+  rgba: &RgbaImage,
+  mime_type: &str,
+  jpeg_quality: u32,
+) -> napi::Result<(Vec<u8>, String)> {
+  let mut output = Vec::new();
+  if mime_type == "image/png" {
+    let encoder = PngEncoder::new(&mut output);
+    encoder
+      .write_image(
+        rgba.as_raw(),
+        rgba.width(),
+        rgba.height(),
+        ColorType::Rgba8.into(),
+      )
+      .map_err(|error| {
+        napi::Error::from_reason(format!("Failed to encode PNG texture: {error}"))
+      })?;
+    return Ok((output, String::from("png")));
+  }
+
+  if mime_type == "image/jpeg" {
+    let mut encoder = JpegEncoder::new_with_quality(&mut output, jpeg_quality.clamp(1, 100) as u8);
+    encoder
+      .encode_image(&DynamicImage::ImageRgba8(rgba.clone()))
+      .map_err(|error| {
+        napi::Error::from_reason(format!("Failed to encode JPEG texture: {error}"))
+      })?;
+    return Ok((output, String::from("jpg")));
+  }
+
+  Err(napi::Error::from_reason(format!(
+    "Unsupported output mime type: {mime_type}"
+  )))
+}
+
+fn resolve_texture_mime_type(format: &str, uses_alpha: Option<bool>) -> napi::Result<String> {
+  match format {
+    "png" => Ok(String::from("image/png")),
+    "jpeg-force" => Ok(String::from("image/jpeg")),
+    "jpeg-safe" => match uses_alpha {
+      Some(true) => Ok(String::from("image/png")),
+      Some(false) => Ok(String::from("image/jpeg")),
+      None => Ok(String::from("image/png")),
+    },
+    _ => Err(napi::Error::from_reason(format!(
+      "Unsupported texture format option: {format}"
+    ))),
+  }
+}
+
+fn material_alpha_mode(alpha: &PngAnalysis) -> (Option<String>, Option<f64>) {
+  if is_cutout_alpha(alpha) {
+    return (Some(String::from("MASK")), Some(0.5));
+  }
+  (None, None)
+}
+
+fn texture_uses_alpha(alpha: &PngAnalysis) -> bool {
+  if is_cutout_alpha(alpha) {
+    return true;
+  }
+  alpha.partial_ratio > 0.0 || alpha.low_ratio >= 0.005
+}
+
+fn is_cutout_alpha(alpha: &PngAnalysis) -> bool {
+  alpha.low_ratio >= 0.005 && alpha.high_ratio >= 0.5 && alpha.partial_ratio <= 0.02
+}
+
+fn should_invert_alpha(texture_key: &str, alpha: &PngAnalysis) -> bool {
+  if texture_key.contains("invertalpha") || texture_key.contains("alphainvert") {
+    return true;
+  }
+  alpha.low_ratio >= 0.95 && alpha.high_ratio <= 0.03 && alpha.low_alpha_rgb_mean >= 8.0
+}
+
+fn invert_rgba_alpha_in_place(data: &mut [u8]) {
+  for offset in (3..data.len()).step_by(4) {
+    data[offset] = 255u8.saturating_sub(data[offset]);
+  }
+}
+
+struct TextureSelectionAnalysisNative {
+  is_likely_flat_color: bool,
+  is_likely_normal_map: bool,
+  srgb_confidence: &'static str,
+}
+
+fn analyze_texture_selection_native(
+  color: &PngAnalysis,
+  resource_key: &str,
+  _is_likely_srgb: Option<bool>,
+  srgb_confidence: &'static str,
+) -> TextureSelectionAnalysisNative {
+  if resource_key.contains("normal")
+    || resource_key.contains("bump")
+    || resource_key.contains("lightmap")
+    || resource_key.contains("metal")
+    || resource_key.contains("rough")
+    || resource_key.contains("ao")
+    || resource_key.contains("mask")
+  {
+    return TextureSelectionAnalysisNative {
+      is_likely_flat_color: false,
+      is_likely_normal_map: resource_key.contains("normal") || resource_key.contains("bump"),
+      srgb_confidence,
+    };
+  }
+
+  TextureSelectionAnalysisNative {
+    is_likely_flat_color: color.channel_range_max <= 12
+      || (color.luminance_std_dev <= 0.035
+        && color.channel_range_max <= 24
+        && !resource_key.contains("shadow")),
+    is_likely_normal_map: color.mean_b >= 0.7
+      && (color.mean_r - 0.5).abs() <= 0.18
+      && (color.mean_g - 0.5).abs() <= 0.18
+      && color.blue_dominance >= 0.12
+      && color.channel_range_max <= 72
+      && color.luminance_std_dev <= 0.12,
+    srgb_confidence,
+  }
+}
+
+fn score_texture_selection(resource_key: &str, analysis: &TextureSelectionAnalysisNative) -> i32 {
+  let mut score = texture_name_priority(resource_key);
+  if analysis.srgb_confidence == "srgb" {
+    score += 120;
+  }
+  if analysis.srgb_confidence == "linear" {
+    score -= 120;
+  }
+  if analysis.is_likely_normal_map {
+    score -= 120;
+  }
+  if analysis.is_likely_flat_color {
+    score -= 80;
+  } else {
+    score += 20;
+  }
+  score
+}
+
+fn texture_name_priority(resource_key: &str) -> i32 {
+  let mut score = 0;
+  if resource_key.contains("basecolor") || resource_key.contains("albedo") {
+    score += 80;
+  }
+  if resource_key.contains("diffuse") {
+    score += 60;
+  }
+  if resource_key.contains("color") {
+    score += 25;
+  }
+  if resource_key.contains("shadow") {
+    score -= 20;
+  }
+  if resource_key.contains("lightmap") {
+    score -= 12;
+  }
+  if resource_key.contains("light") {
+    score -= 10;
+  }
+  if resource_key.contains("metal") || resource_key.contains("rough") || resource_key.contains("ao")
+  {
+    score -= 24;
+  }
+  if resource_key.contains("mask") {
+    score -= 28;
+  }
+  if resource_key.contains("normal") || resource_key.contains("bump") {
+    score -= 60;
+  }
+  score
+}
+
+fn normalize_key(value: &str) -> String {
+  value
+    .chars()
+    .filter_map(|char| {
+      if char.is_ascii_alphanumeric() {
+        Some(char.to_ascii_lowercase())
+      } else {
+        None
+      }
+    })
+    .collect()
+}
+
+fn classify_srgb_confidence(is_likely_srgb: Option<bool>) -> &'static str {
+  match is_likely_srgb {
+    Some(true) => "srgb",
+    Some(false) => "linear",
+    None => "unknown",
+  }
+}
+
 #[napi]
 pub fn interleave_vertex_buffers(
   position: Buffer,
@@ -193,7 +906,9 @@ pub fn interleave_vertex_buffers(
   let blend_stride = blend_stride as usize;
   let texcoord_stride = texcoord_stride as usize;
   if position_stride == 0 || blend_stride == 0 || texcoord_stride == 0 {
-    return Err(napi::Error::from_reason("Vertex buffer stride must be greater than zero"));
+    return Err(napi::Error::from_reason(
+      "Vertex buffer stride must be greater than zero",
+    ));
   }
 
   let stride = position_stride + blend_stride + texcoord_stride;
@@ -222,7 +937,9 @@ pub fn decode_indices(bytes: Buffer, format: String) -> napi::Result<Buffer> {
   let upper = format.to_uppercase();
   let out = if upper.contains("R16_UINT") {
     if bytes.len() % 2 != 0 {
-      return Err(napi::Error::from_reason("R16_UINT index buffer has an odd byte length"));
+      return Err(napi::Error::from_reason(
+        "R16_UINT index buffer has an odd byte length",
+      ));
     }
     let mut values = Vec::with_capacity(bytes.len() / 2);
     for chunk in bytes.chunks_exact(2) {
@@ -231,7 +948,9 @@ pub fn decode_indices(bytes: Buffer, format: String) -> napi::Result<Buffer> {
     values
   } else if upper.contains("R32_UINT") || upper.contains("UNKNOWN") {
     if bytes.len() % 4 != 0 {
-      return Err(napi::Error::from_reason("R32_UINT index buffer byte length is not divisible by 4"));
+      return Err(napi::Error::from_reason(
+        "R32_UINT index buffer byte length is not divisible by 4",
+      ));
     }
     let mut values = Vec::with_capacity(bytes.len() / 4);
     for chunk in bytes.chunks_exact(4) {
@@ -239,17 +958,23 @@ pub fn decode_indices(bytes: Buffer, format: String) -> napi::Result<Buffer> {
     }
     values
   } else {
-    return Err(napi::Error::from_reason(format!("Unsupported IB format: {format}")));
+    return Err(napi::Error::from_reason(format!(
+      "Unsupported IB format: {format}"
+    )));
   };
 
   Ok(u32_vec_to_buffer(out))
 }
 
 #[napi]
-pub fn merge_draw_indices(indices: Buffer, draws: Vec<DrawRange>) -> napi::Result<MergeDrawIndicesResult> {
+pub fn merge_draw_indices(
+  indices: Buffer,
+  draws: Vec<DrawRange>,
+) -> napi::Result<MergeDrawIndicesResult> {
   let indices = buffer_to_u32_vec(&indices)?;
   let mut merged = Vec::new();
   let mut invalid_ranges = Vec::new();
+  let has_draws = !draws.is_empty();
 
   for draw in draws {
     let start_index = draw.start_index;
@@ -276,10 +1001,10 @@ pub fn merge_draw_indices(indices: Buffer, draws: Vec<DrawRange>) -> napi::Resul
   }
 
   Ok(MergeDrawIndicesResult {
-    indices: if draws.is_empty() {
-      u32_vec_to_buffer(indices)
-    } else {
+    indices: if has_draws {
       u32_vec_to_buffer(merged)
+    } else {
+      u32_vec_to_buffer(indices)
     },
     invalid_ranges,
   })
@@ -312,7 +1037,12 @@ pub fn read_float_attribute(
 }
 
 #[napi]
-pub fn ensure_vec4(data: Buffer, vertex_count: u32, width: u32, fill_w: f64) -> napi::Result<Buffer> {
+pub fn ensure_vec4(
+  data: Buffer,
+  vertex_count: u32,
+  width: u32,
+  fill_w: f64,
+) -> napi::Result<Buffer> {
   let data = buffer_to_f32_vec(&data)?;
   let vertex_count = vertex_count as usize;
   let width = width as usize;
@@ -377,14 +1107,20 @@ pub fn normalize_tangent_array(data: Buffer) -> napi::Result<Buffer> {
       }
     }
     if i + 3 < out.len() {
-      out[i + 3] = if data.get(i + 3).copied().unwrap_or(0.0) >= 0.0 { 1.0 } else { -1.0 };
+      out[i + 3] = if data.get(i + 3).copied().unwrap_or(0.0) >= 0.0 {
+        1.0
+      } else {
+        -1.0
+      };
     }
   }
   Ok(f32_vec_to_buffer(out))
 }
 
 #[napi]
-pub fn remove_degenerate_triangles(indices: Buffer) -> napi::Result<RemoveDegenerateTrianglesResult> {
+pub fn remove_degenerate_triangles(
+  indices: Buffer,
+) -> napi::Result<RemoveDegenerateTrianglesResult> {
   let indices = buffer_to_u32_vec(&indices)?;
   let mut removed = 0u32;
   for i in (0..indices.len()).step_by(3) {
@@ -438,7 +1174,9 @@ fn ratio(value: usize, total: usize) -> f64 {
 
 fn buffer_to_u32_vec(buffer: &Buffer) -> napi::Result<Vec<u32>> {
   if buffer.len() % 4 != 0 {
-    return Err(napi::Error::from_reason("Expected a Uint32-compatible buffer"));
+    return Err(napi::Error::from_reason(
+      "Expected a Uint32-compatible buffer",
+    ));
   }
 
   Ok(
@@ -451,7 +1189,9 @@ fn buffer_to_u32_vec(buffer: &Buffer) -> napi::Result<Vec<u32>> {
 
 fn buffer_to_f32_vec(buffer: &Buffer) -> napi::Result<Vec<f32>> {
   if buffer.len() % 4 != 0 {
-    return Err(napi::Error::from_reason("Expected a Float32-compatible buffer"));
+    return Err(napi::Error::from_reason(
+      "Expected a Float32-compatible buffer",
+    ));
   }
 
   Ok(
@@ -567,7 +1307,9 @@ fn read_dxgi_values(bytes: &[u8], offset: usize, format: &str) -> napi::Result<V
     }
   }
 
-  Err(napi::Error::from_reason(format!("Unsupported DXGI format: {format}")))
+  Err(napi::Error::from_reason(format!(
+    "Unsupported DXGI format: {format}"
+  )))
 }
 
 fn format_component_count(format: &str) -> usize {
@@ -586,7 +1328,11 @@ fn format_component_count(format: &str) -> usize {
       }
     }
   }
-  if count == 0 { 1 } else { count }
+  if count == 0 {
+    1
+  } else {
+    count
+  }
 }
 
 fn half_to_float(value: u16) -> f32 {

@@ -98,6 +98,13 @@ function tokenizeIniExpression(expression: string): IniExpressionToken[] {
             continue;
         }
 
+        const threeCharOperator = expression.slice(index, index + 3);
+        if (["===", "!=="].includes(threeCharOperator)) {
+            tokens.push({ type: "operator", value: threeCharOperator });
+            index += 3;
+            continue;
+        }
+
         const twoCharOperator = expression.slice(index, index + 2);
         if (["&&", "||", "==", "!=", "<=", ">="].includes(twoCharOperator)) {
             tokens.push({ type: "operator", value: twoCharOperator });
@@ -164,11 +171,15 @@ function parseIniEquality(
 ): IniExpressionValue {
     let left = parseIniComparison(state, normalizeKey);
     while (true) {
-        if (matchIniOperator(state, "==") || matchIniOperator(state, "=")) {
+        if (
+            matchIniOperator(state, "===") ||
+            matchIniOperator(state, "==") ||
+            matchIniOperator(state, "=")
+        ) {
             left = compareIniEquality(left, parseIniComparison(state, normalizeKey));
             continue;
         }
-        if (matchIniOperator(state, "!=")) {
+        if (matchIniOperator(state, "!==") || matchIniOperator(state, "!=")) {
             left = !compareIniEquality(left, parseIniComparison(state, normalizeKey));
             continue;
         }

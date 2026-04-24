@@ -202,6 +202,7 @@
           "target_label": "Target folder",
           "no_target": "Select a character folder on the left",
           "invalid_url": "Enter a valid URL.",
+          "file_only": "Only direct file downloads are supported.",
           "started": "Download started."
         }
       },
@@ -468,7 +469,7 @@
         "inline_tool": "Inline tool"
       },
       "d3d11_builder": {
-        "title": "Build d3d11.dll",
+        "title": "d3d11.dll Builder",
         "description": "Builds the DLL to be injected into the game process for the selected version",
         "provider": "Provider",
         "version": "Version",

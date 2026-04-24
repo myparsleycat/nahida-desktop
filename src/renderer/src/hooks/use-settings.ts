@@ -3,7 +3,7 @@ import type { IpcHandlers } from "@shared/types.gen";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 
-// biome-ignore lint/suspicious/noExplicitAny: _
+// oxlint-disable-next-line typescript/no-explicit-any
 export function useSettings<T extends Record<string, any>>(
     fetchConfig: Record<keyof T, keyof IpcHandlers>,
 ) {
@@ -17,10 +17,7 @@ export function useSettings<T extends Record<string, any>>(
             const entries = Object.entries(fetchConfig);
             await Promise.all(
                 entries.map(async ([key, ipc]) => {
-                    const time = Date.now();
-                    console.time(`time:${time}:${ipc}`);
                     const val = await window.api.invoke(ipc as keyof IpcHandlers);
-                    console.timeEnd(`time:${time}:${ipc}`);
                     results[key as keyof T] = val;
                 }),
             );
