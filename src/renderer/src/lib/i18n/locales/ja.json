@@ -540,6 +540,7 @@
           "model": "モデル",
           "texture": "テクスチャ",
           "renderer": "レンダラー",
+          "rendering": "レンダリング",
           "toggle": "トグル",
           "rotate": "回転",
           "reset": "リセット",

@@ -552,6 +552,7 @@
           "model": "모델",
           "texture": "텍스처",
           "renderer": "렌더러",
+          "rendering": "렌더링",
           "rotate": "회전",
           "reset": "초기화",
           "toggle": "토글",

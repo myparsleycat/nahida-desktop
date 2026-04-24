@@ -17,6 +17,13 @@ interface Bounds {
 }
 
 const DEFAULT_TOGGLE_VIEWER_HOTKEY = "ctrl H";
+const MODEL_VIEWER_TONE_MAPPINGS = ["neutral", "aces", "none"] as const;
+const MODEL_VIEWER_ENVIRONMENTS = ["studio", "soft", "none"] as const;
+const DEFAULT_MODEL_VIEWER_TONE_MAPPING = "neutral";
+const DEFAULT_MODEL_VIEWER_ENVIRONMENT = "studio";
+const DEFAULT_MODEL_VIEWER_EXPOSURE = 0.7;
+const MODEL_VIEWER_EXPOSURE_MIN = 0;
+const MODEL_VIEWER_EXPOSURE_MAX = 4;
 const TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT = 32;
 const TRANSFER_DOWNLOAD_CONCURRENCY_MIN_MAX = [16, 64];
 const TRANSFER_UPLOAD_CONCURRENCY_DEFAULT = 8;
@@ -30,6 +37,29 @@ function clampTransferConcurrency(value: number, min: number, max: number, fallb
     }
 
     return Math.min(max, Math.max(min, Math.trunc(value)));
+}
+
+function normalizeModelViewerToneMapping(value: string | null | undefined) {
+    return MODEL_VIEWER_TONE_MAPPINGS.includes(value as (typeof MODEL_VIEWER_TONE_MAPPINGS)[number])
+        ? value
+        : DEFAULT_MODEL_VIEWER_TONE_MAPPING;
+}
+
+function normalizeModelViewerEnvironment(value: string | null | undefined) {
+    return MODEL_VIEWER_ENVIRONMENTS.includes(value as (typeof MODEL_VIEWER_ENVIRONMENTS)[number])
+        ? value
+        : DEFAULT_MODEL_VIEWER_ENVIRONMENT;
+}
+
+function clampModelViewerExposure(value: number) {
+    if (!Number.isFinite(value)) {
+        return DEFAULT_MODEL_VIEWER_EXPOSURE;
+    }
+
+    return Math.min(
+        MODEL_VIEWER_EXPOSURE_MAX,
+        Math.max(MODEL_VIEWER_EXPOSURE_MIN, Math.round(value * 100) / 100),
+    );
 }
 
 function getDefaultStartPageForPlatform(platform: NodeJS.Platform) {
@@ -738,6 +768,92 @@ export class Setting {
             await this.desktop.lib.db
                 .insert(setting)
                 .values({ key: "drive_name_sort_policy", value })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value },
+                });
+        },
+    };
+
+    modelViewer = {
+        getToneMapping: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "model_viewer_tone_mapping"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db.insert(setting).values({
+                    key: "model_viewer_tone_mapping",
+                    value: DEFAULT_MODEL_VIEWER_TONE_MAPPING,
+                });
+                return DEFAULT_MODEL_VIEWER_TONE_MAPPING;
+            }
+
+            return normalizeModelViewerToneMapping(qr.value);
+        },
+
+        setToneMapping: async (toneMapping: string) => {
+            const value = normalizeModelViewerToneMapping(toneMapping);
+
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({ key: "model_viewer_tone_mapping", value })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value },
+                });
+        },
+
+        getEnvironment: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "model_viewer_environment"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db.insert(setting).values({
+                    key: "model_viewer_environment",
+                    value: DEFAULT_MODEL_VIEWER_ENVIRONMENT,
+                });
+                return DEFAULT_MODEL_VIEWER_ENVIRONMENT;
+            }
+
+            return normalizeModelViewerEnvironment(qr.value);
+        },
+
+        setEnvironment: async (environment: string) => {
+            const value = normalizeModelViewerEnvironment(environment);
+
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({ key: "model_viewer_environment", value })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value },
+                });
+        },
+
+        getExposure: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "model_viewer_exposure"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db.insert(setting).values({
+                    key: "model_viewer_exposure",
+                    value: String(DEFAULT_MODEL_VIEWER_EXPOSURE),
+                });
+                return DEFAULT_MODEL_VIEWER_EXPOSURE;
+            }
+
+            return clampModelViewerExposure(Number.parseFloat(qr.value as string));
+        },
+
+        setExposure: async (exposure: number) => {
+            const value = String(clampModelViewerExposure(exposure));
+
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({ key: "model_viewer_exposure", value })
                 .onConflictDoUpdate({
                     target: setting.key,
                     set: { value },

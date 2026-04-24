@@ -572,6 +572,7 @@
           "model": "Model",
           "texture": "Texture",
           "renderer": "Renderer",
+          "rendering": "Rendering",
           "rotate": "Rotate",
           "reset": "Reset",
           "toggle": "Toggle",

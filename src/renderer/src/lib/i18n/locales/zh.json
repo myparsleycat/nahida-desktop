@@ -539,6 +539,7 @@
           "model": "模型",
           "texture": "纹理",
           "renderer": "渲染器",
+          "rendering": "渲染",
           "toggle": "切换",
           "rotate": "旋转",
           "reset": "重置",

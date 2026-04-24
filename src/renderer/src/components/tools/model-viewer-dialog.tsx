@@ -1,5 +1,6 @@
 import { Button } from "@renderer/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@renderer/components/ui/dialog";
+import { Input } from "@renderer/components/ui/input";
 import {
   Menubar,
   MenubarCheckboxItem,
@@ -26,6 +27,8 @@ import {
   type ModelViewerHandle,
   type ModelViewerRealtimeShapeKey,
   type ModelViewerRenderer,
+  type ModelViewerThreeEnvironment,
+  type ModelViewerThreeToneMapping,
   parseOrientation,
 } from "./model-viewer-contract";
 import { cleanupModelViewerUrl, modelViewerSourceToUrl } from "./model-viewer-session";
@@ -35,6 +38,9 @@ type VariableStateValue = number | string;
 type ModelRotationAction = { label: string; delta: [number, number, number] };
 
 const DEFAULT_MODEL_ORIENTATION = "0deg 0deg 0deg";
+const DEFAULT_THREE_EXPOSURE = 0.7;
+const MIN_THREE_EXPOSURE = 0;
+const MAX_THREE_EXPOSURE = 4;
 const MODEL_ROTATION_ACTIONS: ModelRotationAction[] = [
   { label: "Left 90°", delta: [0, 0, -90] },
   { label: "Right 90°", delta: [0, 0, 90] },
@@ -109,7 +115,10 @@ export function ModelViewerDialog({
   const [loadingViewerIndex, setLoadingViewerIndex] = useState<0 | 1 | null>(null);
   const [modelOrientation, setModelOrientation] = useState(DEFAULT_MODEL_ORIENTATION);
   const [doubleSidedEnabled, setDoubleSidedEnabled] = useState(true);
-  const [renderer, setRenderer] = useState<ModelViewerRenderer>("google");
+  const [renderer, setRenderer] = useState<ModelViewerRenderer>("three");
+  const [threeToneMapping, setThreeToneMapping] = useState<ModelViewerThreeToneMapping>("neutral");
+  const [threeEnvironment, setThreeEnvironment] = useState<ModelViewerThreeEnvironment>("studio");
+  const [threeExposure, setThreeExposure] = useState(DEFAULT_THREE_EXPOSURE);
   const viewerRefs = useRef<[ModelViewerHandle | null, ModelViewerHandle | null]>([null, null]);
   const doubleSidedEnabledRef = useRef(true);
   const viewerUrlsRef = useRef<[string, string]>(["", ""]);
@@ -156,7 +165,7 @@ export function ModelViewerDialog({
       return;
     }
 
-    setRenderer("google");
+    setRenderer("three");
     resetViewerSession({ resetOrientation: true });
   }, [open]);
 
@@ -178,13 +187,39 @@ export function ModelViewerDialog({
   }, [doubleSidedEnabled]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    void Promise.all([
+      window.api.invoke("setting:modelViewer:getToneMapping"),
+      window.api.invoke("setting:modelViewer:getEnvironment"),
+      window.api.invoke("setting:modelViewer:getExposure"),
+    ])
+      .then(([toneMapping, environment, exposure]) => {
+        if (cancelled) {
+          return;
+        }
+
+        setThreeToneMapping(normalizeThreeToneMapping(toneMapping));
+        setThreeEnvironment(normalizeThreeEnvironment(environment));
+        setThreeExposure(clampThreeExposure(exposure));
+      })
+      .catch((error) => {
+        console.error("Failed to load model viewer rendering settings", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const nextSourceSessionKey = getSourceSessionKey(source);
     const shouldResetOrientation = sourceSessionKeyRef.current !== nextSourceSessionKey;
     sourceSessionKeyRef.current = nextSourceSessionKey;
 
     if (!source) {
       resetViewerSession({ resetOrientation: shouldResetOrientation });
-      setRenderer("google");
+      setRenderer("three");
       setActiveState({});
       setManifest(null);
       setViewerUrl(0, "");
@@ -194,7 +229,7 @@ export function ModelViewerDialog({
 
     if (source.mode === "single") {
       resetViewerSession({ resetOrientation: shouldResetOrientation });
-      setRenderer("google");
+      setRenderer("three");
       setActiveState({});
       setManifest(null);
       setViewerUrl(0, source.glbPath);
@@ -203,7 +238,7 @@ export function ModelViewerDialog({
     }
 
     resetViewerSession({ resetOrientation: shouldResetOrientation });
-    setRenderer(source.manifest.shapeKeys?.length ? "three" : "google");
+    setRenderer("three");
     setActiveState(source.manifest.defaultState);
     setManifest(source.manifest);
     setViewerUrl(0, source.activeGlbPath || source.defaultGlbPath);
@@ -213,6 +248,31 @@ export function ModelViewerDialog({
   useEffect(() => {
     resetViewerSession({ resetOrientation: false });
   }, [renderer]);
+
+  const updateThreeToneMapping = (value: ModelViewerThreeToneMapping) => {
+    setThreeToneMapping(value);
+    void window.api.invoke("setting:modelViewer:setToneMapping", value).catch((error) => {
+      console.error("Failed to persist model viewer tone mapping", error);
+      toast.error("Failed to save tone mapping setting.");
+    });
+  };
+
+  const updateThreeEnvironment = (value: ModelViewerThreeEnvironment) => {
+    setThreeEnvironment(value);
+    void window.api.invoke("setting:modelViewer:setEnvironment", value).catch((error) => {
+      console.error("Failed to persist model viewer environment", error);
+      toast.error("Failed to save environment setting.");
+    });
+  };
+
+  const updateThreeExposure = (value: number) => {
+    const nextValue = clampThreeExposure(value);
+    setThreeExposure(nextValue);
+    void window.api.invoke("setting:modelViewer:setExposure", nextValue).catch((error) => {
+      console.error("Failed to persist model viewer exposure", error);
+      toast.error("Failed to save exposure setting.");
+    });
+  };
 
   const rotateModel = (delta: [number, number, number]) => {
     setModelOrientation((currentOrientation) => {
@@ -326,10 +386,11 @@ export function ModelViewerDialog({
     }
 
     try {
-      const result = await window.api.invoke("tools:persistModelViewerToggleState", {
+      const result = await window.api.invoke(
+        "tools:persistModelViewerToggleState",
         iniPath,
-        state: activeState,
-      });
+        activeState,
+      );
 
       if (result.updatedVariables.length > 0) {
         toast.success(t("page.tools.model_viewer.toast.save_to_ini_success"));
@@ -594,6 +655,93 @@ export function ModelViewerDialog({
               </MenubarRadioGroup>
             </MenubarContent>
           </MenubarMenu>
+          <MenubarMenu>
+            <MenubarTrigger disabled={renderer !== "three"}>Rendering</MenubarTrigger>
+            <MenubarContent>
+              <MenubarGroup>
+                <MenubarLabel className="text-xs text-muted-foreground">Tone Mapping</MenubarLabel>
+                <MenubarRadioGroup
+                  value={threeToneMapping}
+                  onValueChange={(value) =>
+                    updateThreeToneMapping(value as ModelViewerThreeToneMapping)
+                  }
+                >
+                  <MenubarRadioItem value="neutral">Neutral</MenubarRadioItem>
+                  <MenubarRadioItem value="aces">ACES Filmic</MenubarRadioItem>
+                  <MenubarRadioItem value="none">None</MenubarRadioItem>
+                </MenubarRadioGroup>
+              </MenubarGroup>
+              <MenubarSeparator />
+              <MenubarGroup>
+                <MenubarLabel className="text-xs text-muted-foreground">Environment</MenubarLabel>
+                <MenubarRadioGroup
+                  value={threeEnvironment}
+                  onValueChange={(value) =>
+                    updateThreeEnvironment(value as ModelViewerThreeEnvironment)
+                  }
+                >
+                  <MenubarRadioItem value="studio">Studio</MenubarRadioItem>
+                  <MenubarRadioItem value="soft">Soft</MenubarRadioItem>
+                  <MenubarRadioItem value="none">None</MenubarRadioItem>
+                </MenubarRadioGroup>
+              </MenubarGroup>
+              <MenubarSeparator />
+              <MenubarGroup>
+                <MenubarLabel className="text-xs text-muted-foreground">Exposure</MenubarLabel>
+                <div className="px-1.5 py-1">
+                  <div className="mb-2 flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2"
+                      onClick={() => updateThreeExposure(threeExposure - 0.1)}
+                    >
+                      -0.1
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2"
+                      onClick={() => updateThreeExposure(DEFAULT_THREE_EXPOSURE)}
+                    >
+                      Reset
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2"
+                      onClick={() => updateThreeExposure(threeExposure + 0.1)}
+                    >
+                      +0.1
+                    </Button>
+                  </div>
+                  <Input
+                    type="number"
+                    min={MIN_THREE_EXPOSURE}
+                    max={MAX_THREE_EXPOSURE}
+                    step={0.05}
+                    value={formatSliderValue(threeExposure)}
+                    onChange={(event) => {
+                      const nextValue = Number.parseFloat(event.target.value);
+                      if (Number.isFinite(nextValue)) {
+                        setThreeExposure(nextValue);
+                      }
+                    }}
+                    onBlur={(event) => {
+                      updateThreeExposure(Number.parseFloat(event.target.value));
+                    }}
+                  />
+                  <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>{formatSliderValue(MIN_THREE_EXPOSURE)}</span>
+                    <span>{formatSliderValue(MAX_THREE_EXPOSURE)}</span>
+                  </div>
+                </div>
+              </MenubarGroup>
+            </MenubarContent>
+          </MenubarMenu>
           {showToggleViewer ? (
             <MenubarMenu>
               <MenubarTrigger>{t("page.tools.model_viewer.menu.toggle")}</MenubarTrigger>
@@ -639,6 +787,9 @@ export function ModelViewerDialog({
                     orientation={modelOrientation}
                     variantState={viewerVariantState}
                     shapeKeys={shapeKeys}
+                    threeToneMapping={threeToneMapping}
+                    threeEnvironment={threeEnvironment}
+                    threeExposure={threeExposure}
                     onLoad={() => handleViewerLoad(index)}
                     onError={(error) => handleViewerError(index, error)}
                   />
@@ -1007,5 +1158,21 @@ function getSourceSessionKey(source: ModelViewerDialogSource | null): string | n
     return `single:${source.glbPath}`;
   }
 
-  return `variant:${source.manifestPath}:${source.artifactRoot}`;
+  return `variant:${source.manifestPath}`;
+}
+
+function clampThreeExposure(value: number): number {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_THREE_EXPOSURE;
+  }
+
+  return Math.min(MAX_THREE_EXPOSURE, Math.max(MIN_THREE_EXPOSURE, Math.round(value * 100) / 100));
+}
+
+function normalizeThreeToneMapping(value: string | null | undefined): ModelViewerThreeToneMapping {
+  return value === "aces" || value === "none" || value === "neutral" ? value : "neutral";
+}
+
+function normalizeThreeEnvironment(value: string | null | undefined): ModelViewerThreeEnvironment {
+  return value === "soft" || value === "none" || value === "studio" ? value : "studio";
 }
