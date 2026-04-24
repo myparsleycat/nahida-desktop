@@ -815,20 +815,20 @@ async function collectBufferGroups(
 
     for (const resource of resources) {
         if (!resource.filename || !resource.stride) continue;
-        const typedMatch = resource.name.match(/^(.*?)(Position|Blend|Texcoord)(\.\d+)?$/i);
-        if (typedMatch) {
-            const [, prefix, kind, suffix = ""] = typedMatch;
-            const key = `${prefix}${suffix}`;
-            if (/position/i.test(kind)) {
+        const typedResource = parseBufferGroupResourceName(resource.name);
+        if (typedResource) {
+            const { key, kind } = typedResource;
+            if (kind === "position") {
                 ensureBufferResourceGroup(byKey, key).position = resource;
-            } else if (/blend/i.test(kind)) {
+            } else if (kind === "blend") {
                 ensureBufferResourceGroup(byKey, key).blend = resource;
             } else {
                 ensureBufferResourceGroup(byKey, key).texcoord = resource;
             }
         } else if (
-            resource.filename.toLowerCase().endsWith(".buf") ||
-            resource.filename.toLowerCase().endsWith(".vb")
+            !isShapeKeyPositionVariantResource(resource.name) &&
+            (resource.filename.toLowerCase().endsWith(".buf") ||
+                resource.filename.toLowerCase().endsWith(".vb"))
         ) {
             ensureBufferResourceGroup(byKey, resource.name).single = resource;
         }
@@ -893,6 +893,31 @@ async function collectBufferGroups(
     }
 
     return groups;
+}
+
+function parseBufferGroupResourceName(
+    resourceName: string,
+): { key: string; kind: "position" | "blend" | "texcoord" } | null {
+    const typedMatch = resourceName.match(/^(.*?)(Position|Blend|Texcoord)(\.\d+)?$/i);
+    if (typedMatch) {
+        const [, prefix, kind, suffix = ""] = typedMatch;
+        return {
+            key: `${prefix}${suffix}`,
+            kind: kind.toLowerCase() as "position" | "blend" | "texcoord",
+        };
+    }
+
+    const basePositionMatch = resourceName.match(/^(.*?)PositionBase(\.\d+)?$/i);
+    if (basePositionMatch) {
+        const [, prefix, suffix = ""] = basePositionMatch;
+        return { key: `${prefix}${suffix}`, kind: "position" };
+    }
+
+    return null;
+}
+
+function isShapeKeyPositionVariantResource(resourceName: string): boolean {
+    return /Position(?!Base(?:\.|$))[\w.-]+$/i.test(resourceName);
 }
 
 function ensureBufferResourceGroup(
@@ -1834,7 +1859,7 @@ function collectRealtimeShapeKeys(
             normalizeKey(trimResourcePrefix(outputEntry[1].trim())),
         );
         const baseResource = resourceMap.get(normalizeKey(trimResourcePrefix(baseEntry[1].trim())));
-        if (!outputResource?.filename || !baseResource?.filename) {
+        if (!outputResource || !baseResource?.filename) {
             continue;
         }
 
@@ -1917,13 +1942,7 @@ function collectRealtimeShapeKeys(
 }
 
 function deriveBufferGroupKey(resourceName: string): string | undefined {
-    const typedMatch = resourceName.match(/^(.*?)(Position|Blend|Texcoord)(\.\d+)?$/i);
-    if (!typedMatch) {
-        return undefined;
-    }
-
-    const [, prefix, , suffix = ""] = typedMatch;
-    return `${prefix}${suffix}`;
+    return parseBufferGroupResourceName(resourceName)?.key;
 }
 
 function stripCopyPrefix(value: string | undefined): string {
