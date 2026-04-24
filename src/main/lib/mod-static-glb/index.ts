@@ -554,7 +554,9 @@ async function buildModGlb(
     );
 
     for (const ib of ibResources) {
-        const group = bufferGroups.find((candidate) => keyMatchesIb(candidate.key, ib.key));
+        const group =
+            bufferGroups.find((candidate) => strictKeyMatchesIb(candidate.key, ib.key)) ||
+            bufferGroups.find((candidate) => keyMatchesIb(candidate.key, ib.key));
         if (!group) {
             warning.warn(`No matching vertex buffer found for ${ib.filename}`);
             continue;
@@ -2605,6 +2607,13 @@ function bestKeyForIb(stem: string, resourceName: string, keys: string[]): strin
     const sameSuffixKeys =
         suffix !== null ? sorted.filter((key) => extractNumericSuffix(key) === suffix) : [];
 
+    const exactKeyMatch =
+        sameSuffixKeys.find((key) => normalizeKey(key) === normalizedName) ||
+        sorted.find((key) => normalizeKey(key) === normalizedName);
+    if (exactKeyMatch) {
+        return exactKeyMatch;
+    }
+
     if (sameSuffixKeys.length === 1) {
         return sameSuffixKeys[0];
     }
@@ -2660,6 +2669,28 @@ function keyMatchesIb(groupKey: string, ibKey: string): boolean {
     }
 
     return a.includes(b) || b.includes(a);
+}
+
+function strictKeyMatchesIb(groupKey: string, ibKey: string): boolean {
+    const a = normalizeKey(groupKey);
+    const b = normalizeKey(ibKey);
+    if (a === b) {
+        return true;
+    }
+
+    const groupSuffix = extractNumericSuffix(groupKey);
+    const ibSuffix = extractNumericSuffix(ibKey);
+    if (groupSuffix !== null || ibSuffix !== null) {
+        if (groupSuffix !== ibSuffix) {
+            return false;
+        }
+
+        const groupBase = normalizeKey(groupKey.replace(/\.\d+$/i, ""));
+        const ibBase = normalizeKey(ibKey.replace(/\.\d+$/i, ""));
+        return groupBase === ibBase;
+    }
+
+    return false;
 }
 
 function normalizeKey(value: string): string {
