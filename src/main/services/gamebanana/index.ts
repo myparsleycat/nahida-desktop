@@ -39,9 +39,9 @@ export class GameBananaService {
     private readonly logoutUrl = "https://gamebanana.com/members/account/logout";
     private readonly authUrl = `${this.apiBaseUrl}/Member/Authenticate`;
     private readonly navigatorPersonalUrl = `${this.apiBaseUrl}/Member/Navigator/Personal`;
-    private readonly cookieSettingKey = "gamebanana_rmc";
+    private readonly cookieSettingKey = "gamebanana_auth_cookies";
     private loginWindow: BrowserWindow | null = null;
-    private authPromise: Promise<void> | null = null;
+    private authPromise: Promise<string> | null = null;
 
     private readonly baseUrls = {
         game: {
@@ -61,7 +61,7 @@ export class GameBananaService {
         },
     } as const;
 
-    constructor(private readonly desktop: NahidaDesktop) {}
+    constructor(private readonly desktop: NahidaDesktop) { }
 
     private getParentWindow() {
         const mainWindow = this.desktop.window.main.window;
@@ -112,23 +112,28 @@ export class GameBananaService {
             });
     }
 
-    private parseRmcCookie(setCookieHeaders: string[] | undefined) {
+    private parseAuthCookies(setCookieHeaders: string[] | undefined) {
         if (!setCookieHeaders?.length) {
             return null;
         }
 
-        for (const header of setCookieHeaders) {
-            const cookie = header
-                .split(";")
-                .map((part) => part.trim())
-                .find((part) => part.startsWith("rmc="));
+        const cookies: string[] = [];
 
-            if (cookie) {
-                return cookie;
+        for (const header of setCookieHeaders) {
+            const parts = header.split(";").map((part) => part.trim());
+
+            const rmc = parts.find((part) => part.startsWith("rmc="));
+            if (rmc) {
+                cookies.push(rmc);
+            }
+
+            const sess = parts.find((part) => part.startsWith("sess="));
+            if (sess) {
+                cookies.push(sess);
             }
         }
 
-        return null;
+        return cookies.length > 0 ? cookies.join("; ") : null;
     }
 
     private async validateCookie(cookie: string) {
@@ -155,7 +160,11 @@ export class GameBananaService {
         return MemberNavigatorPersonalSchema.safeParse(data).success;
     }
 
-    private async ensureAuthenticated(forceRelogin = false) {
+    private async ensureAuthenticated(forceRelogin = false, _depth = 0) {
+        if (_depth > 1) {
+            throw new Error("GAMEBANANA_AUTH_FAILED");
+        }
+
         if (forceRelogin) {
             await this.removeCookie();
         } else {
@@ -170,15 +179,22 @@ export class GameBananaService {
             }
         }
 
-        if (!this.authPromise) {
-            const authPromise = this.openLoginWindow();
-            this.authPromise = authPromise;
-            authPromise.finally(() => {
-                if (this.authPromise === authPromise) {
-                    this.authPromise = null;
-                }
-            });
+        if (this.authPromise) {
+            await this.authPromise;
+            const cookieAfterWait = await this.getCookie();
+            if (cookieAfterWait) {
+                return cookieAfterWait;
+            }
+            throw new Error("GAMEBANANA_AUTH_FAILED");
         }
+
+        const authPromise = this.openLoginWindow();
+        this.authPromise = authPromise;
+        authPromise.finally(() => {
+            if (this.authPromise === authPromise) {
+                this.authPromise = null;
+            }
+        });
 
         await this.authPromise;
 
@@ -229,21 +245,27 @@ export class GameBananaService {
     }
 
     private async openLoginWindow() {
-        return new Promise<void>((resolve, reject) => {
+        return new Promise<string>((resolve, reject) => {
             void (async () => {
                 const parentWindow = this.getParentWindow();
 
                 if (this.loginWindow && !this.loginWindow.isDestroyed()) {
                     focus(this.loginWindow);
+                    try {
+                        const result = await (this.authPromise ?? Promise.reject(new Error("GAMEBANANA_AUTH_FAILED")));
+                        resolve(result);
+                    } catch (error) {
+                        reject(error instanceof Error ? error : new Error("GAMEBANANA_AUTH_FAILED"));
+                    }
                     return;
                 }
 
                 let settled = false;
-                const resolveOnce = () => {
+                const resolveOnce = (value?: string) => {
                     if (settled) return;
                     settled = true;
                     cleanup();
-                    resolve();
+                    resolve(value ?? "");
                 };
                 const rejectOnce = (error: Error) => {
                     if (settled) return;
@@ -289,7 +311,7 @@ export class GameBananaService {
                             return acc;
                         }, {});
 
-                        const cookie = this.parseRmcCookie(headers["set-cookie"]);
+                        const cookie = this.parseAuthCookies(headers["set-cookie"]);
                         if (cookie) {
                             try {
                                 await this.saveCookie(cookie);
@@ -297,7 +319,7 @@ export class GameBananaService {
                                     cancel: false,
                                     responseHeaders: details.responseHeaders,
                                 });
-                                resolveOnce();
+                                resolveOnce(cookie);
                                 if (!loginWindow.isDestroyed()) {
                                     loginWindow.close();
                                 }
@@ -384,7 +406,7 @@ export class GameBananaService {
         });
 
         if ((response.status === 401 || response.status === 403) && _retryAuth) {
-            await this.ensureAuthenticated(true);
+            await this.ensureAuthenticated(true, 1);
             return this.request(input, {
                 ...kyOptions,
                 _retryAuth: false,
@@ -397,7 +419,7 @@ export class GameBananaService {
                 .json()
                 .catch(() => null);
             if (GameBananaLoginRequiredSchema.safeParse(data).success) {
-                await this.ensureAuthenticated(true);
+                await this.ensureAuthenticated(true, 1);
                 return this.request(input, {
                     ...kyOptions,
                     _retryAuth: false,
@@ -407,6 +429,7 @@ export class GameBananaService {
 
         if (!response.ok) {
             if (response.status === 401 || response.status === 403) {
+                await this.removeCookie();
                 throw new Error("GAMEBANANA_AUTH_FAILED");
             }
 
@@ -607,9 +630,9 @@ export class GameBananaService {
 
 export type GameBananaGameOverview =
     z.infer<typeof GameProfileSchema> extends infer T
-        ? {
-              profile: T;
-              topSubs: z.infer<typeof GameTopSubsSchema>;
-              subfeed: z.infer<typeof GameSubfeedSchema>;
-          }
-        : never;
+    ? {
+        profile: T;
+        topSubs: z.infer<typeof GameTopSubsSchema>;
+        subfeed: z.infer<typeof GameSubfeedSchema>;
+    }
+    : never;
