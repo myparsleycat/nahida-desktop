@@ -1061,21 +1061,33 @@ function collectTextureBindings(
                     (lowerValue.startsWith("resource") || lowerValue.startsWith("ref resource"))
                 );
             })
-            .map(([, value]) => trimResourcePrefix(value.replace(/^ref\s+/i, "")));
+            .map(([, value]) =>
+                resolveTextureResourceReference(
+                    trimResourcePrefix(value.replace(/^ref\s+/i, "")),
+                    section,
+                    sectionByFullName,
+                    resolvedVariables,
+                ),
+            )
+            .filter((name): name is string => !!name);
 
         for (const ibValue of ibValues) {
-            const diffuseResourceName =
+            const diffuseResourceName = resolveTextureResourceReference(
                 textureResourceNames.find((name) => name.toLowerCase().includes("diffuse")) ||
-                textureResourceNames.find((name) => {
-                    const lower = name.toLowerCase();
-                    return !lower.includes("normal") && !lower.includes("light");
-                }) ||
-                resolveSectionResourceName(section, sectionByFullName, resolvedVariables) ||
-                resolveOverrideDiffuseResource(
-                    section.name,
-                    trimResourcePrefix(ibValue),
-                    overrideTextureResources,
-                );
+                    textureResourceNames.find((name) => {
+                        const lower = name.toLowerCase();
+                        return !lower.includes("normal") && !lower.includes("light");
+                    }) ||
+                    resolveSectionResourceName(section, sectionByFullName, resolvedVariables) ||
+                    resolveOverrideDiffuseResource(
+                        section.name,
+                        trimResourcePrefix(ibValue),
+                        overrideTextureResources,
+                    ),
+                section,
+                sectionByFullName,
+                resolvedVariables,
+            );
 
             bindings.push({
                 ibResourceName: trimResourcePrefix(ibValue),
@@ -1365,6 +1377,65 @@ function resolveSectionResourceName(
     return directThis?.toLowerCase().includes("resource")
         ? trimResourcePrefix(directThis.replace(/^ref\s+/i, ""))
         : undefined;
+}
+
+function resolveTextureResourceReference(
+    resourceName: string | undefined,
+    section: IniSection,
+    sectionByFullName: Map<string, IniSection>,
+    variables: Map<string, number | string>,
+    visited = new Set<string>(),
+): string | undefined {
+    if (!resourceName) {
+        return undefined;
+    }
+
+    const normalizedName = normalizeKey(resourceName);
+    if (!normalizedName || visited.has(normalizedName)) {
+        return resourceName;
+    }
+    visited.add(normalizedName);
+
+    const lookupKeys = buildResourceAssignmentLookupKeys(resourceName);
+    const assignments = resolveAssignmentFromSection(
+        section,
+        lookupKeys,
+        sectionByFullName,
+        variables,
+    );
+    const nextValue = lookupKeys
+        .map((key) => assignments.get(normalizeKey(key)))
+        .find((value) => !!value);
+    if (!nextValue) {
+        return resourceName;
+    }
+
+    const nextResourceName = trimResourcePrefix(nextValue.replace(/^ref\s+/i, ""));
+    if (!nextResourceName || normalizeKey(nextResourceName) === normalizedName) {
+        return resourceName;
+    }
+
+    return resolveTextureResourceReference(
+        nextResourceName,
+        section,
+        sectionByFullName,
+        variables,
+        visited,
+    );
+}
+
+function buildResourceAssignmentLookupKeys(resourceName: string): string[] {
+    const keys = new Set<string>();
+    const trimmed = resourceName.trim();
+    if (!trimmed) {
+        return [];
+    }
+
+    keys.add(trimmed);
+    if (!/^resource/i.test(trimmed)) {
+        keys.add(`Resource${trimmed}`);
+    }
+    return Array.from(keys);
 }
 
 function resolveAssignmentFromSection(
