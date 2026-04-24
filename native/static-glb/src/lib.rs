@@ -3,7 +3,7 @@
 use ddsfile::Dds;
 use image::codecs::jpeg::JpegEncoder;
 use image::codecs::png::PngEncoder;
-use image::{ColorType, DynamicImage, ImageEncoder, ImageReader, RgbaImage};
+use image::{ColorType, ImageEncoder, ImageReader, RgbaImage};
 use napi::bindgen_prelude::{AsyncTask, Buffer};
 use napi::Task;
 use napi_derive::napi;
@@ -134,7 +134,7 @@ impl Task for PrepareTextureForMaterialTask {
     let mut inverted_alpha = false;
     if final_analysis.has_alpha && should_invert_alpha(&texture_key, &final_analysis) {
       invert_rgba_alpha_in_place(rgba.as_mut());
-      final_analysis = analyze_rgba(rgba.as_raw(), rgba.width(), rgba.height())?;
+      final_analysis = analysis_after_alpha_invert(&final_analysis);
       inverted_alpha = true;
     }
 
@@ -720,7 +720,7 @@ fn encode_prepared_image(
   if mime_type == "image/jpeg" {
     let mut encoder = JpegEncoder::new_with_quality(&mut output, jpeg_quality.clamp(1, 100) as u8);
     encoder
-      .encode_image(&DynamicImage::ImageRgba8(rgba.clone()))
+      .encode_image(rgba)
       .map_err(|error| {
         napi::Error::from_reason(format!("Failed to encode JPEG texture: {error}"))
       })?;
@@ -775,6 +775,22 @@ fn should_invert_alpha(texture_key: &str, alpha: &PngAnalysis) -> bool {
 fn invert_rgba_alpha_in_place(data: &mut [u8]) {
   for offset in (3..data.len()).step_by(4) {
     data[offset] = 255u8.saturating_sub(data[offset]);
+  }
+}
+
+fn analysis_after_alpha_invert(alpha: &PngAnalysis) -> PngAnalysis {
+  PngAnalysis {
+    has_alpha: alpha.high_ratio > 0.0 || alpha.partial_ratio > 0.0,
+    low_ratio: alpha.high_ratio,
+    high_ratio: alpha.low_ratio,
+    partial_ratio: alpha.partial_ratio,
+    low_alpha_rgb_mean: 0.0,
+    channel_range_max: alpha.channel_range_max,
+    luminance_std_dev: alpha.luminance_std_dev,
+    mean_r: alpha.mean_r,
+    mean_g: alpha.mean_g,
+    mean_b: alpha.mean_b,
+    blue_dominance: alpha.blue_dominance,
   }
 }
 
