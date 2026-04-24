@@ -2446,7 +2446,7 @@ async function writePreparedTextureImage(
     textureOutDir: string,
     image: Buffer,
     imageExtension: string,
-    mimeType: PreparedTexture["mimeType"],
+    mimeType: PreparedTexture["mimeType"] | string,
     jpegQuality: number,
 ): Promise<string> {
     const fileName =
