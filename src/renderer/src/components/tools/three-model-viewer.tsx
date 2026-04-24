@@ -119,6 +119,9 @@ function ThreeModelScene({
   const onLoadRef = useRef(onLoad);
   const onErrorRef = useRef(onError);
   const shapeKeyCacheRef = useRef<Map<string, Promise<Float32Array>>>(new Map());
+  const lastAppliedVariantSnapshotRef = useRef<Record<string, number | string> | null>(null);
+  const lastAppliedModelRootRef = useRef<Object3D | null>(null);
+  const lastAppliedShapeKeysRef = useRef<ModelViewerRealtimeShapeKey[] | undefined>(undefined);
 
   const rotation = useMemo(() => {
     const [roll, pitch, yaw] = parseOrientation(orientation);
@@ -287,11 +290,26 @@ function ThreeModelScene({
         activeObjectRef.current = null;
       }
       materialRef.current = [];
+      lastAppliedVariantSnapshotRef.current = null;
+      lastAppliedModelRootRef.current = null;
+      lastAppliedShapeKeysRef.current = undefined;
     };
   }, []);
 
   useEffect(() => {
     if (!modelRoot || !shapeKeys?.length) {
+      lastAppliedVariantSnapshotRef.current = null;
+      lastAppliedModelRootRef.current = modelRoot;
+      lastAppliedShapeKeysRef.current = shapeKeys;
+      return;
+    }
+
+    const currentVariantSnapshot = variantState ? { ...variantState } : null;
+    const didApplySameInputs =
+      lastAppliedModelRootRef.current === modelRoot &&
+      lastAppliedShapeKeysRef.current === shapeKeys &&
+      areVariantSnapshotsEqual(lastAppliedVariantSnapshotRef.current, currentVariantSnapshot);
+    if (didApplySameInputs) {
       return;
     }
 
@@ -309,6 +327,9 @@ function ThreeModelScene({
       }
 
       applyShapeKeysToScene(modelRoot, loadedShapeKeys, variantState);
+      lastAppliedVariantSnapshotRef.current = currentVariantSnapshot;
+      lastAppliedModelRootRef.current = modelRoot;
+      lastAppliedShapeKeysRef.current = shapeKeys;
       invalidate();
     })().catch((error) => {
       if (!cancelled) {
@@ -329,6 +350,33 @@ function ThreeModelScene({
       </group>
     </>
   );
+}
+
+function areVariantSnapshotsEqual(
+  left: Record<string, number | string> | null,
+  right: Record<string, number | string> | null,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  const leftEntries = Object.entries(left);
+  const rightEntries = Object.entries(right);
+  if (leftEntries.length !== rightEntries.length) {
+    return false;
+  }
+
+  for (const [key, value] of leftEntries) {
+    if (right[key] !== value) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 async function loadShapeKey(
