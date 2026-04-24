@@ -251,12 +251,7 @@ export class GameBananaService {
 
                 if (this.loginWindow && !this.loginWindow.isDestroyed()) {
                     focus(this.loginWindow);
-                    try {
-                        const result = await (this.authPromise ?? Promise.reject(new Error("GAMEBANANA_AUTH_FAILED")));
-                        resolve(result);
-                    } catch (error) {
-                        reject(error instanceof Error ? error : new Error("GAMEBANANA_AUTH_FAILED"));
-                    }
+                    reject(new Error("GAMEBANANA_AUTH_FAILED"));
                     return;
                 }
 
