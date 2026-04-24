@@ -230,11 +230,26 @@ export class StaticGlb {
     }
 
     public async convertForViewer(input: StaticGlbViewerInput): Promise<StaticGlbPreviewResult> {
+        const startedAt = Date.now();
+        let lastCheckpointAt = startedAt;
+        const logTiming = (stage: string) => {
+            const now = Date.now();
+            const totalElapsedMs = now - startedAt;
+            const stageElapsedMs = now - lastCheckpointAt;
+            lastCheckpointAt = now;
+            this.desktop.logger.info(
+                `${stage} completed in ${stageElapsedMs}ms (total ${totalElapsedMs}ms)`,
+                "StaticGlb.convertForViewer",
+            );
+        };
+
+        this.desktop.logger.info("Starting model viewer conversion", "StaticGlb.convertForViewer");
         const assetPath = await this.getAssetPath();
         if (!assetPath) {
             throw new Error("Set the static GLB asset path in Mod Tools first.");
         }
         const textureSettings = await this.getTextureSettings();
+        logTiming("Loaded asset path and texture settings");
 
         if (typeof input !== "string" && input.artifactRoot && input.state) {
             const result = await resolveVariantStateArtifact({
@@ -250,6 +265,7 @@ export class StaticGlb {
                     this.desktop.logger.warn(message, "StaticGlb.convertForViewer");
                 },
             });
+            logTiming("Resolved variant state artifact");
 
             return {
                 mode: "variant-set",
@@ -280,6 +296,7 @@ export class StaticGlb {
         const textureCacheDir = path.join(tempDir, "textures");
         const glbPath = path.join(tempDir, `${sanitizeModelViewerFileName(modName)}.glb`);
         const warnings: string[] = [];
+        logTiming("Created viewer temp directory");
 
         try {
             const variantResult = await convertModToVariantArtifacts({
@@ -295,8 +312,13 @@ export class StaticGlb {
                     this.desktop.logger.warn(message, "StaticGlb.convertForViewer");
                 },
             });
+            logTiming("Attempted variant artifact conversion");
 
             if (variantResult) {
+                this.desktop.logger.info(
+                    `Completed model viewer conversion in ${Date.now() - startedAt}ms`,
+                    "StaticGlb.convertForViewer",
+                );
                 return {
                     mode: "variant-set",
                     iniPath: variantResult.iniPath,
@@ -323,8 +345,10 @@ export class StaticGlb {
                     this.desktop.logger.warn(message, "StaticGlb.convertForViewer");
                 },
             });
+            logTiming("Converted mod to GLB buffer");
 
             await fse.writeFile(glbPath, result.glb);
+            logTiming("Wrote GLB file");
 
             if (warnings.length > 0) {
                 this.desktop.window.main.window?.webContents.send(
@@ -334,6 +358,10 @@ export class StaticGlb {
                 );
             }
 
+            this.desktop.logger.info(
+                `Completed model viewer conversion in ${Date.now() - startedAt}ms`,
+                "StaticGlb.convertForViewer",
+            );
             return {
                 mode: "single",
                 iniPath: result.iniPath,
@@ -344,6 +372,10 @@ export class StaticGlb {
             };
         } catch (error) {
             await this.cleanupViewerFile(glbPath);
+            this.desktop.logger.error(
+                `Model viewer conversion failed after ${Date.now() - startedAt}ms`,
+                "StaticGlb.convertForViewer",
+            );
             throw error;
         } finally {
             await fse.remove(textureCacheDir).catch((error) => {
@@ -354,6 +386,7 @@ export class StaticGlb {
                     "StaticGlb.convertForViewer",
                 );
             });
+            logTiming("Removed texture cache directory");
         }
     }
 

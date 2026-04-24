@@ -43,6 +43,29 @@ export interface PngAnalysis {
   blueDominance: number
 }
 
+export declare function prepareTextureForMaterial(input: PrepareTextureForMaterialInput): Promise<PrepareTextureForMaterialResult>
+
+export interface PrepareTextureForMaterialInput {
+  texturePath: string
+  resourceName: string
+  textureFormat: string
+  jpegQuality: number
+  allowCacheReuse: boolean
+  cacheDir: string
+}
+
+export interface PrepareTextureForMaterialResult {
+  image: Buffer
+  mimeType: string
+  imageExtension: string
+  usesAlpha: boolean
+  invertedAlpha: boolean
+  selectionScore: number
+  srgbConfidence: string
+  alphaMode?: string
+  alphaCutoff?: number
+}
+
 export declare function readFloatAttribute(bytes: Buffer, stride: number, vertexCount: number, alignedByteOffset: number, format: string, width: number): Buffer
 
 export declare function removeDegenerateTriangles(indices: Buffer): RemoveDegenerateTrianglesResult

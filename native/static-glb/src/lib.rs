@@ -1,7 +1,14 @@
 #![deny(clippy::all)]
 
-use napi::bindgen_prelude::Buffer;
+use ddsfile::Dds;
+use image::codecs::jpeg::JpegEncoder;
+use image::codecs::png::PngEncoder;
+use image::{ColorType, DynamicImage, ImageEncoder, ImageReader, RgbaImage};
+use napi::bindgen_prelude::{AsyncTask, Buffer};
+use napi::Task;
 use napi_derive::napi;
+use std::io::Cursor;
+use std::path::Path;
 
 #[napi(object)]
 pub struct PngAnalysis {
@@ -37,8 +44,119 @@ pub struct RemoveDegenerateTrianglesResult {
   pub removed: u32,
 }
 
+#[napi(object)]
+pub struct PrepareTextureForMaterialInput {
+  pub texture_path: String,
+  pub resource_name: String,
+  pub texture_format: String,
+  pub jpeg_quality: u32,
+  pub allow_cache_reuse: bool,
+  pub cache_dir: String,
+}
+
+#[napi(object)]
+pub struct PrepareTextureForMaterialResult {
+  pub image: Buffer,
+  pub mime_type: String,
+  pub image_extension: String,
+  pub uses_alpha: bool,
+  pub inverted_alpha: bool,
+  pub selection_score: i32,
+  pub srgb_confidence: String,
+  pub alpha_mode: Option<String>,
+  pub alpha_cutoff: Option<f64>,
+}
+
+pub struct PrepareTextureForMaterialTask {
+  input: PrepareTextureForMaterialInput,
+}
+
 #[napi]
 pub fn analyze_png(data: Buffer, width: u32, height: u32) -> napi::Result<PngAnalysis> {
+  analyze_rgba(&data, width, height)
+}
+
+#[napi]
+pub fn prepare_texture_for_material(input: PrepareTextureForMaterialInput) -> AsyncTask<PrepareTextureForMaterialTask> {
+  AsyncTask::new(PrepareTextureForMaterialTask { input })
+}
+
+impl Task for PrepareTextureForMaterialTask {
+  type Output = PrepareTextureForMaterialResult;
+  type JsValue = PrepareTextureForMaterialResult;
+
+  fn compute(&mut self) -> napi::Result<Self::Output> {
+    let input = &self.input;
+    let _ = input.allow_cache_reuse;
+    let _ = &input.cache_dir;
+
+    let texture_path = Path::new(&input.texture_path);
+    let extension = texture_path
+      .extension()
+      .and_then(|value| value.to_str())
+      .map(|value| value.to_ascii_lowercase())
+      .unwrap_or_default();
+
+    let (mut rgba, is_likely_srgb) = if extension == "dds" {
+      load_dds_rgba(texture_path)?
+    } else if extension == "png" {
+      load_png_rgba(texture_path)?
+    } else {
+      return Err(napi::Error::from_reason(format!(
+        "Unsupported texture type for GLB embedding: {}",
+        input.texture_path
+      )));
+    };
+
+    let analysis = analyze_rgba(rgba.as_raw(), rgba.width(), rgba.height())?;
+    let resource_key = normalize_key(&input.resource_name);
+    let texture_key = normalize_key(&format!(
+      "{} {}",
+      input.resource_name,
+      texture_path.file_name().and_then(|value| value.to_str()).unwrap_or_default()
+    ));
+    let srgb_confidence = classify_srgb_confidence(is_likely_srgb);
+
+    let selection = analyze_texture_selection_native(
+      &analysis,
+      &resource_key,
+      is_likely_srgb,
+      srgb_confidence,
+    );
+
+    let mut final_analysis = analysis;
+    let mut inverted_alpha = false;
+    if final_analysis.has_alpha && should_invert_alpha(&texture_key, &final_analysis) {
+      invert_rgba_alpha_in_place(rgba.as_mut());
+      final_analysis = analyze_rgba(rgba.as_raw(), rgba.width(), rgba.height())?;
+      inverted_alpha = true;
+    }
+
+    let uses_alpha = texture_uses_alpha(&final_analysis);
+    let mime_type = resolve_texture_mime_type(&input.texture_format, Some(uses_alpha))?;
+    let (image, image_extension) = encode_prepared_image(&rgba, &mime_type, input.jpeg_quality)?;
+    let score = score_texture_selection(&resource_key, &selection);
+    let (alpha_mode, alpha_cutoff) = material_alpha_mode(&final_analysis);
+
+    Ok(PrepareTextureForMaterialResult {
+      image: image.into(),
+      mime_type,
+      image_extension,
+      uses_alpha,
+      inverted_alpha,
+      selection_score: score,
+      srgb_confidence: srgb_confidence.to_string(),
+      alpha_mode,
+      alpha_cutoff,
+    })
+  }
+
+  fn resolve(&mut self, _: napi::Env, output: Self::Output) -> napi::Result<Self::JsValue> {
+    Ok(output)
+  }
+}
+
+fn analyze_rgba(data: &[u8], width: u32, height: u32) -> napi::Result<PngAnalysis> {
   let pixel_count = width as usize * height as usize;
   let expected_len = pixel_count * 4;
   if data.len() < expected_len {
@@ -180,6 +298,256 @@ pub fn parse_dds_srgb_state(bytes: Buffer) -> Option<bool> {
   }
 }
 
+fn load_dds_rgba(texture_path: &Path) -> napi::Result<(RgbaImage, Option<bool>)> {
+  let bytes = std::fs::read(texture_path).map_err(|error| {
+    napi::Error::from_reason(format!(
+      "Failed to read DDS file '{}': {}",
+      texture_path.display(),
+      error
+    ))
+  })?;
+  let srgb = parse_dds_srgb_state(bytes[..bytes.len().min(148)].to_vec().into());
+  let mut reader = Cursor::new(&bytes);
+  let dds = Dds::read(&mut reader).map_err(|error| {
+    napi::Error::from_reason(format!(
+      "Failed to read DDS file '{}': {}",
+      texture_path.display(),
+      error
+    ))
+  })?;
+  let image = image_dds::image_from_dds(&dds, 0).map_err(|error| {
+    napi::Error::from_reason(format!(
+      "Failed to decode DDS file '{}': {}",
+      texture_path.display(),
+      error
+    ))
+  })?;
+  Ok((image, srgb))
+}
+
+fn load_png_rgba(texture_path: &Path) -> napi::Result<(RgbaImage, Option<bool>)> {
+  let image = ImageReader::open(texture_path)
+    .map_err(|error| {
+      napi::Error::from_reason(format!(
+        "Failed to open PNG file '{}': {}",
+        texture_path.display(),
+        error
+      ))
+    })?
+    .with_guessed_format()
+    .map_err(|error| {
+      napi::Error::from_reason(format!(
+        "Failed to detect image format for '{}': {}",
+        texture_path.display(),
+        error
+      ))
+    })?
+    .decode()
+    .map_err(|error| {
+      napi::Error::from_reason(format!(
+        "Failed to decode PNG file '{}': {}",
+        texture_path.display(),
+        error
+      ))
+    })?;
+  Ok((image.to_rgba8(), None))
+}
+
+fn encode_prepared_image(
+  rgba: &RgbaImage,
+  mime_type: &str,
+  jpeg_quality: u32,
+) -> napi::Result<(Vec<u8>, String)> {
+  let mut output = Vec::new();
+  if mime_type == "image/png" {
+    let encoder = PngEncoder::new(&mut output);
+    encoder
+      .write_image(
+        rgba.as_raw(),
+        rgba.width(),
+        rgba.height(),
+        ColorType::Rgba8.into(),
+      )
+      .map_err(|error| napi::Error::from_reason(format!("Failed to encode PNG texture: {error}")))?;
+    return Ok((output, String::from("png")));
+  }
+
+  if mime_type == "image/jpeg" {
+    let mut encoder = JpegEncoder::new_with_quality(
+      &mut output,
+      jpeg_quality.clamp(1, 100) as u8,
+    );
+    encoder
+      .encode_image(&DynamicImage::ImageRgba8(rgba.clone()))
+      .map_err(|error| napi::Error::from_reason(format!("Failed to encode JPEG texture: {error}")))?;
+    return Ok((output, String::from("jpg")));
+  }
+
+  Err(napi::Error::from_reason(format!(
+    "Unsupported output mime type: {mime_type}"
+  )))
+}
+
+fn resolve_texture_mime_type(format: &str, uses_alpha: Option<bool>) -> napi::Result<String> {
+  match format {
+    "png" => Ok(String::from("image/png")),
+    "jpeg-force" => Ok(String::from("image/jpeg")),
+    "jpeg-safe" => match uses_alpha {
+      Some(true) => Ok(String::from("image/png")),
+      Some(false) => Ok(String::from("image/jpeg")),
+      None => Ok(String::from("image/png")),
+    },
+    _ => Err(napi::Error::from_reason(format!(
+      "Unsupported texture format option: {format}"
+    ))),
+  }
+}
+
+fn material_alpha_mode(alpha: &PngAnalysis) -> (Option<String>, Option<f64>) {
+  if is_cutout_alpha(alpha) {
+    return (Some(String::from("MASK")), Some(0.5));
+  }
+  (None, None)
+}
+
+fn texture_uses_alpha(alpha: &PngAnalysis) -> bool {
+  if is_cutout_alpha(alpha) {
+    return true;
+  }
+  alpha.partial_ratio > 0.0 || alpha.low_ratio >= 0.005
+}
+
+fn is_cutout_alpha(alpha: &PngAnalysis) -> bool {
+  alpha.low_ratio >= 0.005 && alpha.high_ratio >= 0.5 && alpha.partial_ratio <= 0.02
+}
+
+fn should_invert_alpha(texture_key: &str, alpha: &PngAnalysis) -> bool {
+  if texture_key.contains("invertalpha") || texture_key.contains("alphainvert") {
+    return true;
+  }
+  alpha.low_ratio >= 0.95 && alpha.high_ratio <= 0.03 && alpha.low_alpha_rgb_mean >= 8.0
+}
+
+fn invert_rgba_alpha_in_place(data: &mut [u8]) {
+  for offset in (3..data.len()).step_by(4) {
+    data[offset] = 255u8.saturating_sub(data[offset]);
+  }
+}
+
+struct TextureSelectionAnalysisNative {
+  is_likely_flat_color: bool,
+  is_likely_normal_map: bool,
+  srgb_confidence: &'static str,
+}
+
+fn analyze_texture_selection_native(
+  color: &PngAnalysis,
+  resource_key: &str,
+  _is_likely_srgb: Option<bool>,
+  srgb_confidence: &'static str,
+) -> TextureSelectionAnalysisNative {
+  if resource_key.contains("normal")
+    || resource_key.contains("bump")
+    || resource_key.contains("lightmap")
+    || resource_key.contains("metal")
+    || resource_key.contains("rough")
+    || resource_key.contains("ao")
+    || resource_key.contains("mask")
+  {
+    return TextureSelectionAnalysisNative {
+      is_likely_flat_color: false,
+      is_likely_normal_map: resource_key.contains("normal") || resource_key.contains("bump"),
+      srgb_confidence,
+    };
+  }
+
+  TextureSelectionAnalysisNative {
+    is_likely_flat_color: color.channel_range_max <= 12
+      || (color.luminance_std_dev <= 0.035
+        && color.channel_range_max <= 24
+        && !resource_key.contains("shadow")),
+    is_likely_normal_map: color.mean_b >= 0.7
+      && (color.mean_r - 0.5).abs() <= 0.18
+      && (color.mean_g - 0.5).abs() <= 0.18
+      && color.blue_dominance >= 0.12
+      && color.channel_range_max <= 72
+      && color.luminance_std_dev <= 0.12,
+    srgb_confidence,
+  }
+}
+
+fn score_texture_selection(resource_key: &str, analysis: &TextureSelectionAnalysisNative) -> i32 {
+  let mut score = texture_name_priority(resource_key);
+  if analysis.srgb_confidence == "srgb" {
+    score += 120;
+  }
+  if analysis.srgb_confidence == "linear" {
+    score -= 120;
+  }
+  if analysis.is_likely_normal_map {
+    score -= 120;
+  }
+  if analysis.is_likely_flat_color {
+    score -= 80;
+  } else {
+    score += 20;
+  }
+  score
+}
+
+fn texture_name_priority(resource_key: &str) -> i32 {
+  let mut score = 0;
+  if resource_key.contains("basecolor") || resource_key.contains("albedo") {
+    score += 80;
+  }
+  if resource_key.contains("diffuse") {
+    score += 60;
+  }
+  if resource_key.contains("color") {
+    score += 25;
+  }
+  if resource_key.contains("shadow") {
+    score -= 20;
+  }
+  if resource_key.contains("lightmap") {
+    score -= 12;
+  }
+  if resource_key.contains("light") {
+    score -= 10;
+  }
+  if resource_key.contains("metal") || resource_key.contains("rough") || resource_key.contains("ao") {
+    score -= 24;
+  }
+  if resource_key.contains("mask") {
+    score -= 28;
+  }
+  if resource_key.contains("normal") || resource_key.contains("bump") {
+    score -= 60;
+  }
+  score
+}
+
+fn normalize_key(value: &str) -> String {
+  value
+    .chars()
+    .filter_map(|char| {
+      if char.is_ascii_alphanumeric() {
+        Some(char.to_ascii_lowercase())
+      } else {
+        None
+      }
+    })
+    .collect()
+}
+
+fn classify_srgb_confidence(is_likely_srgb: Option<bool>) -> &'static str {
+  match is_likely_srgb {
+    Some(true) => "srgb",
+    Some(false) => "linear",
+    None => "unknown",
+  }
+}
+
 #[napi]
 pub fn interleave_vertex_buffers(
   position: Buffer,
@@ -250,6 +618,7 @@ pub fn merge_draw_indices(indices: Buffer, draws: Vec<DrawRange>) -> napi::Resul
   let indices = buffer_to_u32_vec(&indices)?;
   let mut merged = Vec::new();
   let mut invalid_ranges = Vec::new();
+  let has_draws = !draws.is_empty();
 
   for draw in draws {
     let start_index = draw.start_index;
@@ -276,10 +645,10 @@ pub fn merge_draw_indices(indices: Buffer, draws: Vec<DrawRange>) -> napi::Resul
   }
 
   Ok(MergeDrawIndicesResult {
-    indices: if draws.is_empty() {
-      u32_vec_to_buffer(indices)
-    } else {
+    indices: if has_draws {
       u32_vec_to_buffer(merged)
+    } else {
+      u32_vec_to_buffer(indices)
     },
     invalid_ranges,
   })

@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import os from "node:os";
 import path from "node:path";
+import { pipeline } from "node:stream/promises";
 import { convertDdsToPng } from "@native/native-util";
 import {
     decodeIndices as decodeIndicesNative,
@@ -9,6 +10,7 @@ import {
     mergeDrawIndices,
     normalizeTangentArray as normalizeTangentArrayNative,
     normalizeVec3Array as normalizeVec3ArrayNative,
+    prepareTextureForMaterial,
     readFloatAttribute as readFloatAttributeNative,
     removeDegenerateTriangles as removeDegenerateTrianglesNative,
 } from "@native/static-glb";
@@ -23,22 +25,9 @@ import type { Logger } from "../../internal/logger";
 import { GlbBuilder } from "./builder";
 import { evaluateIniCondition, evaluateIniNumericExpression } from "./ini-expression";
 import {
-    analyzeAlpha,
-    analyzeTextureSelection,
-    classifySrgbConfidence,
-    invertPngAlpha,
-    materialAlphaMode,
     type PreparedTexture,
-    readDdsSrgbState,
-    readPngAsync,
-    resolveTextureMimeType,
-    scoreTextureSelection,
-    shouldInvertAlpha,
     type StaticGlbTextureFormat,
     textureNamePriority,
-    textureUsesAlpha,
-    writeJpegAsync,
-    writePngAsync,
 } from "./texture-utils";
 
 export type { StaticGlbTextureFormat } from "./texture-utils";
@@ -2140,6 +2129,7 @@ async function buildMaterials(
     textureBindings: TextureBinding[],
     warn: (message: string) => void,
 ): Promise<Map<string, MaterialBinding>> {
+    const buildStartedAt = Date.now();
     const resourcesByName = new Map(
         resources.map((resource) => [normalizeKey(resource.name), resource]),
     );
@@ -2204,10 +2194,15 @@ async function buildMaterials(
             }),
         )
     ).flat();
+    options.logger?.debug(
+        `Resolved ${candidates.length} texture candidates across ${textureBindings.length} bindings in ${Date.now() - buildStartedAt}ms`,
+        "StaticGLB",
+    );
 
     const texturePrepareConcurrency = Math.max(1, Math.min(os.availableParallelism(), 8));
     const limitTexturePreparation = pLimit(texturePrepareConcurrency);
     const prepareTasks = new Map<string, Promise<PreparedTexture | null>>();
+    const prepareScheduleStartedAt = Date.now();
     for (const candidate of candidates) {
         if (!prepareTasks.has(candidate.texturePath)) {
             prepareTasks.set(
@@ -2224,6 +2219,10 @@ async function buildMaterials(
             );
         }
     }
+    options.logger?.debug(
+        `Scheduled ${prepareTasks.size} unique texture preparation tasks with concurrency ${texturePrepareConcurrency} in ${Date.now() - prepareScheduleStartedAt}ms`,
+        "StaticGLB",
+    );
 
     const candidatesByIb = new Map<string, typeof candidates>();
     for (const candidate of candidates) {
@@ -2235,8 +2234,13 @@ async function buildMaterials(
             candidatesByIb.set(key, [candidate]);
         }
     }
+    options.logger?.debug(
+        `Grouped texture candidates into ${candidatesByIb.size} IB buckets in ${Date.now() - buildStartedAt}ms`,
+        "StaticGLB",
+    );
 
     for (const [ibKey, bindingCandidates] of candidatesByIb) {
+        const ibStartedAt = Date.now();
         const preparedCandidates: Array<{
             candidate: (typeof candidates)[number];
             texture: PreparedTexture;
@@ -2258,6 +2262,10 @@ async function buildMaterials(
 
             preparedCandidates.push({ candidate, texture });
         }
+        options.logger?.debug(
+            `Prepared ${preparedCandidates.length}/${bindingCandidates.length} texture candidates for ${ibKey} in ${Date.now() - ibStartedAt}ms`,
+            "StaticGLB",
+        );
 
         const selected = preparedCandidates.sort((left, right) => {
             if (right.texture.selectionScore !== left.texture.selectionScore) {
@@ -2286,6 +2294,7 @@ async function buildMaterials(
         let cached = textureCache.get(selected.candidate.texturePath);
         if (!cached) {
             const texture = selected.texture;
+            const materialCreateStartedAt = Date.now();
 
             options.logger?.debug(
                 `Prepared texture: ${texture.imagePath} (${texture.mimeType}, alpha: ${texture.usesAlpha}, inverted: ${texture.invertedAlpha}, score: ${texture.selectionScore})`,
@@ -2321,12 +2330,26 @@ async function buildMaterials(
                 mimeType: texture.mimeType,
             };
             textureCache.set(selected.candidate.texturePath, cached);
+            options.logger?.debug(
+                `Created GLB material for ${selected.candidate.diffuseResourceName} in ${Date.now() - materialCreateStartedAt}ms`,
+                "StaticGLB",
+            );
+        } else {
+            options.logger?.debug(
+                `Reused cached GLB material for ${selected.candidate.diffuseResourceName}`,
+                "StaticGLB",
+            );
         }
 
         if (cached) {
             materialByIb.set(ibKey, cached);
         }
     }
+
+    options.logger?.debug(
+        `Built ${materialByIb.size} materials in ${Date.now() - buildStartedAt}ms`,
+        "StaticGLB",
+    );
 
     return materialByIb;
 }
@@ -2338,90 +2361,55 @@ async function prepareTextureImage(
     resourceName: string,
     warn: (message: string) => void,
 ): Promise<PreparedTexture | null> {
-    const pngPath = await convertTextureToPng(options, texturePath, textureOutDir, warn);
-    if (!pngPath) return null;
-
+    const startedAt = Date.now();
     try {
-        const png = await readPngAsync(pngPath);
-        const alpha = analyzeAlpha(png);
-        const selectionAnalysis = await analyzeTextureSelection(
+        const nativeStartedAt = Date.now();
+        const prepared = await prepareTextureForMaterial({
             texturePath,
             resourceName,
-            png,
-            normalizeKey,
-        );
-        let finalAlpha = alpha;
-        let invertedAlpha = false;
-
-        if (alpha.hasAlpha && shouldInvertAlpha(resourceName, texturePath, alpha, normalizeKey)) {
-            invertPngAlpha(png);
-            finalAlpha = analyzeAlpha(png);
-            invertedAlpha = true;
-        }
-
-        const alphaSettings = materialAlphaMode(finalAlpha);
-        const usesAlpha = textureUsesAlpha(finalAlpha);
-        const mimeType = resolveTextureMimeType(
-            resolveTextureFormatOption(options.textureFormat),
-            usesAlpha,
-        );
-        const imagePath = await writePreparedTextureImage({
-            png,
-            sourcePngPath: pngPath,
+            textureFormat: resolveTextureFormatOption(options.textureFormat),
+            jpegQuality: normalizeJpegQualityOption(options.jpegQuality),
+            allowCacheReuse: true,
+            cacheDir: textureOutDir,
+        });
+        const nativeElapsedMs = Date.now() - nativeStartedAt;
+        const outputStartedAt = Date.now();
+        const imagePath = await writePreparedTextureImage(
             texturePath,
             textureOutDir,
-            mimeType,
-            jpegQuality: normalizeJpegQualityOption(options.jpegQuality),
-            reuseSourcePng: !invertedAlpha,
-        });
+            prepared.image,
+            prepared.imageExtension,
+            prepared.mimeType,
+            normalizeJpegQualityOption(options.jpegQuality),
+        );
+        const outputElapsedMs = Date.now() - outputStartedAt;
+        options.logger?.debug(
+            `Prepared texture pipeline for ${resourceName} in ${Date.now() - startedAt}ms (native=${nativeElapsedMs}ms, output=${outputElapsedMs}ms)`,
+            "StaticGLB",
+        );
 
         return {
             imagePath,
-            mimeType,
-            ...alphaSettings,
-            usesAlpha,
-            invertedAlpha,
-            selectionScore: scoreTextureSelection(resourceName, selectionAnalysis, normalizeKey),
-            srgbConfidence: selectionAnalysis.srgbConfidence,
+            mimeType: prepared.mimeType as PreparedTexture["mimeType"],
+            alphaMode:
+                prepared.alphaMode === "MASK" ? "MASK" : undefined,
+            alphaCutoff: prepared.alphaCutoff ?? undefined,
+            usesAlpha: prepared.usesAlpha,
+            invertedAlpha: prepared.invertedAlpha,
+            selectionScore: prepared.selectionScore,
+            srgbConfidence: normalizeSrgbConfidence(prepared.srgbConfidence),
         };
     } catch (error) {
-        const isLikelySrgb = await readDdsSrgbState(texturePath);
-        const srgbConfidence = classifySrgbConfidence(isLikelySrgb);
         warn(
-            `Could not inspect texture alpha ${pngPath}: ${
+            `Failed to prepare texture ${texturePath}: ${
                 error instanceof Error ? error.message : String(error)
             }`,
         );
-        const mimeType = resolveTextureMimeType(
-            resolveTextureFormatOption(options.textureFormat),
-            null,
+        options.logger?.debug(
+            `Prepared texture pipeline failed for ${resourceName} after ${Date.now() - startedAt}ms`,
+            "StaticGLB",
         );
-        const imagePath =
-            mimeType === "image/png"
-                ? pngPath
-                : await convertPngToJpeg(
-                      pngPath,
-                      texturePath,
-                      textureOutDir,
-                      normalizeJpegQualityOption(options.jpegQuality),
-                  );
-        return {
-            imagePath,
-            mimeType,
-            usesAlpha: mimeType === "image/png",
-            invertedAlpha: false,
-            selectionScore: scoreTextureSelection(
-                resourceName,
-                {
-                    isLikelyFlatColor: false,
-                    isLikelySrgb,
-                    isLikelyNormalMap: false,
-                    srgbConfidence,
-                },
-                normalizeKey,
-            ),
-            srgbConfidence,
-        };
+        return null;
     }
 }
 
@@ -2434,57 +2422,6 @@ function collectMaterialTextureCandidateNames(binding: TextureBinding): string[]
         ordered.add(binding.diffuseResourceName);
     }
     return Array.from(ordered);
-}
-
-async function convertTextureToPng(
-    options: ConvertModToGlbBufferOptions,
-    texturePath: string,
-    textureOutDir: string,
-    warn: (message: string) => void,
-): Promise<string | null> {
-    const extension = path.extname(texturePath).toLowerCase();
-    if (extension === ".png") {
-        options.logger?.debug(
-            `Texture is already PNG, skipping conversion: ${texturePath}`,
-            "StaticGLB",
-        );
-        return texturePath;
-    }
-    if (extension !== ".dds") {
-        warn(`Unsupported texture type for GLB embedding: ${texturePath}`);
-        return null;
-    }
-
-    await fse.ensureDir(textureOutDir);
-
-    const pngPath = path.join(textureOutDir, `${createTextureCacheBaseName(texturePath)}.png`);
-
-    if (await isCacheUpToDate(pngPath, texturePath)) {
-        options.logger?.debug(`Reusing cached PNG for texture: ${texturePath}`, "StaticGLB");
-        return pngPath;
-    }
-
-    try {
-        await convertDdsToPng(texturePath, pngPath);
-        options.logger?.debug(`Converted DDS to PNG: ${texturePath} -> ${pngPath}`, "StaticGLB");
-        return pngPath;
-    } catch {
-        try {
-            await convertDdsToPngFallback(texturePath, pngPath);
-            options.logger?.debug(
-                `Converted DDS to PNG (fallback): ${texturePath} -> ${pngPath}`,
-                "StaticGLB",
-            );
-            return pngPath;
-        } catch (fallbackError) {
-            warn(
-                `Failed to convert DDS texture ${texturePath}: ${
-                    fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
-                }`,
-            );
-            return null;
-        }
-    }
 }
 
 function resolveTextureFormatOption(format?: StaticGlbTextureFormat): StaticGlbTextureFormat {
@@ -2503,63 +2440,33 @@ function normalizeJpegQualityOption(quality?: number): number {
     return Math.max(1, Math.min(100, Math.round(quality)));
 }
 
-async function writePreparedTextureImage(input: {
-    png: PNG;
-    sourcePngPath: string;
-    texturePath: string;
-    textureOutDir: string;
-    mimeType: PreparedTexture["mimeType"];
-    jpegQuality: number;
-    reuseSourcePng: boolean;
-}): Promise<string> {
-    if (input.mimeType === "image/png") {
-        if (input.reuseSourcePng) {
-            return input.sourcePngPath;
-        }
-
-        const pngOutputPath = path.join(
-            input.textureOutDir,
-            `${createTextureCacheBaseName(input.texturePath)}-prepared.png`,
-        );
-        if (await isCacheUpToDate(pngOutputPath, input.sourcePngPath)) {
-            return pngOutputPath;
-        }
-        await fse.ensureDir(input.textureOutDir);
-        await writePngAsync(input.png, pngOutputPath);
-        return pngOutputPath;
-    }
-
-    const jpegOutputPath = path.join(
-        input.textureOutDir,
-        `${createTextureCacheBaseName(input.texturePath)}-q${input.jpegQuality}.jpg`,
-    );
-    if (await isCacheUpToDate(jpegOutputPath, input.sourcePngPath)) {
-        return jpegOutputPath;
-    }
-    await fse.ensureDir(input.textureOutDir);
-    await writeJpegAsync(input.png, jpegOutputPath, input.jpegQuality);
-    return jpegOutputPath;
-}
-
-async function convertPngToJpeg(
-    pngPath: string,
+async function writePreparedTextureImage(
     texturePath: string,
     textureOutDir: string,
+    image: Buffer,
+    imageExtension: string,
+    mimeType: PreparedTexture["mimeType"],
     jpegQuality: number,
 ): Promise<string> {
-    const png = await readPngAsync(pngPath);
-    return writePreparedTextureImage({
-        png,
-        sourcePngPath: pngPath,
-        texturePath,
-        textureOutDir,
-        mimeType: "image/jpeg",
-        jpegQuality,
-        reuseSourcePng: false,
-    });
+    const fileName =
+        mimeType === "image/png"
+            ? `${createTextureCacheBaseName(texturePath)}-prepared.${imageExtension}`
+            : `${createTextureCacheBaseName(texturePath)}-q${jpegQuality}.${imageExtension}`;
+    const outputPath = path.join(textureOutDir, fileName);
+    if (await isCacheUpToDate(outputPath, texturePath)) {
+        return outputPath;
+    }
+    await fse.ensureDir(textureOutDir);
+    await fse.writeFile(outputPath, image);
+    return outputPath;
 }
 
 async function convertDdsToPngFallback(texturePath: string, pngPath: string): Promise<void> {
+    const png = await decodeDdsToPngObject(texturePath);
+    await writePngBuffer(png, pngPath);
+}
+
+async function decodeDdsToPngObject(texturePath: string): Promise<PNG> {
     const dds = await fse.readFile(texturePath);
     const info = parseDDSHeader(dds);
     if (!info || !info.layers[0]) {
@@ -2569,7 +2476,15 @@ async function convertDdsToPngFallback(texturePath: string, pngPath: string): Pr
     const rgba = decodeImage(dds, info.format, info.layers[0]);
     const png = new PNG({ width: info.shape.width, height: info.shape.height });
     png.data.set(rgba);
-    await writePngAsync(png, pngPath);
+    return png;
+}
+
+async function writePngBuffer(png: PNG, pngPath: string): Promise<void> {
+    await pipeline(png.pack(), fse.createWriteStream(pngPath));
+}
+
+function normalizeSrgbConfidence(value: string): PreparedTexture["srgbConfidence"] {
+    return value === "srgb" || value === "linear" || value === "unknown" ? value : "unknown";
 }
 
 async function materializeViewerUiAssets(
