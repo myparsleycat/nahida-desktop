@@ -2391,8 +2391,7 @@ async function prepareTextureImage(
         return {
             imagePath,
             mimeType: prepared.mimeType as PreparedTexture["mimeType"],
-            alphaMode:
-                prepared.alphaMode === "MASK" ? "MASK" : undefined,
+            alphaMode: prepared.alphaMode === "MASK" ? "MASK" : undefined,
             alphaCutoff: prepared.alphaCutoff ?? undefined,
             usesAlpha: prepared.usesAlpha,
             invertedAlpha: prepared.invertedAlpha,
@@ -2995,6 +2994,7 @@ function removeDegenerateTriangles(
     return removed === 0 ? indices : bufferToUint32Array(result.indices);
 }
 
+// oxlint-disable-next-line no-unused-vars
 function readDxgiValues(bytes: Buffer, offset: number, format: string): number[] {
     const upper = format.toUpperCase();
     const count = formatComponentCount(upper);
