@@ -1,5 +1,5 @@
-import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
+import { Canvas, useThree } from "@react-three/fiber";
 import { cn } from "@renderer/lib/utils";
 import {
   type MutableRefObject,
@@ -11,7 +11,6 @@ import {
   useRef,
   useState,
 } from "react";
-import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import {
   BufferAttribute,
   BufferGeometry,
@@ -30,6 +29,7 @@ import {
   Texture,
   Vector3,
 } from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type {
   ModelViewerHandle,
@@ -114,6 +114,7 @@ function ThreeModelScene({
   const groupRef = useRef<Group | null>(null);
   const activeObjectRef = useRef<Object3D | null>(null);
   const materialRef = useRef<MeshStandardMaterial[]>([]);
+  const orientedCenterRef = useRef<Vector3 | null>(null);
   const pendingLoadIdRef = useRef(0);
   const onLoadRef = useRef(onLoad);
   const onErrorRef = useRef(onError);
@@ -155,6 +156,7 @@ function ThreeModelScene({
       }
       setModelRoot(null);
       activeObjectRef.current = null;
+      orientedCenterRef.current = null;
       materialRef.current = [];
       return () => {
         disposed = true;
@@ -165,6 +167,7 @@ function ThreeModelScene({
       if (current) {
         disposeObjectTree(current);
       }
+      orientedCenterRef.current = null;
       return null;
     });
 
@@ -208,6 +211,8 @@ function ThreeModelScene({
         camera,
         controls: controlsRef.current,
         object: groupRef.current,
+      }).then((center) => {
+        orientedCenterRef.current = center;
       });
     }
     invalidate();
@@ -217,6 +222,34 @@ function ThreeModelScene({
   useEffect(() => {
     invalidate();
   }, [invalidate, rotation]);
+
+  useLayoutEffect(() => {
+    if (!modelRoot || !groupRef.current || !controlsRef.current) {
+      return;
+    }
+
+    groupRef.current.updateMatrixWorld(true);
+    const nextCenter = getObjectCenter(groupRef.current);
+    if (!nextCenter) {
+      return;
+    }
+
+    const previousCenter = orientedCenterRef.current;
+    orientedCenterRef.current = nextCenter.clone();
+    if (!previousCenter) {
+      return;
+    }
+
+    const delta = nextCenter.clone().sub(previousCenter);
+    if (delta.lengthSq() === 0) {
+      return;
+    }
+
+    controlsRef.current.target.add(delta);
+    camera.position.add(delta);
+    controlsRef.current.update();
+    invalidate();
+  }, [camera, invalidate, modelRoot, rotation]);
 
   useEffect(() => {
     controllerRef.current = {
@@ -232,11 +265,12 @@ function ThreeModelScene({
         invalidate();
       },
       updateFraming: async () => {
-        await fitCameraToObject({
+        const center = await fitCameraToObject({
           camera,
           controls: controlsRef.current,
           object: groupRef.current,
         });
+        orientedCenterRef.current = center;
         invalidate();
       },
     };
@@ -289,12 +323,7 @@ function ThreeModelScene({
 
   return (
     <>
-      <OrbitControls
-        ref={controlsRef}
-        dampingFactor={0.08}
-        enableDamping
-        makeDefault
-      />
+      <OrbitControls ref={controlsRef} dampingFactor={0.08} enableDamping makeDefault />
       <group ref={groupRef} rotation={rotation}>
         {modelRoot ? <primitive object={modelRoot} /> : null}
       </group>
@@ -431,22 +460,10 @@ function applyShapeKeyToGeometry(
         t,
       );
       const norm = normalizeVec3(
-        lerpVec3FromBuffers(
-          left,
-          right,
-          baseOffset,
-          shapeKey.metadata.normalOffset / 4,
-          t,
-        ),
+        lerpVec3FromBuffers(left, right, baseOffset, shapeKey.metadata.normalOffset / 4, t),
       );
       const tang = normalizeVec4(
-        lerpVec4FromBuffers(
-          left,
-          right,
-          baseOffset,
-          shapeKey.metadata.tangentOffset / 4,
-          t,
-        ),
+        lerpVec4FromBuffers(left, right, baseOffset, shapeKey.metadata.tangentOffset / 4, t),
       );
 
       sumPosX += pos[0];
@@ -640,14 +657,15 @@ async function fitCameraToObject({
   camera: Camera;
   controls: OrbitControlsImpl | null;
   object: Object3D | null;
-}) {
+}): Promise<Vector3 | null> {
   if (!(camera instanceof PerspectiveCamera) || !controls || !object) {
-    return;
+    return null;
   }
 
+  object.updateMatrixWorld(true);
   const bounds = new Box3().setFromObject(object);
   if (bounds.isEmpty()) {
-    return;
+    return null;
   }
 
   const center = bounds.getCenter(new Vector3());
@@ -662,6 +680,7 @@ async function fitCameraToObject({
   camera.far = Math.max(distance * 20, 100);
   camera.updateProjectionMatrix();
   controls.update();
+  return center.clone();
 }
 
 function collectStandardMaterials(root: Object3D): MeshStandardMaterial[] {
