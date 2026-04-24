@@ -57,7 +57,8 @@ pub struct PrepareTextureForMaterialInput {
 
 #[napi(object)]
 pub struct PrepareTextureForMaterialResult {
-  pub image: Buffer,
+  pub image: Option<Buffer>,
+  pub image_path: Option<String>,
   pub mime_type: String,
   pub image_extension: String,
   pub uses_alpha: bool,
@@ -78,7 +79,9 @@ pub fn analyze_png(data: Buffer, width: u32, height: u32) -> napi::Result<PngAna
 }
 
 #[napi(ts_return_type = "Promise<PrepareTextureForMaterialResult>")]
-pub fn prepare_texture_for_material(input: PrepareTextureForMaterialInput) -> AsyncTask<PrepareTextureForMaterialTask> {
+pub fn prepare_texture_for_material(
+  input: PrepareTextureForMaterialInput,
+) -> AsyncTask<PrepareTextureForMaterialTask> {
   AsyncTask::new(PrepareTextureForMaterialTask { input })
 }
 
@@ -117,16 +120,15 @@ impl Task for PrepareTextureForMaterialTask {
     let texture_key = normalize_key(&format!(
       "{} {}",
       input.resource_name,
-      texture_path.file_name().and_then(|value| value.to_str()).unwrap_or_default()
+      texture_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
     ));
     let srgb_confidence = classify_srgb_confidence(is_likely_srgb);
 
-    let selection = analyze_texture_selection_native(
-      &analysis,
-      &resource_key,
-      is_likely_srgb,
-      srgb_confidence,
-    );
+    let selection =
+      analyze_texture_selection_native(&analysis, &resource_key, is_likely_srgb, srgb_confidence);
 
     let mut final_analysis = analysis;
     let mut inverted_alpha = false;
@@ -141,8 +143,9 @@ impl Task for PrepareTextureForMaterialTask {
     let (image, image_extension) = encode_prepared_image(&rgba, &mime_type, input.jpeg_quality)?;
     let score = score_texture_selection(&resource_key, &selection);
     let (alpha_mode, alpha_cutoff) = material_alpha_mode(&final_analysis);
-    let result = PrepareTextureForMaterialResult {
-      image: image.into(),
+    let mut result = PrepareTextureForMaterialResult {
+      image: Some(image.into()),
+      image_path: None,
       mime_type,
       image_extension,
       uses_alpha,
@@ -153,7 +156,10 @@ impl Task for PrepareTextureForMaterialTask {
       alpha_cutoff,
     };
 
-    write_cached_prepared_texture(input, texture_path, &result)?;
+    if let Some(cache_path) = write_cached_prepared_texture(input, texture_path, &result)? {
+      result.image = None;
+      result.image_path = Some(cache_path.to_string_lossy().into_owned());
+    }
 
     Ok(result)
   }
@@ -205,7 +211,9 @@ fn analyze_rgba(data: &[u8], width: u32, height: u32) -> napi::Result<PngAnalysi
     }
   }
 
-  let stride = (((width as usize * height as usize) as f64 / 4096.0).sqrt().floor() as usize)
+  let stride = (((width as usize * height as usize) as f64 / 4096.0)
+    .sqrt()
+    .floor() as usize)
     .max(1);
 
   for y in (0..height as usize).step_by(stride) {
@@ -370,7 +378,9 @@ fn read_cached_prepared_texture(
 
   for cache_path in prepared_texture_cache_candidates(input, texture_path) {
     let metadata_path = prepared_texture_metadata_path(&cache_path);
-    if !is_cache_up_to_date(&cache_path, texture_path)? || !is_cache_up_to_date(&metadata_path, texture_path)? {
+    if !is_cache_up_to_date(&cache_path, texture_path)?
+      || !is_cache_up_to_date(&metadata_path, texture_path)?
+    {
       continue;
     }
 
@@ -379,16 +389,9 @@ fn read_cached_prepared_texture(
       None => continue,
     };
 
-    let image = std::fs::read(&cache_path).map_err(|error| {
-      napi::Error::from_reason(format!(
-        "Failed to read cached texture '{}': {}",
-        cache_path.display(),
-        error
-      ))
-    })?;
-
     return Ok(Some(PrepareTextureForMaterialResult {
-      image: image.into(),
+      image: None,
+      image_path: Some(cache_path.to_string_lossy().into_owned()),
       mime_type: metadata.mime_type,
       image_extension: metadata.image_extension,
       uses_alpha: metadata.uses_alpha,
@@ -407,12 +410,19 @@ fn write_cached_prepared_texture(
   input: &PrepareTextureForMaterialInput,
   texture_path: &Path,
   result: &PrepareTextureForMaterialResult,
-) -> napi::Result<()> {
+) -> napi::Result<Option<PathBuf>> {
   if input.cache_dir.is_empty() {
-    return Ok(());
+    return Ok(None);
   }
 
-  let cache_path = prepared_texture_cache_path(&input.cache_dir, texture_path, &input.texture_path, &result.mime_type, &result.image_extension, input.jpeg_quality);
+  let cache_path = prepared_texture_cache_path(
+    &input.cache_dir,
+    texture_path,
+    &input.texture_path,
+    &result.mime_type,
+    &result.image_extension,
+    input.jpeg_quality,
+  );
   if let Some(parent) = cache_path.parent() {
     std::fs::create_dir_all(parent).map_err(|error| {
       napi::Error::from_reason(format!(
@@ -423,7 +433,13 @@ fn write_cached_prepared_texture(
     })?;
   }
 
-  std::fs::write(&cache_path, &result.image).map_err(|error| {
+  let image = result.image.as_ref().ok_or_else(|| {
+    napi::Error::from_reason(
+      "Prepared texture bytes were missing while attempting to write cache".to_string(),
+    )
+  })?;
+
+  std::fs::write(&cache_path, image).map_err(|error| {
     napi::Error::from_reason(format!(
       "Failed to write cached texture '{}': {}",
       cache_path.display(),
@@ -450,7 +466,7 @@ fn write_cached_prepared_texture(
     ))
   })?;
 
-  Ok(())
+  Ok(Some(cache_path))
 }
 
 fn prepared_texture_cache_candidates(
@@ -458,11 +474,39 @@ fn prepared_texture_cache_candidates(
   texture_path: &Path,
 ) -> Vec<PathBuf> {
   match input.texture_format.as_str() {
-    "png" => vec![prepared_texture_cache_path(&input.cache_dir, texture_path, &input.texture_path, "image/png", "png", input.jpeg_quality)],
-    "jpeg-force" => vec![prepared_texture_cache_path(&input.cache_dir, texture_path, &input.texture_path, "image/jpeg", "jpg", input.jpeg_quality)],
+    "png" => vec![prepared_texture_cache_path(
+      &input.cache_dir,
+      texture_path,
+      &input.texture_path,
+      "image/png",
+      "png",
+      input.jpeg_quality,
+    )],
+    "jpeg-force" => vec![prepared_texture_cache_path(
+      &input.cache_dir,
+      texture_path,
+      &input.texture_path,
+      "image/jpeg",
+      "jpg",
+      input.jpeg_quality,
+    )],
     "jpeg-safe" => vec![
-      prepared_texture_cache_path(&input.cache_dir, texture_path, &input.texture_path, "image/png", "png", input.jpeg_quality),
-      prepared_texture_cache_path(&input.cache_dir, texture_path, &input.texture_path, "image/jpeg", "jpg", input.jpeg_quality),
+      prepared_texture_cache_path(
+        &input.cache_dir,
+        texture_path,
+        &input.texture_path,
+        "image/png",
+        "png",
+        input.jpeg_quality,
+      ),
+      prepared_texture_cache_path(
+        &input.cache_dir,
+        texture_path,
+        &input.texture_path,
+        "image/jpeg",
+        "jpg",
+        input.jpeg_quality,
+      ),
     ],
     _ => Vec::new(),
   }
@@ -512,7 +556,10 @@ fn create_texture_cache_base_name(texture_path: &Path, resolved_texture_path: &s
   let mut hasher = Sha256::new();
   hasher.update(resolved_texture_path.as_bytes());
   let digest = hasher.finalize();
-  let digest_prefix: String = digest[..6].iter().map(|value| format!("{value:02x}")).collect();
+  let digest_prefix: String = digest[..6]
+    .iter()
+    .map(|value| format!("{value:02x}"))
+    .collect();
   format!("{extensionless}-{digest_prefix}")
 }
 
@@ -631,7 +678,9 @@ impl PreparedTextureMetadata {
   }
 }
 
-fn read_prepared_texture_metadata(metadata_path: &Path) -> napi::Result<Option<PreparedTextureMetadata>> {
+fn read_prepared_texture_metadata(
+  metadata_path: &Path,
+) -> napi::Result<Option<PreparedTextureMetadata>> {
   let contents = match std::fs::read_to_string(metadata_path) {
     Ok(contents) => contents,
     Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -662,18 +711,19 @@ fn encode_prepared_image(
         rgba.height(),
         ColorType::Rgba8.into(),
       )
-      .map_err(|error| napi::Error::from_reason(format!("Failed to encode PNG texture: {error}")))?;
+      .map_err(|error| {
+        napi::Error::from_reason(format!("Failed to encode PNG texture: {error}"))
+      })?;
     return Ok((output, String::from("png")));
   }
 
   if mime_type == "image/jpeg" {
-    let mut encoder = JpegEncoder::new_with_quality(
-      &mut output,
-      jpeg_quality.clamp(1, 100) as u8,
-    );
+    let mut encoder = JpegEncoder::new_with_quality(&mut output, jpeg_quality.clamp(1, 100) as u8);
     encoder
       .encode_image(&DynamicImage::ImageRgba8(rgba.clone()))
-      .map_err(|error| napi::Error::from_reason(format!("Failed to encode JPEG texture: {error}")))?;
+      .map_err(|error| {
+        napi::Error::from_reason(format!("Failed to encode JPEG texture: {error}"))
+      })?;
     return Ok((output, String::from("jpg")));
   }
 
@@ -809,7 +859,8 @@ fn texture_name_priority(resource_key: &str) -> i32 {
   if resource_key.contains("light") {
     score -= 10;
   }
-  if resource_key.contains("metal") || resource_key.contains("rough") || resource_key.contains("ao") {
+  if resource_key.contains("metal") || resource_key.contains("rough") || resource_key.contains("ao")
+  {
     score -= 24;
   }
   if resource_key.contains("mask") {
@@ -855,7 +906,9 @@ pub fn interleave_vertex_buffers(
   let blend_stride = blend_stride as usize;
   let texcoord_stride = texcoord_stride as usize;
   if position_stride == 0 || blend_stride == 0 || texcoord_stride == 0 {
-    return Err(napi::Error::from_reason("Vertex buffer stride must be greater than zero"));
+    return Err(napi::Error::from_reason(
+      "Vertex buffer stride must be greater than zero",
+    ));
   }
 
   let stride = position_stride + blend_stride + texcoord_stride;
@@ -884,7 +937,9 @@ pub fn decode_indices(bytes: Buffer, format: String) -> napi::Result<Buffer> {
   let upper = format.to_uppercase();
   let out = if upper.contains("R16_UINT") {
     if bytes.len() % 2 != 0 {
-      return Err(napi::Error::from_reason("R16_UINT index buffer has an odd byte length"));
+      return Err(napi::Error::from_reason(
+        "R16_UINT index buffer has an odd byte length",
+      ));
     }
     let mut values = Vec::with_capacity(bytes.len() / 2);
     for chunk in bytes.chunks_exact(2) {
@@ -893,7 +948,9 @@ pub fn decode_indices(bytes: Buffer, format: String) -> napi::Result<Buffer> {
     values
   } else if upper.contains("R32_UINT") || upper.contains("UNKNOWN") {
     if bytes.len() % 4 != 0 {
-      return Err(napi::Error::from_reason("R32_UINT index buffer byte length is not divisible by 4"));
+      return Err(napi::Error::from_reason(
+        "R32_UINT index buffer byte length is not divisible by 4",
+      ));
     }
     let mut values = Vec::with_capacity(bytes.len() / 4);
     for chunk in bytes.chunks_exact(4) {
@@ -901,14 +958,19 @@ pub fn decode_indices(bytes: Buffer, format: String) -> napi::Result<Buffer> {
     }
     values
   } else {
-    return Err(napi::Error::from_reason(format!("Unsupported IB format: {format}")));
+    return Err(napi::Error::from_reason(format!(
+      "Unsupported IB format: {format}"
+    )));
   };
 
   Ok(u32_vec_to_buffer(out))
 }
 
 #[napi]
-pub fn merge_draw_indices(indices: Buffer, draws: Vec<DrawRange>) -> napi::Result<MergeDrawIndicesResult> {
+pub fn merge_draw_indices(
+  indices: Buffer,
+  draws: Vec<DrawRange>,
+) -> napi::Result<MergeDrawIndicesResult> {
   let indices = buffer_to_u32_vec(&indices)?;
   let mut merged = Vec::new();
   let mut invalid_ranges = Vec::new();
@@ -975,7 +1037,12 @@ pub fn read_float_attribute(
 }
 
 #[napi]
-pub fn ensure_vec4(data: Buffer, vertex_count: u32, width: u32, fill_w: f64) -> napi::Result<Buffer> {
+pub fn ensure_vec4(
+  data: Buffer,
+  vertex_count: u32,
+  width: u32,
+  fill_w: f64,
+) -> napi::Result<Buffer> {
   let data = buffer_to_f32_vec(&data)?;
   let vertex_count = vertex_count as usize;
   let width = width as usize;
@@ -1040,14 +1107,20 @@ pub fn normalize_tangent_array(data: Buffer) -> napi::Result<Buffer> {
       }
     }
     if i + 3 < out.len() {
-      out[i + 3] = if data.get(i + 3).copied().unwrap_or(0.0) >= 0.0 { 1.0 } else { -1.0 };
+      out[i + 3] = if data.get(i + 3).copied().unwrap_or(0.0) >= 0.0 {
+        1.0
+      } else {
+        -1.0
+      };
     }
   }
   Ok(f32_vec_to_buffer(out))
 }
 
 #[napi]
-pub fn remove_degenerate_triangles(indices: Buffer) -> napi::Result<RemoveDegenerateTrianglesResult> {
+pub fn remove_degenerate_triangles(
+  indices: Buffer,
+) -> napi::Result<RemoveDegenerateTrianglesResult> {
   let indices = buffer_to_u32_vec(&indices)?;
   let mut removed = 0u32;
   for i in (0..indices.len()).step_by(3) {
@@ -1101,7 +1174,9 @@ fn ratio(value: usize, total: usize) -> f64 {
 
 fn buffer_to_u32_vec(buffer: &Buffer) -> napi::Result<Vec<u32>> {
   if buffer.len() % 4 != 0 {
-    return Err(napi::Error::from_reason("Expected a Uint32-compatible buffer"));
+    return Err(napi::Error::from_reason(
+      "Expected a Uint32-compatible buffer",
+    ));
   }
 
   Ok(
@@ -1114,7 +1189,9 @@ fn buffer_to_u32_vec(buffer: &Buffer) -> napi::Result<Vec<u32>> {
 
 fn buffer_to_f32_vec(buffer: &Buffer) -> napi::Result<Vec<f32>> {
   if buffer.len() % 4 != 0 {
-    return Err(napi::Error::from_reason("Expected a Float32-compatible buffer"));
+    return Err(napi::Error::from_reason(
+      "Expected a Float32-compatible buffer",
+    ));
   }
 
   Ok(
@@ -1230,7 +1307,9 @@ fn read_dxgi_values(bytes: &[u8], offset: usize, format: &str) -> napi::Result<V
     }
   }
 
-  Err(napi::Error::from_reason(format!("Unsupported DXGI format: {format}")))
+  Err(napi::Error::from_reason(format!(
+    "Unsupported DXGI format: {format}"
+  )))
 }
 
 fn format_component_count(format: &str) -> usize {
@@ -1249,7 +1328,11 @@ fn format_component_count(format: &str) -> usize {
       }
     }
   }
-  if count == 0 { 1 } else { count }
+  if count == 0 {
+    1
+  } else {
+    count
+  }
 }
 
 fn half_to_float(value: u16) -> f32 {

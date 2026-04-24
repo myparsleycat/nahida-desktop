@@ -2110,18 +2110,6 @@ function createTextureCacheBaseName(texturePath: string): string {
     return `${extensionless}-${digest}`;
 }
 
-async function isCacheUpToDate(cachePath: string, sourcePath: string): Promise<boolean> {
-    try {
-        const [cacheStat, sourceStat] = await Promise.all([
-            fse.stat(cachePath),
-            fse.stat(sourcePath),
-        ]);
-        return cacheStat.mtimeMs >= sourceStat.mtimeMs;
-    } catch {
-        return false;
-    }
-}
-
 async function buildMaterials(
     builder: GlbBuilder,
     options: ConvertModToGlbBufferOptions,
@@ -2379,6 +2367,7 @@ async function prepareTextureImage(
         const imagePath = await writePreparedTextureImage(
             texturePath,
             textureOutDir,
+            prepared.imagePath,
             prepared.image,
             prepared.imageExtension,
             prepared.mimeType,
@@ -2444,18 +2433,23 @@ function normalizeJpegQualityOption(quality?: number): number {
 async function writePreparedTextureImage(
     texturePath: string,
     textureOutDir: string,
-    image: Buffer,
+    preparedImagePath: string | undefined,
+    image: Buffer | undefined,
     imageExtension: string,
     mimeType: PreparedTexture["mimeType"] | string,
     jpegQuality: number,
 ): Promise<string> {
+    if (preparedImagePath) {
+        return preparedImagePath;
+    }
+
     const fileName =
         mimeType === "image/png"
             ? `${createTextureCacheBaseName(texturePath)}-prepared.${imageExtension}`
             : `${createTextureCacheBaseName(texturePath)}-q${jpegQuality}.${imageExtension}`;
     const outputPath = path.join(textureOutDir, fileName);
-    if (await isCacheUpToDate(outputPath, texturePath)) {
-        return outputPath;
+    if (!image) {
+        throw new Error(`Missing prepared texture bytes for ${texturePath}`);
     }
     await fse.ensureDir(textureOutDir);
     await fse.writeFile(outputPath, image);

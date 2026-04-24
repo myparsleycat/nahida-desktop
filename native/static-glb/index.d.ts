@@ -55,7 +55,8 @@ export interface PrepareTextureForMaterialInput {
 }
 
 export interface PrepareTextureForMaterialResult {
-  image: Buffer
+  image?: Buffer
+  imagePath?: string
   mimeType: string
   imageExtension: string
   usesAlpha: boolean
