@@ -5,11 +5,6 @@ import type {
     StaticGlbViewerInput,
 } from "@main/services/mod-tools/static-glb";
 
-type PersistModelViewerToggleStateInput = {
-    iniPath: string;
-    state: Record<string, number | string>;
-};
-
 export function registerToolsHandlers(d: NahidaDesktop) {
     rh(
         "tools:buildNewD3DDLL",
@@ -55,8 +50,10 @@ export function registerToolsHandlers(d: NahidaDesktop) {
     rh("tools:convertStaticGlbForViewer", (input: StaticGlbViewerInput) =>
         d.service.modTools.staticGlb.convertForViewer(input),
     );
-    rh("tools:persistModelViewerToggleState", (input: PersistModelViewerToggleStateInput) =>
-        d.service.modTools.togglePersist.persistStateToIni(input.iniPath, input.state),
+    rh(
+        "tools:persistModelViewerToggleState",
+        (iniPath: string, state: Record<string, string | number>) =>
+            d.service.modTools.togglePersist.persistStateToIni(iniPath, state),
     );
     rh("tools:cleanupStaticGlbViewerFile", (glbPath: string) =>
         d.service.modTools.staticGlb.cleanupViewerFile(glbPath),
