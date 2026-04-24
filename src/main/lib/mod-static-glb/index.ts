@@ -2495,7 +2495,7 @@ async function materializeUiAsset(
 }
 
 function trimResourcePrefix(value: string): string {
-    return value.trim().replace(/^Resource/i, "");
+    return value.trim().replace(/^ref\s+/i, "").replace(/^Resource/i, "");
 }
 
 function bestKeyForIb(stem: string, resourceName: string, keys: string[]): string {
