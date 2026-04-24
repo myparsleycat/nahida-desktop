@@ -573,7 +573,8 @@
           "texture": "Texture",
           "renderer": "Renderer",
           "rotate": "Rotate",
-          "reset": "Reset"
+          "reset": "Reset",
+          "toggle": "Toggle"
         },
         "rotate_actions": {
           "Left 90°": "Left 90°",

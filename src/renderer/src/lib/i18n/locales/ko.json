@@ -553,7 +553,8 @@
           "texture": "텍스처",
           "renderer": "렌더러",
           "rotate": "회전",
-          "reset": "초기화"
+          "reset": "초기화",
+          "toggle": "토글"
         },
         "rotate_actions": {
           "Left 90°": "왼쪽으로 90°",

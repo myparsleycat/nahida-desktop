@@ -231,6 +231,88 @@ export function ModelViewerDialog({
     });
   };
 
+  const handleResetToggles = async () => {
+    if (!source || source.mode !== "variant-set" || isResolving || loadingViewerIndex !== null) {
+      return;
+    }
+
+    const nextState = manifest?.defaultState ?? source.manifest.defaultState;
+    const artifactState = stripRealtimeShapeKeyState(nextState, manifest?.shapeKeys);
+
+    if (
+      createStateKey(stripRealtimeShapeKeyState(activeState, manifest?.shapeKeys)) ===
+      createStateKey(artifactState)
+    ) {
+      setActiveState(nextState);
+      return;
+    }
+
+    const nextViewerIndex: 0 | 1 = activeViewerIndex === 0 ? 1 : 0;
+    pendingCameraStateRef.current =
+      viewerRefs.current[activeViewerIndex]?.captureCameraState() ?? null;
+
+    const nextStateKey = createStateKey(artifactState);
+    const existingStateArtifact = manifest?.states.find((entry) => entry.key === nextStateKey);
+    if (existingStateArtifact?.glbPath) {
+      setActiveState(nextState);
+      loadingViewerIndexRef.current = nextViewerIndex;
+      setLoadingViewerIndex(nextViewerIndex);
+      setViewerUrl(nextViewerIndex, existingStateArtifact.glbPath);
+      return;
+    }
+
+    setIsResolving(true);
+    const expectedSource = source;
+    const expectedViewerIndex = nextViewerIndex;
+    const expectedStateKey = nextStateKey;
+    pendingVariantRequestRef.current = {
+      source: expectedSource,
+      viewerIndex: expectedViewerIndex,
+      stateKey: expectedStateKey,
+    };
+    try {
+      const result = await window.api.invoke("tools:convertStaticGlbForViewer", {
+        artifactRoot: source.artifactRoot,
+        manifestPath: source.manifestPath,
+        state: artifactState,
+      });
+      if (result.mode !== "variant-set") {
+        return;
+      }
+      if (
+        !openRef.current ||
+        sourceRef.current !== expectedSource ||
+        pendingVariantRequestRef.current?.source !== expectedSource ||
+        pendingVariantRequestRef.current.viewerIndex !== expectedViewerIndex ||
+        pendingVariantRequestRef.current.stateKey !== expectedStateKey
+      ) {
+        return;
+      }
+
+      setManifest(result.manifest);
+      setActiveState(nextState);
+      loadingViewerIndexRef.current = nextViewerIndex;
+      setLoadingViewerIndex(nextViewerIndex);
+      setViewerUrl(nextViewerIndex, result.activeGlbPath);
+    } catch (error) {
+      pendingCameraStateRef.current = null;
+      loadingViewerIndexRef.current = null;
+      setLoadingViewerIndex(null);
+      toast.error("Failed to reset model variant", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      if (
+        pendingVariantRequestRef.current?.source === expectedSource &&
+        pendingVariantRequestRef.current.viewerIndex === expectedViewerIndex &&
+        pendingVariantRequestRef.current.stateKey === expectedStateKey
+      ) {
+        pendingVariantRequestRef.current = null;
+      }
+      setIsResolving(false);
+    }
+  };
+
   const handleSelectValue = async (variableId: string, value: VariableStateValue) => {
     if (!source || source.mode !== "variant-set" || isResolving || loadingViewerIndex !== null) {
       return;
@@ -480,6 +562,18 @@ export function ModelViewerDialog({
               </MenubarRadioGroup>
             </MenubarContent>
           </MenubarMenu>
+          {showToggleViewer ? (
+            <MenubarMenu>
+              <MenubarTrigger>{t("page.tools.model_viewer.menu.toggle")}</MenubarTrigger>
+              <MenubarContent>
+                <MenubarGroup>
+                  <MenubarItem onClick={handleResetToggles}>
+                    {t("page.tools.model_viewer.menu.reset")}
+                  </MenubarItem>
+                </MenubarGroup>
+              </MenubarContent>
+            </MenubarMenu>
+          ) : null}
         </Menubar>
 
         <div
@@ -848,10 +942,7 @@ function normalizeRealtimeShapeKeyState(
       continue;
     }
 
-    normalized[variable.id] = Math.min(
-      1,
-      Math.max(0, (rawValue - variable.slider.min) / range),
-    );
+    normalized[variable.id] = Math.min(1, Math.max(0, (rawValue - variable.slider.min) / range));
   }
 
   return normalized;
