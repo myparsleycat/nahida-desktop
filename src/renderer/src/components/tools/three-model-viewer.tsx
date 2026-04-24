@@ -479,6 +479,7 @@ function applyShapeKeyToGeometry(
 
   for (let index = 0; index < vertexCount; index += 1) {
     const baseOffset = index * stride;
+    const tangentIndex = index * 4;
     let sumPosX = 0;
     let sumPosY = 0;
     let sumPosZ = 0;
@@ -489,6 +490,7 @@ function applyShapeKeyToGeometry(
     let sumTangY = 0;
     let sumTangZ = 0;
     let sumTangW = 0;
+    let preservedTangW = tangentArray ? Math.sign(tangentArray[tangentIndex + 3]) || 1 : 1;
     let contributionCount = 0;
 
     for (const dimension of shapeKey.dimensions) {
@@ -510,9 +512,17 @@ function applyShapeKeyToGeometry(
       const norm = normalizeVec3(
         lerpVec3FromBuffers(left, right, baseOffset, shapeKey.metadata.normalOffset / 4, t),
       );
-      const tang = normalizeVec4(
-        lerpVec4FromBuffers(left, right, baseOffset, shapeKey.metadata.tangentOffset / 4, t),
+      const tang = lerpVec4FromBuffers(
+        left,
+        right,
+        baseOffset,
+        shapeKey.metadata.tangentOffset / 4,
+        t,
       );
+      const normalizedTang = normalizeVec3([tang[0], tang[1], tang[2]]);
+      if (tang[3] !== 0) {
+        preservedTangW = tang[3] < 0 ? -1 : 1;
+      }
 
       sumPosX += pos[0];
       sumPosY += pos[1];
@@ -520,9 +530,9 @@ function applyShapeKeyToGeometry(
       sumNormX += norm[0];
       sumNormY += norm[1];
       sumNormZ += norm[2];
-      sumTangX += tang[0];
-      sumTangY += tang[1];
-      sumTangZ += tang[2];
+      sumTangX += normalizedTang[0];
+      sumTangY += normalizedTang[1];
+      sumTangZ += normalizedTang[2];
       sumTangW += tang[3];
       contributionCount += 1;
     }
@@ -549,12 +559,11 @@ function applyShapeKeyToGeometry(
     }
 
     if (tangentArray) {
-      const tangentIndex = index * 4;
-      const normalized = normalizeVec4([sumTangX, sumTangY, sumTangZ, sumTangW]);
+      const normalized = normalizeVec3([sumTangX, sumTangY, sumTangZ]);
       tangentArray[tangentIndex] = normalized[0];
       tangentArray[tangentIndex + 1] = normalized[1];
       tangentArray[tangentIndex + 2] = normalized[2];
-      tangentArray[tangentIndex + 3] = normalized[3];
+      tangentArray[tangentIndex + 3] = Math.sign(sumTangW) || preservedTangW;
     }
   }
 
@@ -606,14 +615,6 @@ function normalizeVec3(value: [number, number, number]): [number, number, number
     return [0, 0, 0];
   }
   return [value[0] / length, value[1] / length, value[2] / length];
-}
-
-function normalizeVec4(value: [number, number, number, number]): [number, number, number, number] {
-  const length = Math.hypot(value[0], value[1], value[2], value[3]);
-  if (!length) {
-    return [0, 0, 0, 0];
-  }
-  return [value[0] / length, value[1] / length, value[2] / length, value[3] / length];
 }
 
 function captureThreeCameraState(
