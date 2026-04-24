@@ -1491,7 +1491,10 @@ function collectSlotVariableBindings(
     sections: IniSection[],
     defaultVariables: Map<string, number | string>,
 ): SlotVariableBinding[] {
-    const bindings: SlotVariableBinding[] = collectKeyCycleBindings(sections);
+    const bindings: SlotVariableBinding[] = [
+        ...collectKeyCycleBindings(sections),
+        ...collectButtonAmountBindings(sections),
+    ];
     const clickedSection = sections.find(
         (section) =>
             section.header === "CommandList" &&
@@ -1561,6 +1564,52 @@ function collectSlotVariableBindings(
     return dedupeSlotBindings(bindings);
 }
 
+function collectButtonAmountBindings(sections: IniSection[]): SlotVariableBinding[] {
+    const bindings: SlotVariableBinding[] = [];
+
+    for (const section of sections) {
+        if (section.header !== "CommandList") {
+            continue;
+        }
+
+        let currentSlot: number | null = null;
+        for (const rawLine of section.lines) {
+            const trimmed = rawLine.trim();
+            const slotMatch = trimmed.match(/^if\s+\$button_amount\s*>=\s*(\d+)$/i);
+            if (slotMatch) {
+                currentSlot = Number(slotMatch[1]);
+                continue;
+            }
+
+            if (currentSlot === null) {
+                continue;
+            }
+
+            const cycleMatch = trimmed.match(/^if\s+\$([\w.]+)\s*<\s*(-?\d+(?:\.\d+)?)$/i);
+            if (!cycleMatch) {
+                continue;
+            }
+
+            const maxValue = Number(cycleMatch[2]);
+            if (!Number.isFinite(maxValue)) {
+                continue;
+            }
+
+            bindings.push({
+                slot: currentSlot,
+                variable: normalizeKey(cycleMatch[1]),
+                values: Array.from(
+                    { length: Math.max(0, Math.floor(maxValue)) + 1 },
+                    (_, index) => index,
+                ),
+            });
+            currentSlot = null;
+        }
+    }
+
+    return bindings;
+}
+
 function collectKeyCycleBindings(sections: IniSection[]): SlotVariableBinding[] {
     return sections
         .filter((section) => normalizeKey(section.header).startsWith("key"))
@@ -1611,11 +1660,13 @@ async function buildVariantVariables(
         const iconResource = findFirstResourcePath(resourceMap, [
             `MenuItem.${binding.slot}`,
             `MenuItem.${deriveVariableUiToken(binding.variable)}`,
+            `Button_${binding.slot - 1}`,
+            `Button_${binding.slot}`,
         ]);
         const slider = inferSliderConfig(binding.variable, binding.values);
         variables.push({
             id: binding.variable,
-            label: humanizeVariableLabel(binding.variable),
+            label: resolveVariantVariableLabel(binding.variable, iconResource),
             defaultValue: 0,
             values: binding.values.map((value) => ({
                 value,
@@ -1630,6 +1681,17 @@ async function buildVariantVariables(
     }
 
     return variables;
+}
+
+function resolveVariantVariableLabel(variableId: string, iconResource?: string): string {
+    if (iconResource) {
+        const stem = path.basename(iconResource, path.extname(iconResource));
+        if (!/^(?:button|icon|item)[._-]?\d+$/i.test(stem)) {
+            return humanizeVariableLabel(stem);
+        }
+    }
+
+    return humanizeVariableLabel(variableId);
 }
 
 function mergeBindingsByVariable(bindings: SlotVariableBinding[]): SlotVariableBinding[] {
@@ -1711,17 +1773,29 @@ function collectViewerUiAssetPaths(sections: IniSection[]): StaticGlbViewerUiAss
             .map((section) => [normalizeKey(section.name), section.values.filename]),
     );
 
+    const slotHoverPath = findFirstResourcePath(resourceMap, [
+        "ItemSlotHover.1",
+        "ItemSlotHover.SlotHover",
+        "UIButtonSelect",
+        "ButtonPush",
+    ]);
+    const slotActivePath = findFirstResourcePath(resourceMap, [
+        "ItemSlotHover.2",
+        "ItemSlotHover.SlotClicked",
+        "UIButtonSelect",
+        "ButtonPush",
+    ]);
+
     return {
-        backgroundPath: findFirstResourcePath(resourceMap, ["MenuBG", "MenuBack", "MenuPlate"]),
-        slotPath: findFirstResourcePath(resourceMap, ["ItemSlot", "ItemSlotBack"]),
-        slotHoverPath: findFirstResourcePath(resourceMap, [
-            "ItemSlotHover.1",
-            "ItemSlotHover.SlotHover",
+        backgroundPath: findFirstResourcePath(resourceMap, [
+            "MenuBG",
+            "MenuBack",
+            "MenuPlate",
+            "UIBackground",
         ]),
-        slotActivePath: findFirstResourcePath(resourceMap, [
-            "ItemSlotHover.2",
-            "ItemSlotHover.SlotClicked",
-        ]),
+        slotPath: findFirstResourcePath(resourceMap, ["ItemSlot", "ItemSlotBack", "OutlineButton"]),
+        slotHoverPath,
+        slotActivePath: slotActivePath ?? slotHoverPath,
     };
 }
 
@@ -2495,7 +2569,10 @@ async function materializeUiAsset(
 }
 
 function trimResourcePrefix(value: string): string {
-    return value.trim().replace(/^ref\s+/i, "").replace(/^Resource/i, "");
+    return value
+        .trim()
+        .replace(/^ref\s+/i, "")
+        .replace(/^Resource/i, "");
 }
 
 function bestKeyForIb(stem: string, resourceName: string, keys: string[]): string {
