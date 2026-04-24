@@ -141,6 +141,16 @@ export const ModCardHeader = memo(function ModCardHeader({
     }
   };
 
+  const scheduleModelViewerCleanup = (source: ModelViewerDialogSource | null) => {
+    if (!source) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      void cleanupModelViewerSource(source);
+    }, 0);
+  };
+
   const handleOpenModelViewer = async (e: MouseEvent) => {
     e.stopPropagation();
     if (isConvertingModel) return;
@@ -189,7 +199,7 @@ export const ModCardHeader = memo(function ModCardHeader({
 
   useEffect(() => {
     return () => {
-      void cleanupModelViewerSource(modelViewerSource);
+      scheduleModelViewerCleanup(modelViewerSource);
     };
   }, [modelViewerSource]);
 
@@ -391,7 +401,7 @@ export const ModCardHeader = memo(function ModCardHeader({
         onOpenChange={(open) => {
           setShowModelViewer(open);
           if (!open) {
-            void cleanupModelViewerSource(modelViewerSource);
+            scheduleModelViewerCleanup(modelViewerSource);
             setModelViewerSource(null);
           }
         }}

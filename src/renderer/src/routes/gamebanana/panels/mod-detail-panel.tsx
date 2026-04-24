@@ -256,7 +256,10 @@ export function ModDetailPanel({
                     <Badge variant="outline">
                       {modOverviewQuery.data.profile._aCategory._sName}
                     </Badge>
-                    <Badge variant="secondary">{modOverviewQuery.data.profile._aGame._sName}</Badge>
+                    <Badge variant="outline">
+                      {modOverviewQuery.data.profile._aSubmitter._sName}
+                    </Badge>
+                    <Badge variant="outline">{modOverviewQuery.data.profile._aGame._sName}</Badge>
                   </div>
                   <div className="text-2xl font-semibold">
                     {modOverviewQuery.data.profile._sName}

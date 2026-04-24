@@ -133,7 +133,7 @@ export function ModContextMenu({
 
   useEffect(() => {
     return () => {
-      void cleanupModelViewerSource(modelViewerSource);
+      scheduleModelViewerCleanup(modelViewerSource);
     };
   }, [modelViewerSource]);
 
@@ -203,6 +203,16 @@ export function ModContextMenu({
     } catch (error) {
       console.warn("Failed to clean up model viewer file", error);
     }
+  };
+
+  const scheduleModelViewerCleanup = (source: ModelViewerDialogSource | null) => {
+    if (!source) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      void cleanupModelViewerSource(source);
+    }, 0);
   };
 
   const handleOpenModelViewer = async () => {
@@ -526,7 +536,7 @@ export function ModContextMenu({
         onOpenChange={(open) => {
           setShowModelViewer(open);
           if (!open) {
-            void cleanupModelViewerSource(modelViewerSource);
+            scheduleModelViewerCleanup(modelViewerSource);
             setModelViewerSource(null);
           }
         }}

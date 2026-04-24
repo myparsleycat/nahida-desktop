@@ -1,9 +1,17 @@
+import type { IpcHandlers } from "@shared/types.gen";
 import type {
   GameBananaGameKey,
   useGameBananaGameSubfeed,
   useGameBananaModCategoryOverview,
   useGameBananaModOverview,
 } from "@renderer/hooks/use-gamebanana-data";
+
+type GameOverviewData = Awaited<ReturnType<IpcHandlers["gamebanana:getGameOverview"]>>;
+type GameSubfeedData = Awaited<ReturnType<IpcHandlers["gamebanana:getGameSubfeed"]>>;
+type CategoryOverviewData = Awaited<
+  ReturnType<IpcHandlers["gamebanana:getModCategoryOverview"]>
+>;
+type ModOverviewData = Awaited<ReturnType<IpcHandlers["gamebanana:getModOverview"]>>;
 
 export interface GameOption {
   key: GameBananaGameKey;
@@ -15,61 +23,14 @@ export interface GameBananaBreadcrumbItem {
   name: string;
 }
 
-export interface PreviewImage {
-  _sUrl?: string;
-  _sFile?: string;
-  _sFile530?: string;
-  _sFile800?: string;
-  _sFile220?: string;
-  _sFile100?: string;
-  _sBaseUrl?: string;
-  _sCaption?: string;
-}
-
-export interface PreviewMedia {
-  _aImages?: PreviewImage[];
-}
-
-export interface SubmissionListItem {
-  _idRow: number;
-  _sName: string;
-  _sDescription?: string;
-  _aPreviewMedia?: PreviewMedia;
-  _tsDateAdded?: number;
-  _tsDateModified?: number;
-  _tsDateUpdated?: number;
-  _nLikeCount?: number;
-  _nPostCount?: number;
-  _nViewCount?: number;
-  _aSubmitter: {
-    _sName: string;
-  };
-  _aRootCategory?: {
-    _sName: string;
-  };
-  _aSubCategory?: {
-    _sName: string;
-  };
-}
-
-export interface RootCategoryItem {
-  _idRow?: number;
-  _sName: string;
-  _nItemCount?: number;
-}
-
-export interface CategoryChildItem {
-  _idRow: number;
-  _sName: string;
-}
-
-export interface ModFileItem {
-  _idRow: number;
-  _sFile: string;
-  _sDownloadUrl: string;
-  _nDownloadCount: number;
-  _tsDateAdded: number;
-}
+export type SubmissionListItem =
+  | GameSubfeedData["_aRecords"][number]
+  | CategoryOverviewData["index"]["_aRecords"][number];
+export type PreviewMedia = NonNullable<SubmissionListItem["_aPreviewMedia"]>;
+export type PreviewImage = NonNullable<PreviewMedia["_aImages"]>[number];
+export type RootCategoryItem = GameOverviewData["profile"]["_aModRootCategories"][number];
+export type CategoryChildItem = CategoryOverviewData["categories"][number];
+export type ModFileItem = ModOverviewData["profile"]["_aFiles"][number];
 
 export type GameSubfeedQuery = ReturnType<typeof useGameBananaGameSubfeed>;
 export type CategoryOverviewQuery = ReturnType<typeof useGameBananaModCategoryOverview>;

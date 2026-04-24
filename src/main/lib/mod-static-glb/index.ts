@@ -119,6 +119,29 @@ export type StaticGlbVariantValue = {
     label: string;
 };
 
+export type StaticGlbVariantSlider = {
+    min: number;
+    max: number;
+    step: number;
+};
+
+export type StaticGlbRealtimeShapeKeyDimension = {
+    variableId: string;
+    smallerPath: string;
+    biggerPath: string;
+};
+
+export type StaticGlbRealtimeShapeKey = {
+    shaderPath: string;
+    targetMeshPrefixes: string[];
+    basePath: string;
+    vertexStride: number;
+    positionOffset: number;
+    normalOffset: number;
+    tangentOffset: number;
+    dimensions: StaticGlbRealtimeShapeKeyDimension[];
+};
+
 export type StaticGlbVariantVariable = {
     id: string;
     label: string;
@@ -127,6 +150,8 @@ export type StaticGlbVariantVariable = {
     order: number;
     slot?: number;
     iconPath?: string;
+    controlType?: "buttons" | "slider";
+    slider?: StaticGlbVariantSlider;
 };
 
 export type StaticGlbViewerUiAssets = {
@@ -144,6 +169,7 @@ export type StaticGlbVariantManifest = {
     defaultState: VariableStateMap;
     variables: StaticGlbVariantVariable[];
     uiAssets: StaticGlbViewerUiAssets;
+    shapeKeys?: StaticGlbRealtimeShapeKey[];
     states: Array<{
         key: string;
         values: VariableStateMap;
@@ -193,6 +219,7 @@ export type ConvertModToGlbBufferResult = {
 };
 
 type DrawInstruction = {
+    ibResourceName?: string;
     indexCount: number;
     startIndex: number;
     baseVertex: number;
@@ -335,7 +362,7 @@ export async function convertModToVariantArtifacts(
 
     try {
         for (const [key, state] of statesToGenerate) {
-            const glbName = `${sanitizeStateKey(key)}.glb`;
+            const glbName = createStateArtifactFileName(key);
             const glbPath = path.join(glbDir, glbName);
             const result = await buildModGlb({
                 ...options,
@@ -383,6 +410,7 @@ export async function convertModToVariantArtifacts(
             defaultState: analysis.defaultState,
             variables,
             uiAssets,
+            shapeKeys: analysis.shapeKeys,
             states,
         };
         const manifestPath = path.join(artifactRoot, "manifest.json");
@@ -452,7 +480,7 @@ export async function resolveVariantStateArtifact(
             });
             const glbDir = path.join(artifactRoot, "glb");
             await fse.ensureDir(glbDir);
-            const glbPath = path.join(glbDir, `${sanitizeStateKey(key)}.glb`);
+            const glbPath = path.join(glbDir, createStateArtifactFileName(key));
             await fse.writeFile(glbPath, result.glb);
 
             const current = manifest.states.find((entry) => entry.key === key);
@@ -473,8 +501,13 @@ export async function resolveVariantStateArtifact(
                 };
             }
 
+            if (current.glbPath !== glbPath) {
+                current.glbPath = glbPath;
+                await writeVariantManifestAtomic(manifestPath, manifest);
+            }
+
             return {
-                glbPath: current.glbPath,
+                glbPath,
                 manifestPath,
                 manifest,
                 meshCount: result.meshCount,
@@ -495,11 +528,12 @@ async function buildModGlb(
     const defaultVariables = collectDefaultIniVariables(sections);
     const resolvedVariables = mergeVariableState(defaultVariables, options.variableState);
     const resources = collectResources(sections);
-    const bufferGroups = await collectBufferGroups(modDir, resources, warning.warn);
     const sectionByFullName = new Map(
         sections.map((section) => [normalizeKey(getSectionFullName(section)), section]),
     );
+    const bufferGroups = await collectBufferGroups(modDir, resources, warning.warn);
     const textureBindings = collectTextureBindings(sections, sectionByFullName, resolvedVariables);
+    const drawBindings = collectTextureOverrideDrawBindings(sections);
     const ibResources = collectIbResources(
         sections,
         resources,
@@ -507,8 +541,8 @@ async function buildModGlb(
         sectionByFullName,
         resolvedVariables,
         textureBindings,
+        drawBindings,
     );
-    const drawBindings = collectTextureOverrideDrawBindings(sections);
 
     options.logger?.debug(
         `Found ${resources.length} resources, ${bufferGroups.length} buffer groups, ${ibResources.length} IB resources, ${textureBindings.length} texture bindings`,
@@ -886,12 +920,16 @@ function collectIbResources(
     sectionByFullName: Map<string, IniSection>,
     resolvedVariables: Map<string, number | string>,
     textureBindings: TextureBinding[],
+    drawBindings: TextureOverrideBinding[],
 ): IbResource[] {
     const bufferKeys = bufferGroups.map((group) => group.key);
     const bindingsByIbName = new Map(
         textureBindings.map((binding) => [normalizeKey(binding.ibResourceName), binding]),
     );
-    const referencedIbNames = new Set(bindingsByIbName.keys());
+    const referencedIbNames = new Set([
+        ...bindingsByIbName.keys(),
+        ...drawBindings.map((binding) => normalizeKey(binding.ibResourceName)),
+    ]);
     const activeIbNames = new Set(
         sections
             .filter((section) => section.header === "TextureOverride")
@@ -980,8 +1018,12 @@ function collectTextureBindings(
             sectionByFullName,
             resolvedVariables,
         );
-        const ibValue = assignments.get("ib") || section.values.ib;
-        if (!ibValue) continue;
+        const ibValues = collectSectionIbResourceNames(section);
+        const resolvedIbValue = assignments.get("ib") || section.values.ib;
+        if (ibValues.length === 0 && resolvedIbValue) {
+            ibValues.push(trimResourcePrefix(resolvedIbValue));
+        }
+        if (ibValues.length === 0) continue;
 
         const textureResourceNames = Array.from(assignments.entries())
             .filter(([key, value]) => {
@@ -996,52 +1038,96 @@ function collectTextureBindings(
             })
             .map(([, value]) => trimResourcePrefix(value.replace(/^ref\s+/i, "")));
 
-        const diffuseResourceName =
-            textureResourceNames.find((name) => name.toLowerCase().includes("diffuse")) ||
-            textureResourceNames.find((name) => {
-                const lower = name.toLowerCase();
-                return !lower.includes("normal") && !lower.includes("light");
-            }) ||
-            resolveSectionResourceName(section, sectionByFullName, resolvedVariables) ||
-            resolveOverrideDiffuseResource(
-                section.name,
-                trimResourcePrefix(ibValue),
-                overrideTextureResources,
-            );
+        for (const ibValue of ibValues) {
+            const diffuseResourceName =
+                textureResourceNames.find((name) => name.toLowerCase().includes("diffuse")) ||
+                textureResourceNames.find((name) => {
+                    const lower = name.toLowerCase();
+                    return !lower.includes("normal") && !lower.includes("light");
+                }) ||
+                resolveSectionResourceName(section, sectionByFullName, resolvedVariables) ||
+                resolveOverrideDiffuseResource(
+                    section.name,
+                    trimResourcePrefix(ibValue),
+                    overrideTextureResources,
+                );
 
-        bindings.push({
-            ibResourceName: trimResourcePrefix(ibValue),
-            diffuseResourceName,
-            textureResourceNames,
-            overrideHash: section.values.hash?.trim(),
-        });
+            bindings.push({
+                ibResourceName: trimResourcePrefix(ibValue),
+                diffuseResourceName,
+                textureResourceNames,
+                overrideHash: section.values.hash?.trim(),
+            });
+        }
     }
     return bindings;
 }
 
+function collectSectionIbResourceNames(section: IniSection): string[] {
+    const names = new Set<string>();
+    for (const line of section.lines) {
+        const match = line.trim().match(/^([^=]+?)\s*=\s*(.+)$/);
+        if (!match || normalizeKey(match[1].trim()) !== "ib") continue;
+        const name = trimResourcePrefix(match[2].trim());
+        if (name) {
+            names.add(name);
+        }
+    }
+
+    if (names.size === 0 && section.values.ib) {
+        names.add(trimResourcePrefix(section.values.ib));
+    }
+
+    return Array.from(names);
+}
+
 function collectTextureOverrideDrawBindings(sections: IniSection[]): TextureOverrideBinding[] {
     const variables = collectDefaultIniVariables(sections);
+    const sectionByFullName = new Map(
+        sections.map((section) => [normalizeKey(getSectionFullName(section)), section]),
+    );
 
     return sections
         .filter((section) => section.header === "TextureOverride")
-        .map((section) => ({
-            sectionName: section.name,
-            ibResourceName: trimResourcePrefix(section.values.ib || ""),
-            diffuseResourceName: undefined,
-            overrideHash: section.values.hash?.trim(),
-            draws: collectSectionDrawInstructions(section.lines, variables),
-        }))
-        .filter((binding) => !!binding.ibResourceName);
+        .flatMap((section) => {
+            const draws = collectSectionDrawInstructions(section, variables, sectionByFullName);
+            const byIb = new Map<string, DrawInstruction[]>();
+            for (const draw of draws) {
+                if (!draw.ibResourceName) continue;
+                const key = normalizeKey(draw.ibResourceName);
+                const group = byIb.get(key) ?? [];
+                group.push(draw);
+                byIb.set(key, group);
+            }
+
+            return Array.from(byIb.values()).map((group) => ({
+                sectionName: section.name,
+                ibResourceName: group[0].ibResourceName!,
+                diffuseResourceName: undefined,
+                overrideHash: section.values.hash?.trim(),
+                draws: group,
+            }));
+        });
 }
 
 function collectSectionDrawInstructions(
-    lines: string[],
+    section: IniSection,
     variables: Map<string, number | string>,
+    sectionByFullName: Map<string, IniSection>,
+    inheritedClauses: IniConditionClause[] = [],
+    inheritedIbResourceName?: string,
+    visited = new Set<string>(),
 ): DrawInstruction[] {
     const instructions: DrawInstruction[] = [];
     const stack: IniBranchFrame[] = [];
+    let currentIbResourceName = inheritedIbResourceName;
+    const normalizedName = normalizeKey(getSectionFullName(section));
+    if (visited.has(normalizedName)) {
+        return instructions;
+    }
+    visited.add(normalizedName);
 
-    for (const rawLine of lines) {
+    for (const rawLine of section.lines) {
         const trimmed = rawLine.trim();
         const lower = trimmed.toLowerCase();
 
@@ -1089,6 +1175,36 @@ function collectSectionDrawInstructions(
             continue;
         }
 
+        const runMatch = trimmed.match(/^run\s*=\s*(.+)$/i);
+        if (runMatch) {
+            const nestedSection = sectionByFullName.get(normalizeKey(runMatch[1].trim()));
+            if (!nestedSection) {
+                continue;
+            }
+
+            const activeConditions = [
+                ...inheritedClauses,
+                ...stack.flatMap((entry) => entry.activeClauses),
+            ];
+            instructions.push(
+                ...collectSectionDrawInstructions(
+                    nestedSection,
+                    variables,
+                    sectionByFullName,
+                    activeConditions,
+                    currentIbResourceName,
+                    new Set(visited),
+                ),
+            );
+            continue;
+        }
+
+        const assignmentMatch = trimmed.match(/^([^=]+?)\s*=\s*(.+)$/);
+        if (assignmentMatch && normalizeKey(assignmentMatch[1].trim()) === "ib") {
+            currentIbResourceName = trimResourcePrefix(assignmentMatch[2].trim());
+            continue;
+        }
+
         const drawMatch = trimmed.match(/^drawindexed\s*=\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)$/i);
         if (!drawMatch) continue;
 
@@ -1099,8 +1215,12 @@ function collectSectionDrawInstructions(
             continue;
         }
 
-        const activeConditions = stack.flatMap((entry) => entry.activeClauses);
+        const activeConditions = [
+            ...inheritedClauses,
+            ...stack.flatMap((entry) => entry.activeClauses),
+        ];
         instructions.push({
+            ibResourceName: currentIbResourceName,
             indexCount,
             startIndex,
             baseVertex,
@@ -1347,6 +1467,7 @@ async function analyzeModVariants(options: {
     const modDir = path.dirname(iniPath);
     const defaultVariables = collectDefaultIniVariables(sections);
     const slotBindings = collectSlotVariableBindings(sections, defaultVariables);
+    const resources = collectResources(sections);
     const variables = (await buildVariantVariables(slotBindings, sections, modDir, options)).map(
         (variable) => ({
             ...variable,
@@ -1362,6 +1483,7 @@ async function analyzeModVariants(options: {
         ),
         variables,
         uiAssets: collectViewerUiAssetPaths(sections),
+        shapeKeys: collectRealtimeShapeKeys(sections, resources, modDir),
     };
 }
 
@@ -1369,7 +1491,10 @@ function collectSlotVariableBindings(
     sections: IniSection[],
     defaultVariables: Map<string, number | string>,
 ): SlotVariableBinding[] {
-    const bindings: SlotVariableBinding[] = collectKeyCycleBindings(sections);
+    const bindings: SlotVariableBinding[] = [
+        ...collectKeyCycleBindings(sections),
+        ...collectButtonAmountBindings(sections),
+    ];
     const clickedSection = sections.find(
         (section) =>
             section.header === "CommandList" &&
@@ -1439,6 +1564,52 @@ function collectSlotVariableBindings(
     return dedupeSlotBindings(bindings);
 }
 
+function collectButtonAmountBindings(sections: IniSection[]): SlotVariableBinding[] {
+    const bindings: SlotVariableBinding[] = [];
+
+    for (const section of sections) {
+        if (section.header !== "CommandList") {
+            continue;
+        }
+
+        let currentSlot: number | null = null;
+        for (const rawLine of section.lines) {
+            const trimmed = rawLine.trim();
+            const slotMatch = trimmed.match(/^if\s+\$button_amount\s*>=\s*(\d+)$/i);
+            if (slotMatch) {
+                currentSlot = Number(slotMatch[1]);
+                continue;
+            }
+
+            if (currentSlot === null) {
+                continue;
+            }
+
+            const cycleMatch = trimmed.match(/^if\s+\$([\w.]+)\s*<\s*(-?\d+(?:\.\d+)?)$/i);
+            if (!cycleMatch) {
+                continue;
+            }
+
+            const maxValue = Number(cycleMatch[2]);
+            if (!Number.isFinite(maxValue)) {
+                continue;
+            }
+
+            bindings.push({
+                slot: currentSlot,
+                variable: normalizeKey(cycleMatch[1]),
+                values: Array.from(
+                    { length: Math.max(0, Math.floor(maxValue)) + 1 },
+                    (_, index) => index,
+                ),
+            });
+            currentSlot = null;
+        }
+    }
+
+    return bindings;
+}
+
 function collectKeyCycleBindings(sections: IniSection[]): SlotVariableBinding[] {
     return sections
         .filter((section) => normalizeKey(section.header).startsWith("key"))
@@ -1485,11 +1656,17 @@ async function buildVariantVariables(
 
     const variables: StaticGlbVariantVariable[] = [];
 
-    for (const binding of bindings.sort((a, b) => a.slot - b.slot)) {
-        const iconResource = resourceMap.get(normalizeKey(`MenuItem.${binding.slot}`));
+    for (const binding of mergeBindingsByVariable(bindings)) {
+        const iconResource = findFirstResourcePath(resourceMap, [
+            `MenuItem.${binding.slot}`,
+            `MenuItem.${deriveVariableUiToken(binding.variable)}`,
+            `Button_${binding.slot - 1}`,
+            `Button_${binding.slot}`,
+        ]);
+        const slider = inferSliderConfig(binding.variable, binding.values);
         variables.push({
             id: binding.variable,
-            label: humanizeVariableLabel(binding.variable),
+            label: resolveVariantVariableLabel(binding.variable, iconResource),
             defaultValue: 0,
             values: binding.values.map((value) => ({
                 value,
@@ -1498,10 +1675,95 @@ async function buildVariantVariables(
             order: binding.slot,
             slot: binding.slot,
             iconPath: iconResource ? path.resolve(modDir, iconResource) : undefined,
+            controlType: slider ? "slider" : "buttons",
+            slider,
         });
     }
 
     return variables;
+}
+
+function resolveVariantVariableLabel(variableId: string, iconResource?: string): string {
+    if (iconResource) {
+        const stem = path.basename(iconResource, path.extname(iconResource));
+        if (!/^(?:button|icon|item)[._-]?\d+$/i.test(stem)) {
+            return humanizeVariableLabel(stem);
+        }
+    }
+
+    return humanizeVariableLabel(variableId);
+}
+
+function mergeBindingsByVariable(bindings: SlotVariableBinding[]): SlotVariableBinding[] {
+    const merged = new Map<string, SlotVariableBinding>();
+
+    for (const binding of bindings.sort((a, b) => a.slot - b.slot)) {
+        const existing = merged.get(binding.variable);
+        if (!existing) {
+            merged.set(binding.variable, {
+                slot: binding.slot,
+                variable: binding.variable,
+                values: [...binding.values],
+            });
+            continue;
+        }
+
+        existing.slot = Math.min(existing.slot, binding.slot);
+        existing.values = mergeVariableValues(existing.values, binding.values);
+    }
+
+    return Array.from(merged.values()).sort((a, b) => a.slot - b.slot);
+}
+
+function mergeVariableValues(
+    left: VariableStateValue[],
+    right: VariableStateValue[],
+): VariableStateValue[] {
+    const merged: VariableStateValue[] = [];
+    const seen = new Set<string>();
+
+    for (const value of [...left, ...right]) {
+        const key = String(value);
+        if (seen.has(key)) {
+            continue;
+        }
+        seen.add(key);
+        merged.push(value);
+    }
+
+    if (merged.every((value) => typeof value === "number")) {
+        return [...merged].sort((a, b) => Number(a) - Number(b));
+    }
+
+    return merged;
+}
+
+function inferSliderConfig(
+    variableId: string,
+    values: VariableStateValue[],
+): StaticGlbVariantSlider | undefined {
+    const token = deriveVariableUiToken(variableId).toLowerCase();
+    if (!token.startsWith("slider")) {
+        return undefined;
+    }
+
+    const numericValues = values.filter((value): value is number => typeof value === "number");
+    if (numericValues.length < 3 || numericValues.length !== values.length) {
+        return undefined;
+    }
+
+    const sorted = [...numericValues].sort((a, b) => a - b);
+    const steps = sorted
+        .slice(1)
+        .map((value, index) => Number((value - sorted[index]).toFixed(6)))
+        .filter((step) => step > 0);
+    const step = steps.length > 0 ? Math.min(...steps) : 1;
+
+    return {
+        min: sorted[0] ?? 0,
+        max: sorted[sorted.length - 1] ?? 0,
+        step,
+    };
 }
 
 function collectViewerUiAssetPaths(sections: IniSection[]): StaticGlbViewerUiAssets {
@@ -1511,12 +1773,190 @@ function collectViewerUiAssetPaths(sections: IniSection[]): StaticGlbViewerUiAss
             .map((section) => [normalizeKey(section.name), section.values.filename]),
     );
 
+    const slotHoverPath = findFirstResourcePath(resourceMap, [
+        "ItemSlotHover.1",
+        "ItemSlotHover.SlotHover",
+        "UIButtonSelect",
+        "ButtonPush",
+    ]);
+    const slotActivePath = findFirstResourcePath(resourceMap, [
+        "ItemSlotHover.2",
+        "ItemSlotHover.SlotClicked",
+        "UIButtonSelect",
+        "ButtonPush",
+    ]);
+
     return {
-        backgroundPath: resourceMap.get(normalizeKey("MenuBG")),
-        slotPath: resourceMap.get(normalizeKey("ItemSlot")),
-        slotHoverPath: resourceMap.get(normalizeKey("ItemSlotHover.1")),
-        slotActivePath: resourceMap.get(normalizeKey("ItemSlotHover.2")),
+        backgroundPath: findFirstResourcePath(resourceMap, [
+            "MenuBG",
+            "MenuBack",
+            "MenuPlate",
+            "UIBackground",
+        ]),
+        slotPath: findFirstResourcePath(resourceMap, ["ItemSlot", "ItemSlotBack", "OutlineButton"]),
+        slotHoverPath,
+        slotActivePath: slotActivePath ?? slotHoverPath,
     };
+}
+
+function collectRealtimeShapeKeys(
+    sections: IniSection[],
+    resources: Resource[],
+    modDir: string,
+): StaticGlbRealtimeShapeKey[] {
+    const sectionByFullName = new Map(
+        sections.map((section) => [normalizeKey(getSectionFullName(section)), section]),
+    );
+    const resourceMap = new Map(
+        resources.map((resource) => [normalizeKey(resource.name), resource]),
+    );
+    const customShaders = sections.filter(
+        (section) =>
+            section.header === "CustomShader" &&
+            section.values.cs &&
+            path.basename(section.values.cs).toLowerCase() === "shapekey.hlsl",
+    );
+    const shapeKeys: StaticGlbRealtimeShapeKey[] = [];
+
+    for (const shaderSection of customShaders) {
+        const shaderSectionName = getSectionFullName(shaderSection);
+        const outputEntry = shaderSection.lines
+            .map((line) => line.match(/^([^=]+?)\s*=\s*copy\s+ref\s+cs-u5\s*$/i))
+            .find((match): match is RegExpMatchArray => match !== null);
+        const baseEntry = shaderSection.lines
+            .map((line) => line.match(/^cs-u5\s*=\s*copy\s+(.+)$/i))
+            .find((match): match is RegExpMatchArray => match !== null);
+        if (!outputEntry || !baseEntry) {
+            continue;
+        }
+
+        const outputResource = resourceMap.get(
+            normalizeKey(trimResourcePrefix(outputEntry[1].trim())),
+        );
+        const baseResource = resourceMap.get(normalizeKey(trimResourcePrefix(baseEntry[1].trim())));
+        if (!outputResource?.filename || !baseResource?.filename) {
+            continue;
+        }
+
+        const targetMeshPrefix = deriveBufferGroupKey(outputResource.name);
+        if (!targetMeshPrefix) {
+            continue;
+        }
+
+        const callers = sections.filter((section) =>
+            section.lines.some(
+                (line) => normalizeKey(line) === normalizeKey(`run = ${shaderSectionName}`),
+            ),
+        );
+        const dimensions = new Map<string, StaticGlbRealtimeShapeKeyDimension>();
+
+        for (const caller of callers) {
+            const assignments = resolveAssignmentFromSection(
+                caller,
+                ["x88", "x89", "cs-t51", "cs-t52", "cs-t53", "cs-t54"],
+                sectionByFullName,
+                new Map(),
+            );
+            const bottomVariableId = parseVariableToken(assignments.get(normalizeKey("x88")));
+            const chestVariableId = parseVariableToken(assignments.get(normalizeKey("x89")));
+            const smallerBottom = resourceMap.get(
+                normalizeKey(
+                    trimResourcePrefix(stripCopyPrefix(assignments.get(normalizeKey("cs-t52")))),
+                ),
+            );
+            const biggerBottom = resourceMap.get(
+                normalizeKey(
+                    trimResourcePrefix(stripCopyPrefix(assignments.get(normalizeKey("cs-t51")))),
+                ),
+            );
+            const smallerChest = resourceMap.get(
+                normalizeKey(
+                    trimResourcePrefix(stripCopyPrefix(assignments.get(normalizeKey("cs-t54")))),
+                ),
+            );
+            const biggerChest = resourceMap.get(
+                normalizeKey(
+                    trimResourcePrefix(stripCopyPrefix(assignments.get(normalizeKey("cs-t53")))),
+                ),
+            );
+
+            if (bottomVariableId && smallerBottom?.filename && biggerBottom?.filename) {
+                dimensions.set(bottomVariableId, {
+                    variableId: bottomVariableId,
+                    smallerPath: path.resolve(modDir, smallerBottom.filename),
+                    biggerPath: path.resolve(modDir, biggerBottom.filename),
+                });
+            }
+
+            if (chestVariableId && smallerChest?.filename && biggerChest?.filename) {
+                dimensions.set(chestVariableId, {
+                    variableId: chestVariableId,
+                    smallerPath: path.resolve(modDir, smallerChest.filename),
+                    biggerPath: path.resolve(modDir, biggerChest.filename),
+                });
+            }
+        }
+
+        if (dimensions.size === 0) {
+            continue;
+        }
+
+        shapeKeys.push({
+            shaderPath: path.resolve(modDir, shaderSection.values.cs),
+            targetMeshPrefixes: [targetMeshPrefix],
+            basePath: path.resolve(modDir, baseResource.filename),
+            vertexStride: baseResource.stride ?? 40,
+            positionOffset: 0,
+            normalOffset: 12,
+            tangentOffset: 24,
+            dimensions: Array.from(dimensions.values()),
+        });
+    }
+
+    return shapeKeys;
+}
+
+function deriveBufferGroupKey(resourceName: string): string | undefined {
+    const typedMatch = resourceName.match(/^(.*?)(Position|Blend|Texcoord)(\.\d+)?$/i);
+    if (!typedMatch) {
+        return undefined;
+    }
+
+    const [, prefix, , suffix = ""] = typedMatch;
+    return `${prefix}${suffix}`;
+}
+
+function stripCopyPrefix(value: string | undefined): string {
+    return (
+        value
+            ?.replace(/^copy\s+/i, "")
+            .replace(/^ref\s+/i, "")
+            .trim() ?? ""
+    );
+}
+
+function parseVariableToken(value: string | undefined): string | undefined {
+    const match = value?.match(/\$([\w.]+)/);
+    return match ? normalizeKey(match[1]) : undefined;
+}
+
+function findFirstResourcePath(
+    resourceMap: Map<string, string>,
+    candidates: string[],
+): string | undefined {
+    for (const candidate of candidates) {
+        const value = resourceMap.get(normalizeKey(candidate));
+        if (value) {
+            return value;
+        }
+    }
+    return undefined;
+}
+
+function deriveVariableUiToken(variableId: string): string {
+    const raw = variableId.replace(/^\$+/, "");
+    const trimmed = raw.replace(/^swapvar/i, "");
+    return trimmed || raw;
 }
 
 function mapToRecord(
@@ -1548,6 +1988,13 @@ export function createStateKey(state: VariableStateMap): string {
 
 function sanitizeStateKey(stateKey: string): string {
     return stateKey.replace(/[^a-z0-9=&_-]+/gi, "_").replace(/[=&]/g, "_");
+}
+
+function createStateArtifactFileName(stateKey: string): string {
+    const sanitized = sanitizeStateKey(stateKey).replace(/^_+|_+$/g, "");
+    const digest = crypto.createHash("sha256").update(stateKey).digest("hex").slice(0, 12);
+    const prefix = sanitized.slice(0, 80) || "state";
+    return `${prefix}-${digest}.glb`;
 }
 
 function escapeRegex(value: string): string {
@@ -2122,7 +2569,10 @@ async function materializeUiAsset(
 }
 
 function trimResourcePrefix(value: string): string {
-    return value.trim().replace(/^Resource/i, "");
+    return value
+        .trim()
+        .replace(/^ref\s+/i, "")
+        .replace(/^Resource/i, "");
 }
 
 function bestKeyForIb(stem: string, resourceName: string, keys: string[]): string {
@@ -2130,9 +2580,8 @@ function bestKeyForIb(stem: string, resourceName: string, keys: string[]): strin
     const normalizedName = normalizeKey(stripIbResourceSuffix(resourceName));
     const sorted = [...keys].sort((a, b) => b.length - a.length);
     const suffix = extractNumericSuffix(resourceName) ?? extractNumericSuffix(stem);
-    const sameSuffixKeys = suffix !== null
-        ? sorted.filter((key) => extractNumericSuffix(key) === suffix)
-        : [];
+    const sameSuffixKeys =
+        suffix !== null ? sorted.filter((key) => extractNumericSuffix(key) === suffix) : [];
 
     if (sameSuffixKeys.length === 1) {
         return sameSuffixKeys[0];

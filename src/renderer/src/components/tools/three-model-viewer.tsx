@@ -1,7 +1,8 @@
-import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
+import { Canvas, useThree } from "@react-three/fiber";
 import { cn } from "@renderer/lib/utils";
 import {
+  type MutableRefObject,
   forwardRef,
   useEffect,
   useImperativeHandle,
@@ -10,8 +11,9 @@ import {
   useRef,
   useState,
 } from "react";
-import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import {
+  BufferAttribute,
+  BufferGeometry,
   Box3,
   type Camera,
   DoubleSide,
@@ -27,16 +29,34 @@ import {
   Texture,
   Vector3,
 } from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import type { MutableRefObject } from "react";
-import type { ModelViewerHandle, ModelViewerSurfaceProps } from "./model-viewer-contract";
+import type {
+  ModelViewerHandle,
+  ModelViewerRealtimeShapeKey,
+  ModelViewerSurfaceProps,
+} from "./model-viewer-contract";
 import { parseOrientation } from "./model-viewer-contract";
 import type { ModelViewerCameraState } from "./model-viewer-contract";
+import { modelViewerSourceToUrl } from "./model-viewer-session";
 
 const DEFAULT_CAMERA_POSITION = new Vector3(0, 0, 4);
 
+type LoadedShapeKey = {
+  metadata: ModelViewerRealtimeShapeKey;
+  base: Float32Array;
+  dimensions: Array<{
+    variableId: string;
+    smaller: Float32Array;
+    bigger: Float32Array;
+  }>;
+};
+
 export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurfaceProps>(
-  function ThreeModelViewer({ className, onError, onLoad, orientation, src }, ref) {
+  function ThreeModelViewer(
+    { className, onError, onLoad, orientation, shapeKeys, src, variantState },
+    ref,
+  ) {
     const controllerRef = useRef<ModelViewerHandle | null>(null);
 
     useImperativeHandle(
@@ -65,9 +85,11 @@ export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurface
           <ThreeModelScene
             controllerRef={controllerRef}
             orientation={orientation}
+            shapeKeys={shapeKeys}
             src={src}
             onError={onError}
             onLoad={onLoad}
+            variantState={variantState}
           />
         </Canvas>
       </div>
@@ -80,7 +102,9 @@ function ThreeModelScene({
   onError,
   onLoad,
   orientation,
+  shapeKeys,
   src,
+  variantState,
 }: ModelViewerSurfaceProps & {
   controllerRef: MutableRefObject<ModelViewerHandle | null>;
 }) {
@@ -90,13 +114,23 @@ function ThreeModelScene({
   const groupRef = useRef<Group | null>(null);
   const activeObjectRef = useRef<Object3D | null>(null);
   const materialRef = useRef<MeshStandardMaterial[]>([]);
+  const orientedCenterRef = useRef<Vector3 | null>(null);
   const pendingLoadIdRef = useRef(0);
   const onLoadRef = useRef(onLoad);
   const onErrorRef = useRef(onError);
+  const shapeKeyCacheRef = useRef<Map<string, Promise<Float32Array>>>(new Map());
+  const lastAppliedVariantSnapshotRef = useRef<Record<string, number | string> | null>(null);
+  const lastAppliedModelRootRef = useRef<Object3D | null>(null);
+  const lastAppliedShapeKeysRef = useRef<ModelViewerRealtimeShapeKey[] | undefined>(undefined);
 
   const rotation = useMemo(() => {
-    const [x, y, z] = parseOrientation(orientation);
-    return new Euler(MathUtils.degToRad(x), MathUtils.degToRad(y), MathUtils.degToRad(z), "XYZ");
+    const [roll, pitch, yaw] = parseOrientation(orientation);
+    return new Euler(
+      MathUtils.degToRad(pitch),
+      MathUtils.degToRad(yaw),
+      MathUtils.degToRad(roll),
+      "YXZ",
+    );
   }, [orientation]);
 
   useEffect(() => {
@@ -125,6 +159,7 @@ function ThreeModelScene({
       }
       setModelRoot(null);
       activeObjectRef.current = null;
+      orientedCenterRef.current = null;
       materialRef.current = [];
       return () => {
         disposed = true;
@@ -135,6 +170,7 @@ function ThreeModelScene({
       if (current) {
         disposeObjectTree(current);
       }
+      orientedCenterRef.current = null;
       return null;
     });
 
@@ -178,6 +214,8 @@ function ThreeModelScene({
         camera,
         controls: controlsRef.current,
         object: groupRef.current,
+      }).then((center) => {
+        orientedCenterRef.current = center;
       });
     }
     invalidate();
@@ -187,6 +225,34 @@ function ThreeModelScene({
   useEffect(() => {
     invalidate();
   }, [invalidate, rotation]);
+
+  useLayoutEffect(() => {
+    if (!modelRoot || !groupRef.current || !controlsRef.current) {
+      return;
+    }
+
+    groupRef.current.updateMatrixWorld(true);
+    const nextCenter = getObjectCenter(groupRef.current);
+    if (!nextCenter) {
+      return;
+    }
+
+    const previousCenter = orientedCenterRef.current;
+    orientedCenterRef.current = nextCenter.clone();
+    if (!previousCenter) {
+      return;
+    }
+
+    const delta = nextCenter.clone().sub(previousCenter);
+    if (delta.lengthSq() === 0) {
+      return;
+    }
+
+    controlsRef.current.target.add(delta);
+    camera.position.add(delta);
+    controlsRef.current.update();
+    invalidate();
+  }, [camera, invalidate, modelRoot, rotation]);
 
   useEffect(() => {
     controllerRef.current = {
@@ -202,11 +268,12 @@ function ThreeModelScene({
         invalidate();
       },
       updateFraming: async () => {
-        await fitCameraToObject({
+        const center = await fitCameraToObject({
           camera,
           controls: controlsRef.current,
           object: groupRef.current,
         });
+        orientedCenterRef.current = center;
         invalidate();
       },
     };
@@ -223,22 +290,331 @@ function ThreeModelScene({
         activeObjectRef.current = null;
       }
       materialRef.current = [];
+      lastAppliedVariantSnapshotRef.current = null;
+      lastAppliedModelRootRef.current = null;
+      lastAppliedShapeKeysRef.current = undefined;
     };
   }, []);
 
+  useEffect(() => {
+    if (!modelRoot || !shapeKeys?.length) {
+      lastAppliedVariantSnapshotRef.current = null;
+      lastAppliedModelRootRef.current = modelRoot;
+      lastAppliedShapeKeysRef.current = shapeKeys;
+      return;
+    }
+
+    const currentVariantSnapshot = variantState ? { ...variantState } : null;
+    const didApplySameInputs =
+      lastAppliedModelRootRef.current === modelRoot &&
+      lastAppliedShapeKeysRef.current === shapeKeys &&
+      areVariantSnapshotsEqual(lastAppliedVariantSnapshotRef.current, currentVariantSnapshot);
+    if (didApplySameInputs) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const loadedShapeKeys = (
+        await Promise.all(
+          shapeKeys.map((shapeKey) => loadShapeKey(shapeKey, shapeKeyCacheRef.current)),
+        )
+      ).filter((shapeKey): shapeKey is LoadedShapeKey => !!shapeKey);
+
+      if (cancelled || loadedShapeKeys.length === 0) {
+        return;
+      }
+
+      applyShapeKeysToScene(modelRoot, loadedShapeKeys, variantState);
+      lastAppliedVariantSnapshotRef.current = currentVariantSnapshot;
+      lastAppliedModelRootRef.current = modelRoot;
+      lastAppliedShapeKeysRef.current = shapeKeys;
+      invalidate();
+    })().catch((error) => {
+      if (!cancelled) {
+        onErrorRef.current?.(error);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [invalidate, modelRoot, shapeKeys, variantState]);
+
   return (
     <>
-      <OrbitControls
-        ref={controlsRef}
-        dampingFactor={0.08}
-        enableDamping
-        makeDefault
-      />
+      <OrbitControls ref={controlsRef} dampingFactor={0.08} enableDamping makeDefault />
       <group ref={groupRef} rotation={rotation}>
         {modelRoot ? <primitive object={modelRoot} /> : null}
       </group>
     </>
   );
+}
+
+function areVariantSnapshotsEqual(
+  left: Record<string, number | string> | null,
+  right: Record<string, number | string> | null,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  const leftEntries = Object.entries(left);
+  const rightEntries = Object.entries(right);
+  if (leftEntries.length !== rightEntries.length) {
+    return false;
+  }
+
+  for (const [key, value] of leftEntries) {
+    if (right[key] !== value) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+async function loadShapeKey(
+  shapeKey: ModelViewerRealtimeShapeKey,
+  cache: Map<string, Promise<Float32Array>>,
+): Promise<LoadedShapeKey | null> {
+  const [base, ...dimensionBuffers] = await Promise.all([
+    loadFloatBuffer(shapeKey.basePath, cache),
+    ...shapeKey.dimensions.flatMap((dimension) => [
+      loadFloatBuffer(dimension.smallerPath, cache),
+      loadFloatBuffer(dimension.biggerPath, cache),
+    ]),
+  ]);
+
+  if (!base) {
+    return null;
+  }
+
+  const dimensions = shapeKey.dimensions.map((dimension, index) => ({
+    variableId: dimension.variableId,
+    smaller: dimensionBuffers[index * 2]!,
+    bigger: dimensionBuffers[index * 2 + 1]!,
+  }));
+
+  return {
+    metadata: shapeKey,
+    base,
+    dimensions,
+  };
+}
+
+async function loadFloatBuffer(
+  sourcePath: string,
+  cache: Map<string, Promise<Float32Array>>,
+): Promise<Float32Array> {
+  const existing = cache.get(sourcePath);
+  if (existing) {
+    return existing;
+  }
+
+  const request = fetch(modelViewerSourceToUrl(sourcePath))
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error(`Failed to load shape key buffer: ${sourcePath}`);
+      }
+      return new Float32Array(await response.arrayBuffer());
+    })
+    .catch((error) => {
+      cache.delete(sourcePath);
+      throw error;
+    });
+  cache.set(sourcePath, request);
+  return request;
+}
+
+function applyShapeKeysToScene(
+  root: Object3D,
+  shapeKeys: LoadedShapeKey[],
+  variantState?: Record<string, number | string>,
+) {
+  root.traverse((object) => {
+    if (!(object instanceof Mesh) || !(object.geometry instanceof BufferGeometry)) {
+      return;
+    }
+
+    const shapeKey = shapeKeys.find((candidate) =>
+      candidate.metadata.targetMeshPrefixes.some((prefix) => object.name.startsWith(prefix)),
+    );
+    if (!shapeKey) {
+      return;
+    }
+
+    applyShapeKeyToGeometry(object.geometry, shapeKey, variantState);
+  });
+}
+
+function applyShapeKeyToGeometry(
+  geometry: BufferGeometry,
+  shapeKey: LoadedShapeKey,
+  variantState?: Record<string, number | string>,
+) {
+  const positionAttribute = geometry.getAttribute("position");
+  const normalAttribute = geometry.getAttribute("normal");
+  const tangentAttribute = geometry.getAttribute("tangent");
+  if (!(positionAttribute instanceof BufferAttribute)) {
+    return;
+  }
+
+  const positionArray = positionAttribute.array as Float32Array;
+  const normalArray =
+    normalAttribute instanceof BufferAttribute ? (normalAttribute.array as Float32Array) : null;
+  const tangentArray =
+    tangentAttribute instanceof BufferAttribute ? (tangentAttribute.array as Float32Array) : null;
+  const stride = shapeKey.metadata.vertexStride / 4;
+  const base = shapeKey.base;
+  const vertexCount = positionAttribute.count;
+  if (base.length < vertexCount * stride) {
+    return;
+  }
+
+  for (let index = 0; index < vertexCount; index += 1) {
+    const baseOffset = index * stride;
+    const tangentIndex = index * 4;
+    let sumPosX = 0;
+    let sumPosY = 0;
+    let sumPosZ = 0;
+    let sumNormX = 0;
+    let sumNormY = 0;
+    let sumNormZ = 0;
+    let sumTangX = 0;
+    let sumTangY = 0;
+    let sumTangZ = 0;
+    let sumTangW = 0;
+    let preservedTangW = tangentArray ? Math.sign(tangentArray[tangentIndex + 3]) || 1 : 1;
+    let contributionCount = 0;
+
+    for (const dimension of shapeKey.dimensions) {
+      const rawValue = Number(variantState?.[dimension.variableId] ?? 0.5);
+      const value = Math.min(1, Math.max(0, rawValue));
+      const useSmaller = value <= 0.5;
+      const t = useSmaller ? value / 0.5 : (value - 0.5) / 0.5;
+      const source = useSmaller ? dimension.smaller : dimension.bigger;
+      const left = useSmaller ? source : base;
+      const right = useSmaller ? base : source;
+
+      const pos = lerpVec3FromBuffers(
+        left,
+        right,
+        baseOffset,
+        shapeKey.metadata.positionOffset / 4,
+        t,
+      );
+      const norm = normalizeVec3(
+        lerpVec3FromBuffers(left, right, baseOffset, shapeKey.metadata.normalOffset / 4, t),
+      );
+      const tang = lerpVec4FromBuffers(
+        left,
+        right,
+        baseOffset,
+        shapeKey.metadata.tangentOffset / 4,
+        t,
+      );
+      const normalizedTang = normalizeVec3([tang[0], tang[1], tang[2]]);
+      if (tang[3] !== 0) {
+        preservedTangW = tang[3] < 0 ? -1 : 1;
+      }
+
+      sumPosX += pos[0];
+      sumPosY += pos[1];
+      sumPosZ += pos[2];
+      sumNormX += norm[0];
+      sumNormY += norm[1];
+      sumNormZ += norm[2];
+      sumTangX += normalizedTang[0];
+      sumTangY += normalizedTang[1];
+      sumTangZ += normalizedTang[2];
+      sumTangW += tang[3];
+      contributionCount += 1;
+    }
+
+    const positionIndex = index * 3;
+    if (contributionCount === 0) {
+      positionArray[positionIndex] = base[baseOffset + shapeKey.metadata.positionOffset / 4];
+      positionArray[positionIndex + 1] =
+        base[baseOffset + shapeKey.metadata.positionOffset / 4 + 1];
+      positionArray[positionIndex + 2] =
+        base[baseOffset + shapeKey.metadata.positionOffset / 4 + 2];
+      continue;
+    }
+
+    positionArray[positionIndex] = sumPosX / contributionCount;
+    positionArray[positionIndex + 1] = sumPosY / contributionCount;
+    positionArray[positionIndex + 2] = sumPosZ / contributionCount;
+
+    if (normalArray) {
+      const normalized = normalizeVec3([sumNormX, sumNormY, sumNormZ]);
+      normalArray[positionIndex] = normalized[0];
+      normalArray[positionIndex + 1] = normalized[1];
+      normalArray[positionIndex + 2] = normalized[2];
+    }
+
+    if (tangentArray) {
+      const normalized = normalizeVec3([sumTangX, sumTangY, sumTangZ]);
+      tangentArray[tangentIndex] = normalized[0];
+      tangentArray[tangentIndex + 1] = normalized[1];
+      tangentArray[tangentIndex + 2] = normalized[2];
+      tangentArray[tangentIndex + 3] = Math.sign(sumTangW) || preservedTangW;
+    }
+  }
+
+  positionAttribute.needsUpdate = true;
+  if (normalAttribute instanceof BufferAttribute) {
+    normalAttribute.needsUpdate = true;
+  }
+  if (tangentAttribute instanceof BufferAttribute) {
+    tangentAttribute.needsUpdate = true;
+  }
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+}
+
+function lerpVec3FromBuffers(
+  left: Float32Array,
+  right: Float32Array,
+  baseOffset: number,
+  offset: number,
+  t: number,
+): [number, number, number] {
+  const index = baseOffset + offset;
+  return [
+    left[index] + (right[index] - left[index]) * t,
+    left[index + 1] + (right[index + 1] - left[index + 1]) * t,
+    left[index + 2] + (right[index + 2] - left[index + 2]) * t,
+  ];
+}
+
+function lerpVec4FromBuffers(
+  left: Float32Array,
+  right: Float32Array,
+  baseOffset: number,
+  offset: number,
+  t: number,
+): [number, number, number, number] {
+  const index = baseOffset + offset;
+  return [
+    left[index] + (right[index] - left[index]) * t,
+    left[index + 1] + (right[index + 1] - left[index + 1]) * t,
+    left[index + 2] + (right[index + 2] - left[index + 2]) * t,
+    left[index + 3] + (right[index + 3] - left[index + 3]) * t,
+  ];
+}
+
+function normalizeVec3(value: [number, number, number]): [number, number, number] {
+  const length = Math.hypot(value[0], value[1], value[2]);
+  if (!length) {
+    return [0, 0, 0];
+  }
+  return [value[0] / length, value[1] / length, value[2] / length];
 }
 
 function captureThreeCameraState(
@@ -330,14 +706,15 @@ async function fitCameraToObject({
   camera: Camera;
   controls: OrbitControlsImpl | null;
   object: Object3D | null;
-}) {
+}): Promise<Vector3 | null> {
   if (!(camera instanceof PerspectiveCamera) || !controls || !object) {
-    return;
+    return null;
   }
 
+  object.updateMatrixWorld(true);
   const bounds = new Box3().setFromObject(object);
   if (bounds.isEmpty()) {
-    return;
+    return null;
   }
 
   const center = bounds.getCenter(new Vector3());
@@ -352,6 +729,7 @@ async function fitCameraToObject({
   camera.far = Math.max(distance * 20, 100);
   camera.updateProjectionMatrix();
   controls.update();
+  return center.clone();
 }
 
 function collectStandardMaterials(root: Object3D): MeshStandardMaterial[] {

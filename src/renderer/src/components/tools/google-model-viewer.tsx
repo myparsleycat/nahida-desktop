@@ -13,6 +13,7 @@ import {
 export const GoogleModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurfaceProps>(
   function GoogleModelViewer({ className, onError, onLoad, orientation, src }, ref) {
     const elementRef = useRef<ModelViewerElement | null>(null);
+    const lastSyncedOrientationRef = useRef(orientation);
 
     useImperativeHandle(
       ref,
@@ -61,6 +62,42 @@ export const GoogleModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurfac
       };
     }, [onError, onLoad]);
 
+    useEffect(() => {
+      const element = elementRef.current;
+      if (!element || !src || lastSyncedOrientationRef.current === orientation) {
+        lastSyncedOrientationRef.current = orientation;
+        return;
+      }
+
+      lastSyncedOrientationRef.current = orientation;
+      let cancelled = false;
+
+      const syncCameraTargetToRotatedModel = async () => {
+        await element.updateComplete;
+        await nextFrame();
+
+        if (cancelled || !element.isConnected) {
+          return;
+        }
+
+        const center = element.getBoundingBoxCenter?.();
+        const orbit = element.getCameraOrbit?.()?.toString();
+        if (!center || !orbit) {
+          return;
+        }
+
+        element.cameraTarget = `${center.x}m ${center.y}m ${center.z}m`;
+        element.cameraOrbit = orbit;
+        element.jumpCameraToGoal?.();
+      };
+
+      void syncCameraTargetToRotatedModel();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [orientation, src]);
+
     return (
       <model-viewer
         ref={(element) => {
@@ -86,3 +123,9 @@ export const GoogleModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurfac
     );
   },
 );
+
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}

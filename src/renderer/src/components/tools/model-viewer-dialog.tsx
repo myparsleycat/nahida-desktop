@@ -24,6 +24,7 @@ import {
   formatOrientation,
   type ModelViewerCameraState,
   type ModelViewerHandle,
+  type ModelViewerRealtimeShapeKey,
   type ModelViewerRenderer,
   parseOrientation,
 } from "./model-viewer-contract";
@@ -52,6 +53,12 @@ type ModelViewerVariantManifest = {
     order: number;
     slot?: number;
     iconPath?: string;
+    controlType?: "buttons" | "slider";
+    slider?: {
+      min: number;
+      max: number;
+      step: number;
+    };
   }>;
   uiAssets: {
     backgroundPath?: string;
@@ -59,6 +66,7 @@ type ModelViewerVariantManifest = {
     slotHoverPath?: string;
     slotActivePath?: string;
   };
+  shapeKeys?: ModelViewerRealtimeShapeKey[];
   states: Array<{
     key: string;
     values: Record<string, VariableStateValue>;
@@ -194,7 +202,7 @@ export function ModelViewerDialog({
     }
 
     resetViewerSession({ resetOrientation: shouldResetOrientation });
-    setRenderer("google");
+    setRenderer(source.manifest.shapeKeys?.length ? "three" : "google");
     setActiveState(source.manifest.defaultState);
     setManifest(source.manifest);
     setViewerUrl(0, source.activeGlbPath || source.defaultGlbPath);
@@ -232,12 +240,22 @@ export function ModelViewerDialog({
       ...activeState,
       [variableId]: value,
     };
+    const hasRealtimeShapeKey = Boolean(
+      manifest?.shapeKeys?.some((shapeKey) =>
+        shapeKey.dimensions.some((dimension) => dimension.variableId === variableId),
+      ),
+    );
+    if (hasRealtimeShapeKey && renderer === "three") {
+      setActiveState(nextState);
+      return;
+    }
+    const artifactState = stripRealtimeShapeKeyState(nextState, manifest?.shapeKeys);
 
     const nextViewerIndex: 0 | 1 = activeViewerIndex === 0 ? 1 : 0;
     pendingCameraStateRef.current =
       viewerRefs.current[activeViewerIndex]?.captureCameraState() ?? null;
 
-    const nextStateKey = createStateKey(nextState);
+    const nextStateKey = createStateKey(artifactState);
     const existingStateArtifact = manifest?.states.find((entry) => entry.key === nextStateKey);
     if (existingStateArtifact?.glbPath) {
       setActiveState(nextState);
@@ -260,7 +278,7 @@ export function ModelViewerDialog({
       const result = await window.api.invoke("tools:convertStaticGlbForViewer", {
         artifactRoot: source.artifactRoot,
         manifestPath: source.manifestPath,
-        state: nextState,
+        state: artifactState,
       });
       if (result.mode !== "variant-set") {
         return;
@@ -302,11 +320,18 @@ export function ModelViewerDialog({
   const variables = manifest?.variables ?? [];
   const uiAssets = manifest?.uiAssets;
   const visibleVariables = variables.filter((variable) => variable.values.length > 0);
+  const tileVariables = visibleVariables.filter((variable) => variable.controlType !== "slider");
+  const sliderVariables = visibleVariables.filter((variable) => variable.controlType === "slider");
   const tileBackgroundPath = uiAssets?.backgroundPath;
   const slotPath = uiAssets?.slotPath;
   const slotHoverPath = uiAssets?.slotHoverPath;
   const slotActivePath = uiAssets?.slotActivePath;
-  const hasVariantTileUi = Boolean(tileBackgroundPath) && visibleVariables.length > 0;
+  const shapeKeys = manifest?.shapeKeys;
+  const viewerVariantState =
+    renderer === "three"
+      ? normalizeRealtimeShapeKeyState(activeState, variables, shapeKeys)
+      : activeState;
+  const hasVariantTileUi = Boolean(tileBackgroundPath) && tileVariables.length > 0;
   const hasVariantToggleUi = visibleVariables.length > 0;
   const showToggleViewer = Boolean(
     source?.mode === "variant-set" && manifest && (hasVariantTileUi || hasVariantToggleUi),
@@ -448,7 +473,9 @@ export function ModelViewerDialog({
                 value={renderer}
                 onValueChange={(value) => setRenderer(value as ModelViewerRenderer)}
               >
-                <MenubarRadioItem value="google">@google/model-viewer</MenubarRadioItem>
+                {!shapeKeys?.length ? (
+                  <MenubarRadioItem value="google">@google/model-viewer</MenubarRadioItem>
+                ) : null}
                 <MenubarRadioItem value="three">Three.js</MenubarRadioItem>
               </MenubarRadioGroup>
             </MenubarContent>
@@ -478,6 +505,8 @@ export function ModelViewerDialog({
                     )}
                     src={viewerUrls[index]}
                     orientation={modelOrientation}
+                    variantState={viewerVariantState}
+                    shapeKeys={shapeKeys}
                     onLoad={() => handleViewerLoad(index)}
                     onError={(error) => handleViewerError(index, error)}
                   />
@@ -533,7 +562,7 @@ export function ModelViewerDialog({
                       }}
                     >
                       <div className="grid grid-cols-3 gap-3 p-4">
-                        {visibleVariables.map((variable) => (
+                        {tileVariables.map((variable) => (
                           <VariantTile
                             key={variable.id}
                             variable={variable}
@@ -550,7 +579,7 @@ export function ModelViewerDialog({
                   ) : null}
 
                   <div className="space-y-3">
-                    {visibleVariables.map((variable) => (
+                    {tileVariables.map((variable) => (
                       <div key={variable.id} className="rounded-md border bg-background/50 p-3">
                         <div className="mb-2 text-sm font-medium">{variable.label}</div>
                         <div className="flex flex-wrap gap-2">
@@ -571,6 +600,22 @@ export function ModelViewerDialog({
                           })}
                         </div>
                       </div>
+                    ))}
+                    {sliderVariables.map((variable) => (
+                      <VariantSlider
+                        key={variable.id}
+                        variable={variable}
+                        activeValue={activeState[variable.id]}
+                        disabled={isViewerBusy}
+                        realtime={Boolean(
+                          shapeKeys?.some((shapeKey) =>
+                            shapeKey.dimensions.some(
+                              (dimension) => dimension.variableId === variable.id,
+                            ),
+                          ) && renderer === "three",
+                        )}
+                        onSelect={handleSelectValue}
+                      />
                     ))}
                   </div>
                 </div>
@@ -653,6 +698,163 @@ function VariantTile({
       </div>
     </button>
   );
+}
+
+function VariantSlider({
+  variable,
+  activeValue,
+  disabled,
+  realtime,
+  onSelect,
+}: {
+  variable: ModelViewerVariantManifest["variables"][number];
+  activeValue: VariableStateValue | undefined;
+  disabled?: boolean;
+  realtime?: boolean;
+  onSelect: (variableId: string, value: VariableStateValue) => void;
+}) {
+  const slider = variable.slider;
+  const fallbackValue =
+    typeof variable.defaultValue === "number"
+      ? variable.defaultValue
+      : Number(variable.values[0]?.value ?? 0);
+  const resolvedValue =
+    typeof activeValue === "number" ? activeValue : Number(activeValue ?? fallbackValue);
+  const [draftValue, setDraftValue] = useState(resolvedValue);
+  const commitTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setDraftValue(resolvedValue);
+  }, [resolvedValue]);
+
+  useEffect(() => {
+    return () => {
+      if (commitTimeoutRef.current !== null) {
+        window.clearTimeout(commitTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  if (!slider) {
+    return null;
+  }
+
+  const scheduleCommit = (nextValue: number) => {
+    if (commitTimeoutRef.current !== null) {
+      window.clearTimeout(commitTimeoutRef.current);
+    }
+    commitTimeoutRef.current = window.setTimeout(() => {
+      onSelect(variable.id, nextValue);
+      commitTimeoutRef.current = null;
+    }, 150);
+  };
+
+  return (
+    <div className="rounded-md border bg-background/50 p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          {variable.iconPath ? (
+            <img
+              src={modelViewerSourceToUrl(variable.iconPath)}
+              className="size-8 rounded object-contain"
+            />
+          ) : null}
+          <div className="text-sm font-medium">{variable.label}</div>
+        </div>
+        <div className="text-xs tabular-nums text-muted-foreground">
+          {formatSliderValue(draftValue)}
+        </div>
+      </div>
+      <input
+        type="range"
+        min={slider.min}
+        max={slider.max}
+        step={slider.step}
+        value={draftValue}
+        disabled={disabled}
+        className={cn("w-full accent-primary", disabled && "cursor-not-allowed opacity-60")}
+        onChange={(event) => {
+          const nextValue = Number(event.currentTarget.value);
+          setDraftValue(nextValue);
+          if (!disabled) {
+            if (realtime) {
+              onSelect(variable.id, nextValue);
+            } else {
+              scheduleCommit(nextValue);
+            }
+          }
+        }}
+      />
+      <div className="mt-2 flex items-center justify-between text-[11px] tabular-nums text-muted-foreground">
+        <span>{formatSliderValue(slider.min)}</span>
+        <span>{formatSliderValue(slider.max)}</span>
+      </div>
+    </div>
+  );
+}
+
+function formatSliderValue(value: number): string {
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+
+  return value.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function stripRealtimeShapeKeyState(
+  state: Record<string, VariableStateValue>,
+  shapeKeys?: ModelViewerRealtimeShapeKey[],
+): Record<string, VariableStateValue> {
+  if (!shapeKeys?.length) {
+    return state;
+  }
+
+  const stripped = { ...state };
+  for (const shapeKey of shapeKeys) {
+    for (const dimension of shapeKey.dimensions) {
+      delete stripped[dimension.variableId];
+    }
+  }
+  return stripped;
+}
+
+function normalizeRealtimeShapeKeyState(
+  state: Record<string, VariableStateValue>,
+  variables: ModelViewerVariantManifest["variables"],
+  shapeKeys?: ModelViewerRealtimeShapeKey[],
+): Record<string, VariableStateValue> {
+  if (!shapeKeys?.length) {
+    return state;
+  }
+
+  const normalized = { ...state };
+  const realtimeVariableIds = new Set(
+    shapeKeys.flatMap((shapeKey) => shapeKey.dimensions.map((dimension) => dimension.variableId)),
+  );
+
+  for (const variable of variables) {
+    if (!realtimeVariableIds.has(variable.id) || !variable.slider) {
+      continue;
+    }
+
+    const rawValue = normalized[variable.id];
+    if (typeof rawValue !== "number") {
+      continue;
+    }
+
+    const range = variable.slider.max - variable.slider.min;
+    if (range <= 0) {
+      normalized[variable.id] = 0.5;
+      continue;
+    }
+
+    normalized[variable.id] = Math.min(
+      1,
+      Math.max(0, (rawValue - variable.slider.min) / range),
+    );
+  }
+
+  return normalized;
 }
 
 function withCacheBuster(url: string): string {

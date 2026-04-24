@@ -2,7 +2,7 @@ import type { ModelViewerCameraState } from "./model-viewer-contract";
 
 const ANGLED_VIEW_THETA_DEGREES = Math.atan2(0.45, 1) * (180 / Math.PI);
 const ANGLED_VIEW_PHI_DEGREES =
-    Math.acos(0.15 / Math.sqrt((0.45 ** 2) + (0.15 ** 2) + (1 ** 2))) * (180 / Math.PI);
+    Math.acos(0.15 / Math.sqrt(0.45 ** 2 + 0.15 ** 2 + 1 ** 2)) * (180 / Math.PI);
 
 function toLocalUrl(filePath: string): string {
     const normalized = filePath.replaceAll("\\", "/");
@@ -38,11 +38,18 @@ type ModelViewerTarget = {
     toString(): string;
 };
 
+type ModelViewerVector3D = {
+    x: number;
+    y: number;
+    z: number;
+};
+
 export type ModelViewerElement = HTMLElement & {
     cameraOrbit?: string;
     cameraTarget?: string;
     fieldOfView?: string;
     orientation?: string;
+    updateComplete?: Promise<unknown>;
     model?: {
         materials?: Array<{
             ensureLoaded?: () => Promise<void>;
@@ -51,6 +58,7 @@ export type ModelViewerElement = HTMLElement & {
     };
     jumpCameraToGoal?: () => void;
     updateFraming?: () => Promise<void>;
+    getBoundingBoxCenter?: () => ModelViewerVector3D;
     getCameraOrbit?: () => ModelViewerOrbit;
     getCameraTarget?: () => ModelViewerTarget;
     getFieldOfView?: () => number;
