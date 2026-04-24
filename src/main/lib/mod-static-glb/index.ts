@@ -1493,12 +1493,21 @@ async function analyzeModVariants(options: {
     const defaultVariables = collectDefaultIniVariables(sections);
     const slotBindings = collectSlotVariableBindings(sections, defaultVariables);
     const resources = collectResources(sections);
-    const variables = (await buildVariantVariables(slotBindings, sections, modDir, options)).map(
-        (variable) => ({
-            ...variable,
-            defaultValue: defaultVariables.get(normalizeKey(variable.id)) ?? 0,
-        }),
+    const shapeKeys = collectRealtimeShapeKeys(sections, resources, modDir);
+    const realtimeShapeKeyVariableIds = new Set(
+        shapeKeys.flatMap((shapeKey) =>
+            shapeKey.dimensions.map((dimension) => normalizeKey(dimension.variableId)),
+        ),
     );
+    const variables = (
+        await buildVariantVariables(slotBindings, sections, modDir, {
+            ...options,
+            realtimeShapeKeyVariableIds,
+        })
+    ).map((variable) => ({
+        ...variable,
+        defaultValue: defaultVariables.get(normalizeKey(variable.id)) ?? 0,
+    }));
 
     return {
         iniPath,
@@ -1508,7 +1517,7 @@ async function analyzeModVariants(options: {
         ),
         variables,
         uiAssets: collectViewerUiAssetPaths(sections),
-        shapeKeys: collectRealtimeShapeKeys(sections, resources, modDir),
+        shapeKeys,
     };
 }
 
@@ -1671,7 +1680,11 @@ async function buildVariantVariables(
     bindings: SlotVariableBinding[],
     sections: IniSection[],
     modDir: string,
-    _options: { logger?: Logger; onWarning?: (message: string) => void },
+    options: {
+        logger?: Logger;
+        onWarning?: (message: string) => void;
+        realtimeShapeKeyVariableIds?: Set<string>;
+    },
 ): Promise<StaticGlbVariantVariable[]> {
     const resourceMap = new Map(
         sections
@@ -1688,7 +1701,11 @@ async function buildVariantVariables(
             `Button_${binding.slot - 1}`,
             `Button_${binding.slot}`,
         ]);
-        const slider = inferSliderConfig(binding.variable, binding.values);
+        const slider = inferSliderConfig(
+            binding.variable,
+            binding.values,
+            options.realtimeShapeKeyVariableIds?.has(normalizeKey(binding.variable)) ?? false,
+        );
         variables.push({
             id: binding.variable,
             label: resolveVariantVariableLabel(binding.variable, iconResource),
@@ -1766,9 +1783,10 @@ function mergeVariableValues(
 function inferSliderConfig(
     variableId: string,
     values: VariableStateValue[],
+    forceNumericSlider = false,
 ): StaticGlbVariantSlider | undefined {
     const token = deriveVariableUiToken(variableId).toLowerCase();
-    if (!token.startsWith("slider")) {
+    if (!forceNumericSlider && !token.startsWith("slider")) {
         return undefined;
     }
 
