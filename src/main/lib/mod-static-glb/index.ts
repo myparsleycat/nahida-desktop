@@ -219,6 +219,7 @@ export type ConvertModToGlbBufferResult = {
 };
 
 type DrawInstruction = {
+    ibResourceName?: string;
     indexCount: number;
     startIndex: number;
     baseVertex: number;
@@ -532,6 +533,7 @@ async function buildModGlb(
     );
     const bufferGroups = await collectBufferGroups(modDir, resources, warning.warn);
     const textureBindings = collectTextureBindings(sections, sectionByFullName, resolvedVariables);
+    const drawBindings = collectTextureOverrideDrawBindings(sections);
     const ibResources = collectIbResources(
         sections,
         resources,
@@ -539,8 +541,8 @@ async function buildModGlb(
         sectionByFullName,
         resolvedVariables,
         textureBindings,
+        drawBindings,
     );
-    const drawBindings = collectTextureOverrideDrawBindings(sections);
 
     options.logger?.debug(
         `Found ${resources.length} resources, ${bufferGroups.length} buffer groups, ${ibResources.length} IB resources, ${textureBindings.length} texture bindings`,
@@ -905,10 +907,7 @@ function ensureBufferResourceGroup(
     return value;
 }
 
-async function readResourceBytes(
-    modDir: string,
-    resource: Resource,
-): Promise<Buffer> {
+async function readResourceBytes(modDir: string, resource: Resource): Promise<Buffer> {
     const filePath = path.resolve(modDir, resource.filename!);
     if (!(await fse.pathExists(filePath))) throw new Error(`Missing resource file: ${filePath}`);
     return await fse.readFile(filePath);
@@ -921,12 +920,16 @@ function collectIbResources(
     sectionByFullName: Map<string, IniSection>,
     resolvedVariables: Map<string, number | string>,
     textureBindings: TextureBinding[],
+    drawBindings: TextureOverrideBinding[],
 ): IbResource[] {
     const bufferKeys = bufferGroups.map((group) => group.key);
     const bindingsByIbName = new Map(
         textureBindings.map((binding) => [normalizeKey(binding.ibResourceName), binding]),
     );
-    const referencedIbNames = new Set(bindingsByIbName.keys());
+    const referencedIbNames = new Set([
+        ...bindingsByIbName.keys(),
+        ...drawBindings.map((binding) => normalizeKey(binding.ibResourceName)),
+    ]);
     const activeIbNames = new Set(
         sections
             .filter((section) => section.header === "TextureOverride")
@@ -1015,8 +1018,12 @@ function collectTextureBindings(
             sectionByFullName,
             resolvedVariables,
         );
-        const ibValue = assignments.get("ib") || section.values.ib;
-        if (!ibValue) continue;
+        const ibValues = collectSectionIbResourceNames(section);
+        const resolvedIbValue = assignments.get("ib") || section.values.ib;
+        if (ibValues.length === 0 && resolvedIbValue) {
+            ibValues.push(trimResourcePrefix(resolvedIbValue));
+        }
+        if (ibValues.length === 0) continue;
 
         const textureResourceNames = Array.from(assignments.entries())
             .filter(([key, value]) => {
@@ -1031,27 +1038,47 @@ function collectTextureBindings(
             })
             .map(([, value]) => trimResourcePrefix(value.replace(/^ref\s+/i, "")));
 
-        const diffuseResourceName =
-            textureResourceNames.find((name) => name.toLowerCase().includes("diffuse")) ||
-            textureResourceNames.find((name) => {
-                const lower = name.toLowerCase();
-                return !lower.includes("normal") && !lower.includes("light");
-            }) ||
-            resolveSectionResourceName(section, sectionByFullName, resolvedVariables) ||
-            resolveOverrideDiffuseResource(
-                section.name,
-                trimResourcePrefix(ibValue),
-                overrideTextureResources,
-            );
+        for (const ibValue of ibValues) {
+            const diffuseResourceName =
+                textureResourceNames.find((name) => name.toLowerCase().includes("diffuse")) ||
+                textureResourceNames.find((name) => {
+                    const lower = name.toLowerCase();
+                    return !lower.includes("normal") && !lower.includes("light");
+                }) ||
+                resolveSectionResourceName(section, sectionByFullName, resolvedVariables) ||
+                resolveOverrideDiffuseResource(
+                    section.name,
+                    trimResourcePrefix(ibValue),
+                    overrideTextureResources,
+                );
 
-        bindings.push({
-            ibResourceName: trimResourcePrefix(ibValue),
-            diffuseResourceName,
-            textureResourceNames,
-            overrideHash: section.values.hash?.trim(),
-        });
+            bindings.push({
+                ibResourceName: trimResourcePrefix(ibValue),
+                diffuseResourceName,
+                textureResourceNames,
+                overrideHash: section.values.hash?.trim(),
+            });
+        }
     }
     return bindings;
+}
+
+function collectSectionIbResourceNames(section: IniSection): string[] {
+    const names = new Set<string>();
+    for (const line of section.lines) {
+        const match = line.trim().match(/^([^=]+?)\s*=\s*(.+)$/);
+        if (!match || normalizeKey(match[1].trim()) !== "ib") continue;
+        const name = trimResourcePrefix(match[2].trim());
+        if (name) {
+            names.add(name);
+        }
+    }
+
+    if (names.size === 0 && section.values.ib) {
+        names.add(trimResourcePrefix(section.values.ib));
+    }
+
+    return Array.from(names);
 }
 
 function collectTextureOverrideDrawBindings(sections: IniSection[]): TextureOverrideBinding[] {
@@ -1062,14 +1089,25 @@ function collectTextureOverrideDrawBindings(sections: IniSection[]): TextureOver
 
     return sections
         .filter((section) => section.header === "TextureOverride")
-        .map((section) => ({
-            sectionName: section.name,
-            ibResourceName: trimResourcePrefix(section.values.ib || ""),
-            diffuseResourceName: undefined,
-            overrideHash: section.values.hash?.trim(),
-            draws: collectSectionDrawInstructions(section, variables, sectionByFullName),
-        }))
-        .filter((binding) => !!binding.ibResourceName);
+        .flatMap((section) => {
+            const draws = collectSectionDrawInstructions(section, variables, sectionByFullName);
+            const byIb = new Map<string, DrawInstruction[]>();
+            for (const draw of draws) {
+                if (!draw.ibResourceName) continue;
+                const key = normalizeKey(draw.ibResourceName);
+                const group = byIb.get(key) ?? [];
+                group.push(draw);
+                byIb.set(key, group);
+            }
+
+            return Array.from(byIb.values()).map((group) => ({
+                sectionName: section.name,
+                ibResourceName: group[0].ibResourceName!,
+                diffuseResourceName: undefined,
+                overrideHash: section.values.hash?.trim(),
+                draws: group,
+            }));
+        });
 }
 
 function collectSectionDrawInstructions(
@@ -1077,10 +1115,12 @@ function collectSectionDrawInstructions(
     variables: Map<string, number | string>,
     sectionByFullName: Map<string, IniSection>,
     inheritedClauses: IniConditionClause[] = [],
+    inheritedIbResourceName?: string,
     visited = new Set<string>(),
 ): DrawInstruction[] {
     const instructions: DrawInstruction[] = [];
     const stack: IniBranchFrame[] = [];
+    let currentIbResourceName = inheritedIbResourceName;
     const normalizedName = normalizeKey(getSectionFullName(section));
     if (visited.has(normalizedName)) {
         return instructions;
@@ -1152,9 +1192,16 @@ function collectSectionDrawInstructions(
                     variables,
                     sectionByFullName,
                     activeConditions,
+                    currentIbResourceName,
                     new Set(visited),
                 ),
             );
+            continue;
+        }
+
+        const assignmentMatch = trimmed.match(/^([^=]+?)\s*=\s*(.+)$/);
+        if (assignmentMatch && normalizeKey(assignmentMatch[1].trim()) === "ib") {
+            currentIbResourceName = trimResourcePrefix(assignmentMatch[2].trim());
             continue;
         }
 
@@ -1173,6 +1220,7 @@ function collectSectionDrawInstructions(
             ...stack.flatMap((entry) => entry.activeClauses),
         ];
         instructions.push({
+            ibResourceName: currentIbResourceName,
             indexCount,
             startIndex,
             baseVertex,
@@ -1685,7 +1733,9 @@ function collectRealtimeShapeKeys(
     const sectionByFullName = new Map(
         sections.map((section) => [normalizeKey(getSectionFullName(section)), section]),
     );
-    const resourceMap = new Map(resources.map((resource) => [normalizeKey(resource.name), resource]));
+    const resourceMap = new Map(
+        resources.map((resource) => [normalizeKey(resource.name), resource]),
+    );
     const customShaders = sections.filter(
         (section) =>
             section.header === "CustomShader" &&
@@ -1737,30 +1787,22 @@ function collectRealtimeShapeKeys(
             const chestVariableId = parseVariableToken(assignments.get(normalizeKey("x89")));
             const smallerBottom = resourceMap.get(
                 normalizeKey(
-                    trimResourcePrefix(
-                        stripCopyPrefix(assignments.get(normalizeKey("cs-t52"))),
-                    ),
+                    trimResourcePrefix(stripCopyPrefix(assignments.get(normalizeKey("cs-t52")))),
                 ),
             );
             const biggerBottom = resourceMap.get(
                 normalizeKey(
-                    trimResourcePrefix(
-                        stripCopyPrefix(assignments.get(normalizeKey("cs-t51"))),
-                    ),
+                    trimResourcePrefix(stripCopyPrefix(assignments.get(normalizeKey("cs-t51")))),
                 ),
             );
             const smallerChest = resourceMap.get(
                 normalizeKey(
-                    trimResourcePrefix(
-                        stripCopyPrefix(assignments.get(normalizeKey("cs-t54"))),
-                    ),
+                    trimResourcePrefix(stripCopyPrefix(assignments.get(normalizeKey("cs-t54")))),
                 ),
             );
             const biggerChest = resourceMap.get(
                 normalizeKey(
-                    trimResourcePrefix(
-                        stripCopyPrefix(assignments.get(normalizeKey("cs-t53"))),
-                    ),
+                    trimResourcePrefix(stripCopyPrefix(assignments.get(normalizeKey("cs-t53")))),
                 ),
             );
 
@@ -1811,7 +1853,12 @@ function deriveBufferGroupKey(resourceName: string): string | undefined {
 }
 
 function stripCopyPrefix(value: string | undefined): string {
-    return value?.replace(/^copy\s+/i, "").replace(/^ref\s+/i, "").trim() ?? "";
+    return (
+        value
+            ?.replace(/^copy\s+/i, "")
+            .replace(/^ref\s+/i, "")
+            .trim() ?? ""
+    );
 }
 
 function parseVariableToken(value: string | undefined): string | undefined {
@@ -2456,9 +2503,8 @@ function bestKeyForIb(stem: string, resourceName: string, keys: string[]): strin
     const normalizedName = normalizeKey(stripIbResourceSuffix(resourceName));
     const sorted = [...keys].sort((a, b) => b.length - a.length);
     const suffix = extractNumericSuffix(resourceName) ?? extractNumericSuffix(stem);
-    const sameSuffixKeys = suffix !== null
-        ? sorted.filter((key) => extractNumericSuffix(key) === suffix)
-        : [];
+    const sameSuffixKeys =
+        suffix !== null ? sorted.filter((key) => extractNumericSuffix(key) === suffix) : [];
 
     if (sameSuffixKeys.length === 1) {
         return sameSuffixKeys[0];
