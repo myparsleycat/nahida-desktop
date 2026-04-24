@@ -14,6 +14,7 @@ image = { version = "0.25.8", default-features = false, features = ["jpeg", "png
 image_dds = { version = "0.7.2", default-features = false, features = ["ddsfile", "image"] }
 napi = "3.0.0"
 napi-derive = "3.0.0"
+sha2 = "0.10.9"
 
 [build-dependencies]
 napi-build = "2"

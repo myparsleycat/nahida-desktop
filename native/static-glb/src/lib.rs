@@ -7,8 +7,9 @@ use image::{ColorType, DynamicImage, ImageEncoder, ImageReader, RgbaImage};
 use napi::bindgen_prelude::{AsyncTask, Buffer};
 use napi::Task;
 use napi_derive::napi;
+use sha2::{Digest, Sha256};
 use std::io::Cursor;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[napi(object)]
 pub struct PngAnalysis {
@@ -76,7 +77,7 @@ pub fn analyze_png(data: Buffer, width: u32, height: u32) -> napi::Result<PngAna
   analyze_rgba(&data, width, height)
 }
 
-#[napi]
+#[napi(ts_return_type = "Promise<PrepareTextureForMaterialResult>")]
 pub fn prepare_texture_for_material(input: PrepareTextureForMaterialInput) -> AsyncTask<PrepareTextureForMaterialTask> {
   AsyncTask::new(PrepareTextureForMaterialTask { input })
 }
@@ -87,10 +88,13 @@ impl Task for PrepareTextureForMaterialTask {
 
   fn compute(&mut self) -> napi::Result<Self::Output> {
     let input = &self.input;
-    let _ = input.allow_cache_reuse;
-    let _ = &input.cache_dir;
-
     let texture_path = Path::new(&input.texture_path);
+    if input.allow_cache_reuse {
+      if let Some(cached) = read_cached_prepared_texture(input, texture_path)? {
+        return Ok(cached);
+      }
+    }
+
     let extension = texture_path
       .extension()
       .and_then(|value| value.to_str())
@@ -137,8 +141,7 @@ impl Task for PrepareTextureForMaterialTask {
     let (image, image_extension) = encode_prepared_image(&rgba, &mime_type, input.jpeg_quality)?;
     let score = score_texture_selection(&resource_key, &selection);
     let (alpha_mode, alpha_cutoff) = material_alpha_mode(&final_analysis);
-
-    Ok(PrepareTextureForMaterialResult {
+    let result = PrepareTextureForMaterialResult {
       image: image.into(),
       mime_type,
       image_extension,
@@ -148,7 +151,11 @@ impl Task for PrepareTextureForMaterialTask {
       srgb_confidence: srgb_confidence.to_string(),
       alpha_mode,
       alpha_cutoff,
-    })
+    };
+
+    write_cached_prepared_texture(input, texture_path, &result)?;
+
+    Ok(result)
   }
 
   fn resolve(&mut self, _: napi::Env, output: Self::Output) -> napi::Result<Self::JsValue> {
@@ -351,6 +358,293 @@ fn load_png_rgba(texture_path: &Path) -> napi::Result<(RgbaImage, Option<bool>)>
       ))
     })?;
   Ok((image.to_rgba8(), None))
+}
+
+fn read_cached_prepared_texture(
+  input: &PrepareTextureForMaterialInput,
+  texture_path: &Path,
+) -> napi::Result<Option<PrepareTextureForMaterialResult>> {
+  if input.cache_dir.is_empty() {
+    return Ok(None);
+  }
+
+  for cache_path in prepared_texture_cache_candidates(input, texture_path) {
+    let metadata_path = prepared_texture_metadata_path(&cache_path);
+    if !is_cache_up_to_date(&cache_path, texture_path)? || !is_cache_up_to_date(&metadata_path, texture_path)? {
+      continue;
+    }
+
+    let metadata = match read_prepared_texture_metadata(&metadata_path)? {
+      Some(metadata) => metadata,
+      None => continue,
+    };
+
+    let image = std::fs::read(&cache_path).map_err(|error| {
+      napi::Error::from_reason(format!(
+        "Failed to read cached texture '{}': {}",
+        cache_path.display(),
+        error
+      ))
+    })?;
+
+    return Ok(Some(PrepareTextureForMaterialResult {
+      image: image.into(),
+      mime_type: metadata.mime_type,
+      image_extension: metadata.image_extension,
+      uses_alpha: metadata.uses_alpha,
+      inverted_alpha: metadata.inverted_alpha,
+      selection_score: metadata.selection_score,
+      srgb_confidence: metadata.srgb_confidence,
+      alpha_mode: metadata.alpha_mode,
+      alpha_cutoff: metadata.alpha_cutoff,
+    }));
+  }
+
+  Ok(None)
+}
+
+fn write_cached_prepared_texture(
+  input: &PrepareTextureForMaterialInput,
+  texture_path: &Path,
+  result: &PrepareTextureForMaterialResult,
+) -> napi::Result<()> {
+  if input.cache_dir.is_empty() {
+    return Ok(());
+  }
+
+  let cache_path = prepared_texture_cache_path(&input.cache_dir, texture_path, &input.texture_path, &result.mime_type, &result.image_extension, input.jpeg_quality);
+  if let Some(parent) = cache_path.parent() {
+    std::fs::create_dir_all(parent).map_err(|error| {
+      napi::Error::from_reason(format!(
+        "Failed to create texture cache directory '{}': {}",
+        parent.display(),
+        error
+      ))
+    })?;
+  }
+
+  std::fs::write(&cache_path, &result.image).map_err(|error| {
+    napi::Error::from_reason(format!(
+      "Failed to write cached texture '{}': {}",
+      cache_path.display(),
+      error
+    ))
+  })?;
+
+  let metadata = PreparedTextureMetadata {
+    mime_type: result.mime_type.clone(),
+    image_extension: result.image_extension.clone(),
+    uses_alpha: result.uses_alpha,
+    inverted_alpha: result.inverted_alpha,
+    selection_score: result.selection_score,
+    srgb_confidence: result.srgb_confidence.clone(),
+    alpha_mode: result.alpha_mode.clone(),
+    alpha_cutoff: result.alpha_cutoff,
+  };
+  let metadata_path = prepared_texture_metadata_path(&cache_path);
+  std::fs::write(&metadata_path, metadata.serialize()).map_err(|error| {
+    napi::Error::from_reason(format!(
+      "Failed to write texture cache metadata '{}': {}",
+      metadata_path.display(),
+      error
+    ))
+  })?;
+
+  Ok(())
+}
+
+fn prepared_texture_cache_candidates(
+  input: &PrepareTextureForMaterialInput,
+  texture_path: &Path,
+) -> Vec<PathBuf> {
+  match input.texture_format.as_str() {
+    "png" => vec![prepared_texture_cache_path(&input.cache_dir, texture_path, &input.texture_path, "image/png", "png", input.jpeg_quality)],
+    "jpeg-force" => vec![prepared_texture_cache_path(&input.cache_dir, texture_path, &input.texture_path, "image/jpeg", "jpg", input.jpeg_quality)],
+    "jpeg-safe" => vec![
+      prepared_texture_cache_path(&input.cache_dir, texture_path, &input.texture_path, "image/png", "png", input.jpeg_quality),
+      prepared_texture_cache_path(&input.cache_dir, texture_path, &input.texture_path, "image/jpeg", "jpg", input.jpeg_quality),
+    ],
+    _ => Vec::new(),
+  }
+}
+
+fn prepared_texture_cache_path(
+  cache_dir: &str,
+  texture_path: &Path,
+  resolved_texture_path: &str,
+  mime_type: &str,
+  image_extension: &str,
+  jpeg_quality: u32,
+) -> PathBuf {
+  let file_name = if mime_type == "image/png" {
+    format!(
+      "{}-prepared.{}",
+      create_texture_cache_base_name(texture_path, resolved_texture_path),
+      image_extension
+    )
+  } else {
+    format!(
+      "{}-q{}.{}",
+      create_texture_cache_base_name(texture_path, resolved_texture_path),
+      jpeg_quality,
+      image_extension
+    )
+  };
+  Path::new(cache_dir).join(file_name)
+}
+
+fn prepared_texture_metadata_path(cache_path: &Path) -> PathBuf {
+  let mut file_name = cache_path
+    .file_name()
+    .and_then(|value| value.to_str())
+    .unwrap_or_default()
+    .to_string();
+  file_name.push_str(".meta");
+  cache_path.with_file_name(file_name)
+}
+
+fn create_texture_cache_base_name(texture_path: &Path, resolved_texture_path: &str) -> String {
+  let extensionless = texture_path
+    .file_stem()
+    .and_then(|value| value.to_str())
+    .filter(|value| !value.is_empty())
+    .unwrap_or("texture");
+  let mut hasher = Sha256::new();
+  hasher.update(resolved_texture_path.as_bytes());
+  let digest = hasher.finalize();
+  let digest_prefix: String = digest[..6].iter().map(|value| format!("{value:02x}")).collect();
+  format!("{extensionless}-{digest_prefix}")
+}
+
+fn is_cache_up_to_date(cache_path: &Path, source_path: &Path) -> napi::Result<bool> {
+  let cache_metadata = match std::fs::metadata(cache_path) {
+    Ok(metadata) => metadata,
+    Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+    Err(error) => {
+      return Err(napi::Error::from_reason(format!(
+        "Failed to stat cache artifact '{}': {}",
+        cache_path.display(),
+        error
+      )))
+    }
+  };
+
+  let source_metadata = std::fs::metadata(source_path).map_err(|error| {
+    napi::Error::from_reason(format!(
+      "Failed to stat source texture '{}': {}",
+      source_path.display(),
+      error
+    ))
+  })?;
+
+  let cache_mtime = cache_metadata.modified().map_err(|error| {
+    napi::Error::from_reason(format!(
+      "Failed to read cache mtime '{}': {}",
+      cache_path.display(),
+      error
+    ))
+  })?;
+  let source_mtime = source_metadata.modified().map_err(|error| {
+    napi::Error::from_reason(format!(
+      "Failed to read source texture mtime '{}': {}",
+      source_path.display(),
+      error
+    ))
+  })?;
+
+  Ok(cache_mtime >= source_mtime)
+}
+
+struct PreparedTextureMetadata {
+  mime_type: String,
+  image_extension: String,
+  uses_alpha: bool,
+  inverted_alpha: bool,
+  selection_score: i32,
+  srgb_confidence: String,
+  alpha_mode: Option<String>,
+  alpha_cutoff: Option<f64>,
+}
+
+impl PreparedTextureMetadata {
+  fn serialize(&self) -> String {
+    format!(
+      "mime_type={}\nimage_extension={}\nuses_alpha={}\ninverted_alpha={}\nselection_score={}\nsrgb_confidence={}\nalpha_mode={}\nalpha_cutoff={}\n",
+      self.mime_type,
+      self.image_extension,
+      self.uses_alpha,
+      self.inverted_alpha,
+      self.selection_score,
+      self.srgb_confidence,
+      self.alpha_mode.as_deref().unwrap_or_default(),
+      self.alpha_cutoff.map(|value| value.to_string()).unwrap_or_default(),
+    )
+  }
+
+  fn deserialize(value: &str) -> Option<Self> {
+    let mut mime_type = None;
+    let mut image_extension = None;
+    let mut uses_alpha = None;
+    let mut inverted_alpha = None;
+    let mut selection_score = None;
+    let mut srgb_confidence = None;
+    let mut alpha_mode = None;
+    let mut alpha_cutoff = None;
+
+    for line in value.lines() {
+      let (key, raw_value) = line.split_once('=')?;
+      match key {
+        "mime_type" => mime_type = Some(raw_value.to_string()),
+        "image_extension" => image_extension = Some(raw_value.to_string()),
+        "uses_alpha" => uses_alpha = raw_value.parse::<bool>().ok(),
+        "inverted_alpha" => inverted_alpha = raw_value.parse::<bool>().ok(),
+        "selection_score" => selection_score = raw_value.parse::<i32>().ok(),
+        "srgb_confidence" => srgb_confidence = Some(raw_value.to_string()),
+        "alpha_mode" => {
+          alpha_mode = if raw_value.is_empty() {
+            Some(None)
+          } else {
+            Some(Some(raw_value.to_string()))
+          }
+        }
+        "alpha_cutoff" => {
+          alpha_cutoff = if raw_value.is_empty() {
+            Some(None)
+          } else {
+            raw_value.parse::<f64>().ok().map(Some)
+          }
+        }
+        _ => {}
+      }
+    }
+
+    Some(Self {
+      mime_type: mime_type?,
+      image_extension: image_extension?,
+      uses_alpha: uses_alpha?,
+      inverted_alpha: inverted_alpha?,
+      selection_score: selection_score?,
+      srgb_confidence: srgb_confidence?,
+      alpha_mode: alpha_mode.unwrap_or(None),
+      alpha_cutoff: alpha_cutoff.unwrap_or(None),
+    })
+  }
+}
+
+fn read_prepared_texture_metadata(metadata_path: &Path) -> napi::Result<Option<PreparedTextureMetadata>> {
+  let contents = match std::fs::read_to_string(metadata_path) {
+    Ok(contents) => contents,
+    Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+    Err(error) => {
+      return Err(napi::Error::from_reason(format!(
+        "Failed to read texture cache metadata '{}': {}",
+        metadata_path.display(),
+        error
+      )))
+    }
+  };
+
+  Ok(PreparedTextureMetadata::deserialize(&contents))
 }
 
 fn encode_prepared_image(
