@@ -195,6 +195,30 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         d.ipc.broadcast("drive:update-settings");
     });
 
+    rh("setting:modelViewer:getToneMapping", async () => {
+        return await d.setting.modelViewer.getToneMapping();
+    });
+
+    rh("setting:modelViewer:setToneMapping", async (toneMapping) => {
+        return await d.setting.modelViewer.setToneMapping(toneMapping);
+    });
+
+    rh("setting:modelViewer:getEnvironment", async () => {
+        return await d.setting.modelViewer.getEnvironment();
+    });
+
+    rh("setting:modelViewer:setEnvironment", async (environment) => {
+        return await d.setting.modelViewer.setEnvironment(environment);
+    });
+
+    rh("setting:modelViewer:getExposure", async () => {
+        return await d.setting.modelViewer.getExposure();
+    });
+
+    rh("setting:modelViewer:setExposure", async (exposure) => {
+        return await d.setting.modelViewer.setExposure(exposure);
+    });
+
     if (supportsWindowsDesktopFeatures(process.platform)) {
         rh("setting:xxmi:getPersistToggles", async () => {
             return await d.setting.xxmi.getPersistToggles();

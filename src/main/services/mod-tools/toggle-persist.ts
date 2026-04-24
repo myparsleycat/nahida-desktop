@@ -98,6 +98,24 @@ export class TogglePersist {
         return [...this.persistLogs];
     }
 
+    public async persistStateToIni(
+        targetIniPath: string,
+        state: Record<string, string | number>,
+    ): Promise<{ updatedVariables: string[] }> {
+        const updates = new Map<string, string>();
+
+        for (const [varName, rawValue] of Object.entries(state)) {
+            updates.set(varName.toLowerCase(), String(rawValue));
+        }
+
+        if (updates.size === 0) {
+            return { updatedVariables: [] };
+        }
+
+        const updatedVariables = await this.applyPersistUpdates(targetIniPath, updates);
+        return { updatedVariables };
+    }
+
     private parseD3dxUserIni(content: string): Record<string, string> {
         const result: Record<string, string> = {};
         const lines = content.split(/\r?\n/);
@@ -198,7 +216,9 @@ export class TogglePersist {
         const previous = this.persistFileUpdateLocks.get(lockKey) ?? Promise.resolve();
         const next = previous
             .catch(() => {})
-            .then(() => this.updateModIniPersist(targetIniPath, updates));
+            .then(async () => {
+                await this.updateModIniPersist(targetIniPath, updates);
+            });
         this.persistFileUpdateLocks.set(lockKey, next);
 
         try {
@@ -210,45 +230,14 @@ export class TogglePersist {
         }
     }
 
-    private async updateModIniPersist(targetIniPath: string, updates: Map<string, string>) {
+    private async updateModIniPersist(
+        targetIniPath: string,
+        updates: Map<string, string>,
+    ): Promise<string[]> {
         try {
-            const content = await fse.readFile(targetIniPath, "utf-8");
-            const lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
-            const lines = content.split(/\r?\n/);
-            // if (this.isAnimationPersistVariable(lines, varName)) {
-            //     return;
-            // }
+            const updatedVars = await this.applyPersistUpdates(targetIniPath, updates);
 
-            let inConstants = false;
-            let modified = false;
-            const updatedVars: string[] = [];
-
-            for (let i = 0; i < lines.length; i++) {
-                const trimmed = lines[i].trim();
-                if (trimmed.startsWith("[")) {
-                    inConstants = trimmed === "[Constants]";
-                    continue;
-                }
-
-                if (inConstants && trimmed.startsWith("global persist $")) {
-                    const match = trimmed.match(/^global\s+persist\s+\$(.+?)\s*=\s*(.+)$/i);
-                    if (!match) continue;
-                    const existingVarName = match[1].trim();
-                    const varKey = existingVarName.toLowerCase();
-                    const nextValue = updates.get(varKey);
-                    if (nextValue === undefined) continue;
-
-                    const currentValue = match[2].trim();
-                    if (currentValue === nextValue.trim()) continue;
-
-                    lines[i] = `global persist $${existingVarName} = ${nextValue}`;
-                    updatedVars.push(existingVarName);
-                    modified = true;
-                }
-            }
-
-            if (modified) {
-                await fse.writeFile(targetIniPath, lines.join(lineEnding), "utf-8");
+            if (updatedVars.length > 0) {
                 const summary =
                     updatedVars.length === 1
                         ? `Updated persist variable $${updatedVars[0]} in ${targetIniPath}`
@@ -257,9 +246,58 @@ export class TogglePersist {
                               .join(", ")} in ${targetIniPath}`;
                 this.logInfo(summary);
             }
+
+            return updatedVars;
         } catch (error) {
             this.logError(`Error updating mod ini ${targetIniPath}: ${error}`);
+            return [];
         }
+    }
+
+    private async applyPersistUpdates(
+        targetIniPath: string,
+        updates: Map<string, string>,
+    ): Promise<string[]> {
+        const content = await fse.readFile(targetIniPath, "utf-8");
+        const lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
+        const lines = content.split(/\r?\n/);
+        // if (this.isAnimationPersistVariable(lines, varName)) {
+        //     return;
+        // }
+
+        let inConstants = false;
+        let modified = false;
+        const updatedVars: string[] = [];
+
+        for (let i = 0; i < lines.length; i++) {
+            const trimmed = lines[i].trim();
+            if (trimmed.startsWith("[")) {
+                inConstants = trimmed === "[Constants]";
+                continue;
+            }
+
+            if (inConstants && trimmed.startsWith("global persist $")) {
+                const match = trimmed.match(/^global\s+persist\s+\$(.+?)\s*=\s*(.+)$/i);
+                if (!match) continue;
+                const existingVarName = match[1].trim();
+                const varKey = existingVarName.toLowerCase();
+                const nextValue = updates.get(varKey);
+                if (nextValue === undefined) continue;
+
+                const currentValue = match[2].trim();
+                if (currentValue === nextValue.trim()) continue;
+
+                lines[i] = `global persist $${existingVarName} = ${nextValue}`;
+                updatedVars.push(existingVarName);
+                modified = true;
+            }
+        }
+
+        if (modified) {
+            await fse.writeFile(targetIniPath, lines.join(lineEnding), "utf-8");
+        }
+
+        return updatedVars;
     }
 
     private isAnimationPersistVariable(lines: string[], varName: string): boolean {

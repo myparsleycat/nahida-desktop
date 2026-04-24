@@ -539,8 +539,16 @@
           "model": "模型",
           "texture": "纹理",
           "renderer": "渲染器",
+          "rendering": "渲染",
+          "toggle": "切换",
           "rotate": "旋转",
-          "reset": "重置"
+          "reset": "重置",
+          "save_to_ini": "保存到 INI"
+        },
+        "toast": {
+          "save_to_ini_success": "已将当前切换状态保存到 INI",
+          "save_to_ini_no_changes": "没有找到可保存的 persist 变量",
+          "save_to_ini_error": "保存到 INI 失败"
         },
         "rotate_actions": {
           "Left 90°": "向左旋转 90°",

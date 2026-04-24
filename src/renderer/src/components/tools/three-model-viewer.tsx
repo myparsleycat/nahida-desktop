@@ -2,6 +2,7 @@ import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import { cn } from "@renderer/lib/utils";
 import {
+  type ElementRef,
   type MutableRefObject,
   forwardRef,
   useEffect,
@@ -12,6 +13,7 @@ import {
   useState,
 } from "react";
 import {
+  ACESFilmicToneMapping,
   BufferAttribute,
   BufferGeometry,
   Box3,
@@ -23,13 +25,17 @@ import {
   MathUtils,
   Mesh,
   MeshStandardMaterial,
+  NeutralToneMapping,
+  NoToneMapping,
   Object3D,
   PerspectiveCamera,
+  PMREMGenerator,
+  Scene,
   SRGBColorSpace,
   Texture,
   Vector3,
 } from "three";
-import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type {
   ModelViewerHandle,
@@ -39,6 +45,8 @@ import type {
 import { parseOrientation } from "./model-viewer-contract";
 import type { ModelViewerCameraState } from "./model-viewer-contract";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
+
+type OrbitControlsImpl = ElementRef<typeof OrbitControls>;
 
 const DEFAULT_CAMERA_POSITION = new Vector3(0, 0, 4);
 
@@ -54,7 +62,18 @@ type LoadedShapeKey = {
 
 export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurfaceProps>(
   function ThreeModelViewer(
-    { className, onError, onLoad, orientation, shapeKeys, src, variantState },
+    {
+      className,
+      onError,
+      onLoad,
+      orientation,
+      shapeKeys,
+      src,
+      threeEnvironment = "studio",
+      threeExposure = 1,
+      threeToneMapping = "neutral",
+      variantState,
+    },
     ref,
   ) {
     const controllerRef = useRef<ModelViewerHandle | null>(null);
@@ -71,6 +90,33 @@ export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurface
       [],
     );
 
+    const lighting = useMemo(() => {
+      switch (threeEnvironment) {
+        case "none":
+          return {
+            ambient: 0.45,
+            directionalKey: 1.35,
+            directionalFill: 0.45,
+            hemisphere: 0,
+          };
+        case "soft":
+          return {
+            ambient: 0.5,
+            directionalKey: 1.5,
+            directionalFill: 0.6,
+            hemisphere: 0.55,
+          };
+        case "studio":
+        default:
+          return {
+            ambient: 0.6,
+            directionalKey: 1.8,
+            directionalFill: 0.8,
+            hemisphere: 0.9,
+          };
+      }
+    }, [threeEnvironment]);
+
     return (
       <div className={cn("h-full w-full", className)}>
         <Canvas
@@ -79,14 +125,24 @@ export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurface
           dpr={window.devicePixelRatio}
           gl={{ alpha: true, antialias: true }}
         >
-          <ambientLight intensity={1.8} />
-          <directionalLight intensity={2.8} position={[6, 8, 10]} />
-          <directionalLight intensity={1.2} position={[-6, 4, -8]} />
+          <ambientLight intensity={lighting.ambient} />
+          {lighting.hemisphere > 0 ? (
+            <hemisphereLight
+              intensity={lighting.hemisphere}
+              groundColor="#b9bec7"
+              position={[0, 1, 0]}
+            />
+          ) : null}
+          <directionalLight intensity={lighting.directionalKey} position={[6, 8, 10]} />
+          <directionalLight intensity={lighting.directionalFill} position={[-6, 4, -8]} />
           <ThreeModelScene
             controllerRef={controllerRef}
             orientation={orientation}
             shapeKeys={shapeKeys}
             src={src}
+            threeEnvironment={threeEnvironment}
+            threeExposure={threeExposure}
+            threeToneMapping={threeToneMapping}
             onError={onError}
             onLoad={onLoad}
             variantState={variantState}
@@ -104,11 +160,14 @@ function ThreeModelScene({
   orientation,
   shapeKeys,
   src,
+  threeEnvironment = "studio",
+  threeExposure = 1,
+  threeToneMapping = "neutral",
   variantState,
 }: ModelViewerSurfaceProps & {
   controllerRef: MutableRefObject<ModelViewerHandle | null>;
 }) {
-  const { camera, gl, invalidate } = useThree();
+  const { camera, gl, invalidate, scene } = useThree();
   const [modelRoot, setModelRoot] = useState<Object3D | null>(null);
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
   const groupRef = useRef<Group | null>(null);
@@ -135,8 +194,39 @@ function ThreeModelScene({
 
   useEffect(() => {
     gl.outputColorSpace = SRGBColorSpace;
+    gl.toneMapping =
+      threeToneMapping === "aces"
+        ? ACESFilmicToneMapping
+        : threeToneMapping === "none"
+          ? NoToneMapping
+          : NeutralToneMapping;
+    gl.toneMappingExposure = Number.isFinite(threeExposure) ? threeExposure : 1;
     gl.setClearAlpha(0);
-  }, [gl]);
+
+    if (threeEnvironment === "none") {
+      scene.environment = null;
+      invalidate();
+      return;
+    }
+
+    const environmentScene = new Scene();
+    const pmremGenerator = new PMREMGenerator(gl);
+    const roomEnvironment = new RoomEnvironment();
+    roomEnvironment.scale.setScalar(threeEnvironment === "soft" ? 0.85 : 1);
+    const environmentTarget = pmremGenerator.fromScene(environmentScene.add(roomEnvironment));
+
+    scene.environment = environmentTarget.texture;
+    invalidate();
+
+    return () => {
+      if (scene.environment === environmentTarget.texture) {
+        scene.environment = null;
+      }
+      environmentTarget.dispose();
+      roomEnvironment.dispose();
+      pmremGenerator.dispose();
+    };
+  }, [gl, invalidate, scene, threeEnvironment, threeExposure, threeToneMapping]);
 
   useEffect(() => {
     onLoadRef.current = onLoad;

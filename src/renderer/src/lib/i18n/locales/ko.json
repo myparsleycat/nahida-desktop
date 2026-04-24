@@ -552,8 +552,16 @@
           "model": "모델",
           "texture": "텍스처",
           "renderer": "렌더러",
+          "rendering": "렌더링",
           "rotate": "회전",
-          "reset": "초기화"
+          "reset": "초기화",
+          "toggle": "토글",
+          "save_to_ini": "INI에 저장"
+        },
+        "toast": {
+          "save_to_ini_success": "현재 토글 상태를 INI에 저장했습니다.",
+          "save_to_ini_no_changes": "저장할 persist 변수를 찾지 못했습니다.",
+          "save_to_ini_error": "INI 저장에 실패했습니다."
         },
         "rotate_actions": {
           "Left 90°": "왼쪽으로 90°",

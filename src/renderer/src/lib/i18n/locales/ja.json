@@ -540,8 +540,16 @@
           "model": "モデル",
           "texture": "テクスチャ",
           "renderer": "レンダラー",
+          "rendering": "レンダリング",
+          "toggle": "トグル",
           "rotate": "回転",
-          "reset": "リセット"
+          "reset": "リセット",
+          "save_to_ini": "INI に保存"
+        },
+        "toast": {
+          "save_to_ini_success": "現在のトグル状態を INI に保存しました",
+          "save_to_ini_no_changes": "保存できる persist 変数がありません",
+          "save_to_ini_error": "INI への保存に失敗しました"
         },
         "rotate_actions": {
           "Left 90°": "左に 90°",
