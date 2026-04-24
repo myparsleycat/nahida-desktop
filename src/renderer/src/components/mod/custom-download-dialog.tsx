@@ -40,6 +40,18 @@ export function CustomDownloadDialog({
     }
   }, [open]);
 
+  const getErrorCode = (error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    const matched = message.match(
+      /\b(DOWNLOAD_URL_REQUIRED|INVALID_DOWNLOAD_URL|UNSUPPORTED_DOWNLOAD_URL_PROTOCOL|DOWNLOAD_URL_HTML_PAGE)\b/,
+    );
+
+    return {
+      code: matched?.[1] ?? null,
+      message,
+    };
+  };
+
   const handleDownload = async () => {
     if (!groupPath || !trimmedUrl) {
       return;
@@ -53,10 +65,16 @@ export function CustomDownloadDialog({
     try {
       setIsSubmitting(true);
       await window.api.invoke("mod:downloadFromUrl", trimmedUrl, groupPath);
-      toast.success(t("page.mod.content-header.download_dialog.started"));
       onOpenChange(false);
     } catch (error) {
-      toast.error((error as Error).message);
+      const { code, message } = getErrorCode(error);
+
+      if (code === "DOWNLOAD_URL_HTML_PAGE") {
+        toast.warning(t("page.mod.content-header.download_dialog.file_only"));
+        return;
+      }
+
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }

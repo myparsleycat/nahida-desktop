@@ -1,3 +1,4 @@
+import { open } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
@@ -277,30 +278,27 @@ export class CustomDownloader {
         return !!fileType && archiveExts.has(fileType.ext);
     }
 
-    private async replaceGroupWithStaging(groupPath: string, stagingPath: string) {
-        const groupExists = await fse.pathExists(groupPath);
-        const backupPath = groupExists ? this.createSiblingTempPath(groupPath, "backup") : null;
+    private isHtmlContentType(headers?: Headers) {
+        const contentType = headers?.get("Content-Type")?.split(";")[0]?.trim().toLowerCase();
+        return contentType === "text/html" || contentType === "application/xhtml+xml";
+    }
 
-        if (backupPath) {
-            await fse.move(groupPath, backupPath);
+    private async isHtmlResponseOrContent(props: { headers?: Headers; filePath: string }) {
+        const { headers, filePath } = props;
+
+        if (this.isHtmlContentType(headers)) {
+            return true;
         }
+
+        const fd = await open(filePath, "r");
 
         try {
-            await fse.move(stagingPath, groupPath);
-        } catch (err) {
-            await fse.remove(groupPath).catch(() => {});
-
-            if (backupPath && (await fse.pathExists(backupPath))) {
-                await fse.move(backupPath, groupPath).catch((restoreErr) => {
-                    this.desktop.logger.error(restoreErr, "CustomDownloader:restoreGroupPath");
-                });
-            }
-
-            throw err;
-        }
-
-        if (backupPath) {
-            await fse.remove(backupPath).catch(() => {});
+            const buffer = Buffer.alloc(4096);
+            const { bytesRead } = await fd.read(buffer, 0, buffer.length, 0);
+            const snippet = buffer.subarray(0, bytesRead).toString("utf8").trimStart();
+            return /^(<!doctype\s+html\b|<html\b)/i.test(snippet);
+        } finally {
+            await fd.close();
         }
     }
 
@@ -349,21 +347,21 @@ export class CustomDownloader {
         const trimmedUrl = url.trim();
 
         if (!trimmedUrl) {
-            throw new Error("Download URL is required.");
+            throw new Error("DOWNLOAD_URL_REQUIRED");
         }
 
         let parsedUrl: URL;
         try {
             parsedUrl = new URL(trimmedUrl);
         } catch {
-            throw new Error("Invalid download URL.");
+            throw new Error("INVALID_DOWNLOAD_URL");
         }
 
         if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-            throw new Error("Only HTTP(S) URLs are supported.");
+            throw new Error("UNSUPPORTED_DOWNLOAD_URL_PROTOCOL");
         }
 
-        await fse.ensureDir(path.dirname(groupPath));
+        await fse.ensureDir(groupPath);
 
         const resp = await ky.head(trimmedUrl, {
             redirect: "follow",
@@ -379,6 +377,10 @@ export class CustomDownloader {
             realFileUrl,
             resp.headers.get("Content-Disposition"),
         );
+
+        if (this.isHtmlContentType(resp.headers)) {
+            throw new Error("DOWNLOAD_URL_HTML_PAGE");
+        }
 
         const savePath = this.createSiblingTempPath(
             groupPath,
@@ -444,6 +446,14 @@ export class CustomDownloader {
                 throttledUpdate.flush();
 
                 if (abortController.signal.aborted) throw new Error("Aborted");
+                if (
+                    await this.isHtmlResponseOrContent({
+                        headers: resp.headers,
+                        filePath: savePath,
+                    })
+                ) {
+                    throw new Error("DOWNLOAD_URL_HTML_PAGE");
+                }
 
                 await fse.ensureDir(stagingPath);
                 const shouldExtract = await this.isArchiveByResponseOrContent({
@@ -465,7 +475,7 @@ export class CustomDownloader {
                     throw new Error("Downloaded file did not produce staged content.");
                 }
 
-                await this.replaceGroupWithStaging(groupPath, stagingPath);
+                await this.finalizeStagedDownload(stagingPath, groupPath);
 
                 this.desktop.service.transfer.markFileCompleted(pid, pid);
                 this.desktop.service.transfer.updateTransfer(pid, {
