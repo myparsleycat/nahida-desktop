@@ -76,7 +76,7 @@ export default function ToolsPage() {
             <Wrench className="h-3.5 w-3.5 text-accent" />
           </div>
           <span className="text-sm font-semibold text-sidebar-foreground tracking-tight">
-            {t("page.tools.dashboard.sidebar_title")}
+            Tools
           </span>
         </div>
 
@@ -155,7 +155,9 @@ export default function ToolsPage() {
           </button>
 
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-            <span className="text-foreground font-medium">{t("page.tools.dashboard.tools_label")}</span>
+            <span className="text-foreground font-medium">
+              {t("page.tools.dashboard.tools_label")}
+            </span>
             {activeTool && (
               <>
                 <span>/</span>
@@ -170,16 +172,7 @@ export default function ToolsPage() {
             <div className="h-full min-h-0">{activeTool.component()}</div>
           ) : (
             <div className="max-w-3xl mx-auto space-y-6 overflow-y-auto h-full">
-              <div>
-                <h1 className="text-xl font-semibold text-foreground text-balance">
-                  {t("page.tools.dashboard.empty_title")}
-                </h1>
-                <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-                  {t("page.tools.dashboard.empty_description")}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4">
                 {toolPages.map((tool, index) => {
                   const isExternal = !!tool.path;
                   const toolName = t(tool.nameKey);

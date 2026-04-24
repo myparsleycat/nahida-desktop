@@ -468,7 +468,7 @@
         "inline_tool": "Inline tool"
       },
       "d3d11_builder": {
-        "title": "Build d3d11.dll",
+        "title": "d3d11.dll Builder",
         "description": "Builds the DLL to be injected into the game process for the selected version",
         "provider": "Provider",
         "version": "Version",
