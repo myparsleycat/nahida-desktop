@@ -574,7 +574,13 @@
           "renderer": "Renderer",
           "rotate": "Rotate",
           "reset": "Reset",
-          "toggle": "Toggle"
+          "toggle": "Toggle",
+          "save_to_ini": "Save to INI"
+        },
+        "toast": {
+          "save_to_ini_success": "Saved current toggle values to INI",
+          "save_to_ini_no_changes": "No matching persist variables were found to save",
+          "save_to_ini_error": "Failed to save toggle values to INI"
         },
         "rotate_actions": {
           "Left 90°": "Left 90°",

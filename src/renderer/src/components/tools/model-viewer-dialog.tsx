@@ -15,7 +15,7 @@ import {
 } from "@renderer/components/ui/menubar";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { cn } from "@renderer/lib/utils";
-import { Loader2Icon } from "lucide-react";
+import { Loader2Icon, RotateCcwIcon, SaveIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -44,6 +44,7 @@ const MODEL_ROTATION_ACTIONS: ModelRotationAction[] = [
 ];
 
 type ModelViewerVariantManifest = {
+  iniPath: string;
   defaultState: Record<string, VariableStateValue>;
   variables: Array<{
     id: string;
@@ -313,6 +314,36 @@ export function ModelViewerDialog({
     }
   };
 
+  const handleSaveTogglesToIni = async () => {
+    if (!source || source.mode !== "variant-set" || isResolving || loadingViewerIndex !== null) {
+      return;
+    }
+
+    const iniPath = manifest?.iniPath ?? source.manifest.iniPath;
+    if (!iniPath) {
+      toast.error(t("page.tools.model_viewer.toast.save_to_ini_error"));
+      return;
+    }
+
+    try {
+      const result = await window.api.invoke("tools:persistModelViewerToggleState", {
+        iniPath,
+        state: activeState,
+      });
+
+      if (result.updatedVariables.length > 0) {
+        toast.success(t("page.tools.model_viewer.toast.save_to_ini_success"));
+        return;
+      }
+
+      toast.warning(t("page.tools.model_viewer.toast.save_to_ini_no_changes"));
+    } catch (error) {
+      toast.error(t("page.tools.model_viewer.toast.save_to_ini_error"), {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
   const handleSelectValue = async (variableId: string, value: VariableStateValue) => {
     if (!source || source.mode !== "variant-set" || isResolving || loadingViewerIndex !== null) {
       return;
@@ -530,6 +561,7 @@ export function ModelViewerDialog({
               <MenubarSeparator />
               <MenubarGroup>
                 <MenubarItem onClick={handleResetView}>
+                  <RotateCcwIcon />
                   {t("page.tools.model_viewer.menu.reset")}
                 </MenubarItem>
               </MenubarGroup>
@@ -567,7 +599,13 @@ export function ModelViewerDialog({
               <MenubarTrigger>{t("page.tools.model_viewer.menu.toggle")}</MenubarTrigger>
               <MenubarContent>
                 <MenubarGroup>
+                  <MenubarItem onClick={handleSaveTogglesToIni} disabled={isViewerBusy}>
+                    <SaveIcon />
+                    {t("page.tools.model_viewer.menu.save_to_ini")}
+                  </MenubarItem>
+                  <MenubarSeparator />
                   <MenubarItem onClick={handleResetToggles}>
+                    <RotateCcwIcon />
                     {t("page.tools.model_viewer.menu.reset")}
                   </MenubarItem>
                 </MenubarGroup>

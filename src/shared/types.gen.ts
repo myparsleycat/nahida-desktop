@@ -237,6 +237,7 @@ export type IpcHandlers = {
     "tools:getProviderReleases": (...args: Parameters<typeof desktop.service.modTools.dllBuilder.getProviderReleases>) => ReturnType<typeof desktop.service.modTools.dllBuilder.getProviderReleases>;
     "tools:getStaticGlbAssetPath": (...args: Parameters<typeof desktop.service.modTools.staticGlb.getAssetPath>) => ReturnType<typeof desktop.service.modTools.staticGlb.getAssetPath>;
     "tools:getStaticGlbTextureSettings": (...args: Parameters<typeof desktop.service.modTools.staticGlb.getTextureSettings>) => ReturnType<typeof desktop.service.modTools.staticGlb.getTextureSettings>;
+    "tools:persistModelViewerToggleState": (...args: Parameters<typeof desktop.service.modTools.togglePersist.persistStateToIni>) => ReturnType<typeof desktop.service.modTools.togglePersist.persistStateToIni>;
     "tools:setStaticGlbAssetPath": (...args: Parameters<typeof desktop.service.modTools.staticGlb.setAssetPath>) => ReturnType<typeof desktop.service.modTools.staticGlb.setAssetPath>;
     "tools:setStaticGlbJpegQuality": (...args: Parameters<typeof desktop.service.modTools.staticGlb.setJpegQuality>) => ReturnType<typeof desktop.service.modTools.staticGlb.setJpegQuality>;
     "tools:setStaticGlbTextureFormat": (...args: Parameters<typeof desktop.service.modTools.staticGlb.setTextureFormat>) => ReturnType<typeof desktop.service.modTools.staticGlb.setTextureFormat>;
