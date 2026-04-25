@@ -31,6 +31,7 @@ export type GameBananaGameKey = keyof typeof gameBananaGames;
 export type GameBananaCategorySort = "a_to_z" | "count";
 export type GameBananaFeedSort = "default";
 export type GameBananaModPostsSort = "popular" | "newest";
+export type GameBananaSubmissionModel = "Mod" | "Tool" | (string & {});
 
 export class GameBananaService {
     public readonly games = gameBananaGames;
@@ -444,6 +445,11 @@ export class GameBananaService {
         return schema.parse(data);
     }
 
+    private getSubmissionReferer(modelName: GameBananaSubmissionModel, itemId: number) {
+        const segment = `${modelName}`.toLowerCase();
+        return `https://gamebanana.com/${segment}s/${itemId}`;
+    }
+
     public async getGameProfile(gameId: number) {
         const url = this.formatUrl(this.baseUrls.game.profilePage, gameId);
         return await this.requestJson(GameProfileSchema, url, {
@@ -533,42 +539,56 @@ export class GameBananaService {
         });
     }
 
-    public async getModProfile(modId: number) {
-        const url = this.formatUrl(this.baseUrls.mod.profilePage, modId);
+    public async getModProfile(
+        itemId: number,
+        modelName: GameBananaSubmissionModel = "Mod",
+    ) {
+        const url = this.formatUrl(`${this.apiBaseUrl}/${modelName}/{}/ProfilePage`, itemId);
         return await this.requestJson(ModProfileSchema, url, {
             method: "GET",
             headers: {
-                Referer: `https://gamebanana.com/mods/${modId}`,
+                Referer: this.getSubmissionReferer(modelName, itemId),
             },
         });
     }
 
-    public async getModConfig(modId: number) {
-        const url = this.formatUrl(this.baseUrls.mod.config, modId);
+    public async getModConfig(
+        itemId: number,
+        modelName: GameBananaSubmissionModel = "Mod",
+    ) {
+        const url = this.formatUrl(`${this.apiBaseUrl}/${modelName}/{}/Config`, itemId);
         return await this.requestJson(ModConfigSchema, url, {
             method: "GET",
             headers: {
-                Referer: `https://gamebanana.com/mods/${modId}`,
+                Referer: this.getSubmissionReferer(modelName, itemId),
             },
         });
     }
 
     public async getModPosts({
         modId,
+        modelName = "Mod",
         page = 1,
         perPage = 15,
         sort = "popular",
     }: {
         modId: number;
+        modelName?: GameBananaSubmissionModel;
         page?: number;
         perPage?: number;
         sort?: GameBananaModPostsSort;
     }) {
-        const url = this.formatUrl(this.baseUrls.mod.posts, modId, page, perPage, sort);
+        const url = this.formatUrl(
+            `${this.apiBaseUrl}/${modelName}/{}/Posts?_nPage={}&_nPerpage={}&_sSort={}`,
+            modId,
+            page,
+            perPage,
+            sort,
+        );
         return await this.requestJson(ModPostsSchema, url, {
             method: "GET",
             headers: {
-                Referer: `https://gamebanana.com/mods/${modId}`,
+                Referer: this.getSubmissionReferer(modelName, modId),
             },
         });
     }
@@ -613,10 +633,16 @@ export class GameBananaService {
         };
     }
 
-    public async getModOverview(modId: number) {
+    public async getModOverview({
+        itemId,
+        modelName = "Mod",
+    }: {
+        itemId: number;
+        modelName?: GameBananaSubmissionModel;
+    }) {
         const [profile, config] = await Promise.all([
-            this.getModProfile(modId),
-            this.getModConfig(modId),
+            this.getModProfile(itemId, modelName),
+            this.getModConfig(itemId, modelName),
         ]);
 
         return {

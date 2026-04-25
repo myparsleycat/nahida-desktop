@@ -3,7 +3,7 @@ import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import type { TFunction } from "i18next";
 import { SubmissionCard } from "../cards/submission-card";
 import { ErrorState, OverviewSkeleton, PaginationButtons } from "../shared/common";
-import type { GameSubfeedQuery } from "../types";
+import type { GameBananaSubmissionSelection, GameSubfeedQuery } from "../types";
 import { getSubmissionDateKey } from "../utils";
 
 export function GameHomePanel({
@@ -19,7 +19,7 @@ export function GameHomePanel({
   subfeedQuery: GameSubfeedQuery;
   subfeedPage: number;
   onSubfeedPage: (page: number) => void;
-  onSelectMod: (modId: number) => void;
+  onSelectMod: (submission: GameBananaSubmissionSelection) => void;
 }) {
   return (
     <Card className="flex h-full min-h-0 flex-col p-0">
@@ -54,7 +54,12 @@ export function GameHomePanel({
                   key={`feed-${submission._idRow}-${getSubmissionDateKey(submission)}`}
                   submission={submission}
                   language={language}
-                  onClick={() => onSelectMod(submission._idRow)}
+                  onClick={() =>
+                    onSelectMod({
+                      id: submission._idRow,
+                      modelName: submission._sModelName,
+                    })
+                  }
                 />
               ))}
             </div>

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader } from "@renderer/components/ui/card";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import {
+  type GameBananaSubmissionSelection,
   useGameBananaModPosts,
   type GameBananaModPostsSort,
 } from "@renderer/hooks/use-gamebanana-data";
@@ -181,14 +182,16 @@ function CommentSkeletonList() {
 export function ModDetailPanel({
   t,
   language,
-  modId,
+  selection,
   modOverviewQuery,
 }: {
   t: TFunction;
   language: string;
-  modId?: number;
+  selection?: GameBananaSubmissionSelection;
   modOverviewQuery: ModOverviewQuery;
 }) {
+  const modId = selection?.id;
+  const modelName = selection?.modelName ?? "Mod";
   const previews = modOverviewQuery.data
     ? getSubmissionPreviewImages(modOverviewQuery.data.profile)
     : [];
@@ -200,7 +203,13 @@ export function ModDetailPanel({
   const hiddenPreviewCount = previews.length - (maxVisiblePreviews - 1);
   const [lightboxPreviewIndex, setLightboxPreviewIndex] = useState<number | null>(null);
   const [commentSort, setCommentSort] = useState<GameBananaModPostsSort>("popular");
-  const commentsQuery = useGameBananaModPosts(modId, 1, commentSort, Boolean(modId));
+  const commentsQuery = useGameBananaModPosts(
+    modId,
+    modelName,
+    1,
+    commentSort,
+    Boolean(modId),
+  );
   const lightboxPreview =
     lightboxPreviewIndex === null ? null : (previews[lightboxPreviewIndex] ?? null);
 
@@ -210,7 +219,7 @@ export function ModDetailPanel({
 
   useEffect(() => {
     setCommentSort("popular");
-  }, [modId]);
+  }, [modId, modelName]);
 
   const comments = useMemo(() => {
     const seen = new Set<number>();
