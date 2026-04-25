@@ -1,31 +1,85 @@
-import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
+import { Input } from "@renderer/components/ui/input";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { Loader2Icon, RefreshCwIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export function PaginationButtons({
   page,
+  totalPages,
   onPrev,
   onNext,
+  onPageChange,
   disablePrev,
   disableNext,
 }: {
   page: number;
+  totalPages?: number;
   onPrev: () => void;
   onNext: () => void;
+  onPageChange: (page: number) => void;
   disablePrev: boolean;
   disableNext: boolean;
 }) {
   const { t } = useTranslation();
+  const [inputValue, setInputValue] = useState(String(page));
+  const [isEditing, setIsEditing] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const commitPage = useCallback(() => {
+    setIsEditing(false);
+    const parsed = parseInt(inputValue, 10);
+    if (!Number.isNaN(parsed) && parsed >= 1) {
+      const maxPage = totalPages ?? Infinity;
+      const clamped = Math.min(parsed, maxPage);
+      if (clamped !== page) {
+        onPageChange(clamped);
+      } else {
+        setInputValue(String(page));
+      }
+    } else {
+      setInputValue(String(page));
+    }
+  }, [inputValue, page, totalPages, onPageChange]);
 
   return (
     <div className="flex items-center gap-2">
       <Button variant="outline" size="sm" disabled={disablePrev} onClick={onPrev}>
         {t("page.gamebanana.previous")}
       </Button>
-      <Badge variant="outline">#{page}</Badge>
+      <div className="flex items-center gap-1">
+        <Input
+          ref={inputRef}
+          className="h-7 w-14 text-center text-sm"
+          hideFocusRing
+          value={isEditing ? inputValue : String(page)}
+          onChange={(e) => {
+            setInputValue(e.target.value);
+            if (!isEditing) setIsEditing(true);
+          }}
+          onFocus={() => {
+            setIsEditing(true);
+            setInputValue(String(page));
+            inputRef.current?.select();
+          }}
+          onBlur={commitPage}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              commitPage();
+              inputRef.current?.blur();
+            } else if (e.key === "Escape") {
+              setInputValue(String(page));
+              setIsEditing(false);
+              inputRef.current?.blur();
+            }
+          }}
+        />
+        {totalPages != null && (
+          <span className="text-xs text-muted-foreground">/ {totalPages}</span>
+        )}
+      </div>
       <Button variant="outline" size="sm" disabled={disableNext} onClick={onNext}>
         {t("page.gamebanana.next")}
       </Button>

@@ -51,8 +51,17 @@ export function CategoryPanel({
             </div>
             <PaginationButtons
               page={modsPage}
+              totalPages={
+                categoryOverviewQuery.data?.index._aMetadata
+                  ? Math.ceil(
+                      categoryOverviewQuery.data.index._aMetadata._nRecordCount /
+                        categoryOverviewQuery.data.index._aMetadata._nPerpage,
+                    )
+                  : undefined
+              }
               onPrev={() => onModsPage(modsPage - 1)}
               onNext={() => onModsPage(modsPage + 1)}
+              onPageChange={onModsPage}
               disablePrev={modsPage <= 1}
               disableNext={Boolean(categoryOverviewQuery.data?.index._aMetadata._bIsComplete)}
             />

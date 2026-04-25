@@ -30,8 +30,14 @@ export function GameHomePanel({
           </div>
           <PaginationButtons
             page={subfeedPage}
+            totalPages={
+              subfeedQuery.data?._aMetadata
+                ? Math.ceil(subfeedQuery.data._aMetadata._nRecordCount / subfeedQuery.data._aMetadata._nPerpage)
+                : undefined
+            }
             onPrev={() => onSubfeedPage(subfeedPage - 1)}
             onNext={() => onSubfeedPage(subfeedPage + 1)}
+            onPageChange={onSubfeedPage}
             disablePrev={subfeedPage <= 1}
             disableNext={Boolean(subfeedQuery.data?._aMetadata._bIsComplete)}
           />
