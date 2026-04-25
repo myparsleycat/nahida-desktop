@@ -84,6 +84,7 @@ type IbResource = {
     format: string;
     key: string;
     overrideHash?: string;
+    overrideHashes?: string[];
 };
 
 type TextureBinding = {
@@ -939,9 +940,13 @@ function collectIbResources(
     drawBindings: TextureOverrideBinding[],
 ): IbResource[] {
     const bufferKeys = bufferGroups.map((group) => group.key);
-    const bindingsByIbName = new Map(
-        textureBindings.map((binding) => [normalizeKey(binding.ibResourceName), binding]),
-    );
+    const bindingsByIbName = new Map<string, TextureBinding[]>();
+    for (const binding of textureBindings) {
+        const key = normalizeKey(binding.ibResourceName);
+        const group = bindingsByIbName.get(key) ?? [];
+        group.push(binding);
+        bindingsByIbName.set(key, group);
+    }
     const referencedIbNames = new Set([
         ...bindingsByIbName.keys(),
         ...drawBindings.map((binding) => normalizeKey(binding.ibResourceName)),
@@ -976,13 +981,21 @@ function collectIbResources(
         .map((resource) => {
             const stem = path.basename(resource.filename!, path.extname(resource.filename!));
             const key = bestKeyForIb(stem, resource.name, bufferKeys);
-            const binding = bindingsByIbName.get(normalizeKey(resource.name));
+            const bindings = bindingsByIbName.get(normalizeKey(resource.name)) ?? [];
+            const overrideHashes = Array.from(
+                new Set(
+                    bindings
+                        .map((binding) => binding.overrideHash?.trim())
+                        .filter((value): value is string => !!value),
+                ),
+            );
             return {
                 name: resource.name,
                 filename: resource.filename!,
                 format: resource.format!,
                 key,
-                overrideHash: binding?.overrideHash,
+                overrideHash: overrideHashes[0],
+                overrideHashes,
             };
         });
 }
@@ -2726,18 +2739,33 @@ async function loadFmtForIb(
     });
 
     if (!vb0Txt) {
-        const ibHash = normalizeKey(ib.overrideHash || ib.key || stem);
-        const ibTxt = await findRecursive(assetDir, "**/*.txt", (file) => {
-            const lower = path.basename(file).toLowerCase();
-            return lower.includes("-ib=") && normalizeKey(lower).includes(ibHash);
-        });
+        const hashCandidates = Array.from(
+            new Set(
+                [...(ib.overrideHashes ?? []), ib.overrideHash, ib.key]
+                    .map((value) => normalizeKey(value || ""))
+                    .filter(Boolean),
+            ),
+        );
 
-        if (ibTxt) {
+        for (const ibHash of hashCandidates) {
+            const ibTxt = await findRecursive(assetDir, "**/*.txt", (file) => {
+                const lower = path.basename(file).toLowerCase();
+                return lower.includes("-ib=") && normalizeKey(lower).includes(ibHash);
+            });
+
+            if (!ibTxt) {
+                continue;
+            }
+
             const ibBase = path.basename(ibTxt).replace(/-ib=.*$/i, "");
             vb0Txt = await findRecursive(assetDir, "**/*.txt", (file) => {
                 const lower = path.basename(file).toLowerCase();
                 return lower.includes("vb0") && lower.startsWith(ibBase.toLowerCase());
             });
+
+            if (vb0Txt) {
+                break;
+            }
         }
     }
 
