@@ -1,11 +1,12 @@
 #![deny(clippy::all)]
 
-use compress_tools::{uncompress_archive_file, ArchiveContents, ArchiveIterator};
+use compress_tools::{ArchiveContents, ArchiveIterator, ArchiveIteratorBuilder};
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_derive::napi;
 use std::collections::HashMap;
 use std::fs::{self, File};
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{
     atomic::{AtomicU8, Ordering},
@@ -156,7 +157,7 @@ fn should_skip_entry(name: &str) -> bool {
         return true;
     };
 
-    !segments.next().is_some() && is_ignored_top_level_entry(top_level_name)
+    segments.next().is_none() && is_ignored_top_level_entry(top_level_name)
 }
 
 fn extract_archive_entries(
@@ -208,45 +209,92 @@ fn extract_archive_entries(
 
     let total_files = file_entries.len() as u32;
 
-    for (index, entry_name) in file_entries.into_iter().enumerate() {
-        let relative_path = sanitize_entry_path(&entry_name)?;
-        let target_path = temp_folder.join(&relative_path);
+    let source_file = File::open(archive_path)
+        .map_err(|e| Error::from_reason(format!("Failed to reopen archive: {}", e)))?;
+    let mut iterator = ArchiveIteratorBuilder::new(source_file)
+        .filter(|name, stat| {
+            !should_skip_entry(name) && !(is_directory_entry(name) || is_directory_stat(stat))
+        })
+        .build()
+        .map_err(|e| Error::from_reason(format!("Failed to stream archive: {}", e)))?;
+    let mut current_output: Option<File> = None;
+    let mut current_entry_name: Option<String> = None;
+    let mut extracted_files = 0u32;
 
-        if let Some(parent) = target_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                Error::from_reason(format!(
-                    "Failed to create extraction folder for {}: {}",
-                    entry_name, e
-                ))
-            })?;
-        }
+    for content in &mut iterator {
+        match content {
+            ArchiveContents::StartOfEntry(name, _stat) => {
+                let relative_path = sanitize_entry_path(&name)?;
+                let target_path = temp_folder.join(&relative_path);
 
-        let source_file = File::open(archive_path)
-            .map_err(|e| Error::from_reason(format!("Failed to reopen archive: {}", e)))?;
-        let mut output_file = File::create(&target_path).map_err(|e| {
-            Error::from_reason(format!(
-                "Failed to create extracted file {}: {}",
-                target_path.display(),
-                e
-            ))
-        })?;
+                if let Some(parent) = target_path.parent() {
+                    fs::create_dir_all(parent).map_err(|e| {
+                        Error::from_reason(format!(
+                            "Failed to create extraction folder for {}: {}",
+                            name, e
+                        ))
+                    })?;
+                }
 
-        uncompress_archive_file(source_file, &mut output_file, &entry_name).map_err(|e| {
-            Error::from_reason(format!("Failed to extract archive entry {}: {}", entry_name, e))
-        })?;
+                current_output = Some(File::create(&target_path).map_err(|e| {
+                    Error::from_reason(format!(
+                        "Failed to create extracted file {}: {}",
+                        target_path.display(),
+                        e
+                    ))
+                })?);
+                current_entry_name = Some(name);
+            }
+            ArchiveContents::DataChunk(data) => {
+                if let Some(output_file) = current_output.as_mut() {
+                    output_file.write_all(&data).map_err(|e| {
+                        Error::from_reason(format!(
+                            "Failed to write extracted file {}: {}",
+                            current_entry_name.as_deref().unwrap_or("<unknown>"),
+                            e
+                        ))
+                    })?;
+                }
+            }
+            ArchiveContents::EndOfEntry => {
+                if let Some(mut output_file) = current_output.take() {
+                    output_file.flush().map_err(|e| {
+                        Error::from_reason(format!(
+                            "Failed to finalize extracted file {}: {}",
+                            current_entry_name.as_deref().unwrap_or("<unknown>"),
+                            e
+                        ))
+                    })?;
 
-        let raw_percent = (((index as u32 + 1) * 90) / total_files).clamp(1, 90) as u8;
-        let prev = last_percent.load(Ordering::Relaxed);
-        if raw_percent > prev
-            && last_percent
-                .compare_exchange(prev, raw_percent, Ordering::Relaxed, Ordering::Relaxed)
-                .is_ok()
-        {
-            emit_progress(
-                callback,
-                raw_percent as u32,
-                format!("Extracting... {}%", raw_percent),
-            );
+                    extracted_files += 1;
+                    let raw_percent = ((extracted_files * 90) / total_files).clamp(1, 90) as u8;
+                    let prev = last_percent.load(Ordering::Relaxed);
+                    if raw_percent > prev
+                        && last_percent
+                            .compare_exchange(
+                                prev,
+                                raw_percent,
+                                Ordering::Relaxed,
+                                Ordering::Relaxed,
+                            )
+                            .is_ok()
+                    {
+                        emit_progress(
+                            callback,
+                            raw_percent as u32,
+                            format!("Extracting... {}%", raw_percent),
+                        );
+                    }
+                }
+                current_entry_name = None;
+            }
+            ArchiveContents::Err(e) => {
+                return Err(Error::from_reason(format!(
+                    "Failed to extract archive entry {}: {}",
+                    current_entry_name.as_deref().unwrap_or("<unknown>"),
+                    e
+                )));
+            }
         }
     }
 
