@@ -41,7 +41,7 @@ function RouteComponent() {
   const selectedGameKey = useGameBananaStore((state) => state.selectedGame);
   const selectedCategoryId = useGameBananaStore((state) => state.selectedCategoryId);
   const categoryBreadcrumbs = useGameBananaStore((state) => state.categoryBreadcrumbs);
-  const selectedModId = useGameBananaStore((state) => state.selectedModId);
+  const selectedMod = useGameBananaStore((state) => state.selectedMod);
   const subfeedPage = useGameBananaStore((state) => state.subfeedPage);
   const modsPage = useGameBananaStore((state) => state.modsPage);
   const modSearch = useGameBananaStore((state) => state.modSearch);
@@ -75,7 +75,7 @@ function RouteComponent() {
     modsPage,
     isAuthReady,
   );
-  const modOverviewQuery = useGameBananaModOverview(selectedModId, isAuthReady);
+  const modOverviewQuery = useGameBananaModOverview(selectedMod, isAuthReady);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,7 +136,7 @@ function RouteComponent() {
     (category) => category._idRow === selectedCategoryId,
   );
   const hasCategoryContext = Boolean(selectedCategoryId);
-  const isViewingMod = Boolean(selectedModId);
+  const isViewingMod = Boolean(selectedMod);
   const showCategorySidebar =
     !hasCategoryContext ||
     isViewingMod ||
@@ -318,7 +318,7 @@ function RouteComponent() {
               <ModDetailPanel
                 t={t}
                 language={i18n.language}
-                modId={selectedModId}
+                selection={selectedMod}
                 modOverviewQuery={modOverviewQuery}
               />
             )}

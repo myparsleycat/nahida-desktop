@@ -1,6 +1,7 @@
 import type { IpcHandlers } from "@shared/types.gen";
 import type {
   GameBananaGameKey,
+  GameBananaSubmissionSelection,
   useGameBananaGameSubfeed,
   useGameBananaModCategoryOverview,
   useGameBananaModOverview,
@@ -17,6 +18,8 @@ export interface GameOption {
   key: GameBananaGameKey;
   id: number;
 }
+
+export type { GameBananaSubmissionSelection };
 
 export interface GameBananaBreadcrumbItem {
   id: number;

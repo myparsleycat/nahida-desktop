@@ -6,7 +6,11 @@ import { SearchIcon } from "lucide-react";
 import type { TFunction } from "i18next";
 import { ModGridCard } from "../cards/mod-grid-card";
 import { ErrorState, OverviewSkeleton, PaginationButtons } from "../shared/common";
-import type { CategoryOverviewQuery, SubmissionListItem } from "../types";
+import type {
+  CategoryOverviewQuery,
+  GameBananaSubmissionSelection,
+  SubmissionListItem,
+} from "../types";
 
 export function CategoryPanel({
   t,
@@ -28,7 +32,7 @@ export function CategoryPanel({
   modsPage: number;
   hasSidebar: boolean;
   onChangeModSearch: (value: string) => void;
-  onSelectMod: (modId: number) => void;
+  onSelectMod: (submission: GameBananaSubmissionSelection) => void;
   onModsPage: (page: number) => void;
 }) {
   return (
@@ -51,8 +55,17 @@ export function CategoryPanel({
             </div>
             <PaginationButtons
               page={modsPage}
+              totalPages={
+                categoryOverviewQuery.data?.index._aMetadata
+                  ? Math.ceil(
+                      categoryOverviewQuery.data.index._aMetadata._nRecordCount /
+                        categoryOverviewQuery.data.index._aMetadata._nPerpage,
+                    )
+                  : undefined
+              }
               onPrev={() => onModsPage(modsPage - 1)}
               onNext={() => onModsPage(modsPage + 1)}
+              onPageChange={onModsPage}
               disablePrev={modsPage <= 1}
               disableNext={Boolean(categoryOverviewQuery.data?.index._aMetadata._bIsComplete)}
             />
@@ -83,7 +96,12 @@ export function CategoryPanel({
                       key={`mod-${mod._idRow}`}
                       mod={mod}
                       language={language}
-                      onClick={() => onSelectMod(mod._idRow)}
+                      onClick={() =>
+                        onSelectMod({
+                          id: mod._idRow,
+                          modelName: mod._sModelName,
+                        })
+                      }
                     />
                   ))}
                 </div>

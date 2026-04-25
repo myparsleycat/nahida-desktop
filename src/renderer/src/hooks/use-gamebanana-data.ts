@@ -12,6 +12,10 @@ type GameBananaModPosts = Awaited<ReturnType<IpcHandlers["gamebanana:getModPosts
 
 export type GameBananaGameKey = keyof GameBananaGames & string;
 export type GameBananaModPostsSort = "popular" | "newest";
+export interface GameBananaSubmissionSelection {
+    id: number;
+    modelName: string;
+}
 
 export function useGameBananaGames(enabled = true) {
     return useQuery<GameBananaGames>({
@@ -53,27 +57,36 @@ export function useGameBananaModCategoryOverview(categoryId?: number, page = 1, 
     });
 }
 
-export function useGameBananaModOverview(modId?: number, enabled = true) {
+export function useGameBananaModOverview(
+    selection?: GameBananaSubmissionSelection,
+    enabled = true,
+) {
     return useQuery<GameBananaModOverview>({
-        queryKey: ["gamebanana", "modOverview", modId],
-        queryFn: () => window.api.invoke("gamebanana:getModOverview", modId as number),
-        enabled: enabled && Number.isFinite(modId),
+        queryKey: ["gamebanana", "modOverview", selection?.modelName, selection?.id],
+        queryFn: () =>
+            window.api.invoke("gamebanana:getModOverview", {
+                itemId: selection?.id as number,
+                modelName: selection?.modelName ?? "Mod",
+            }),
+        enabled: enabled && Number.isFinite(selection?.id),
         // placeholderData: keepPreviousData,
     });
 }
 
 export function useGameBananaModPosts(
     modId?: number,
+    modelName = "Mod",
     page = 1,
     sort: GameBananaModPostsSort = "popular",
     enabled = true,
 ) {
     return useInfiniteQuery<GameBananaModPosts>({
-        queryKey: ["gamebanana", "modPosts", modId, page, sort],
+        queryKey: ["gamebanana", "modPosts", modelName, modId, page, sort],
         initialPageParam: page,
         queryFn: ({ pageParam }) =>
             window.api.invoke("gamebanana:getModPosts", {
                 modId: modId as number,
+                modelName,
                 page: pageParam,
                 perPage: 15,
                 sort,

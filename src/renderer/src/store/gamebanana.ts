@@ -9,18 +9,23 @@ interface GameBananaBreadcrumb {
     name: string;
 }
 
+interface GameBananaSelectedSubmission {
+    id: number;
+    modelName: string;
+}
+
 interface GameBananaState {
     selectedGame: GameBananaGameKey | "";
     selectedCategoryId?: number;
     categoryBreadcrumbs: GameBananaBreadcrumb[];
-    selectedModId?: number;
+    selectedMod?: GameBananaSelectedSubmission;
     subfeedPage: number;
     modsPage: number;
     modSearch: string;
     setSelectedGame: (game: GameBananaGameKey) => void;
     setInitialGame: (game: GameBananaGameKey) => void;
     selectCategory: (categoryId: number, categoryName: string) => void;
-    selectMod: (modId: number) => void;
+    selectMod: (submission: GameBananaSelectedSubmission) => void;
     clearSelectedMod: () => void;
     selectBreadcrumbCategory: (index: number) => void;
     resetToGameHome: () => void;
@@ -33,7 +38,7 @@ export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
     selectedGame: "",
     selectedCategoryId: undefined,
     categoryBreadcrumbs: [],
-    selectedModId: undefined,
+    selectedMod: undefined,
     subfeedPage: DEFAULT_SUBFEED_PAGE,
     modsPage: DEFAULT_MODS_PAGE,
     modSearch: "",
@@ -42,7 +47,7 @@ export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
             selectedGame,
             selectedCategoryId: undefined,
             categoryBreadcrumbs: [],
-            selectedModId: undefined,
+            selectedMod: undefined,
             subfeedPage: DEFAULT_SUBFEED_PAGE,
             modsPage: DEFAULT_MODS_PAGE,
             modSearch: "",
@@ -62,13 +67,13 @@ export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
             return {
                 selectedCategoryId: categoryId,
                 categoryBreadcrumbs: nextBreadcrumbs,
-                selectedModId: undefined,
+                selectedMod: undefined,
                 modsPage: DEFAULT_MODS_PAGE,
                 modSearch: "",
             };
         }),
-    selectMod: (selectedModId) => set({ selectedModId }),
-    clearSelectedMod: () => set({ selectedModId: undefined }),
+    selectMod: (selectedMod) => set({ selectedMod }),
+    clearSelectedMod: () => set({ selectedMod: undefined }),
     selectBreadcrumbCategory: (index) =>
         set((state) => {
             const nextBreadcrumbs = state.categoryBreadcrumbs.slice(0, index + 1);
@@ -80,7 +85,7 @@ export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
             return {
                 selectedCategoryId: nextCategory.id,
                 categoryBreadcrumbs: nextBreadcrumbs,
-                selectedModId: undefined,
+                selectedMod: undefined,
                 modsPage: DEFAULT_MODS_PAGE,
                 modSearch: "",
             };
@@ -89,7 +94,7 @@ export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
         set({
             selectedCategoryId: undefined,
             categoryBreadcrumbs: [],
-            selectedModId: undefined,
+            selectedMod: undefined,
             subfeedPage: DEFAULT_SUBFEED_PAGE,
             modsPage: DEFAULT_MODS_PAGE,
             modSearch: "",
