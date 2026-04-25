@@ -296,7 +296,7 @@ const ModPostRecordSchema = z
         _nReplyCount: z.number().optional(),
         _iPinLevel: z.number().optional(),
         _nStampScore: z.number().optional(),
-        _aPreviewMedia: z.array(z.unknown()).optional(),
+        _aPreviewMedia: PreviewMediaSchema.optional(),
         _sText: z.string(),
         _aPoster: MemberSchema.optional(),
         _bFollowLinks: z.boolean().optional(),
