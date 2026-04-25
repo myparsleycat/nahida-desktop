@@ -37,7 +37,10 @@ export class GameBananaService {
     private readonly apiBaseUrl = "https://gamebanana.com/apiv11";
     private readonly loginUrl = "https://gamebanana.com/members/account/login";
     private readonly logoutUrl = "https://gamebanana.com/members/account/logout";
-    private readonly authUrl = `${this.apiBaseUrl}/Member/Authenticate`;
+    private readonly authUrls = [
+        `${this.apiBaseUrl}/Member/Authenticate`,
+        `${this.apiBaseUrl}/Member/EmailAuthenticate`,
+    ] as const;
     private readonly navigatorPersonalUrl = `${this.apiBaseUrl}/Member/Navigator/Personal`;
     private readonly cookieSettingKey = "gamebanana_auth_cookies";
     private loginWindow: BrowserWindow | null = null;
@@ -297,7 +300,7 @@ export class GameBananaService {
                 };
 
                 webRequest.onHeadersReceived(
-                    { urls: [`${this.authUrl}*`] },
+                    { urls: this.authUrls.map((url) => `${url}*`) },
                     async (details, callback) => {
                         const headers = Object.entries(details.responseHeaders ?? {}).reduce<
                             Record<string, string[]>
