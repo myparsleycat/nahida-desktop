@@ -1377,7 +1377,7 @@ function buildDiffuseLookupAliases(value: string): string[] {
     );
     if (meshSuffixMatch) {
         aliases.add(meshSuffixMatch[0].toLowerCase());
-        const familyAlias = meshSuffixMatch[0].replace(/[a-z0-9]+$/i, "");
+        const familyAlias = meshSuffixMatch[1];
         if (familyAlias) {
             aliases.add(familyAlias.toLowerCase());
         }
