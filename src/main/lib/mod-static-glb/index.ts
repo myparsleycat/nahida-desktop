@@ -1007,7 +1007,9 @@ function collectTextureBindings(
 ): TextureBinding[] {
     const bindings: TextureBinding[] = [];
     const overrideTextureResources = sections
-        .filter((section) => section.header === "TextureOverride")
+        .filter(
+            (section) => section.header === "TextureOverride" || section.header === "CommandList",
+        )
         .map((section) => {
             const resourceName = resolveSectionResourceName(
                 section,
@@ -1310,6 +1312,9 @@ function resolveOverrideDiffuseResource(
     const ibStem = ibResourceName.replace(/IB$/i, "");
     const exactResource = `${ibStem}Diffuse`.toLowerCase();
     const familyStem = ibStem.replace(/(?<=[a-z0-9])[A-Z]$/g, "");
+    const sectionAliases = buildDiffuseLookupAliases(sectionName);
+    const ibAliases = buildDiffuseLookupAliases(ibStem);
+    const familyAliases = buildDiffuseLookupAliases(familyStem);
 
     const preferred = overrideTextureResources.filter((entry) => {
         const sectionLower = entry.sectionName.toLowerCase();
@@ -1319,20 +1324,66 @@ function resolveOverrideDiffuseResource(
 
     return (
         preferred.find((entry) => entry.sectionName.toLowerCase() === exactSection)?.resourceName ||
+        preferred.find((entry) =>
+            sectionAliases.some((alias) => entry.sectionName.toLowerCase() === `${alias}diffuse`),
+        )?.resourceName ||
         preferred.find((entry) => entry.resourceName.toLowerCase() === exactResource)
             ?.resourceName ||
+        preferred.find((entry) =>
+            ibAliases.some((alias) => entry.resourceName.toLowerCase() === `${alias}diffuse`),
+        )?.resourceName ||
         preferred.find((entry) =>
             entry.sectionName.toLowerCase().startsWith(sectionName.toLowerCase()),
         )?.resourceName ||
         preferred.find((entry) =>
+            sectionAliases.some((alias) => entry.sectionName.toLowerCase().startsWith(alias)),
+        )?.resourceName ||
+        preferred.find((entry) =>
             entry.sectionName.toLowerCase().startsWith(familyStem.toLowerCase()),
+        )?.resourceName ||
+        preferred.find((entry) =>
+            familyAliases.some((alias) => entry.sectionName.toLowerCase().startsWith(alias)),
         )?.resourceName ||
         preferred.find((entry) => entry.resourceName.toLowerCase().startsWith(ibStem.toLowerCase()))
             ?.resourceName ||
         preferred.find((entry) =>
+            ibAliases.some((alias) => entry.resourceName.toLowerCase().startsWith(alias)),
+        )?.resourceName ||
+        preferred.find((entry) =>
             entry.resourceName.toLowerCase().startsWith(familyStem.toLowerCase()),
+        )?.resourceName ||
+        preferred.find((entry) =>
+            familyAliases.some((alias) => entry.resourceName.toLowerCase().startsWith(alias)),
         )?.resourceName
     );
+}
+
+function buildDiffuseLookupAliases(value: string): string[] {
+    const aliases = new Set<string>();
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return [];
+    }
+
+    aliases.add(trimmed.toLowerCase());
+
+    const resourceTrimmed = trimmed.replace(/^resource/i, "");
+    if (resourceTrimmed && resourceTrimmed !== trimmed) {
+        aliases.add(resourceTrimmed.toLowerCase());
+    }
+
+    const meshSuffixMatch = resourceTrimmed.match(
+        /(head|body|dress|hair|face|weapon|glasses|cloth|skirt|shoe|arm|leg|hand|foot)[a-z0-9]*$/i,
+    );
+    if (meshSuffixMatch) {
+        aliases.add(meshSuffixMatch[0].toLowerCase());
+        const familyAlias = meshSuffixMatch[0].replace(/[a-z0-9]+$/i, "");
+        if (familyAlias) {
+            aliases.add(familyAlias.toLowerCase());
+        }
+    }
+
+    return Array.from(aliases).filter(Boolean);
 }
 
 function getSectionFullName(section: IniSection): string {
