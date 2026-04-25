@@ -24,12 +24,15 @@ const PreviewImageSchema = z.object({
     _wFile800: z.number().optional(),
 });
 
-const PreviewMediaSchema = z
-    .object({
-        _aMetadata: z.record(z.string(), z.unknown()).optional(),
-        _aImages: z.array(PreviewImageSchema).optional(),
-    })
-    .catchall(z.unknown());
+const PreviewMediaSchema = z.preprocess(
+    (val) => (Array.isArray(val) ? { _aImages: val } : val),
+    z
+        .object({
+            _aMetadata: z.record(z.string(), z.unknown()).optional(),
+            _aImages: z.array(PreviewImageSchema).optional(),
+        })
+        .catchall(z.unknown()),
+);
 
 const SubjectShaperSchema = z
     .object({
