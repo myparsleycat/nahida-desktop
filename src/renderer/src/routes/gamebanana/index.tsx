@@ -12,14 +12,14 @@ import { useGameBananaStore } from "@renderer/store/gamebanana";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { GameBananaToolbar } from "./components/gamebanana-toolbar";
-import { CategoryPanel } from "./panels/category-panel";
-import { GameHomePanel } from "./panels/game-home-panel";
-import { ModDetailPanel } from "./panels/mod-detail-panel";
-import { GameBananaAuthState } from "./shared/common";
-import { CategorySidebar } from "./sidebars/category-sidebar";
-import { ModFilesSidebar } from "./sidebars/mod-files-sidebar";
-import type { GameOption } from "./types";
+import { GameBananaToolbar } from "./-components/gamebanana-toolbar";
+import { CategoryPanel } from "./-panels/category-panel";
+import { GameHomePanel } from "./-panels/game-home-panel";
+import { ModDetailPanel } from "./-panels/mod-detail-panel";
+import { GameBananaAuthState } from "./-shared/common";
+import { CategorySidebar } from "./-sidebars/category-sidebar";
+import { ModFilesSidebar } from "./-sidebars/mod-files-sidebar";
+import type { GameOption } from "./-types";
 
 const EMPTY_GAMES_MAP: Record<string, number> = {};
 

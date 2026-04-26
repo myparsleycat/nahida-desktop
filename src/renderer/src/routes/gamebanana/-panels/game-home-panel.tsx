@@ -1,10 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import type { TFunction } from "i18next";
-import { SubmissionCard } from "../cards/submission-card";
-import { ErrorState, OverviewSkeleton, PaginationButtons } from "../shared/common";
-import type { GameBananaSubmissionSelection, GameSubfeedQuery } from "../types";
-import { getSubmissionDateKey } from "../utils";
+import { SubmissionCard } from "../-cards/submission-card";
+import { ErrorState, OverviewSkeleton, PaginationButtons } from "../-shared/common";
+import type { GameBananaSubmissionSelection, GameSubfeedQuery } from "../-types";
+import { getSubmissionDateKey } from "../-utils";
 
 export function GameHomePanel({
   t,

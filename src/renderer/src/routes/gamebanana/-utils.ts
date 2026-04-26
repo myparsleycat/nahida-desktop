@@ -1,4 +1,4 @@
-import type { PreviewImage, PreviewMedia, SubmissionListItem } from "./types";
+import type { PreviewImage, PreviewMedia, SubmissionListItem } from "./-types";
 
 export function formatEpoch(epochSeconds: number, language: string) {
   return new Intl.DateTimeFormat(language, {

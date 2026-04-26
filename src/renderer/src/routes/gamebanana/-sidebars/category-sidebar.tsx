@@ -5,9 +5,9 @@ import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { cn } from "@renderer/lib/utils";
 import type { TFunction } from "i18next";
-import { ErrorState } from "../shared/common";
-import type { CategoryChildItem, RootCategoryItem } from "../types";
-import { formatNumber } from "../utils";
+import { ErrorState } from "../-shared/common";
+import type { CategoryChildItem, RootCategoryItem } from "../-types";
+import { formatNumber } from "../-utils";
 
 export function CategorySidebar({
   t,

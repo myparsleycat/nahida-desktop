@@ -4,13 +4,13 @@ import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { cn } from "@renderer/lib/utils";
 import { SearchIcon } from "lucide-react";
 import type { TFunction } from "i18next";
-import { ModGridCard } from "../cards/mod-grid-card";
-import { ErrorState, OverviewSkeleton, PaginationButtons } from "../shared/common";
+import { ModGridCard } from "../-cards/mod-grid-card";
+import { ErrorState, OverviewSkeleton, PaginationButtons } from "../-shared/common";
 import type {
   CategoryOverviewQuery,
   GameBananaSubmissionSelection,
   SubmissionListItem,
-} from "../types";
+} from "../-types";
 
 export function CategoryPanel({
   t,

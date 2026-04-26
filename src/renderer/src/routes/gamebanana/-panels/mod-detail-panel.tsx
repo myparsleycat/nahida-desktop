@@ -21,9 +21,9 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { ErrorState } from "../shared/common";
-import type { ModOverviewQuery } from "../types";
-import { formatEpoch, formatNumber, getSubmissionPreviewImages } from "../utils";
+import { ErrorState } from "../-shared/common";
+import type { ModOverviewQuery } from "../-types";
+import { formatEpoch, formatNumber, getSubmissionPreviewImages } from "../-utils";
 
 function SubmissionPreviewLightbox({
   previews,

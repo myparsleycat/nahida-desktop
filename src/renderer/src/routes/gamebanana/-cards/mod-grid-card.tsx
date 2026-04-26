@@ -1,4 +1,4 @@
-import type { SubmissionListItem } from "../types";
+import type { SubmissionListItem } from "../-types";
 import { PreviewCard } from "./preview-card";
 
 export function ModGridCard({

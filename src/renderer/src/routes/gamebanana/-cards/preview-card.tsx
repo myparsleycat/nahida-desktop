@@ -1,12 +1,12 @@
 import { cn } from "@renderer/lib/utils";
 import { ExternalLinkIcon, ImageIcon } from "lucide-react";
-import type { SubmissionListItem } from "../types";
+import type { SubmissionListItem } from "../-types";
 import {
   formatEpoch,
   formatNumber,
   getSubmissionPreviewUrl,
   getSubmissionTimestamp,
-} from "../utils";
+} from "../-utils";
 
 export function PreviewCard({
   item,
