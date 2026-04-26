@@ -22,6 +22,7 @@ export type LogLevel = "info" | "debug" | "warn" | "error" | "trace" | "fatal";
 export class Logger {
     private logger: PinoLogger | null = null;
     private dest: string | null = null;
+    private initPromise: Promise<void> | null = null;
     private isCleaning: boolean = false;
     private readonly disableLogging: boolean;
     private readonly isWorker: boolean;
@@ -31,50 +32,80 @@ export class Logger {
         this.disableLogging = disableLogging;
         this.isWorker = isWorker;
 
-        this.init();
+        void this.ensureInitialized();
     }
 
-    public async init(): Promise<void> {
-        try {
-            this.dest = pathModule.join(
-                await nahidaLogsPath(),
-                this.isWorker ? "desktop-worker.log" : "desktop.log",
-            );
-
-            if (is.dev) {
-                return;
-            }
-
-            this.logger = pino(
-                createStream(pathModule.basename(this.dest), {
-                    size: "10M",
-                    interval: "7d",
-                    compress: "gzip",
-                    encoding: "utf-8",
-                    maxFiles: 3,
-                    path: pathModule.dirname(this.dest),
-                }),
-            );
-            this.logger.level = this.currentLevel;
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    public async waitForPino(): Promise<void> {
-        if (this.logger) {
+    private async ensureInitialized(): Promise<void> {
+        if (this.initPromise) {
+            await this.initPromise;
             return;
         }
 
-        await new Promise<void>((resolve) => {
-            const wait = setInterval(() => {
-                if (this.logger) {
-                    clearInterval(wait);
+        this.initPromise = (async () => {
+            try {
+                await app.whenReady();
 
-                    resolve();
+                this.dest = pathModule.join(
+                    await nahidaLogsPath(),
+                    this.isWorker ? "desktop-worker.log" : "desktop.log",
+                );
+
+                if (is.dev || this.disableLogging) {
+                    return;
                 }
-            }, 100);
+
+                this.logger = pino(
+                    { level: this.currentLevel },
+                    createStream(pathModule.basename(this.dest), {
+                        size: "10M",
+                        interval: "7d",
+                        compress: "gzip",
+                        encoding: "utf-8",
+                        maxFiles: 3,
+                        path: pathModule.dirname(this.dest),
+                    }),
+                );
+            } catch (e) {
+                console.error(e);
+            }
+        })();
+
+        await this.initPromise;
+    }
+
+    private shouldWrite(level: LogLevel): boolean {
+        const priorities: Record<LogLevel, number> = {
+            trace: 10,
+            debug: 20,
+            info: 30,
+            warn: 40,
+            error: 50,
+            fatal: 60,
+        };
+
+        return priorities[level] >= priorities[this.currentLevel];
+    }
+
+    private async writeFallback(
+        level: LogLevel,
+        logContent: string,
+        object?: unknown,
+    ): Promise<void> {
+        if (!this.dest || !this.shouldWrite(level)) {
+            return;
+        }
+
+        const line = JSON.stringify({
+            level,
+            time: new Date().toISOString(),
+            msg: logContent,
+            err:
+                object instanceof Error
+                    ? { name: object.name, message: object.message, stack: object.stack }
+                    : undefined,
         });
+
+        await fse.appendFile(this.dest, `${line}\n`, "utf8");
     }
 
     public setLevel(level: LogLevel): void {
@@ -103,38 +134,41 @@ export class Logger {
             return;
         }
 
-        (async () => {
+        void (async () => {
+            const logContent = `${where ? `[${where}] ` : ""}${
+                typeof object !== "undefined"
+                    ? typeof object === "string" || typeof object === "number"
+                        ? object
+                        : JSON.stringify(object)
+                    : ""
+            }`;
+
             try {
+                await this.ensureInitialized();
+
                 if (!this.logger) {
-                    await this.waitForPino();
+                    await this.writeFallback(level, logContent, object);
+                    return;
                 }
 
-                const logContent = `${where ? `[${where}] ` : ""}${
-                    typeof object !== "undefined"
-                        ? typeof object === "string" || typeof object === "number"
-                            ? object
-                            : JSON.stringify(object)
-                        : ""
-                }`;
-
                 if (level === "info") {
-                    this.logger?.info(logContent);
+                    this.logger.info(logContent);
                 } else if (level === "debug") {
-                    this.logger?.debug(logContent);
+                    this.logger.debug(logContent);
                 } else if (level === "error") {
-                    this.logger?.error(logContent);
+                    this.logger.error(logContent);
 
                     if (object instanceof Error) {
-                        this.logger?.error(object);
+                        this.logger.error(object);
                     }
                 } else if (level === "warn") {
-                    this.logger?.warn(logContent);
+                    this.logger.warn(logContent);
                 } else if (level === "trace") {
-                    this.logger?.trace(logContent);
+                    this.logger.trace(logContent);
                 } else if (level === "fatal") {
-                    this.logger?.fatal(logContent);
+                    this.logger.fatal(logContent);
                 } else {
-                    this.logger?.info(logContent);
+                    this.logger.info(logContent);
                 }
             } catch (e) {
                 console.error(e);
