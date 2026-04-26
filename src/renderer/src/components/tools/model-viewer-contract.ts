@@ -1,4 +1,3 @@
-export type ModelViewerRenderer = "google" | "three";
 export type ModelViewerThreeToneMapping = "neutral" | "aces" | "none";
 export type ModelViewerThreeEnvironment = "studio" | "soft" | "none";
 export type ModelViewerVariantStateValue = number | string;

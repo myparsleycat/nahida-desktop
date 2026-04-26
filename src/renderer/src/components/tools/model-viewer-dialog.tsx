@@ -20,13 +20,11 @@ import { Loader2Icon, RotateCcwIcon, SaveIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { GoogleModelViewer } from "./google-model-viewer";
 import {
   formatOrientation,
   type ModelViewerCameraState,
   type ModelViewerHandle,
   type ModelViewerRealtimeShapeKey,
-  type ModelViewerRenderer,
   type ModelViewerThreeEnvironment,
   type ModelViewerThreeToneMapping,
   parseOrientation,
@@ -115,7 +113,6 @@ export function ModelViewerDialog({
   const [loadingViewerIndex, setLoadingViewerIndex] = useState<0 | 1 | null>(null);
   const [modelOrientation, setModelOrientation] = useState(DEFAULT_MODEL_ORIENTATION);
   const [doubleSidedEnabled, setDoubleSidedEnabled] = useState(true);
-  const [renderer, setRenderer] = useState<ModelViewerRenderer>("three");
   const [threeToneMapping, setThreeToneMapping] = useState<ModelViewerThreeToneMapping>("neutral");
   const [threeEnvironment, setThreeEnvironment] = useState<ModelViewerThreeEnvironment>("studio");
   const [threeExposure, setThreeExposure] = useState(DEFAULT_THREE_EXPOSURE);
@@ -165,7 +162,6 @@ export function ModelViewerDialog({
       return;
     }
 
-    setRenderer("three");
     resetViewerSession({ resetOrientation: true });
   }, [open]);
 
@@ -219,7 +215,6 @@ export function ModelViewerDialog({
 
     if (!source) {
       resetViewerSession({ resetOrientation: shouldResetOrientation });
-      setRenderer("three");
       setActiveState({});
       setManifest(null);
       setViewerUrl(0, "");
@@ -229,7 +224,6 @@ export function ModelViewerDialog({
 
     if (source.mode === "single") {
       resetViewerSession({ resetOrientation: shouldResetOrientation });
-      setRenderer("three");
       setActiveState({});
       setManifest(null);
       setViewerUrl(0, source.glbPath);
@@ -238,16 +232,11 @@ export function ModelViewerDialog({
     }
 
     resetViewerSession({ resetOrientation: shouldResetOrientation });
-    setRenderer("three");
     setActiveState(source.manifest.defaultState);
     setManifest(source.manifest);
     setViewerUrl(0, source.activeGlbPath || source.defaultGlbPath);
     setViewerUrl(1, "");
   }, [source]);
-
-  useEffect(() => {
-    resetViewerSession({ resetOrientation: false });
-  }, [renderer]);
 
   const updateThreeToneMapping = (value: ModelViewerThreeToneMapping) => {
     setThreeToneMapping(value);
@@ -419,7 +408,7 @@ export function ModelViewerDialog({
         shapeKey.dimensions.some((dimension) => dimension.variableId === variableId),
       ),
     );
-    if (hasRealtimeShapeKey && renderer === "three") {
+    if (hasRealtimeShapeKey) {
       setActiveState(nextState);
       return;
     }
@@ -501,18 +490,13 @@ export function ModelViewerDialog({
   const slotHoverPath = uiAssets?.slotHoverPath;
   const slotActivePath = uiAssets?.slotActivePath;
   const shapeKeys = manifest?.shapeKeys;
-  const viewerVariantState =
-    renderer === "three"
-      ? normalizeRealtimeShapeKeyState(activeState, variables, shapeKeys)
-      : activeState;
+  const viewerVariantState = normalizeRealtimeShapeKeyState(activeState, variables, shapeKeys);
   const hasVariantTileUi = Boolean(tileBackgroundPath) && tileVariables.length > 0;
   const hasVariantToggleUi = visibleVariables.length > 0;
   const showToggleViewer = Boolean(
     source?.mode === "variant-set" && manifest && (hasVariantTileUi || hasVariantToggleUi),
   );
   const isViewerBusy = isResolving || loadingViewerIndex !== null;
-
-  const ActiveViewerComponent = renderer === "google" ? GoogleModelViewer : ThreeModelViewer;
 
   function resetViewerSession(options?: { resetOrientation?: boolean }) {
     const currentIndex = activeViewerIndexRef.current;
@@ -642,21 +626,7 @@ export function ModelViewerDialog({
             </MenubarContent>
           </MenubarMenu>
           <MenubarMenu>
-            <MenubarTrigger>{t("page.tools.model_viewer.menu.renderer")}</MenubarTrigger>
-            <MenubarContent>
-              <MenubarRadioGroup
-                value={renderer}
-                onValueChange={(value) => setRenderer(value as ModelViewerRenderer)}
-              >
-                {!shapeKeys?.length ? (
-                  <MenubarRadioItem value="google">@google/model-viewer</MenubarRadioItem>
-                ) : null}
-                <MenubarRadioItem value="three">Three.js</MenubarRadioItem>
-              </MenubarRadioGroup>
-            </MenubarContent>
-          </MenubarMenu>
-          <MenubarMenu>
-            <MenubarTrigger disabled={renderer !== "three"}>Rendering</MenubarTrigger>
+            <MenubarTrigger>Rendering</MenubarTrigger>
             <MenubarContent>
               <MenubarGroup>
                 <MenubarLabel className="text-xs text-muted-foreground">Tone Mapping</MenubarLabel>
@@ -772,7 +742,7 @@ export function ModelViewerDialog({
             {viewerUrls.some((url) => Boolean(url)) ? (
               <>
                 {([0, 1] as const).map((index) => (
-                  <ActiveViewerComponent
+                  <ThreeModelViewer
                     key={index}
                     ref={(viewer) => {
                       viewerRefs.current[index] = viewer;
@@ -895,7 +865,7 @@ export function ModelViewerDialog({
                             shapeKey.dimensions.some(
                               (dimension) => dimension.variableId === variable.id,
                             ),
-                          ) && renderer === "three",
+                          ),
                         )}
                         onSelect={handleSelectValue}
                       />

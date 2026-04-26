@@ -150,9 +150,6 @@ importers:
       '@formkit/auto-animate':
         specifier: ^0.9.0
         version: 0.9.0
-      '@google/model-viewer':
-        specifier: ^4.2.0
-        version: 4.2.0(three@0.184.0)
       '@react-three/drei':
         specifier: ^10.7.7
         version: 10.7.7(@react-three/fiber@9.6.0(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(three@0.184.0))(@types/react@19.2.14)(@types/three@0.184.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(three@0.184.0)
@@ -980,12 +977,6 @@ packages:
 
   '@formkit/auto-animate@0.9.0':
     resolution: {integrity: sha512-VhP4zEAacXS3dfTpJpJ88QdLqMTcabMg0jwpOSxZ/VzfQVfl3GkZSCZThhGC5uhq/TxPHPzW0dzr4H9Bb1OgKA==}
-
-  '@google/model-viewer@4.2.0':
-    resolution: {integrity: sha512-RjpAI5cLs9CdvPcMRsOs8Bea/lNmGTTyaPyl16o9Fv6Qn8VSpgBMmXFr/11yb0hTrsojp2dOACEcY77R8hVUVA==}
-    engines: {node: '>=6.0.0'}
-    peerDependencies:
-      three: ^0.182.0
 
   '@hono/node-server@2.0.0':
     resolution: {integrity: sha512-n3GfHwwCvHCkGmOwKfxUPOlbfzuO64Sbc5XC4NGPIXxkuOnJrdgExdRKmHfF924r914WRJPT397GdqLvdYTeyQ==}
@@ -5702,12 +5693,6 @@ snapshots:
   '@floating-ui/utils@0.2.11': {}
 
   '@formkit/auto-animate@0.9.0': {}
-
-  '@google/model-viewer@4.2.0(three@0.184.0)':
-    dependencies:
-      '@monogrid/gainmap-js': 3.4.0(three@0.184.0)
-      lit: 3.3.2
-      three: 0.184.0
 
   '@hono/node-server@2.0.0(hono@4.12.15)':
     dependencies:
