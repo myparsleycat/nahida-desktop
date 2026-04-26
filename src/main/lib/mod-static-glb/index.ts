@@ -71,11 +71,21 @@ type BufferGroup = {
     stride: number;
 };
 
-type BufferResourceGroup = {
+type StaticGlbModLayout = "mihoyo" | "wwmi";
+
+type MihoyoBufferResourceGroup = {
     position?: Resource;
     blend?: Resource;
     texcoord?: Resource;
     single?: Resource;
+};
+
+type WwmiBufferResourceGroup = {
+    position?: Resource;
+    vector?: Resource;
+    blend?: Resource;
+    color?: Resource;
+    texcoord?: Resource;
 };
 
 type IbResource = {
@@ -518,10 +528,14 @@ async function buildModGlb(
     const defaultVariables = collectDefaultIniVariables(sections);
     const resolvedVariables = mergeVariableState(defaultVariables, options.variableState);
     const resources = collectResources(sections);
+    const layout = detectStaticGlbModLayout(sections, resources);
     const sectionByFullName = new Map(
         sections.map((section) => [normalizeKey(getSectionFullName(section)), section]),
     );
-    const bufferGroups = await collectBufferGroups(modDir, resources, warning.warn);
+    const bufferGroups =
+        layout === "wwmi"
+            ? await collectWwmiBufferGroups(modDir, resources, warning.warn)
+            : await collectMihoyoBufferGroups(modDir, resources, warning.warn);
     const textureBindings = collectTextureBindings(sections, sectionByFullName, resolvedVariables);
     const drawBindings = collectTextureOverrideDrawBindings(sections);
     const ibResources = collectIbResources(
@@ -535,7 +549,7 @@ async function buildModGlb(
     );
 
     options.logger?.debug(
-        `Found ${resources.length} resources, ${bufferGroups.length} buffer groups, ${ibResources.length} IB resources, ${textureBindings.length} texture bindings`,
+        `Detected ${layout} layout with ${resources.length} resources, ${bufferGroups.length} buffer groups, ${ibResources.length} IB resources, ${textureBindings.length} texture bindings`,
         "StaticGLB",
     );
 
@@ -565,7 +579,7 @@ async function buildModGlb(
 
         let fmt: FmtLayout;
         try {
-            fmt = await loadFmtForIb(modDir, options.assetPath, ib, group.stride);
+            fmt = await loadFmtForIb(modDir, options.assetPath, ib, group.stride, layout);
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             warning.warn(`Skipping ${ib.filename}: ${message}`);
@@ -805,31 +819,58 @@ function collectResources(sections: IniSection[]): Resource[] {
         }));
 }
 
-async function collectBufferGroups(
+function detectStaticGlbModLayout(
+    sections: IniSection[],
+    resources: Resource[],
+): StaticGlbModLayout {
+    if (
+        sections.some(
+            (section) =>
+                section.header === "Constants" &&
+                section.lines.some((line) => /\$required_wwmi_version\b/i.test(line)),
+        )
+    ) {
+        return "wwmi";
+    }
+
+    const resourceNames = new Set(resources.map((resource) => normalizeKey(resource.name)));
+    if (
+        resourceNames.has(normalizeKey("IndexBuffer")) &&
+        resourceNames.has(normalizeKey("PositionBuffer")) &&
+        resourceNames.has(normalizeKey("VectorBuffer")) &&
+        resourceNames.has(normalizeKey("TexCoordBuffer"))
+    ) {
+        return "wwmi";
+    }
+
+    return "mihoyo";
+}
+
+async function collectMihoyoBufferGroups(
     modDir: string,
     resources: Resource[],
     warn: (message: string) => void,
 ): Promise<BufferGroup[]> {
-    const byKey = new Map<string, BufferResourceGroup>();
+    const byKey = new Map<string, MihoyoBufferResourceGroup>();
 
     for (const resource of resources) {
         if (!resource.filename || !resource.stride) continue;
-        const typedResource = parseBufferGroupResourceName(resource.name);
+        const typedResource = parseMihoyoBufferGroupResourceName(resource.name);
         if (typedResource) {
             const { key, kind } = typedResource;
             if (kind === "position") {
-                ensureBufferResourceGroup(byKey, key).position = resource;
+                ensureMihoyoBufferResourceGroup(byKey, key).position = resource;
             } else if (kind === "blend") {
-                ensureBufferResourceGroup(byKey, key).blend = resource;
+                ensureMihoyoBufferResourceGroup(byKey, key).blend = resource;
             } else {
-                ensureBufferResourceGroup(byKey, key).texcoord = resource;
+                ensureMihoyoBufferResourceGroup(byKey, key).texcoord = resource;
             }
         } else if (
             !isShapeKeyPositionVariantResource(resource.name) &&
             (resource.filename.toLowerCase().endsWith(".buf") ||
                 resource.filename.toLowerCase().endsWith(".vb"))
         ) {
-            ensureBufferResourceGroup(byKey, resource.name).single = resource;
+            ensureMihoyoBufferResourceGroup(byKey, resource.name).single = resource;
         }
     }
 
@@ -894,7 +935,94 @@ async function collectBufferGroups(
     return groups;
 }
 
-function parseBufferGroupResourceName(
+async function collectWwmiBufferGroups(
+    modDir: string,
+    resources: Resource[],
+    warn: (message: string) => void,
+): Promise<BufferGroup[]> {
+    const byKey = new Map<string, WwmiBufferResourceGroup>();
+
+    for (const resource of resources) {
+        if (!resource.filename || !resource.stride) continue;
+        const typedResource = parseWwmiBufferResourceName(resource.name);
+        if (!typedResource) {
+            continue;
+        }
+
+        const group = ensureWwmiBufferResourceGroup(byKey, typedResource.key);
+        switch (typedResource.kind) {
+            case "position":
+                group.position = resource;
+                break;
+            case "vector":
+                group.vector = resource;
+                break;
+            case "blend":
+                group.blend = resource;
+                break;
+            case "color":
+                group.color = resource;
+                break;
+            case "texcoord":
+                group.texcoord = resource;
+                break;
+        }
+    }
+
+    const groups: BufferGroup[] = [];
+    for (const [key, group] of byKey) {
+        if (
+            !group.position?.filename ||
+            !group.vector?.filename ||
+            !group.blend?.filename ||
+            !group.color?.filename ||
+            !group.texcoord?.filename
+        ) {
+            warn(`Skipping incomplete WWMI buffer group: ${key}`);
+            continue;
+        }
+
+        const resourcesToRead = [
+            group.position,
+            group.vector,
+            group.blend,
+            group.color,
+            group.texcoord,
+        ];
+        const [position, vector, blend, color, texcoord] = await Promise.all(
+            resourcesToRead.map((resource) => readResourceBytes(modDir, resource)),
+        );
+
+        const stride = resourcesToRead.reduce((sum, resource) => sum + (resource.stride ?? 0), 0);
+        const vertexCount = Math.min(
+            ...resourcesToRead.map((resource, index) =>
+                Math.floor(
+                    [position, vector, blend, color, texcoord][index].length / (resource.stride ?? 1),
+                ),
+            ),
+        );
+
+        const vb = interleaveBufferSet(
+            [
+                { bytes: position, stride: group.position.stride! },
+                { bytes: vector, stride: group.vector.stride! },
+                { bytes: blend, stride: group.blend.stride! },
+                { bytes: color, stride: group.color.stride! },
+                { bytes: texcoord, stride: group.texcoord.stride! },
+            ],
+            vertexCount,
+        );
+        if (vb.length !== vertexCount * stride) {
+            throw new Error(`Unexpected WWMI interleaved buffer length for ${key}`);
+        }
+
+        groups.push({ key, vbFilename: `${key}.vb`, vbBytes: vb, stride });
+    }
+
+    return groups;
+}
+
+function parseMihoyoBufferGroupResourceName(
     resourceName: string,
 ): { key: string; kind: "position" | "blend" | "texcoord" } | null {
     const typedMatch = resourceName.match(/^(.*?)(Position|Blend|Texcoord)(\.\d+)?$/i);
@@ -915,14 +1043,43 @@ function parseBufferGroupResourceName(
     return null;
 }
 
+function parseWwmiBufferResourceName(
+    resourceName: string,
+): { key: string; kind: "position" | "vector" | "blend" | "color" | "texcoord" } | null {
+    const match = resourceName.match(
+        /^(.*?)(Position|Vector|Blend|Color|TexCoord)Buffer(\.\d+)?$/i,
+    );
+    if (!match) {
+        return null;
+    }
+
+    const [, prefix, kind, suffix = ""] = match;
+    return {
+        key: `${prefix}IndexBuffer${suffix}`,
+        kind: kind.toLowerCase() as "position" | "vector" | "blend" | "color" | "texcoord",
+    };
+}
+
 function isShapeKeyPositionVariantResource(resourceName: string): boolean {
     return /Position(?!Base(?:\.|$))[\w.-]+$/i.test(resourceName);
 }
 
-function ensureBufferResourceGroup(
-    map: Map<string, BufferResourceGroup>,
+function ensureMihoyoBufferResourceGroup(
+    map: Map<string, MihoyoBufferResourceGroup>,
     key: string,
-): BufferResourceGroup {
+): MihoyoBufferResourceGroup {
+    let value = map.get(key);
+    if (!value) {
+        value = {};
+        map.set(key, value);
+    }
+    return value;
+}
+
+function ensureWwmiBufferResourceGroup(
+    map: Map<string, WwmiBufferResourceGroup>,
+    key: string,
+): WwmiBufferResourceGroup {
     let value = map.get(key);
     if (!value) {
         value = {};
@@ -935,6 +1092,25 @@ async function readResourceBytes(modDir: string, resource: Resource): Promise<Bu
     const filePath = path.resolve(modDir, resource.filename!);
     if (!(await fse.pathExists(filePath))) throw new Error(`Missing resource file: ${filePath}`);
     return await fse.readFile(filePath);
+}
+
+function interleaveBufferSet(
+    buffers: Array<{ bytes: Buffer; stride: number }>,
+    vertexCount: number,
+): Buffer {
+    const stride = buffers.reduce((sum, entry) => sum + entry.stride, 0);
+    const output = Buffer.allocUnsafe(vertexCount * stride);
+
+    for (let vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++) {
+        let targetOffset = vertexIndex * stride;
+        for (const entry of buffers) {
+            const sourceOffset = vertexIndex * entry.stride;
+            entry.bytes.copy(output, targetOffset, sourceOffset, sourceOffset + entry.stride);
+            targetOffset += entry.stride;
+        }
+    }
+
+    return output;
 }
 
 function collectIbResources(
@@ -1168,12 +1344,30 @@ function collectSectionDrawInstructions(
     inheritedIbResourceName?: string,
     visited = new Set<string>(),
 ): DrawInstruction[] {
+    return collectSectionDrawContext(
+        section,
+        variables,
+        sectionByFullName,
+        inheritedClauses,
+        inheritedIbResourceName,
+        visited,
+    ).instructions;
+}
+
+function collectSectionDrawContext(
+    section: IniSection,
+    variables: Map<string, number | string>,
+    sectionByFullName: Map<string, IniSection>,
+    inheritedClauses: IniConditionClause[] = [],
+    inheritedIbResourceName?: string,
+    visited = new Set<string>(),
+): { instructions: DrawInstruction[]; currentIbResourceName?: string } {
     const instructions: DrawInstruction[] = [];
     const stack: IniBranchFrame[] = [];
     let currentIbResourceName = inheritedIbResourceName;
     const normalizedName = normalizeKey(getSectionFullName(section));
     if (visited.has(normalizedName)) {
-        return instructions;
+        return { instructions, currentIbResourceName };
     }
     visited.add(normalizedName);
 
@@ -1236,16 +1430,16 @@ function collectSectionDrawInstructions(
                 ...inheritedClauses,
                 ...stack.flatMap((entry) => entry.activeClauses),
             ];
-            instructions.push(
-                ...collectSectionDrawInstructions(
-                    nestedSection,
-                    variables,
-                    sectionByFullName,
-                    activeConditions,
-                    currentIbResourceName,
-                    new Set(visited),
-                ),
+            const nested = collectSectionDrawContext(
+                nestedSection,
+                variables,
+                sectionByFullName,
+                activeConditions,
+                currentIbResourceName,
+                new Set(visited),
             );
+            instructions.push(...nested.instructions);
+            currentIbResourceName = nested.currentIbResourceName ?? currentIbResourceName;
             continue;
         }
 
@@ -1278,7 +1472,7 @@ function collectSectionDrawInstructions(
         });
     }
 
-    return instructions;
+    return { instructions, currentIbResourceName };
 }
 
 function buildIndicesForState(
@@ -2094,7 +2288,10 @@ function collectRealtimeShapeKeys(
 }
 
 function deriveBufferGroupKey(resourceName: string): string | undefined {
-    return parseBufferGroupResourceName(resourceName)?.key;
+    return (
+        parseMihoyoBufferGroupResourceName(resourceName)?.key ||
+        parseWwmiBufferResourceName(resourceName)?.key
+    );
 }
 
 function stripCopyPrefix(value: string | undefined): string {
@@ -2777,6 +2974,7 @@ async function loadFmtForIb(
     assetDir: string,
     ib: IbResource,
     stride: number,
+    layout: StaticGlbModLayout,
 ): Promise<FmtLayout> {
     const stem = path.basename(ib.filename, path.extname(ib.filename));
     const localFmt = path.resolve(modDir, `${stem}.fmt`);
@@ -2790,6 +2988,13 @@ async function loadFmtForIb(
     });
     if (assetFmt) {
         return parseFmt(await fse.readFile(assetFmt, "utf8"), stride, ib.format);
+    }
+
+    if (layout === "wwmi") {
+        const wwmiFmt = await findWwmiFmtForIb(assetDir, ib, stride);
+        if (wwmiFmt) {
+            return wwmiFmt;
+        }
     }
 
     let vb0Txt = await findRecursive(assetDir, "**/*.txt", (file) => {
@@ -2837,6 +3042,44 @@ async function loadFmtForIb(
         stride,
         ib.format,
     );
+}
+
+async function findWwmiFmtForIb(
+    assetDir: string,
+    ib: IbResource,
+    stride: number,
+): Promise<FmtLayout | null> {
+    const hashCandidates = Array.from(
+        new Set(
+            [...(ib.overrideHashes ?? []), ib.overrideHash, ib.key]
+                .map((value) => normalizeKey(value || ""))
+                .filter(Boolean),
+        ),
+    );
+
+    for (const candidate of hashCandidates) {
+        const fmtPaths = await fg("**/*.fmt", {
+            cwd: path.resolve(assetDir),
+            absolute: true,
+            onlyFiles: true,
+            caseSensitiveMatch: false,
+        });
+        const matching = fmtPaths.filter((file) => normalizeKey(file).includes(candidate));
+        if (matching.length === 0) {
+            continue;
+        }
+
+        const parsed = await Promise.all(
+            matching.map(async (file) => ({
+                file,
+                fmt: parseFmt(await fse.readFile(file, "utf8"), stride, ib.format),
+            })),
+        );
+        parsed.sort((left, right) => left.fmt.stride - right.fmt.stride);
+        return parsed[0]?.fmt ?? null;
+    }
+
+    return null;
 }
 
 async function findRecursive(
