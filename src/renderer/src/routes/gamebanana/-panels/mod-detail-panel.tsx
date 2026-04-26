@@ -3,6 +3,14 @@ import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
 import { Card, CardContent, CardHeader } from "@renderer/components/ui/card";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@renderer/components/ui/select";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import {
   type GameBananaSubmissionSelection,
@@ -203,13 +211,7 @@ export function ModDetailPanel({
   const hiddenPreviewCount = previews.length - (maxVisiblePreviews - 1);
   const [lightboxPreviewIndex, setLightboxPreviewIndex] = useState<number | null>(null);
   const [commentSort, setCommentSort] = useState<GameBananaModPostsSort>("popular");
-  const commentsQuery = useGameBananaModPosts(
-    modId,
-    modelName,
-    1,
-    commentSort,
-    Boolean(modId),
-  );
+  const commentsQuery = useGameBananaModPosts(modId, modelName, 1, commentSort, Boolean(modId));
   const lightboxPreview =
     lightboxPreviewIndex === null ? null : (previews[lightboxPreviewIndex] ?? null);
 
@@ -356,20 +358,23 @@ export function ModDetailPanel({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <Badge variant="outline">{formatNumber(totalCommentCount, language)}</Badge>
-                  <div className="inline-flex rounded-lg bg-muted p-1">
-                    {(["popular", "newest"] as const).map((sort) => (
-                      <Button
-                        key={sort}
-                        type="button"
-                        size="sm"
-                        variant={commentSort === sort ? "secondary" : "ghost"}
-                        className="h-7 px-3"
-                        onClick={() => setCommentSort(sort)}
-                      >
-                        {t(`page.gamebanana.comment_sort.${sort}`)}
-                      </Button>
-                    ))}
-                  </div>
+                  <Select
+                    value={commentSort}
+                    onValueChange={(value) => setCommentSort(value as GameBananaModPostsSort)}
+                  >
+                    <SelectTrigger className="h-7">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectGroup>
+                        {(["popular", "newest"] as const).map((sort) => (
+                          <SelectItem key={sort} value={sort}>
+                            {t(`page.gamebanana.comment_sort.${sort}`)}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </CardHeader>
