@@ -245,10 +245,10 @@ export function ModDetailPanel({
   return (
     <>
       <ScrollArea
-        className="h-full min-h-0 min-w-0 pr-4"
+        className="h-full min-h-0 min-w-0"
         viewportClassName="overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!w-full [&>div]:max-w-full"
       >
-        <div className="min-w-0 max-w-full space-y-4 p-1">
+        <div className="min-w-0 max-w-full space-y-4 p-4">
           <Card>
             <CardContent>
               {modOverviewQuery.isLoading ? (
