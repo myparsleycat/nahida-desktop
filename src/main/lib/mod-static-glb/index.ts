@@ -1793,8 +1793,9 @@ function collectKeyCycleBindings(sections: IniSection[]): SlotVariableBinding[] 
                     variable: normalizeKey(key),
                     values: value
                         .split(",")
-                        .map((entry) => parseIniScalar(entry.trim()))
-                        .filter((entry) => entry !== ""),
+                        .map((entry) => entry.trim())
+                        .filter((entry) => entry !== "")
+                        .map((entry) => parseIniScalar(entry)),
                 }));
         });
 }
