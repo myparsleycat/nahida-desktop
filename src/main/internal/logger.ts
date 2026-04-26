@@ -135,15 +135,15 @@ export class Logger {
         }
 
         void (async () => {
-            const logContent = `${where ? `[${where}] ` : ""}${
-                typeof object !== "undefined"
-                    ? typeof object === "string" || typeof object === "number"
-                        ? object
-                        : JSON.stringify(object)
-                    : ""
-            }`;
-
             try {
+                const objectContent =
+                    typeof object === "undefined"
+                        ? ""
+                        : typeof object === "string" || typeof object === "number"
+                          ? String(object)
+                          : JSON.stringify(object);
+                const logContent = `${where ? `[${where}] ` : ""}${objectContent}`;
+
                 await this.ensureInitialized();
 
                 if (!this.logger) {
