@@ -20,7 +20,7 @@ export function useTitlebar() {
     [titlebarStyle],
   );
 
-  const screenHeight = titlebarStyle === "modern" ? `h-[calc(100vh-28px)]` : "h-screen";
+  const screenHeight = titlebarStyle === "modern" ? `h-[calc(100vh-32px)]` : "h-screen";
 
   return {
     Titlebar,

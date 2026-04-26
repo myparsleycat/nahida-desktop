@@ -182,7 +182,7 @@ function RootComponent() {
 
   return (
     <>
-      {titlebarStyle === "modern" && <div className="h-7 shrink-0" />}
+      {titlebarStyle === "modern" && <div className="h-8 shrink-0" />}
 
       <Toaster position="bottom-right" richColors />
 

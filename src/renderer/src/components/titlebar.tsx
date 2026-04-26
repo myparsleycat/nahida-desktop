@@ -47,7 +47,7 @@ export function Titlebar({ title }: TitlebarProps) {
 
   return (
     <div
-      className="titlebar fixed top-0 left-0 right-0 h-7 bg-background flex items-center select-none z-9999 border-b"
+      className="titlebar fixed top-0 left-0 right-0 h-8 bg-background flex items-center select-none z-9999 border-b"
       onPointerDownCapture={(e) => {
         e.stopPropagation();
       }}
@@ -78,7 +78,7 @@ export function Titlebar({ title }: TitlebarProps) {
             type="button"
             size="xs"
             variant="outline"
-            className="titlebar-action h-5 px-2 text-[10px] mr-4"
+            className="titlebar-action h-6 px-2 text-[11.5px] mr-4"
             isLoading={isUpdateActionPending || updaterDownloading}
             onClick={async () => {
               setIsUpdateActionPending(true);
