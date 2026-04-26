@@ -35,6 +35,25 @@ export function CategoryPanel({
   onSelectMod: (submission: GameBananaSubmissionSelection) => void;
   onModsPage: (page: number) => void;
 }) {
+  const metadata = categoryOverviewQuery.data?.index._aMetadata;
+  const hasCategoryData = categoryOverviewQuery.data != null;
+  const isSearching = modSearch.trim().length > 0;
+  const serverTotalPages = metadata
+    ? Math.ceil(metadata._nRecordCount / metadata._nPerpage)
+    : undefined;
+  const paginationPage = isSearching ? 1 : modsPage;
+  const paginationTotalPages = isSearching ? 1 : serverTotalPages;
+  const disablePrev = !hasCategoryData || isSearching || modsPage <= 1;
+  const disableNext = !hasCategoryData || isSearching || Boolean(metadata?._bIsComplete);
+
+  const handleModsPageChange = (page: number) => {
+    if (!hasCategoryData || isSearching) {
+      return;
+    }
+
+    onModsPage(page);
+  };
+
   return (
     <>
       <ScrollArea
@@ -62,20 +81,13 @@ export function CategoryPanel({
                     />
                   </div>
                   <PaginationButtons
-                    page={modsPage}
-                    totalPages={
-                      categoryOverviewQuery.data?.index._aMetadata
-                        ? Math.ceil(
-                            categoryOverviewQuery.data.index._aMetadata._nRecordCount /
-                              categoryOverviewQuery.data.index._aMetadata._nPerpage,
-                          )
-                        : undefined
-                    }
-                    onPrev={() => onModsPage(modsPage - 1)}
-                    onNext={() => onModsPage(modsPage + 1)}
-                    onPageChange={onModsPage}
-                    disablePrev={modsPage <= 1}
-                    disableNext={Boolean(categoryOverviewQuery.data?.index._aMetadata._bIsComplete)}
+                    page={paginationPage}
+                    totalPages={paginationTotalPages}
+                    onPrev={() => handleModsPageChange(modsPage - 1)}
+                    onNext={() => handleModsPageChange(modsPage + 1)}
+                    onPageChange={handleModsPageChange}
+                    disablePrev={disablePrev}
+                    disableNext={disableNext}
                   />
                 </div>
               </div>
