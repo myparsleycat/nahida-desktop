@@ -1,15 +1,10 @@
-import "@google/model-viewer";
 import { Button } from "@renderer/components/ui/button";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeftIcon, FolderOpenIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { suppressModelViewerFocusOutline } from "./model-viewer-session";
-
-function toLocalUrl(filePath: string) {
-  const normalized = filePath.replaceAll("\\", "/");
-  return `local://${encodeURI(normalized).replaceAll("#", "%23").replaceAll("?", "%3F")}`;
-}
+import { ThreeModelViewer } from "./three-model-viewer";
+import { modelViewerSourceToUrl } from "./model-viewer-session";
 
 export function ModelViewerPage({
   path,
@@ -25,7 +20,7 @@ export function ModelViewerPage({
   const { t } = useTranslation();
   const { Titlebar } = useTitlebar();
   const modelName = name || t("page.tools.model_viewer.title");
-  const modelSrc = path ? toLocalUrl(path) : "";
+  const modelSrc = path ? modelViewerSourceToUrl(path) : "";
   const sourceContext = {
     artifactRoot: artifactRoot || "",
     manifestPath: manifestPath || "",
@@ -66,25 +61,11 @@ export function ModelViewerPage({
 
         <main className="relative min-h-0 flex-1 bg-muted/30">
           {modelSrc ? (
-            <>
-              <model-viewer
-                ref={suppressModelViewerFocusOutline}
-                className="absolute inset-0 h-full w-full"
-                tabIndex={-1}
-                src={modelSrc}
-                ar
-                ar-modes="webxr scene-viewer quick-look"
-                camera-controls
-                interaction-prompt="none"
-                tone-mapping="neutral"
-                shadow-intensity="1"
-                exposure="1"
-              >
-                <div className="progress-bar hide" slot="progress-bar">
-                  <div className="update-bar"></div>
-                </div>
-              </model-viewer>
-            </>
+            <ThreeModelViewer
+              className="absolute inset-0 h-full w-full"
+              src={modelSrc}
+              orientation="0deg 0deg 0deg"
+            />
           ) : (
             <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
               {t("page.tools.model_viewer.convert_first")}

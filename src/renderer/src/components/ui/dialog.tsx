@@ -21,6 +21,10 @@ function DialogClose({ ...props }: React.ComponentProps<typeof DialogPrimitive.C
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
 }
 
+function isTitlebarTarget(target: EventTarget | null) {
+  return target instanceof Element && !!target.closest(".titlebar");
+}
+
 function DialogOverlay({
   className,
   ...props
@@ -42,6 +46,7 @@ function DialogContent({
   children,
   showCloseButton = true,
   overlayOnContextMenu,
+  onPointerDownOutside,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
@@ -52,6 +57,14 @@ function DialogContent({
       <DialogOverlay onContextMenu={overlayOnContextMenu} />
       <DialogPrimitive.Content
         onCloseAutoFocus={(e) => e.preventDefault()}
+        onPointerDownOutside={(e) => {
+          if (isTitlebarTarget(e.target)) {
+            e.preventDefault();
+            return;
+          }
+
+          onPointerDownOutside?.(e);
+        }}
         data-slot="dialog-content"
         className={cn(
           "bg-background/75 dark:bg-background/50 backdrop-blur-xl data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/10 grid max-w-[calc(100%-2rem)] gap-4 rounded-xl p-4 text-sm ring-1 duration-100 sm:max-w-sm fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2",

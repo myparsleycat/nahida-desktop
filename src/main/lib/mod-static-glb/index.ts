@@ -563,7 +563,14 @@ async function buildModGlb(
             continue;
         }
 
-        const fmt = await loadFmtForIb(modDir, options.assetPath, ib, group.stride);
+        let fmt: FmtLayout;
+        try {
+            fmt = await loadFmtForIb(modDir, options.assetPath, ib, group.stride);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            warning.warn(`Skipping ${ib.filename}: ${message}`);
+            continue;
+        }
         const ibPath = path.resolve(modDir, ib.filename);
         if (!(await fse.pathExists(ibPath))) {
             warning.warn(`Missing IB file: ${ibPath}`);
@@ -1786,8 +1793,9 @@ function collectKeyCycleBindings(sections: IniSection[]): SlotVariableBinding[] 
                     variable: normalizeKey(key),
                     values: value
                         .split(",")
-                        .map((entry) => parseIniScalar(entry.trim()))
-                        .filter((entry) => entry !== ""),
+                        .map((entry) => entry.trim())
+                        .filter((entry) => entry !== "")
+                        .map((entry) => parseIniScalar(entry)),
                 }));
         });
 }

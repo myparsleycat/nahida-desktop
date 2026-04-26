@@ -45,6 +45,7 @@
 }
 
 :root {
+    --app-titlebar-height: 32px;
     --radius: 0.625rem;
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
@@ -192,6 +193,32 @@ body {
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;
+}
+
+.titlebar {
+    -webkit-app-region: drag;
+    pointer-events: auto !important;
+}
+
+.titlebar-action,
+.titlebar button,
+.titlebar a,
+.titlebar input,
+.titlebar select,
+.titlebar textarea {
+    -webkit-app-region: no-drag;
+}
+
+body:has(.titlebar) [data-slot="dialog-overlay"],
+body:has(.titlebar) [data-slot="alert-dialog-overlay"] {
+    top: var(--app-titlebar-height);
+}
+
+body:has(.titlebar) [data-slot="dialog-content"],
+body:has(.titlebar) [data-slot="alert-dialog-content"] {
+    top: calc(var(--app-titlebar-height) + (100vh - var(--app-titlebar-height)) / 2);
+    max-height: calc(100vh - var(--app-titlebar-height) - 2rem);
+    overflow-y: auto;
 }
 
 .scroll-area::-webkit-scrollbar {

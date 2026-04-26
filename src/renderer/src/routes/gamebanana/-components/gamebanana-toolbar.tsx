@@ -18,7 +18,7 @@ import {
 } from "@renderer/components/ui/menubar";
 import { ExternalLinkIcon, LogOutIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { GameBananaBreadcrumbItem, GameOption } from "../types";
+import type { GameBananaBreadcrumbItem, GameOption } from "../-types";
 
 export function GameBananaToolbar({
   games,

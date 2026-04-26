@@ -13,9 +13,9 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { ErrorState, StatCard } from "../shared/common";
-import type { ModOverviewQuery } from "../types";
-import { formatEpoch, formatNumber, getSubmissionFullPreviewUrl } from "../utils";
+import { ErrorState, StatCard } from "../-shared/common";
+import type { ModOverviewQuery } from "../-types";
+import { formatEpoch, formatNumber, getSubmissionFullPreviewUrl } from "../-utils";
 
 export function ModFilesSidebar({
   t,
