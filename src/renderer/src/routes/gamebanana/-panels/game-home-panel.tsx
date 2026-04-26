@@ -21,6 +21,13 @@ export function GameHomePanel({
   onSubfeedPage: (page: number) => void;
   onSelectMod: (submission: GameBananaSubmissionSelection) => void;
 }) {
+  const metadata = subfeedQuery.data?._aMetadata;
+  const totalPages =
+    metadata && metadata._nPerpage > 0
+      ? Math.ceil(metadata._nRecordCount / metadata._nPerpage)
+      : undefined;
+  const disableNext = subfeedQuery.data == null || Boolean(metadata?._bIsComplete);
+
   return (
     <>
       <ScrollArea
@@ -36,19 +43,12 @@ export function GameHomePanel({
                 </div>
                 <PaginationButtons
                   page={subfeedPage}
-                  totalPages={
-                    subfeedQuery.data?._aMetadata
-                      ? Math.ceil(
-                          subfeedQuery.data._aMetadata._nRecordCount /
-                            subfeedQuery.data._aMetadata._nPerpage,
-                        )
-                      : undefined
-                  }
+                  totalPages={totalPages}
                   onPrev={() => onSubfeedPage(subfeedPage - 1)}
                   onNext={() => onSubfeedPage(subfeedPage + 1)}
                   onPageChange={onSubfeedPage}
                   disablePrev={subfeedPage <= 1}
-                  disableNext={Boolean(subfeedQuery.data?._aMetadata._bIsComplete)}
+                  disableNext={disableNext}
                 />
               </div>
             </CardHeader>
