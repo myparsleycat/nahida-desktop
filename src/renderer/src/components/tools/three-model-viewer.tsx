@@ -1,5 +1,5 @@
 import { OrbitControls } from "@react-three/drei";
-import { Canvas, useThree } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { cn } from "@renderer/lib/utils";
 import {
   type ElementRef,
@@ -49,7 +49,9 @@ import { modelViewerSourceToUrl } from "./model-viewer-session";
 type OrbitControlsImpl = ElementRef<typeof OrbitControls>;
 
 const DEFAULT_CAMERA_POSITION = new Vector3(0, 0, 4);
-const ORBIT_CONTROLS_ZOOM_SPEED = 3;
+const ORBIT_CONTROLS_ZOOM_SPEED = 1.5;
+const SMOOTH_ZOOM_DAMPING = 0.16;
+const SMOOTH_ZOOM_DELTA_SCALE = 0.0015;
 
 type LoadedShapeKey = {
   metadata: ModelViewerRealtimeShapeKey;
@@ -182,6 +184,7 @@ function ThreeModelScene({
   const lastAppliedVariantSnapshotRef = useRef<Record<string, number | string> | null>(null);
   const lastAppliedModelRootRef = useRef<Object3D | null>(null);
   const lastAppliedShapeKeysRef = useRef<ModelViewerRealtimeShapeKey[] | undefined>(undefined);
+  const desiredCameraDistanceRef = useRef<number | null>(null);
 
   const rotation = useMemo(() => {
     const [roll, pitch, yaw] = parseOrientation(orientation);
@@ -307,6 +310,10 @@ function ThreeModelScene({
         object: groupRef.current,
       }).then((center) => {
         orientedCenterRef.current = center;
+        desiredCameraDistanceRef.current = getPerspectiveCameraDistance(
+          camera,
+          controlsRef.current,
+        );
       });
     }
     invalidate();
@@ -342,6 +349,7 @@ function ThreeModelScene({
     controlsRef.current.target.add(delta);
     camera.position.add(delta);
     controlsRef.current.update();
+    desiredCameraDistanceRef.current = getPerspectiveCameraDistance(camera, controlsRef.current);
     invalidate();
   }, [camera, invalidate, modelRoot, rotation]);
 
@@ -349,8 +357,13 @@ function ThreeModelScene({
     controllerRef.current = {
       captureCameraState: () =>
         captureThreeCameraState(camera, controlsRef.current, groupRef.current),
-      restoreCameraState: (state, options) =>
-        restoreThreeCameraState(camera, controlsRef.current, groupRef.current, state, options),
+      restoreCameraState: (state, options) => {
+        restoreThreeCameraState(camera, controlsRef.current, groupRef.current, state, options);
+        desiredCameraDistanceRef.current = getPerspectiveCameraDistance(
+          camera,
+          controlsRef.current,
+        );
+      },
       setDoubleSided: (doubleSided) => {
         for (const material of materialRef.current) {
           material.side = doubleSided ? DoubleSide : FrontSide;
@@ -365,6 +378,10 @@ function ThreeModelScene({
           object: groupRef.current,
         });
         orientedCenterRef.current = center;
+        desiredCameraDistanceRef.current = getPerspectiveCameraDistance(
+          camera,
+          controlsRef.current,
+        );
         invalidate();
       },
     };
@@ -373,6 +390,75 @@ function ThreeModelScene({
       controllerRef.current = null;
     };
   }, [camera, controllerRef, invalidate]);
+
+  useEffect(() => {
+    desiredCameraDistanceRef.current = getPerspectiveCameraDistance(camera, controlsRef.current);
+  }, [camera]);
+
+  useEffect(() => {
+    const controls = controlsRef.current;
+    const domElement = gl.domElement;
+    if (!(camera instanceof PerspectiveCamera) || !controls || !domElement) {
+      return;
+    }
+
+    const onWheel = (event: WheelEvent) => {
+      if (!controls.enabled) {
+        return;
+      }
+
+      event.preventDefault();
+      const currentDistance =
+        desiredCameraDistanceRef.current ?? getPerspectiveCameraDistance(camera, controls);
+      if (!currentDistance) {
+        return;
+      }
+
+      const zoomFactor = Math.exp(
+        event.deltaY * SMOOTH_ZOOM_DELTA_SCALE * ORBIT_CONTROLS_ZOOM_SPEED,
+      );
+      desiredCameraDistanceRef.current = MathUtils.clamp(
+        currentDistance * zoomFactor,
+        Math.max(controls.minDistance, 0.01),
+        controls.maxDistance,
+      );
+      invalidate();
+    };
+
+    domElement.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      domElement.removeEventListener("wheel", onWheel);
+    };
+  }, [camera, gl, invalidate]);
+
+  useFrame((_, delta) => {
+    const controls = controlsRef.current;
+    const desiredDistance = desiredCameraDistanceRef.current;
+    if (!(camera instanceof PerspectiveCamera) || !controls || !desiredDistance) {
+      return;
+    }
+
+    const offset = camera.position.clone().sub(controls.target);
+    const currentDistance = offset.length();
+    if (!Number.isFinite(currentDistance) || currentDistance <= 0) {
+      return;
+    }
+
+    const step = 1 - Math.pow(1 - SMOOTH_ZOOM_DAMPING, delta * 60);
+    const nextDistance = MathUtils.lerp(currentDistance, desiredDistance, step);
+    if (Math.abs(nextDistance - currentDistance) < 0.0001) {
+      if (Math.abs(desiredDistance - currentDistance) < 0.0001) {
+        desiredCameraDistanceRef.current = currentDistance;
+      }
+      return;
+    }
+
+    camera.position.copy(
+      controls.target.clone().add(offset.normalize().multiplyScalar(nextDistance)),
+    );
+    controls.update();
+    invalidate();
+  });
 
   useEffect(() => {
     return () => {
@@ -439,6 +525,7 @@ function ThreeModelScene({
         ref={controlsRef}
         dampingFactor={0.08}
         enableDamping
+        enableZoom={false}
         makeDefault
         zoomSpeed={ORBIT_CONTROLS_ZOOM_SPEED}
       />
@@ -844,6 +931,18 @@ function collectStandardMaterials(root: Object3D): MeshStandardMaterial[] {
     }
   });
   return materials;
+}
+
+function getPerspectiveCameraDistance(
+  camera: Camera,
+  controls: OrbitControlsImpl | null,
+): number | null {
+  if (!(camera instanceof PerspectiveCamera) || !controls) {
+    return null;
+  }
+
+  const distance = camera.position.distanceTo(controls.target);
+  return Number.isFinite(distance) && distance > 0 ? distance : null;
 }
 
 function disposeObjectTree(root: Object3D) {
