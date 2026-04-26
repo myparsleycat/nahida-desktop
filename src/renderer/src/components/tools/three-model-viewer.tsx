@@ -3,8 +3,8 @@ import { Canvas, useThree } from "@react-three/fiber";
 import { cn } from "@renderer/lib/utils";
 import {
   type ElementRef,
-  type MutableRefObject,
   forwardRef,
+  type MutableRefObject,
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
@@ -14,9 +14,9 @@ import {
 } from "react";
 import {
   ACESFilmicToneMapping,
+  Box3,
   BufferAttribute,
   BufferGeometry,
-  Box3,
   type Camera,
   DoubleSide,
   Euler,
@@ -38,17 +38,18 @@ import {
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type {
+  ModelViewerCameraState,
   ModelViewerHandle,
   ModelViewerRealtimeShapeKey,
   ModelViewerSurfaceProps,
 } from "./model-viewer-contract";
 import { parseOrientation } from "./model-viewer-contract";
-import type { ModelViewerCameraState } from "./model-viewer-contract";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
 
 type OrbitControlsImpl = ElementRef<typeof OrbitControls>;
 
 const DEFAULT_CAMERA_POSITION = new Vector3(0, 0, 4);
+const ORBIT_CONTROLS_ZOOM_SPEED = 3;
 
 type LoadedShapeKey = {
   metadata: ModelViewerRealtimeShapeKey;
@@ -434,7 +435,13 @@ function ThreeModelScene({
 
   return (
     <>
-      <OrbitControls ref={controlsRef} dampingFactor={0.08} enableDamping makeDefault />
+      <OrbitControls
+        ref={controlsRef}
+        dampingFactor={0.08}
+        enableDamping
+        makeDefault
+        zoomSpeed={ORBIT_CONTROLS_ZOOM_SPEED}
+      />
       <group ref={groupRef} rotation={rotation}>
         {modelRoot ? <primitive object={modelRoot} /> : null}
       </group>
