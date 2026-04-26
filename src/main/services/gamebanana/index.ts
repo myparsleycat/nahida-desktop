@@ -141,27 +141,26 @@ export class GameBananaService {
     }
 
     private async validateCookie(cookie: string) {
-        const response = await ky(this.navigatorPersonalUrl, {
-            method: "GET",
-            throwHttpErrors: false,
-            headers: {
-                Cookie: cookie,
-                "User-Agent":
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-            },
-        });
+        try {
+            const response = await this.request(this.navigatorPersonalUrl, {
+                method: "GET",
+                _skipAuth: true,
+                _retryAuth: false,
+                headers: {
+                    Cookie: cookie,
+                },
+            });
 
-        if (response.status === 401 || response.status === 403) {
+            const data = await response.json();
+
+            if (GameBananaLoginRequiredSchema.safeParse(data).success) {
+                return false;
+            }
+
+            return MemberNavigatorPersonalSchema.safeParse(data).success;
+        } catch {
             return false;
         }
-
-        const data = await response.json();
-
-        if (GameBananaLoginRequiredSchema.safeParse(data).success) {
-            return false;
-        }
-
-        return MemberNavigatorPersonalSchema.safeParse(data).success;
     }
 
     private async ensureAuthenticated(forceRelogin = false, _depth = 0) {
@@ -219,26 +218,19 @@ export class GameBananaService {
 
         try {
             if (cookie) {
-                const response = await ky(this.logoutUrl, {
-                    method: "GET",
-                    throwHttpErrors: false,
-                    redirect: "manual",
-                    headers: {
-                        Cookie: cookie,
-                        "User-Agent":
-                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-                    },
-                });
-
-                const isRedirect =
-                    response.status === 302 ||
-                    response.status === 303 ||
-                    response.status === 307 ||
-                    response.status === 308;
-
-                if (!response.ok && !isRedirect) {
+                try {
+                    await this.request(this.logoutUrl, {
+                        method: "GET",
+                        _skipAuth: true,
+                        _retryAuth: false,
+                        redirect: "manual",
+                        headers: {
+                            Cookie: cookie,
+                        },
+                    });
+                } catch (error) {
                     this.desktop.logger.warn(
-                        `Unexpected GameBanana logout response: ${response.status}`,
+                        `Unexpected GameBanana logout response: ${error instanceof Error ? error.message : String(error)}`,
                         "GameBananaService",
                     );
                 }
