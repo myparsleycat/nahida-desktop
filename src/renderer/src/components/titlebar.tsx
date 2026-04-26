@@ -46,7 +46,12 @@ export function Titlebar({ title }: TitlebarProps) {
   if (titlebarStyle === "native") return null;
 
   return (
-    <div className="titlebar fixed top-0 left-0 right-0 h-7 bg-background flex items-center select-none z-9999 border-b">
+    <div
+      className="titlebar fixed top-0 left-0 right-0 h-7 bg-background flex items-center select-none z-9999 border-b"
+      onPointerDownCapture={(e) => {
+        e.stopPropagation();
+      }}
+    >
       <div
         className={cn(
           "flex items-center px-2 h-full w-full",
@@ -73,7 +78,7 @@ export function Titlebar({ title }: TitlebarProps) {
             type="button"
             size="xs"
             variant="outline"
-            className="h-5 px-2 text-[10px] mr-4"
+            className="titlebar-action h-5 px-2 text-[10px] mr-4"
             isLoading={isUpdateActionPending || updaterDownloading}
             onClick={async () => {
               setIsUpdateActionPending(true);
@@ -98,7 +103,7 @@ export function Titlebar({ title }: TitlebarProps) {
         {!hideMinimize && (
           <button
             type="button"
-            className="flex justify-center items-center px-3 hover:bg-muted duration-150 min h-full"
+            className="titlebar-action flex justify-center items-center px-3 hover:bg-muted duration-150 min h-full"
             tabIndex={-1}
             onClick={() => {
               window.electron.ipcRenderer.send("window-control", "minimize");
@@ -111,7 +116,7 @@ export function Titlebar({ title }: TitlebarProps) {
         {!hideMaximize && (
           <button
             type="button"
-            className="flex justify-center items-center px-3 hover:bg-muted duration-150 max h-full"
+            className="titlebar-action flex justify-center items-center px-3 hover:bg-muted duration-150 max h-full"
             tabIndex={-1}
             onClick={() => {
               window.electron.ipcRenderer.send("window-control", "maximize");
@@ -123,7 +128,7 @@ export function Titlebar({ title }: TitlebarProps) {
 
         <button
           type="button"
-          className="flex justify-center items-center px-3 hover:bg-red-500 duration-150 close h-full"
+          className="titlebar-action flex justify-center items-center px-3 hover:bg-red-500 duration-150 close h-full"
           tabIndex={-1}
           onClick={() => {
             window.electron.ipcRenderer.send("window-control", "close");

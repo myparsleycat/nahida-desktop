@@ -18,6 +18,10 @@ function AlertDialogPortal({ ...props }: React.ComponentProps<typeof AlertDialog
   return <AlertDialogPrimitive.Portal data-slot="alert-dialog-portal" {...props} />;
 }
 
+function isTitlebarTarget(target: EventTarget | null) {
+  return target instanceof Element && !!target.closest(".titlebar");
+}
+
 function AlertDialogOverlay({
   className,
   ...props
@@ -38,6 +42,7 @@ function AlertDialogOverlay({
 function AlertDialogContent({
   className,
   size = "default",
+  onPointerDownOutside,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content> & {
   size?: "default" | "sm";
@@ -47,6 +52,14 @@ function AlertDialogContent({
       <AlertDialogOverlay />
       <AlertDialogPrimitive.Content
         onCloseAutoFocus={(e) => e.preventDefault()}
+        onPointerDownOutside={(e) => {
+          if (isTitlebarTarget(e.target)) {
+            e.preventDefault();
+            return;
+          }
+
+          onPointerDownOutside?.(e);
+        }}
         onClick={(e) => e.stopPropagation()}
         data-slot="alert-dialog-content"
         data-size={size}
