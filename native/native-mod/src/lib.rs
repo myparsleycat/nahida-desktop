@@ -460,6 +460,14 @@ fn find_preview(mod_path: &Path, max_depth: usize) -> Option<String> {
     best_path
 }
 
+fn has_any_file(dir: &Path) -> bool {
+    WalkDir::new(dir)
+        .min_depth(1)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .any(|e| e.file_type().is_file())
+}
+
 #[napi]
 pub async fn get_characters_folder(
     mod_folder_path: String,
@@ -513,7 +521,7 @@ pub fn get_characters_folder_sync(
             let mod_count = match fs::read_dir(group_path) {
                 Ok(entries) => entries
                     .filter_map(|e| e.ok())
-                    .filter(|e| e.path().is_dir())
+                    .filter(|e| e.path().is_dir() && has_any_file(&e.path()))
                     .count() as u32,
                 Err(_) => 0,
             };
@@ -541,6 +549,7 @@ fn scan_mod_folder(group_path: &Path, mod_path: &Path) -> Option<ModInfo> {
     let mut total_size = 0.0;
     let mut max_mtime_sys = SystemTime::UNIX_EPOCH;
     let mut ini_paths = Vec::new();
+    let mut found_any_file = false;
 
     let mut best_preview_score = -1;
     let mut best_preview_path: Option<String> = None;
@@ -551,6 +560,7 @@ fn scan_mod_folder(group_path: &Path, mod_path: &Path) -> Option<ModInfo> {
         .filter_map(|e| e.ok())
     {
         if entry.file_type().is_file() {
+            found_any_file = true;
             let path = entry.path();
 
             if let Ok(metadata) = entry.metadata() {
@@ -599,6 +609,10 @@ fn scan_mod_folder(group_path: &Path, mod_path: &Path) -> Option<ModInfo> {
                 }
             }
         }
+    }
+
+    if !found_any_file {
+        return None;
     }
 
     if max_mtime_sys == SystemTime::UNIX_EPOCH {
