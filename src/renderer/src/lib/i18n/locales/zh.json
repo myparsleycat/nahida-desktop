@@ -423,7 +423,11 @@
       "no_description": "暂无说明。",
       "files": "文件",
       "no_files": "没有可下载的文件。",
-      "file_downloads": "{{count}} 次下载"
+      "file_downloads": "{{count}} 次下载",
+      "narrow_window": {
+        "title": "窗口过窄",
+        "description": "请加宽窗口以浏览 GameBanana 内容。"
+      }
     },
     "tools": {
       "dashboard": {

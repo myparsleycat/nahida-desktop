@@ -424,7 +424,11 @@
       "no_description": "説明はありません。",
       "files": "ファイル",
       "no_files": "ダウンロード可能なファイルはありません。",
-      "file_downloads": "{{count}} 回ダウンロード"
+      "file_downloads": "{{count}} 回ダウンロード",
+      "narrow_window": {
+        "title": "ウィンドウが狭すぎます",
+        "description": "GameBanana コンテンツを表示するにはウィンドウを広げてください。"
+      }
     },
     "tools": {
       "dashboard": {

@@ -254,103 +254,114 @@ function RouteComponent() {
     <>
       <Titlebar title={{ text: "GameBanana", position: "center" }} />
       <main className="flex h-full flex-1 flex-col overflow-hidden bg-background">
-        <div className="border-b px-4 py-3">
-          <GameBananaToolbar
-            games={games}
-            selectedGame={selectedGame?.key}
-            selectedGameLabel={selectedGameLabel}
-            stageLabel={
-              isViewingMod
-                ? t("page.gamebanana.stage.mod")
-                : hasCategoryContext
-                  ? t("page.gamebanana.stage.category")
-                  : t("page.gamebanana.stage.game")
-            }
-            breadcrumbCategories={resolvedCategoryBreadcrumbs}
-            breadcrumbMod={selectedModName}
-            isGamesLoading={isGamesLoading}
-            gamesError={Boolean(gamesError)}
-            onSelectGame={setSelectedGame}
-            onOpenGameProfile={handleOpenGameProfile}
-            isLoggingOut={isLoggingOut}
-            onLogout={handleLogout}
-            onBackToCategory={clearSelectedMod}
-            onSelectBreadcrumbCategory={selectBreadcrumbCategory}
-            canOpenProfile={Boolean(currentProfileUrl)}
-            onResetToGameHome={resetToGameHome}
-          />
+        <div className="lg:hidden flex h-full items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-xl border border-dashed p-6 text-center">
+            <div className="text-base font-medium">{t("page.gamebanana.narrow_window.title")}</div>
+            <div className="mt-2 text-sm text-muted-foreground">
+              {t("page.gamebanana.narrow_window.description")}
+            </div>
+          </div>
         </div>
 
-        <div
-          className={cn(
-            "grid min-h-0 flex-1 gap-2 overflow-hidden",
-            showCategorySidebar && "xl:grid-cols-[minmax(0,1fr)_320px]",
-          )}
-        >
-          <div className="min-h-0 min-w-0">
-            {!hasCategoryContext && !isViewingMod && (
-              <GameHomePanel
-                t={t}
-                language={i18n.language}
-                subfeedQuery={subfeedQuery}
-                subfeedPage={subfeedPage}
-                onSubfeedPage={setSubfeedPage}
-                onSelectMod={selectMod}
-              />
-            )}
-
-            {hasCategoryContext && !isViewingMod && (
-              <CategoryPanel
-                t={t}
-                language={i18n.language}
-                categoryOverviewQuery={categoryOverviewQuery}
-                filteredMods={filteredMods}
-                modSearch={modSearch}
-                modsPage={modsPage}
-                hasSidebar={showCategorySidebar}
-                onChangeModSearch={setModSearch}
-                onSelectMod={selectMod}
-                onModsPage={setModsPage}
-              />
-            )}
-
-            {isViewingMod && (
-              <ModDetailPanel
-                t={t}
-                language={i18n.language}
-                selection={selectedMod}
-                modOverviewQuery={modOverviewQuery}
-              />
-            )}
+        <div className="hidden lg:flex lg:flex-col lg:flex-1 lg:overflow-hidden">
+          <div className="border-b px-4 py-3">
+            <GameBananaToolbar
+              games={games}
+              selectedGame={selectedGame?.key}
+              selectedGameLabel={selectedGameLabel}
+              stageLabel={
+                isViewingMod
+                  ? t("page.gamebanana.stage.mod")
+                  : hasCategoryContext
+                    ? t("page.gamebanana.stage.category")
+                    : t("page.gamebanana.stage.game")
+              }
+              breadcrumbCategories={resolvedCategoryBreadcrumbs}
+              breadcrumbMod={selectedModName}
+              isGamesLoading={isGamesLoading}
+              gamesError={Boolean(gamesError)}
+              onSelectGame={setSelectedGame}
+              onOpenGameProfile={handleOpenGameProfile}
+              isLoggingOut={isLoggingOut}
+              onLogout={handleLogout}
+              onBackToCategory={clearSelectedMod}
+              onSelectBreadcrumbCategory={selectBreadcrumbCategory}
+              canOpenProfile={Boolean(currentProfileUrl)}
+              onResetToGameHome={resetToGameHome}
+            />
           </div>
 
-          {showCategorySidebar && (
-            <div className="min-h-0 min-w-0 pr-4 py-4">
-              {isViewingMod ? (
-                <ModFilesSidebar
+          <div
+            className={cn(
+              "grid min-h-0 flex-1 gap-2 overflow-hidden",
+              showCategorySidebar && "lg:grid-cols-[minmax(0,1fr)_320px]",
+            )}
+          >
+            <div className="min-h-0 min-w-0">
+              {!hasCategoryContext && !isViewingMod && (
+                <GameHomePanel
                   t={t}
                   language={i18n.language}
-                  modOverviewQuery={modOverviewQuery}
+                  subfeedQuery={subfeedQuery}
+                  subfeedPage={subfeedPage}
+                  onSubfeedPage={setSubfeedPage}
+                  onSelectMod={selectMod}
                 />
-              ) : (
-                <CategorySidebar
+              )}
+
+              {hasCategoryContext && !isViewingMod && (
+                <CategoryPanel
                   t={t}
                   language={i18n.language}
-                  hasCategoryContext={hasCategoryContext}
-                  isGameOverviewLoading={gameOverviewQuery.isLoading}
-                  isCategoryOverviewLoading={categoryOverviewQuery.isLoading}
-                  gameOverviewError={Boolean(gameOverviewQuery.error)}
-                  categoryOverviewError={Boolean(categoryOverviewQuery.error)}
-                  rootCategories={rootCategories}
-                  categoryChildren={categoryChildren}
-                  selectedCategoryId={selectedCategoryId}
-                  selectedCategoryName={selectedCategoryName}
-                  onSelectCategory={selectCategory}
-                  onResetToGameHome={resetToGameHome}
+                  categoryOverviewQuery={categoryOverviewQuery}
+                  filteredMods={filteredMods}
+                  modSearch={modSearch}
+                  modsPage={modsPage}
+                  hasSidebar={showCategorySidebar}
+                  onChangeModSearch={setModSearch}
+                  onSelectMod={selectMod}
+                  onModsPage={setModsPage}
+                />
+              )}
+
+              {isViewingMod && (
+                <ModDetailPanel
+                  t={t}
+                  language={i18n.language}
+                  selection={selectedMod}
+                  modOverviewQuery={modOverviewQuery}
                 />
               )}
             </div>
-          )}
+
+            {showCategorySidebar && (
+              <div className="min-h-0 min-w-0 pr-4 py-4">
+                {isViewingMod ? (
+                  <ModFilesSidebar
+                    t={t}
+                    language={i18n.language}
+                    modOverviewQuery={modOverviewQuery}
+                  />
+                ) : (
+                  <CategorySidebar
+                    t={t}
+                    language={i18n.language}
+                    hasCategoryContext={hasCategoryContext}
+                    isGameOverviewLoading={gameOverviewQuery.isLoading}
+                    isCategoryOverviewLoading={categoryOverviewQuery.isLoading}
+                    gameOverviewError={Boolean(gameOverviewQuery.error)}
+                    categoryOverviewError={Boolean(categoryOverviewQuery.error)}
+                    rootCategories={rootCategories}
+                    categoryChildren={categoryChildren}
+                    selectedCategoryId={selectedCategoryId}
+                    selectedCategoryName={selectedCategoryName}
+                    onSelectCategory={selectCategory}
+                    onResetToGameHome={resetToGameHome}
+                  />
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </main>
     </>

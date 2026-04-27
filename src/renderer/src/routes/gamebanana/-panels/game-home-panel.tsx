@@ -57,7 +57,7 @@ export function GameHomePanel({
                 <div className="space-y-3 p-4">
                   {subfeedQuery.isLoading && <OverviewSkeleton />}
                   {subfeedQuery.error && <ErrorState title={t("page.gamebanana.error_title")} />}
-                  <div className="grid gap-4 sm:grid-cols-3 2xl:grid-cols-4">
+                  <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                     {subfeedQuery.data?._aRecords.map((submission) => (
                       <SubmissionCard
                         key={`feed-${submission._idRow}-${getSubmissionDateKey(submission)}`}

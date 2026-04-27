@@ -456,7 +456,11 @@
       "no_description": "No description available.",
       "files": "Files",
       "no_files": "No downloadable files listed.",
-      "file_downloads": "{{count}} downloads"
+      "file_downloads": "{{count}} downloads",
+      "narrow_window": {
+        "title": "Window is too narrow",
+        "description": "Please widen the window to browse GameBanana content."
+      }
     },
     "tools": {
       "dashboard": {
