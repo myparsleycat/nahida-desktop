@@ -21,6 +21,8 @@ import {
 import { Separator } from "@renderer/components/ui/separator";
 import { Switch } from "@renderer/components/ui/switch";
 import { useSettings } from "@renderer/hooks/use-settings";
+import { useAuth } from "@renderer/hooks/use-auth";
+import { getFallbackStartPage, requiresAuthForStartPage } from "@renderer/lib/start-page";
 import { useGlobalStore } from "@renderer/store/global";
 import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import type { AutoUpdateMode } from "@shared/updater";
@@ -47,6 +49,7 @@ const settingsConfig = {
 function RouteComponent() {
   const { theme, setTheme } = useTheme();
   const { t } = useTranslation();
+  const { session, sessionInitialized } = useAuth();
   const appStatus = useGlobalStore((state) => state.appStatus);
   const updateAvailable = useGlobalStore((state) => state.updateAvailable);
   const updateDownloaded = useGlobalStore((state) => state.updateDownloaded);
@@ -102,13 +105,27 @@ function RouteComponent() {
     await update("runInBackground", false, "setting:general:setRunInBackground");
   };
 
+  const isLoggedIn = !!session;
+  const startPageFallback = getFallbackStartPage(appStatus?.platform);
   const startPageOptions = [
     { value: "/transfer", label: t("page.transfer.title") },
     { value: "/gamebanana", label: t("page.gamebanana.title") },
     ...(hasWindowsDesktopFeatures ? [{ value: "/mod", label: t("page.mod.title") }] : []),
-    { value: "/drive/drive/root", label: t("page.drive.title") },
-    { value: "/drive/share/root", label: t("page.share_drive.title") },
+    {
+      value: "/drive/drive/root",
+      label: t("page.drive.title"),
+      disabled: sessionInitialized && !isLoggedIn,
+    },
+    {
+      value: "/drive/share/root",
+      label: t("page.share_drive.title"),
+      disabled: sessionInitialized && !isLoggedIn,
+    },
   ];
+  const selectedStartPage =
+    sessionInitialized && !isLoggedIn && requiresAuthForStartPage(settings.defaultStartPage)
+      ? startPageFallback
+      : settings.defaultStartPage;
 
   const confirmDisableRunInBackground = async () => {
     setIsRunInBackgroundConfirmOpen(false);
@@ -358,7 +375,7 @@ function RouteComponent() {
               </label>
               <Select
                 name="startPage"
-                value={settings.defaultStartPage}
+                value={selectedStartPage}
                 onValueChange={(val) =>
                   update("defaultStartPage", val, "setting:general:setDefaultStartPage")
                 }
@@ -369,7 +386,11 @@ function RouteComponent() {
                 <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
                   <SelectGroup>
                     {startPageOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
+                      <SelectItem
+                        key={option.value}
+                        value={option.value}
+                        disabled={option.disabled}
+                      >
                         {option.label}
                       </SelectItem>
                     ))}

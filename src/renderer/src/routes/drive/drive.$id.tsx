@@ -18,6 +18,7 @@ import { ContextMenuProvider } from "@renderer/components/drive/context-menu";
 import { AliceLoader } from "@renderer/components/loaders";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { useDrag } from "@renderer/hooks/drive";
+import { useAuth } from "@renderer/hooks/use-auth";
 import { useDriveUploadRefresh } from "@renderer/hooks/use-drive-upload-refresh";
 import { useDriveNameSortPolicy } from "@renderer/hooks/use-settings";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
@@ -41,7 +42,9 @@ function RouteComponent() {
   const { t } = useTranslation();
   const { Titlebar } = useTitlebar();
   const { id } = Route.useParams();
+  const { session } = useAuth();
   const location = useLocation();
+  const effectiveId = id === "root" ? session?.drive.rootId ?? id : id;
 
   const { onDragEnter, onDragLeave, onDragOver, onDrop } = useDrag();
   const searchInDirQuery = useViewStore((s) => s.searchInDirQuery);
@@ -50,11 +53,11 @@ function RouteComponent() {
   const layout = useViewStore((s) => s.layout);
   const { data: nameSortPolicy = "natural_ignore_spacing" } = useDriveNameSortPolicy();
 
-  useDriveUploadRefresh(id, ["drive", "drive", id]);
+  useDriveUploadRefresh(effectiveId, ["drive", "drive", effectiveId]);
 
   const query = useQuery({
-    queryKey: ["drive", "drive", id],
-    enabled: !!id,
+    queryKey: ["drive", "drive", effectiveId],
+    enabled: !!effectiveId,
     placeholderData: (prev) => prev,
     refetchIntervalInBackground: true,
     refetchInterval: () => {
@@ -64,7 +67,7 @@ function RouteComponent() {
       return 30000; // 30초 (포그라운드)
     },
     queryFn: async () => {
-      const data = await window.api.invoke("drive:get:item", id);
+      const data = await window.api.invoke("drive:get:item", effectiveId);
       return data;
     },
   });
@@ -74,14 +77,14 @@ function RouteComponent() {
     if (searchInDirQuery) {
       setSearchInDirQuery("");
     }
-  }, [id]);
+  }, [effectiveId]);
 
   useEffect(() => {
-    if (id && location.pathname.startsWith("/drive/drive/")) {
+    if (effectiveId && location.pathname.startsWith("/drive/drive/")) {
       const setLastDriveId = viewStore.getState().setLastDriveId;
-      setLastDriveId(id);
+      setLastDriveId(effectiveId);
     }
-  }, [id, location.pathname]);
+  }, [effectiveId, location.pathname]);
 
   const rawContents = useMemo(() => {
     if (!query.data?.children) return [];
@@ -116,7 +119,7 @@ function RouteComponent() {
 
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     try {
-      await onDrop(e, id);
+      await onDrop(e, effectiveId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error ?? "");
       const code =
@@ -161,7 +164,7 @@ function RouteComponent() {
         <div className="w-full h-full flex flex-col select-none">
           <div className="w-full h-12 flex flex-row items-center p-2 border-b select-none">
             {location.pathname !== "/drive/share" ? (
-              <AkashaBreadcrumb itemId={id} ancestors={query.data.ancestors} />
+              <AkashaBreadcrumb itemId={effectiveId} ancestors={query.data.ancestors} />
             ) : (
               <div className="flex-1"></div>
             )}
@@ -177,7 +180,11 @@ function RouteComponent() {
             onDrop={handleDrop}
           >
             <ContextMenuProvider>
-              <HandlerProvider queryData={query} sortedContents={sortedContents} currentId={id}>
+              <HandlerProvider
+                queryData={query}
+                sortedContents={sortedContents}
+                currentId={effectiveId}
+              >
                 {sortedContents.length > 0 ? (
                   <ScrollArea className="flex-1 flex flex-col h-full">
                     <>
@@ -185,13 +192,13 @@ function RouteComponent() {
                         <ContentMenuList
                           sortedContents={sortedContents}
                           isFetching={query.isFetching}
-                          itemId={id}
+                          itemId={effectiveId}
                         />
                       ) : layout === "grid" ? (
                         <ContentMenuGrid
                           sortedContents={sortedContents}
                           isFetching={query.isFetching}
-                          itemId={id}
+                          itemId={effectiveId}
                         />
                       ) : null}
                     </>
