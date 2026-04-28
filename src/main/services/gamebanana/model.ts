@@ -3,6 +3,7 @@ import { z } from "zod";
 const UrlString = z.string();
 const HttpUrlString = z.url({ protocol: /^https?$/ });
 const NumericId = z.coerce.number();
+const StatusValue = z.union([z.string(), z.number()]).transform((value) => String(value));
 
 const PreviewImageSchema = z.object({
     _sType: z.string().optional(),
@@ -174,7 +175,7 @@ const GameSectionSchema = z.object({
 export const GameProfileSchema = z
     .object({
         _idRow: NumericId,
-        _nStatus: z.string(),
+        _nStatus: StatusValue,
         _bIsPrivate: z.boolean(),
         _bAccessorIsSubmitter: z.boolean(),
         _bIsTrashed: z.boolean(),
@@ -293,7 +294,7 @@ const ModPostAccessSchema = z.record(z.string(), z.boolean());
 const ModPostRecordSchema = z
     .object({
         _idRow: NumericId,
-        _nStatus: z.string(),
+        _nStatus: StatusValue,
         _tsDateAdded: z.number().optional(),
         _tsDateModified: z.number().optional(),
         _nReplyCount: z.number().optional(),
@@ -311,7 +312,7 @@ const ModPostRecordSchema = z
 export const ModProfileSchema = z
     .object({
         _idRow: NumericId,
-        _nStatus: z.string(),
+        _nStatus: StatusValue,
         _bIsPrivate: z.boolean(),
         _bAccessorIsSubmitter: z.boolean(),
         _bIsTrashed: z.boolean(),

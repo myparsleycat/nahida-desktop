@@ -1,4 +1,14 @@
 import { Titlebar } from "@renderer/components/titlebar";
+import { Button } from "@renderer/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@renderer/components/ui/dialog";
+import { Input } from "@renderer/components/ui/input";
 import {
   type GameBananaGameKey,
   useGameBananaGameOverview,
@@ -10,6 +20,7 @@ import {
 import { cn } from "@renderer/lib/utils";
 import { useGameBananaStore } from "@renderer/store/gamebanana";
 import { createFileRoute } from "@tanstack/react-router";
+import { Loader2Icon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { GameBananaToolbar } from "./-components/gamebanana-toolbar";
@@ -32,6 +43,10 @@ function RouteComponent() {
   const [authStatus, setAuthStatus] = useState<"checking" | "ready" | "error">("checking");
   const [authErrorCode, setAuthErrorCode] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isManualRmcDialogOpen, setIsManualRmcDialogOpen] = useState(false);
+  const [manualRmcValue, setManualRmcValue] = useState("");
+  const [manualRmcError, setManualRmcError] = useState<string | null>(null);
+  const [isSavingManualRmc, setIsSavingManualRmc] = useState(false);
   const isAuthReady = authStatus === "ready";
   const {
     data: gamesMap,
@@ -210,6 +225,41 @@ function RouteComponent() {
       });
   };
 
+  const handleOpenManualRmcDialog = () => {
+    setManualRmcError(null);
+    setIsManualRmcDialogOpen(true);
+  };
+
+  const handleSaveManualRmc = () => {
+    const nextValue = manualRmcValue.trim();
+    if (!nextValue) {
+      setManualRmcError(t("page.gamebanana.auth.manual_rmc.empty"));
+      return;
+    }
+
+    setIsSavingManualRmc(true);
+    setManualRmcError(null);
+    void window.api
+      .invoke("gamebanana:setManualRmcToken", nextValue)
+      .then(() => {
+        setIsManualRmcDialogOpen(false);
+        setManualRmcValue("");
+        setAuthErrorCode(null);
+        setAuthStatus("ready");
+      })
+      .catch((error) => {
+        const isInvalidToken = error instanceof Error && error.message === "GAMEBANANA_INVALID_RMC";
+        setManualRmcError(
+          isInvalidToken
+            ? t("page.gamebanana.auth.manual_rmc.invalid")
+            : t("page.gamebanana.auth.manual_rmc.failed"),
+        );
+      })
+      .finally(() => {
+        setIsSavingManualRmc(false);
+      });
+  };
+
   if (authStatus === "checking") {
     return (
       <>
@@ -244,7 +294,61 @@ function RouteComponent() {
             }
             actionLabel={t("page.gamebanana.auth.retry")}
             onAction={handleRetryAuth}
+            extraAction={
+              <Button
+                variant="outline"
+                onClick={handleOpenManualRmcDialog}
+                disabled={isSavingManualRmc}
+              >
+                {t("page.gamebanana.auth.manual_rmc.button")}
+              </Button>
+            }
           />
+          <Dialog
+            open={isManualRmcDialogOpen}
+            onOpenChange={(open) => {
+              setIsManualRmcDialogOpen(open);
+              if (!open) {
+                setManualRmcError(null);
+              }
+            }}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{t("page.gamebanana.auth.manual_rmc.title")}</DialogTitle>
+                <DialogDescription>
+                  {t("page.gamebanana.auth.manual_rmc.description")}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2">
+                <Input
+                  value={manualRmcValue}
+                  onChange={(event) => setManualRmcValue(event.target.value)}
+                  disabled={isSavingManualRmc}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handleSaveManualRmc();
+                    }
+                  }}
+                />
+                {manualRmcError && <p className="text-sm text-destructive">{manualRmcError}</p>}
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsManualRmcDialogOpen(false)}
+                  disabled={isSavingManualRmc}
+                >
+                  {t("g.cancel")}
+                </Button>
+                <Button onClick={handleSaveManualRmc} disabled={isSavingManualRmc}>
+                  {isSavingManualRmc ? <Loader2Icon className="size-4 animate-spin" /> : null}
+                  {t("g.save")}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </main>
       </>
     );
@@ -254,103 +358,114 @@ function RouteComponent() {
     <>
       <Titlebar title={{ text: "GameBanana", position: "center" }} />
       <main className="flex h-full flex-1 flex-col overflow-hidden bg-background">
-        <div className="border-b px-4 py-3">
-          <GameBananaToolbar
-            games={games}
-            selectedGame={selectedGame?.key}
-            selectedGameLabel={selectedGameLabel}
-            stageLabel={
-              isViewingMod
-                ? t("page.gamebanana.stage.mod")
-                : hasCategoryContext
-                  ? t("page.gamebanana.stage.category")
-                  : t("page.gamebanana.stage.game")
-            }
-            breadcrumbCategories={resolvedCategoryBreadcrumbs}
-            breadcrumbMod={selectedModName}
-            isGamesLoading={isGamesLoading}
-            gamesError={Boolean(gamesError)}
-            onSelectGame={setSelectedGame}
-            onOpenGameProfile={handleOpenGameProfile}
-            isLoggingOut={isLoggingOut}
-            onLogout={handleLogout}
-            onBackToCategory={clearSelectedMod}
-            onSelectBreadcrumbCategory={selectBreadcrumbCategory}
-            canOpenProfile={Boolean(currentProfileUrl)}
-            onResetToGameHome={resetToGameHome}
-          />
+        <div className="lg:hidden flex h-full items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-xl border border-dashed p-6 text-center">
+            <div className="text-base font-medium">{t("page.gamebanana.narrow_window.title")}</div>
+            <div className="mt-2 text-sm text-muted-foreground">
+              {t("page.gamebanana.narrow_window.description")}
+            </div>
+          </div>
         </div>
 
-        <div
-          className={cn(
-            "grid min-h-0 flex-1 gap-2 overflow-hidden",
-            showCategorySidebar && "xl:grid-cols-[minmax(0,1fr)_320px]",
-          )}
-        >
-          <div className="min-h-0 min-w-0">
-            {!hasCategoryContext && !isViewingMod && (
-              <GameHomePanel
-                t={t}
-                language={i18n.language}
-                subfeedQuery={subfeedQuery}
-                subfeedPage={subfeedPage}
-                onSubfeedPage={setSubfeedPage}
-                onSelectMod={selectMod}
-              />
-            )}
-
-            {hasCategoryContext && !isViewingMod && (
-              <CategoryPanel
-                t={t}
-                language={i18n.language}
-                categoryOverviewQuery={categoryOverviewQuery}
-                filteredMods={filteredMods}
-                modSearch={modSearch}
-                modsPage={modsPage}
-                hasSidebar={showCategorySidebar}
-                onChangeModSearch={setModSearch}
-                onSelectMod={selectMod}
-                onModsPage={setModsPage}
-              />
-            )}
-
-            {isViewingMod && (
-              <ModDetailPanel
-                t={t}
-                language={i18n.language}
-                selection={selectedMod}
-                modOverviewQuery={modOverviewQuery}
-              />
-            )}
+        <div className="hidden lg:flex lg:flex-col lg:flex-1 lg:overflow-hidden">
+          <div className="border-b px-4 py-3">
+            <GameBananaToolbar
+              games={games}
+              selectedGame={selectedGame?.key}
+              selectedGameLabel={selectedGameLabel}
+              stageLabel={
+                isViewingMod
+                  ? t("page.gamebanana.stage.mod")
+                  : hasCategoryContext
+                    ? t("page.gamebanana.stage.category")
+                    : t("page.gamebanana.stage.game")
+              }
+              breadcrumbCategories={resolvedCategoryBreadcrumbs}
+              breadcrumbMod={selectedModName}
+              isGamesLoading={isGamesLoading}
+              gamesError={Boolean(gamesError)}
+              onSelectGame={setSelectedGame}
+              onOpenGameProfile={handleOpenGameProfile}
+              isLoggingOut={isLoggingOut}
+              onLogout={handleLogout}
+              onBackToCategory={clearSelectedMod}
+              onSelectBreadcrumbCategory={selectBreadcrumbCategory}
+              canOpenProfile={Boolean(currentProfileUrl)}
+              onResetToGameHome={resetToGameHome}
+            />
           </div>
 
-          {showCategorySidebar && (
-            <div className="min-h-0 min-w-0 pr-4 py-4">
-              {isViewingMod ? (
-                <ModFilesSidebar
+          <div
+            className={cn(
+              "grid min-h-0 flex-1 gap-2 overflow-hidden",
+              showCategorySidebar && "lg:grid-cols-[minmax(0,1fr)_320px]",
+            )}
+          >
+            <div className="min-h-0 min-w-0">
+              {!hasCategoryContext && !isViewingMod && (
+                <GameHomePanel
                   t={t}
                   language={i18n.language}
-                  modOverviewQuery={modOverviewQuery}
+                  subfeedQuery={subfeedQuery}
+                  subfeedPage={subfeedPage}
+                  onSubfeedPage={setSubfeedPage}
+                  onSelectMod={selectMod}
                 />
-              ) : (
-                <CategorySidebar
+              )}
+
+              {hasCategoryContext && !isViewingMod && (
+                <CategoryPanel
                   t={t}
                   language={i18n.language}
-                  hasCategoryContext={hasCategoryContext}
-                  isGameOverviewLoading={gameOverviewQuery.isLoading}
-                  isCategoryOverviewLoading={categoryOverviewQuery.isLoading}
-                  gameOverviewError={Boolean(gameOverviewQuery.error)}
-                  categoryOverviewError={Boolean(categoryOverviewQuery.error)}
-                  rootCategories={rootCategories}
-                  categoryChildren={categoryChildren}
-                  selectedCategoryId={selectedCategoryId}
-                  selectedCategoryName={selectedCategoryName}
-                  onSelectCategory={selectCategory}
-                  onResetToGameHome={resetToGameHome}
+                  categoryOverviewQuery={categoryOverviewQuery}
+                  filteredMods={filteredMods}
+                  modSearch={modSearch}
+                  modsPage={modsPage}
+                  hasSidebar={showCategorySidebar}
+                  onChangeModSearch={setModSearch}
+                  onSelectMod={selectMod}
+                  onModsPage={setModsPage}
+                />
+              )}
+
+              {isViewingMod && (
+                <ModDetailPanel
+                  t={t}
+                  language={i18n.language}
+                  selection={selectedMod}
+                  modOverviewQuery={modOverviewQuery}
                 />
               )}
             </div>
-          )}
+
+            {showCategorySidebar && (
+              <div className="min-h-0 min-w-0 pr-4 py-4">
+                {isViewingMod ? (
+                  <ModFilesSidebar
+                    t={t}
+                    language={i18n.language}
+                    modOverviewQuery={modOverviewQuery}
+                  />
+                ) : (
+                  <CategorySidebar
+                    t={t}
+                    language={i18n.language}
+                    hasCategoryContext={hasCategoryContext}
+                    isGameOverviewLoading={gameOverviewQuery.isLoading}
+                    isCategoryOverviewLoading={categoryOverviewQuery.isLoading}
+                    gameOverviewError={Boolean(gameOverviewQuery.error)}
+                    categoryOverviewError={Boolean(categoryOverviewQuery.error)}
+                    rootCategories={rootCategories}
+                    categoryChildren={categoryChildren}
+                    selectedCategoryId={selectedCategoryId}
+                    selectedCategoryName={selectedCategoryName}
+                    onSelectCategory={selectCategory}
+                    onResetToGameHome={resetToGameHome}
+                  />
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </main>
     </>

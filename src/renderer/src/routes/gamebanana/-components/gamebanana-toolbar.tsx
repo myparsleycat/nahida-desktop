@@ -58,20 +58,28 @@ export function GameBananaToolbar({
   const { t } = useTranslation();
 
   return (
-    <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+    <div className="flex flex-col gap-3 lg:flex-row  justify-between">
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
         <Menubar className="h-9 w-fit min-w-0">
           <MenubarMenu>
             <MenubarTrigger className="gap-2 px-3">
-              <span className="text-xs text-muted-foreground">{t("page.gamebanana.game_menu")}</span>
-              <span className="max-w-44 truncate">{selectedGameLabel ?? t("page.gamebanana.title")}</span>
+              <span className="text-xs text-muted-foreground">
+                {t("page.gamebanana.game_menu")}
+              </span>
+              <span className="max-w-44 truncate">
+                {selectedGameLabel ?? t("page.gamebanana.title")}
+              </span>
             </MenubarTrigger>
             <MenubarContent>
               {isGamesLoading && (
-                <div className="px-2 py-1 text-sm text-muted-foreground">{t("page.gamebanana.loading")}</div>
+                <div className="px-2 py-1 text-sm text-muted-foreground">
+                  {t("page.gamebanana.loading")}
+                </div>
               )}
               {gamesError && (
-                <div className="px-2 py-1 text-sm text-muted-foreground">{t("page.gamebanana.error_title")}</div>
+                <div className="px-2 py-1 text-sm text-muted-foreground">
+                  {t("page.gamebanana.error_title")}
+                </div>
               )}
               {!isGamesLoading && !gamesError && (
                 <MenubarRadioGroup value={selectedGame}>

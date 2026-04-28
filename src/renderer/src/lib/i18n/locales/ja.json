@@ -372,7 +372,15 @@
         "required_description": "保存されたログイン情報の有効期限が切れているか、無効です。再度ログインしてください。",
         "cancelled_title": "GameBanana ログインがキャンセルされました",
         "cancelled_description": "GameBanana のデータを読み込むにはログインを完了してください。",
-        "retry": "再ログイン"
+        "retry": "再ログイン",
+        "manual_rmc": {
+          "button": "rmc を入力",
+          "title": "rmc トークンを手動設定",
+          "description": "ブラウザから取得した GameBanana の rmc Cookie 値を直接入力します。",
+          "empty": "rmc 値を入力してください。",
+          "invalid": "無効な rmc トークンです。",
+          "failed": "rmc トークンの保存に失敗しました。"
+        }
       },
       "supported_games": "対応ゲーム",
       "supported_games_description": "ゲームを選ぶと概要とルートカテゴリを読み込みます。",
@@ -424,7 +432,11 @@
       "no_description": "説明はありません。",
       "files": "ファイル",
       "no_files": "ダウンロード可能なファイルはありません。",
-      "file_downloads": "{{count}} 回ダウンロード"
+      "file_downloads": "{{count}} 回ダウンロード",
+      "narrow_window": {
+        "title": "ウィンドウが狭すぎます",
+        "description": "GameBanana コンテンツを表示するにはウィンドウを広げてください。"
+      }
     },
     "tools": {
       "dashboard": {

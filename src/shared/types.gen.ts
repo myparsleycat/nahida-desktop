@@ -134,6 +134,7 @@ export type IpcHandlers = {
     "gamebanana:getModOverview": (...args: Parameters<typeof desktop.service.gamebanana.getModOverview>) => ReturnType<typeof desktop.service.gamebanana.getModOverview>;
     "gamebanana:getModPosts": (...args: Parameters<typeof desktop.service.gamebanana.getModPosts>) => ReturnType<typeof desktop.service.gamebanana.getModPosts>;
     "gamebanana:logout": (...args: Parameters<typeof desktop.service.gamebanana.logout>) => ReturnType<typeof desktop.service.gamebanana.logout>;
+    "gamebanana:setManualRmcToken": (...args: Parameters<typeof desktop.service.gamebanana.setManualRmcToken>) => ReturnType<typeof desktop.service.gamebanana.setManualRmcToken>;
     "mod:addGame": (...args: Parameters<typeof desktop.service.mod.fn.addGame>) => ReturnType<typeof desktop.service.mod.fn.addGame>;
     "mod:applyPreset": (...args: Parameters<typeof desktop.service.mod.fn.applyPreset>) => ReturnType<typeof desktop.service.mod.fn.applyPreset>;
     "mod:copyFolder": (...args: any[]) => any;

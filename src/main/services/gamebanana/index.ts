@@ -22,6 +22,7 @@ import {
 export const gameBananaGames = {
     gi: 8552,
     sr: 18366,
+    hi: 10349,
     zz: 19567,
     ww: 20357,
     ef: 21842,
@@ -116,73 +117,81 @@ export class GameBananaService {
             });
     }
 
-    private parseAuthCookies(setCookieHeaders: string[] | undefined) {
+    private parseCookies(setCookieHeaders: string[] | undefined) {
         if (!setCookieHeaders?.length) {
             return null;
         }
 
-        const cookies: string[] = [];
+        const cookies = new Map<string, string>();
 
         for (const header of setCookieHeaders) {
             const parts = header.split(";").map((part) => part.trim());
-
-            const rmc = parts.find((part) => part.startsWith("rmc="));
-            if (rmc) {
-                cookies.push(rmc);
+            const cookie = parts[0];
+            if (!cookie) {
+                continue;
             }
 
-            const sess = parts.find((part) => part.startsWith("sess="));
-            if (sess) {
-                cookies.push(sess);
+            const separatorIndex = cookie.indexOf("=");
+            if (separatorIndex <= 0) {
+                continue;
             }
+
+            const name = cookie.slice(0, separatorIndex).trim();
+            const value = cookie.slice(separatorIndex + 1).trim();
+            if (!name) {
+                continue;
+            }
+
+            cookies.set(name, `${name}=${value}`);
         }
 
-        return cookies.length > 0 ? cookies.join("; ") : null;
+        return cookies.size > 0 ? Array.from(cookies.values()).join("; ") : null;
+    }
+
+    private normalizeManualRmcCookie(input: string) {
+        const trimmed = input.trim();
+        if (!trimmed) {
+            throw new Error("GAMEBANANA_INVALID_RMC");
+        }
+
+        const segments = trimmed
+            .split(";")
+            .map((segment) => segment.trim())
+            .filter(Boolean);
+        const rmcSegment = segments.find((segment) => segment.startsWith("rmc="));
+        const token = (rmcSegment ? rmcSegment.slice(4) : trimmed.replace(/^rmc=/, "")).trim();
+
+        if (!token) {
+            throw new Error("GAMEBANANA_INVALID_RMC");
+        }
+
+        return `rmc=${token}`;
     }
 
     private async validateCookie(cookie: string) {
-        const response = await ky(this.navigatorPersonalUrl, {
-            method: "GET",
-            throwHttpErrors: false,
-            headers: {
-                Cookie: cookie,
-                "User-Agent":
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-            },
-        });
+        try {
+            const response = await this.request(this.navigatorPersonalUrl, {
+                method: "GET",
+                _skipAuth: true,
+                _retryAuth: false,
+                headers: {
+                    Cookie: cookie,
+                },
+            });
 
-        if (response.status === 401 || response.status === 403) {
+            const data = await response.json();
+
+            if (GameBananaLoginRequiredSchema.safeParse(data).success) {
+                return false;
+            }
+
+            return MemberNavigatorPersonalSchema.safeParse(data).success;
+        } catch {
             return false;
         }
-
-        const data = await response.json();
-
-        if (GameBananaLoginRequiredSchema.safeParse(data).success) {
-            return false;
-        }
-
-        return MemberNavigatorPersonalSchema.safeParse(data).success;
     }
 
-    private async ensureAuthenticated(forceRelogin = false, _depth = 0) {
-        if (_depth > 1) {
-            throw new Error("GAMEBANANA_AUTH_FAILED");
-        }
-
-        if (forceRelogin) {
-            await this.removeCookie();
-        } else {
-            const storedCookie = await this.getCookie();
-            if (storedCookie) {
-                const isValid = await this.validateCookie(storedCookie);
-                if (isValid) {
-                    return storedCookie;
-                }
-
-                await this.removeCookie();
-            }
-        }
-
+    private async openAuthenticatedSession() {
         if (this.authPromise) {
             await this.authPromise;
             const cookieAfterWait = await this.getCookie();
@@ -210,8 +219,44 @@ export class GameBananaService {
         return refreshedCookie;
     }
 
+    private async ensureAuthenticated(forceRelogin = false) {
+        if (forceRelogin) {
+            await this.removeCookie();
+        } else {
+            const storedCookie = await this.getCookie();
+            if (storedCookie) {
+                return storedCookie;
+            }
+        }
+
+        return this.openAuthenticatedSession();
+    }
+
     public async ensureSession() {
-        await this.ensureAuthenticated();
+        const storedCookie = await this.getCookie();
+        if (!storedCookie) {
+            await this.openAuthenticatedSession();
+            return;
+        }
+
+        const isValid = await this.validateCookie(storedCookie);
+        if (isValid) {
+            return;
+        }
+
+        await this.removeCookie();
+        await this.openAuthenticatedSession();
+    }
+
+    public async setManualRmcToken(input: string) {
+        const cookie = this.normalizeManualRmcCookie(input);
+        const isValid = await this.validateCookie(cookie);
+
+        if (!isValid) {
+            throw new Error("GAMEBANANA_INVALID_RMC");
+        }
+
+        await this.saveCookie(cookie);
     }
 
     public async logout() {
@@ -219,26 +264,19 @@ export class GameBananaService {
 
         try {
             if (cookie) {
-                const response = await ky(this.logoutUrl, {
-                    method: "GET",
-                    throwHttpErrors: false,
-                    redirect: "manual",
-                    headers: {
-                        Cookie: cookie,
-                        "User-Agent":
-                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-                    },
-                });
-
-                const isRedirect =
-                    response.status === 302 ||
-                    response.status === 303 ||
-                    response.status === 307 ||
-                    response.status === 308;
-
-                if (!response.ok && !isRedirect) {
+                try {
+                    await this.request(this.logoutUrl, {
+                        method: "GET",
+                        _skipAuth: true,
+                        _retryAuth: false,
+                        redirect: "manual",
+                        headers: {
+                            Cookie: cookie,
+                        },
+                    });
+                } catch (error) {
                     this.desktop.logger.warn(
-                        `Unexpected GameBanana logout response: ${response.status}`,
+                        `Unexpected GameBanana logout response: ${error instanceof Error ? error.message : String(error)}`,
                         "GameBananaService",
                     );
                 }
@@ -310,7 +348,7 @@ export class GameBananaService {
                             return acc;
                         }, {});
 
-                        const cookie = this.parseAuthCookies(headers["set-cookie"]);
+                        const cookie = this.parseCookies(headers["set-cookie"]);
                         if (cookie) {
                             try {
                                 await this.saveCookie(cookie);
@@ -391,7 +429,7 @@ export class GameBananaService {
         options?: Options & { _retryAuth?: boolean; _skipAuth?: boolean },
     ) {
         const { _retryAuth = true, _skipAuth = false, ...kyOptions } = options ?? {};
-        const cookie = _skipAuth ? null : await this.ensureAuthenticated();
+        const cookie = _skipAuth ? null : await this.getCookie();
 
         const response = await ky(input, {
             ...kyOptions,
@@ -405,7 +443,7 @@ export class GameBananaService {
         });
 
         if ((response.status === 401 || response.status === 403) && _retryAuth) {
-            await this.ensureAuthenticated(true, 1);
+            await this.ensureAuthenticated(true);
             return this.request(input, {
                 ...kyOptions,
                 _retryAuth: false,
@@ -418,7 +456,7 @@ export class GameBananaService {
                 .json()
                 .catch(() => null);
             if (GameBananaLoginRequiredSchema.safeParse(data).success) {
-                await this.ensureAuthenticated(true, 1);
+                await this.ensureAuthenticated(true);
                 return this.request(input, {
                     ...kyOptions,
                     _retryAuth: false,
