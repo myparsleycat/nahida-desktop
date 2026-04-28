@@ -22,6 +22,7 @@ import {
 export const gameBananaGames = {
     gi: 8552,
     sr: 18366,
+    hi: 10349,
     zz: 19567,
     ww: 20357,
     ef: 21842,
