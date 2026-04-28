@@ -104,9 +104,10 @@ function RouteComponent() {
 
   const startPageOptions = [
     { value: "/transfer", label: t("page.transfer.title") },
+    { value: "/gamebanana", label: t("page.gamebanana.title") },
+    ...(hasWindowsDesktopFeatures ? [{ value: "/mod", label: t("page.mod.title") }] : []),
     { value: "/drive/drive/root", label: t("page.drive.title") },
     { value: "/drive/share/root", label: t("page.share_drive.title") },
-    ...(hasWindowsDesktopFeatures ? [{ value: "/mod", label: t("page.mod.title") }] : []),
   ];
 
   const confirmDisableRunInBackground = async () => {
