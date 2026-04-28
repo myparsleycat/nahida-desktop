@@ -116,28 +116,35 @@ export class GameBananaService {
             });
     }
 
-    private parseAuthCookies(setCookieHeaders: string[] | undefined) {
+    private parseCookies(setCookieHeaders: string[] | undefined) {
         if (!setCookieHeaders?.length) {
             return null;
         }
 
-        const cookies: string[] = [];
+        const cookies = new Map<string, string>();
 
         for (const header of setCookieHeaders) {
             const parts = header.split(";").map((part) => part.trim());
-
-            const rmc = parts.find((part) => part.startsWith("rmc="));
-            if (rmc) {
-                cookies.push(rmc);
+            const cookie = parts[0];
+            if (!cookie) {
+                continue;
             }
 
-            const sess = parts.find((part) => part.startsWith("sess="));
-            if (sess) {
-                cookies.push(sess);
+            const separatorIndex = cookie.indexOf("=");
+            if (separatorIndex <= 0) {
+                continue;
             }
+
+            const name = cookie.slice(0, separatorIndex).trim();
+            const value = cookie.slice(separatorIndex + 1).trim();
+            if (!name) {
+                continue;
+            }
+
+            cookies.set(name, `${name}=${value}`);
         }
 
-        return cookies.length > 0 ? cookies.join("; ") : null;
+        return cookies.size > 0 ? Array.from(cookies.values()).join("; ") : null;
     }
 
     private async validateCookie(cookie: string) {
@@ -302,7 +309,7 @@ export class GameBananaService {
                             return acc;
                         }, {});
 
-                        const cookie = this.parseAuthCookies(headers["set-cookie"]);
+                        const cookie = this.parseCookies(headers["set-cookie"]);
                         if (cookie) {
                             try {
                                 await this.saveCookie(cookie);
