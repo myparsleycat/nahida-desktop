@@ -660,8 +660,8 @@
         "titlebarStyle": {
           "title": "タイトルバースタイル",
           "select": "スタイル選択",
-          "modern": "モダン (カスタム)",
-          "native": "ネイティブ (デフォルト)"
+          "modern": "モダン",
+          "native": "ネイティブ"
         },
         "logLevel": {
           "title": "ログレベル",

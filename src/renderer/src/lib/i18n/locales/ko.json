@@ -672,8 +672,8 @@
         "titlebarStyle": {
           "title": "타이틀바 스타일",
           "select": "스타일 선택",
-          "modern": "모던 (커스텀)",
-          "native": "네이티브 (기본)"
+          "modern": "모던",
+          "native": "네이티브"
         },
         "logLevel": {
           "title": "로그 레벨",

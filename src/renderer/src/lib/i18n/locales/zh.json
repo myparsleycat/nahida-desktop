@@ -659,8 +659,8 @@
         "titlebarStyle": {
           "title": "标题栏样式",
           "select": "选择样式",
-          "modern": "现代 (自定义)",
-          "native": "原生 (默认)"
+          "modern": "现代",
+          "native": "原生 "
         },
         "logLevel": {
           "title": "日志级别",

@@ -692,8 +692,8 @@
         "titlebarStyle": {
           "title": "Titlebar Style",
           "select": "Select Style",
-          "modern": "Modern (Custom)",
-          "native": "Native (Default)"
+          "modern": "Modern",
+          "native": "Native"
         },
         "logLevel": {
           "title": "Log Level",
