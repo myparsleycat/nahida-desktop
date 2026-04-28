@@ -127,28 +127,35 @@ export function GameBananaAuthState({
   actionLabel,
   pending = false,
   onAction,
+  extraAction,
 }: {
   title: string;
   description: string;
   actionLabel?: string;
   pending?: boolean;
   onAction?: () => void;
+  extraAction?: ReactNode;
 }) {
   return (
     <div className="flex h-full min-h-80 items-center justify-center">
       <div className="w-full max-w-md rounded-xl border border-dashed p-6 text-center">
         <div className="text-base font-medium">{title}</div>
         <div className="mt-2 text-sm text-muted-foreground">{description}</div>
-        {actionLabel && onAction && (
-          <Button className="mt-4" onClick={onAction} disabled={pending}>
-            {pending ? (
-              <Loader2Icon className="size-4 animate-spin" />
-            ) : (
-              <RefreshCwIcon className="size-4" />
+        {(actionLabel && onAction) || extraAction ? (
+          <div className="mt-4 flex items-center justify-center gap-2">
+            {actionLabel && onAction && (
+              <Button onClick={onAction} disabled={pending}>
+                {pending ? (
+                  <Loader2Icon className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCwIcon className="size-4" />
+                )}
+                {actionLabel}
+              </Button>
             )}
-            {actionLabel}
-          </Button>
-        )}
+            {extraAction}
+          </div>
+        ) : null}
       </div>
     </div>
   );

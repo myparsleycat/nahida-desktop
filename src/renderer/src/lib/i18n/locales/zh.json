@@ -371,7 +371,15 @@
         "required_description": "已保存的登录状态已过期或无效。请重新登录后继续。",
         "cancelled_title": "已取消 GameBanana 登录",
         "cancelled_description": "需要完成登录后才能加载 GameBanana 数据。",
-        "retry": "重新登录"
+        "retry": "重新登录",
+        "manual_rmc": {
+          "button": "输入 rmc",
+          "title": "手动设置 rmc Token",
+          "description": "直接输入从浏览器获取的 GameBanana rmc Cookie 值。",
+          "empty": "请输入 rmc 值。",
+          "invalid": "rmc token 无效。",
+          "failed": "保存 rmc token 失败。"
+        }
       },
       "supported_games": "支持的游戏",
       "supported_games_description": "选择游戏后会加载其概览和根分类。",

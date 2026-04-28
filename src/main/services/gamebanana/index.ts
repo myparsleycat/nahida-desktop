@@ -148,6 +148,26 @@ export class GameBananaService {
         return cookies.size > 0 ? Array.from(cookies.values()).join("; ") : null;
     }
 
+    private normalizeManualRmcCookie(input: string) {
+        const trimmed = input.trim();
+        if (!trimmed) {
+            throw new Error("GAMEBANANA_INVALID_RMC");
+        }
+
+        const segments = trimmed
+            .split(";")
+            .map((segment) => segment.trim())
+            .filter(Boolean);
+        const rmcSegment = segments.find((segment) => segment.startsWith("rmc="));
+        const token = (rmcSegment ? rmcSegment.slice(4) : trimmed.replace(/^rmc=/, "")).trim();
+
+        if (!token) {
+            throw new Error("GAMEBANANA_INVALID_RMC");
+        }
+
+        return `rmc=${token}`;
+    }
+
     private async validateCookie(cookie: string) {
         try {
             const response = await this.request(this.navigatorPersonalUrl, {
@@ -226,6 +246,17 @@ export class GameBananaService {
 
         await this.removeCookie();
         await this.openAuthenticatedSession();
+    }
+
+    public async setManualRmcToken(input: string) {
+        const cookie = this.normalizeManualRmcCookie(input);
+        const isValid = await this.validateCookie(cookie);
+
+        if (!isValid) {
+            throw new Error("GAMEBANANA_INVALID_RMC");
+        }
+
+        await this.saveCookie(cookie);
     }
 
     public async logout() {

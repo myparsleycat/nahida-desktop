@@ -1,4 +1,14 @@
 import { Titlebar } from "@renderer/components/titlebar";
+import { Button } from "@renderer/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@renderer/components/ui/dialog";
+import { Input } from "@renderer/components/ui/input";
 import {
   type GameBananaGameKey,
   useGameBananaGameOverview,
@@ -10,6 +20,7 @@ import {
 import { cn } from "@renderer/lib/utils";
 import { useGameBananaStore } from "@renderer/store/gamebanana";
 import { createFileRoute } from "@tanstack/react-router";
+import { Loader2Icon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { GameBananaToolbar } from "./-components/gamebanana-toolbar";
@@ -32,6 +43,10 @@ function RouteComponent() {
   const [authStatus, setAuthStatus] = useState<"checking" | "ready" | "error">("checking");
   const [authErrorCode, setAuthErrorCode] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isManualRmcDialogOpen, setIsManualRmcDialogOpen] = useState(false);
+  const [manualRmcValue, setManualRmcValue] = useState("");
+  const [manualRmcError, setManualRmcError] = useState<string | null>(null);
+  const [isSavingManualRmc, setIsSavingManualRmc] = useState(false);
   const isAuthReady = authStatus === "ready";
   const {
     data: gamesMap,
@@ -210,6 +225,41 @@ function RouteComponent() {
       });
   };
 
+  const handleOpenManualRmcDialog = () => {
+    setManualRmcError(null);
+    setIsManualRmcDialogOpen(true);
+  };
+
+  const handleSaveManualRmc = () => {
+    const nextValue = manualRmcValue.trim();
+    if (!nextValue) {
+      setManualRmcError(t("page.gamebanana.auth.manual_rmc.empty"));
+      return;
+    }
+
+    setIsSavingManualRmc(true);
+    setManualRmcError(null);
+    void window.api
+      .invoke("gamebanana:setManualRmcToken", nextValue)
+      .then(() => {
+        setIsManualRmcDialogOpen(false);
+        setManualRmcValue("");
+        setAuthErrorCode(null);
+        setAuthStatus("ready");
+      })
+      .catch((error) => {
+        const isInvalidToken = error instanceof Error && error.message === "GAMEBANANA_INVALID_RMC";
+        setManualRmcError(
+          isInvalidToken
+            ? t("page.gamebanana.auth.manual_rmc.invalid")
+            : t("page.gamebanana.auth.manual_rmc.failed"),
+        );
+      })
+      .finally(() => {
+        setIsSavingManualRmc(false);
+      });
+  };
+
   if (authStatus === "checking") {
     return (
       <>
@@ -244,7 +294,61 @@ function RouteComponent() {
             }
             actionLabel={t("page.gamebanana.auth.retry")}
             onAction={handleRetryAuth}
+            extraAction={
+              <Button
+                variant="outline"
+                onClick={handleOpenManualRmcDialog}
+                disabled={isSavingManualRmc}
+              >
+                {t("page.gamebanana.auth.manual_rmc.button")}
+              </Button>
+            }
           />
+          <Dialog
+            open={isManualRmcDialogOpen}
+            onOpenChange={(open) => {
+              setIsManualRmcDialogOpen(open);
+              if (!open) {
+                setManualRmcError(null);
+              }
+            }}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{t("page.gamebanana.auth.manual_rmc.title")}</DialogTitle>
+                <DialogDescription>
+                  {t("page.gamebanana.auth.manual_rmc.description")}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2">
+                <Input
+                  value={manualRmcValue}
+                  onChange={(event) => setManualRmcValue(event.target.value)}
+                  disabled={isSavingManualRmc}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handleSaveManualRmc();
+                    }
+                  }}
+                />
+                {manualRmcError && <p className="text-sm text-destructive">{manualRmcError}</p>}
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsManualRmcDialogOpen(false)}
+                  disabled={isSavingManualRmc}
+                >
+                  {t("g.cancel")}
+                </Button>
+                <Button onClick={handleSaveManualRmc} disabled={isSavingManualRmc}>
+                  {isSavingManualRmc ? <Loader2Icon className="size-4 animate-spin" /> : null}
+                  {t("g.save")}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </main>
       </>
     );

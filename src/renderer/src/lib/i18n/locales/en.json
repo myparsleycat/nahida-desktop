@@ -391,7 +391,15 @@
         "required_description": "Your saved login has expired or is no longer valid. Sign in again to continue.",
         "cancelled_title": "GameBanana login was cancelled",
         "cancelled_description": "Complete login to load GameBanana data.",
-        "retry": "Sign In Again"
+        "retry": "Sign In Again",
+        "manual_rmc": {
+          "button": "Enter rmc",
+          "title": "Set rmc Token",
+          "description": "Enter the GameBanana rmc cookie value from your browser.",
+          "empty": "Enter an rmc value.",
+          "invalid": "The rmc token is invalid.",
+          "failed": "Failed to save the rmc token."
+        }
       },
       "supported_games": "Supported Games",
       "supported_games_description": "Select a game to load its overview and mod categories.",

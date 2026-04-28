@@ -371,7 +371,15 @@
         "required_description": "로그인 정보가 만료되었거나 사용할 수 없습니다. 다시 로그인해 주세요.",
         "cancelled_title": "GameBanana 로그인이 취소되었습니다",
         "cancelled_description": "로그인을 완료해야 GameBanana 데이터를 불러올 수 있습니다.",
-        "retry": "다시 로그인"
+        "retry": "다시 로그인",
+        "manual_rmc": {
+          "button": "rmc 직접 입력",
+          "title": "rmc 토큰 직접 설정",
+          "description": "브라우저에서 가져온 GameBanana rmc 쿠키 값을 직접 입력합니다.",
+          "empty": "rmc 값을 입력해 주세요.",
+          "invalid": "유효하지 않은 rmc 토큰입니다.",
+          "failed": "rmc 토큰 저장에 실패했습니다."
+        }
       },
       "supported_games": "지원 게임",
       "supported_games_description": "게임을 선택하면 개요와 루트 모드 카테고리를 불러옵니다.",

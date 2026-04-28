@@ -4,6 +4,9 @@ import { rh } from "@main/ipc/helper";
 export function registerGameBananaHandlers(d: NahidaDesktop) {
     rh("gamebanana:ensureAuthenticated", async () => d.service.gamebanana.ensureSession());
     rh("gamebanana:getGames", async () => d.service.gamebanana.games);
+    rh("gamebanana:setManualRmcToken", async (token: string) =>
+        d.service.gamebanana.setManualRmcToken(token),
+    );
     rh("gamebanana:getGameOverview", async (gameId: number) =>
         d.service.gamebanana.getGameOverview(gameId),
     );
