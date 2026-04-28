@@ -171,25 +171,7 @@ export class GameBananaService {
         }
     }
 
-    private async ensureAuthenticated(forceRelogin = false, _depth = 0) {
-        if (_depth > 1) {
-            throw new Error("GAMEBANANA_AUTH_FAILED");
-        }
-
-        if (forceRelogin) {
-            await this.removeCookie();
-        } else {
-            const storedCookie = await this.getCookie();
-            if (storedCookie) {
-                const isValid = await this.validateCookie(storedCookie);
-                if (isValid) {
-                    return storedCookie;
-                }
-
-                await this.removeCookie();
-            }
-        }
-
+    private async openAuthenticatedSession() {
         if (this.authPromise) {
             await this.authPromise;
             const cookieAfterWait = await this.getCookie();
@@ -217,8 +199,33 @@ export class GameBananaService {
         return refreshedCookie;
     }
 
+    private async ensureAuthenticated(forceRelogin = false) {
+        if (forceRelogin) {
+            await this.removeCookie();
+        } else {
+            const storedCookie = await this.getCookie();
+            if (storedCookie) {
+                return storedCookie;
+            }
+        }
+
+        return this.openAuthenticatedSession();
+    }
+
     public async ensureSession() {
-        await this.ensureAuthenticated();
+        const storedCookie = await this.getCookie();
+        if (!storedCookie) {
+            await this.openAuthenticatedSession();
+            return;
+        }
+
+        const isValid = await this.validateCookie(storedCookie);
+        if (isValid) {
+            return;
+        }
+
+        await this.removeCookie();
+        await this.openAuthenticatedSession();
     }
 
     public async logout() {
@@ -391,7 +398,7 @@ export class GameBananaService {
         options?: Options & { _retryAuth?: boolean; _skipAuth?: boolean },
     ) {
         const { _retryAuth = true, _skipAuth = false, ...kyOptions } = options ?? {};
-        const cookie = _skipAuth ? null : await this.ensureAuthenticated();
+        const cookie = _skipAuth ? null : await this.getCookie();
 
         const response = await ky(input, {
             ...kyOptions,
@@ -405,7 +412,7 @@ export class GameBananaService {
         });
 
         if ((response.status === 401 || response.status === 403) && _retryAuth) {
-            await this.ensureAuthenticated(true, 1);
+            await this.ensureAuthenticated(true);
             return this.request(input, {
                 ...kyOptions,
                 _retryAuth: false,
@@ -418,7 +425,7 @@ export class GameBananaService {
                 .json()
                 .catch(() => null);
             if (GameBananaLoginRequiredSchema.safeParse(data).success) {
-                await this.ensureAuthenticated(true, 1);
+                await this.ensureAuthenticated(true);
                 return this.request(input, {
                     ...kyOptions,
                     _retryAuth: false,
