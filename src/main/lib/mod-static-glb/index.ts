@@ -20,7 +20,6 @@ import fse from "fs-extra";
 import { nanoid } from "nanoid";
 import pLimit from "p-limit";
 import { PNG } from "pngjs";
-import sharp from "sharp";
 import writeFileAtomic from "write-file-atomic";
 import type { Logger } from "../../internal/logger";
 import { GlbBuilder } from "./builder";
@@ -36,7 +35,6 @@ export type { StaticGlbTextureFormat } from "./texture-utils";
 type IniSection = {
     header: string;
     name: string;
-    namespace?: string;
     lines: string[];
     values: Record<string, string>;
 };
@@ -66,71 +64,14 @@ type FmtLayout = {
     elements: FmtElement[];
 };
 
-type WwmiMetadataSemantic = {
-    name?: string;
-    index?: number;
-    format?: string;
-    stride?: number;
-};
-
-type WwmiMetadataExportFormatEntry = {
-    semantics?: WwmiMetadataSemantic[];
-};
-
-type WwmiMetadata = {
-    vb0_hash?: string;
-    components?: Array<{
-        index_offset?: number;
-        index_count?: number;
-        vertex_offset?: number;
-        vertex_count?: number;
-    }>;
-    export_format?: Record<string, WwmiMetadataExportFormatEntry>;
-};
-
-type WwmiAssetComponent = {
-    componentIndex: number;
-    vbPath: string;
-    ibPath: string;
-    fmtPath: string;
-    fmt: FmtLayout;
-    metadata?: {
-        indexOffset: number;
-        indexCount: number;
-        vertexOffset: number;
-        vertexCount: number;
-    };
-};
-
-type WwmiAssetBundle = {
-    rootDir: string;
-    metadataPath: string;
-    metadata: WwmiMetadata;
-    components: Map<number, WwmiAssetComponent>;
-    textureUsage?: Record<string, Record<string, string[]>>;
-    textureFilesByHash: Map<string, string>;
-};
-
-type WwmiTextureUsageEntry = {
-    hash: string;
-    signature: string;
-    slotName: string;
-};
-
 type BufferGroup = {
     key: string;
     vbFilename: string;
     vbBytes: Buffer;
     stride: number;
-    layout?: FmtLayout;
 };
 
 type StaticGlbModLayout = "mihoyo" | "wwmi";
-
-type StaticGlbModLayoutDetection = {
-    layout: StaticGlbModLayout;
-    reason: string;
-};
 
 type MihoyoBufferResourceGroup = {
     position?: Resource;
@@ -157,14 +98,9 @@ type IbResource = {
 };
 
 type TextureBinding = {
-    sectionName: string;
     ibResourceName: string;
     diffuseResourceName?: string;
     textureResourceNames?: string[];
-    textureSlotBindings?: Array<{
-        slotName: string;
-        resourceName: string;
-    }>;
     overrideHash?: string;
 };
 
@@ -173,11 +109,6 @@ type MaterialBinding = {
     textureResourceName: string;
     imagePath: string;
     mimeType: "image/png" | "image/jpeg";
-};
-
-type MaterialBindingCollection = {
-    byIb: Map<string, MaterialBinding>;
-    bySection: Map<string, MaterialBinding>;
 };
 
 export type VariableStateValue = number | string;
@@ -595,36 +526,18 @@ async function buildModGlb(
     const { iniPath, sections } = await loadIniBundle(options.modPath);
     const modDir = path.dirname(iniPath);
     const defaultVariables = collectDefaultIniVariables(sections);
+    const resolvedVariables = mergeVariableState(defaultVariables, options.variableState);
     const resources = collectResources(sections);
-    const layoutDetection = detectStaticGlbModLayout(sections, resources);
-    const { layout } = layoutDetection;
-    const resolvedVariables = mergeVariableState(
-        layout === "wwmi" ? withWwmiDefaultVariables(defaultVariables) : defaultVariables,
-        options.variableState,
-    );
+    const layout = detectStaticGlbModLayout(sections, resources);
     const sectionByFullName = new Map(
         sections.map((section) => [normalizeKey(getSectionFullName(section)), section]),
-    );
-    options.logger?.debug(
-        `Using ${layout} converter path for ${iniPath} (${layoutDetection.reason})`,
-        "StaticGLB",
     );
     const bufferGroups =
         layout === "wwmi"
             ? await collectWwmiBufferGroups(modDir, resources, warning.warn)
             : await collectMihoyoBufferGroups(modDir, resources, warning.warn);
+    const textureBindings = collectTextureBindings(sections, sectionByFullName, resolvedVariables);
     const drawBindings = collectTextureOverrideDrawBindings(sections);
-    const textureBindings = collectTextureBindings(
-        layout,
-        sections,
-        sectionByFullName,
-        resolvedVariables,
-        drawBindings,
-    );
-    const wwmiAssetBundle =
-        layout === "wwmi"
-            ? await findWwmiAssetBundle(options.assetPath, drawBindings, options.logger)
-            : null;
     const ibResources = collectIbResources(
         sections,
         resources,
@@ -639,14 +552,8 @@ async function buildModGlb(
         `Detected ${layout} layout with ${resources.length} resources, ${bufferGroups.length} buffer groups, ${ibResources.length} IB resources, ${textureBindings.length} texture bindings`,
         "StaticGLB",
     );
-    if (wwmiAssetBundle) {
-        options.logger?.debug(
-            `Using WWMI asset bundle ${wwmiAssetBundle.rootDir} with ${wwmiAssetBundle.components.size} component assets`,
-            "StaticGLB",
-        );
-    }
 
-    if (ibResources.length === 0 && !wwmiAssetBundle) {
+    if (ibResources.length === 0) {
         throw new Error(`No index buffer Resource sections were found in ${iniPath}`);
     }
 
@@ -654,8 +561,6 @@ async function buildModGlb(
     const materialBindings = await buildMaterials(
         builder,
         options,
-        layout,
-        wwmiAssetBundle,
         modDir,
         options.textureCacheDir,
         resources,
@@ -676,17 +581,9 @@ async function buildModGlb(
         try {
             fmt = await loadFmtForIb(modDir, options.assetPath, ib, group.stride, layout);
         } catch (error) {
-            if (layout === "wwmi" && group.layout) {
-                const message = error instanceof Error ? error.message : String(error);
-                warning.warn(
-                    `Falling back to synthesized WWMI layout for ${ib.filename}: ${message}`,
-                );
-                fmt = group.layout;
-            } else {
-                const message = error instanceof Error ? error.message : String(error);
-                warning.warn(`Skipping ${ib.filename}: ${message}`);
-                continue;
-            }
+            const message = error instanceof Error ? error.message : String(error);
+            warning.warn(`Skipping ${ib.filename}: ${message}`);
+            continue;
         }
         const ibPath = path.resolve(modDir, ib.filename);
         if (!(await fse.pathExists(ibPath))) {
@@ -699,70 +596,16 @@ async function buildModGlb(
             warning.warn(`Empty IB file: ${ibPath}`);
             continue;
         }
-        const ibDrawBindings = drawBindings.filter(
-            (binding) => normalizeKey(binding.ibResourceName) === normalizeKey(ib.name),
-        );
-        const hasSectionMaterials = ibDrawBindings.some((binding) =>
-            materialBindings.bySection.has(normalizeKey(binding.sectionName)),
-        );
-
-        if (hasSectionMaterials && ibDrawBindings.length > 0) {
-            let wrotePrimitive = false;
-            for (const binding of ibDrawBindings) {
-                const sectionIndices = buildIndicesForStateStrict(
-                    [binding],
-                    indices,
-                    resolvedVariables,
-                    warning.warn,
-                );
-                if (sectionIndices.length === 0) {
-                    continue;
-                }
-
-                const material = materialBindings.bySection.get(normalizeKey(binding.sectionName));
-                const primitive = buildPrimitive(
-                    builder,
-                    group.vbBytes,
-                    group.stride,
-                    fmt,
-                    sectionIndices,
-                    {
-                        includeTangents: !!options.includeTangents,
-                        includeVertexColors: layout !== "wwmi" && !material,
-                    },
-                    warning.warn,
-                );
-                if (!primitive) {
-                    warning.warn(
-                        `Could not build primitive for ${ib.filename} (${binding.sectionName})`,
-                    );
-                    continue;
-                }
-
-                if (material) {
-                    primitive.material = material.materialIndex;
-                }
-
-                builder.addMesh(
-                    `${path.basename(ib.filename, path.extname(ib.filename))}-${binding.sectionName}`,
-                    primitive,
-                );
-                wrotePrimitive = true;
-            }
-
-            if (wrotePrimitive) {
-                continue;
-            }
-        }
-
         const activeIndices = buildIndicesForState(
-            ibDrawBindings,
+            drawBindings.filter(
+                (binding) => normalizeKey(binding.ibResourceName) === normalizeKey(ib.name),
+            ),
             indices,
             resolvedVariables,
             warning.warn,
         );
 
-        const material = materialBindings.byIb.get(normalizeKey(ib.name));
+        const material = materialBindings.get(normalizeKey(ib.name));
         const primitive = buildPrimitive(
             builder,
             group.vbBytes,
@@ -771,7 +614,7 @@ async function buildModGlb(
             activeIndices,
             {
                 includeTangents: !!options.includeTangents,
-                includeVertexColors: layout !== "wwmi" && !material,
+                includeVertexColors: !material,
             },
             warning.warn,
         );
@@ -913,7 +756,6 @@ function extractMergedIniRefs(text: string, baseDir: string): string[] {
 function parseIni(text: string): IniSection[] {
     const sections: IniSection[] = [];
     let current: IniSection | null = null;
-    const namespace = extractIniNamespace(text);
 
     for (const rawLine of text.split(/\r?\n/)) {
         const line = rawLine.trim();
@@ -928,7 +770,6 @@ function parseIni(text: string): IniSection[] {
             current = {
                 header: kindMatch ? kindMatch[1] : full,
                 name: kindMatch ? kindMatch[2] : full,
-                namespace,
                 lines: [],
                 values: {},
             };
@@ -946,11 +787,6 @@ function parseIni(text: string): IniSection[] {
     }
 
     return sections;
-}
-
-function extractIniNamespace(text: string): string | undefined {
-    const match = text.match(/^\s*namespace\s*=\s*([^\r\n;]+)$/im);
-    return match?.[1]?.trim() || undefined;
 }
 
 function stripInlineComment(value: string): string {
@@ -986,7 +822,7 @@ function collectResources(sections: IniSection[]): Resource[] {
 function detectStaticGlbModLayout(
     sections: IniSection[],
     resources: Resource[],
-): StaticGlbModLayoutDetection {
+): StaticGlbModLayout {
     if (
         sections.some(
             (section) =>
@@ -994,10 +830,7 @@ function detectStaticGlbModLayout(
                 section.lines.some((line) => /\$required_wwmi_version\b/i.test(line)),
         )
     ) {
-        return {
-            layout: "wwmi",
-            reason: "found $required_wwmi_version in [Constants]",
-        };
+        return "wwmi";
     }
 
     const resourceNames = new Set(resources.map((resource) => normalizeKey(resource.name)));
@@ -1007,16 +840,10 @@ function detectStaticGlbModLayout(
         resourceNames.has(normalizeKey("VectorBuffer")) &&
         resourceNames.has(normalizeKey("TexCoordBuffer"))
     ) {
-        return {
-            layout: "wwmi",
-            reason: "found WWMI resource set (IndexBuffer/PositionBuffer/VectorBuffer/TexCoordBuffer)",
-        };
+        return "wwmi";
     }
 
-    return {
-        layout: "mihoyo",
-        reason: "defaulted to mihoyo because no WWMI markers were found",
-    };
+    return "mihoyo";
 }
 
 async function collectMihoyoBufferGroups(
@@ -1170,8 +997,7 @@ async function collectWwmiBufferGroups(
         const vertexCount = Math.min(
             ...resourcesToRead.map((resource, index) =>
                 Math.floor(
-                    [position, vector, blend, color, texcoord][index].length /
-                        (resource.stride ?? 1),
+                    [position, vector, blend, color, texcoord][index].length / (resource.stride ?? 1),
                 ),
             ),
         );
@@ -1190,99 +1016,10 @@ async function collectWwmiBufferGroups(
             throw new Error(`Unexpected WWMI interleaved buffer length for ${key}`);
         }
 
-        groups.push({
-            key,
-            vbFilename: `${key}.vb`,
-            vbBytes: vb,
-            stride,
-            layout: createWwmiFmtLayout(resourcesToRead),
-        });
+        groups.push({ key, vbFilename: `${key}.vb`, vbBytes: vb, stride });
     }
 
     return groups;
-}
-
-function createWwmiFmtLayout(resources: Resource[]): FmtLayout {
-    let offset = 0;
-    const elements: FmtElement[] = [];
-
-    const position = resources.find((resource) =>
-        normalizeKey(resource.name).includes(normalizeKey("PositionBuffer")),
-    );
-    if (position?.format && position.stride !== undefined) {
-        elements.push({
-            semanticName: "POSITION",
-            semanticIndex: 0,
-            format: position.format,
-            inputSlot: 0,
-            alignedByteOffset: offset,
-            inputSlotClass: "per-vertex",
-            instanceDataStepRate: 0,
-        });
-        offset += position.stride;
-    }
-
-    const vector = resources.find((resource) =>
-        normalizeKey(resource.name).includes(normalizeKey("VectorBuffer")),
-    );
-    if (vector?.format && vector.stride !== undefined) {
-        elements.push({
-            semanticName: "NORMAL",
-            semanticIndex: 0,
-            format: vector.format,
-            inputSlot: 0,
-            alignedByteOffset: offset,
-            inputSlotClass: "per-vertex",
-            instanceDataStepRate: 0,
-        });
-        offset += vector.stride;
-    }
-
-    const blend = resources.find((resource) =>
-        normalizeKey(resource.name).includes(normalizeKey("BlendBuffer")),
-    );
-    if (blend?.stride !== undefined) {
-        offset += blend.stride;
-    }
-
-    const color = resources.find((resource) =>
-        normalizeKey(resource.name).includes(normalizeKey("ColorBuffer")),
-    );
-    if (color?.format && color.stride !== undefined) {
-        elements.push({
-            semanticName: "COLOR",
-            semanticIndex: 0,
-            format: color.format,
-            inputSlot: 0,
-            alignedByteOffset: offset,
-            inputSlotClass: "per-vertex",
-            instanceDataStepRate: 0,
-        });
-        offset += color.stride;
-    }
-
-    const texcoord = resources.find((resource) =>
-        normalizeKey(resource.name).includes(normalizeKey("TexCoordBuffer")),
-    );
-    if (texcoord?.format && texcoord.stride !== undefined) {
-        elements.push({
-            semanticName: "TEXCOORD",
-            semanticIndex: 0,
-            format: texcoord.format,
-            inputSlot: 0,
-            alignedByteOffset: offset,
-            inputSlotClass: "per-vertex",
-            instanceDataStepRate: 0,
-        });
-        offset += texcoord.stride;
-    }
-
-    return {
-        stride: resources.reduce((sum, resource) => sum + (resource.stride ?? 0), 0),
-        topology: "trianglelist",
-        indexFormat: "DXGI_FORMAT_R32_UINT",
-        elements,
-    };
 }
 
 function parseMihoyoBufferGroupResourceName(
@@ -1447,225 +1184,6 @@ function collectIbResources(
 }
 
 function collectTextureBindings(
-    layout: StaticGlbModLayout,
-    sections: IniSection[],
-    sectionByFullName: Map<string, IniSection>,
-    resolvedVariables: Map<string, number | string>,
-    drawBindings: TextureOverrideBinding[],
-): TextureBinding[] {
-    return layout === "wwmi"
-        ? collectTextureBindingsWwmi(sections, sectionByFullName, resolvedVariables, drawBindings)
-        : collectTextureBindingsMihoyo(sections, sectionByFullName, resolvedVariables);
-}
-
-function collectTextureBindingsWwmi(
-    sections: IniSection[],
-    sectionByFullName: Map<string, IniSection>,
-    resolvedVariables: Map<string, number | string>,
-    drawBindings: TextureOverrideBinding[],
-): TextureBinding[] {
-    const bindings: TextureBinding[] = [];
-    const drawBindingsBySectionName = new Map<string, string[]>();
-    for (const binding of drawBindings) {
-        const key = normalizeKey(binding.sectionName);
-        const group = drawBindingsBySectionName.get(key) ?? [];
-        if (!group.some((name) => normalizeKey(name) === normalizeKey(binding.ibResourceName))) {
-            group.push(binding.ibResourceName);
-            drawBindingsBySectionName.set(key, group);
-        }
-    }
-    const overrideTextureResources = sections
-        .filter(
-            (section) => section.header === "TextureOverride" || section.header === "CommandList",
-        )
-        .map((section) => {
-            const resourceName = resolveSectionResourceNameWwmi(
-                section,
-                sectionByFullName,
-                resolvedVariables,
-            );
-            if (!resourceName) return null;
-            return {
-                sectionName: section.name,
-                resourceName,
-            };
-        })
-        .filter((entry): entry is { sectionName: string; resourceName: string } => !!entry);
-
-    for (const section of sections) {
-        if (section.header !== "TextureOverride") continue;
-
-        const assignments = resolveActiveAssignmentsFromSection(
-            section,
-            sectionByFullName,
-            resolvedVariables,
-        );
-        const ibValues = collectSectionIbResourceNames(section);
-        const resolvedIbValue = assignments.get("ib") || section.values.ib;
-        if (ibValues.length === 0 && resolvedIbValue) {
-            ibValues.push(trimResourcePrefix(resolvedIbValue));
-        }
-        if (ibValues.length === 0) {
-            ibValues.push(...(drawBindingsBySectionName.get(normalizeKey(section.name)) ?? []));
-        }
-        if (ibValues.length === 0) continue;
-
-        const textureSlotBindings = Array.from(assignments.entries())
-            .filter(([key, value]) => {
-                if (!value) return false;
-                const lowerKey = key.toLowerCase();
-                const lowerValue = value.toLowerCase();
-                return (
-                    (/^pst\d+$/.test(lowerKey) || lowerKey.endsWith("diffuse")) &&
-                    (lowerValue.startsWith("resource") || lowerValue.startsWith("ref resource"))
-                );
-            })
-            .map(([key, value]) => ({
-                slotName: key,
-                resourceName: resolveTextureResourceReference(
-                    trimResourcePrefix(value.replace(/^ref\s+/i, "")),
-                    section,
-                    sectionByFullName,
-                    resolvedVariables,
-                ),
-            }))
-            .filter(
-                (
-                    entry,
-                ): entry is {
-                    slotName: string;
-                    resourceName: string;
-                } => !!entry.resourceName,
-            );
-        const textureResourceNames = textureSlotBindings.map((entry) => entry.resourceName);
-        if (textureResourceNames.length === 0) {
-            textureResourceNames.push(
-                ...collectSectionTextureFallbackCandidates(
-                    section,
-                    sections,
-                    sectionByFullName,
-                    resolvedVariables,
-                ),
-            );
-        }
-
-        for (const ibValue of ibValues) {
-            const diffuseResourceName = resolveTextureResourceReference(
-                textureResourceNames.find((name) => name.toLowerCase().includes("diffuse")) ||
-                    textureResourceNames.find((name) => {
-                        const lower = name.toLowerCase();
-                        return !lower.includes("normal") && !lower.includes("light");
-                    }) ||
-                    resolveSectionResourceNameWwmi(section, sectionByFullName, resolvedVariables) ||
-                    resolveOverrideDiffuseResource(
-                        section.name,
-                        trimResourcePrefix(ibValue),
-                        overrideTextureResources,
-                    ),
-                section,
-                sectionByFullName,
-                resolvedVariables,
-            );
-            if (!diffuseResourceName && textureResourceNames.length === 0) {
-                continue;
-            }
-
-            bindings.push({
-                sectionName: section.name,
-                ibResourceName: trimResourcePrefix(ibValue),
-                diffuseResourceName,
-                textureResourceNames,
-                overrideHash: section.values.hash?.trim(),
-            });
-        }
-    }
-    return bindings;
-}
-
-function collectSectionTextureFallbackCandidates(
-    section: IniSection,
-    sections: IniSection[],
-    sectionByFullName: Map<string, IniSection>,
-    resolvedVariables: Map<string, number | string>,
-): string[] {
-    const componentIndex = extractComponentIndex(section.name);
-    if (componentIndex === null) {
-        return [];
-    }
-
-    const explicitResourceNames = new Set(
-        sections
-            .filter((candidate) => candidate !== section && candidate.header === "TextureOverride")
-            .flatMap((candidate) =>
-                Array.from(
-                    resolveActiveAssignmentsFromSection(
-                        candidate,
-                        sectionByFullName,
-                        resolvedVariables,
-                    ).entries(),
-                )
-                    .filter(([key, value]) => {
-                        if (!value) return false;
-                        return (
-                            key.endsWith("diffuse") &&
-                            (value.toLowerCase().startsWith("resource") ||
-                                value.toLowerCase().startsWith("ref resource"))
-                        );
-                    })
-                    .map(([, value]) => trimResourcePrefix(value.replace(/^ref\s+/i, ""))),
-            )
-            .map(normalizeKey),
-    );
-
-    return sections
-        .filter((candidate) => candidate.header === "Resource" && !!candidate.values.filename)
-        .map((candidate) => ({
-            resourceName: candidate.name,
-            filename: candidate.values.filename,
-            score: scoreTextureFallbackCandidate(
-                candidate.values.filename,
-                componentIndex,
-                explicitResourceNames.has(normalizeKey(candidate.name)),
-            ),
-        }))
-        .filter((candidate) => candidate.score > 0)
-        .sort((left, right) => right.score - left.score)
-        .map((candidate) => candidate.resourceName);
-}
-
-function extractComponentIndex(sectionName: string): number | null {
-    const match = sectionName.match(/component(\d+)/i);
-    return match ? Number(match[1]) : null;
-}
-
-function scoreTextureFallbackCandidate(
-    filename: string,
-    componentIndex: number,
-    explicitlyReferencedElsewhere: boolean,
-): number {
-    const stem = path.basename(filename, path.extname(filename)).toLowerCase();
-    const match = stem.match(/components-([0-9-]+)/);
-    if (!match) {
-        return 0;
-    }
-
-    const components = match[1]
-        .split("-")
-        .map((value) => Number(value))
-        .filter((value) => Number.isFinite(value));
-    if (!components.includes(componentIndex)) {
-        return 0;
-    }
-
-    let score = 100;
-    score += components.length === 1 ? 30 : 0;
-    score += components.length > 1 ? Math.max(0, 24 - components.length * 4) : 0;
-    score -= explicitlyReferencedElsewhere ? 20 : 0;
-
-    return score;
-}
-
-function collectTextureBindingsMihoyo(
     sections: IniSection[],
     sectionByFullName: Map<string, IniSection>,
     resolvedVariables: Map<string, number | string>,
@@ -1759,8 +1277,8 @@ function collectTextureBindingsMihoyo(
                 sectionByFullName,
                 resolvedVariables,
             );
+
             bindings.push({
-                sectionName: section.name,
                 ibResourceName: trimResourcePrefix(ibValue),
                 diffuseResourceName,
                 textureResourceNames,
@@ -1963,25 +1481,6 @@ function buildIndicesForState(
     variables: Map<string, number | string>,
     warn: (message: string) => void,
 ): Uint32Array {
-    return buildIndicesForBindings(bindings, indices, variables, warn, true);
-}
-
-function buildIndicesForStateStrict(
-    bindings: TextureOverrideBinding[],
-    indices: Uint32Array,
-    variables: Map<string, number | string>,
-    warn: (message: string) => void,
-): Uint32Array {
-    return buildIndicesForBindings(bindings, indices, variables, warn, false);
-}
-
-function buildIndicesForBindings(
-    bindings: TextureOverrideBinding[],
-    indices: Uint32Array,
-    variables: Map<string, number | string>,
-    warn: (message: string) => void,
-    fallbackToAll: boolean,
-): Uint32Array {
     const activeDraws = bindings.flatMap((binding) =>
         binding.draws.filter(
             (draw) =>
@@ -1995,7 +1494,7 @@ function buildIndicesForBindings(
     );
 
     if (activeDraws.length === 0) {
-        return fallbackToAll ? indices : new Uint32Array(0);
+        return indices;
     }
 
     const result = mergeDrawIndices(uint32ArrayToBuffer(indices), activeDraws);
@@ -2089,9 +1588,7 @@ function buildDiffuseLookupAliases(value: string): string[] {
 }
 
 function getSectionFullName(section: IniSection): string {
-    return section.namespace
-        ? `${section.header}\\${section.namespace}\\${section.name}`
-        : `${section.header}${section.name}`;
+    return `${section.header}${section.name}`;
 }
 
 function collectDefaultIniVariables(sections: IniSection[]): Map<string, number | string> {
@@ -2107,18 +1604,6 @@ function collectDefaultIniVariables(sections: IniSection[]): Map<string, number 
         }
     }
     return variables;
-}
-
-function withWwmiDefaultVariables(
-    variables: Map<string, number | string>,
-): Map<string, number | string> {
-    const merged = new Map(variables);
-    // WWMI sets these during runtime detection/merge before component draw and texture overrides.
-    merged.set(normalizeKey("$mod_enabled"), 1);
-    merged.set(normalizeKey("$object_detected"), 1);
-    merged.set(normalizeKey("ResourceMergedSkeleton"), 1);
-    merged.set(normalizeKey("ResourceExtraMergedSkeleton"), 1);
-    return merged;
 }
 
 function parseIniScalar(value?: string): number | string {
@@ -2145,27 +1630,6 @@ function resolveSectionResourceName(
     );
     const directThis =
         assignment.get("this") || assignment.get(normalizeKey("Resource\\ZZMI\\Diffuse"));
-    return directThis?.toLowerCase().includes("resource")
-        ? trimResourcePrefix(directThis.replace(/^ref\s+/i, ""))
-        : undefined;
-}
-
-function resolveSectionResourceNameWwmi(
-    section: IniSection,
-    sectionByFullName: Map<string, IniSection>,
-    defaultVariables: Map<string, number | string>,
-    visited = new Set<string>(),
-): string | undefined {
-    const assignments = resolveActiveAssignmentsFromSection(
-        section,
-        sectionByFullName,
-        defaultVariables,
-        visited,
-    );
-    const directThis =
-        assignments.get("this") ||
-        assignments.get(normalizeKey("Resource\\ZZMI\\Diffuse")) ||
-        Array.from(assignments.entries()).find(([key]) => key.endsWith("diffuse"))?.[1];
     return directThis?.toLowerCase().includes("resource")
         ? trimResourcePrefix(directThis.replace(/^ref\s+/i, ""))
         : undefined;
@@ -2324,94 +1788,6 @@ function resolveAssignmentFromSection(
         if (wanted.has(key)) {
             assignments.set(key, value);
         }
-    }
-
-    return assignments;
-}
-
-function resolveActiveAssignmentsFromSection(
-    section: IniSection,
-    sectionByFullName: Map<string, IniSection>,
-    variables: Map<string, number | string>,
-    visited = new Set<string>(),
-): Map<string, string> {
-    const normalizedName = normalizeKey(getSectionFullName(section));
-    if (visited.has(normalizedName)) return new Map<string, string>();
-    visited.add(normalizedName);
-
-    const branchActive: boolean[] = [];
-    const branchMatched: boolean[] = [];
-    const isActive = () => branchActive.every(Boolean);
-    const assignments = new Map<string, string>();
-
-    for (const line of section.lines) {
-        const trimmed = line.trim();
-        const lower = trimmed.toLowerCase();
-
-        if (lower.startsWith("if ")) {
-            const parentActive = isActive();
-            const matched = parentActive
-                ? evaluateIniCondition(trimmed.slice(3), variables, normalizeKey)
-                : false;
-            branchActive.push(matched);
-            branchMatched.push(matched);
-            continue;
-        }
-
-        if (lower.startsWith("elif ") || lower.startsWith("else if ")) {
-            if (branchActive.length === 0) continue;
-            const depth = branchActive.length - 1;
-            const parentActive = branchActive.slice(0, depth).every(Boolean);
-            const expression = lower.startsWith("elif ") ? trimmed.slice(5) : trimmed.slice(8);
-            const matched =
-                parentActive && !branchMatched[depth]
-                    ? evaluateIniCondition(expression, variables, normalizeKey)
-                    : false;
-            branchActive[depth] = matched;
-            branchMatched[depth] = branchMatched[depth] || matched;
-            continue;
-        }
-
-        if (lower === "else") {
-            if (branchActive.length === 0) continue;
-            const depth = branchActive.length - 1;
-            const parentActive = branchActive.slice(0, depth).every(Boolean);
-            branchActive[depth] = parentActive && !branchMatched[depth];
-            branchMatched[depth] = true;
-            continue;
-        }
-
-        if (lower === "endif") {
-            branchActive.pop();
-            branchMatched.pop();
-            continue;
-        }
-
-        if (!isActive()) continue;
-
-        const runMatch = trimmed.match(/^run\s*=\s*(.+)$/i);
-        if (runMatch) {
-            const nestedSection = sectionByFullName.get(normalizeKey(runMatch[1].trim()));
-            if (!nestedSection) {
-                continue;
-            }
-            const nested = resolveActiveAssignmentsFromSection(
-                nestedSection,
-                sectionByFullName,
-                variables,
-                new Set(visited),
-            );
-            for (const [key, value] of nested) {
-                assignments.set(key, value);
-            }
-        }
-
-        const assignmentMatch = trimmed.match(/^([^=]+?)\s*=\s*(.+)$/);
-        if (!assignmentMatch) {
-            continue;
-        }
-
-        assignments.set(normalizeKey(assignmentMatch[1].trim()), assignmentMatch[2].trim());
     }
 
     return assignments;
@@ -3003,34 +2379,20 @@ function createTextureCacheBaseName(texturePath: string): string {
     return `${extensionless}-${digest}`;
 }
 
-function extractTextureHash(texturePath: string): string | null {
-    const stem = path.basename(texturePath, path.extname(texturePath)).toLowerCase();
-    const hashMatch = stem.match(/t=([0-9a-f]{8,})/i);
-    if (hashMatch) {
-        return hashMatch[1].toLowerCase();
-    }
-
-    const fallback = stem.match(/\b([0-9a-f]{8,})\b/i);
-    return fallback?.[1]?.toLowerCase() ?? null;
-}
-
 async function buildMaterials(
     builder: GlbBuilder,
     options: ConvertModToGlbBufferOptions,
-    layout: StaticGlbModLayout,
-    wwmiAssetBundle: WwmiAssetBundle | null,
     modDir: string,
     textureCacheDir: string,
     resources: Resource[],
     textureBindings: TextureBinding[],
     warn: (message: string) => void,
-): Promise<MaterialBindingCollection> {
+): Promise<Map<string, MaterialBinding>> {
     const buildStartedAt = Date.now();
     const resourcesByName = new Map(
         resources.map((resource) => [normalizeKey(resource.name), resource]),
     );
     const materialByIb = new Map<string, MaterialBinding>();
-    const materialBySection = new Map<string, MaterialBinding>();
     const textureCache = new Map<string, MaterialBinding>();
     const textureOutDir = path.resolve(textureCacheDir);
 
@@ -3040,16 +2402,11 @@ async function buildMaterials(
         binding: TextureBinding;
         diffuseResourceName: string;
         texturePath: string;
-        slotName?: string;
     }> = (
         await Promise.all(
             textureBindings.map(async (binding) => {
-                const resourceCandidates = collectMaterialTextureCandidateNames(binding, layout);
-                const wwmiAssetCandidates =
-                    layout === "wwmi"
-                        ? collectWwmiAssetTextureCandidates(binding, wwmiAssetBundle)
-                        : [];
-                if (resourceCandidates.length === 0 && wwmiAssetCandidates.length === 0) {
+                const resourceNames = collectMaterialTextureCandidateNames(binding);
+                if (resourceNames.length === 0) {
                     options.logger?.debug(
                         `Binding for ${binding.ibResourceName} has no texture candidates`,
                         "StaticGLB",
@@ -3057,12 +2414,14 @@ async function buildMaterials(
                     return [];
                 }
 
-                const resolvedResources = await Promise.all(
-                    resourceCandidates.map(async ({ resourceName, slotName }) => {
-                        const textureResource = resourcesByName.get(normalizeKey(resourceName));
+                const resolved = await Promise.all(
+                    resourceNames.map(async (diffuseResourceName) => {
+                        const textureResource = resourcesByName.get(
+                            normalizeKey(diffuseResourceName),
+                        );
                         if (!textureResource?.filename) {
                             options.logger?.debug(
-                                `Texture resource ${resourceName} not found or has no filename`,
+                                `Texture resource ${diffuseResourceName} not found or has no filename`,
                                 "StaticGLB",
                             );
                             return null;
@@ -3076,21 +2435,11 @@ async function buildMaterials(
 
                         return {
                             binding,
-                            diffuseResourceName: resourceName,
+                            diffuseResourceName,
                             texturePath,
-                            slotName,
                         };
                     }),
                 );
-                const resolved = [
-                    ...resolvedResources,
-                    ...wwmiAssetCandidates.map((candidate) => ({
-                        binding,
-                        diffuseResourceName: candidate.resourceName,
-                        texturePath: candidate.texturePath,
-                        slotName: candidate.slotName,
-                    })),
-                ];
 
                 return resolved.filter(
                     (
@@ -3099,7 +2448,6 @@ async function buildMaterials(
                         binding: TextureBinding;
                         diffuseResourceName: string;
                         texturePath: string;
-                        slotName: string | undefined;
                     } => candidate !== null,
                 );
             }),
@@ -3150,45 +2498,61 @@ async function buildMaterials(
         "StaticGLB",
     );
 
-    const candidatesBySection = new Map<string, typeof candidates>();
-    if (layout === "wwmi") {
-        for (const candidate of candidates) {
-            const key = normalizeKey(candidate.binding.sectionName);
-            const current = candidatesBySection.get(key);
-            if (current) {
-                current.push(candidate);
-            } else {
-                candidatesBySection.set(key, [candidate]);
+    for (const [ibKey, bindingCandidates] of candidatesByIb) {
+        const ibStartedAt = Date.now();
+        const preparedCandidates: Array<{
+            candidate: (typeof candidates)[number];
+            texture: PreparedTexture;
+        }> = [];
+        for (const candidate of bindingCandidates) {
+            const prepareTask = prepareTasks.get(candidate.texturePath);
+            if (!prepareTask) {
+                continue;
             }
-        }
-    }
 
-    const createOrReuseMaterial = async (
-        selected: {
-            candidate: (typeof candidates)[number];
-            texture: PreparedTexture;
-        },
-        preparedCandidates?: Array<{
-            candidate: (typeof candidates)[number];
-            texture: PreparedTexture;
-        }>,
-    ) => {
-        const bakedTexture =
-            layout === "wwmi" && preparedCandidates
-                ? await bakeWwmiMaterialTexture(
-                      selected,
-                      preparedCandidates,
-                      wwmiAssetBundle,
-                      textureOutDir,
-                      options.logger,
-                  )
-                : null;
-        const texture = bakedTexture ?? selected.texture;
-        const cacheKey = bakedTexture
-            ? `baked:${selected.candidate.binding.sectionName}:${texture.imagePath}`
-            : selected.candidate.texturePath;
-        let cached = textureCache.get(cacheKey);
+            const texture = await prepareTask;
+            if (!texture) {
+                options.logger?.debug(
+                    `Failed to prepare texture ${candidate.texturePath}`,
+                    "StaticGLB",
+                );
+                continue;
+            }
+
+            preparedCandidates.push({ candidate, texture });
+        }
+        options.logger?.debug(
+            `Prepared ${preparedCandidates.length}/${bindingCandidates.length} texture candidates for ${ibKey} in ${Date.now() - ibStartedAt}ms`,
+            "StaticGLB",
+        );
+
+        const selected = preparedCandidates.sort((left, right) => {
+            if (right.texture.selectionScore !== left.texture.selectionScore) {
+                return right.texture.selectionScore - left.texture.selectionScore;
+            }
+            return (
+                textureNamePriority(right.candidate.diffuseResourceName, normalizeKey) -
+                textureNamePriority(left.candidate.diffuseResourceName, normalizeKey)
+            );
+        })[0];
+
+        if (!selected) {
+            continue;
+        }
+
+        options.logger?.debug(
+            `Texture candidates for ${ibKey}: ${preparedCandidates
+                .map(
+                    ({ candidate, texture }) =>
+                        `${candidate.diffuseResourceName}=${texture.selectionScore}[${texture.srgbConfidence}]`,
+                )
+                .join(", ")} | selected=${selected.candidate.diffuseResourceName}`,
+            "StaticGLB",
+        );
+
+        let cached = textureCache.get(selected.candidate.texturePath);
         if (!cached) {
+            const texture = selected.texture;
             const materialCreateStartedAt = Date.now();
 
             options.logger?.debug(
@@ -3224,7 +2588,7 @@ async function buildMaterials(
                 imagePath: texture.imagePath,
                 mimeType: texture.mimeType,
             };
-            textureCache.set(cacheKey, cached);
+            textureCache.set(selected.candidate.texturePath, cached);
             options.logger?.debug(
                 `Created GLB material for ${selected.candidate.diffuseResourceName} in ${Date.now() - materialCreateStartedAt}ms`,
                 "StaticGLB",
@@ -3236,467 +2600,17 @@ async function buildMaterials(
             );
         }
 
-        return cached;
-    };
-
-    if (layout !== "wwmi") {
-        for (const [ibKey, bindingCandidates] of candidatesByIb) {
-            const ibStartedAt = Date.now();
-            const preparedCandidates: Array<{
-                candidate: (typeof candidates)[number];
-                texture: PreparedTexture;
-            }> = [];
-            for (const candidate of bindingCandidates) {
-                const prepareTask = prepareTasks.get(candidate.texturePath);
-                if (!prepareTask) {
-                    continue;
-                }
-
-                const texture = await prepareTask;
-                if (!texture) {
-                    options.logger?.debug(
-                        `Failed to prepare texture ${candidate.texturePath}`,
-                        "StaticGLB",
-                    );
-                    continue;
-                }
-
-                preparedCandidates.push({ candidate, texture });
-            }
-            options.logger?.debug(
-                `Prepared ${preparedCandidates.length}/${bindingCandidates.length} texture candidates for ${ibKey} in ${Date.now() - ibStartedAt}ms`,
-                "StaticGLB",
-            );
-
-            const selected = preparedCandidates.sort((left, right) => {
-                if (right.texture.selectionScore !== left.texture.selectionScore) {
-                    return right.texture.selectionScore - left.texture.selectionScore;
-                }
-                return (
-                    textureNamePriority(right.candidate.diffuseResourceName, normalizeKey) -
-                    textureNamePriority(left.candidate.diffuseResourceName, normalizeKey)
-                );
-            })[0];
-
-            if (!selected) {
-                continue;
-            }
-
-            options.logger?.debug(
-                `Texture candidates for ${ibKey}: ${preparedCandidates
-                    .map(
-                        ({ candidate, texture }) =>
-                            `${candidate.diffuseResourceName}=${texture.selectionScore}[${texture.srgbConfidence}]`,
-                    )
-                    .join(", ")} | selected=${selected.candidate.diffuseResourceName}`,
-                "StaticGLB",
-            );
-
-            const cached = await createOrReuseMaterial(selected);
-            if (cached) {
-                materialByIb.set(ibKey, cached);
-            }
-        }
-    }
-
-    if (layout === "wwmi") {
-        for (const [sectionKey, bindingCandidates] of candidatesBySection) {
-            const preparedCandidates: Array<{
-                candidate: (typeof candidates)[number];
-                texture: PreparedTexture;
-            }> = [];
-            for (const candidate of bindingCandidates) {
-                const prepareTask = prepareTasks.get(candidate.texturePath);
-                if (!prepareTask) {
-                    continue;
-                }
-
-                const texture = await prepareTask;
-                if (!texture) {
-                    continue;
-                }
-
-                preparedCandidates.push({ candidate, texture });
-            }
-
-            const selected = preparedCandidates.sort((left, right) => {
-                const rightScore = scoreWwmiMaterialCandidate(
-                    right.candidate,
-                    right.texture,
-                    wwmiAssetBundle,
-                );
-                const leftScore = scoreWwmiMaterialCandidate(
-                    left.candidate,
-                    left.texture,
-                    wwmiAssetBundle,
-                );
-                if (rightScore !== leftScore) {
-                    return rightScore - leftScore;
-                }
-                return (
-                    textureNamePriority(right.candidate.diffuseResourceName, normalizeKey) -
-                    textureNamePriority(left.candidate.diffuseResourceName, normalizeKey)
-                );
-            })[0];
-
-            if (!selected) {
-                continue;
-            }
-
-            options.logger?.debug(
-                `Texture candidates for ${sectionKey}: ${preparedCandidates
-                    .map(
-                        ({ candidate, texture }) =>
-                            `${candidate.diffuseResourceName}=${scoreWwmiMaterialCandidate(candidate, texture, wwmiAssetBundle)}(${texture.selectionScore})[${texture.srgbConfidence}${candidate.slotName ? `:${candidate.slotName}` : ""}]`,
-                    )
-                    .join(", ")} | selected=${selected.candidate.diffuseResourceName}`,
-                "StaticGLB",
-            );
-
-            const cached = await createOrReuseMaterial(selected, preparedCandidates);
-            if (cached) {
-                materialBySection.set(sectionKey, cached);
-            }
+        if (cached) {
+            materialByIb.set(ibKey, cached);
         }
     }
 
     options.logger?.debug(
-        `Built ${materialBySection.size || materialByIb.size} materials in ${Date.now() - buildStartedAt}ms`,
+        `Built ${materialByIb.size} materials in ${Date.now() - buildStartedAt}ms`,
         "StaticGLB",
     );
 
-    return {
-        byIb: materialByIb,
-        bySection: materialBySection,
-    };
-}
-
-function scoreWwmiMaterialCandidate(
-    candidate: {
-        binding: TextureBinding;
-        diffuseResourceName: string;
-        texturePath: string;
-        slotName?: string;
-    },
-    texture: PreparedTexture,
-    wwmiAssetBundle: WwmiAssetBundle | null,
-): number {
-    let score = texture.selectionScore;
-
-    if (candidate.binding.diffuseResourceName) {
-        if (
-            normalizeKey(candidate.diffuseResourceName) ===
-            normalizeKey(candidate.binding.diffuseResourceName)
-        ) {
-            if (texture.selectionScore > 0) {
-                score += 500;
-            }
-        } else {
-            score -= 50;
-        }
-    }
-
-    const componentIndex = extractComponentIndex(candidate.binding.sectionName);
-    if (componentIndex !== null) {
-        score += scoreTextureFallbackCandidate(candidate.texturePath, componentIndex, false);
-        score += scoreWwmiTextureUsageCandidate(
-            componentIndex,
-            candidate.slotName,
-            candidate.texturePath,
-            wwmiAssetBundle?.textureUsage,
-        );
-    }
-
-    return score;
-}
-
-function scoreWwmiTextureUsageCandidate(
-    componentIndex: number,
-    slotName: string | undefined,
-    texturePath: string,
-    textureUsage: Record<string, Record<string, string[]>> | undefined,
-): number {
-    if (!textureUsage) {
-        return 0;
-    }
-
-    const usage = textureUsage[`Component ${componentIndex}`];
-    const textureHash = extractTextureHash(texturePath);
-    if (!usage || !textureHash) {
-        return 0;
-    }
-
-    let score = 0;
-    for (const [usageSlotName, hashes] of Object.entries(usage)) {
-        const matchIndex = hashes.findIndex((value) => value.toLowerCase().startsWith(textureHash));
-        if (matchIndex < 0) {
-            continue;
-        }
-
-        const slotIndex = extractTextureSlotIndex(usageSlotName);
-        const slotScore = 380 - Math.max(0, slotIndex) * 35 - matchIndex * 10;
-        score = Math.max(score, slotScore);
-        if (slotName && normalizeKey(slotName) === normalizeKey(usageSlotName)) {
-            score = Math.max(score, slotScore + 180);
-        }
-    }
-
-    return score;
-}
-
-function extractTextureSlotIndex(slotName: string): number {
-    const match = slotName.match(/(\d+)/);
-    return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
-}
-
-async function bakeWwmiMaterialTexture(
-    selected: {
-        candidate: {
-            binding: TextureBinding;
-            diffuseResourceName: string;
-            texturePath: string;
-            slotName?: string;
-        };
-        texture: PreparedTexture;
-    },
-    preparedCandidates: Array<{
-        candidate: {
-            binding: TextureBinding;
-            diffuseResourceName: string;
-            texturePath: string;
-            slotName?: string;
-        };
-        texture: PreparedTexture;
-    }>,
-    wwmiAssetBundle: WwmiAssetBundle | null,
-    textureOutDir: string,
-    logger?: Logger,
-): Promise<PreparedTexture | null> {
-    if (!wwmiAssetBundle?.textureUsage) {
-        return null;
-    }
-
-    const componentIndex = extractComponentIndex(selected.candidate.binding.sectionName);
-    const selectedHash = extractTextureHash(selected.candidate.texturePath);
-    const selectedSlot = selected.candidate.slotName;
-    if (componentIndex === null || !selectedHash || !selectedSlot) {
-        return null;
-    }
-
-    const usageEntries = collectWwmiUsageEntries(
-        componentIndex,
-        wwmiAssetBundle.textureUsage,
-        selectedHash,
-        selectedSlot,
-    );
-    if (usageEntries.length <= 1) {
-        return null;
-    }
-
-    const selectedSignature =
-        usageEntries.find(
-            (entry) =>
-                normalizeKey(entry.slotName) === normalizeKey(selectedSlot) &&
-                entry.hash === selectedHash,
-        )?.signature ?? usageEntries[0]?.signature;
-    if (!selectedSignature) {
-        return null;
-    }
-
-    const companions = preparedCandidates
-        .filter((entry) => {
-            const hash = extractTextureHash(entry.candidate.texturePath);
-            if (!hash) {
-                return false;
-            }
-            return usageEntries.some(
-                (usage) =>
-                    usage.signature === selectedSignature &&
-                    usage.hash === hash &&
-                    normalizeKey(usage.slotName) === normalizeKey(entry.candidate.slotName || ""),
-            );
-        })
-        .sort(
-            (left, right) =>
-                extractTextureSlotIndex(left.candidate.slotName || "") -
-                extractTextureSlotIndex(right.candidate.slotName || ""),
-        );
-
-    if (companions.length <= 1) {
-        return null;
-    }
-
-    const baseSlotIndex = extractTextureSlotIndex(selectedSlot);
-    const baseRaw = await loadImageRgba(selected.texture.imagePath);
-    const baked = {
-        data: new Uint8ClampedArray(baseRaw.data),
-        info: baseRaw.info,
-    };
-
-    let appliedLayers = 0;
-    for (const companion of companions) {
-        if (companion.candidate.texturePath === selected.candidate.texturePath) {
-            continue;
-        }
-
-        const slotIndex = extractTextureSlotIndex(companion.candidate.slotName || "");
-        const layerRaw = await loadImageRgba(
-            companion.texture.imagePath,
-            baseRaw.info.width,
-            baseRaw.info.height,
-        );
-
-        const layerData = toUint8ClampedArray(layerRaw.data);
-
-        if (companion.texture.srgbConfidence !== "srgb") {
-            // Treat non-sRGB companions as lighting/mask information and softly darken the base.
-            applySoftMultiplyLayer(baked.data, layerData);
-            appliedLayers += 1;
-            continue;
-        }
-
-        if (slotIndex > baseSlotIndex || companion.texture.usesAlpha) {
-            // Later sRGB slots usually act as decals/details layered over the base color.
-            applyAlphaCompositeLayer(baked.data, layerData, companion.texture.usesAlpha);
-            appliedLayers += 1;
-        }
-    }
-
-    if (appliedLayers === 0) {
-        return null;
-    }
-
-    const bakedKey = crypto
-        .createHash("sha1")
-        .update(
-            JSON.stringify({
-                section: selected.candidate.binding.sectionName,
-                selected: selected.candidate.texturePath,
-                signature: selectedSignature,
-                companions: companions.map((entry) => ({
-                    path: entry.candidate.texturePath,
-                    slot: entry.candidate.slotName,
-                })),
-            }),
-        )
-        .digest("hex")
-        .slice(0, 16);
-    const bakedPath = path.join(
-        textureOutDir,
-        `${sanitizeFileName(selected.candidate.binding.sectionName)}-${bakedKey}-baked.png`,
-    );
-    await sharp(Buffer.from(baked.data), {
-        raw: {
-            width: baseRaw.info.width,
-            height: baseRaw.info.height,
-            channels: 4,
-        },
-    })
-        .png()
-        .toFile(bakedPath);
-
-    logger?.debug(
-        `Baked WWMI material for ${selected.candidate.binding.sectionName} using ${appliedLayers} companion layers (${selectedSignature})`,
-        "StaticGLB",
-    );
-
-    return {
-        imagePath: bakedPath,
-        mimeType: "image/png",
-        alphaMode: selected.texture.alphaMode,
-        alphaCutoff: selected.texture.alphaCutoff,
-        usesAlpha: true,
-        invertedAlpha: false,
-        selectionScore: selected.texture.selectionScore,
-        srgbConfidence: "srgb",
-    };
-}
-
-function collectWwmiUsageEntries(
-    componentIndex: number,
-    textureUsage: Record<string, Record<string, string[]>>,
-    selectedHash: string,
-    selectedSlot: string,
-): WwmiTextureUsageEntry[] {
-    const usage = textureUsage[`Component ${componentIndex}`];
-    if (!usage) {
-        return [];
-    }
-
-    const entries = Object.entries(usage).flatMap(([slotName, values]) =>
-        values
-            .map((value) => parseWwmiTextureUsageValue(value, slotName))
-            .filter((entry): entry is WwmiTextureUsageEntry => !!entry),
-    );
-    const selectedEntry = entries.find(
-        (entry) =>
-            entry.hash === selectedHash &&
-            normalizeKey(entry.slotName) === normalizeKey(selectedSlot),
-    );
-    if (!selectedEntry) {
-        return [];
-    }
-
-    return entries.filter((entry) => entry.signature === selectedEntry.signature);
-}
-
-function parseWwmiTextureUsageValue(value: string, slotName: string): WwmiTextureUsageEntry | null {
-    const match = value.match(/^([0-9a-f]+)(-.+)$/i);
-    if (!match) {
-        return null;
-    }
-
-    return {
-        hash: match[1].toLowerCase(),
-        signature: match[2].toLowerCase(),
-        slotName,
-    };
-}
-
-async function loadImageRgba(imagePath: string, width?: number, height?: number) {
-    let pipeline = sharp(imagePath).ensureAlpha();
-    if (width && height) {
-        pipeline = pipeline.resize(width, height, { fit: "fill" });
-    }
-    return pipeline.raw().toBuffer({ resolveWithObject: true });
-}
-
-function toUint8ClampedArray(data: Buffer): Uint8ClampedArray {
-    return new Uint8ClampedArray(data.buffer, data.byteOffset, data.byteLength);
-}
-
-function applySoftMultiplyLayer(base: Uint8ClampedArray, layer: Uint8ClampedArray): void {
-    for (let i = 0; i < base.length; i += 4) {
-        for (let channel = 0; channel < 3; channel++) {
-            const baseValue = base[i + channel] / 255;
-            const layerValue = layer[i + channel] / 255;
-            const multiplied = baseValue * (0.55 + layerValue * 0.45);
-            base[i + channel] = Math.max(0, Math.min(255, Math.round(multiplied * 255)));
-        }
-    }
-}
-
-function applyAlphaCompositeLayer(
-    base: Uint8ClampedArray,
-    layer: Uint8ClampedArray,
-    useTextureAlpha: boolean,
-): void {
-    for (let i = 0; i < base.length; i += 4) {
-        const alpha = useTextureAlpha ? layer[i + 3] / 255 : 0.35;
-        if (alpha <= 0) {
-            continue;
-        }
-        for (let channel = 0; channel < 3; channel++) {
-            base[i + channel] = Math.round(
-                base[i + channel] * (1 - alpha) + layer[i + channel] * alpha,
-            );
-        }
-        base[i + 3] = Math.max(base[i + 3], layer[i + 3]);
-    }
-}
-
-function sanitizeFileName(value: string): string {
-    return value.replace(/[^a-z0-9._-]+/gi, "_");
+    return materialByIb;
 }
 
 async function prepareTextureImage(
@@ -3758,41 +2672,7 @@ async function prepareTextureImage(
     }
 }
 
-function collectMaterialTextureCandidateNames(
-    binding: TextureBinding,
-    layout: StaticGlbModLayout,
-): Array<{ resourceName: string; slotName?: string }> {
-    if (layout === "wwmi") {
-        const ordered: Array<{ resourceName: string; slotName?: string }> = [];
-        const seen = new Set<string>();
-        for (const entry of binding.textureSlotBindings ?? []) {
-            const key = `${normalizeKey(entry.resourceName)}::${normalizeKey(entry.slotName)}`;
-            if (seen.has(key)) {
-                continue;
-            }
-            ordered.push({
-                resourceName: entry.resourceName,
-                slotName: entry.slotName,
-            });
-            seen.add(key);
-        }
-        for (const resourceName of binding.textureResourceNames ?? []) {
-            const key = `${normalizeKey(resourceName)}::`;
-            if (seen.has(key)) {
-                continue;
-            }
-            ordered.push({ resourceName });
-            seen.add(key);
-        }
-        if (binding.diffuseResourceName) {
-            const key = `${normalizeKey(binding.diffuseResourceName)}::`;
-            if (!seen.has(key)) {
-                ordered.push({ resourceName: binding.diffuseResourceName });
-            }
-        }
-        return ordered;
-    }
-
+function collectMaterialTextureCandidateNames(binding: TextureBinding): string[] {
     const ordered = new Set<string>();
     for (const resourceName of binding.textureResourceNames ?? []) {
         ordered.add(resourceName);
@@ -3800,53 +2680,7 @@ function collectMaterialTextureCandidateNames(
     if (binding.diffuseResourceName) {
         ordered.add(binding.diffuseResourceName);
     }
-    return Array.from(ordered).map((resourceName) => ({ resourceName }));
-}
-
-function collectWwmiAssetTextureCandidates(
-    binding: TextureBinding,
-    wwmiAssetBundle: WwmiAssetBundle | null,
-): Array<{ resourceName: string; texturePath: string; slotName?: string }> {
-    if (!wwmiAssetBundle?.textureUsage) {
-        return [];
-    }
-
-    const componentIndex = extractComponentIndex(binding.sectionName);
-    if (componentIndex === null) {
-        return [];
-    }
-
-    const usage = wwmiAssetBundle.textureUsage[`Component ${componentIndex}`];
-    if (!usage) {
-        return [];
-    }
-
-    const seen = new Set<string>();
-    const candidates: Array<{ resourceName: string; texturePath: string; slotName?: string }> = [];
-    for (const [slotName, values] of Object.entries(usage)) {
-        for (const value of values) {
-            const entry = parseWwmiTextureUsageValue(value, slotName);
-            if (!entry) {
-                continue;
-            }
-            const texturePath = wwmiAssetBundle.textureFilesByHash.get(entry.hash);
-            if (!texturePath) {
-                continue;
-            }
-            const key = `${entry.hash}:${normalizeKey(slotName)}`;
-            if (seen.has(key)) {
-                continue;
-            }
-            seen.add(key);
-            candidates.push({
-                resourceName: `AssetTexture_${entry.hash}`,
-                texturePath,
-                slotName,
-            });
-        }
-    }
-
-    return candidates;
+    return Array.from(ordered);
 }
 
 function resolveTextureFormatOption(format?: StaticGlbTextureFormat): StaticGlbTextureFormat {
@@ -4215,11 +3049,6 @@ async function findWwmiFmtForIb(
     ib: IbResource,
     stride: number,
 ): Promise<FmtLayout | null> {
-    const metadataFmt = await findWwmiMetadataFmtForIb(assetDir, ib, stride);
-    if (metadataFmt) {
-        return metadataFmt;
-    }
-
     const hashCandidates = Array.from(
         new Set(
             [...(ib.overrideHashes ?? []), ib.overrideHash, ib.key]
@@ -4251,254 +3080,6 @@ async function findWwmiFmtForIb(
     }
 
     return null;
-}
-
-async function findWwmiAssetBundle(
-    assetDir: string,
-    drawBindings: TextureOverrideBinding[],
-    logger?: Logger,
-): Promise<WwmiAssetBundle | null> {
-    const root = path.resolve(assetDir);
-    if (!(await fse.pathExists(root))) {
-        return null;
-    }
-
-    const hashCandidates = Array.from(
-        new Set(
-            drawBindings
-                .map((binding) => binding.overrideHash?.trim())
-                .filter((value): value is string => !!value)
-                .map(normalizeKey),
-        ),
-    );
-    if (hashCandidates.length === 0) {
-        return null;
-    }
-
-    const metadataPaths = await fg("**/Metadata.json", {
-        cwd: root,
-        absolute: true,
-        onlyFiles: true,
-        caseSensitiveMatch: false,
-    });
-
-    for (const metadataPath of metadataPaths) {
-        let metadata: WwmiMetadata;
-        try {
-            metadata = (await fse.readJson(metadataPath)) as WwmiMetadata;
-        } catch {
-            continue;
-        }
-
-        const vb0Hash = normalizeKey(metadata.vb0_hash || "");
-        if (!vb0Hash || !hashCandidates.includes(vb0Hash)) {
-            continue;
-        }
-
-        const bundle = await loadWwmiAssetBundleFromMetadata(metadataPath, metadata);
-        if (bundle) {
-            logger?.debug(`Matched WWMI asset bundle via ${metadataPath}`, "StaticGLB");
-            return bundle;
-        }
-    }
-
-    return null;
-}
-
-async function loadWwmiAssetBundleFromMetadata(
-    metadataPath: string,
-    metadata: WwmiMetadata,
-): Promise<WwmiAssetBundle | null> {
-    const rootDir = path.dirname(metadataPath);
-    let textureUsage: Record<string, Record<string, string[]>> | undefined;
-    const textureUsagePath = path.join(rootDir, "TextureUsage.json");
-    if (await fse.pathExists(textureUsagePath)) {
-        try {
-            textureUsage = (await fse.readJson(textureUsagePath)) as Record<
-                string,
-                Record<string, string[]>
-            >;
-        } catch {
-            textureUsage = undefined;
-        }
-    }
-    const fmtPaths = await fg("Component *.fmt", {
-        cwd: rootDir,
-        absolute: true,
-        onlyFiles: true,
-        caseSensitiveMatch: false,
-    });
-    const textureFilesByHash = new Map<string, string>();
-    const texturePaths = await fg("*.dds", {
-        cwd: rootDir,
-        absolute: true,
-        onlyFiles: true,
-        caseSensitiveMatch: false,
-    });
-    for (const texturePath of texturePaths) {
-        const hash = extractTextureHash(texturePath);
-        if (hash && !textureFilesByHash.has(hash)) {
-            textureFilesByHash.set(hash, texturePath);
-        }
-    }
-
-    const components = new Map<number, WwmiAssetComponent>();
-    for (const fmtPath of fmtPaths) {
-        const componentIndex = extractWwmiComponentIndexFromFileName(fmtPath);
-        if (componentIndex === null) {
-            continue;
-        }
-
-        const vbPath = path.join(rootDir, `Component ${componentIndex}.vb`);
-        const ibPath = path.join(rootDir, `Component ${componentIndex}.ib`);
-        if (!(await fse.pathExists(vbPath)) || !(await fse.pathExists(ibPath))) {
-            continue;
-        }
-
-        const fmt = parseFmt(await fse.readFile(fmtPath, "utf8"), 0, "DXGI_FORMAT_R16_UINT");
-        const componentMetadata = metadata.components?.[componentIndex];
-        components.set(componentIndex, {
-            componentIndex,
-            vbPath,
-            ibPath,
-            fmtPath,
-            fmt,
-            metadata: componentMetadata
-                ? {
-                      indexOffset: componentMetadata.index_offset ?? 0,
-                      indexCount: componentMetadata.index_count ?? 0,
-                      vertexOffset: componentMetadata.vertex_offset ?? 0,
-                      vertexCount: componentMetadata.vertex_count ?? 0,
-                  }
-                : undefined,
-        });
-    }
-
-    if (components.size === 0) {
-        return null;
-    }
-
-    return {
-        rootDir,
-        metadataPath,
-        metadata,
-        components,
-        textureUsage,
-        textureFilesByHash,
-    };
-}
-
-function extractWwmiComponentIndexFromFileName(filePath: string): number | null {
-    const match = path.basename(filePath).match(/^Component\s+(\d+)\./i);
-    return match ? Number(match[1]) : null;
-}
-
-async function findWwmiMetadataFmtForIb(
-    assetDir: string,
-    ib: IbResource,
-    stride: number,
-): Promise<FmtLayout | null> {
-    const hashCandidates = new Set(
-        [...(ib.overrideHashes ?? []), ib.overrideHash, ib.key]
-            .map((value) => normalizeKey(value || ""))
-            .filter(Boolean),
-    );
-    if (hashCandidates.size === 0) {
-        return null;
-    }
-
-    const metadataPaths = await fg("**/Metadata.json", {
-        cwd: path.resolve(assetDir),
-        absolute: true,
-        onlyFiles: true,
-        caseSensitiveMatch: false,
-    });
-
-    for (const metadataPath of metadataPaths) {
-        let metadata: WwmiMetadata;
-        try {
-            metadata = (await fse.readJson(metadataPath)) as WwmiMetadata;
-        } catch {
-            continue;
-        }
-
-        const vb0Hash = normalizeKey(metadata.vb0_hash || "");
-        if (!vb0Hash || !hashCandidates.has(vb0Hash)) {
-            continue;
-        }
-
-        const fmt = createWwmiFmtLayoutFromMetadata(metadata, stride, ib.format);
-        if (fmt) {
-            return fmt;
-        }
-    }
-
-    return null;
-}
-
-function createWwmiFmtLayoutFromMetadata(
-    metadata: WwmiMetadata,
-    fallbackStride: number,
-    fallbackIndexFormat: string,
-): FmtLayout | null {
-    const exportFormat = metadata.export_format;
-    if (!exportFormat) {
-        return null;
-    }
-
-    const sections = [
-        exportFormat.Position,
-        exportFormat.Vector,
-        exportFormat.Blend,
-        exportFormat.Color,
-        exportFormat.TexCoord,
-    ].filter((entry): entry is WwmiMetadataExportFormatEntry => !!entry);
-
-    if (sections.length === 0) {
-        return null;
-    }
-
-    let offset = 0;
-    const elements: FmtElement[] = [];
-    for (const section of sections) {
-        for (const semantic of section.semantics ?? []) {
-            if (!semantic.name || !semantic.format || !semantic.stride) {
-                continue;
-            }
-
-            elements.push({
-                semanticName: semantic.name,
-                semanticIndex: semantic.index ?? 0,
-                format: normalizeDxgiFormat(semantic.format),
-                inputSlot: 0,
-                alignedByteOffset: offset,
-                inputSlotClass: "per-vertex",
-                instanceDataStepRate: 0,
-            });
-            offset += semantic.stride;
-        }
-    }
-
-    if (elements.length === 0) {
-        return null;
-    }
-
-    return {
-        stride: fallbackStride,
-        topology: "trianglelist",
-        indexFormat: normalizeDxgiFormat(fallbackIndexFormat || "DXGI_FORMAT_R32_UINT"),
-        elements,
-    };
-}
-
-function normalizeDxgiFormat(format: string): string {
-    const trimmed = format.trim();
-    if (!trimmed) {
-        return trimmed;
-    }
-    return trimmed.toUpperCase().startsWith("DXGI_FORMAT_")
-        ? trimmed.toUpperCase()
-        : `DXGI_FORMAT_${trimmed.toUpperCase()}`;
 }
 
 async function findRecursive(
