@@ -1,5 +1,5 @@
 import { getCharactersFolder, getMods } from "@native/native-mod";
-import type { FolderGroup, Preset } from "@shared/types.gen";
+import type { FolderGroup, Preset } from "@shared/types";
 import { GAME_MATCH_CASES } from "@shared/xxmi-match";
 import { and, eq, ne } from "drizzle-orm";
 import type { NahidaDesktop } from "../..";

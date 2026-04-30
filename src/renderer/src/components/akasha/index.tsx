@@ -19,7 +19,7 @@ import {
   useSelectionStore,
   useViewStore,
 } from "@renderer/store/drive";
-import type { Content } from "@shared/types.gen";
+import type { Content } from "@shared/types";
 import { formatDate, formatSize, getRandInt } from "@shared/utils";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import {

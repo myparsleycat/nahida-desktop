@@ -1,6 +1,6 @@
 import type { SortType } from "@renderer/types";
 import type { DriveNameSortPolicy } from "@shared/drive";
-import type { Content } from "@shared/types.gen";
+import type { Content } from "@shared/types";
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 

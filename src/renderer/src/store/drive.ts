@@ -1,5 +1,4 @@
-/** biome-ignore-all lint/suspicious/noExplicitAny: <> */
-import type { Content } from "@shared/types.gen";
+import type { Content } from "@shared/types";
 import { useNavigate } from "@tanstack/react-router";
 import { createStore, useStore } from "zustand";
 
@@ -65,10 +64,12 @@ export function useDragStore<T>(selector: (state: DragStore) => T): T {
     return useStore(dragStore, selector);
 }
 
+// oxlint-disable-next-line typescript/no-explicit-any
 type DialogResolve = (result: any) => void;
 
 interface BaseDialogState {
     open: boolean;
+    // oxlint-disable-next-line typescript/no-explicit-any
     data?: any;
 }
 

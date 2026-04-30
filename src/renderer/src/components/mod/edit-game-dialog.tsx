@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { useModStore } from "@renderer/store/mod";
-import type { GameConfig } from "@shared/types.gen";
+import type { GameConfig } from "@shared/types";
 import { FolderOpen, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";

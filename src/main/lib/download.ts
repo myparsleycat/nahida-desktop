@@ -5,7 +5,7 @@ import type { ReadableStream } from "node:stream/web";
 import { createGunzip, createZstdDecompress } from "node:zlib";
 import { eden } from "@main/client";
 import type { LinkData } from "@main/server";
-import type { TransferData } from "@shared/types.gen";
+import type { TransferData } from "@shared/types";
 import { decode } from "cbor-x";
 import { retry, throttle } from "es-toolkit";
 import fse from "fs-extra";

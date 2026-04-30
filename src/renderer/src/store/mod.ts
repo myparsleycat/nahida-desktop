@@ -1,4 +1,4 @@
-import type { FolderGroup, GameConfig, Preset } from "@shared/types.gen";
+import type { FolderGroup, GameConfig, Preset } from "@shared/types";
 import { createStore, useStore } from "zustand";
 
 interface ModState {
@@ -39,9 +39,7 @@ interface ModState {
     downloadMode: { downloadId: string; suggestedName?: string } | null;
     setDownloadMode: (mode: { downloadId: string; suggestedName?: string } | null) => void;
     archiveExtractPrompt: { requestId: string; fileName: string } | null;
-    setArchiveExtractPrompt: (
-        prompt: { requestId: string; fileName: string } | null,
-    ) => void;
+    setArchiveExtractPrompt: (prompt: { requestId: string; fileName: string } | null) => void;
     searchQuery: string;
     setSearchQuery: (query: string) => void;
     viewMode: "grid" | "list";

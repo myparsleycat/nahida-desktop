@@ -1,10 +1,11 @@
-import { resolve, join } from "node:path";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve, join } from "node:path";
 import type { Plugin } from "vite";
 
 interface IpcGeneratorOptions {
     handlerDir: string;
     typesFile: string;
+    sharedTypesFile: string;
     runtimeFile: string;
 }
 
@@ -64,7 +65,7 @@ function toConstLiteral(values: string[], eol: string) {
 }
 
 function generateIpc(options: IpcGeneratorOptions) {
-    const { handlerDir, typesFile, runtimeFile } = options;
+    const { handlerDir, typesFile, sharedTypesFile, runtimeFile } = options;
     const channels = new Map<string, string>(); // channel -> type definition
     const sendChannels = new Set<string>();
 
@@ -174,7 +175,8 @@ function generateIpc(options: IpcGeneratorOptions) {
 
     const sortedChannelNames = Array.from(channels.keys()).sort();
     const sortedSendChannelNames = Array.from(sendChannels).sort();
-    const eventChannelNames = extractTypeKeys(currentTypesContent, "IpcEvents");
+    const sharedTypesContent = readFileSync(sharedTypesFile, "utf-8");
+    const eventChannelNames = extractTypeKeys(sharedTypesContent, "IpcEvents");
 
     // update types.ts
     const typesContent = readFileSync(typesFile, "utf-8");
@@ -229,6 +231,7 @@ export const ipcGeneratorPlugin = (): Plugin => {
     const options = {
         handlerDir: resolve("src/main/ipc/handlers"),
         typesFile: resolve("src/shared/types.gen.ts"),
+        sharedTypesFile: resolve("src/shared/types.ts"),
         runtimeFile: resolve("src/shared/ipc-keys.gen.ts"),
     };
 
@@ -241,7 +244,8 @@ export const ipcGeneratorPlugin = (): Plugin => {
             server.watcher.on("change", (file) => {
                 if (
                     file.includes(join("src", "main", "ipc", "handlers")) ||
-                    file === options.typesFile
+                    file === options.typesFile ||
+                    file === options.sharedTypesFile
                 ) {
                     generateIpc(options);
                 }

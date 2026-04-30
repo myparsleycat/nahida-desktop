@@ -1,6 +1,6 @@
 import { getSearchScore } from "@renderer/lib/sejong";
 import { useModStore } from "@renderer/store/mod";
-import type { ModInfo } from "@shared/types.gen";
+import type { ModInfo } from "@shared/types";
 import { disassemble, getChoseong } from "es-hangul";
 import { useMemo } from "react";
 

@@ -1,5 +1,6 @@
-/** biome-ignore-all lint/suspicious/noExplicitAny: <> */
-import type { IpcEvents, IpcHandlers } from "@shared/types.gen";
+// oxlint-disable typescript/no-explicit-any
+
+import type { IpcEvents, IpcHandlers } from "@shared/types";
 
 export function invoke<K extends keyof IpcHandlers>(
     channel: K,

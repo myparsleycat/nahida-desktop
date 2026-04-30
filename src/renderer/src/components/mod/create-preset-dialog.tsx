@@ -23,7 +23,7 @@ import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Textarea } from "@renderer/components/ui/textarea";
 import { usePresetMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModStore } from "@renderer/store/mod";
-import type { PresetCreateConflict } from "@shared/types.gen";
+import type { PresetCreateConflict } from "@shared/types";
 import { LoaderIcon, Plus } from "lucide-react";
 import { type MouseEvent, useState } from "react";
 import { useTranslation } from "react-i18next";

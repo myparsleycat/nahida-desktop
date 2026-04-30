@@ -1,10 +1,5 @@
 import { getAggregateTransferProgress, isOpenTransferQueueStatus } from "@shared/transfer-progress";
-import type {
-    Transfer,
-    TransferData,
-    TransferStatus,
-    TransferWithoutData,
-} from "@shared/types.gen";
+import type { Transfer, TransferData, TransferStatus, TransferWithoutData } from "@shared/types";
 import { throttle } from "es-toolkit";
 import type { NahidaDesktop } from "..";
 

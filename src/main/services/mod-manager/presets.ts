@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { ApplyPresetResult, Preset } from "@shared/types.gen";
+import type { ApplyPresetResult, Preset } from "@shared/types";
 import { and, eq } from "drizzle-orm";
 import { trim } from "es-toolkit";
 import { nanoid } from "nanoid";

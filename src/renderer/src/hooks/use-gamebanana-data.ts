@@ -1,4 +1,4 @@
-import type { IpcHandlers } from "@shared/types.gen";
+import type { IpcHandlers } from "@shared/types";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
 export type GameBananaGames = Record<string, number>;

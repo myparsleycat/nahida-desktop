@@ -1,5 +1,5 @@
 import type { DriveNameSortPolicy } from "@shared/drive";
-import type { IpcHandlers } from "@shared/types.gen";
+import type { IpcHandlers } from "@shared/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 
