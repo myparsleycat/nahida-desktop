@@ -363,7 +363,6 @@
     },
     "gamebanana": {
       "title": "GameBanana",
-      "description": "지원 게임, 카테고리, 모드를 GameBanana에서 탐색합니다.",
       "auth": {
         "checking_title": "GameBanana 로그인 상태를 확인하는 중입니다",
         "checking_description": "저장된 로그인 쿠키를 검사하고 필요하면 다시 로그인합니다.",

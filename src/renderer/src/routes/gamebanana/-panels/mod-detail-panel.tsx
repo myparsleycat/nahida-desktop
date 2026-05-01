@@ -13,9 +13,9 @@ import {
 } from "@renderer/components/ui/select";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import {
-  type GameBananaSubmissionSelection,
   useGameBananaModPosts,
   type GameBananaModPostsSort,
+  type GameBananaSubmissionSelection,
 } from "@renderer/hooks/use-gamebanana-data";
 import { cn } from "@renderer/lib/utils";
 import type { TFunction } from "i18next";
@@ -177,6 +177,46 @@ function stripHtmlToText(value: string) {
     .trim();
 }
 
+function sanitizeGameBananaHtml(value: string) {
+  if (!value) return "";
+
+  if (typeof DOMParser === "undefined") {
+    return value;
+  }
+
+  const documentNode = new DOMParser().parseFromString(value, "text/html");
+
+  documentNode.querySelectorAll("script, style, iframe, object, embed").forEach((node) => {
+    node.remove();
+  });
+
+  documentNode.querySelectorAll("*").forEach((element) => {
+    for (const attribute of [...element.attributes]) {
+      const attributeName = attribute.name.toLowerCase();
+      const attributeValue = attribute.value.trim();
+
+      if (attributeName.startsWith("on")) {
+        element.removeAttribute(attribute.name);
+        continue;
+      }
+
+      if (
+        (attributeName === "href" || attributeName === "src") &&
+        /^javascript:/i.test(attributeValue)
+      ) {
+        element.removeAttribute(attribute.name);
+      }
+    }
+
+    if (element instanceof HTMLAnchorElement) {
+      element.target = "_blank";
+      element.rel = "noreferrer noopener";
+    }
+  });
+
+  return documentNode.body.innerHTML;
+}
+
 function CommentSkeletonList() {
   return (
     <div className="space-y-3">
@@ -235,6 +275,10 @@ export function ModDetailPanel({
         return true;
       });
   }, [commentsQuery.data]);
+  const descriptionHtml = useMemo(
+    () => sanitizeGameBananaHtml(modOverviewQuery.data?.profile._sText ?? ""),
+    [modOverviewQuery.data?.profile._sText],
+  );
 
   const totalCommentCount =
     commentsQuery.data?.pages[0]?._aMetadata._nRecordCount ?? comments.length;
@@ -350,6 +394,33 @@ export function ModDetailPanel({
                   </div>
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent>
+              {modOverviewQuery.isLoading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-5 w-2/5" />
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-5 w-11/12" />
+                  <Skeleton className="h-5 w-4/5" />
+                  <Skeleton className="h-24 w-full rounded-xl" />
+                </div>
+              ) : modOverviewQuery.error ? (
+                <ErrorState title={t("page.gamebanana.error_title")} />
+              ) : modOverviewQuery.data ? (
+                descriptionHtml.trim() ? (
+                  <div
+                    className="[&_a]:text-primary [&_a]:underline-offset-4 hover:[&_a]:underline [&_br]:leading-6 [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:leading-tight [&_h3]:text-lg [&_h3]:font-semibold [&_img]:max-w-full [&_img]:rounded-xl [&_li]:ml-5 [&_li]:list-disc [&_ol]:space-y-2 [&_p]:leading-7 [&_p]:not-last:mb-4 [&_span]:wrap-break-word [&_strong]:font-semibold [&_ul]:space-y-2"
+                    dangerouslySetInnerHTML={{ __html: descriptionHtml }}
+                  />
+                ) : (
+                  <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                    {t("page.gamebanana.no_description")}
+                  </div>
+                )
+              ) : null}
             </CardContent>
           </Card>
 

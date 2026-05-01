@@ -363,7 +363,6 @@
     },
     "gamebanana": {
       "title": "GameBanana",
-      "description": "浏览 GameBanana 上支持的游戏、分类和模组。",
       "auth": {
         "checking_title": "正在检查 GameBanana 登录状态",
         "checking_description": "正在验证已保存的登录 Cookie，并在需要时重新打开登录。",
