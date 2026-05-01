@@ -5,7 +5,7 @@ import type {
     useGameBananaModCategoryOverview,
     useGameBananaModOverview,
 } from "@renderer/hooks/use-gamebanana-data";
-import type { IpcHandlers } from "@shared/types.gen";
+import type { IpcHandlers } from "@shared/types";
 
 type GameOverviewData = Awaited<ReturnType<IpcHandlers["gamebanana:getGameOverview"]>>;
 type GameSubfeedData = Awaited<ReturnType<IpcHandlers["gamebanana:getGameSubfeed"]>>;

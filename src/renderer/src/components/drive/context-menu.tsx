@@ -7,7 +7,7 @@ import {
 } from "@renderer/components/ui/context-menu";
 import { useDriveClipboardActions } from "@renderer/hooks/use-drive-clipboard";
 import { useContentMenu, useDialogStore, useSelectionStore } from "@renderer/store/drive";
-import { Content } from "@shared/types.gen";
+import type { Content } from "@shared/types";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation, useNavigate, useParams, useRouteContext } from "@tanstack/react-router";
 import {

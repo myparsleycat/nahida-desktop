@@ -10,7 +10,7 @@ import {
 } from "@renderer/components/ui/select";
 import { useEnabledImporters, usePresets } from "@renderer/hooks/use-mod-data";
 import { useModStore } from "@renderer/store/mod";
-import type { GameConfig } from "@shared/types.gen";
+import type { GameConfig } from "@shared/types";
 import { useLocation } from "@tanstack/react-router";
 import { PencilIcon, PlayIcon } from "lucide-react";
 import { memo, useEffect } from "react";

@@ -5,7 +5,7 @@ import type {
     GameConfig,
     ModInfo,
     PresetCreateConflict,
-} from "@shared/types.gen";
+} from "@shared/types";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -80,7 +80,8 @@ export function useGameMutations() {
     const deleteGameMutation = useMutation({
         mutationFn: (game: string) => window.api.invoke("mod:removeGame", game),
         onSuccess: async (_, deletedGame) => {
-            const currentGames = (queryClient.getQueryData(["games"]) as GameConfig[] | undefined) ?? [];
+            const currentGames =
+                (queryClient.getQueryData(["games"]) as GameConfig[] | undefined) ?? [];
             const remainingGames = currentGames.filter((game) => game.game !== deletedGame);
             const nextSelectedGame =
                 selectedGame === deletedGame ? (remainingGames[0]?.game ?? "") : selectedGame;
@@ -157,7 +158,9 @@ export function useGameMutations() {
                 return;
             }
 
-            toast.error(errorMessage || t("page.mod.hooks.use-mod-mutations.add-game-mutation.failed"));
+            toast.error(
+                errorMessage || t("page.mod.hooks.use-mod-mutations.add-game-mutation.failed"),
+            );
         },
     });
 
@@ -398,7 +401,9 @@ export function usePresetMutations() {
 
             if ((error as Error).message.includes("PRESET_CONFLICT_RESOLUTION_FAILED")) {
                 toast.error(
-                    t("page.mod.hooks.use-mod-mutations.create-preset-mutation.conflict-resolve-failed"),
+                    t(
+                        "page.mod.hooks.use-mod-mutations.create-preset-mutation.conflict-resolve-failed",
+                    ),
                 );
             }
         },
@@ -446,5 +451,10 @@ export function usePresetMutations() {
         },
     });
 
-    return { createPresetMutation, getPresetCreateConflicts, applyPresetMutation, deletePresetMutation };
+    return {
+        createPresetMutation,
+        getPresetCreateConflicts,
+        applyPresetMutation,
+        deletePresetMutation,
+    };
 }

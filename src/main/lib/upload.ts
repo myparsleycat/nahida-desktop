@@ -2,7 +2,7 @@ import path from "node:path";
 import { eden, eden2url } from "@main/client";
 import sha256PiscinaWorker from "@main/worker/drive/sha256-piscina.worker?modulePath";
 import { collectFiles } from "@native/native-fs";
-import type { Content } from "@shared/types.gen";
+import type { Content } from "@shared/types";
 import { chunk, groupBy, orderBy, retry, sumBy } from "es-toolkit";
 import { fileTypeFromBuffer } from "file-type";
 import fse from "fs-extra";

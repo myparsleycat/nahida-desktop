@@ -61,12 +61,30 @@ export class LocalProtocol {
                 const blob = new Blob([imgArrayBuffer], { type: "image/webp" });
                 return new Response(blob);
             } else {
-                const resizedImg = await this.queue.add(() =>
-                    sharp(buffer)
-                        .resize({ width: 500, height: 500, fit: "inside" })
-                        .webp({ quality: 70 })
-                        .toBuffer(),
-                );
+                let resizedImg: Buffer | undefined;
+                try {
+                    resizedImg = await this.queue.add(() =>
+                        sharp(buffer)
+                            .resize({ width: 500, height: 500, fit: "inside" })
+                            .webp({ quality: 70 })
+                            .toBuffer(),
+                    );
+                } catch (error) {
+                    this.desktop.logger.warn(
+                        `Failed to resize image, serving original file instead: ${fullPath}`,
+                        "LocalProtocol.handle",
+                    );
+                    this.desktop.logger.warn(error, "LocalProtocol.handle");
+
+                    const mimeType = resolveMimeType(fullPath, fileType);
+                    return new Response(buffer as BodyInit, {
+                        headers: {
+                            "Cache-Control": "no-store",
+                            "Content-Length": buffer.byteLength.toString(),
+                            "Content-Type": mimeType,
+                        },
+                    });
+                }
 
                 if (!resizedImg) {
                     return new Response("not found", { status: 404 });

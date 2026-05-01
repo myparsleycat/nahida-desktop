@@ -42,6 +42,7 @@ function RouteComponent() {
   const { Titlebar } = useTitlebar();
   const { id } = Route.useParams();
   const location = useLocation();
+  const effectiveId = id === "root" ? "share" : id;
 
   const { onDragEnter, onDragLeave, onDragOver, onDrop } = useDrag();
   const searchInDirQuery = useViewStore((s) => s.searchInDirQuery);
@@ -50,11 +51,11 @@ function RouteComponent() {
   const layout = useViewStore((s) => s.layout);
   const { data: nameSortPolicy = "natural_ignore_spacing" } = useDriveNameSortPolicy();
 
-  useDriveUploadRefresh(id, ["drive", "share", id]);
+  useDriveUploadRefresh(effectiveId, ["drive", "share", effectiveId]);
 
   const query = useQuery({
-    queryKey: ["drive", "share", id],
-    enabled: !!id,
+    queryKey: ["drive", "share", effectiveId],
+    enabled: !!effectiveId,
     placeholderData: (prev) => prev,
     refetchIntervalInBackground: true,
     refetchInterval: () => {
@@ -64,7 +65,7 @@ function RouteComponent() {
       return 30000; // 30초 (포그라운드)
     },
     queryFn: async () => {
-      const data = await window.api.invoke("drive:get:item", id);
+      const data = await window.api.invoke("drive:get:item", effectiveId);
       return data;
     },
   });
@@ -74,14 +75,14 @@ function RouteComponent() {
     if (searchInDirQuery) {
       setSearchInDirQuery("");
     }
-  }, [id]);
+  }, [effectiveId]);
 
   useEffect(() => {
-    if (id && location.pathname.startsWith("/drive/share/")) {
+    if (effectiveId && location.pathname.startsWith("/drive/share/")) {
       const setLastShareId = viewStore.getState().setLastShareId;
-      setLastShareId(id);
+      setLastShareId(effectiveId);
     }
-  }, [id, location.pathname]);
+  }, [effectiveId, location.pathname]);
 
   const rawContents = useMemo(() => {
     if (!query.data?.children) return [];
@@ -116,7 +117,7 @@ function RouteComponent() {
 
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     try {
-      await onDrop(e, id);
+      await onDrop(e, effectiveId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error ?? "");
       const code =
@@ -161,7 +162,7 @@ function RouteComponent() {
         <div className="w-full h-full flex flex-col select-none">
           <div className="w-full h-12 flex flex-row items-center p-2 border-b select-none">
             {location.pathname !== "/drive/share" ? (
-              <AkashaBreadcrumb itemId={id} ancestors={query.data.ancestors} />
+              <AkashaBreadcrumb itemId={effectiveId} ancestors={query.data.ancestors} />
             ) : (
               <div className="flex-1"></div>
             )}
@@ -177,20 +178,24 @@ function RouteComponent() {
             onDrop={handleDrop}
           >
             <ContextMenuProvider>
-              <HandlerProvider queryData={query} sortedContents={sortedContents} currentId={id}>
+              <HandlerProvider
+                queryData={query}
+                sortedContents={sortedContents}
+                currentId={effectiveId}
+              >
                 {sortedContents.length > 0 ? (
                   <ScrollArea className="flex-1 flex flex-col h-full">
                     {layout === "list" ? (
                       <ContentMenuList
                         sortedContents={sortedContents}
                         isFetching={query.isFetching}
-                        itemId={id}
+                        itemId={effectiveId}
                       />
                     ) : layout === "grid" ? (
                       <ContentMenuGrid
                         sortedContents={sortedContents}
                         isFetching={query.isFetching}
-                        itemId={id}
+                        itemId={effectiveId}
                       />
                     ) : null}
                   </ScrollArea>

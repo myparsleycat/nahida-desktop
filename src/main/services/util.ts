@@ -4,7 +4,7 @@ import path from "node:path";
 import { eden } from "@main/client";
 import isDev from "@main/internal/isDev";
 import { nahidaLogsPath } from "@main/internal/logger";
-import type { AppStatus, PathMetadata } from "@shared/types.gen";
+import type { AppStatus, PathMetadata } from "@shared/types";
 import {
     BrowserWindow,
     clipboard,

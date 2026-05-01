@@ -13,11 +13,12 @@ import {
 } from "@renderer/components/ui/select";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import {
-  type GameBananaSubmissionSelection,
   useGameBananaModPosts,
   type GameBananaModPostsSort,
+  type GameBananaSubmissionSelection,
 } from "@renderer/hooks/use-gamebanana-data";
 import { cn } from "@renderer/lib/utils";
+import DOMPurify from "dompurify";
 import type { TFunction } from "i18next";
 import {
   ChevronLeftIcon,
@@ -177,6 +178,31 @@ function stripHtmlToText(value: string) {
     .trim();
 }
 
+function sanitizeGameBananaHtml(value: string) {
+  if (!value) return "";
+
+  return DOMPurify.sanitize(value, {
+    FORBID_TAGS: ["script", "style", "iframe", "object", "embed"],
+    ALLOWED_URI_REGEXP: /^(https?:|mailto:|#)/i,
+  });
+}
+
+function hardenSanitizedGameBananaAnchors(value: string) {
+  if (!value || typeof document === "undefined") {
+    return value;
+  }
+
+  const template = document.createElement("template");
+  template.innerHTML = value;
+
+  template.content.querySelectorAll("a").forEach((anchor) => {
+    anchor.setAttribute("target", "_blank");
+    anchor.setAttribute("rel", "noreferrer noopener");
+  });
+
+  return template.innerHTML;
+}
+
 function CommentSkeletonList() {
   return (
     <div className="space-y-3">
@@ -235,6 +261,13 @@ export function ModDetailPanel({
         return true;
       });
   }, [commentsQuery.data]);
+  const descriptionHtml = useMemo(
+    () =>
+      hardenSanitizedGameBananaAnchors(
+        sanitizeGameBananaHtml(modOverviewQuery.data?.profile._sText ?? ""),
+      ),
+    [modOverviewQuery.data?.profile._sText],
+  );
 
   const totalCommentCount =
     commentsQuery.data?.pages[0]?._aMetadata._nRecordCount ?? comments.length;
@@ -350,6 +383,33 @@ export function ModDetailPanel({
                   </div>
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent>
+              {modOverviewQuery.isLoading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-5 w-2/5" />
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-5 w-11/12" />
+                  <Skeleton className="h-5 w-4/5" />
+                  <Skeleton className="h-24 w-full rounded-xl" />
+                </div>
+              ) : modOverviewQuery.error ? (
+                <ErrorState title={t("page.gamebanana.error_title")} />
+              ) : modOverviewQuery.data ? (
+                descriptionHtml.trim() ? (
+                  <div
+                    className="[&_a]:text-primary [&_a]:underline-offset-4 hover:[&_a]:underline [&_br]:leading-6 [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:leading-tight [&_h3]:text-lg [&_h3]:font-semibold [&_img]:max-w-full [&_img]:rounded-xl [&_li]:ml-5 [&_li]:list-disc [&_ol]:space-y-2 [&_p]:leading-7 [&_p]:not-last:mb-4 [&_span]:wrap-break-word [&_strong]:font-semibold [&_ul]:space-y-2"
+                    dangerouslySetInnerHTML={{ __html: descriptionHtml }}
+                  />
+                ) : (
+                  <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                    {t("page.gamebanana.no_description")}
+                  </div>
+                )
+              ) : null}
             </CardContent>
           </Card>
 

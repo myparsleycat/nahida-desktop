@@ -5,7 +5,7 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream } from "node:stream/web";
 import type { ArchiveExtractPathMode, ResolvedArchiveExtractPathMode } from "@shared/mod";
-import type { TransferData } from "@shared/types.gen";
+import type { TransferData } from "@shared/types";
 import { throttle } from "es-toolkit";
 import { fileTypeFromFile } from "file-type";
 import fse from "fs-extra";

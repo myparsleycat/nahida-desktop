@@ -7,7 +7,7 @@ import type { TransferItemProps } from "@renderer/components/transfer/types";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { useGlobalStore } from "@renderer/store/global";
-import type { Transfer } from "@shared/types.gen";
+import type { Transfer } from "@shared/types";
 import { formatSize, formatTime } from "@shared/utils";
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback } from "react";

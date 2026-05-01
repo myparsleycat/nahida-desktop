@@ -363,7 +363,6 @@
     },
     "gamebanana": {
       "title": "GameBanana",
-      "description": "지원 게임, 카테고리, 모드를 GameBanana에서 탐색합니다.",
       "auth": {
         "checking_title": "GameBanana 로그인 상태를 확인하는 중입니다",
         "checking_description": "저장된 로그인 쿠키를 검사하고 필요하면 다시 로그인합니다.",
@@ -672,8 +671,8 @@
         "titlebarStyle": {
           "title": "타이틀바 스타일",
           "select": "스타일 선택",
-          "modern": "모던 (커스텀)",
-          "native": "네이티브 (기본)"
+          "modern": "모던",
+          "native": "네이티브"
         },
         "logLevel": {
           "title": "로그 레벨",

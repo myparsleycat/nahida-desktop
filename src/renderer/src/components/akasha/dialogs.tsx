@@ -40,7 +40,7 @@ import { Switch } from "@renderer/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import { cn } from "@renderer/lib/utils";
 import { useDialogStore, useSelectionStore } from "@renderer/store/drive";
-import { Content } from "@shared/types.gen";
+import type { Content } from "@shared/types";
 import { useForm, type AnyFieldApi } from "@tanstack/react-form";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation, useParams, useRouteContext } from "@tanstack/react-router";

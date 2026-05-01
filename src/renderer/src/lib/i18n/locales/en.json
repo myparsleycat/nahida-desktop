@@ -383,7 +383,6 @@
     },
     "gamebanana": {
       "title": "GameBanana",
-      "description": "Browse supported games, categories, and mods from GameBanana.",
       "auth": {
         "checking_title": "Checking your GameBanana login",
         "checking_description": "Verifying the saved login cookie and reopening login if needed.",
@@ -692,8 +691,8 @@
         "titlebarStyle": {
           "title": "Titlebar Style",
           "select": "Select Style",
-          "modern": "Modern (Custom)",
-          "native": "Native (Default)"
+          "modern": "Modern",
+          "native": "Native"
         },
         "logLevel": {
           "title": "Log Level",

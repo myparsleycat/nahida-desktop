@@ -364,7 +364,6 @@
     },
     "gamebanana": {
       "title": "GameBanana",
-      "description": "対応ゲーム、カテゴリ、MOD を GameBanana から探索します。",
       "auth": {
         "checking_title": "GameBanana のログイン状態を確認しています",
         "checking_description": "保存されたログイン Cookie を検証し、必要なら再ログインします。",
@@ -660,8 +659,8 @@
         "titlebarStyle": {
           "title": "タイトルバースタイル",
           "select": "スタイル選択",
-          "modern": "モダン (カスタム)",
-          "native": "ネイティブ (デフォルト)"
+          "modern": "モダン",
+          "native": "ネイティブ"
         },
         "logLevel": {
           "title": "ログレベル",

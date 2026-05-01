@@ -1,5 +1,5 @@
 import { supportsWindowsDesktopFeatures } from "@shared/platform";
-import type { IpcEvents } from "@shared/types.gen";
+import type { IpcEvents } from "@shared/types";
 import { BrowserWindow } from "electron";
 import type { NahidaDesktop } from "../index";
 import { registerAuthHandlers } from "./handlers/auth";

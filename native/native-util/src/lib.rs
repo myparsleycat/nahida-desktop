@@ -114,7 +114,10 @@ impl Task for ConvertDdsToPngTask {
 }
 
 #[napi]
-pub fn convert_dds_to_png(input_path: String, output_path: String) -> AsyncTask<ConvertDdsToPngTask> {
+pub fn convert_dds_to_png(
+    input_path: String,
+    output_path: String,
+) -> AsyncTask<ConvertDdsToPngTask> {
     AsyncTask::new(ConvertDdsToPngTask {
         input_path: PathBuf::from(input_path),
         output_path: PathBuf::from(output_path),

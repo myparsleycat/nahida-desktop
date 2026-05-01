@@ -1,4 +1,5 @@
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
+import { resolveStartPage } from "@renderer/lib/start-page";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 
@@ -11,9 +12,25 @@ function RouteComponent() {
   const { Titlebar } = useTitlebar();
 
   useEffect(() => {
-    window.api.invoke("setting:general:getDefaultStartPage").then((page: string | null) => {
-      const targetPage = page || "/transfer";
-      navi({ to: targetPage });
+    Promise.all([
+      window.api.invoke("setting:general:getDefaultStartPage"),
+      window.api.invoke("auth:getSession"),
+      window.api.invoke("util:getAppStatus"),
+    ]).then(([page, session, appStatus]) => {
+      navi({
+        to: resolveStartPage(page, {
+          isLoggedIn: !!session,
+          platform: appStatus?.platform,
+          sessionRootId: session?.drive.rootId,
+        }),
+      });
+    }).catch((error) => {
+      console.error("Failed to resolve startup navigation", error);
+      navi({
+        to: resolveStartPage(undefined, {
+          isLoggedIn: false,
+        }),
+      });
     });
   }, [navi]);
 
