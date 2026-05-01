@@ -81,8 +81,6 @@ export class GameBananaService {
     }
 
     private async saveCookie(cookie: string) {
-        this.sessionCookie = cookie;
-
         const rmcCookie = this.extractCookie(cookie, "rmc");
         if (!rmcCookie) {
             throw new Error("GAMEBANANA_INVALID_RMC");
@@ -97,6 +95,8 @@ export class GameBananaService {
                 target: setting.key,
                 set: { value: encryptedCookie },
             });
+
+        this.sessionCookie = cookie;
     }
 
     private async getCookie() {
