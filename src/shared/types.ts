@@ -1,8 +1,7 @@
-import { Treaty } from "@elysiajs/eden";
-import { eden } from "@main/client";
-import { Session } from "./schemas/auth";
+// oxlint-disable typescript/no-explicit-any
+import type { Session } from "./schemas/auth";
 
-export * from "./types.gen";
+export type { IpcHandlers } from "./types.gen";
 
 export interface AppStatus {
     version: string;
@@ -149,8 +148,6 @@ export type IpcEvents = {
     "renderer:reload": () => void;
 };
 
-const akashaModIdGet = eden.akasha.content({ id: "" }).get;
-export type ModIdGetResp = Treaty.Data<typeof akashaModIdGet>;
 export type Content = {
     id: string;
     name: string;
