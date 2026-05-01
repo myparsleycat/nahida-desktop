@@ -6,21 +6,17 @@ export function requiresAuthForStartPage(page: string | null | undefined) {
   return DRIVE_START_PAGES.includes(page as (typeof DRIVE_START_PAGES)[number]);
 }
 
-export function getFallbackStartPage(platform?: string | null) {
+export function getFallbackStartPage(platform?: NodeJS.Platform | null) {
   return supportsWindowsDesktopFeatures(platform) ? "/mod" : "/transfer";
 }
 
 export function materializeStartPage(
-  page: string | null | undefined,
+  page: string,
   options: {
     isLoggedIn: boolean;
     sessionRootId?: string | null;
   },
 ) {
-  if (!page) {
-    return page;
-  }
-
   if (page === "/drive/drive/root") {
     return options.isLoggedIn && options.sessionRootId
       ? `/drive/drive/${options.sessionRootId}`
@@ -38,10 +34,10 @@ export function resolveStartPage(
   page: string | null | undefined,
   options: {
     isLoggedIn: boolean;
-    platform?: string | null;
+    platform?: NodeJS.Platform | null;
     sessionRootId?: string | null;
   },
-) {
+): string {
   const fallback = getFallbackStartPage(options.platform);
 
   if (!page) {

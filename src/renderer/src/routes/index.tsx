@@ -24,6 +24,13 @@ function RouteComponent() {
           sessionRootId: session?.drive.rootId,
         }),
       });
+    }).catch((error) => {
+      console.error("Failed to resolve startup navigation", error);
+      navi({
+        to: resolveStartPage(undefined, {
+          isLoggedIn: false,
+        }),
+      });
     });
   }, [navi]);
 
