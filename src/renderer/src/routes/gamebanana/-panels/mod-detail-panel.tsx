@@ -18,6 +18,7 @@ import {
   type GameBananaSubmissionSelection,
 } from "@renderer/hooks/use-gamebanana-data";
 import { cn } from "@renderer/lib/utils";
+import DOMPurify from "dompurify";
 import type { TFunction } from "i18next";
 import {
   ChevronLeftIcon,
@@ -180,41 +181,26 @@ function stripHtmlToText(value: string) {
 function sanitizeGameBananaHtml(value: string) {
   if (!value) return "";
 
-  if (typeof DOMParser === "undefined") {
+  return DOMPurify.sanitize(value, {
+    FORBID_TAGS: ["script", "style", "iframe", "object", "embed"],
+    ALLOWED_URI_REGEXP: /^(https?:|mailto:|#)/i,
+  });
+}
+
+function hardenSanitizedGameBananaAnchors(value: string) {
+  if (!value || typeof document === "undefined") {
     return value;
   }
 
-  const documentNode = new DOMParser().parseFromString(value, "text/html");
+  const template = document.createElement("template");
+  template.innerHTML = value;
 
-  documentNode.querySelectorAll("script, style, iframe, object, embed").forEach((node) => {
-    node.remove();
+  template.content.querySelectorAll("a").forEach((anchor) => {
+    anchor.setAttribute("target", "_blank");
+    anchor.setAttribute("rel", "noreferrer noopener");
   });
 
-  documentNode.querySelectorAll("*").forEach((element) => {
-    for (const attribute of [...element.attributes]) {
-      const attributeName = attribute.name.toLowerCase();
-      const attributeValue = attribute.value.trim();
-
-      if (attributeName.startsWith("on")) {
-        element.removeAttribute(attribute.name);
-        continue;
-      }
-
-      if (
-        (attributeName === "href" || attributeName === "src") &&
-        /^javascript:/i.test(attributeValue)
-      ) {
-        element.removeAttribute(attribute.name);
-      }
-    }
-
-    if (element instanceof HTMLAnchorElement) {
-      element.target = "_blank";
-      element.rel = "noreferrer noopener";
-    }
-  });
-
-  return documentNode.body.innerHTML;
+  return template.innerHTML;
 }
 
 function CommentSkeletonList() {
@@ -276,7 +262,10 @@ export function ModDetailPanel({
       });
   }, [commentsQuery.data]);
   const descriptionHtml = useMemo(
-    () => sanitizeGameBananaHtml(modOverviewQuery.data?.profile._sText ?? ""),
+    () =>
+      hardenSanitizedGameBananaAnchors(
+        sanitizeGameBananaHtml(modOverviewQuery.data?.profile._sText ?? ""),
+      ),
     [modOverviewQuery.data?.profile._sText],
   );
 
