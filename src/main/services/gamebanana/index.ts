@@ -272,17 +272,21 @@ export class GameBananaService {
             const data = await response.json();
 
             if (GameBananaLoginRequiredSchema.safeParse(data).success) {
-                return false;
+                return null;
             }
 
-            return MemberNavigatorPersonalSchema.safeParse(data).success;
+            if (!MemberNavigatorPersonalSchema.safeParse(data).success) {
+                return null;
+            }
+
+            return response.mergedCookie ?? cookie;
         } catch {
-            return false;
+            return null;
         }
     }
 
     private async validateCookie(cookie: string) {
-        return this.tryRefreshSession(cookie);
+        return !!(await this.tryRefreshSession(cookie));
     }
 
     private async openAuthenticatedSession() {
@@ -350,14 +354,12 @@ export class GameBananaService {
 
     public async setManualRmcToken(input: string) {
         const cookie = this.normalizeManualRmcCookie(input);
-        const isValid = await this.validateCookie(cookie);
-
-        if (!isValid) {
+        const refreshedCookie = await this.tryRefreshSession(cookie);
+        if (!refreshedCookie) {
             throw new Error("GAMEBANANA_INVALID_RMC");
         }
 
-        const refreshedCookie = await this.getCookie();
-        await this.saveCookie(refreshedCookie ?? cookie);
+        await this.saveCookie(refreshedCookie);
     }
 
     public async logout() {
@@ -528,11 +530,11 @@ export class GameBananaService {
     private async request(
         input: Input,
         options?: Options & { _retryAuth?: boolean; _skipAuth?: boolean; _cookie?: string | null },
-    ) {
+    ): Promise<Response & { mergedCookie?: string | null }> {
         const { _retryAuth = true, _skipAuth = false, _cookie, ...kyOptions } = options ?? {};
         const cookie = _skipAuth ? (_cookie ?? null) : ((_cookie ?? await this.getCookie()) ?? null);
 
-        const response = await ky(input, {
+        const response = (await ky(input, {
             ...kyOptions,
             throwHttpErrors: false,
             headers: {
@@ -541,7 +543,7 @@ export class GameBananaService {
                 "User-Agent":
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
             },
-        });
+        })) as Response & { mergedCookie?: string | null };
 
         const normalizedHeaders = Object.fromEntries(
             Array.from(response.headers.entries()).map(([key, value]) => [key.toLowerCase(), value]),
@@ -553,6 +555,7 @@ export class GameBananaService {
                     ? [normalizedHeaders["set-cookie"]]
                     : undefined;
         const mergedCookie = await this.persistMergedCookie(cookie, setCookieHeaders);
+        response.mergedCookie = mergedCookie;
 
         if ((response.status === 401 || response.status === 403) && _retryAuth) {
             if (mergedCookie && mergedCookie !== cookie) {
