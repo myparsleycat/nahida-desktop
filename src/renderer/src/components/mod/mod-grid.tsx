@@ -5,13 +5,14 @@ import { useFilteredMods } from "@renderer/hooks/use-filtered-mods";
 import { useModContextMenuData } from "@renderer/hooks/use-mod-context-menu-data";
 import { useModGroup } from "@renderer/hooks/use-mod-data";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
-import { useVirtualizationSettings } from "@renderer/hooks/use-settings";
+import { useModGridLayoutSettings, useVirtualizationSettings } from "@renderer/hooks/use-settings";
 import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { chunk } from "es-toolkit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { normalizeModGridLayoutSettings, resolveModGridLayout } from "./grid-layout";
 import { ModCard } from "./mod-card";
 
 interface ModGridProps {
@@ -39,31 +40,31 @@ export function ModGrid(_props: ModGridProps) {
   const showSkeleton = useDelayedSkeleton(isLoading);
 
   const { data: vSettings } = useVirtualizationSettings();
+  const { data: gridLayoutSettings } = useModGridLayoutSettings();
 
-  const [columnCount, setColumnCount] = useState(1);
+  const [availableWidth, setAvailableWidth] = useState(0);
   useEffect(() => {
     if (!scrollAreaRef.current) return;
 
     const viewport = scrollAreaRef.current.querySelector("[data-radix-scroll-area-viewport]");
     if (!viewport) return;
 
-    const updateColumns = () => {
-      const width = viewport.clientWidth;
-      if (width < 800) setColumnCount(1);
-      else if (width < 1200) setColumnCount(2);
-      else if (width < 1600) setColumnCount(3);
-      else if (width < 2000) setColumnCount(4);
-      else if (width < 2400) setColumnCount(5);
-      else if (width < 2800) setColumnCount(6);
-      else setColumnCount(7);
+    const updateWidth = () => {
+      setAvailableWidth(viewport.clientWidth);
     };
 
-    updateColumns();
-    const observer = new ResizeObserver(updateColumns);
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
     observer.observe(viewport);
 
     return () => observer.disconnect();
   }, [scrollAreaRef.current]);
+
+  const resolvedGridLayout = useMemo(
+    () => resolveModGridLayout(availableWidth, normalizeModGridLayoutSettings(gridLayoutSettings)),
+    [availableWidth, gridLayoutSettings],
+  );
+  const columnCount = resolvedGridLayout.columnCount;
 
   const rows = useMemo(() => chunk(mods, columnCount), [mods, columnCount]);
   const getModRenderKey = useCallback(
@@ -126,13 +127,16 @@ export function ModGrid(_props: ModGridProps) {
     [updateToggleKeyMutation.mutate],
   );
 
-  const handleIniListExpandedChange = useCallback((modId: string, isExpanded: boolean) => {
-    if (!selectedGroupPath) return;
-    setIniListExpanded(selectedGroupPath, modId, isExpanded);
-  }, [selectedGroupPath, setIniListExpanded]);
+  const handleIniListExpandedChange = useCallback(
+    (modId: string, isExpanded: boolean) => {
+      if (!selectedGroupPath) return;
+      setIniListExpanded(selectedGroupPath, modId, isExpanded);
+    },
+    [selectedGroupPath, setIniListExpanded],
+  );
 
   const iniListExpandedByModId = selectedGroupPath
-    ? iniListExpandedByGroupPath[selectedGroupPath] ?? {}
+    ? (iniListExpandedByGroupPath[selectedGroupPath] ?? {})
     : {};
 
   if (!selectedGroupPath) {
@@ -151,7 +155,8 @@ export function ModGrid(_props: ModGridProps) {
             <div
               className="grid gap-3"
               style={{
-                gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+                gridTemplateColumns: resolvedGridLayout.gridTemplateColumns,
+                justifyContent: resolvedGridLayout.justifyContent,
               }}
             >
               {Array.from({ length: 12 }).map((_, index) => (
@@ -175,7 +180,8 @@ export function ModGrid(_props: ModGridProps) {
             <div
               className="grid gap-3"
               style={{
-                gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+                gridTemplateColumns: resolvedGridLayout.gridTemplateColumns,
+                justifyContent: resolvedGridLayout.justifyContent,
               }}
               // ref={parent}
             >
@@ -222,7 +228,8 @@ export function ModGrid(_props: ModGridProps) {
                     <div
                       className="grid gap-3 w-full"
                       style={{
-                        gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+                        gridTemplateColumns: resolvedGridLayout.gridTemplateColumns,
+                        justifyContent: resolvedGridLayout.justifyContent,
                       }}
                     >
                       {rowMods.map((mod) => (

@@ -1,7 +1,12 @@
 import type { NahidaDesktop } from "@main/index";
 import { imageCache, setting } from "@main/internal/db/schema";
 import { normalizeDriveNameSortPolicy, type DriveNameSortPolicy } from "@shared/drive";
-import { ARCHIVE_EXTRACT_PATH_MODES, type ArchiveExtractPathMode } from "@shared/mod";
+import {
+    ARCHIVE_EXTRACT_PATH_MODES,
+    MOD_GRID_LAYOUT_MODES,
+    type ArchiveExtractPathMode,
+    type ModGridLayoutMode,
+} from "@shared/mod";
 import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import type { AutoUpdateMode } from "@shared/updater";
 import AutoLaunch from "auto-launch";
@@ -30,6 +35,13 @@ const TRANSFER_UPLOAD_CONCURRENCY_DEFAULT = 8;
 const TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX = [4, 16];
 const TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT = 2;
 const TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX = [1, 4];
+const MOD_GRID_WIDTH_MIN = 240;
+const MOD_GRID_WIDTH_MAX = 640;
+const MOD_GRID_COLUMN_MIN = 1;
+const MOD_GRID_COLUMN_MAX = 8;
+const MOD_GRID_RESPONSIVE_BASE_WIDTH_DEFAULT = 400;
+const MOD_GRID_FIXED_CARD_WIDTH_DEFAULT = 360;
+const MOD_GRID_FIXED_COLUMN_COUNT_DEFAULT = 4;
 
 function clampTransferConcurrency(value: number, min: number, max: number, fallback: number) {
     if (!Number.isFinite(value)) {
@@ -89,6 +101,20 @@ function normalizeAutoUpdateMode(value: string | null | undefined): AutoUpdateMo
     }
 
     return "auto";
+}
+
+function clampIntegerSetting(value: number, min: number, max: number, fallback: number) {
+    if (!Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.min(max, Math.max(min, Math.trunc(value)));
+}
+
+function normalizeModGridLayoutMode(value: string | null | undefined): ModGridLayoutMode {
+    return MOD_GRID_LAYOUT_MODES.includes(value as ModGridLayoutMode)
+        ? (value as ModGridLayoutMode)
+        : "responsive";
 }
 
 export class Setting {
@@ -568,6 +594,155 @@ export class Setting {
                 .onConflictDoUpdate({
                     target: setting.key,
                     set: { value: String(threshold) },
+                });
+        },
+
+        getGridLayoutMode: async (): Promise<ModGridLayoutMode> => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "mod_grid_layout_mode"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db
+                    .insert(setting)
+                    .values({ key: "mod_grid_layout_mode", value: "responsive" });
+                return "responsive";
+            }
+
+            return normalizeModGridLayoutMode(qr.value as string | null | undefined);
+        },
+
+        setGridLayoutMode: async (mode: ModGridLayoutMode) => {
+            const normalizedMode = normalizeModGridLayoutMode(mode);
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({ key: "mod_grid_layout_mode", value: normalizedMode })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: normalizedMode },
+                });
+        },
+
+        getGridResponsiveBaseWidth: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "mod_grid_responsive_base_width"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db.insert(setting).values({
+                    key: "mod_grid_responsive_base_width",
+                    value: String(MOD_GRID_RESPONSIVE_BASE_WIDTH_DEFAULT),
+                });
+                return MOD_GRID_RESPONSIVE_BASE_WIDTH_DEFAULT;
+            }
+
+            return clampIntegerSetting(
+                parseInt(qr.value as string, 10),
+                MOD_GRID_WIDTH_MIN,
+                MOD_GRID_WIDTH_MAX,
+                MOD_GRID_RESPONSIVE_BASE_WIDTH_DEFAULT,
+            );
+        },
+
+        setGridResponsiveBaseWidth: async (width: number) => {
+            const normalizedWidth = clampIntegerSetting(
+                width,
+                MOD_GRID_WIDTH_MIN,
+                MOD_GRID_WIDTH_MAX,
+                MOD_GRID_RESPONSIVE_BASE_WIDTH_DEFAULT,
+            );
+
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({
+                    key: "mod_grid_responsive_base_width",
+                    value: String(normalizedWidth),
+                })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(normalizedWidth) },
+                });
+        },
+
+        getGridFixedCardWidth: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "mod_grid_fixed_card_width"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db.insert(setting).values({
+                    key: "mod_grid_fixed_card_width",
+                    value: String(MOD_GRID_FIXED_CARD_WIDTH_DEFAULT),
+                });
+                return MOD_GRID_FIXED_CARD_WIDTH_DEFAULT;
+            }
+
+            return clampIntegerSetting(
+                parseInt(qr.value as string, 10),
+                MOD_GRID_WIDTH_MIN,
+                MOD_GRID_WIDTH_MAX,
+                MOD_GRID_FIXED_CARD_WIDTH_DEFAULT,
+            );
+        },
+
+        setGridFixedCardWidth: async (width: number) => {
+            const normalizedWidth = clampIntegerSetting(
+                width,
+                MOD_GRID_WIDTH_MIN,
+                MOD_GRID_WIDTH_MAX,
+                MOD_GRID_FIXED_CARD_WIDTH_DEFAULT,
+            );
+
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({
+                    key: "mod_grid_fixed_card_width",
+                    value: String(normalizedWidth),
+                })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(normalizedWidth) },
+                });
+        },
+
+        getGridFixedColumnCount: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "mod_grid_fixed_column_count"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db.insert(setting).values({
+                    key: "mod_grid_fixed_column_count",
+                    value: String(MOD_GRID_FIXED_COLUMN_COUNT_DEFAULT),
+                });
+                return MOD_GRID_FIXED_COLUMN_COUNT_DEFAULT;
+            }
+
+            return clampIntegerSetting(
+                parseInt(qr.value as string, 10),
+                MOD_GRID_COLUMN_MIN,
+                MOD_GRID_COLUMN_MAX,
+                MOD_GRID_FIXED_COLUMN_COUNT_DEFAULT,
+            );
+        },
+
+        setGridFixedColumnCount: async (count: number) => {
+            const normalizedCount = clampIntegerSetting(
+                count,
+                MOD_GRID_COLUMN_MIN,
+                MOD_GRID_COLUMN_MAX,
+                MOD_GRID_FIXED_COLUMN_COUNT_DEFAULT,
+            );
+
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({
+                    key: "mod_grid_fixed_column_count",
+                    value: String(normalizedCount),
+                })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(normalizedCount) },
                 });
         },
 

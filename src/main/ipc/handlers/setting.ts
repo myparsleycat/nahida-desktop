@@ -144,6 +144,42 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         d.ipc.broadcast("mod:update-settings");
     });
 
+    rh("setting:mod:getGridLayoutMode", async () => {
+        return await d.setting.mod.getGridLayoutMode();
+    });
+
+    rh("setting:mod:setGridLayoutMode", async (mode) => {
+        await d.setting.mod.setGridLayoutMode(mode);
+        d.ipc.broadcast("mod:update-settings");
+    });
+
+    rh("setting:mod:getGridResponsiveBaseWidth", async () => {
+        return await d.setting.mod.getGridResponsiveBaseWidth();
+    });
+
+    rh("setting:mod:setGridResponsiveBaseWidth", async (width) => {
+        await d.setting.mod.setGridResponsiveBaseWidth(width);
+        d.ipc.broadcast("mod:update-settings");
+    });
+
+    rh("setting:mod:getGridFixedCardWidth", async () => {
+        return await d.setting.mod.getGridFixedCardWidth();
+    });
+
+    rh("setting:mod:setGridFixedCardWidth", async (width) => {
+        await d.setting.mod.setGridFixedCardWidth(width);
+        d.ipc.broadcast("mod:update-settings");
+    });
+
+    rh("setting:mod:getGridFixedColumnCount", async () => {
+        return await d.setting.mod.getGridFixedColumnCount();
+    });
+
+    rh("setting:mod:setGridFixedColumnCount", async (count) => {
+        await d.setting.mod.setGridFixedColumnCount(count);
+        d.ipc.broadcast("mod:update-settings");
+    });
+
     rh("setting:mod:getSearchModPreview", async () => {
         return await d.setting.mod.getSearchModPreview();
     });

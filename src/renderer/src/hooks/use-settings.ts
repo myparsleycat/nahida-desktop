@@ -1,4 +1,5 @@
 import type { DriveNameSortPolicy } from "@shared/drive";
+import type { ModGridLayoutMode } from "@shared/mod";
 import type { IpcHandlers } from "@shared/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
@@ -74,6 +75,43 @@ export function useVirtualizationSettings() {
             const enabled = await window.api.invoke("setting:mod:getVirtualizationEnabled");
             const threshold = await window.api.invoke("setting:mod:getVirtualizationThreshold");
             return { enabled, threshold };
+        },
+    });
+}
+
+export function useModGridLayoutSettings() {
+    const queryClient = useQueryClient();
+
+    useEffect(() => {
+        const removeListener = window.api.on("mod:update-settings", () => {
+            queryClient.invalidateQueries({ queryKey: ["settings", "mod", "gridLayout"] });
+        });
+        return () => removeListener();
+    }, [queryClient]);
+
+    return useQuery({
+        queryKey: ["settings", "mod", "gridLayout"],
+        queryFn: async (): Promise<{
+            mode: ModGridLayoutMode;
+            responsiveBaseWidth: number;
+            fixedCardWidth: number;
+            fixedColumnCount: number;
+        }> => {
+            const [mode, responsiveBaseWidth, fixedCardWidth, fixedColumnCount] = await Promise.all(
+                [
+                    window.api.invoke("setting:mod:getGridLayoutMode"),
+                    window.api.invoke("setting:mod:getGridResponsiveBaseWidth"),
+                    window.api.invoke("setting:mod:getGridFixedCardWidth"),
+                    window.api.invoke("setting:mod:getGridFixedColumnCount"),
+                ],
+            );
+
+            return {
+                mode,
+                responsiveBaseWidth,
+                fixedCardWidth,
+                fixedColumnCount,
+            };
         },
     });
 }

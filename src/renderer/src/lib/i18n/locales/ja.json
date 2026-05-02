@@ -697,6 +697,22 @@
           "searchModPreview": "サブフォルダからモッドプレビューを検索",
           "searchModPreviewDescription": "キャラクター フォルダにプレビュー画像がない場合、モッド フォルダ内からプレビュー画像を検索します。"
         },
+        "layout": {
+          "title": "レイアウト",
+          "mode": "グリッドレイアウトモード",
+          "modeDescription": "MODグリッドがカード幅と列数を決定する方法を選択します。",
+          "modes": {
+            "responsive": "レスポンシブ",
+            "fixed_card_width": "カード幅固定",
+            "fixed_column_count": "列数固定"
+          },
+          "responsiveBaseWidth": "レスポンシブ基準カード幅",
+          "responsiveBaseWidthDescription": "利用可能な幅に何列入るかを計算するために使用します。範囲: 240〜640。",
+          "fixedCardWidth": "固定カード幅",
+          "fixedCardWidthDescription": "カード幅を固定し、収まる列数だけを変更します。範囲: 240〜640。",
+          "fixedColumnCount": "固定列数",
+          "fixedColumnCountDescription": "可能な場合は常にこの列数を使用します。範囲: 1〜8。"
+        },
         "performance": {
           "title": "パフォーマンス",
           "backdrop-blur": {
