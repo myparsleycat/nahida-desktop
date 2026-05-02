@@ -1,16 +1,19 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import type { FixToolLogEvent } from "@shared/types";
 
 export class ScriptExecutor {
     private currentProcess: ChildProcess | null = null;
     private stdoutBuffer = "";
     private stderrBuffer = "";
+    private stdoutHasPartialLog = false;
+    private stderrHasPartialLog = false;
     private readonly stdoutDecoder = new TextDecoder("utf-8");
     private readonly stderrDecoder = new TextDecoder("utf-8");
 
-    constructor(private onLog: (msg: string) => void) {}
+    constructor(private onLog: (msg: string, event?: Omit<FixToolLogEvent, "message">) => void) {}
 
     private stripAnsi(str: string): string {
-        // biome-ignore lint/suspicious/noControlCharactersInRegex: ansi stripping
+        // oxlint-disable-next-line no-control-regex
         const ansiRegex = /[\x1B\x9B][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
         return str.replace(ansiRegex, "");
     }
@@ -26,9 +29,30 @@ export class ScriptExecutor {
         }
     }
 
+    private emitLog(
+        message: string,
+        bufferContext: "stdout" | "stderr",
+        replaceLast: boolean = false,
+    ) {
+        const trimmed = message.trim();
+        if (!trimmed) {
+            return;
+        }
+
+        this.onLog(trimmed, replaceLast ? { replaceLast: true } : undefined);
+        if (bufferContext === "stdout") {
+            this.stdoutHasPartialLog = replaceLast;
+        } else {
+            this.stderrHasPartialLog = replaceLast;
+        }
+        this.checkAndAutoReply(trimmed);
+    }
+
     private handleStreamData(data: Uint8Array, bufferContext: "stdout" | "stderr") {
         const decoder = bufferContext === "stdout" ? this.stdoutDecoder : this.stderrDecoder;
         let currentBuffer = bufferContext === "stdout" ? this.stdoutBuffer : this.stderrBuffer;
+        let hasPartialLog =
+            bufferContext === "stdout" ? this.stdoutHasPartialLog : this.stderrHasPartialLog;
 
         const chunk = decoder.decode(data, { stream: true });
         currentBuffer += chunk;
@@ -53,11 +77,11 @@ export class ScriptExecutor {
             const processCount = lines.length - (endsWithNewline ? 0 : 1);
 
             for (let i = 0; i < processCount; i++) {
-                const line = lines[i].trim();
-                if (line) {
-                    this.onLog(line);
-                    this.checkAndAutoReply(line);
+                const line = lines[i];
+                if (line.trim()) {
+                    this.emitLog(line, bufferContext, hasPartialLog);
                 }
+                hasPartialLog = false;
             }
 
             if (!endsWithNewline) {
@@ -72,9 +96,13 @@ export class ScriptExecutor {
                         lowerLast.includes('press "enter" to quit') ||
                         lowerLast.includes("done")
                     ) {
-                        this.onLog(incompleteClean);
+                        this.emitLog(incompleteClean, bufferContext, hasPartialLog);
                         this.sendInput("\n");
                         remaining = "";
+                        hasPartialLog = false;
+                    } else {
+                        this.emitLog(incompleteClean, bufferContext, hasPartialLog);
+                        hasPartialLog = true;
                     }
                 }
             }
@@ -82,8 +110,10 @@ export class ScriptExecutor {
 
         if (bufferContext === "stdout") {
             this.stdoutBuffer = remaining;
+            this.stdoutHasPartialLog = hasPartialLog;
         } else {
             this.stderrBuffer = remaining;
+            this.stderrHasPartialLog = hasPartialLog;
         }
     }
 
@@ -95,6 +125,8 @@ export class ScriptExecutor {
     ): Promise<void> {
         this.stdoutBuffer = "";
         this.stderrBuffer = "";
+        this.stdoutHasPartialLog = false;
+        this.stderrHasPartialLog = false;
 
         return new Promise<void>((resolve, reject) => {
             let settled = false;
@@ -178,17 +210,25 @@ export class ScriptExecutor {
                 const stdoutFinal = this.stdoutDecoder.decode();
                 const stderrFinal = this.stderrDecoder.decode();
 
-                const finalProcess = (buf: string, rest: string) => {
+                const finalProcess = (
+                    buf: string,
+                    rest: string,
+                    bufferContext: "stdout" | "stderr",
+                    replaceLast: boolean,
+                ) => {
                     const combined = this.stripAnsi(buf + rest).trim();
                     if (combined) {
                         for (const line of combined.split(/\r?\n/)) {
-                            if (line.trim()) this.onLog(line.trim());
+                            if (line.trim()) {
+                                this.emitLog(line, bufferContext, replaceLast);
+                                replaceLast = false;
+                            }
                         }
                     }
                 };
 
-                finalProcess(this.stdoutBuffer, stdoutFinal);
-                finalProcess(this.stderrBuffer, stderrFinal);
+                finalProcess(this.stdoutBuffer, stdoutFinal, "stdout", this.stdoutHasPartialLog);
+                finalProcess(this.stderrBuffer, stderrFinal, "stderr", this.stderrHasPartialLog);
 
                 cleanup();
 

@@ -26,6 +26,7 @@ import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
 import { cn } from "@renderer/lib/utils";
 import type { ModInfo } from "@renderer/types/mod";
 import { useRouteContext } from "@tanstack/react-router";
+import type { FixToolLogEvent } from "@shared/types";
 import {
   BoxIcon,
   ChevronRightIcon,
@@ -73,8 +74,14 @@ export const ModCardHeader = memo(function ModCardHeader({
 
   useEffect(() => {
     if (!showLogModal) return;
-    const removeListener = window.api.on("ftm:log", (msg: string) => {
-      setLogs((prev) => [...prev, msg]);
+    const removeListener = window.api.on("ftm:log", (event: FixToolLogEvent) => {
+      setLogs((prev) => {
+        if (event.replaceLast && prev.length > 0) {
+          return [...prev.slice(0, -1), event.message];
+        }
+
+        return [...prev, event.message];
+      });
     });
     return () => removeListener();
   }, [showLogModal]);
