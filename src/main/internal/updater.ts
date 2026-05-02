@@ -1,6 +1,10 @@
 const { autoUpdater } = require("electron-updater");
 
-import type { AutoUpdateMode, UpdaterStatus } from "@shared/updater";
+import type {
+    AutoUpdateMode,
+    ReleaseNoteTranslationLanguage,
+    UpdaterStatus,
+} from "@shared/updater";
 import { app, BrowserWindow } from "electron";
 import { convert as htmlToText } from "html-to-text";
 import ms from "ms";
@@ -18,17 +22,22 @@ if (isDev) {
     autoUpdater.forceDevUpdateConfig = true;
 }
 
+const RELEASE_NOTES_TRANSLATION_URL = "https://translate.nahida.live";
+
 export class Updater {
     private readonly desktop: NahidaDesktop;
     public updateDownloaded: boolean = false;
     public updateAvailable: boolean = false;
     private releaseVersion: string | null = null;
-    private releaseNotesText: string | null = null;
+    private originalReleaseNotesText: string | null = null;
+    private translatedReleaseNotesText: string | null = null;
+    private translatedLanguage: ReleaseNoteTranslationLanguage | null = null;
     private updateDialogDismissed: boolean = false;
     private interval: ReturnType<typeof setInterval> | undefined = undefined;
     private isCheckingForUpdates: boolean = false;
     private isDownloadingUpdate: boolean = false;
     private hasRunInitialAutoCheck: boolean = false;
+    private releaseNotesTranslationRequestId: number = 0;
     private releaseNoteInfoSchema = z.object({
         note: z.string(),
         version: z.string().optional().nullable(),
@@ -43,6 +52,20 @@ export class Updater {
                 z.null(),
             ])
             .optional(),
+    });
+    private translationResponseSchema = z.object({
+        response: z.union([
+            z.string(),
+            z.object({
+                choices: z.array(
+                    z.object({
+                        message: z.object({
+                            content: z.string().nullable().optional(),
+                        }),
+                    }),
+                ),
+            }),
+        ]),
     });
 
     public constructor(desktop: NahidaDesktop) {
@@ -60,7 +83,7 @@ export class Updater {
                 this.updateDownloaded = false;
                 this.updateAvailable = false;
                 this.releaseVersion = null;
-                this.releaseNotesText = null;
+                this.clearReleaseNotes();
                 this.updateDialogDismissed = false;
             }
             this.broadcastStatus();
@@ -68,14 +91,24 @@ export class Updater {
             this.desktop.logger.log("error", err, "updater");
         });
 
-        autoUpdater.on("update-available", (info) => {
+        autoUpdater.on("update-available", async (info) => {
             const { version, releaseNotes } = this.updateInfoSchema.parse(info);
             this.isCheckingForUpdates = false;
             this.updateAvailable = true;
             this.releaseVersion = version;
-            this.releaseNotesText = this.normalizeReleaseNotes(releaseNotes);
+            this.originalReleaseNotesText = this.normalizeReleaseNotes(releaseNotes);
+            this.translatedReleaseNotesText = null;
+            this.translatedLanguage = null;
             this.broadcastStatus();
             this.broadcastUpdateAvailable();
+
+            try {
+                const language = await this.desktop.setting.general.getLanguage();
+                await this.translateCurrentReleaseNotes(language);
+            } catch (err) {
+                this.desktop.logger.log("error", err, "updater.translateReleaseNotes");
+                this.desktop.logger.log("error", err);
+            }
         });
 
         autoUpdater.on("update-not-available", () => {
@@ -84,7 +117,7 @@ export class Updater {
             this.updateDownloaded = false;
             this.updateAvailable = false;
             this.releaseVersion = null;
-            this.releaseNotesText = null;
+            this.clearReleaseNotes();
             this.updateDialogDismissed = false;
             this.broadcastStatus();
         });
@@ -205,6 +238,14 @@ export class Updater {
         this.broadcastStatus();
     }
 
+    public async handleLanguageChanged(language: string): Promise<void> {
+        if (!this.originalReleaseNotesText) {
+            return;
+        }
+
+        await this.translateCurrentReleaseNotes(language);
+    }
+
     public async getStatus(): Promise<UpdaterStatus> {
         const mode = await this.desktop.setting.general.getAutoUpdateMode();
 
@@ -213,10 +254,22 @@ export class Updater {
             updateAvailable: this.updateAvailable,
             updateDownloaded: this.updateDownloaded,
             releaseVersion: this.releaseVersion,
-            releaseNotesText: this.releaseNotesText,
+            releaseNotes: this.getReleaseNotes(),
             shouldPromptForUpdate: this.updateDownloaded && !this.updateDialogDismissed,
             isChecking: this.isCheckingForUpdates,
             isDownloading: this.isDownloadingUpdate,
+        };
+    }
+
+    private getReleaseNotes() {
+        if (!this.originalReleaseNotesText && !this.translatedReleaseNotesText) {
+            return null;
+        }
+
+        return {
+            original: this.originalReleaseNotesText,
+            translated: this.translatedReleaseNotesText,
+            translatedLanguage: this.translatedLanguage,
         };
     }
 
@@ -263,6 +316,140 @@ export class Updater {
 
         return text.length > 0 ? text : null;
     }
+
+    private clearReleaseNotes(): void {
+        this.originalReleaseNotesText = null;
+        this.translatedReleaseNotesText = null;
+        this.translatedLanguage = null;
+        this.releaseNotesTranslationRequestId += 1;
+    }
+
+    private isTranslationLanguage(language: string): language is ReleaseNoteTranslationLanguage {
+        return language === "ko" || language === "ja" || language === "zh";
+    }
+
+    private async translateCurrentReleaseNotes(language: string): Promise<void> {
+        const originalText = this.originalReleaseNotesText;
+        const releaseVersion = this.releaseVersion;
+        const requestId = ++this.releaseNotesTranslationRequestId;
+
+        if (!originalText || !releaseVersion) {
+            return;
+        }
+
+        if (!this.isTranslationLanguage(language)) {
+            const hadTranslation =
+                this.translatedReleaseNotesText !== null || this.translatedLanguage !== null;
+            this.translatedReleaseNotesText = null;
+            this.translatedLanguage = null;
+            if (hadTranslation) {
+                this.broadcastStatus();
+            }
+            return;
+        }
+
+        try {
+            const translatedText = await this.translateReleaseNotes(originalText, language);
+
+            if (
+                requestId !== this.releaseNotesTranslationRequestId ||
+                this.originalReleaseNotesText !== originalText ||
+                this.releaseVersion !== releaseVersion
+            ) {
+                return;
+            }
+
+            if (!translatedText) {
+                const hadTranslation =
+                    this.translatedReleaseNotesText !== null || this.translatedLanguage !== null;
+                this.translatedReleaseNotesText = null;
+                this.translatedLanguage = null;
+                if (hadTranslation) {
+                    this.broadcastStatus();
+                }
+                return;
+            }
+
+            this.translatedReleaseNotesText = translatedText;
+            this.translatedLanguage = language;
+            this.broadcastStatus();
+        } catch (err) {
+            if (requestId !== this.releaseNotesTranslationRequestId) {
+                return;
+            }
+
+            this.translatedReleaseNotesText = null;
+            this.translatedLanguage = null;
+            this.desktop.logger.log("error", err, "updater.translateReleaseNotes");
+            this.desktop.logger.log("error", err);
+            this.broadcastStatus();
+        }
+    }
+
+    private async translateReleaseNotes(
+        originalText: string,
+        language: ReleaseNoteTranslationLanguage,
+    ): Promise<string | null> {
+        const response = await this.desktop.httpService.fetcher(RELEASE_NOTES_TRANSLATION_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                source: "English",
+                target: this.getLanguageName(language),
+                text: originalText,
+            }),
+        });
+
+        const responseText = await response.text();
+
+        if (!response.ok) {
+            throw new Error(
+                `Release notes translation failed with status ${response.status}: ${responseText}`,
+            );
+        }
+
+        const translatedText = this.extractTranslatedText(responseText);
+
+        if (!translatedText || translatedText === originalText) {
+            return null;
+        }
+
+        return translatedText;
+    }
+
+    private extractTranslatedText(responseText: string): string {
+        const trimmedResponseText = responseText.trim();
+
+        if (!trimmedResponseText) {
+            return "";
+        }
+
+        try {
+            const parsed = this.translationResponseSchema.parse(JSON.parse(trimmedResponseText));
+
+            if (typeof parsed.response === "string") {
+                return parsed.response.trim();
+            }
+
+            return parsed.response.choices[0]?.message.content?.trim() ?? "";
+        } catch {
+            return trimmedResponseText;
+        }
+    }
+
+    private getLanguageName(language: ReleaseNoteTranslationLanguage): string {
+        switch (language) {
+            case "ko":
+                return "Korean";
+            case "ja":
+                return "Japanese";
+            case "zh":
+                return "Simplified Chinese";
+        }
+    }
+
     public async showPendingDialogsIfNeeded(): Promise<void> {
         const mainWindow = this.desktop.window.main.window;
         if (this.updateDownloaded && !this.updateDialogDismissed && mainWindow) {

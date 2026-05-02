@@ -871,7 +871,9 @@
         "title": "有新版本可用。",
         "description": "Nahida Desktop 有新版本可用。请重新启动以完成更新。",
         "action": "更新",
-        "releaseNotesTitle": "发布说明"
+        "releaseNotesTitle": "发布说明",
+        "showOriginal": "显示原文",
+        "showTranslation": "显示翻译"
       },
       "notAvailable": {
         "title": "当前已是最新版本。",

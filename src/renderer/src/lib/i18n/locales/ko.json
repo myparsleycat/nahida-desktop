@@ -884,7 +884,9 @@
         "title": "새로운 버전이 출시되었습니다.",
         "description": "Nahida Desktop의 새로운 버전이 출시되었습니다. 다시 시작하여 업데이트하세요.",
         "action": "업데이트",
-        "releaseNotesTitle": "릴리즈 노트"
+        "releaseNotesTitle": "릴리즈 노트",
+        "showOriginal": "원문 보기",
+        "showTranslation": "번역 보기"
       },
       "notAvailable": {
         "title": "최신 버전을 사용 중입니다.",

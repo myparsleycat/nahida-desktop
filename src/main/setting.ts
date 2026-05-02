@@ -217,20 +217,29 @@ export class Setting {
             }
         },
 
-        getLanguage: async () => {
+        getLanguage: async (): Promise<string> => {
             const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "language"),
             });
 
+            const systemLocale = app.getSystemLocale();
+            const fallbackLanguage = ["ko", "en", "ja", "zh"].includes(systemLocale.split("-")[0])
+                ? systemLocale.split("-")[0]
+                : "en";
+
             if (!qr) {
-                const systemLocale = app.getSystemLocale();
-                const language = ["ko", "en", "ja", "zh"].includes(systemLocale.split("-")[0])
-                    ? systemLocale.split("-")[0]
-                    : "en";
                 await this.desktop.lib.db
                     .insert(setting)
-                    .values({ key: "language", value: language });
-                return language;
+                    .values({ key: "language", value: fallbackLanguage });
+                return fallbackLanguage;
+            }
+
+            if (!qr.value) {
+                await this.desktop.lib.db
+                    .update(setting)
+                    .set({ value: fallbackLanguage })
+                    .where(eq(setting.key, "language"));
+                return fallbackLanguage;
             }
 
             return qr.value;
@@ -246,6 +255,7 @@ export class Setting {
                 });
 
             this.desktop.ipc.broadcast("language:update", language);
+            await this.desktop.updater.handleLanguageChanged(language);
         },
 
         getMoveTransferPageWhenStartTransfer: async () => {

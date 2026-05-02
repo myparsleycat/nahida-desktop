@@ -1,6 +1,6 @@
 import type { Session } from "@shared/schemas/auth";
 import type { AppStatus, TransferWithoutData } from "@shared/types";
-import type { UpdaterStatus } from "@shared/updater";
+import type { UpdaterReleaseNotes, UpdaterStatus } from "@shared/updater";
 import { createStore, useStore } from "zustand";
 
 interface GlobalStore {
@@ -11,7 +11,7 @@ interface GlobalStore {
     updateDownloaded: boolean;
     setUpdateDownloaded: (updateDownloaded: boolean) => void;
     releaseVersion: string | null;
-    releaseNotesText: string | null;
+    releaseNotes: UpdaterReleaseNotes | null;
     shouldPromptForUpdate: boolean;
     setShouldPromptForUpdate: (shouldPromptForUpdate: boolean) => void;
     updaterMode: UpdaterStatus["mode"];
@@ -38,7 +38,7 @@ export const globalStore = createStore<GlobalStore>((set) => {
         updateDownloaded: false,
         setUpdateDownloaded: (updateDownloaded) => set({ updateDownloaded }),
         releaseVersion: null,
-        releaseNotesText: null,
+        releaseNotes: null,
         shouldPromptForUpdate: false,
         setShouldPromptForUpdate: (shouldPromptForUpdate) => set({ shouldPromptForUpdate }),
         updaterMode: "auto",
@@ -53,7 +53,7 @@ export const globalStore = createStore<GlobalStore>((set) => {
                 updateAvailable: status.updateAvailable,
                 updateDownloaded: status.updateDownloaded,
                 releaseVersion: status.releaseVersion,
-                releaseNotesText: status.releaseNotesText,
+                releaseNotes: status.releaseNotes,
                 shouldPromptForUpdate: status.shouldPromptForUpdate,
                 updaterChecking: status.isChecking,
                 updaterDownloading: status.isDownloading,

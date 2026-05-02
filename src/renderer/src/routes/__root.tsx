@@ -1,6 +1,7 @@
 import { PathSelectorDialog } from "@renderer/components/path-selector-dialog";
 import { RootProvider } from "@renderer/components/root-provider";
 import { Sidebar } from "@renderer/components/sidebar";
+import { Button } from "@renderer/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,12 +29,22 @@ function UpdateAlertDialog() {
   const appStatus = useGlobalStore((state) => state.appStatus);
   const open = useGlobalStore((state) => state.shouldPromptForUpdate);
   const releaseVersion = useGlobalStore((state) => state.releaseVersion);
-  const releaseNotesText = useGlobalStore((state) => state.releaseNotesText);
+  const releaseNotes = useGlobalStore((state) => state.releaseNotes);
   const setShouldPromptForUpdate = useGlobalStore((state) => state.setShouldPromptForUpdate);
   const isDismissingRef = useRef(false);
   const skipNextDismissRef = useRef(false);
+  const [showOriginalReleaseNotes, setShowOriginalReleaseNotes] = useState(false);
   const versionRangeText =
     appStatus?.version && releaseVersion ? ` (${appStatus.version} → ${releaseVersion})` : "";
+  const hasTranslatedReleaseNotes = !!(releaseNotes?.translated && releaseNotes?.original);
+  const displayedReleaseNotesText =
+    hasTranslatedReleaseNotes && !showOriginalReleaseNotes
+      ? releaseNotes.translated
+      : releaseNotes?.original ?? releaseNotes?.translated ?? null;
+
+  useEffect(() => {
+    setShowOriginalReleaseNotes(false);
+  }, [releaseNotes?.original, releaseNotes?.translated, releaseNotes?.translatedLanguage]);
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
@@ -69,14 +80,28 @@ function UpdateAlertDialog() {
             {versionRangeText}
           </AlertDialogDescription>
         </AlertDialogHeader>
-        {releaseNotesText && (
+        {displayedReleaseNotesText && (
           <section className="space-y-2">
-            <h3 className="text-sm font-medium">
-              {t("updater.toast.available.releaseNotesTitle")}
-            </h3>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-medium">
+                {t("updater.toast.available.releaseNotesTitle")}
+              </h3>
+              {hasTranslatedReleaseNotes && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowOriginalReleaseNotes((current) => !current)}
+                >
+                  {showOriginalReleaseNotes
+                    ? t("updater.toast.available.showTranslation")
+                    : t("updater.toast.available.showOriginal")}
+                </Button>
+              )}
+            </div>
             <ScrollArea className="h-64 rounded-md border">
               <div className="px-4 py-3 text-sm whitespace-pre-wrap wrap-break-word">
-                {releaseNotesText}
+                {displayedReleaseNotesText}
               </div>
             </ScrollArea>
           </section>
