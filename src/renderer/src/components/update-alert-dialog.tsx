@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 
 const RELEASE_NOTE_LINK_PATTERN = /\[(https?:\/\/[^\]\s]+)\]/g;
 const RELEASE_NOTE_LINK_BOUNDARIES = ["* ", "- ", "• ", ": ", "의 ", "by ", "from "];
+const RELEASE_NOTE_BULLET_PATTERN = /^(\s*)([*-])\s+(.*)$/;
 
 function findReleaseNoteLinkSplitIndex(value: string) {
   let splitIndex = -1;
@@ -109,9 +110,24 @@ function renderReleaseNoteLine(line: string, lineIndex: number) {
 function ReleaseNotesContent({ text }: { text: string }) {
   return (
     <div className="px-4 py-3 text-sm whitespace-pre-wrap break-words">
-      {text.split("\n").map((line, index) => (
-        <div key={`release-note-line-${index}`}>{renderReleaseNoteLine(line, index)}</div>
-      ))}
+      {text.split("\n").map((line, index) => {
+        const bulletMatch = line.match(RELEASE_NOTE_BULLET_PATTERN);
+        if (bulletMatch) {
+          const [, indent, marker, content] = bulletMatch;
+          return (
+            <div
+              key={`release-note-line-${index}`}
+              className="flex items-start gap-2"
+              style={indent ? { paddingLeft: `${indent.length}ch` } : undefined}
+            >
+              <span className="shrink-0">{marker}</span>
+              <div className="min-w-0 flex-1">{renderReleaseNoteLine(content, index)}</div>
+            </div>
+          );
+        }
+
+        return <div key={`release-note-line-${index}`}>{renderReleaseNoteLine(line, index)}</div>;
+      })}
     </div>
   );
 }
