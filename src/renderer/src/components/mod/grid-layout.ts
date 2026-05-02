@@ -63,7 +63,8 @@ export function resolveModGridLayout(
     rawSettings: Partial<ModGridLayoutSettings> | null | undefined,
 ): ResolvedModGridLayout {
     const settings = normalizeModGridLayoutSettings(rawSettings);
-    const safeWidth = Math.max(0, Math.trunc(availableWidth));
+    const normalizedWidth = Number.isFinite(availableWidth) ? availableWidth : 0;
+    const safeWidth = Math.max(0, Math.trunc(normalizedWidth));
 
     if (settings.mode === "fixed_card_width") {
         const columnCount = Math.max(1, Math.floor(safeWidth / settings.fixedCardWidth));
