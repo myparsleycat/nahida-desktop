@@ -12,9 +12,9 @@ import { IS_ELECTRON } from "./const";
 import { DB_FILE_NAME } from "./internal/const";
 import { InitDB } from "./internal/db";
 import * as schema from "./internal/db/schema";
-import { NahidaProtocolHandler } from "./internal/protocol";
 import { DesktopHttpService } from "./internal/http";
 import Logger from "./internal/logger";
+import { NahidaProtocolHandler } from "./internal/protocol";
 import Updater from "./internal/updater";
 import { IPC } from "./ipc";
 import Compressor from "./lib/compressor";
@@ -27,6 +27,7 @@ import Tray from "./lib/tray";
 import Utils from "./lib/utils";
 import Watcher from "./lib/watcher";
 import { registerProtocal } from "./protocals";
+import { startServer } from "./server";
 import ArchiveService from "./services/archive";
 import Auth from "./services/auth";
 import { DriveService } from "./services/drive";
@@ -40,7 +41,6 @@ import Setting from "./setting";
 import LoginWindow from "./windows/login";
 import MainWindow from "./windows/main";
 import ReportWindow from "./windows/report";
-import { startServer } from "./server";
 
 if (IS_ELECTRON) {
     // Needs to be here, otherwise Chromium's FileSystemAccess API won't work. Waiting for the electron team to fix it.
@@ -264,7 +264,6 @@ app.whenReady().then(async () => {
     const gotTheLock = app.requestSingleInstanceLock();
 
     if (!gotTheLock) {
-        desktop.logger.warn("앱이 이미 실행중임");
         app.quit();
         return;
     }
