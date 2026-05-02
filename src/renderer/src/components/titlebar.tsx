@@ -25,6 +25,7 @@ export function Titlebar({ title }: TitlebarProps) {
   const updateAvailable = useGlobalStore((state) => state.updateAvailable);
   const updateDownloaded = useGlobalStore((state) => state.updateDownloaded);
   const shouldPromptForUpdate = useGlobalStore((state) => state.shouldPromptForUpdate);
+  const setShouldPromptForUpdate = useGlobalStore((state) => state.setShouldPromptForUpdate);
   const updaterMode = useGlobalStore((state) => state.updaterMode);
   const updaterDownloading = useGlobalStore((state) => state.updaterDownloading);
   const [isUpdateActionPending, setIsUpdateActionPending] = useState(false);
@@ -86,7 +87,7 @@ export function Titlebar({ title }: TitlebarProps) {
                 if (shouldOfferManualDownload) {
                   await window.api.invoke("updater:downloadUpdate");
                 } else {
-                  await window.api.invoke("updater:installUpdate");
+                  setShouldPromptForUpdate(true);
                 }
               } finally {
                 setIsUpdateActionPending(false);

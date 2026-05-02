@@ -865,12 +865,12 @@
   },
   "updater": {
     "titlebar": {
-      "action": "클릭해 재시작하고 업데이트",
+      "action": "업데이트 확인",
       "downloadAction": "업데이트 다운로드"
     },
     "actions": {
       "download": "업데이트 다운로드",
-      "install": "재시작하고 업데이트"
+      "install": "업데이트 확인"
     },
     "status": {
       "idle": "최신 버전을 사용 중입니다.",
