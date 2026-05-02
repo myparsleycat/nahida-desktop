@@ -46,7 +46,8 @@ export function ModGrid(_props: ModGridProps) {
   useEffect(() => {
     if (!scrollAreaRef.current) return;
 
-    const viewport = scrollAreaRef.current.querySelector("[data-radix-scroll-area-viewport]");
+    const scrollArea = scrollAreaRef.current;
+    const viewport = scrollArea.querySelector("[data-radix-scroll-area-viewport]");
     if (!viewport) return;
 
     const updateWidth = () => {
@@ -58,7 +59,7 @@ export function ModGrid(_props: ModGridProps) {
     observer.observe(viewport);
 
     return () => observer.disconnect();
-  }, [scrollAreaRef.current]);
+  }, []);
 
   const resolvedGridLayout = useMemo(
     () => resolveModGridLayout(availableWidth, normalizeModGridLayoutSettings(gridLayoutSettings)),
