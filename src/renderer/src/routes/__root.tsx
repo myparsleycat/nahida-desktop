@@ -11,7 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@renderer/components/ui/alert-dialog";
-import { Button } from "@renderer/components/ui/button";
+import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Toaster } from "@renderer/components/ui/sonner";
 import { useGlobalEvents } from "@renderer/hooks/use-global-events";
 import { useDownloadArchiveExtractPromptHandler } from "@renderer/hooks/use-mod-events";
@@ -28,7 +28,7 @@ function UpdateAlertDialog() {
   const appStatus = useGlobalStore((state) => state.appStatus);
   const open = useGlobalStore((state) => state.shouldPromptForUpdate);
   const releaseVersion = useGlobalStore((state) => state.releaseVersion);
-  const releaseNotesUrl = useGlobalStore((state) => state.releaseNotesUrl);
+  const releaseNotesText = useGlobalStore((state) => state.releaseNotesText);
   const setShouldPromptForUpdate = useGlobalStore((state) => state.setShouldPromptForUpdate);
   const isDismissingRef = useRef(false);
   const skipNextDismissRef = useRef(false);
@@ -60,25 +60,29 @@ function UpdateAlertDialog() {
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent className="min-w-xl">
         <AlertDialogHeader>
           <AlertDialogTitle>{t("updater.toast.available.title")}</AlertDialogTitle>
           <AlertDialogDescription>
-            {t("updater.toast.available.description", { versionRangeText })}
+            {t("updater.toast.available.description")}
+            <br />
+            {versionRangeText}
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {releaseNotesText && (
+          <section className="space-y-2">
+            <h3 className="text-sm font-medium">
+              {t("updater.toast.available.releaseNotesTitle")}
+            </h3>
+            <ScrollArea className="h-64 rounded-md border">
+              <div className="px-4 py-3 text-sm whitespace-pre-wrap wrap-break-word">
+                {releaseNotesText}
+              </div>
+            </ScrollArea>
+          </section>
+        )}
         <AlertDialogFooter>
           <AlertDialogCancel>{t("g.later")}</AlertDialogCancel>
-          {releaseNotesUrl && (
-            <Button
-              variant="outline"
-              onClick={() => {
-                window.api.invoke("util:openExternal", releaseNotesUrl);
-              }}
-            >
-              {t("updater.toast.available.releaseNotes")}
-            </Button>
-          )}
           <AlertDialogAction
             onClick={() => {
               skipNextDismissRef.current = true;

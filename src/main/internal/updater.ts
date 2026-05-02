@@ -2,6 +2,7 @@ const { autoUpdater } = require("electron-updater");
 
 import type { AutoUpdateMode, UpdaterStatus } from "@shared/updater";
 import { app, BrowserWindow } from "electron";
+import { convert as htmlToText } from "html-to-text";
 import ms from "ms";
 import z from "zod";
 import type { NahidaDesktop } from "..";
@@ -22,7 +23,7 @@ export class Updater {
     public updateDownloaded: boolean = false;
     public updateAvailable: boolean = false;
     private releaseVersion: string | null = null;
-    private releaseNotesUrl: string | null = null;
+    private releaseNotesText: string | null = null;
     private updateDialogDismissed: boolean = false;
     private interval: ReturnType<typeof setInterval> | undefined = undefined;
     private isCheckingForUpdates: boolean = false;
@@ -30,11 +31,18 @@ export class Updater {
     private hasRunInitialAutoCheck: boolean = false;
     private releaseNoteInfoSchema = z.object({
         note: z.string(),
-        version: z.string().optional(),
+        version: z.string().optional().nullable(),
     });
     private updateInfoSchema = z.object({
         version: z.string(),
-        releaseNotes: z.string().nullable(),
+        releaseNotes: z
+            .union([
+                z.string(),
+                this.releaseNoteInfoSchema,
+                z.array(this.releaseNoteInfoSchema),
+                z.null(),
+            ])
+            .optional(),
     });
 
     public constructor(desktop: NahidaDesktop) {
@@ -52,7 +60,7 @@ export class Updater {
                 this.updateDownloaded = false;
                 this.updateAvailable = false;
                 this.releaseVersion = null;
-                this.releaseNotesUrl = null;
+                this.releaseNotesText = null;
                 this.updateDialogDismissed = false;
             }
             this.broadcastStatus();
@@ -65,7 +73,7 @@ export class Updater {
             this.isCheckingForUpdates = false;
             this.updateAvailable = true;
             this.releaseVersion = version;
-            this.releaseNotesUrl = releaseNotes && this.extractReleaseNotesUrl(releaseNotes);
+            this.releaseNotesText = this.normalizeReleaseNotes(releaseNotes);
             this.broadcastStatus();
             this.broadcastUpdateAvailable();
         });
@@ -76,7 +84,7 @@ export class Updater {
             this.updateDownloaded = false;
             this.updateAvailable = false;
             this.releaseVersion = null;
-            this.releaseNotesUrl = null;
+            this.releaseNotesText = null;
             this.updateDialogDismissed = false;
             this.broadcastStatus();
         });
@@ -205,25 +213,56 @@ export class Updater {
             updateAvailable: this.updateAvailable,
             updateDownloaded: this.updateDownloaded,
             releaseVersion: this.releaseVersion,
-            releaseNotesUrl: this.releaseNotesUrl,
+            releaseNotesText: this.releaseNotesText,
             shouldPromptForUpdate: this.updateDownloaded && !this.updateDialogDismissed,
             isChecking: this.isCheckingForUpdates,
             isDownloading: this.isDownloadingUpdate,
         };
     }
 
-    private extractReleaseNotesUrl(releaseNotes: string): string | null {
-        const notionLinkPattern = /<p>\s*notion:\s*<a[^>]+href="([^"]+)"[^>]*>/i;
-        const notionLinkMatch = notionLinkPattern.exec(releaseNotes);
-        if (notionLinkMatch?.[1]) {
-            return notionLinkMatch[1];
+    private normalizeReleaseNotes(
+        releaseNotes:
+            | string
+            | z.infer<typeof this.releaseNoteInfoSchema>
+            | z.infer<typeof this.releaseNoteInfoSchema>[]
+            | null
+            | undefined,
+    ): string | null {
+        if (!releaseNotes) {
+            return null;
         }
 
-        const fallbackPattern = /<a[^>]+href="([^"]*notion\.so[^"]*)"[^>]*>/i;
-        const fallbackMatch = fallbackPattern.exec(releaseNotes);
-        return fallbackMatch?.[1] ?? null;
+        if (typeof releaseNotes === "string") {
+            return this.htmlToPlainText(releaseNotes);
+        }
+
+        if (Array.isArray(releaseNotes)) {
+            const sections = releaseNotes
+                .map((item) => this.formatReleaseNoteSection(item))
+                .filter((item) => item.length > 0);
+            const joined = sections.join("\n\n").trim();
+            return joined.length > 0 ? joined : null;
+        }
+
+        return this.formatReleaseNoteSection(releaseNotes);
     }
 
+    private formatReleaseNoteSection(noteInfo: z.infer<typeof this.releaseNoteInfoSchema>): string {
+        const versionPrefix = noteInfo.version ? `v${noteInfo.version}\n` : "";
+        const noteText = this.htmlToPlainText(noteInfo.note);
+        return `${versionPrefix}${noteText}`.trim();
+    }
+
+    private htmlToPlainText(value: string): string | null {
+        const text = htmlToText(value, {
+            wordwrap: false,
+        })
+            .replace(/\r\n/g, "\n")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim();
+
+        return text.length > 0 ? text : null;
+    }
     public async showPendingDialogsIfNeeded(): Promise<void> {
         const mainWindow = this.desktop.window.main.window;
         if (this.updateDownloaded && !this.updateDialogDismissed && mainWindow) {

@@ -5,7 +5,7 @@ export interface UpdaterStatus {
     updateAvailable: boolean;
     updateDownloaded: boolean;
     releaseVersion: string | null;
-    releaseNotesUrl: string | null;
+    releaseNotesText: string | null;
     shouldPromptForUpdate: boolean;
     isChecking: boolean;
     isDownloading: boolean;

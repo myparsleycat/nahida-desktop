@@ -902,9 +902,9 @@
     "toast": {
       "available": {
         "title": "A new version is available.",
-        "description": "A new version of Nahida Desktop is available. Restart to update.{{versionRangeText}}",
+        "description": "A new version of Nahida Desktop is available. Restart to update.",
         "action": "Update",
-        "releaseNotes": "Open patch notes"
+        "releaseNotesTitle": "Release notes"
       },
       "notAvailable": {
         "title": "You're up to date.",
