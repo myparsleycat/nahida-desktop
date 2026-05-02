@@ -328,6 +328,38 @@ export class CustomDownloader {
         return path.extname(stagedPath) ? path.dirname(stagedPath) : stagedPath;
     }
 
+    private getArchiveRootName(fileName: string) {
+        const sanitized = this.desktop.lib.fs.sanitizeWindowsFilename(fileName);
+        const withoutArchiveExt = sanitized.replace(/\.(zip|7z|rar)$/i, "");
+        return withoutArchiveExt || sanitized;
+    }
+
+    private async applySelectedExtractedName(props: {
+        extractedPath: string;
+        stagingPath: string;
+        requestedFileName: string;
+        originalSuggestedFileName: string;
+    }) {
+        const { extractedPath, stagingPath, requestedFileName, originalSuggestedFileName } = props;
+
+        if (requestedFileName === originalSuggestedFileName || extractedPath === stagingPath) {
+            return extractedPath;
+        }
+
+        const stats = await fse.stat(extractedPath);
+        const desiredName = stats.isDirectory()
+            ? this.getArchiveRootName(requestedFileName)
+            : requestedFileName;
+
+        if (!desiredName || path.basename(extractedPath) === desiredName) {
+            return extractedPath;
+        }
+
+        const renamedPath = path.join(path.dirname(extractedPath), desiredName);
+        await this.moveWithOverwrite(extractedPath, renamedPath);
+        return renamedPath;
+    }
+
     private async finalizeStagedDownload(stagingPath: string, destinationDir: string) {
         await fse.ensureDir(destinationDir);
 
@@ -617,10 +649,18 @@ export class CustomDownloader {
                 const stagedPath = shouldExtract
                     ? await this.extractGBArchive(stagedDownloadPath)
                     : stagedDownloadPath;
+                const finalStagedPath = shouldExtract
+                    ? await this.applySelectedExtractedName({
+                          extractedPath: stagedPath,
+                          stagingPath,
+                          requestedFileName: finalFileName,
+                          originalSuggestedFileName: suggestedFileName,
+                      })
+                    : stagedPath;
 
                 if (previewUrl) {
                     const previewSavePath = path.join(
-                        this.getPreviewTargetDir(stagedPath),
+                        this.getPreviewTargetDir(finalStagedPath),
                         "preview.jpg",
                     );
                     await this.downloadFile({
@@ -722,7 +762,7 @@ export class CustomDownloader {
             type: "download",
             data: transferData,
             abortController,
-            name: title,
+            name: finalFileName,
             initialStatus: "pending",
             path: destinationPath,
         });
@@ -764,7 +804,16 @@ export class CustomDownloader {
                 });
 
                 if (shouldExtract) {
-                    await this.desktop.service.archive.extract(stagedDownloadPath, stagingPath);
+                    const extractedPath = await this.desktop.service.archive.extract(
+                        stagedDownloadPath,
+                        stagingPath,
+                    );
+                    await this.applySelectedExtractedName({
+                        extractedPath,
+                        stagingPath,
+                        requestedFileName: finalFileName,
+                        originalSuggestedFileName: title,
+                    });
                     await fse.rm(stagedDownloadPath, { force: true });
                 }
 
