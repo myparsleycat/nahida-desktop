@@ -35,7 +35,7 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@hono/node-server": "^2.0.1",
-    "@hono/node-ws": "^1.3.0",
+    "@hono/node-ws": "^1.3.1",
     "@hono/zod-validator": "^0.7.6",
     "auto-launch": "^5.0.6",
     "better-sqlite3": "^12.9.0",
@@ -74,7 +74,7 @@
     "valdex": "^1.0.4",
     "validator": "^13.15.35",
     "write-file-atomic": "^7.0.1",
-    "zod": "^4.4.1"
+    "zod": "^4.4.2"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^2.0.0",
@@ -85,10 +85,10 @@
     "@rolldown/plugin-babel": "^0.2.3",
     "@tailwindcss/vite": "^4.2.4",
     "@tanstack/react-form": "^1.29.1",
-    "@tanstack/react-query": "^5.100.6",
+    "@tanstack/react-query": "^5.100.8",
     "@tanstack/react-router": "^1.169.1",
     "@tanstack/react-virtual": "^3.13.24",
-    "@tanstack/router-plugin": "^1.167.31",
+    "@tanstack/router-plugin": "^1.167.32",
     "@types/auto-launch": "^5.0.5",
     "@types/better-sqlite3": "^7.6.13",
     "@types/electron-progressbar": "^2.2.0",
