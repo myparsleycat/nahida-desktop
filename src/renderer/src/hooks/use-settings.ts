@@ -134,6 +134,26 @@ export function useSidebarLayoutSetting() {
     });
 }
 
+export function useCharacterSidebarWidthSetting() {
+    const queryClient = useQueryClient();
+
+    useEffect(() => {
+        const removeListener = window.api.on("mod:update-settings", () => {
+            queryClient.invalidateQueries({
+                queryKey: ["settings", "mod", "characterSidebarWidth"],
+            });
+        });
+        return () => removeListener();
+    }, [queryClient]);
+
+    return useQuery({
+        queryKey: ["settings", "mod", "characterSidebarWidth"],
+        queryFn: async (): Promise<number> => {
+            return await window.api.invoke("setting:mod:getCharacterSidebarWidth");
+        },
+    });
+}
+
 export function useSearchModPreviewSetting() {
     const queryClient = useQueryClient();
 

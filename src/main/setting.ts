@@ -44,6 +44,9 @@ const MOD_GRID_COLUMN_MAX = 8;
 const MOD_GRID_RESPONSIVE_BASE_WIDTH_DEFAULT = 400;
 const MOD_GRID_FIXED_CARD_WIDTH_DEFAULT = 360;
 const MOD_GRID_FIXED_COLUMN_COUNT_DEFAULT = 4;
+const MOD_CHARACTER_SIDEBAR_WIDTH_MIN = 220;
+const MOD_CHARACTER_SIDEBAR_WIDTH_MAX = 480;
+const MOD_CHARACTER_SIDEBAR_WIDTH_DEFAULT = 256;
 
 function clampTransferConcurrency(value: number, min: number, max: number, fallback: number) {
     if (!Number.isFinite(value)) {
@@ -500,6 +503,56 @@ export class Setting {
                 .onConflictDoUpdate({
                     target: setting.key,
                     set: { value: normalizedMode },
+                });
+        },
+
+        getCharacterSidebarWidth: async () => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "mod_character_sidebar_width"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db.insert(setting).values({
+                    key: "mod_character_sidebar_width",
+                    value: String(MOD_CHARACTER_SIDEBAR_WIDTH_DEFAULT),
+                });
+                return MOD_CHARACTER_SIDEBAR_WIDTH_DEFAULT;
+            }
+
+            const normalizedWidth = clampIntegerSetting(
+                parseInt(qr.value as string, 10),
+                MOD_CHARACTER_SIDEBAR_WIDTH_MIN,
+                MOD_CHARACTER_SIDEBAR_WIDTH_MAX,
+                MOD_CHARACTER_SIDEBAR_WIDTH_DEFAULT,
+            );
+
+            if (String(normalizedWidth) !== qr.value) {
+                await this.desktop.lib.db
+                    .update(setting)
+                    .set({ value: String(normalizedWidth) })
+                    .where(eq(setting.key, "mod_character_sidebar_width"));
+            }
+
+            return normalizedWidth;
+        },
+
+        setCharacterSidebarWidth: async (width: number) => {
+            const normalizedWidth = clampIntegerSetting(
+                width,
+                MOD_CHARACTER_SIDEBAR_WIDTH_MIN,
+                MOD_CHARACTER_SIDEBAR_WIDTH_MAX,
+                MOD_CHARACTER_SIDEBAR_WIDTH_DEFAULT,
+            );
+
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({
+                    key: "mod_character_sidebar_width",
+                    value: String(normalizedWidth),
+                })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: String(normalizedWidth) },
                 });
         },
 

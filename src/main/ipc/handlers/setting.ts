@@ -112,6 +112,15 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         d.ipc.broadcast("mod:update-settings");
     });
 
+    rh("setting:mod:getCharacterSidebarWidth", async () => {
+        return await d.setting.mod.getCharacterSidebarWidth();
+    });
+
+    rh("setting:mod:setCharacterSidebarWidth", async (width) => {
+        await d.setting.mod.setCharacterSidebarWidth(width);
+        d.ipc.broadcast("mod:update-settings");
+    });
+
     rh("setting:mod:getArchiveExtractPathMode", async () => {
         return await d.setting.mod.getArchiveExtractPathMode();
     });
