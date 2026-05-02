@@ -729,6 +729,32 @@
           "searchModPreview": "Search Preview in Subfolders",
           "searchModPreviewDescription": "If no preview image exists in the character folder, search for preview images inside mod folders."
         },
+        "layout": {
+          "title": "Layout",
+          "sidebar": {
+            "mode": "Sidebar layout",
+            "modeDescription": "Display the character sidebar as either a row list or a square preview grid.",
+            "modes": {
+              "row": "Row list",
+              "grid": "Preview grid"
+            }
+          },
+          "grid": {
+            "mode": "Mod grid layout",
+            "modeDescription": "Choose how the mod grid decides card widths and column counts.",
+            "modes": {
+              "responsive": "Responsive",
+              "fixed_card_width": "Fixed card width",
+              "fixed_column_count": "Fixed column count"
+            },
+            "responsiveBaseWidth": "Responsive base card width",
+            "responsiveBaseWidthDescription": "Used to calculate how many columns fit in the available width. Range: 240 to 640.",
+            "fixedCardWidth": "Fixed card width",
+            "fixedCardWidthDescription": "Keeps card width fixed and only changes how many columns fit. Range: 240 to 640.",
+            "fixedColumnCount": "Fixed column count",
+            "fixedColumnCountDescription": "Always use this many columns when possible. Range: 1 to 8."
+          }
+        },
         "performance": {
           "title": "Performance",
           "backdrop-blur": {
@@ -876,9 +902,11 @@
     "toast": {
       "available": {
         "title": "A new version is available.",
-        "description": "A new version of Nahida Desktop is available. Restart to update.{{versionRangeText}}",
+        "description": "A new version of Nahida Desktop is available. Restart to update.",
         "action": "Update",
-        "releaseNotes": "Open patch notes"
+        "releaseNotesTitle": "Release notes",
+        "showOriginal": "Show original",
+        "showTranslation": "Show translation"
       },
       "notAvailable": {
         "title": "You're up to date.",

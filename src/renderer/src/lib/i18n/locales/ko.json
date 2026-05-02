@@ -709,6 +709,32 @@
           "searchModPreview": "하위 폴더에서 미리보기 검색",
           "searchModPreviewDescription": "캐릭터 폴더에 프리뷰 이미지가 없는 경우, 모드 폴더 내부에서 프리뷰 이미지를 검색합니다."
         },
+        "layout": {
+          "title": "레이아웃",
+          "sidebar": {
+            "mode": "사이드바 레이아웃",
+            "modeDescription": "캐릭터 사이드바를 행 목록 또는 정사각형 프리뷰 그리드로 표시합니다.",
+            "modes": {
+              "row": "행 목록",
+              "grid": "프리뷰 그리드"
+            }
+          },
+          "grid": {
+            "mode": "모드 그리드 레이아웃",
+            "modeDescription": "모드 그리드가 카드 너비와 열 개수를 결정하는 방식을 선택합니다.",
+            "modes": {
+              "responsive": "반응형",
+              "fixed_card_width": "고정 카드 너비",
+              "fixed_column_count": "고정 열 개수"
+            },
+            "responsiveBaseWidth": "반응형 기준 카드 너비",
+            "responsiveBaseWidthDescription": "사용 가능한 너비에 몇 개의 열이 들어가는지 계산할 때 사용합니다. 범위: 240~640.",
+            "fixedCardWidth": "고정 카드 너비",
+            "fixedCardWidthDescription": "카드 너비를 고정하고 들어갈 수 있는 열 개수만 변경합니다. 범위: 240~640.",
+            "fixedColumnCount": "고정 열 개수",
+            "fixedColumnCountDescription": "가능한 경우 항상 이 개수의 열을 사용합니다. 범위: 1~8."
+          }
+        },
         "performance": {
           "title": "성능",
           "backdrop-blur": {
@@ -856,9 +882,11 @@
     "toast": {
       "available": {
         "title": "새로운 버전이 출시되었습니다.",
-        "description": "Nahida Desktop의 새로운 버전이 출시되었습니다. 다시 시작하여 업데이트하세요.{{versionRangeText}}",
+        "description": "Nahida Desktop의 새로운 버전이 출시되었습니다. 다시 시작하여 업데이트하세요.",
         "action": "업데이트",
-        "releaseNotes": "패치 노트 열기"
+        "releaseNotesTitle": "릴리즈 노트",
+        "showOriginal": "원문 보기",
+        "showTranslation": "번역 보기"
       },
       "notAvailable": {
         "title": "최신 버전을 사용 중입니다.",

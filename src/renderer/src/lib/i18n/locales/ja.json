@@ -697,6 +697,32 @@
           "searchModPreview": "サブフォルダからモッドプレビューを検索",
           "searchModPreviewDescription": "キャラクター フォルダにプレビュー画像がない場合、モッド フォルダ内からプレビュー画像を検索します。"
         },
+        "layout": {
+          "title": "レイアウト",
+          "sidebar": {
+            "mode": "サイドバーレイアウト",
+            "modeDescription": "キャラクターサイドバーを行リストまたは正方形プレビューグリッドで表示します。",
+            "modes": {
+              "row": "行リスト",
+              "grid": "プレビューグリッド"
+            }
+          },
+          "grid": {
+            "mode": "MODグリッドレイアウト",
+            "modeDescription": "MODグリッドがカード幅と列数を決定する方法を選択します。",
+            "modes": {
+              "responsive": "レスポンシブ",
+              "fixed_card_width": "カード幅固定",
+              "fixed_column_count": "列数固定"
+            },
+            "responsiveBaseWidth": "レスポンシブ基準カード幅",
+            "responsiveBaseWidthDescription": "利用可能な幅に何列入るかを計算するために使用します。範囲: 240〜640。",
+            "fixedCardWidth": "固定カード幅",
+            "fixedCardWidthDescription": "カード幅を固定し、収まる列数だけを変更します。範囲: 240〜640。",
+            "fixedColumnCount": "固定列数",
+            "fixedColumnCountDescription": "可能な場合は常にこの列数を使用します。範囲: 1〜8。"
+          }
+        },
         "performance": {
           "title": "パフォーマンス",
           "backdrop-blur": {
@@ -844,9 +870,11 @@
     "toast": {
       "available": {
         "title": "新しいバージョンが利用可能です。",
-        "description": "Nahida Desktop の新しいバージョンが利用可能です。再起動して更新してください。{{versionRangeText}}",
+        "description": "Nahida Desktop の新しいバージョンが利用可能です。再起動して更新してください。",
         "action": "更新",
-        "releaseNotes": "パッチノートを開く"
+        "releaseNotesTitle": "リリースノート",
+        "showOriginal": "原文を表示",
+        "showTranslation": "翻訳を表示"
       },
       "notAvailable": {
         "title": "最新バージョンを使用しています。",
