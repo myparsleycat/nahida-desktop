@@ -4,8 +4,10 @@ import { normalizeDriveNameSortPolicy, type DriveNameSortPolicy } from "@shared/
 import {
     ARCHIVE_EXTRACT_PATH_MODES,
     MOD_GRID_LAYOUT_MODES,
+    SIDEBAR_LAYOUT_MODES,
     type ArchiveExtractPathMode,
     type ModGridLayoutMode,
+    type SidebarLayoutMode,
 } from "@shared/mod";
 import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import type { AutoUpdateMode } from "@shared/updater";
@@ -115,6 +117,12 @@ function normalizeModGridLayoutMode(value: string | null | undefined): ModGridLa
     return MOD_GRID_LAYOUT_MODES.includes(value as ModGridLayoutMode)
         ? (value as ModGridLayoutMode)
         : "responsive";
+}
+
+function normalizeSidebarLayoutMode(value: string | null | undefined): SidebarLayoutMode {
+    return SIDEBAR_LAYOUT_MODES.includes(value as SidebarLayoutMode)
+        ? (value as SidebarLayoutMode)
+        : "row";
 }
 
 export class Setting {
@@ -455,6 +463,46 @@ export class Setting {
     };
 
     mod = {
+        getSidebarLayout: async (): Promise<SidebarLayoutMode> => {
+            const qr = await this.desktop.lib.db.query.setting.findFirst({
+                where: (t, { eq }) => eq(t.key, "mod_sidebar_layout"),
+            });
+
+            if (!qr) {
+                await this.desktop.lib.db.insert(setting).values({
+                    key: "mod_sidebar_layout",
+                    value: "row",
+                });
+                return "row";
+            }
+
+            const normalizedLayout = normalizeSidebarLayoutMode(qr.value);
+
+            if (qr.value !== normalizedLayout) {
+                await this.desktop.lib.db
+                    .update(setting)
+                    .set({ value: normalizedLayout })
+                    .where(eq(setting.key, "mod_sidebar_layout"));
+            }
+
+            return normalizedLayout;
+        },
+
+        setSidebarLayout: async (mode: SidebarLayoutMode) => {
+            const normalizedMode = normalizeSidebarLayoutMode(mode);
+
+            await this.desktop.lib.db
+                .insert(setting)
+                .values({
+                    key: "mod_sidebar_layout",
+                    value: normalizedMode,
+                })
+                .onConflictDoUpdate({
+                    target: setting.key,
+                    set: { value: normalizedMode },
+                });
+        },
+
         getArchiveExtractPathMode: async (): Promise<ArchiveExtractPathMode> => {
             const qr = await this.desktop.lib.db.query.setting.findFirst({
                 where: (t, { eq }) => eq(t.key, "mod_archive_extract_path_mode"),

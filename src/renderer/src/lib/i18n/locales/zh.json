@@ -698,19 +698,29 @@
         },
         "layout": {
           "title": "布局",
-          "mode": "网格布局模式",
-          "modeDescription": "选择模组网格决定卡片宽度和列数的方式。",
-          "modes": {
-            "responsive": "响应式",
-            "fixed_card_width": "固定卡片宽度",
-            "fixed_column_count": "固定列数"
+          "sidebar": {
+            "mode": "侧边栏布局",
+            "modeDescription": "将角色侧边栏显示为行列表或正方形预览网格。",
+            "modes": {
+              "row": "行列表",
+              "grid": "预览网格"
+            }
           },
-          "responsiveBaseWidth": "响应式基准卡片宽度",
-          "responsiveBaseWidthDescription": "用于计算可用宽度内可容纳多少列。范围：240 到 640。",
-          "fixedCardWidth": "固定卡片宽度",
-          "fixedCardWidthDescription": "保持卡片宽度固定，只改变可容纳的列数。范围：240 到 640。",
-          "fixedColumnCount": "固定列数",
-          "fixedColumnCountDescription": "在可能的情况下始终使用此列数。范围：1 到 8。"
+          "grid": {
+            "mode": "模组网格布局",
+            "modeDescription": "选择模组网格决定卡片宽度和列数的方式。",
+            "modes": {
+              "responsive": "响应式",
+              "fixed_card_width": "固定卡片宽度",
+              "fixed_column_count": "固定列数"
+            },
+            "responsiveBaseWidth": "响应式基准卡片宽度",
+            "responsiveBaseWidthDescription": "用于计算可用宽度内可容纳多少列。范围：240 到 640。",
+            "fixedCardWidth": "固定卡片宽度",
+            "fixedCardWidthDescription": "保持卡片宽度固定，只改变可容纳的列数。范围：240 到 640。",
+            "fixedColumnCount": "固定列数",
+            "fixedColumnCountDescription": "在可能的情况下始终使用此列数。范围：1 到 8。"
+          }
         },
         "performance": {
           "title": "性能",

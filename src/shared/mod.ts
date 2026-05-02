@@ -15,3 +15,7 @@ export const MOD_GRID_LAYOUT_MODES = [
 ] as const;
 
 export type ModGridLayoutMode = (typeof MOD_GRID_LAYOUT_MODES)[number];
+
+export const SIDEBAR_LAYOUT_MODES = ["row", "grid"] as const;
+
+export type SidebarLayoutMode = (typeof SIDEBAR_LAYOUT_MODES)[number];

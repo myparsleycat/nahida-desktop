@@ -731,19 +731,29 @@
         },
         "layout": {
           "title": "Layout",
-          "mode": "Grid layout mode",
-          "modeDescription": "Choose how the mod grid decides card widths and column counts.",
-          "modes": {
-            "responsive": "Responsive",
-            "fixed_card_width": "Fixed card width",
-            "fixed_column_count": "Fixed column count"
+          "sidebar": {
+            "mode": "Sidebar layout",
+            "modeDescription": "Display the character sidebar as either a row list or a square preview grid.",
+            "modes": {
+              "row": "Row list",
+              "grid": "Preview grid"
+            }
           },
-          "responsiveBaseWidth": "Responsive base card width",
-          "responsiveBaseWidthDescription": "Used to calculate how many columns fit in the available width. Range: 240 to 640.",
-          "fixedCardWidth": "Fixed card width",
-          "fixedCardWidthDescription": "Keeps card width fixed and only changes how many columns fit. Range: 240 to 640.",
-          "fixedColumnCount": "Fixed column count",
-          "fixedColumnCountDescription": "Always use this many columns when possible. Range: 1 to 8."
+          "grid": {
+            "mode": "Mod grid layout",
+            "modeDescription": "Choose how the mod grid decides card widths and column counts.",
+            "modes": {
+              "responsive": "Responsive",
+              "fixed_card_width": "Fixed card width",
+              "fixed_column_count": "Fixed column count"
+            },
+            "responsiveBaseWidth": "Responsive base card width",
+            "responsiveBaseWidthDescription": "Used to calculate how many columns fit in the available width. Range: 240 to 640.",
+            "fixedCardWidth": "Fixed card width",
+            "fixedCardWidthDescription": "Keeps card width fixed and only changes how many columns fit. Range: 240 to 640.",
+            "fixedColumnCount": "Fixed column count",
+            "fixedColumnCountDescription": "Always use this many columns when possible. Range: 1 to 8."
+          }
         },
         "performance": {
           "title": "Performance",

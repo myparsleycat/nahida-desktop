@@ -9,10 +9,21 @@ import { Skeleton } from "@renderer/components/ui/skeleton";
 import { cn } from "@renderer/lib/utils";
 import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
-import { FolderIcon, FolderMinus, FolderPlus, FolderTree, TrashIcon } from "lucide-react";
+import type { SidebarLayoutMode } from "@shared/mod";
+import {
+  ChevronDown,
+  ChevronRight,
+  FolderIcon,
+  FolderMinus,
+  FolderPlus,
+  FolderTree,
+  TrashIcon,
+} from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Preview } from "./preview";
+import { buttonVariants } from "../ui/button";
+import { CharacterSidebarItemGrid } from "./character-sidebar-item-grid";
+import { CharacterSidebarItemRow } from "./character-sidebar-item-row";
 
 interface CharacterSidebarItemProps {
   group: FolderGroup;
@@ -21,223 +32,255 @@ interface CharacterSidebarItemProps {
   onDrop?: (group: FolderGroup, files: File[]) => void;
   onCreateFolder?: (group: FolderGroup) => void;
   onDeleteFolder?: (group: FolderGroup) => void;
-  itemRefs: React.MutableRefObject<Map<string, { element: HTMLButtonElement; group: FolderGroup }>>;
+  itemRefs: React.MutableRefObject<Map<string, { element: HTMLElement; group: FolderGroup }>>;
   depth?: number;
+  layout?: SidebarLayoutMode;
+  parentGroupName?: string;
+  itemClassName?: string;
+  selectedItemClassName?: string;
+  nestedItemClassName?: string;
+  itemStyle?: React.CSSProperties;
 }
 
-export const CharacterSidebarItem = memo(
-  ({
-    group,
-    isSelected,
-    onClick,
-    onDrop,
-    onCreateFolder,
-    onDeleteFolder,
-    itemRefs,
-    depth = 0,
-  }: CharacterSidebarItemProps) => {
-    const { t } = useTranslation();
-    const expandedGroups = useModStore((s) => s.expandedGroups);
-    const persistentGroups = useModStore((s) => s.persistentGroups);
-    const toggleExpandedGroup = useModStore((s) => s.toggleExpandedGroup);
-    const togglePersistentGroup = useModStore((s) => s.togglePersistentGroup);
+export const CharacterSidebarItem = memo(function CharacterSidebarItem({
+  group,
+  isSelected,
+  onClick,
+  onDrop,
+  onCreateFolder,
+  onDeleteFolder,
+  itemRefs,
+  depth = 0,
+  layout = "row",
+  parentGroupName,
+  itemClassName,
+  selectedItemClassName,
+  nestedItemClassName,
+  itemStyle,
+}: CharacterSidebarItemProps) {
+  const { t } = useTranslation();
+  const expandedGroups = useModStore((s) => s.expandedGroups);
+  const persistentGroups = useModStore((s) => s.persistentGroups);
+  const toggleExpandedGroup = useModStore((s) => s.toggleExpandedGroup);
+  const togglePersistentGroup = useModStore((s) => s.togglePersistentGroup);
 
-    const isExpanded = expandedGroups.has(group.path);
-    const isPersistent = persistentGroups.has(group.path);
+  const isExpanded = expandedGroups.has(group.path);
+  const isPersistent = persistentGroups.has(group.path);
+  const isGridLayout = layout === "grid";
 
-    const ref = useRef<HTMLButtonElement>(null);
-    const isInitialMount = useRef(true);
+  const ref = useRef<HTMLButtonElement>(null);
+  const isInitialMount = useRef(true);
 
-    useEffect(() => {
-      if (isSelected && ref.current && isInitialMount.current) {
-        requestAnimationFrame(() => {
-          ref.current?.scrollIntoView({ behavior: "auto", block: "center" });
-        });
-      }
-      isInitialMount.current = false;
-    }, [isSelected]);
+  useEffect(() => {
+    if (isSelected && ref.current && isInitialMount.current) {
+      requestAnimationFrame(() => {
+        ref.current?.scrollIntoView({ behavior: "auto", block: "center" });
+      });
+    }
+    isInitialMount.current = false;
+  }, [isSelected]);
 
-    useEffect(() => {
-      if (ref.current) {
-        itemRefs.current.set(group.path, { element: ref.current, group });
-      }
-      return () => {
-        itemRefs.current.delete(group.path);
-      };
-    }, [group.path, itemRefs, group]);
+  useEffect(() => {
+    if (ref.current) {
+      itemRefs.current.set(group.path, { element: ref.current, group });
+    }
 
-    const [isDragOver, setIsDragOver] = useState(false);
-
-    const setDragOverIfChanged = (next: boolean) => {
-      setIsDragOver((prev) => (prev === next ? prev : next));
+    return () => {
+      itemRefs.current.delete(group.path);
     };
+  }, [group, group.path, itemRefs]);
 
-    const hasFiles = (e: React.DragEvent) => e.dataTransfer?.types.includes("Files");
+  const [isDragOver, setIsDragOver] = useState(false);
 
-    const handleDragEnter = (e: React.DragEvent) => {
-      if (!hasFiles(e)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      setDragOverIfChanged(true);
-    };
+  const setDragOverIfChanged = (next: boolean) => {
+    setIsDragOver((prev) => (prev === next ? prev : next));
+  };
 
-    const handleDragLeave = (e: React.DragEvent) => {
-      if (!hasFiles(e)) return;
-      e.preventDefault();
-      e.stopPropagation();
+  const hasFiles = (e: React.DragEvent) => e.dataTransfer?.types.includes("Files");
 
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = e.clientX;
-      const y = e.clientY;
+  const handleDragEnter = (e: React.DragEvent) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverIfChanged(true);
+  };
 
-      if (x <= rect.left || x >= rect.right || y <= rect.top || y >= rect.bottom) {
-        setDragOverIfChanged(false);
-      }
-    };
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
 
-    const handleDragOver = (e: React.DragEvent) => {
-      if (!hasFiles(e)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      setDragOverIfChanged(true);
-    };
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
 
-    const handleDrop = (e: React.DragEvent) => {
-      if (!hasFiles(e)) return;
-      e.preventDefault();
-      e.stopPropagation();
+    if (x <= rect.left || x >= rect.right || y <= rect.top || y >= rect.bottom) {
       setDragOverIfChanged(false);
+    }
+  };
 
-      const files = Array.from(e.dataTransfer.files);
-      if (files.length > 0) {
-        onDrop?.(group, files);
-      }
-    };
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverIfChanged(true);
+  };
 
-    return (
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <button
-            ref={ref}
-            onClick={(e) => {
-              if (isPersistent || isExpanded) {
-                toggleExpandedGroup(group.path);
-              } else {
-                onClick(group, e);
-              }
-            }}
-            onDragEnter={handleDragEnter}
-            onDragLeave={handleDragLeave}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-            className={cn(
-              "relative w-full grid items-center gap-3 pr-4 py-2 hover:bg-[#cecece] dark:hover:bg-[#2a2a2a] overflow-hidden h-14",
-              isSelected && "dark:bg-[#2a2a2a] bg-[#cecece]",
-            )}
-            style={{
-              gridTemplateColumns: "auto 1fr auto",
-              paddingLeft: depth > 0 ? `${depth * 16 + 8}px` : "8px",
-            }}
-          >
-            {isDragOver && (
-              <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm border-2 border-dashed border-primary pointer-events-none">
-                <span className="text-sm font-bold">
-                  {t("page.mod.character-sidebar.add-to-character", { name: group.name })}
-                </span>
-              </div>
-            )}
+  const handleDrop = (e: React.DragEvent) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverIfChanged(false);
 
-            {depth > 0 && (
-              <div
-                className="absolute left-0 top-0 bottom-0 w-px bg-border/50"
-                style={{ left: `${(depth - 1) * 16 + 16}px` }}
-              />
-            )}
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      onDrop?.(group, files);
+    }
+  };
 
-            <div
-              className={cn(
-                "flex items-center justify-center shrink-0 overflow-hidden bg-muted rounded-full",
-                "w-10 h-10",
-              )}
-            >
-              <Preview
-                path={group.preview}
-                alt={group.name}
-                objectFit="cover"
-                fallback={<span className={cn("font-bold text-center")}>?</span>}
-                allowPlay={true}
-              />
+  const handlePrimaryClick = (e: React.MouseEvent) => {
+    if (isPersistent || isExpanded) {
+      toggleExpandedGroup(group.path);
+      return;
+    }
+
+    onClick(group, e);
+  };
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          className={cn(
+            "relative",
+            isGridLayout ? "min-w-0 overflow-visible" : "w-full overflow-hidden",
+          )}
+        >
+          {isDragOver && (
+            <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center border-2 border-dashed border-primary bg-background/80 backdrop-blur-sm">
+              <span className="text-sm font-bold">
+                {t("page.mod.character-sidebar.add-to-character", { name: group.name })}
+              </span>
             </div>
-
-            <span className="text-left text-sm text-foreground truncate min-w-0">{group.name}</span>
-            <span className="text-sm text-muted-foreground shrink-0">
-              {group.modCount ?? group.mods.length}
-            </span>
-          </button>
-        </ContextMenuTrigger>
-
-        <ContextMenuContent className="w-56">
-          <ContextMenuItem onClick={() => window.api.invoke("util:openPath", group.path)}>
-            <FolderIcon className="mr-2 h-4 w-4" />
-            {t("page.mod.character-sidebar.open-in-explorer")}
-          </ContextMenuItem>
-
-          <ContextMenuItem onClick={() => onCreateFolder?.(group)}>
-            <FolderPlus className="mr-2 h-4 w-4" />
-            {t("page.mod.character-sidebar.create-folder")}
-          </ContextMenuItem>
-
-          <ContextMenuItem variant="destructive" onClick={() => onDeleteFolder?.(group)}>
-            <TrashIcon className="mr-2 h-4 w-4" />
-            {t("page.mod.character-sidebar.delete-folder")}
-          </ContextMenuItem>
-
-          <ContextMenuSeparator />
-
-          {!isPersistent && (
-            <ContextMenuItem onClick={() => toggleExpandedGroup(group.path)}>
-              {isExpanded ? (
-                <>
-                  <FolderMinus className="mr-2 h-4 w-4" />
-                  {t("page.mod.character-sidebar.collapse-subgroups")}
-                </>
-              ) : (
-                <>
-                  <FolderTree className="mr-2 h-4 w-4" />
-                  {t("page.mod.character-sidebar.expand-subgroups")}
-                </>
-              )}
-            </ContextMenuItem>
           )}
 
-          <ContextMenuItem onClick={() => togglePersistentGroup(group.path)}>
-            {isPersistent ? (
+          <button
+            ref={ref}
+            type="button"
+            onClick={handlePrimaryClick}
+            className={cn(
+              "w-full text-left transition-colors",
+              itemClassName,
+              depth > 0 && nestedItemClassName,
+              isSelected && selectedItemClassName,
+            )}
+            style={itemStyle}
+          >
+            {isGridLayout ? (
+              <CharacterSidebarItemGrid
+                group={group}
+                depth={depth}
+                parentGroupName={parentGroupName}
+              />
+            ) : (
+              <CharacterSidebarItemRow group={group} depth={depth} />
+            )}
+          </button>
+
+          {isGridLayout && (
+            <span
+              className={cn(
+                "absolute right-1 top-1 z-10 h-7 w-7 rounded-full pointer-events-none",
+                buttonVariants({ variant: "ghost", size: "icon" }),
+              )}
+            >
+              {isExpanded ? (
+                <ChevronDown className="size-4" />
+              ) : (
+                <ChevronRight className="size-4" />
+              )}
+            </span>
+          )}
+        </div>
+      </ContextMenuTrigger>
+
+      <ContextMenuContent className="w-56">
+        <ContextMenuItem onClick={() => window.api.invoke("util:openPath", group.path)}>
+          <FolderIcon className="mr-2 h-4 w-4" />
+          {t("page.mod.character-sidebar.open-in-explorer")}
+        </ContextMenuItem>
+
+        <ContextMenuItem onClick={() => onCreateFolder?.(group)}>
+          <FolderPlus className="mr-2 h-4 w-4" />
+          {t("page.mod.character-sidebar.create-folder")}
+        </ContextMenuItem>
+
+        <ContextMenuItem variant="destructive" onClick={() => onDeleteFolder?.(group)}>
+          <TrashIcon className="mr-2 h-4 w-4" />
+          {t("page.mod.character-sidebar.delete-folder")}
+        </ContextMenuItem>
+
+        <ContextMenuSeparator />
+
+        {!isPersistent && (
+          <ContextMenuItem onClick={() => toggleExpandedGroup(group.path)}>
+            {isExpanded ? (
               <>
-                <FolderMinus className="mr-2 h-4 w-4 text-destructive" />
-                {t("page.mod.character-sidebar.unpersist-subgroups")}
+                <FolderMinus className="mr-2 h-4 w-4" />
+                {t("page.mod.character-sidebar.collapse-subgroups")}
               </>
             ) : (
               <>
-                <FolderTree className="mr-2 h-4 w-4 text-primary" />
-                {t("page.mod.character-sidebar.persist-subgroups")}
+                <FolderTree className="mr-2 h-4 w-4" />
+                {t("page.mod.character-sidebar.expand-subgroups")}
               </>
             )}
           </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
-    );
-  },
-);
+        )}
+
+        <ContextMenuItem onClick={() => togglePersistentGroup(group.path)}>
+          {isPersistent ? (
+            <>
+              <FolderMinus className="mr-2 h-4 w-4 text-destructive" />
+              {t("page.mod.character-sidebar.unpersist-subgroups")}
+            </>
+          ) : (
+            <>
+              <FolderTree className="mr-2 h-4 w-4 text-primary" />
+              {t("page.mod.character-sidebar.persist-subgroups")}
+            </>
+          )}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+});
 
 CharacterSidebarItem.displayName = "CharacterSidebarItem";
 
-export function CharacterSidebarItemSkeleton() {
+export function CharacterSidebarItemSkeleton({ layout = "row" }: { layout?: SidebarLayoutMode }) {
+  if (layout === "grid") {
+    return (
+      <div className="rounded-xl border bg-card p-2">
+        <Skeleton className="aspect-square w-full rounded-lg" />
+        <div className="mt-2 space-y-2">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-3 w-10" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
-      className="w-full grid items-center gap-3 pl-2 pr-4 py-2 h-14"
+      className="grid h-14 w-full items-center gap-3 py-2 pl-2 pr-4"
       style={{ gridTemplateColumns: "auto 1fr auto" }}
     >
-      <Skeleton className="w-10 h-10 rounded-full" />
+      <Skeleton className="h-10 w-10 rounded-full" />
       <Skeleton className="h-4 w-full" />
       <Skeleton className="h-4 w-8" />
     </div>

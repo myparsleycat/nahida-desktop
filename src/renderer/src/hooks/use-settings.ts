@@ -1,5 +1,5 @@
 import type { DriveNameSortPolicy } from "@shared/drive";
-import type { ModGridLayoutMode } from "@shared/mod";
+import type { ModGridLayoutMode, SidebarLayoutMode } from "@shared/mod";
 import type { IpcHandlers } from "@shared/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
@@ -112,6 +112,24 @@ export function useModGridLayoutSettings() {
                 fixedCardWidth,
                 fixedColumnCount,
             };
+        },
+    });
+}
+
+export function useSidebarLayoutSetting() {
+    const queryClient = useQueryClient();
+
+    useEffect(() => {
+        const removeListener = window.api.on("mod:update-settings", () => {
+            queryClient.invalidateQueries({ queryKey: ["settings", "mod", "sidebarLayout"] });
+        });
+        return () => removeListener();
+    }, [queryClient]);
+
+    return useQuery({
+        queryKey: ["settings", "mod", "sidebarLayout"],
+        queryFn: async (): Promise<SidebarLayoutMode> => {
+            return await window.api.invoke("setting:mod:getSidebarLayout");
         },
     });
 }

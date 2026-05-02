@@ -20,6 +20,8 @@ import {
   MOD_GRID_LAYOUT_MODES,
   type ArchiveExtractPathMode,
   type ModGridLayoutMode,
+  SIDEBAR_LAYOUT_MODES,
+  type SidebarLayoutMode,
 } from "@shared/mod";
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
@@ -38,6 +40,7 @@ const settingsConfig = {
   virtualizationThreshold: "setting:mod:getVirtualizationThreshold",
   searchModPreview: "setting:mod:getSearchModPreview",
   copyShaderFixesOnEnable: "setting:mod:getCopyShaderFixesOnEnable",
+  sidebarLayout: "setting:mod:getSidebarLayout",
   gridLayoutMode: "setting:mod:getGridLayoutMode",
   gridResponsiveBaseWidth: "setting:mod:getGridResponsiveBaseWidth",
   gridFixedCardWidth: "setting:mod:getGridFixedCardWidth",
@@ -65,6 +68,7 @@ function ModSettingsRouteContent() {
     virtualizationThreshold: number;
     searchModPreview: boolean;
     copyShaderFixesOnEnable: boolean;
+    sidebarLayout: SidebarLayoutMode;
     gridLayoutMode: ModGridLayoutMode;
     gridResponsiveBaseWidth: number;
     gridFixedCardWidth: number;
@@ -110,6 +114,19 @@ function ModSettingsRouteContent() {
       await update("gridLayoutMode", mode, "setting:mod:setGridLayoutMode");
     } catch (error) {
       Logger.error(error, "ModSettings:handleGridLayoutModeChange");
+      toast.error("설정 저장에 실패했습니다.");
+    }
+  };
+
+  const handleSidebarLayoutChange = async (mode: SidebarLayoutMode) => {
+    if (!SIDEBAR_LAYOUT_MODES.includes(mode)) {
+      return;
+    }
+
+    try {
+      await update("sidebarLayout", mode, "setting:mod:setSidebarLayout");
+    } catch (error) {
+      Logger.error(error, "ModSettings:handleSidebarLayoutChange");
       toast.error("설정 저장에 실패했습니다.");
     }
   };
@@ -289,28 +306,27 @@ function ModSettingsRouteContent() {
           <CardContent className="flex flex-col space-y-4">
             <div className="flex items-center justify-between space-x-4">
               <div className="space-y-0.5">
-                <span className="text-sm font-medium">{t("page.setting.mod.layout.mode")}</span>
+                <span className="text-sm font-medium">
+                  {t("page.setting.mod.layout.sidebar.mode")}
+                </span>
                 <p className="text-xs text-muted-foreground">
-                  {t("page.setting.mod.layout.modeDescription")}
+                  {t("page.setting.mod.layout.sidebar.modeDescription")}
                 </p>
               </div>
               <Select
-                value={settings.gridLayoutMode}
-                onValueChange={(value: ModGridLayoutMode) => handleGridLayoutModeChange(value)}
+                value={settings.sidebarLayout}
+                onValueChange={(value: SidebarLayoutMode) => handleSidebarLayoutChange(value)}
               >
                 <SelectTrigger className="w-55">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent position="popper">
                   <SelectGroup>
-                    <SelectItem value="responsive">
-                      {t("page.setting.mod.layout.modes.responsive")}
+                    <SelectItem value="row">
+                      {t("page.setting.mod.layout.sidebar.modes.row")}
                     </SelectItem>
-                    <SelectItem value="fixed_card_width">
-                      {t("page.setting.mod.layout.modes.fixed_card_width")}
-                    </SelectItem>
-                    <SelectItem value="fixed_column_count">
-                      {t("page.setting.mod.layout.modes.fixed_column_count")}
+                    <SelectItem value="grid">
+                      {t("page.setting.mod.layout.sidebar.modes.grid")}
                     </SelectItem>
                   </SelectGroup>
                 </SelectContent>
@@ -319,13 +335,42 @@ function ModSettingsRouteContent() {
 
             <Separator />
 
+            <div className="space-y-1">
+              <span className="text-sm font-medium">{t("page.setting.mod.layout.grid.mode")}</span>
+              <p className="text-xs text-muted-foreground">
+                {t("page.setting.mod.layout.grid.modeDescription")}
+              </p>
+            </div>
+
             <FieldGroup>
+              <Select
+                value={settings.gridLayoutMode}
+                onValueChange={(value: ModGridLayoutMode) => handleGridLayoutModeChange(value)}
+              >
+                <SelectTrigger className="w-55 ml-auto">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  <SelectGroup>
+                    <SelectItem value="responsive">
+                      {t("page.setting.mod.layout.grid.modes.responsive")}
+                    </SelectItem>
+                    <SelectItem value="fixed_card_width">
+                      {t("page.setting.mod.layout.grid.modes.fixed_card_width")}
+                    </SelectItem>
+                    <SelectItem value="fixed_column_count">
+                      {t("page.setting.mod.layout.grid.modes.fixed_column_count")}
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+
               {settings.gridLayoutMode === "responsive" && (
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-0.5">
-                    <FieldTitle>{t("page.setting.mod.layout.responsiveBaseWidth")}</FieldTitle>
+                    <FieldTitle>{t("page.setting.mod.layout.grid.responsiveBaseWidth")}</FieldTitle>
                     <FieldDescription className="text-xs">
-                      {t("page.setting.mod.layout.responsiveBaseWidthDescription")}
+                      {t("page.setting.mod.layout.grid.responsiveBaseWidthDescription")}
                     </FieldDescription>
                   </div>
                   <Input
@@ -351,9 +396,9 @@ function ModSettingsRouteContent() {
               {settings.gridLayoutMode === "fixed_card_width" && (
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-0.5">
-                    <FieldTitle>{t("page.setting.mod.layout.fixedCardWidth")}</FieldTitle>
+                    <FieldTitle>{t("page.setting.mod.layout.grid.fixedCardWidth")}</FieldTitle>
                     <FieldDescription className="text-xs">
-                      {t("page.setting.mod.layout.fixedCardWidthDescription")}
+                      {t("page.setting.mod.layout.grid.fixedCardWidthDescription")}
                     </FieldDescription>
                   </div>
                   <Input
@@ -379,9 +424,9 @@ function ModSettingsRouteContent() {
               {settings.gridLayoutMode === "fixed_column_count" && (
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-0.5">
-                    <FieldTitle>{t("page.setting.mod.layout.fixedColumnCount")}</FieldTitle>
+                    <FieldTitle>{t("page.setting.mod.layout.grid.fixedColumnCount")}</FieldTitle>
                     <FieldDescription className="text-xs">
-                      {t("page.setting.mod.layout.fixedColumnCountDescription")}
+                      {t("page.setting.mod.layout.grid.fixedColumnCountDescription")}
                     </FieldDescription>
                   </div>
                   <Input

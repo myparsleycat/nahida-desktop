@@ -103,6 +103,15 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         return await d.setting.mod.getDeleteArchiveAfterExtract();
     });
 
+    rh("setting:mod:getSidebarLayout", async () => {
+        return await d.setting.mod.getSidebarLayout();
+    });
+
+    rh("setting:mod:setSidebarLayout", async (mode) => {
+        await d.setting.mod.setSidebarLayout(mode);
+        d.ipc.broadcast("mod:update-settings");
+    });
+
     rh("setting:mod:getArchiveExtractPathMode", async () => {
         return await d.setting.mod.getArchiveExtractPathMode();
     });
