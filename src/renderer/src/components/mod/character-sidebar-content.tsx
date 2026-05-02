@@ -58,9 +58,23 @@ function useSubGroups(group: FolderGroup, shouldFetch: boolean, refreshKey: numb
   return subGroups;
 }
 
-interface CharacterSidebarItemWithChildrenProps extends CharacterSidebarContentLayoutProps {
+interface CharacterSidebarItemWithChildrenProps {
   group: FolderGroup;
+  itemRefs: React.MutableRefObject<Map<string, { element: HTMLElement; group: FolderGroup }>>;
+  onItemClick: (group: FolderGroup, e: React.MouseEvent) => void;
+  onItemDrop: (group: FolderGroup, files: File[]) => void;
   depth: number;
+  searchTerm: string;
+  onCreateFolder: (group: FolderGroup) => void;
+  onDeleteFolder: (group: FolderGroup) => void;
+  refreshKey: number;
+  layout: SidebarLayoutMode;
+  listClassName: string;
+  listStyle?: React.CSSProperties;
+  itemClassName: string;
+  selectedItemClassName: string;
+  nestedItemClassName?: string;
+  itemStyle?: (depth: number) => React.CSSProperties | undefined;
   parentGroupName?: string;
   onCollapseSelf?: () => void;
 }
@@ -209,7 +223,6 @@ export function CharacterSidebarContent({
               onCreateFolder={onCreateFolder}
               onDeleteFolder={onDeleteFolder}
               refreshKey={refreshKey}
-              showSkeleton={showSkeleton}
               layout={layout}
               listClassName={listClassName}
               listStyle={listStyle}
