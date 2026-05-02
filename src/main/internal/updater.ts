@@ -243,7 +243,7 @@ export class Updater {
             return;
         }
 
-        await this.translateCurrentReleaseNotes(language);
+        void this.translateCurrentReleaseNotes(language);
     }
 
     public async getStatus(): Promise<UpdaterStatus> {
