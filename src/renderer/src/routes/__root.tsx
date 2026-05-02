@@ -21,8 +21,110 @@ import { cn } from "@renderer/lib/utils";
 import { useGlobalStore } from "@renderer/store/global";
 import type { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet, useLocation } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+
+const RELEASE_NOTE_LINK_PATTERN = /\[(https?:\/\/[^\]\s]+)\]/g;
+const RELEASE_NOTE_LINK_BOUNDARIES = ["* ", "- ", "• ", ": ", "의 ", "by ", "from "];
+
+function findReleaseNoteLinkSplitIndex(value: string) {
+  let splitIndex = -1;
+
+  for (const boundary of RELEASE_NOTE_LINK_BOUNDARIES) {
+    const boundaryIndex = value.lastIndexOf(boundary);
+    if (boundaryIndex === -1) {
+      continue;
+    }
+
+    const candidateIndex = boundaryIndex + boundary.length;
+    if (candidateIndex < value.length && candidateIndex > splitIndex) {
+      splitIndex = candidateIndex;
+    }
+  }
+
+  return splitIndex;
+}
+
+function renderReleaseNoteLine(line: string, lineIndex: number) {
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  let matchIndex = 0;
+
+  for (const match of line.matchAll(RELEASE_NOTE_LINK_PATTERN)) {
+    const fullMatch = match[0];
+    const url = match[1];
+    const matchStart = match.index ?? 0;
+    const prefix = line.slice(cursor, matchStart);
+    const splitIndex = findReleaseNoteLinkSplitIndex(prefix);
+    const leadingText = splitIndex >= 0 ? prefix.slice(0, splitIndex) : "";
+    const linkLabel = (splitIndex >= 0 ? prefix.slice(splitIndex) : prefix).trimEnd();
+
+    if (leadingText) {
+      nodes.push(
+        <span key={`text-${lineIndex}-${matchIndex}`}>
+          {leadingText}
+        </span>,
+      );
+    }
+
+    if (linkLabel) {
+      nodes.push(
+        <button
+          key={`link-${lineIndex}-${matchIndex}`}
+          type="button"
+          className="inline cursor-pointer text-primary underline underline-offset-4 hover:text-primary/80"
+          onClick={() => void window.api.invoke("util:openExternal", url)}
+          title={url}
+        >
+          {linkLabel}
+        </button>,
+      );
+    } else if (prefix) {
+      nodes.push(
+        <span key={`text-${lineIndex}-${matchIndex}`}>
+          {prefix}
+        </span>,
+      );
+    } else {
+      nodes.push(
+        <button
+          key={`link-${lineIndex}-${matchIndex}`}
+          type="button"
+          className="inline cursor-pointer text-primary underline underline-offset-4 hover:text-primary/80"
+          onClick={() => void window.api.invoke("util:openExternal", url)}
+          title={url}
+        >
+          {url}
+        </button>,
+      );
+    }
+
+    cursor = matchStart + fullMatch.length;
+    matchIndex += 1;
+  }
+
+  const trailingText = line.slice(cursor);
+  if (trailingText) {
+    nodes.push(<span key={`text-${lineIndex}-tail`}>{trailingText}</span>);
+  }
+
+  if (nodes.length === 0) {
+    return <span>&nbsp;</span>;
+  }
+
+  return nodes;
+}
+
+function ReleaseNotesContent({ text }: { text: string }) {
+  return (
+    <div className="px-4 py-3 text-sm whitespace-pre-wrap break-words">
+      {text.split("\n").map((line, index) => (
+        <div key={`release-note-line-${index}`}>{renderReleaseNoteLine(line, index)}</div>
+      ))}
+    </div>
+  );
+}
 
 function UpdateAlertDialog() {
   const { t } = useTranslation();
@@ -100,9 +202,7 @@ function UpdateAlertDialog() {
               )}
             </div>
             <ScrollArea className="h-64 rounded-md border">
-              <div className="px-4 py-3 text-sm whitespace-pre-wrap wrap-break-word">
-                {displayedReleaseNotesText}
-              </div>
+              <ReleaseNotesContent text={displayedReleaseNotesText} />
             </ScrollArea>
           </section>
         )}
