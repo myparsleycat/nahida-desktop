@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { sortBy } from "es-toolkit";
 import fse from "fs-extra";
 import { nanoid } from "nanoid";
+import type { FixToolLogEvent } from "@shared/types";
 import type { NahidaDesktop } from "@/main";
 
 export class FixTool {
@@ -125,7 +126,7 @@ export class FixTool {
     public cancelRun() {
         if (this.currentAbortController) {
             this.currentAbortController.abort();
-            this.desktop.ipc.broadcast("ftm:log", "Cancelled...");
+            this.desktop.ipc.broadcast("ftm:log", { message: "Cancelled..." });
         }
     }
 
@@ -135,8 +136,11 @@ export class FixTool {
         }
 
         this.currentAbortController = new AbortController();
-        this.activeExecutor = new ScriptExecutor((msg) => {
-            this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", msg);
+        this.activeExecutor = new ScriptExecutor((msg, event) => {
+            this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", {
+                message: msg,
+                ...(event ?? {}),
+            } satisfies FixToolLogEvent);
         });
 
         return this.currentAbortController.signal;
@@ -175,7 +179,7 @@ export class FixTool {
             this.desktop.ipc.postMessageToWindow(
                 mainWindow,
                 "ftm:log",
-                `Error: ${(e as Error).message}`,
+                { message: `Error: ${(e as Error).message}` },
             );
         } finally {
             if (prepared) {
@@ -213,7 +217,7 @@ export class FixTool {
             this.desktop.ipc.postMessageToWindow(
                 mainWindow,
                 "ftm:log",
-                `Starting Preset: ${preset.name}`,
+                { message: `Starting Preset: ${preset.name}` },
             );
 
             for (const item of sortedItems) {
@@ -221,7 +225,7 @@ export class FixTool {
                     this.desktop.ipc.postMessageToWindow(
                         mainWindow,
                         "ftm:log",
-                        `Preset execution aborted by user.`,
+                        { message: `Preset execution aborted by user.` },
                     );
                     break;
                 }
@@ -234,7 +238,7 @@ export class FixTool {
                     this.desktop.ipc.postMessageToWindow(
                         mainWindow,
                         "ftm:log",
-                        `Script not found (ID: ${item.scriptId}), skipping...`,
+                        { message: `Script not found (ID: ${item.scriptId}), skipping...` },
                     );
                     continue;
                 }
@@ -243,14 +247,16 @@ export class FixTool {
             }
 
             if (!signal.aborted) {
-                this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", `Preset Completed`);
+                this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", {
+                    message: `Preset Completed`,
+                });
             }
         } catch (e) {
             this.desktop.logger.error(e);
             this.desktop.ipc.postMessageToWindow(
                 mainWindow,
                 "ftm:log",
-                `Error: ${(e as Error).message}`,
+                { message: `Error: ${(e as Error).message}` },
             );
         } finally {
             if (prepared) {
@@ -301,7 +307,7 @@ export class FixTool {
             this.desktop.ipc.postMessageToWindow(
                 mainWindow,
                 "ftm:log",
-                `Running ${script.name}...`,
+                { message: `Running ${script.name}...` },
             );
 
             await this.activeExecutor.execute(
@@ -311,7 +317,9 @@ export class FixTool {
                 signal,
             );
 
-            this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", `Completed ${script.name}`);
+            this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", {
+                message: `Completed ${script.name}`,
+            });
             return true;
         } catch (e) {
             const errorMessage = (e as Error).message;
@@ -319,13 +327,13 @@ export class FixTool {
                 this.desktop.ipc.postMessageToWindow(
                     mainWindow,
                     "ftm:log",
-                    `Cancelled ${script.name}`,
+                    { message: `Cancelled ${script.name}` },
                 );
             } else {
                 this.desktop.ipc.postMessageToWindow(
                     mainWindow,
                     "ftm:log",
-                    `Failed ${script.name}: ${errorMessage}`,
+                    { message: `Failed ${script.name}: ${errorMessage}` },
                 );
             }
             return false;

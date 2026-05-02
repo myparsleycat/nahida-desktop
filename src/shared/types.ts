@@ -23,6 +23,11 @@ interface ToastData {
     description?: string;
 }
 
+export interface FixToolLogEvent {
+    message: string;
+    replaceLast?: boolean;
+}
+
 export interface ToggleKey {
     sectionName: string;
     iniFileName: string;
@@ -136,7 +141,7 @@ export type IpcEvents = {
     "setting:xxmi:persistLogs": (logs: string[]) => void;
     "setting:xxmi:toggleViewerLogs": (logs: string[]) => void;
     "tools:progress": (message: string) => void;
-    "ftm:log": (message: string) => void;
+    "ftm:log": (event: FixToolLogEvent) => void;
     "updater:status-changed": (
         status: Awaited<
             ReturnType<(typeof import("@main/index"))["desktop"]["updater"]["getStatus"]>
