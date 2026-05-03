@@ -71,7 +71,7 @@ function renderReleaseNoteLine(line: string, lineIndex: number) {
           {linkLabel}
         </button>,
       );
-    } else if (prefix) {
+    } else if (prefix && !leadingText) {
       nodes.push(
         <span key={`text-${lineIndex}-${matchIndex}`}>
           {prefix}
