@@ -390,7 +390,7 @@ async function buildTextureListItem(
         outputFormatDefault,
         formatConversionMessage,
         message:
-            targetSize == null
+            targetSize == null && settings.operation !== "convert"
                 ? "No valid downscale candidate matched the requested bounds."
                 : null,
     };
