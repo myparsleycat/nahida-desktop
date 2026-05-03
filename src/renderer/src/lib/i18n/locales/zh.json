@@ -576,6 +576,8 @@
         "resize_step": "缩放级别",
         "resize_step_description": "滑块只能选择符合 1024 倍数规则的有效尺寸。",
         "resize_step_unavailable": "这个纹理没有可用的 1024 步进缩小候选尺寸。",
+        "output_color_space": "输出色彩空间",
+        "output_color_space_description": "无法识别原始色彩空间。请手动选择 sRGB 或 Linear。",
         "output_format": "输出格式",
         "output_format_description": "只显示与原始颜色空间兼容的格式。",
         "current_output_format": "当前选择的输出格式",

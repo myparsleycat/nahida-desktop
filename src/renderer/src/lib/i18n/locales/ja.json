@@ -577,6 +577,8 @@
         "resize_step": "リサイズ段階",
         "resize_step_description": "1024 の倍数で有効なサイズだけをスライダーで選択できます。",
         "resize_step_unavailable": "このテクスチャには 1024 単位で縮小できる有効な段階がありません。",
+        "output_color_space": "出力色空間",
+        "output_color_space_description": "元の色空間を判別できませんでした。sRGB または Linear のいずれかを手動で選択してください。",
         "output_format": "出力形式",
         "output_format_description": "元の色空間と互換性のある形式のみ表示されます。",
         "current_output_format": "選択中の出力形式",
