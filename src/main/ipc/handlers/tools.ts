@@ -6,6 +6,23 @@ import type {
 } from "@main/services/mod-tools/static-glb";
 
 export function registerToolsHandlers(d: NahidaDesktop) {
+    rh("tools:getTextureResizeSettings", () => d.service.modTools.textureResizer.getSettings());
+    rh("tools:listTextureFolder", (targetPath: string, settings) =>
+        d.service.modTools.textureResizer.listFolderTextures(targetPath, settings),
+    );
+    rh("tools:listTextureMod", (modPath: string, settings) =>
+        d.service.modTools.textureResizer.listModTextures(modPath, settings),
+    );
+    rh("tools:resizeTextureFile", (input) => d.service.modTools.textureResizer.resizeFile(input));
+    rh("tools:saveTextureResizeSettings", (settings) =>
+        d.service.modTools.textureResizer.saveSettings(settings),
+    );
+    rh("tools:resizeTextureFolder", (input) =>
+        d.service.modTools.textureResizer.resizeFolder(input),
+    );
+    rh("tools:resizeTextureMod", (modPath: string, input) =>
+        d.service.modTools.textureResizer.resizeMod(modPath, input),
+    );
     rh(
         "tools:buildNewD3DDLL",
         ({

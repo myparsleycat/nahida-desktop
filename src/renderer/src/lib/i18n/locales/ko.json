@@ -240,6 +240,10 @@
           "name-placeholder": "모드 이름",
           "confirm": "이름 변경"
         },
+        "texture-resize": {
+          "title": "모드 텍스처 리사이즈",
+          "description": "\"{{name}}\" 아래의 DDS 파일을 찾아 제자리에서 리사이즈합니다."
+        },
         "create-folder": {
           "title": "새 폴더 만들기",
           "description": "{{name}} 아래에 새 폴더를 만듭니다.",
@@ -551,6 +555,95 @@
           "created": "정적 GLB가 생성되었습니다",
           "created_description": "{{meshCount}}개 메시, 경고 {{warningCount}}개",
           "failed": "정적 GLB 변환에 실패했습니다"
+        }
+      },
+      "texture_resizer": {
+        "title": "텍스처 리사이저",
+        "target_folder": "대상 폴더",
+        "target_folder_placeholder": "DDS 파일을 재귀적으로 검색할 폴더",
+        "browse": "찾아보기",
+        "operation": "작업 종류",
+        "operation_options": {
+          "resize": "리사이즈만",
+          "resize_and_convert": "리사이즈 + 포맷 변환",
+          "convert": "포맷 변환만"
+        },
+        "operation_descriptions": {
+          "resize": "텍스처 크기만 변경합니다. DDS 포맷은 유지됩니다.",
+          "resize_and_convert": "텍스처를 리사이즈한 뒤 색공간은 유지하면서 다른 DDS 포맷으로 다시 인코딩합니다.",
+          "convert": "원본 크기는 유지하고 DDS 출력 포맷만 변경합니다."
+        },
+        "mode": "리사이즈 방식",
+        "mode_options": {
+          "percent": "비율",
+          "custom": "커스텀 범위"
+        },
+        "mode_descriptions": {
+          "percent": "비율로 줄인 뒤 각 텍스처를 가장 가까운 유효 DDS 크기로 스냅합니다.",
+          "custom": "가로/세로 값을 최대 범위로 사용합니다. 각 텍스처는 원본 비율을 유지합니다."
+        },
+        "percent": "비율",
+        "custom_width": "최대 가로",
+        "custom_height": "최대 세로",
+        "custom_hint": "커스텀 범위는 1024px 단위로 보정됩니다. 실제 출력 크기는 각 텍스처 원본 비율을 유지하면서 개별적으로 결정됩니다.",
+        "resize_step": "리사이즈 단계",
+        "resize_step_description": "1024 배수로 가능한 크기만 슬라이더에서 선택합니다.",
+        "resize_step_unavailable": "이 텍스처는 1024 단위로 줄일 수 있는 유효한 단계가 없습니다.",
+        "output_color_space": "출력 색공간",
+        "output_color_space_description": "원본 색공간을 판별하지 못했습니다. sRGB 또는 Linear 중 하나를 직접 선택하세요.",
+        "output_format": "출력 포맷",
+        "output_format_description": "원본 색공간과 호환되는 포맷만 표시됩니다.",
+        "current_output_format": "선택된 출력 포맷",
+        "backup": "백업 생성",
+        "backup_description": "각 DDS를 덮어쓰기 전에 같은 위치에 .bak 파일을 만듭니다. 기존 백업은 유지합니다.",
+        "load": "텍스처 목록 불러오기",
+        "refresh": "목록 새로고침",
+        "texture_list_title": "텍스처 목록",
+        "texture_list_empty": "경로를 선택한 뒤 텍스처 목록을 불러오세요.",
+        "loading_textures": "텍스처 목록을 불러오는 중입니다.",
+        "preview_unavailable": "미리보기를 만들 수 없습니다",
+        "ready": "변환 가능",
+        "not_resizable": "건너뜀",
+        "process_single": "변환",
+        "run": "텍스처 변환",
+        "running": "변환 중",
+        "result_title": "변환 결과",
+        "list": {
+          "total": "전체",
+          "resizable": "변환 가능",
+          "skipped": "건너뜀"
+        },
+        "meta": {
+          "path": "전체 경로",
+          "size": "파일 크기",
+          "format": "DDS 포맷",
+          "layers": "레이어 수",
+          "source": "원본 크기",
+          "target": "예상 결과"
+        },
+        "color_space": {
+          "srgb": "sRGB",
+          "linear": "Linear",
+          "unknown": "알 수 없음"
+        },
+        "dialog": {
+          "title": "텍스처 변환 옵션",
+          "description_fallback": "선택한 DDS 파일"
+        },
+        "result": {
+          "processed": "처리",
+          "updated": "변경",
+          "skipped": "건너뜀",
+          "failed": "실패"
+        },
+        "toast": {
+          "save_settings_failed": "텍스처 변환 설정을 저장하지 못했습니다",
+          "load_failed": "텍스처 목록을 불러오지 못했습니다",
+          "completed": "텍스처 변환이 완료되었습니다",
+          "completed_description": "{{updated}}개 변경, {{failed}}개 실패",
+          "single_completed": "텍스처 변환이 완료되었습니다",
+          "single_completed_fallback": "선택한 텍스처 처리가 완료되었습니다",
+          "failed": "텍스처 변환에 실패했습니다"
         }
       },
       "model_viewer": {

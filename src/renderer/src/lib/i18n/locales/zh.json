@@ -240,6 +240,10 @@
           "name-placeholder": "模组名称",
           "confirm": "重命名"
         },
+        "texture-resize": {
+          "title": "缩放模组纹理",
+          "description": "扫描“{{name}}”中的 DDS 文件并原地缩放。"
+        },
         "create-folder": {
           "title": "新建文件夹",
           "description": "在 {{name}} 下创建一个新文件夹。",
@@ -538,6 +542,95 @@
           "created": "静态 GLB 已创建",
           "created_description": "{{meshCount}} 个网格，{{warningCount}} 个警告",
           "failed": "静态 GLB 转换失败"
+        }
+      },
+      "texture_resizer": {
+        "title": "纹理缩放器",
+        "target_folder": "目标文件夹",
+        "target_folder_placeholder": "递归搜索 DDS 文件的文件夹",
+        "browse": "浏览",
+        "operation": "操作",
+        "operation_options": {
+          "resize": "仅缩放",
+          "resize_and_convert": "缩放并转换格式",
+          "convert": "仅转换格式"
+        },
+        "operation_descriptions": {
+          "resize": "只修改纹理尺寸，DDS 格式保持不变。",
+          "resize_and_convert": "在保持颜色空间不变的前提下缩放并重新编码为其他 DDS 格式。",
+          "convert": "保持原始尺寸，只修改 DDS 输出格式。"
+        },
+        "mode": "缩放模式",
+        "mode_options": {
+          "percent": "百分比",
+          "custom": "自定义上限"
+        },
+        "mode_descriptions": {
+          "percent": "按百分比缩小后，再把每个纹理调整到最近的有效 DDS 尺寸。",
+          "custom": "将宽度和高度作为最大上限。每个纹理都会保持原始宽高比。"
+        },
+        "percent": "百分比",
+        "custom_width": "最大宽度",
+        "custom_height": "最大高度",
+        "custom_hint": "自定义值会自动对齐到 1024px 步进。实际输出会在保持原始比例的前提下逐纹理决定。",
+        "resize_step": "缩放级别",
+        "resize_step_description": "滑块只能选择符合 1024 倍数规则的有效尺寸。",
+        "resize_step_unavailable": "这个纹理没有可用的 1024 步进缩小候选尺寸。",
+        "output_color_space": "输出色彩空间",
+        "output_color_space_description": "无法识别原始色彩空间。请手动选择 sRGB 或 Linear。",
+        "output_format": "输出格式",
+        "output_format_description": "只显示与原始颜色空间兼容的格式。",
+        "current_output_format": "当前选择的输出格式",
+        "backup": "创建备份",
+        "backup_description": "覆盖每个 DDS 之前，在旁边创建 .bak 文件。已有备份会被保留。",
+        "load": "加载纹理列表",
+        "refresh": "刷新列表",
+        "texture_list_title": "纹理列表",
+        "texture_list_empty": "请选择路径后再加载纹理列表。",
+        "loading_textures": "正在加载纹理列表。",
+        "preview_unavailable": "无法创建预览",
+        "ready": "可转换",
+        "not_resizable": "已跳过",
+        "process_single": "转换",
+        "run": "处理纹理",
+        "running": "处理中",
+        "result_title": "处理结果",
+        "list": {
+          "total": "总计",
+          "resizable": "可转换",
+          "skipped": "已跳过"
+        },
+        "meta": {
+          "path": "完整路径",
+          "size": "文件大小",
+          "format": "DDS 格式",
+          "layers": "图层数",
+          "source": "原始尺寸",
+          "target": "预计输出"
+        },
+        "color_space": {
+          "srgb": "sRGB",
+          "linear": "Linear",
+          "unknown": "未知"
+        },
+        "dialog": {
+          "title": "纹理处理选项",
+          "description_fallback": "选中的 DDS 文件"
+        },
+        "result": {
+          "processed": "已处理",
+          "updated": "已修改",
+          "skipped": "已跳过",
+          "failed": "失败"
+        },
+        "toast": {
+          "save_settings_failed": "保存纹理处理设置失败",
+          "load_failed": "加载纹理列表失败",
+          "completed": "纹理处理已完成",
+          "completed_description": "修改 {{updated}} 个，失败 {{failed}} 个",
+          "single_completed": "纹理处理已完成",
+          "single_completed_fallback": "选中纹理处理完成",
+          "failed": "纹理处理失败"
         }
       },
       "model_viewer": {

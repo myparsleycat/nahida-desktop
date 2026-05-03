@@ -70,6 +70,7 @@ interface ModContextMenuProps {
     id: string;
     name: string;
   }[];
+  onOpenTextureResizeDialog?: () => void;
   onPaste?: () => void | Promise<void>;
   children: ReactNode;
 }
@@ -83,6 +84,7 @@ export function ModContextMenu({
   selectedGroupPath,
   fixTools,
   presets,
+  onOpenTextureResizeDialog,
   onPaste,
   children,
 }: ModContextMenuProps) {
@@ -396,6 +398,12 @@ export function ModContextMenu({
             )}
             {t("page.tools.model_viewer.title")}
           </ContextMenuItem>
+          {onOpenTextureResizeDialog && (
+            <ContextMenuItem onClick={onOpenTextureResizeDialog}>
+              <ImageIcon className="mr-2 size-4" />
+              {t("page.tools.texture_resizer.title")}
+            </ContextMenuItem>
+          )}
           <ContextMenuItem onClick={() => setShowRenameDialog(true)}>
             <PencilIcon className="mr-2 size-4" />
             {t("page.mod.context-menu.rename")}

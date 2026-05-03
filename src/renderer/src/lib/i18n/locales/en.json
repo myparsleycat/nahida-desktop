@@ -260,6 +260,10 @@
           "name-placeholder": "Mod name",
           "confirm": "Rename"
         },
+        "texture-resize": {
+          "title": "Resize mod textures",
+          "description": "Scan \"{{name}}\" for DDS files and resize them in place."
+        },
         "create-folder": {
           "title": "Create New Folder",
           "description": "Create a new folder under {{name}}.",
@@ -571,6 +575,93 @@
           "created": "Static GLB created",
           "created_description": "{{meshCount}} mesh(es), {{warningCount}} warning(s)",
           "failed": "Static GLB conversion failed"
+        }
+      },
+      "texture_resizer": {
+        "title": "Texture Resizer",
+        "target_folder": "Target folder",
+        "target_folder_placeholder": "Folder to scan recursively for DDS files",
+        "browse": "Browse",
+        "operation": "Operation",
+        "operation_options": {
+          "resize": "Resize only",
+          "resize_and_convert": "Resize and convert",
+          "convert": "Convert format only"
+        },
+        "operation_descriptions": {
+          "resize": "Only change the texture size. The DDS format stays the same.",
+          "resize_and_convert": "Resize the texture and re-encode it to a different DDS format while preserving color space.",
+          "convert": "Keep the original texture size and only change the DDS output format."
+        },
+        "mode": "Resize mode",
+        "mode_options": {
+          "percent": "Percent",
+          "custom": "Custom bounds"
+        },
+        "mode_descriptions": {
+          "percent": "Scale textures down by percentage, then snap each file to the nearest valid DDS size.",
+          "custom": "Use width and height as maximum bounds. Each texture keeps its original aspect ratio."
+        },
+        "percent": "Percent",
+        "custom_width": "Max width",
+        "custom_height": "Max height",
+        "custom_hint": "Custom bounds are snapped to 1024px steps. Actual output is chosen per texture while preserving its source ratio.",
+        "resize_step": "Resize step",
+        "resize_step_description": "Only valid 1024-multiple sizes are selectable on the slider.",
+        "resize_step_unavailable": "This texture has no valid 1024-step downscale candidate.",
+        "output_format": "Output format",
+        "output_format_description": "Only formats compatible with the source color space are shown.",
+        "current_output_format": "Selected output format",
+        "backup": "Create backup",
+        "backup_description": "Create a sibling .bak file before overwriting each DDS. Existing backups are kept.",
+        "load": "Load texture list",
+        "refresh": "Refresh list",
+        "texture_list_title": "Texture list",
+        "texture_list_empty": "Select a path and load the texture list.",
+        "loading_textures": "Loading textures.",
+        "preview_unavailable": "Preview unavailable",
+        "ready": "Ready",
+        "not_resizable": "Skipped",
+        "process_single": "Process",
+        "run": "Process textures",
+        "running": "Processing",
+        "result_title": "Processing result",
+        "list": {
+          "total": "Total",
+          "resizable": "Resizable",
+          "skipped": "Skipped"
+        },
+        "meta": {
+          "path": "Full path",
+          "size": "File size",
+          "format": "DDS format",
+          "layers": "Layer count",
+          "source": "Source size",
+          "target": "Target size"
+        },
+        "color_space": {
+          "srgb": "sRGB",
+          "linear": "Linear",
+          "unknown": "Unknown"
+        },
+        "dialog": {
+          "title": "Texture processing options",
+          "description_fallback": "Selected DDS file"
+        },
+        "result": {
+          "processed": "Processed",
+          "updated": "Updated",
+          "skipped": "Skipped",
+          "failed": "Failed"
+        },
+        "toast": {
+          "save_settings_failed": "Failed to save texture processing settings",
+          "load_failed": "Failed to load the texture list",
+          "completed": "Texture processing completed",
+          "completed_description": "{{updated}} updated, {{failed}} failed",
+          "single_completed": "Texture processing completed",
+          "single_completed_fallback": "Finished processing the selected texture",
+          "failed": "Texture processing failed"
         }
       },
       "model_viewer": {

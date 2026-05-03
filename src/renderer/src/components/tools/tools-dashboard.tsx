@@ -1,5 +1,6 @@
 import D3D11Builder from "@renderer/components/tools/d3d11-builder";
 import StaticGlbConverter from "@renderer/components/tools/static-glb-converter";
+import TextureResizer from "@renderer/components/tools/texture-resizer";
 import TogglePersistence from "@renderer/components/tools/toggle-persistence";
 import ToggleViewerGenerator from "@renderer/components/tools/toggle-viewer-generator";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
@@ -44,6 +45,11 @@ const toolPages: ToolPage[] = [
     nameKey: "page.tools.static_glb_converter.title",
     initials: "SG",
     component: () => <StaticGlbConverter />,
+  },
+  {
+    nameKey: "page.tools.texture_resizer.title",
+    initials: "TR",
+    component: () => <TextureResizer />,
   },
   {
     nameKey: "page.tools.fix-tool-manager.title",
