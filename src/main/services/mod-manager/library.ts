@@ -182,7 +182,7 @@ export class ModLibraryService {
             });
     }
 
-    public async addGame(game: string, modFolderPath: string) {
+    public async addGame(game: string, modFolderPath: string, importer: string | null) {
         if (!game || !modFolderPath) {
             throw new Error("INVALID_PARAMS");
         }
@@ -199,7 +199,7 @@ export class ModLibraryService {
             }
         }
 
-        await this.desktop.lib.db.insert(gamePaths).values({ game, modFolderPath, importer: null });
+        await this.desktop.lib.db.insert(gamePaths).values({ game, modFolderPath, importer });
     }
 
     public async updateGame(

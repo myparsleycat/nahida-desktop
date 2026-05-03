@@ -230,6 +230,7 @@
           "title": "Add Game",
           "name_input_placeholder": "Game Name (e.g. Genshin)",
           "path_input_placeholder": "Mod folder path",
+          "xxmi_path_required": "Set the XXMI path first to load importers.",
           "#": {
             "0": "Please enter a game name",
             "1": "Please select a mod folder path"
@@ -885,12 +886,12 @@
   },
   "updater": {
     "titlebar": {
-      "action": "Click to restart and update",
+      "action": "Review update",
       "downloadAction": "Download update"
     },
     "actions": {
       "download": "Download update",
-      "install": "Restart and update"
+      "install": "Install update"
     },
     "status": {
       "idle": "You're using the latest version.",

@@ -173,7 +173,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
             type="button"
             onClick={handlePrimaryClick}
             className={cn(
-              "w-full text-left transition-colors",
+              "w-full text-left",
               itemClassName,
               depth > 0 && nestedItemClassName,
               isSelected && selectedItemClassName,

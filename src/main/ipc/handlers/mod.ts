@@ -27,8 +27,8 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return await desktop.service.mod.get.games();
     });
 
-    rh("mod:addGame", async (game: string, path: string) => {
-        return await desktop.service.mod.fn.addGame(game, path);
+    rh("mod:addGame", async (game: string, path: string, importer: string | null) => {
+        return await desktop.service.mod.fn.addGame(game, path, importer);
     });
 
     rh("mod:removeGame", async (game: string) => {

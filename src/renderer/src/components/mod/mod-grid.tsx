@@ -10,7 +10,7 @@ import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { chunk } from "es-toolkit";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { normalizeModGridLayoutSettings, resolveModGridLayout } from "./grid-layout";
 import { ModCard } from "./mod-card";
@@ -24,7 +24,7 @@ export function ModGrid(_props: ModGridProps) {
   const searchQuery = useModStore((s) => s.searchQuery);
   const iniListExpandedByGroupPath = useModStore((s) => s.iniListExpandedByGroupPath);
   const setIniListExpanded = useModStore((s) => s.setIniListExpanded);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
 
   // const [parent] = useAutoAnimate({ duration: 150 });
 
@@ -43,11 +43,11 @@ export function ModGrid(_props: ModGridProps) {
   const { data: gridLayoutSettings } = useModGridLayoutSettings();
 
   const [availableWidth, setAvailableWidth] = useState(0);
-  useEffect(() => {
-    if (!scrollAreaRef.current) return;
+  const handleViewportRef = useCallback((node: HTMLDivElement | null) => {
+    setViewport(node);
+  }, []);
 
-    const scrollArea = scrollAreaRef.current;
-    const viewport = scrollArea.querySelector("[data-radix-scroll-area-viewport]");
+  useEffect(() => {
     if (!viewport) return;
 
     const updateWidth = () => {
@@ -55,11 +55,17 @@ export function ModGrid(_props: ModGridProps) {
     };
 
     updateWidth();
+    const frameId = window.requestAnimationFrame(updateWidth);
     const observer = new ResizeObserver(updateWidth);
     observer.observe(viewport);
+    window.addEventListener("resize", updateWidth);
 
-    return () => observer.disconnect();
-  }, []);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      observer.disconnect();
+      window.removeEventListener("resize", updateWidth);
+    };
+  }, [viewport]);
 
   const resolvedGridLayout = useMemo(
     () => resolveModGridLayout(availableWidth, normalizeModGridLayoutSettings(gridLayoutSettings)),
@@ -81,22 +87,20 @@ export function ModGrid(_props: ModGridProps) {
       const rowMods = rows[index] ?? [];
       return `${selectedGroupPath ?? ""}::${JSON.stringify(rowMods.map((mod) => mod.path))}`;
     },
-    getScrollElement: () =>
-      scrollAreaRef.current?.querySelector("[data-radix-scroll-area-viewport]") || null,
+    getScrollElement: () => viewport,
     estimateSize: useCallback(() => 400 + 12, []), // card height (400) + gap (12)
     overscan: 10,
     measureElement: (element) => element?.getBoundingClientRect().height,
   });
 
   useEffect(() => {
-    const viewport = scrollAreaRef.current?.querySelector("[data-radix-scroll-area-viewport]");
     if (viewport) {
       viewport.scrollTop = 0;
     }
     if (isVirtualizationEnabled && rowVirtualizer) {
       rowVirtualizer.scrollToOffset(0);
     }
-  }, [selectedGroupPath, searchQuery, rowVirtualizer, isVirtualizationEnabled]);
+  }, [selectedGroupPath, searchQuery, rowVirtualizer, isVirtualizationEnabled, viewport]);
 
   const handleToggle = useCallback(
     (mod: ModInfo, event?: React.MouseEvent) => {
@@ -149,8 +153,8 @@ export function ModGrid(_props: ModGridProps) {
   }
 
   return (
-    <div ref={scrollAreaRef} className="flex-1 min-h-0">
-      <ScrollArea className="h-full overflow-y-auto">
+    <div className="flex-1 min-h-0">
+      <ScrollArea className="h-full overflow-y-auto" viewportRef={handleViewportRef}>
         <div className="relative w-full p-3">
           {showSkeleton ? (
             <div

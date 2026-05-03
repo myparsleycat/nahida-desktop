@@ -55,6 +55,7 @@ function RouteComponent() {
   const updateDownloaded = useGlobalStore((state) => state.updateDownloaded);
   const releaseVersion = useGlobalStore((state) => state.releaseVersion);
   const shouldPromptForUpdate = useGlobalStore((state) => state.shouldPromptForUpdate);
+  const setShouldPromptForUpdate = useGlobalStore((state) => state.setShouldPromptForUpdate);
   const updaterMode = useGlobalStore((state) => state.updaterMode);
   const updaterChecking = useGlobalStore((state) => state.updaterChecking);
   const updaterDownloading = useGlobalStore((state) => state.updaterDownloading);
@@ -180,7 +181,7 @@ function RouteComponent() {
 
     try {
       if (updateDownloaded) {
-        await window.api.invoke("updater:installUpdate");
+        setShouldPromptForUpdate(true);
         return;
       }
 

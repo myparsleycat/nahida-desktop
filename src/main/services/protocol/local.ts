@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import path from "node:path";
 import type { NahidaDesktop } from "@main/index";
 import { imageCache } from "@main/internal/db/schema";
@@ -51,7 +52,7 @@ export class LocalProtocol {
         const isOrig = url.searchParams.get("orig") === "true";
 
         if (!isOrig && fileType && convertImageMime.includes(fileType.mime)) {
-            const imgHash = await this.desktop.lib.utils.getFileHash(fullPath);
+            const imgHash = crypto.createHash("sha256").update(buffer).digest("hex");
             const cachedImg = await this.desktop.lib.db.query.imageCache.findFirst({
                 where: (t, { eq }) => eq(t.hash, imgHash),
             });
@@ -97,7 +98,7 @@ export class LocalProtocol {
                     hash: imgHash,
                     image: Buffer.from(resizedImg),
                     size: resizedImg.length,
-                });
+                }).onConflictDoNothing();
                 return new Response(blob);
             }
         } else {
