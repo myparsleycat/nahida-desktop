@@ -25,8 +25,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui
 import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
 import { cn } from "@renderer/lib/utils";
 import type { ModInfo } from "@renderer/types/mod";
-import { useRouteContext } from "@tanstack/react-router";
 import type { FixToolLogEvent } from "@shared/types";
+import { useRouteContext } from "@tanstack/react-router";
 import {
   BoxIcon,
   ChevronRightIcon,
@@ -221,7 +221,7 @@ export const ModCardHeader = memo(function ModCardHeader({
             <DropdownMenuTrigger
               className={cn(
                 buttonVariants({ variant: "ghost", size: "icon" }),
-                "size-7 hover:bg-accent/20",
+                "size-7 hover:bg-muted/20 aria-expanded:bg-muted/50",
               )}
             >
               <WrenchIcon />
