@@ -398,10 +398,12 @@ export function ModContextMenu({
             )}
             {t("page.tools.model_viewer.title")}
           </ContextMenuItem>
-          <ContextMenuItem onClick={onOpenTextureResizeDialog}>
-            <ImageIcon className="mr-2 size-4" />
-            {t("page.tools.texture_resizer.title")}
-          </ContextMenuItem>
+          {onOpenTextureResizeDialog && (
+            <ContextMenuItem onClick={onOpenTextureResizeDialog}>
+              <ImageIcon className="mr-2 size-4" />
+              {t("page.tools.texture_resizer.title")}
+            </ContextMenuItem>
+          )}
           <ContextMenuItem onClick={() => setShowRenameDialog(true)}>
             <PencilIcon className="mr-2 size-4" />
             {t("page.mod.context-menu.rename")}
