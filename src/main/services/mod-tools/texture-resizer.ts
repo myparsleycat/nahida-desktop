@@ -211,15 +211,7 @@ export class TextureResizer {
 
     public async saveSettings(nextSettings: Partial<TextureResizeSettings>) {
         const current = await this.getSettings();
-        const merged: TextureResizeSettings = {
-            mode: normalizeResizeMode(nextSettings.mode ?? current.mode),
-            operation: normalizeOperation(nextSettings.operation ?? current.operation),
-            percent: normalizePercent(nextSettings.percent ?? current.percent),
-            customWidth: normalizeDimension(nextSettings.customWidth ?? current.customWidth),
-            customHeight: normalizeDimension(nextSettings.customHeight ?? current.customHeight),
-            outputFormat: normalizeOutputFormat(nextSettings.outputFormat ?? current.outputFormat),
-            backup: nextSettings.backup ?? current.backup,
-        };
+        const merged = mergeTextureResizeSettings(current, nextSettings);
 
         await Promise.all([
             this.saveSettingValue(MODE_KEY, merged.mode),
@@ -242,7 +234,7 @@ export class TextureResizer {
 
         const normalizedTargetPath = path.resolve(normalizedTargetPathInput);
         const mergedSettings = settings
-            ? await this.saveSettings(settings)
+            ? mergeTextureResizeSettings(await this.getSettings(), settings)
             : await this.getSettings();
         const files = await resolveTargetFiles(normalizedTargetPath);
         return await buildTextureList(files, normalizedTargetPath, mergedSettings);
@@ -406,6 +398,21 @@ function buildResizeRequest(targetPath: string, settings: TextureResizeSettings)
         customHeight: settings.customHeight,
         outputFormat: settings.outputFormat,
         backup: settings.backup,
+    };
+}
+
+function mergeTextureResizeSettings(
+    current: TextureResizeSettings,
+    nextSettings: Partial<TextureResizeSettings>,
+): TextureResizeSettings {
+    return {
+        mode: normalizeResizeMode(nextSettings.mode ?? current.mode),
+        operation: normalizeOperation(nextSettings.operation ?? current.operation),
+        percent: normalizePercent(nextSettings.percent ?? current.percent),
+        customWidth: normalizeDimension(nextSettings.customWidth ?? current.customWidth),
+        customHeight: normalizeDimension(nextSettings.customHeight ?? current.customHeight),
+        outputFormat: normalizeOutputFormat(nextSettings.outputFormat ?? current.outputFormat),
+        backup: nextSettings.backup ?? current.backup,
     };
 }
 
