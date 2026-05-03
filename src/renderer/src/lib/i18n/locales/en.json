@@ -891,7 +891,7 @@
     },
     "actions": {
       "download": "Download update",
-      "install": "Review update"
+      "install": "Install update"
     },
     "status": {
       "idle": "You're using the latest version.",

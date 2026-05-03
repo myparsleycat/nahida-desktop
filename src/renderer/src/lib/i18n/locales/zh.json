@@ -858,7 +858,7 @@
     },
     "actions": {
       "download": "下载更新",
-      "install": "重启并更新"
+      "install": "安装更新"
     },
     "status": {
       "idle": "你当前使用的是最新版本。",
