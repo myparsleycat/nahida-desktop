@@ -17,7 +17,7 @@ export function TextureResizeDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="flex h-[min(85vh,900px)] w-[min(80rem,calc(100%-8rem))] max-w-none flex-col overflow-hidden sm:max-w-none"
+        className="flex h-[min(85vh,900px)] w-[min(80rem,calc(100%-32rem))] max-w-none flex-col overflow-hidden sm:max-w-none"
         onClick={(event) => event.stopPropagation()}
       >
         <TextureResizerWorkspace mode="mod" modName={modName} fixedTargetPath={modPath} />
