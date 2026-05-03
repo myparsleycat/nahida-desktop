@@ -173,6 +173,13 @@ interface ParsedDDSMetadata {
     layerCount: number;
 }
 
+class DDSHeaderParseError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "DDSHeaderParseError";
+    }
+}
+
 const DEFAULT_SETTINGS: TextureResizeSettings = {
     mode: "custom",
     operation: "resize",
@@ -418,15 +425,15 @@ function mergeTextureResizeSettings(
 
 function parseDDSMetadata(buffer: Buffer): ParsedDDSMetadata {
     if (buffer.byteLength < DDS_DX10_HEADER_OFFSET + 4) {
-        throw new Error("DDS header could not be parsed: file is too small.");
+        throw new DDSHeaderParseError("DDS header could not be parsed: file is too small.");
     }
 
     if (buffer.readUInt32LE(0) !== DDS_MAGIC) {
-        throw new Error("DDS header could not be parsed: invalid magic.");
+        throw new DDSHeaderParseError("DDS header could not be parsed: invalid magic.");
     }
 
     if (buffer.readUInt32LE(4) !== DDS_HEADER_SIZE) {
-        throw new Error("DDS header could not be parsed: invalid header size.");
+        throw new DDSHeaderParseError("DDS header could not be parsed: invalid header size.");
     }
 
     const flags = buffer.readUInt32LE(DDS_FLAGS_OFFSET);
@@ -442,7 +449,7 @@ function parseDDSMetadata(buffer: Buffer): ParsedDDSMetadata {
     const colorSpace = detectDDSColorSpace(buffer, format);
 
     if (width === 0 || height === 0) {
-        throw new Error("DDS header could not be parsed: invalid dimensions.");
+        throw new DDSHeaderParseError("DDS header could not be parsed: invalid dimensions.");
     }
 
     return {
@@ -638,7 +645,7 @@ function toRelativePath(rootPath: string, filePath: string) {
 }
 
 function shouldIgnoreTextureListError(error: unknown) {
-    return error instanceof Error && error.message.includes("DDS header could not be parsed");
+    return error instanceof DDSHeaderParseError;
 }
 
 function normalizeResizeMode(value?: string | null): TextureResizeSettings["mode"] {
