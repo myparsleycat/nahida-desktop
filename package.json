@@ -94,6 +94,7 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/electron-progressbar": "^2.2.0",
     "@types/filename-reserved-regex": "^3.0.0",
+    "@types/html-to-text": "^9.0.4",
     "@types/node": "24",
     "@types/path-browserify": "^1.0.3",
     "@types/pngjs": "^6.0.5",
