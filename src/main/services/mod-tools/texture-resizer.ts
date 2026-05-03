@@ -634,8 +634,12 @@ function shouldIgnoreTextureListError(error: unknown) {
     return error instanceof Error && error.message.includes("DDS header could not be parsed");
 }
 
-function normalizeResizeMode(_value?: string | null): TextureResizeSettings["mode"] {
-    return "custom";
+function normalizeResizeMode(value?: string | null): TextureResizeSettings["mode"] {
+    if (value === "percent") {
+        return "percent";
+    }
+
+    return value === "custom" ? value : "custom";
 }
 
 function normalizeOperation(value?: string | null): TextureResizeOperation {
