@@ -171,6 +171,7 @@ interface ParsedDDSMetadata {
     format: string;
     colorSpace: TextureColorSpace;
     layerCount: number;
+    mipLevelCount: number;
 }
 
 class DDSHeaderParseError extends Error {
@@ -378,6 +379,7 @@ async function buildTextureListItem(
         format: info.format,
         colorSpace: info.colorSpace,
         layerCount: info.layerCount,
+        mipLevelCount: info.mipLevelCount,
         originalWidth,
         originalHeight,
         targetWidth: previewSize.width,
@@ -439,12 +441,12 @@ function parseDDSMetadata(buffer: Buffer): ParsedDDSMetadata {
     const flags = buffer.readUInt32LE(DDS_FLAGS_OFFSET);
     const width = buffer.readUInt32LE(DDS_WIDTH_OFFSET);
     const height = buffer.readUInt32LE(DDS_HEIGHT_OFFSET);
-    const mipmapCount =
+    const mipLevelCount =
         (flags & DDSD_MIPMAPCOUNT) !== 0
             ? Math.max(1, buffer.readUInt32LE(DDS_MIPMAP_COUNT_OFFSET))
             : 1;
     const caps2 = buffer.readUInt32LE(DDS_CAPS2_OFFSET);
-    const layerCount = (caps2 & DDSCAPS2_CUBEMAP) !== 0 ? 6 : mipmapCount;
+    const layerCount = (caps2 & DDSCAPS2_CUBEMAP) !== 0 ? 6 : 1;
     const format = detectDDSFormat(buffer);
     const colorSpace = detectDDSColorSpace(buffer, format);
 
@@ -458,6 +460,7 @@ function parseDDSMetadata(buffer: Buffer): ParsedDDSMetadata {
         format,
         colorSpace,
         layerCount,
+        mipLevelCount,
     };
 }
 
@@ -494,18 +497,6 @@ function detectDDSFormat(buffer: Buffer) {
 }
 
 function detectDDSColorSpace(buffer: Buffer, format: string) {
-    if (buffer.byteLength < DDS_DX10_HEADER_OFFSET + 4) {
-        return format.endsWith("_SRGB") ? "srgb" : "unknown";
-    }
-
-    if (buffer.readUInt32LE(0) !== DDS_MAGIC) {
-        return "unknown";
-    }
-
-    if (buffer.readUInt32LE(4) !== DDS_HEADER_SIZE) {
-        return "unknown";
-    }
-
     const pixelFormatFlags = buffer.readUInt32LE(DDS_PIXEL_FORMAT_FLAGS_OFFSET);
     const fourCC = buffer.readUInt32LE(DDS_PIXEL_FORMAT_FOUR_CC_OFFSET);
 
@@ -653,7 +644,7 @@ function normalizeResizeMode(value?: string | null): TextureResizeSettings["mode
         return "percent";
     }
 
-    return value === "custom" ? value : "custom";
+    return "custom";
 }
 
 function normalizeOperation(value?: string | null): TextureResizeOperation {
