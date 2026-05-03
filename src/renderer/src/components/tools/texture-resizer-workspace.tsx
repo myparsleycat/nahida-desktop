@@ -68,8 +68,12 @@ export function TextureResizerWorkspace({
           void loadTextures(fixedTargetPath, nextSettings);
         }
       })
-      .catch(() => {});
-  }, [fixedTargetPath, mode]);
+      .catch((error) => {
+        toast.error(t("page.tools.texture_resizer.toast.load_failed"), {
+          description: error instanceof Error ? error.message : String(error),
+        });
+      });
+  }, [fixedTargetPath, mode, t]);
 
   const browseTargetPath = async () => {
     const selected = await window.api.invoke("util:showOpenDialog", {
