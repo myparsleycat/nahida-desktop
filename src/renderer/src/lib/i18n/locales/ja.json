@@ -241,6 +241,10 @@
           "name-placeholder": "MOD名",
           "confirm": "名前を変更"
         },
+        "texture-resize": {
+          "title": "MOD テクスチャをリサイズ",
+          "description": "\"{{name}}\" 内の DDS ファイルを検索してその場でリサイズします。"
+        },
         "create-folder": {
           "title": "新しいフォルダーを作成",
           "description": "{{name}} の下に新しいフォルダーを作成します。",
@@ -539,6 +543,93 @@
           "created": "Static GLB を作成しました",
           "created_description": "{{meshCount}} 個のメッシュ、{{warningCount}} 件の警告",
           "failed": "Static GLB の変換に失敗しました"
+        }
+      },
+      "texture_resizer": {
+        "title": "テクスチャ リサイザー",
+        "target_folder": "対象フォルダー",
+        "target_folder_placeholder": "DDS ファイルを再帰検索するフォルダー",
+        "browse": "参照",
+        "operation": "処理",
+        "operation_options": {
+          "resize": "リサイズのみ",
+          "resize_and_convert": "リサイズ + 形式変換",
+          "convert": "形式変換のみ"
+        },
+        "operation_descriptions": {
+          "resize": "テクスチャサイズのみ変更します。DDS 形式は維持されます。",
+          "resize_and_convert": "色空間を維持したまま、リサイズして別の DDS 形式へ再エンコードします。",
+          "convert": "元のサイズを維持し、DDS 出力形式のみ変更します。"
+        },
+        "mode": "リサイズ方法",
+        "mode_options": {
+          "percent": "割合",
+          "custom": "カスタム上限"
+        },
+        "mode_descriptions": {
+          "percent": "割合で縮小した後、各テクスチャを有効な DDS サイズへ自動調整します。",
+          "custom": "幅と高さを最大上限として使います。各テクスチャは元の比率を保持します。"
+        },
+        "percent": "割合",
+        "custom_width": "最大幅",
+        "custom_height": "最大高さ",
+        "custom_hint": "カスタム値は 1024px 単位に補正されます。実際の出力サイズは各テクスチャの比率を維持して決まります。",
+        "resize_step": "リサイズ段階",
+        "resize_step_description": "1024 の倍数で有効なサイズだけをスライダーで選択できます。",
+        "resize_step_unavailable": "このテクスチャには 1024 単位で縮小できる有効な段階がありません。",
+        "output_format": "出力形式",
+        "output_format_description": "元の色空間と互換性のある形式のみ表示されます。",
+        "current_output_format": "選択中の出力形式",
+        "backup": "バックアップを作成",
+        "backup_description": "上書き前に各 DDS の横へ .bak を作成します。既存のバックアップは保持します。",
+        "load": "テクスチャ一覧を読み込む",
+        "refresh": "一覧を更新",
+        "texture_list_title": "テクスチャ一覧",
+        "texture_list_empty": "パスを選択してテクスチャ一覧を読み込んでください。",
+        "loading_textures": "テクスチャ一覧を読み込み中です。",
+        "preview_unavailable": "プレビューを作成できません",
+        "ready": "変換可能",
+        "not_resizable": "スキップ",
+        "process_single": "変換",
+        "run": "テクスチャを変換",
+        "running": "変換中",
+        "result_title": "変換結果",
+        "list": {
+          "total": "合計",
+          "resizable": "変換可能",
+          "skipped": "スキップ"
+        },
+        "meta": {
+          "path": "フルパス",
+          "size": "ファイルサイズ",
+          "format": "DDS 形式",
+          "layers": "レイヤー数",
+          "source": "元サイズ",
+          "target": "予想出力"
+        },
+        "color_space": {
+          "srgb": "sRGB",
+          "linear": "Linear",
+          "unknown": "不明"
+        },
+        "dialog": {
+          "title": "テクスチャ変換オプション",
+          "description_fallback": "選択した DDS ファイル"
+        },
+        "result": {
+          "processed": "処理",
+          "updated": "変更",
+          "skipped": "スキップ",
+          "failed": "失敗"
+        },
+        "toast": {
+          "save_settings_failed": "テクスチャ変換設定の保存に失敗しました",
+          "load_failed": "テクスチャ一覧の読み込みに失敗しました",
+          "completed": "テクスチャ変換が完了しました",
+          "completed_description": "{{updated}} 件変更、{{failed}} 件失敗",
+          "single_completed": "テクスチャ変換が完了しました",
+          "single_completed_fallback": "選択したテクスチャの処理が完了しました",
+          "failed": "テクスチャ変換に失敗しました"
         }
       },
       "model_viewer": {

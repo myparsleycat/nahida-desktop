@@ -31,6 +31,7 @@ import {
   BoxIcon,
   ChevronRightIcon,
   FolderIcon,
+  ImageIcon,
   Loader2Icon,
   TerminalSquareIcon,
   TrashIcon,
@@ -43,11 +44,13 @@ import { toast } from "sonner";
 interface ModCardHeaderProps {
   mod: ModInfo;
   selectedGroupPath?: string;
+  onOpenTextureResizeDialog?: (event: MouseEvent) => void;
 }
 
 export const ModCardHeader = memo(function ModCardHeader({
   mod,
   selectedGroupPath,
+  onOpenTextureResizeDialog,
 }: ModCardHeaderProps) {
   const { t } = useTranslation();
   const { queryClient } = useRouteContext({ from: "__root__" });
@@ -232,7 +235,22 @@ export const ModCardHeader = memo(function ModCardHeader({
               className="max-w-52"
             >
               <DropdownMenuGroup>
-                <DropdownMenuLabel>Preset</DropdownMenuLabel>
+                <DropdownMenuLabel>Mod Tools</DropdownMenuLabel>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenTextureResizeDialog?.(e);
+                  }}
+                >
+                  <ImageIcon className="mr-2 size-4" />
+                  {t("page.tools.texture_resizer.title")}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+
+              <DropdownMenuSeparator />
+
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Preset ({presets.length})</DropdownMenuLabel>
                 {presets.map((preset) => (
                   <DropdownMenuItem
                     key={preset.id}
@@ -253,9 +271,9 @@ export const ModCardHeader = memo(function ModCardHeader({
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuGroup>
-              <DropdownMenuSeparator />
+
               <DropdownMenuGroup>
-                <DropdownMenuLabel>Fix Tool</DropdownMenuLabel>
+                <DropdownMenuLabel>Fix Tool ({fixTools.length})</DropdownMenuLabel>
                 {fixTools.map((tool) => (
                   <DropdownMenuItem
                     key={tool.id}

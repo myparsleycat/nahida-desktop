@@ -28,6 +28,73 @@ export interface FixToolLogEvent {
     replaceLast?: boolean;
 }
 
+export type TextureResizeMode = "percent" | "custom";
+export type TextureResizeOperation = "resize" | "resize_and_convert" | "convert";
+export type TextureColorSpace = "srgb" | "linear" | "unknown";
+
+export interface TextureResizeSettings {
+    mode: TextureResizeMode;
+    operation: TextureResizeOperation;
+    percent: number;
+    customWidth: number;
+    customHeight: number;
+    outputFormat: string;
+    backup: boolean;
+}
+
+export interface TextureResizeRunInput {
+    targetPath: string;
+    settings: TextureResizeSettings;
+}
+
+export interface TextureResizeListItem {
+    filePath: string;
+    relativePath: string;
+    fileName: string;
+    fileSize: number;
+    format: string;
+    colorSpace: TextureColorSpace;
+    layerCount: number;
+    originalWidth: number;
+    originalHeight: number;
+    targetWidth: number;
+    targetHeight: number;
+    canResize: boolean;
+    canConvertFormat: boolean;
+    canProcess: boolean;
+    availableOutputFormats: string[];
+    outputFormatDefault: string;
+    formatConversionMessage?: string | null;
+    message?: string | null;
+}
+
+export interface TextureResizeFileRunInput {
+    filePath: string;
+    settings: TextureResizeSettings;
+}
+
+export interface TextureResizeFileResult {
+    filePath: string;
+    status: "updated" | "skipped" | "failed";
+    originalWidth: number;
+    originalHeight: number;
+    outputWidth: number;
+    outputHeight: number;
+    originalFormat: string;
+    outputFormat: string;
+    backupCreated: boolean;
+    message?: string | null;
+}
+
+export interface TextureResizeResult {
+    targetPath: string;
+    processed: number;
+    updated: number;
+    skipped: number;
+    failed: number;
+    files: TextureResizeFileResult[];
+}
+
 export interface ToggleKey {
     sectionName: string;
     iniFileName: string;

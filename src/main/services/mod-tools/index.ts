@@ -2,6 +2,7 @@ import type { NahidaDesktop } from "@/main";
 import { DllBuilder } from "./dll-builder";
 import { FixTool } from "./fix-tool";
 import { StaticGlb } from "./static-glb";
+import { TextureResizer } from "./texture-resizer";
 import { TogglePersist } from "./toggle-persist";
 import { ToggleViewer } from "./toggle-viewer";
 
@@ -11,6 +12,7 @@ export class ModTools {
     public readonly togglePersist: TogglePersist;
     public readonly toggleViewer: ToggleViewer;
     public readonly staticGlb: StaticGlb;
+    public readonly textureResizer: TextureResizer;
 
     constructor(private readonly desktop: NahidaDesktop) {
         this.fixTool = new FixTool(this.desktop);
@@ -18,6 +20,7 @@ export class ModTools {
         this.togglePersist = new TogglePersist(this.desktop);
         this.toggleViewer = new ToggleViewer(this.desktop);
         this.staticGlb = new StaticGlb(this.desktop);
+        this.textureResizer = new TextureResizer(this.desktop);
     }
 
     public async startPersistWatcher() {
