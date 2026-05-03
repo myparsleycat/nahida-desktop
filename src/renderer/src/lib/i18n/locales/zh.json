@@ -209,6 +209,7 @@
           "title": "添加游戏",
           "name_input_placeholder": "游戏名称 (例如：原神)",
           "path_input_placeholder": "模组文件夹路径",
+          "xxmi_path_required": "要加载 Importer，请先设置 XXMI 路径。",
           "#": {
             "0": "请输入游戏名称",
             "1": "请选择模组文件夹路径"

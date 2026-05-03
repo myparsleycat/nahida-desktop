@@ -24,7 +24,7 @@ interface GamePresetSelectorProps {
   games: GameConfig[];
   onDeleteGameClick: (game: string) => void;
   onPickFolder: () => Promise<string | null>;
-  onAddGame: (name: string, path: string) => void;
+  onAddGame: (name: string, path: string, importer: string | null) => void;
   onUpdateGame: (game: string, updates: { modFolderPath: string; importer: string | null }) => void;
 }
 

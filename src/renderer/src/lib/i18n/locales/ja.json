@@ -210,6 +210,7 @@
           "title": "ゲーム追加",
           "name_input_placeholder": "ゲーム名 (例: 原神)",
           "path_input_placeholder": "MODフォルダーのパス",
+          "xxmi_path_required": "Importer を読み込むには、先に XXMI パスを設定してください。",
           "#": {
             "0": "ゲーム名を入力してください",
             "1": "MODフォルダーのパスを選択してください"

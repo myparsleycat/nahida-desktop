@@ -1,3 +1,4 @@
+import { Alert, AlertDescription } from "@renderer/components/ui/alert";
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -9,14 +10,26 @@ import {
   DialogTrigger,
 } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
+import { Label } from "@renderer/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@renderer/components/ui/select";
 import { useModStore } from "@renderer/store/mod";
+import { useQuery } from "@tanstack/react-query";
 import { FolderOpen, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+const NO_IMPORTER_VALUE = "__none__";
+
 interface AddGameDialogProps {
   onPickFolder: () => Promise<string | null>;
-  onAddGame: (name: string, path: string) => void;
+  onAddGame: (name: string, path: string, importer: string | null) => void;
 }
 
 export function AddGameDialog({ onPickFolder, onAddGame }: AddGameDialogProps) {
@@ -28,6 +41,15 @@ export function AddGameDialog({ onPickFolder, onAddGame }: AddGameDialogProps) {
   const setNewGameName = useModStore((s) => s.setNewGameName);
   const newGamePath = useModStore((s) => s.newGamePath);
   const setNewGamePath = useModStore((s) => s.setNewGamePath);
+  const newGameImporter = useModStore((s) => s.newGameImporter);
+  const setNewGameImporter = useModStore((s) => s.setNewGameImporter);
+  const { data: xxmiData } = useQuery({
+    queryKey: ["xxmi:getXXMIData"],
+    queryFn: () => window.api.invoke("xxmi:getXXMIData"),
+  });
+
+  const enabledImporters = xxmiData?.enabledImporters ?? [];
+  const isXXMIConfigured = !!xxmiData?.xxmiPath;
 
   const handleAdd = () => {
     if (!newGameName.trim()) {
@@ -38,7 +60,7 @@ export function AddGameDialog({ onPickFolder, onAddGame }: AddGameDialogProps) {
       toast.warning(t("page.mod.dialog.add-game.#.1"));
       return;
     }
-    onAddGame(newGameName, newGamePath);
+    onAddGame(newGameName, newGamePath, newGameImporter);
   };
 
   const handlePickFolder = async () => {
@@ -48,8 +70,15 @@ export function AddGameDialog({ onPickFolder, onAddGame }: AddGameDialogProps) {
     }
   };
 
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open) {
+      setNewGameImporter(null);
+    }
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button variant="outline" size="icon">
           <Plus className="size-4" />
@@ -61,21 +90,57 @@ export function AddGameDialog({ onPickFolder, onAddGame }: AddGameDialogProps) {
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Input
-              placeholder={t("page.mod.dialog.add-game.name_input_placeholder")}
-              value={newGameName}
-              onChange={(e) => setNewGameName(e.target.value)}
-            />
+            <Label htmlFor="name">{t("page.mod.dialog.add-game.name_input_placeholder")}</Label>
+            <div className="space-y-2">
+              <Input
+                id="name"
+                value={newGameName}
+                onChange={(e) => setNewGameName(e.target.value)}
+              />
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Input
-              placeholder={t("page.mod.dialog.add-game.path_input_placeholder")}
-              value={newGamePath}
-              readOnly
-            />
-            <Button variant="outline" size="icon" onClick={handlePickFolder}>
-              <FolderOpen className="size-4" />
-            </Button>
+
+          <div className="space-y-2">
+            <Label htmlFor="path">{t("page.mod.dialog.add-game.path_input_placeholder")}</Label>
+            <div className="flex gap-2">
+              <Input id="path" value={newGamePath} readOnly hideFocusRing />
+              <Button variant="outline" size="icon" onClick={handlePickFolder}>
+                <FolderOpen className="size-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>{t("page.mod.dialog.edit-game.importer_label")}</Label>
+            <Select
+              value={newGameImporter ?? NO_IMPORTER_VALUE}
+              onValueChange={(value) =>
+                setNewGameImporter(value === NO_IMPORTER_VALUE ? null : value)
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder={t("g.select")} />
+              </SelectTrigger>
+              <SelectContent aria-describedby={undefined} position="popper">
+                <SelectGroup>
+                  <SelectItem value={NO_IMPORTER_VALUE}>
+                    {t("page.mod.dialog.edit-game.no_importer")}
+                  </SelectItem>
+                  {enabledImporters.map((importer) => (
+                    <SelectItem key={importer.key} value={importer.key}>
+                      {importer.key}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            {!isXXMIConfigured && (
+              <Alert>
+                <AlertDescription>
+                  {t("page.mod.dialog.add-game.xxmi_path_required")}
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
         </div>
         <DialogFooter>

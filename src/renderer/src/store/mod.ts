@@ -26,6 +26,8 @@ interface ModState {
     setNewGameName: (name: string) => void;
     newGamePath: string;
     setNewGamePath: (path: string) => void;
+    newGameImporter: string | null;
+    setNewGameImporter: (importer: string | null) => void;
     editingGame: GameConfig | null;
     setEditingGame: (game: GameConfig | null) => void;
     editGamePath: string;
@@ -85,6 +87,8 @@ export const modStore = createStore<ModState>((set) => ({
     setNewGameName: (newGameName) => set({ newGameName }),
     newGamePath: "",
     setNewGamePath: (newGamePath) => set({ newGamePath }),
+    newGameImporter: null,
+    setNewGameImporter: (newGameImporter) => set({ newGameImporter }),
     editingGame: null,
     setEditingGame: (editingGame) => set({ editingGame }),
     editGamePath: "",

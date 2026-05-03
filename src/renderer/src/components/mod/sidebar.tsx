@@ -105,8 +105,8 @@ export default function ModSidebar() {
   );
 
   const handleAddGame = useCallback(
-    (name: string, path: string) => {
-      addGame({ name, path });
+    (name: string, path: string, importer: string | null) => {
+      addGame({ name, path, importer });
     },
     [addGame],
   );

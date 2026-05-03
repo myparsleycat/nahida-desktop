@@ -20,6 +20,7 @@ export function useGameMutations() {
     const setSelectedPreset = useModStore((s) => s.setSelectedPreset);
     const setNewGameName = useModStore((s) => s.setNewGameName);
     const setNewGamePath = useModStore((s) => s.setNewGamePath);
+    const setNewGameImporter = useModStore((s) => s.setNewGameImporter);
     const setIsAddGameDialogOpen = useModStore((s) => s.setIsAddGameDialogOpen);
     const setIsDeleteGameDialogOpen = useModStore((s) => s.setIsDeleteGameDialogOpen);
     const setEditingGame = useModStore((s) => s.setEditingGame);
@@ -40,12 +41,13 @@ export function useGameMutations() {
     };
 
     const addGameMutation = useMutation({
-        mutationFn: ({ name, path }: { name: string; path: string }) =>
-            window.api.invoke("mod:addGame", name, path),
+        mutationFn: ({ name, path, importer }: { name: string; path: string; importer: string | null }) =>
+            window.api.invoke("mod:addGame", name, path, importer),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["games"] });
             setNewGameName("");
             setNewGamePath("");
+            setNewGameImporter(null);
             setIsAddGameDialogOpen(false);
             toast.success(t("page.mod.hooks.use-mod-mutations.add-game-mutation.success"));
         },
