@@ -235,7 +235,12 @@ export class TextureResizer {
     }
 
     public async listFolderTextures(targetPath: string, settings?: Partial<TextureResizeSettings>) {
-        const normalizedTargetPath = path.resolve(targetPath.trim());
+        const normalizedTargetPathInput = targetPath?.trim();
+        if (!normalizedTargetPathInput) {
+            throw new Error("Target path is required.");
+        }
+
+        const normalizedTargetPath = path.resolve(normalizedTargetPathInput);
         const mergedSettings = settings
             ? await this.saveSettings(settings)
             : await this.getSettings();
