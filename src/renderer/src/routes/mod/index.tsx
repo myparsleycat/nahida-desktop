@@ -191,26 +191,28 @@ function ModRouteContent() {
         >
           {selectedGroup && <ContentHeader />}
 
-          {viewMode === "grid" ? (
-            <ModGrid isDragging={isDragging} />
-          ) : (
-            <ModList isDragging={isDragging} />
-          )}
+          <div className="relative flex flex-1 min-h-0 flex-col overflow-hidden">
+            {viewMode === "grid" ? (
+              <ModGrid isDragging={isDragging} />
+            ) : (
+              <ModList isDragging={isDragging} />
+            )}
 
-          {isDragging && (
-            <div className="absolute flex-1 h-full inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm border-2 border-dashed border-primary">
-              <div className="text-center">
-                <p className="text-2xl font-bold">
-                  {t("page.mod.dad_section.title", { name: selectedGroup?.name })}
-                </p>
-                <p className="text-sm text-muted-foreground mt-2">
-                  {t("page.mod.dad_section.description")}
-                </p>
+            {isDragging && (
+              <div className="absolute flex-1 h-full inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm border-2 border-dashed border-primary">
+                <div className="text-center">
+                  <p className="text-2xl font-bold">
+                    {t("page.mod.dad_section.title", { name: selectedGroup?.name })}
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {t("page.mod.dad_section.description")}
+                  </p>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {downloadMode && <DownloadConfirmationOverlay />}
+            {downloadMode && <DownloadConfirmationOverlay />}
+          </div>
         </div>
       </div>
 
