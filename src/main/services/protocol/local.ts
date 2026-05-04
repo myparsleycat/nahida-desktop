@@ -39,7 +39,10 @@ export class LocalProtocol {
                 "code" in error &&
                 (error.code === "ENOENT" || error.code === "ENOTDIR")
             ) {
-                this.desktop.logger.warn(`Local file not found: ${fullPath}`, "LocalProtocol.handle");
+                this.desktop.logger.warn(
+                    `Local file not found: ${fullPath}`,
+                    "LocalProtocol.handle",
+                );
                 return new Response("not found", { status: 404 });
             }
 
@@ -91,14 +94,15 @@ export class LocalProtocol {
                     return new Response("not found", { status: 404 });
                 }
 
-                this.desktop.logger.info(`Resized image: ${fullPath}`, "LocalProtocol.handle");
-
                 const blob = new Blob([new Uint8Array(resizedImg)], { type: "image/webp" });
-                await this.desktop.lib.db.insert(imageCache).values({
-                    hash: imgHash,
-                    image: Buffer.from(resizedImg),
-                    size: resizedImg.length,
-                }).onConflictDoNothing();
+                await this.desktop.lib.db
+                    .insert(imageCache)
+                    .values({
+                        hash: imgHash,
+                        image: Buffer.from(resizedImg),
+                        size: resizedImg.length,
+                    })
+                    .onConflictDoNothing();
                 return new Response(blob);
             }
         } else {
