@@ -10,6 +10,12 @@ import {
     type SidebarLayoutMode,
 } from "@shared/mod";
 import { supportsWindowsDesktopFeatures } from "@shared/platform";
+import {
+    APP_SETTINGS,
+    type AppSettings,
+    type SettingDefinition,
+    type SettingKey,
+} from "@shared/settings";
 import type { AutoUpdateMode } from "@shared/updater";
 import AutoLaunch from "auto-launch";
 import { eq, sum } from "drizzle-orm";
@@ -56,15 +62,19 @@ function clampTransferConcurrency(value: number, min: number, max: number, fallb
     return Math.min(max, Math.max(min, Math.trunc(value)));
 }
 
-function normalizeModelViewerToneMapping(value: string | null | undefined) {
+function normalizeModelViewerToneMapping(
+    value: string | null | undefined,
+): (typeof MODEL_VIEWER_TONE_MAPPINGS)[number] {
     return MODEL_VIEWER_TONE_MAPPINGS.includes(value as (typeof MODEL_VIEWER_TONE_MAPPINGS)[number])
-        ? value
+        ? (value as (typeof MODEL_VIEWER_TONE_MAPPINGS)[number])
         : DEFAULT_MODEL_VIEWER_TONE_MAPPING;
 }
 
-function normalizeModelViewerEnvironment(value: string | null | undefined) {
+function normalizeModelViewerEnvironment(
+    value: string | null | undefined,
+): (typeof MODEL_VIEWER_ENVIRONMENTS)[number] {
     return MODEL_VIEWER_ENVIRONMENTS.includes(value as (typeof MODEL_VIEWER_ENVIRONMENTS)[number])
-        ? value
+        ? (value as (typeof MODEL_VIEWER_ENVIRONMENTS)[number])
         : DEFAULT_MODEL_VIEWER_ENVIRONMENT;
 }
 
@@ -128,11 +138,538 @@ function normalizeSidebarLayoutMode(value: string | null | undefined): SidebarLa
         : "row";
 }
 
+type MainSettingSpec<K extends SettingKey> = {
+    definition: SettingDefinition<K>;
+    getDefault: () => AppSettings[K] | Promise<AppSettings[K]>;
+    fromStored: (value: string | null | undefined) => AppSettings[K];
+    toStored?: (value: AppSettings[K]) => string;
+    normalize?: (value: AppSettings[K]) => AppSettings[K];
+    afterSet?: (value: AppSettings[K]) => Promise<void> | void;
+};
+
+type MainSettingSpecMap = {
+    [K in SettingKey]: MainSettingSpec<K>;
+};
+
+function parseBooleanSetting(value: string | null | undefined, fallback: boolean) {
+    if (value == null) {
+        return fallback;
+    }
+
+    return value === "true";
+}
+
 export class Setting {
     private desktop: NahidaDesktop;
+    private settingSpecs: MainSettingSpecMap | null = null;
 
     constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
+    }
+
+    private getSettingSpecMap(): MainSettingSpecMap {
+        if (this.settingSpecs) {
+            return this.settingSpecs;
+        }
+
+        this.settingSpecs = {
+            "general.runOnStartup": {
+                definition: APP_SETTINGS["general.runOnStartup"],
+                getDefault: () => false,
+                fromStored: (value) => parseBooleanSetting(value, false),
+                toStored: (value) => String(value),
+                afterSet: async (enabled) => {
+                    if (app.isPackaged) {
+                        const autoLaunch = new AutoLaunch({
+                            name: "Nahida Desktop",
+                            path: app.getPath("exe"),
+                            isHidden: true,
+                        });
+
+                        if (enabled) {
+                            await autoLaunch.enable();
+                        } else {
+                            await autoLaunch.disable();
+                        }
+                    }
+                },
+            },
+            "general.language": {
+                definition: APP_SETTINGS["general.language"],
+                getDefault: () => {
+                    const systemLocale = app.getSystemLocale();
+                    const language = systemLocale.split("-")[0];
+                    return ["ko", "en", "ja", "zh"].includes(language) ? language : "en";
+                },
+                fromStored: (value) => {
+                    const systemLocale = app.getSystemLocale();
+                    const language = systemLocale.split("-")[0];
+                    return value || (["ko", "en", "ja", "zh"].includes(language) ? language : "en");
+                },
+                afterSet: async (language) => {
+                    this.desktop.ipc.broadcast("language:update", language);
+                    await this.desktop.updater.handleLanguageChanged(language);
+                },
+            },
+            "general.autoUpdateMode": {
+                definition: APP_SETTINGS["general.autoUpdateMode"],
+                getDefault: () => "auto",
+                fromStored: (value) => normalizeAutoUpdateMode(value),
+                normalize: (value) => normalizeAutoUpdateMode(value),
+                afterSet: async (mode) => {
+                    await this.desktop.updater.handleAutoUpdateModeChanged(mode);
+                },
+            },
+            "general.runInBackground": {
+                definition: APP_SETTINGS["general.runInBackground"],
+                getDefault: () => true,
+                fromStored: (value) => parseBooleanSetting(value, true),
+                toStored: (value) => String(value),
+            },
+            "general.defaultStartPage": {
+                definition: APP_SETTINGS["general.defaultStartPage"],
+                getDefault: () => getDefaultStartPageForPlatform(process.platform),
+                fromStored: (value) => sanitizeDefaultStartPage(value, process.platform),
+                normalize: (value) => sanitizeDefaultStartPage(value, process.platform),
+            },
+            "general.titlebarStyle": {
+                definition: APP_SETTINGS["general.titlebarStyle"],
+                getDefault: () => "modern",
+                fromStored: (value) => value || "modern",
+                afterSet: async () => {
+                    for (const window of BrowserWindow.getAllWindows()) {
+                        window.close();
+                    }
+                    await this.desktop.window.main.focusAndNavigate("/setting/gen");
+                },
+            },
+            "general.logLevel": {
+                definition: APP_SETTINGS["general.logLevel"],
+                getDefault: () => "error",
+                fromStored: (value) => value || "error",
+                afterSet: (level) => {
+                    this.desktop.logger.setLevel(level as LogLevel);
+                },
+            },
+            "general.moveTransferPageWhenStartTransfer": {
+                definition: APP_SETTINGS["general.moveTransferPageWhenStartTransfer"],
+                getDefault: () => false,
+                fromStored: (value) => parseBooleanSetting(value, false),
+                toStored: (value) => String(value),
+            },
+            "general.powerSaveBlockInTransfer": {
+                definition: APP_SETTINGS["general.powerSaveBlockInTransfer"],
+                getDefault: () => false,
+                fromStored: (value) => parseBooleanSetting(value, false),
+                toStored: (value) => String(value),
+            },
+            "mod.archiveExtractPathMode": {
+                definition: APP_SETTINGS["mod.archiveExtractPathMode"],
+                getDefault: () => "flatten_single_root",
+                fromStored: (value) =>
+                    ARCHIVE_EXTRACT_PATH_MODES.includes(value as ArchiveExtractPathMode)
+                        ? (value as ArchiveExtractPathMode)
+                        : "flatten_single_root",
+                normalize: (value) =>
+                    ARCHIVE_EXTRACT_PATH_MODES.includes(value) ? value : "flatten_single_root",
+            },
+            "mod.deleteArchiveAfterExtract": {
+                definition: APP_SETTINGS["mod.deleteArchiveAfterExtract"],
+                getDefault: () => true,
+                fromStored: (value) => parseBooleanSetting(value, true),
+                toStored: (value) => String(value),
+            },
+            "mod.moveFolderInsteadOfCopy": {
+                definition: APP_SETTINGS["mod.moveFolderInsteadOfCopy"],
+                getDefault: () => true,
+                fromStored: (value) => parseBooleanSetting(value, true),
+                toStored: (value) => String(value),
+            },
+            "mod.virtualizationEnabled": {
+                definition: APP_SETTINGS["mod.virtualizationEnabled"],
+                getDefault: () => true,
+                fromStored: (value) => parseBooleanSetting(value, true),
+                toStored: (value) => String(value),
+            },
+            "mod.virtualizationThreshold": {
+                definition: APP_SETTINGS["mod.virtualizationThreshold"],
+                getDefault: () => 30,
+                fromStored: (value) => {
+                    const parsed = Number.parseInt(value ?? "", 10);
+                    return parsed || 30;
+                },
+                normalize: (value) =>
+                    Number.isFinite(value) && value > 0 ? Math.trunc(value) : 30,
+                toStored: (value) => String(value),
+            },
+            "mod.searchModPreview": {
+                definition: APP_SETTINGS["mod.searchModPreview"],
+                getDefault: () => false,
+                fromStored: (value) => parseBooleanSetting(value, false),
+                toStored: (value) => String(value),
+            },
+            "mod.copyShaderFixesOnEnable": {
+                definition: APP_SETTINGS["mod.copyShaderFixesOnEnable"],
+                getDefault: () => true,
+                fromStored: (value) => parseBooleanSetting(value, true),
+                toStored: (value) => String(value),
+            },
+            "mod.sidebarLayout": {
+                definition: APP_SETTINGS["mod.sidebarLayout"],
+                getDefault: () => "row",
+                fromStored: (value) => normalizeSidebarLayoutMode(value),
+                normalize: (value) => normalizeSidebarLayoutMode(value),
+            },
+            "mod.characterSidebarWidth": {
+                definition: APP_SETTINGS["mod.characterSidebarWidth"],
+                getDefault: () => MOD_CHARACTER_SIDEBAR_WIDTH_DEFAULT,
+                fromStored: (value) =>
+                    clampIntegerSetting(
+                        Number.parseInt(value ?? "", 10),
+                        MOD_CHARACTER_SIDEBAR_WIDTH_MIN,
+                        MOD_CHARACTER_SIDEBAR_WIDTH_MAX,
+                        MOD_CHARACTER_SIDEBAR_WIDTH_DEFAULT,
+                    ),
+                normalize: (value) =>
+                    clampIntegerSetting(
+                        value,
+                        MOD_CHARACTER_SIDEBAR_WIDTH_MIN,
+                        MOD_CHARACTER_SIDEBAR_WIDTH_MAX,
+                        MOD_CHARACTER_SIDEBAR_WIDTH_DEFAULT,
+                    ),
+                toStored: (value) =>
+                    String(
+                        clampIntegerSetting(
+                            value,
+                            MOD_CHARACTER_SIDEBAR_WIDTH_MIN,
+                            MOD_CHARACTER_SIDEBAR_WIDTH_MAX,
+                            MOD_CHARACTER_SIDEBAR_WIDTH_DEFAULT,
+                        ),
+                    ),
+            },
+            "mod.gridLayoutMode": {
+                definition: APP_SETTINGS["mod.gridLayoutMode"],
+                getDefault: () => "responsive",
+                fromStored: (value) => normalizeModGridLayoutMode(value),
+                normalize: (value) => normalizeModGridLayoutMode(value),
+            },
+            "mod.gridResponsiveBaseWidth": {
+                definition: APP_SETTINGS["mod.gridResponsiveBaseWidth"],
+                getDefault: () => MOD_GRID_RESPONSIVE_BASE_WIDTH_DEFAULT,
+                fromStored: (value) =>
+                    clampIntegerSetting(
+                        Number.parseInt(value ?? "", 10),
+                        MOD_GRID_WIDTH_MIN,
+                        MOD_GRID_WIDTH_MAX,
+                        MOD_GRID_RESPONSIVE_BASE_WIDTH_DEFAULT,
+                    ),
+                normalize: (value) =>
+                    clampIntegerSetting(
+                        value,
+                        MOD_GRID_WIDTH_MIN,
+                        MOD_GRID_WIDTH_MAX,
+                        MOD_GRID_RESPONSIVE_BASE_WIDTH_DEFAULT,
+                    ),
+                toStored: (value) =>
+                    String(
+                        clampIntegerSetting(
+                            value,
+                            MOD_GRID_WIDTH_MIN,
+                            MOD_GRID_WIDTH_MAX,
+                            MOD_GRID_RESPONSIVE_BASE_WIDTH_DEFAULT,
+                        ),
+                    ),
+            },
+            "mod.gridFixedCardWidth": {
+                definition: APP_SETTINGS["mod.gridFixedCardWidth"],
+                getDefault: () => MOD_GRID_FIXED_CARD_WIDTH_DEFAULT,
+                fromStored: (value) =>
+                    clampIntegerSetting(
+                        Number.parseInt(value ?? "", 10),
+                        MOD_GRID_WIDTH_MIN,
+                        MOD_GRID_WIDTH_MAX,
+                        MOD_GRID_FIXED_CARD_WIDTH_DEFAULT,
+                    ),
+                normalize: (value) =>
+                    clampIntegerSetting(
+                        value,
+                        MOD_GRID_WIDTH_MIN,
+                        MOD_GRID_WIDTH_MAX,
+                        MOD_GRID_FIXED_CARD_WIDTH_DEFAULT,
+                    ),
+                toStored: (value) =>
+                    String(
+                        clampIntegerSetting(
+                            value,
+                            MOD_GRID_WIDTH_MIN,
+                            MOD_GRID_WIDTH_MAX,
+                            MOD_GRID_FIXED_CARD_WIDTH_DEFAULT,
+                        ),
+                    ),
+            },
+            "mod.gridFixedColumnCount": {
+                definition: APP_SETTINGS["mod.gridFixedColumnCount"],
+                getDefault: () => MOD_GRID_FIXED_COLUMN_COUNT_DEFAULT,
+                fromStored: (value) =>
+                    clampIntegerSetting(
+                        Number.parseInt(value ?? "", 10),
+                        MOD_GRID_COLUMN_MIN,
+                        MOD_GRID_COLUMN_MAX,
+                        MOD_GRID_FIXED_COLUMN_COUNT_DEFAULT,
+                    ),
+                normalize: (value) =>
+                    clampIntegerSetting(
+                        value,
+                        MOD_GRID_COLUMN_MIN,
+                        MOD_GRID_COLUMN_MAX,
+                        MOD_GRID_FIXED_COLUMN_COUNT_DEFAULT,
+                    ),
+                toStored: (value) =>
+                    String(
+                        clampIntegerSetting(
+                            value,
+                            MOD_GRID_COLUMN_MIN,
+                            MOD_GRID_COLUMN_MAX,
+                            MOD_GRID_FIXED_COLUMN_COUNT_DEFAULT,
+                        ),
+                    ),
+            },
+            "transfer.downloadConcurrency": {
+                definition: APP_SETTINGS["transfer.downloadConcurrency"],
+                getDefault: () => TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT,
+                fromStored: (value) =>
+                    clampTransferConcurrency(
+                        Number.parseInt(value ?? "", 10),
+                        TRANSFER_DOWNLOAD_CONCURRENCY_MIN_MAX[0],
+                        TRANSFER_DOWNLOAD_CONCURRENCY_MIN_MAX[1],
+                        TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT,
+                    ),
+                normalize: (value) =>
+                    clampTransferConcurrency(
+                        value,
+                        TRANSFER_DOWNLOAD_CONCURRENCY_MIN_MAX[0],
+                        TRANSFER_DOWNLOAD_CONCURRENCY_MIN_MAX[1],
+                        TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT,
+                    ),
+                toStored: (value) =>
+                    String(
+                        clampTransferConcurrency(
+                            value,
+                            TRANSFER_DOWNLOAD_CONCURRENCY_MIN_MAX[0],
+                            TRANSFER_DOWNLOAD_CONCURRENCY_MIN_MAX[1],
+                            TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT,
+                        ),
+                    ),
+            },
+            "transfer.uploadConcurrency": {
+                definition: APP_SETTINGS["transfer.uploadConcurrency"],
+                getDefault: () => TRANSFER_UPLOAD_CONCURRENCY_DEFAULT,
+                fromStored: (value) =>
+                    clampTransferConcurrency(
+                        Number.parseInt(value ?? "", 10),
+                        TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX[0],
+                        TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX[1],
+                        TRANSFER_UPLOAD_CONCURRENCY_DEFAULT,
+                    ),
+                normalize: (value) =>
+                    clampTransferConcurrency(
+                        value,
+                        TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX[0],
+                        TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX[1],
+                        TRANSFER_UPLOAD_CONCURRENCY_DEFAULT,
+                    ),
+                toStored: (value) =>
+                    String(
+                        clampTransferConcurrency(
+                            value,
+                            TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX[0],
+                            TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX[1],
+                            TRANSFER_UPLOAD_CONCURRENCY_DEFAULT,
+                        ),
+                    ),
+            },
+            "transfer.uploadCreateManyConcurrency": {
+                definition: APP_SETTINGS["transfer.uploadCreateManyConcurrency"],
+                getDefault: () => TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT,
+                fromStored: (value) =>
+                    clampTransferConcurrency(
+                        Number.parseInt(value ?? "", 10),
+                        TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[0],
+                        TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[1],
+                        TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT,
+                    ),
+                normalize: (value) =>
+                    clampTransferConcurrency(
+                        value,
+                        TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[0],
+                        TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[1],
+                        TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT,
+                    ),
+                toStored: (value) =>
+                    String(
+                        clampTransferConcurrency(
+                            value,
+                            TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[0],
+                            TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[1],
+                            TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT,
+                        ),
+                    ),
+            },
+            "drive.nameSortPolicy": {
+                definition: APP_SETTINGS["drive.nameSortPolicy"],
+                getDefault: () => normalizeDriveNameSortPolicy(null),
+                fromStored: (value) => normalizeDriveNameSortPolicy(value),
+                normalize: (value) => normalizeDriveNameSortPolicy(value),
+            },
+            "modelViewer.toneMapping": {
+                definition: APP_SETTINGS["modelViewer.toneMapping"],
+                getDefault: () => DEFAULT_MODEL_VIEWER_TONE_MAPPING,
+                fromStored: (value) => normalizeModelViewerToneMapping(value),
+                normalize: (value) => normalizeModelViewerToneMapping(value),
+            },
+            "modelViewer.environment": {
+                definition: APP_SETTINGS["modelViewer.environment"],
+                getDefault: () => DEFAULT_MODEL_VIEWER_ENVIRONMENT,
+                fromStored: (value) => normalizeModelViewerEnvironment(value),
+                normalize: (value) => normalizeModelViewerEnvironment(value),
+            },
+            "modelViewer.exposure": {
+                definition: APP_SETTINGS["modelViewer.exposure"],
+                getDefault: () => DEFAULT_MODEL_VIEWER_EXPOSURE,
+                fromStored: (value) => clampModelViewerExposure(Number.parseFloat(value ?? "")),
+                normalize: (value) => clampModelViewerExposure(value),
+                toStored: (value) => String(clampModelViewerExposure(value)),
+            },
+            "xxmi.persistToggles": {
+                definition: APP_SETTINGS["xxmi.persistToggles"],
+                getDefault: () => false,
+                fromStored: (value) => parseBooleanSetting(value, false),
+                toStored: (value) => String(value),
+                afterSet: async (enabled) => {
+                    if (enabled) {
+                        await this.desktop.setting.general.setRunInBackground(true);
+                    }
+
+                    if (this.desktop.service?.modTools) {
+                        if (enabled) {
+                            await this.desktop.service.modTools.startPersistWatcher();
+                        } else {
+                            await this.desktop.service.modTools.stopPersistWatcher();
+                        }
+                    }
+                },
+            },
+            "xxmi.toggleViewerAutoGenerate": {
+                definition: APP_SETTINGS["xxmi.toggleViewerAutoGenerate"],
+                getDefault: () => false,
+                fromStored: (value) => parseBooleanSetting(value, false),
+                toStored: (value) => String(value),
+                afterSet: async (enabled) => {
+                    if (enabled) {
+                        await this.desktop.setting.general.setRunInBackground(true);
+                    }
+
+                    if (this.desktop.service?.modTools) {
+                        if (enabled) {
+                            const toggleViewerState =
+                                this.desktop.service.modTools.toggleViewer.getState();
+                            if (toggleViewerState.mode === "generate") {
+                                this.desktop.logger.info(
+                                    "Deferred toggle viewer watcher start until manual generate completes",
+                                    "Setting.xxmi.setToggleViewerAutoGenerate",
+                                );
+                            } else {
+                                await this.desktop.service.modTools.startToggleViewerWatcher();
+                            }
+                        } else {
+                            this.desktop.service.modTools.toggleViewer.cancelCurrentWork();
+                            await this.desktop.service.modTools.stopToggleViewerWatcher();
+                        }
+                    }
+                },
+            },
+            "xxmi.toggleViewerHotkey": {
+                definition: APP_SETTINGS["xxmi.toggleViewerHotkey"],
+                getDefault: () => DEFAULT_TOGGLE_VIEWER_HOTKEY,
+                fromStored: (value) => value?.trim() || DEFAULT_TOGGLE_VIEWER_HOTKEY,
+                normalize: (value) => value.trim() || DEFAULT_TOGGLE_VIEWER_HOTKEY,
+                afterSet: async (hotkey) => {
+                    if (this.desktop.service?.modTools) {
+                        await this.desktop.service.modTools.toggleViewer.applyHotkeyToArtifacts(
+                            hotkey,
+                        );
+                    }
+                },
+            },
+        };
+
+        return this.settingSpecs;
+    }
+
+    private getSettingSpec<K extends SettingKey>(key: K): MainSettingSpec<K> {
+        return this.getSettingSpecMap()[key] as MainSettingSpec<K>;
+    }
+
+    private async findStoredSetting(storageKey: string) {
+        return await this.desktop.lib.db.query.setting.findFirst({
+            where: (t, { eq }) => eq(t.key, storageKey),
+        });
+    }
+
+    private async upsertStoredSetting(storageKey: string, value: string) {
+        await this.desktop.lib.db
+            .insert(setting)
+            .values({ key: storageKey, value })
+            .onConflictDoUpdate({
+                target: setting.key,
+                set: { value },
+            });
+    }
+
+    public async get<K extends SettingKey>(key: K): Promise<AppSettings[K]> {
+        const spec = this.getSettingSpec(key);
+        const current = await this.findStoredSetting(spec.definition.storageKey);
+
+        if (!current || current.value == null) {
+            const fallback = spec.normalize
+                ? spec.normalize(await spec.getDefault())
+                : await spec.getDefault();
+            const storedValue = spec.toStored ? spec.toStored(fallback) : String(fallback);
+            await this.upsertStoredSetting(spec.definition.storageKey, storedValue);
+            return fallback;
+        }
+
+        const resolved = spec.normalize
+            ? spec.normalize(spec.fromStored(current.value))
+            : spec.fromStored(current.value);
+        const storedValue = spec.toStored ? spec.toStored(resolved) : String(resolved);
+
+        if (storedValue !== current.value) {
+            await this.upsertStoredSetting(spec.definition.storageKey, storedValue);
+        }
+
+        return resolved;
+    }
+
+    public async getMany<K extends readonly SettingKey[]>(
+        keys: K,
+    ): Promise<{ [P in K[number]]: AppSettings[P] }> {
+        const entries = await Promise.all(
+            keys.map(async (key) => [key, await this.get(key)] as const),
+        );
+
+        return Object.fromEntries(entries) as { [P in K[number]]: AppSettings[P] };
+    }
+
+    public async set<K extends SettingKey>(key: K, value: AppSettings[K]) {
+        const spec = this.getSettingSpec(key);
+        const normalized = spec.normalize ? spec.normalize(value) : value;
+        const storedValue = spec.toStored ? spec.toStored(normalized) : String(normalized);
+
+        await this.upsertStoredSetting(spec.definition.storageKey, storedValue);
+        await spec.afterSet?.(normalized);
+
+        this.desktop.ipc.broadcast("setting:update", { key, value: normalized });
     }
 
     private async getStoredBounds(key: string) {

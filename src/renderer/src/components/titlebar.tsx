@@ -1,7 +1,7 @@
 import { Button } from "@renderer/components/ui/button";
+import { useSetting } from "@renderer/hooks/use-settings";
 import { cn } from "@renderer/lib/utils";
 import { useGlobalStore } from "@renderer/store/global";
-import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "@tanstack/react-router";
 import { DownloadIcon, MaximizeIcon, MinusIcon, XIcon } from "lucide-react";
 import { useState } from "react";
@@ -30,10 +30,7 @@ export function Titlebar({ title }: TitlebarProps) {
   const updaterDownloading = useGlobalStore((state) => state.updaterDownloading);
   const [isUpdateActionPending, setIsUpdateActionPending] = useState(false);
 
-  const { data: titlebarStyle } = useQuery({
-    queryKey: ["settings", "general", "titlebarStyle"],
-    queryFn: async () => window.api.invoke("setting:general:getTitlebarStyle"),
-  });
+  const { data: titlebarStyle } = useSetting("general.titlebarStyle");
 
   const configEntry = Object.entries(WINDOW_CONFIG).find(
     ([route]) => location.pathname === route || location.pathname.startsWith(`${route}/`),

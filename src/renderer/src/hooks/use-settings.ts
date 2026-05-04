@@ -1,34 +1,69 @@
-import type { DriveNameSortPolicy } from "@shared/drive";
-import type { ModGridLayoutMode, SidebarLayoutMode } from "@shared/mod";
-import type { IpcHandlers } from "@shared/types";
+import { getSetting, setSetting } from "@renderer/lib/settings";
+import type { AppSettings, SettingKey } from "@shared/settings";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-// oxlint-disable-next-line typescript/no-explicit-any
-export function useSettings<T extends Record<string, any>>(
-    fetchConfig: Record<keyof T, keyof IpcHandlers>,
-) {
+type SettingsConfig = Record<string, SettingKey>;
+
+type SettingsShape<TConfig extends SettingsConfig> = {
+    [P in keyof TConfig]: AppSettings[TConfig[P]];
+};
+
+function useInvalidateOnSettingUpdate(keys: readonly SettingKey[], queryKey: readonly unknown[]) {
     const queryClient = useQueryClient();
-    const queryKey = ["settings", fetchConfig];
+
+    useEffect(() => {
+        const removeListener = window.api.on("setting:update", ({ key }) => {
+            if (keys.includes(key as SettingKey)) {
+                queryClient.invalidateQueries({ queryKey: [...queryKey] });
+            }
+        });
+
+        return () => removeListener();
+    }, [keys, queryClient, queryKey]);
+}
+
+export function useSetting<K extends SettingKey>(key: K) {
+    const queryKey = useMemo(() => ["settings", key] as const, [key]);
+
+    useInvalidateOnSettingUpdate([key], queryKey);
+
+    return useQuery({
+        queryKey,
+        queryFn: () => getSetting(key),
+        staleTime: Number.POSITIVE_INFINITY,
+        refetchOnWindowFocus: false,
+    });
+}
+
+export function useSettings<TConfig extends SettingsConfig>(settingsConfig: TConfig) {
+    const queryClient = useQueryClient();
+    const entries = useMemo(
+        () => Object.entries(settingsConfig) as [keyof TConfig, TConfig[keyof TConfig]][],
+        [settingsConfig],
+    );
+    const settingKeys = useMemo(() => entries.map(([, key]) => key), [entries]);
+    const queryKey = useMemo(() => ["settings", ...settingKeys] as const, [settingKeys]);
+
+    useInvalidateOnSettingUpdate(settingKeys, queryKey);
 
     const { data, isLoading: isQueryLoading } = useQuery({
         queryKey,
         queryFn: async () => {
-            const results = {} as T;
-            const entries = Object.entries(fetchConfig);
-            await Promise.all(
-                entries.map(async ([key, ipc]) => {
-                    const val = await window.api.invoke(ipc as keyof IpcHandlers);
-                    results[key as keyof T] = val;
-                }),
-            );
-            return results;
+            const resolved = await getSetting(settingKeys as readonly SettingKey[]);
+            const nextSettings = {} as SettingsShape<TConfig>;
+
+            for (const [alias, settingKey] of entries) {
+                nextSettings[alias] = resolved[settingKey] as SettingsShape<TConfig>[typeof alias];
+            }
+
+            return nextSettings;
         },
         staleTime: Number.POSITIVE_INFINITY,
         refetchOnWindowFocus: false,
     });
 
-    const [settings, setSettings] = useState<T>({} as T);
+    const [settings, setSettings] = useState<SettingsShape<TConfig>>({} as SettingsShape<TConfig>);
     const [isInitialized, setIsInitialized] = useState(false);
 
     useEffect(() => {
@@ -38,18 +73,12 @@ export function useSettings<T extends Record<string, any>>(
         }
     }, [data]);
 
-    const update = useCallback(
-        async (key: keyof T, value: T[keyof T], ipc: keyof IpcHandlers) => {
-            setSettings((prev) => ({ ...prev, [key]: value }));
-
-            queryClient.setQueryData(queryKey, (old: T | undefined) => {
-                return old ? { ...old, [key]: value } : old;
-            });
-
-            return (await window.api.invoke(ipc, value)) as unknown;
-        },
-        [queryClient, queryKey],
-    );
+    const update = async <K extends keyof TConfig>(key: K, value: SettingsShape<TConfig>[K]) => {
+        const nextSettings = { ...settings, [key]: value };
+        setSettings(nextSettings);
+        queryClient.setQueryData(queryKey, nextSettings);
+        await setSetting(settingsConfig[key], value);
+    };
 
     return {
         settings,
@@ -60,132 +89,86 @@ export function useSettings<T extends Record<string, any>>(
 }
 
 export function useVirtualizationSettings() {
-    const queryClient = useQueryClient();
-
-    useEffect(() => {
-        const removeListener = window.api.on("mod:update-settings", () => {
-            queryClient.invalidateQueries({ queryKey: ["settings", "mod", "virtualization"] });
-        });
-        return () => removeListener();
-    }, [queryClient]);
+    useInvalidateOnSettingUpdate(
+        ["mod.virtualizationEnabled", "mod.virtualizationThreshold"],
+        ["settings", "mod.virtualizationEnabled", "mod.virtualizationThreshold"],
+    );
 
     return useQuery({
-        queryKey: ["settings", "mod", "virtualization"],
+        queryKey: ["settings", "mod.virtualizationEnabled", "mod.virtualizationThreshold"],
         queryFn: async () => {
-            const enabled = await window.api.invoke("setting:mod:getVirtualizationEnabled");
-            const threshold = await window.api.invoke("setting:mod:getVirtualizationThreshold");
-            return { enabled, threshold };
+            const settings = await getSetting([
+                "mod.virtualizationEnabled",
+                "mod.virtualizationThreshold",
+            ] as const);
+
+            return {
+                enabled: settings["mod.virtualizationEnabled"],
+                threshold: settings["mod.virtualizationThreshold"],
+            };
         },
+        staleTime: Number.POSITIVE_INFINITY,
+        refetchOnWindowFocus: false,
     });
 }
 
 export function useModGridLayoutSettings() {
-    const queryClient = useQueryClient();
-
-    useEffect(() => {
-        const removeListener = window.api.on("mod:update-settings", () => {
-            queryClient.invalidateQueries({ queryKey: ["settings", "mod", "gridLayout"] });
-        });
-        return () => removeListener();
-    }, [queryClient]);
+    useInvalidateOnSettingUpdate(
+        [
+            "mod.gridLayoutMode",
+            "mod.gridResponsiveBaseWidth",
+            "mod.gridFixedCardWidth",
+            "mod.gridFixedColumnCount",
+        ],
+        [
+            "settings",
+            "mod.gridLayoutMode",
+            "mod.gridResponsiveBaseWidth",
+            "mod.gridFixedCardWidth",
+            "mod.gridFixedColumnCount",
+        ],
+    );
 
     return useQuery({
-        queryKey: ["settings", "mod", "gridLayout"],
-        queryFn: async (): Promise<{
-            mode: ModGridLayoutMode;
-            responsiveBaseWidth: number;
-            fixedCardWidth: number;
-            fixedColumnCount: number;
-        }> => {
-            const [mode, responsiveBaseWidth, fixedCardWidth, fixedColumnCount] = await Promise.all(
-                [
-                    window.api.invoke("setting:mod:getGridLayoutMode"),
-                    window.api.invoke("setting:mod:getGridResponsiveBaseWidth"),
-                    window.api.invoke("setting:mod:getGridFixedCardWidth"),
-                    window.api.invoke("setting:mod:getGridFixedColumnCount"),
-                ],
-            );
+        queryKey: [
+            "settings",
+            "mod.gridLayoutMode",
+            "mod.gridResponsiveBaseWidth",
+            "mod.gridFixedCardWidth",
+            "mod.gridFixedColumnCount",
+        ],
+        queryFn: async () => {
+            const settings = await getSetting([
+                "mod.gridLayoutMode",
+                "mod.gridResponsiveBaseWidth",
+                "mod.gridFixedCardWidth",
+                "mod.gridFixedColumnCount",
+            ] as const);
 
             return {
-                mode,
-                responsiveBaseWidth,
-                fixedCardWidth,
-                fixedColumnCount,
+                mode: settings["mod.gridLayoutMode"],
+                responsiveBaseWidth: settings["mod.gridResponsiveBaseWidth"],
+                fixedCardWidth: settings["mod.gridFixedCardWidth"],
+                fixedColumnCount: settings["mod.gridFixedColumnCount"],
             };
         },
+        staleTime: Number.POSITIVE_INFINITY,
+        refetchOnWindowFocus: false,
     });
 }
 
 export function useSidebarLayoutSetting() {
-    const queryClient = useQueryClient();
-
-    useEffect(() => {
-        const removeListener = window.api.on("mod:update-settings", () => {
-            queryClient.invalidateQueries({ queryKey: ["settings", "mod", "sidebarLayout"] });
-        });
-        return () => removeListener();
-    }, [queryClient]);
-
-    return useQuery({
-        queryKey: ["settings", "mod", "sidebarLayout"],
-        queryFn: async (): Promise<SidebarLayoutMode> => {
-            return await window.api.invoke("setting:mod:getSidebarLayout");
-        },
-    });
+    return useSetting("mod.sidebarLayout");
 }
 
 export function useCharacterSidebarWidthSetting() {
-    const queryClient = useQueryClient();
-
-    useEffect(() => {
-        const removeListener = window.api.on("mod:update-settings", () => {
-            queryClient.invalidateQueries({
-                queryKey: ["settings", "mod", "characterSidebarWidth"],
-            });
-        });
-        return () => removeListener();
-    }, [queryClient]);
-
-    return useQuery({
-        queryKey: ["settings", "mod", "characterSidebarWidth"],
-        queryFn: async (): Promise<number> => {
-            return await window.api.invoke("setting:mod:getCharacterSidebarWidth");
-        },
-    });
+    return useSetting("mod.characterSidebarWidth");
 }
 
 export function useSearchModPreviewSetting() {
-    const queryClient = useQueryClient();
-
-    useEffect(() => {
-        const removeListener = window.api.on("mod:update-settings", () => {
-            queryClient.invalidateQueries({ queryKey: ["settings", "mod", "searchModPreview"] });
-        });
-        return () => removeListener();
-    }, [queryClient]);
-
-    return useQuery({
-        queryKey: ["settings", "mod", "searchModPreview"],
-        queryFn: async () => {
-            return await window.api.invoke("setting:mod:getSearchModPreview");
-        },
-    });
+    return useSetting("mod.searchModPreview");
 }
 
 export function useDriveNameSortPolicy() {
-    const queryClient = useQueryClient();
-
-    useEffect(() => {
-        const removeListener = window.api.on("drive:update-settings", () => {
-            queryClient.invalidateQueries({ queryKey: ["settings", "drive", "nameSortPolicy"] });
-        });
-        return () => removeListener();
-    }, [queryClient]);
-
-    return useQuery({
-        queryKey: ["settings", "drive", "nameSortPolicy"],
-        queryFn: async (): Promise<DriveNameSortPolicy> => {
-            return await window.api.invoke("setting:drive:getNameSortPolicy");
-        },
-    });
+    return useSetting("drive.nameSortPolicy");
 }

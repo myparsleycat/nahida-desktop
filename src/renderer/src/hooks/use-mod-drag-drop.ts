@@ -1,9 +1,7 @@
 import { Logger } from "@renderer/lib/logger";
+import { getSetting } from "@renderer/lib/settings";
 import { modStore } from "@renderer/store/mod";
-import type {
-    ArchiveExtractPathMode,
-    ResolvedArchiveExtractPathMode,
-} from "@shared/mod";
+import type { ArchiveExtractPathMode, ResolvedArchiveExtractPathMode } from "@shared/mod";
 import type { QueryClient } from "@tanstack/react-query";
 import path from "path-browserify";
 import { useEffect, useRef, useState } from "react";
@@ -27,9 +25,9 @@ export function useModDragDrop(
     game: string,
 ) {
     const [isDragging, setIsDragging] = useState(false);
-    const [archiveExtractDialogFileName, setArchiveExtractDialogFileName] = useState<
-        string | null
-    >(null);
+    const [archiveExtractDialogFileName, setArchiveExtractDialogFileName] = useState<string | null>(
+        null,
+    );
     const archivePromptQueueRef = useRef<
         {
             fileName: string;
@@ -78,9 +76,7 @@ export function useModDragDrop(
         fileName: string,
         filePath: string,
     ): Promise<ResolvedArchiveExtractPathMode> => {
-        const mode = (await window.api.invoke(
-            "setting:mod:getArchiveExtractPathMode",
-        )) as ArchiveExtractPathMode;
+        const mode = (await getSetting("mod.archiveExtractPathMode")) as ArchiveExtractPathMode;
 
         if (mode === "ask_every_time") {
             const hasSingleTopLevelDirectory = await window.api.invoke(

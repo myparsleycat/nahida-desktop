@@ -33,18 +33,18 @@ export const Route = createFileRoute("/setting/mod")({
 });
 
 const settingsConfig = {
-  archiveExtractPathMode: "setting:mod:getArchiveExtractPathMode",
-  deleteArchiveAfterExtract: "setting:mod:getDeleteArchiveAfterExtract",
-  moveFolderInsteadOfCopy: "setting:mod:getMoveFolderInsteadOfCopy",
-  virtualizationEnabled: "setting:mod:getVirtualizationEnabled",
-  virtualizationThreshold: "setting:mod:getVirtualizationThreshold",
-  searchModPreview: "setting:mod:getSearchModPreview",
-  copyShaderFixesOnEnable: "setting:mod:getCopyShaderFixesOnEnable",
-  sidebarLayout: "setting:mod:getSidebarLayout",
-  gridLayoutMode: "setting:mod:getGridLayoutMode",
-  gridResponsiveBaseWidth: "setting:mod:getGridResponsiveBaseWidth",
-  gridFixedCardWidth: "setting:mod:getGridFixedCardWidth",
-  gridFixedColumnCount: "setting:mod:getGridFixedColumnCount",
+  archiveExtractPathMode: "mod.archiveExtractPathMode",
+  deleteArchiveAfterExtract: "mod.deleteArchiveAfterExtract",
+  moveFolderInsteadOfCopy: "mod.moveFolderInsteadOfCopy",
+  virtualizationEnabled: "mod.virtualizationEnabled",
+  virtualizationThreshold: "mod.virtualizationThreshold",
+  searchModPreview: "mod.searchModPreview",
+  copyShaderFixesOnEnable: "mod.copyShaderFixesOnEnable",
+  sidebarLayout: "mod.sidebarLayout",
+  gridLayoutMode: "mod.gridLayoutMode",
+  gridResponsiveBaseWidth: "mod.gridResponsiveBaseWidth",
+  gridFixedCardWidth: "mod.gridFixedCardWidth",
+  gridFixedColumnCount: "mod.gridFixedColumnCount",
 } as const;
 
 function RouteComponent() {
@@ -60,20 +60,7 @@ function ModSettingsRouteContent() {
   const queryClient = useQueryClient();
   const [anim1] = useAutoAnimate({ duration: 150 });
 
-  const { settings, update, setSettings, isLoading } = useSettings<{
-    archiveExtractPathMode: ArchiveExtractPathMode;
-    deleteArchiveAfterExtract: boolean;
-    moveFolderInsteadOfCopy: boolean;
-    virtualizationEnabled: boolean;
-    virtualizationThreshold: number;
-    searchModPreview: boolean;
-    copyShaderFixesOnEnable: boolean;
-    sidebarLayout: SidebarLayoutMode;
-    gridLayoutMode: ModGridLayoutMode;
-    gridResponsiveBaseWidth: number;
-    gridFixedCardWidth: number;
-    gridFixedColumnCount: number;
-  }>(settingsConfig);
+  const { settings, update, setSettings, isLoading } = useSettings(settingsConfig);
 
   if (isLoading) {
     return null;
@@ -81,7 +68,7 @@ function ModSettingsRouteContent() {
 
   const handleVirtualizationEnabledChange = async (checked: boolean) => {
     try {
-      await update("virtualizationEnabled", checked, "setting:mod:setVirtualizationEnabled");
+      await update("virtualizationEnabled", checked);
       queryClient.invalidateQueries({ queryKey: ["settings", "mod", "virtualization"] });
     } catch (error) {
       Logger.error(error, "ModSettings:handleVirtualizationEnabledChange");
@@ -96,7 +83,7 @@ function ModSettingsRouteContent() {
     }
 
     try {
-      await update("virtualizationThreshold", value, "setting:mod:setVirtualizationThreshold");
+      await update("virtualizationThreshold", value);
       toast.success("설정이 저장되었습니다.");
       queryClient.invalidateQueries({ queryKey: ["settings", "mod", "virtualization"] });
     } catch (error) {
@@ -111,7 +98,7 @@ function ModSettingsRouteContent() {
     }
 
     try {
-      await update("gridLayoutMode", mode, "setting:mod:setGridLayoutMode");
+      await update("gridLayoutMode", mode);
     } catch (error) {
       Logger.error(error, "ModSettings:handleGridLayoutModeChange");
       toast.error("설정 저장에 실패했습니다.");
@@ -124,7 +111,7 @@ function ModSettingsRouteContent() {
     }
 
     try {
-      await update("sidebarLayout", mode, "setting:mod:setSidebarLayout");
+      await update("sidebarLayout", mode);
     } catch (error) {
       Logger.error(error, "ModSettings:handleSidebarLayoutChange");
       toast.error("설정 저장에 실패했습니다.");
@@ -134,7 +121,7 @@ function ModSettingsRouteContent() {
   const handleGridResponsiveBaseWidthChange = async (value: number) => {
     const nextValue = clampModGridWidth(value, 400);
     try {
-      await update("gridResponsiveBaseWidth", nextValue, "setting:mod:setGridResponsiveBaseWidth");
+      await update("gridResponsiveBaseWidth", nextValue);
       setSettings((prev) => ({ ...prev, gridResponsiveBaseWidth: nextValue }));
       toast.success("설정이 저장되었습니다.");
     } catch (error) {
@@ -146,7 +133,7 @@ function ModSettingsRouteContent() {
   const handleGridFixedCardWidthChange = async (value: number) => {
     const nextValue = clampModGridWidth(value, 360);
     try {
-      await update("gridFixedCardWidth", nextValue, "setting:mod:setGridFixedCardWidth");
+      await update("gridFixedCardWidth", nextValue);
       setSettings((prev) => ({ ...prev, gridFixedCardWidth: nextValue }));
       toast.success("설정이 저장되었습니다.");
     } catch (error) {
@@ -158,7 +145,7 @@ function ModSettingsRouteContent() {
   const handleGridFixedColumnCountChange = async (value: number) => {
     const nextValue = clampModGridColumnCount(value, 4);
     try {
-      await update("gridFixedColumnCount", nextValue, "setting:mod:setGridFixedColumnCount");
+      await update("gridFixedColumnCount", nextValue);
       setSettings((prev) => ({ ...prev, gridFixedColumnCount: nextValue }));
       toast.success("설정이 저장되었습니다.");
     } catch (error) {
@@ -189,7 +176,7 @@ function ModSettingsRouteContent() {
               <Select
                 value={settings.archiveExtractPathMode}
                 onValueChange={(value: ArchiveExtractPathMode) =>
-                  update("archiveExtractPathMode", value, "setting:mod:setArchiveExtractPathMode")
+                  update("archiveExtractPathMode", value)
                 }
               >
                 <SelectTrigger className="w-55">
@@ -228,13 +215,7 @@ function ModSettingsRouteContent() {
               </div>
               <Switch
                 checked={settings.deleteArchiveAfterExtract}
-                onCheckedChange={(val) =>
-                  update(
-                    "deleteArchiveAfterExtract",
-                    val,
-                    "setting:mod:setDeleteArchiveAfterExtract",
-                  )
-                }
+                onCheckedChange={(val) => update("deleteArchiveAfterExtract", val)}
               />
             </div>
 
@@ -251,9 +232,7 @@ function ModSettingsRouteContent() {
               </div>
               <Switch
                 checked={settings.moveFolderInsteadOfCopy}
-                onCheckedChange={(val) =>
-                  update("moveFolderInsteadOfCopy", val, "setting:mod:setMoveFolderInsteadOfCopy")
-                }
+                onCheckedChange={(val) => update("moveFolderInsteadOfCopy", val)}
               />
             </div>
 
@@ -270,9 +249,7 @@ function ModSettingsRouteContent() {
               </div>
               <Switch
                 checked={settings.copyShaderFixesOnEnable}
-                onCheckedChange={(val) =>
-                  update("copyShaderFixesOnEnable", val, "setting:mod:setCopyShaderFixesOnEnable")
-                }
+                onCheckedChange={(val) => update("copyShaderFixesOnEnable", val)}
               />
             </div>
 
@@ -289,9 +266,7 @@ function ModSettingsRouteContent() {
               </div>
               <Switch
                 checked={settings.searchModPreview}
-                onCheckedChange={(val) =>
-                  update("searchModPreview", val, "setting:mod:setSearchModPreview")
-                }
+                onCheckedChange={(val) => update("searchModPreview", val)}
               />
             </div>
           </CardContent>

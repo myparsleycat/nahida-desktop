@@ -15,6 +15,7 @@ import {
   MenubarTrigger,
 } from "@renderer/components/ui/menubar";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
+import { getSetting, setSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
 import { Loader2Icon, RotateCcwIcon, SaveIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -186,9 +187,9 @@ export function ModelViewerDialog({
     let cancelled = false;
 
     void Promise.all([
-      window.api.invoke("setting:modelViewer:getToneMapping"),
-      window.api.invoke("setting:modelViewer:getEnvironment"),
-      window.api.invoke("setting:modelViewer:getExposure"),
+      getSetting("modelViewer.toneMapping"),
+      getSetting("modelViewer.environment"),
+      getSetting("modelViewer.exposure"),
     ])
       .then(([toneMapping, environment, exposure]) => {
         if (cancelled) {
@@ -240,7 +241,7 @@ export function ModelViewerDialog({
 
   const updateThreeToneMapping = (value: ModelViewerThreeToneMapping) => {
     setThreeToneMapping(value);
-    void window.api.invoke("setting:modelViewer:setToneMapping", value).catch((error) => {
+    void setSetting("modelViewer.toneMapping", value).catch((error) => {
       console.error("Failed to persist model viewer tone mapping", error);
       toast.error("Failed to save tone mapping setting.");
     });
@@ -248,7 +249,7 @@ export function ModelViewerDialog({
 
   const updateThreeEnvironment = (value: ModelViewerThreeEnvironment) => {
     setThreeEnvironment(value);
-    void window.api.invoke("setting:modelViewer:setEnvironment", value).catch((error) => {
+    void setSetting("modelViewer.environment", value).catch((error) => {
       console.error("Failed to persist model viewer environment", error);
       toast.error("Failed to save environment setting.");
     });
@@ -257,7 +258,7 @@ export function ModelViewerDialog({
   const updateThreeExposure = (value: number) => {
     const nextValue = clampThreeExposure(value);
     setThreeExposure(nextValue);
-    void window.api.invoke("setting:modelViewer:setExposure", nextValue).catch((error) => {
+    void setSetting("modelViewer.exposure", nextValue).catch((error) => {
       console.error("Failed to persist model viewer exposure", error);
       toast.error("Failed to save exposure setting.");
     });

@@ -17,14 +17,12 @@ export const Route = createFileRoute("/setting/drive")({
 });
 
 const settingsConfig = {
-  nameSortPolicy: "setting:drive:getNameSortPolicy",
+  nameSortPolicy: "drive.nameSortPolicy",
 } as const;
 
 function RouteComponent() {
   const { t } = useTranslation();
-  const { settings, update, isLoading } = useSettings<{
-    nameSortPolicy: DriveNameSortPolicy;
-  }>(settingsConfig);
+  const { settings, update, isLoading } = useSettings(settingsConfig);
 
   if (isLoading) {
     return null;
@@ -50,13 +48,7 @@ function RouteComponent() {
             </div>
             <Select
               value={settings.nameSortPolicy}
-              onValueChange={(value) =>
-                update(
-                  "nameSortPolicy",
-                  value as DriveNameSortPolicy,
-                  "setting:drive:setNameSortPolicy",
-                )
-              }
+              onValueChange={(value) => update("nameSortPolicy", value as DriveNameSortPolicy)}
             >
               <SelectTrigger className="w-52">
                 <SelectValue placeholder={t("page.setting.drive.nameSortPolicy.select")} />

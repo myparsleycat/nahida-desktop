@@ -1,11 +1,12 @@
 import { PathSelectorDialog } from "@renderer/components/path-selector-dialog";
 import { RootProvider } from "@renderer/components/root-provider";
 import { Sidebar } from "@renderer/components/sidebar";
-import { UpdateAlertDialog } from "@renderer/components/update-alert-dialog";
 import { Toaster } from "@renderer/components/ui/sonner";
+import { UpdateAlertDialog } from "@renderer/components/update-alert-dialog";
 import { useGlobalEvents } from "@renderer/hooks/use-global-events";
 import { useDownloadArchiveExtractPromptHandler } from "@renderer/hooks/use-mod-events";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
+import { getSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
 import { useGlobalStore } from "@renderer/store/global";
 import type { QueryClient } from "@tanstack/react-query";
@@ -60,7 +61,7 @@ function RootComponent() {
     });
     syncUpdaterStatus();
     window.api.invoke("transfer:list").then(setTransfers);
-    window.api.invoke("setting:general:getLanguage").then((language) => {
+    getSetting("general.language").then((language) => {
       if (language) i18n.changeLanguage(language);
     });
 
