@@ -33,7 +33,7 @@
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
-    "release:docs": "pnpm run docs:build && pnpm exec wrangler pages deploy"
+    "release:docs": "pnpm run docs:build && pnpm exec wrangler pages deploy docs/.vitepress/dist --project-name nahida-desktop-docs --branch main"
   },
   "dependencies": {
     "@borewit/text-codec": "^0.2.2",
