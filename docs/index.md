@@ -1,21 +1,20 @@
 ---
-# https://vitepress.dev/reference/default-theme-home-page
 layout: home
 
 hero:
   name: "Nahida Desktop"
-  text: "A Mod Manager"
-  tagline: My great project tagline
+  text: "An all-in-one mod manager for 3DMigoto mods"
+  tagline: "Manage 3DMigoto-based mods faster with integrated browsing, tooling, and workflows."
   actions:
     - theme: brand
       text: Guide
-      link: /guide
+      link: /guide/what-is-nahida-desktop
 
 features:
-  - title: Feature A
-    details: Lorem ipsum dolor sit amet, consectetur adipiscing elit
-  - title: Feature B
-    details: Lorem ipsum dolor sit amet, consectetur adipiscing elit
-  - title: Feature C
-    details: Lorem ipsum dolor sit amet, consectetur adipiscing elit
+  - title: Mod Management
+    details: Enable, disable, organize, and preview mods from a built-in manager.
+  - title: GameBanana Integration
+    details: Browse and download GameBanana mods directly inside the app.
+  - title: Mod Tools
+    details: Use helper features such as DLL building, toggle persistence, and static GLB conversion.
 ---
