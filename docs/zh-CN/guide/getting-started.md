@@ -2,7 +2,7 @@
 
 ## 从 GitHub Releases 下载
 
-打开 [GitHub Releases](https://github.com/myparsleycat/nahida-desktop/releases/latest) 页面，点击 `Nahida-Desktop-Setup-x.x.x.exe` 即可下载最新版本的安装程序。
+打开 [GitHub Releases](https://github.com/myparsleycat/nahida-desktop/releases/latest) 页面，点击 `Nahida-Desktop-Setup-<version>.exe` 即可下载最新版本的安装程序。
 
 ## 从源码构建
 

@@ -2,7 +2,7 @@
 
 ## GitHub Releases からダウンロード
 
-[GitHub Releases](https://github.com/myparsleycat/nahida-desktop/releases/latest) ページで `Nahida-Desktop-Setup-x.x.x.exe` をクリックすると、最新バージョンのインストーラーをダウンロードできます。
+[GitHub Releases](https://github.com/myparsleycat/nahida-desktop/releases/latest) ページで `Nahida-Desktop-Setup-<version>.exe` をクリックすると、最新バージョンのインストーラーをダウンロードできます。
 
 ## ソースからビルド
 
