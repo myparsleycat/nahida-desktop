@@ -1,7 +1,10 @@
 import { defineConfig } from "vitepress";
 
+const docsBasePath = process.env.DOCS_BASE_PATH || "/";
+
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
+    base: docsBasePath,
     title: "Nahida Desktop Docs",
     description: "Nahida Desktop",
     themeConfig: {

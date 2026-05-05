@@ -32,7 +32,8 @@
     "release:mac": "pnpm run clean && pnpm run build && electron-builder --mac --publish always",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs"
+    "docs:preview": "vitepress preview docs",
+    "release:docs": "pnpm run docs:build && pnpm exec wrangler pages deploy"
   },
   "dependencies": {
     "@borewit/text-codec": "^0.2.2",
@@ -133,6 +134,7 @@
     "typescript": "^6.0.3",
     "vite": "^8.0.10",
     "vitepress": "2.0.0-alpha.17",
+    "wrangler": "^4.68.0",
     "zustand": "^5.0.12"
   },
   "pnpm": {
