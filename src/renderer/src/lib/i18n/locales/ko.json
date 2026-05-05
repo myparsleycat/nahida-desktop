@@ -915,6 +915,9 @@
         }
       }
     },
+    "docs": {
+      "title": "사용 방법"
+    },
     "report": {
       "title": "문제 신고",
       "reported_title": "문제가 신고되었습니다",

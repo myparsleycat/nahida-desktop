@@ -903,6 +903,9 @@
         }
       }
     },
+    "docs": {
+      "title": "使い方"
+    },
     "report": {
       "title": "問題を報告",
       "reported_title": "問題が報告されました",

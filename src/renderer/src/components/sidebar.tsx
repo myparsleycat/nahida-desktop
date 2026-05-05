@@ -8,6 +8,7 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpDownIcon,
   BananaIcon,
+  BookOpenIcon,
   BugIcon,
   DatabaseBackupIcon,
   GamepadIcon,
@@ -287,6 +288,24 @@ export function Sidebar({ className }: { className?: string }) {
               <Separator orientation="horizontal" />
             </>
           )}
+
+          <Tooltip disableHoverableContent={true}>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-lg"
+                onPointerDown={handlePointerDown}
+                onClick={() => {
+                  void window.api.invoke("util:openExternal", "https://desktop.nahida.live");
+                }}
+              >
+                <BookOpenIcon className={cn(iconSize)} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right" hideWhenDetached={true}>
+              {t("page.docs.title")}
+            </TooltipContent>
+          </Tooltip>
 
           <Tooltip disableHoverableContent={true}>
             <TooltipTrigger asChild>
