@@ -57,14 +57,13 @@ export function DownloadConfirmationOverlay() {
 
   return (
     <div
-      className="fixed right-0 bottom-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]"
-      style={{ left: "308px", top: "76px" }}
+      className="absolute inset-0 z-50 flex items-center justify-center bg-black/20"
       onClick={(e) => {
         e.stopPropagation();
       }}
     >
       <div
-        className="bg-background border rounded-lg p-4 max-w-md w-full mx-4 shadow-xl"
+        className="bg-background/75 backdrop-blur rounded-lg p-4 max-w-md w-full mx-4 shadow-lg"
         onClick={(e) => {
           e.stopPropagation();
         }}
@@ -90,6 +89,7 @@ export function DownloadConfirmationOverlay() {
                 value={fileName}
                 onChange={(e) => setFileName(e.target.value)}
                 placeholder={t("components.download-confirmation-overlay.file_name_placeholder")}
+                transparentBackground
                 className="w-full"
               />
             </div>
@@ -99,15 +99,17 @@ export function DownloadConfirmationOverlay() {
             <p className="text-sm font-medium">
               {t("components.download-confirmation-overlay.download_location")}
             </p>
-            {selectedGroupName ? (
-              <p className="text-sm text-muted-foreground bg-muted px-3 py-2 rounded">
-                {selectedGroupName}
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground italic">
-                {t("components.download-confirmation-overlay.need_select_character_folder")}
-              </p>
-            )}
+            <Input
+              value={
+                selectedGroupName
+                  ? selectedGroupName
+                  : t("components.download-confirmation-overlay.need_select_character_folder")
+              }
+              className="w-full"
+              hideFocusRing
+              transparentBackground
+              readOnly
+            />
           </div>
 
           <div className="flex gap-2 pt-2">

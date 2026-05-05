@@ -3,6 +3,18 @@ import { rh } from "@main/ipc/helper";
 import { supportsWindowsDesktopFeatures } from "@shared/platform";
 
 export function registerSettingHandlers(d: NahidaDesktop) {
+    rh("setting:get", async (key) => {
+        return await d.setting.get(key);
+    });
+
+    rh("setting:getMany", async (keys) => {
+        return await d.setting.getMany(keys);
+    });
+
+    rh("setting:set", async (key, value) => {
+        return await d.setting.set(key, value);
+    });
+
     rh("setting:general:getRunOnStartup", async () => {
         return await d.setting.general.getRunOnStartup();
     });

@@ -4,6 +4,7 @@ import { useCharacters, useGames } from "@renderer/hooks/use-mod-data";
 import { useModDragDrop } from "@renderer/hooks/use-mod-drag-drop";
 import { useGameMutations } from "@renderer/hooks/use-mod-mutations";
 import { useCharacterSidebarWidthSetting } from "@renderer/hooks/use-settings";
+import { setSetting } from "@renderer/lib/settings";
 import { useModStore } from "@renderer/store/mod";
 import { useRouteContext } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -47,7 +48,7 @@ export default function ModSidebar() {
 
   const persistSidebarWidth = useCallback(async (width: number) => {
     try {
-      await window.api.invoke("setting:mod:setCharacterSidebarWidth", width);
+      await setSetting("mod.characterSidebarWidth", width);
     } catch (error) {
       console.error("Failed to persist mod sidebar width", error);
     }

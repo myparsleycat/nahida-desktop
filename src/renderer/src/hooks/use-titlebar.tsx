@@ -1,15 +1,12 @@
 import { Titlebar as BaseTitlebar } from "@renderer/components/titlebar";
-import { useQuery } from "@tanstack/react-query";
+import { useSetting } from "@renderer/hooks/use-settings";
 import type { ComponentProps } from "react";
 import { useMemo } from "react";
 
 type TitlebarProps = ComponentProps<typeof BaseTitlebar>;
 
 export function useTitlebar() {
-  const { data: titlebarStyle } = useQuery({
-    queryKey: ["settings", "general", "titlebarStyle"],
-    queryFn: async () => window.api.invoke("setting:general:getTitlebarStyle"),
-  });
+  const { data: titlebarStyle } = useSetting("general.titlebarStyle");
 
   const Titlebar = useMemo(
     () =>

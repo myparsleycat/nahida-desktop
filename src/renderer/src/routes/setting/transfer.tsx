@@ -11,11 +11,11 @@ export const Route = createFileRoute("/setting/transfer")({
 });
 
 const settingsConfig = {
-  downloadConcurrency: "setting:transfer:getDownloadConcurrency",
-  uploadConcurrency: "setting:transfer:getUploadConcurrency",
-  uploadCreateManyConcurrency: "setting:transfer:getUploadCreateManyConcurrency",
-  moveTransferPageWhenStartTransfer: "setting:general:getMoveTransferPageWhenStartTransfer",
-  powerSaveBlockInTransfer: "setting:general:getPowerSaveBlockInTransfer",
+  downloadConcurrency: "transfer.downloadConcurrency",
+  uploadConcurrency: "transfer.uploadConcurrency",
+  uploadCreateManyConcurrency: "transfer.uploadCreateManyConcurrency",
+  moveTransferPageWhenStartTransfer: "general.moveTransferPageWhenStartTransfer",
+  powerSaveBlockInTransfer: "general.powerSaveBlockInTransfer",
 } as const;
 
 const DOWNLOAD_MIN_MAX = [16, 64];
@@ -32,13 +32,7 @@ function clamp(value: number, min: number, max: number) {
 
 function RouteComponent() {
   const { t } = useTranslation();
-  const { settings, update, setSettings, isLoading } = useSettings<{
-    downloadConcurrency: number;
-    uploadConcurrency: number;
-    uploadCreateManyConcurrency: number;
-    moveTransferPageWhenStartTransfer: boolean;
-    powerSaveBlockInTransfer: boolean;
-  }>(settingsConfig);
+  const { settings, update, setSettings, isLoading } = useSettings(settingsConfig);
 
   if (isLoading) {
     return null;
@@ -57,15 +51,7 @@ function RouteComponent() {
 
     setSettings((prev) => ({ ...prev, [key]: nextValue }));
 
-    await update(
-      key,
-      nextValue,
-      key === "downloadConcurrency"
-        ? "setting:transfer:setDownloadConcurrency"
-        : key === "uploadConcurrency"
-          ? "setting:transfer:setUploadConcurrency"
-          : "setting:transfer:setUploadCreateManyConcurrency",
-    );
+    await update(key, nextValue);
   };
 
   return (
@@ -180,7 +166,9 @@ function RouteComponent() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-medium">{t("page.setting.transfer.other.title")}</CardTitle>
+          <CardTitle className="text-sm font-medium">
+            {t("page.setting.transfer.other.title")}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between gap-6">
@@ -194,13 +182,7 @@ function RouteComponent() {
             </div>
             <Switch
               checked={settings.moveTransferPageWhenStartTransfer}
-              onCheckedChange={(val) =>
-                update(
-                  "moveTransferPageWhenStartTransfer",
-                  val,
-                  "setting:general:setMoveTransferPageWhenStartTransfer",
-                )
-              }
+              onCheckedChange={(val) => update("moveTransferPageWhenStartTransfer", val)}
             />
           </div>
 
@@ -217,13 +199,7 @@ function RouteComponent() {
             </div>
             <Switch
               checked={settings.powerSaveBlockInTransfer}
-              onCheckedChange={(val) =>
-                update(
-                  "powerSaveBlockInTransfer",
-                  val,
-                  "setting:general:setPowerSaveBlockInTransfer",
-                )
-              }
+              onCheckedChange={(val) => update("powerSaveBlockInTransfer", val)}
             />
           </div>
         </CardContent>

@@ -20,8 +20,8 @@ import {
 } from "@renderer/components/ui/select";
 import { Separator } from "@renderer/components/ui/separator";
 import { Switch } from "@renderer/components/ui/switch";
-import { useSettings } from "@renderer/hooks/use-settings";
 import { useAuth } from "@renderer/hooks/use-auth";
+import { useSettings } from "@renderer/hooks/use-settings";
 import { getFallbackStartPage, requiresAuthForStartPage } from "@renderer/lib/start-page";
 import { useGlobalStore } from "@renderer/store/global";
 import { supportsWindowsDesktopFeatures } from "@shared/platform";
@@ -37,13 +37,13 @@ export const Route = createFileRoute("/setting/gen")({
 });
 
 const settingsConfig = {
-  runOnStartup: "setting:general:getRunOnStartup",
-  language: "setting:general:getLanguage",
-  autoUpdateMode: "setting:general:getAutoUpdateMode",
-  runInBackground: "setting:general:getRunInBackground",
-  defaultStartPage: "setting:general:getDefaultStartPage",
-  titlebarStyle: "setting:general:getTitlebarStyle",
-  logLevel: "setting:general:getLogLevel",
+  runOnStartup: "general.runOnStartup",
+  language: "general.language",
+  autoUpdateMode: "general.autoUpdateMode",
+  runInBackground: "general.runInBackground",
+  defaultStartPage: "general.defaultStartPage",
+  titlebarStyle: "general.titlebarStyle",
+  logLevel: "general.logLevel",
 } as const;
 
 function RouteComponent() {
@@ -61,15 +61,7 @@ function RouteComponent() {
   const updaterDownloading = useGlobalStore((state) => state.updaterDownloading);
   const hasWindowsDesktopFeatures = supportsWindowsDesktopFeatures(appStatus?.platform);
 
-  const { settings, update, isLoading, setSettings } = useSettings<{
-    runOnStartup: boolean;
-    language: string;
-    autoUpdateMode: AutoUpdateMode;
-    runInBackground: boolean;
-    defaultStartPage: string;
-    titlebarStyle: string;
-    logLevel: string;
-  }>(settingsConfig);
+  const { settings, update, isLoading, setSettings } = useSettings(settingsConfig);
 
   const [imageCacheSize, setImageCacheSize] = useState<number | null>(null);
   const [isRunInBackgroundConfirmOpen, setIsRunInBackgroundConfirmOpen] = useState(false);
@@ -83,12 +75,12 @@ function RouteComponent() {
 
   const handleRunInBackgroundChange = async (val: boolean) => {
     if (val) {
-      await update("runInBackground", true, "setting:general:setRunInBackground");
+      await update("runInBackground", true);
       return;
     }
 
     if (!hasWindowsDesktopFeatures) {
-      await update("runInBackground", false, "setting:general:setRunInBackground");
+      await update("runInBackground", false);
       return;
     }
 
@@ -103,7 +95,7 @@ function RouteComponent() {
       return;
     }
 
-    await update("runInBackground", false, "setting:general:setRunInBackground");
+    await update("runInBackground", false);
   };
 
   const isLoggedIn = !!session;
@@ -130,7 +122,7 @@ function RouteComponent() {
 
   const confirmDisableRunInBackground = async () => {
     setIsRunInBackgroundConfirmOpen(false);
-    await update("runInBackground", false, "setting:general:setRunInBackground");
+    await update("runInBackground", false);
   };
 
   const autoUpdateModeOptions: Array<{
@@ -217,9 +209,7 @@ function RouteComponent() {
             </div>
             <Switch
               checked={settings.runOnStartup}
-              onCheckedChange={(val) =>
-                update("runOnStartup", val, "setting:general:setRunOnStartup")
-              }
+              onCheckedChange={(val) => update("runOnStartup", val)}
             />
           </div>
 
@@ -235,9 +225,7 @@ function RouteComponent() {
             <div className="flex items-center gap-4">
               <Select
                 value={settings.autoUpdateMode}
-                onValueChange={(val: AutoUpdateMode) =>
-                  update("autoUpdateMode", val, "setting:general:setAutoUpdateMode")
-                }
+                onValueChange={(val: AutoUpdateMode) => update("autoUpdateMode", val)}
               >
                 <SelectTrigger className="w-42">
                   <SelectValue />
@@ -338,7 +326,7 @@ function RouteComponent() {
               <Select
                 name="language"
                 value={settings.language}
-                onValueChange={(val) => update("language", val, "setting:general:setLanguage")}
+                onValueChange={(val) => update("language", val)}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder={t("page.setting.gen.language.select")} />
@@ -377,9 +365,7 @@ function RouteComponent() {
               <Select
                 name="startPage"
                 value={selectedStartPage}
-                onValueChange={(val) =>
-                  update("defaultStartPage", val, "setting:general:setDefaultStartPage")
-                }
+                onValueChange={(val) => update("defaultStartPage", val)}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder={t("page.setting.gen.startPage.select")} />
@@ -406,9 +392,7 @@ function RouteComponent() {
               <Select
                 name="titlebarStyle"
                 value={settings.titlebarStyle}
-                onValueChange={(val) =>
-                  update("titlebarStyle", val, "setting:general:setTitlebarStyle")
-                }
+                onValueChange={(val) => update("titlebarStyle", val)}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder={t("page.setting.gen.titlebarStyle.select")} />
@@ -432,7 +416,7 @@ function RouteComponent() {
               <Select
                 name="logLevel"
                 value={settings.logLevel}
-                onValueChange={(val) => update("logLevel", val, "setting:general:setLogLevel")}
+                onValueChange={(val) => update("logLevel", val)}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder={t("page.setting.gen.logLevel.select")} />

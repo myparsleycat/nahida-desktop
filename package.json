@@ -1,6 +1,6 @@
 {
   "name": "nahida-desktop",
-  "version": "2.35.0",
+  "version": "2.35.1",
   "description": "Native app for nahida.live",
   "homepage": "https://nahida.live",
   "author": "nahida.live",
@@ -75,7 +75,7 @@
     "valdex": "^1.0.4",
     "validator": "^13.15.35",
     "write-file-atomic": "^7.0.1",
-    "zod": "^4.4.2"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^2.0.0",
@@ -86,7 +86,7 @@
     "@rolldown/plugin-babel": "^0.2.3",
     "@tailwindcss/vite": "^4.2.4",
     "@tanstack/react-form": "^1.29.1",
-    "@tanstack/react-query": "^5.100.8",
+    "@tanstack/react-query": "^5.100.9",
     "@tanstack/react-router": "^1.169.1",
     "@tanstack/react-virtual": "^3.13.24",
     "@tanstack/router-plugin": "^1.167.32",
@@ -94,6 +94,7 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/electron-progressbar": "^2.2.0",
     "@types/filename-reserved-regex": "^3.0.0",
+    "@types/html-to-text": "^9.0.4",
     "@types/node": "24",
     "@types/path-browserify": "^1.0.3",
     "@types/pngjs": "^6.0.5",

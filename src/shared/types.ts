@@ -55,6 +55,7 @@ export interface TextureResizeListItem {
     format: string;
     colorSpace: TextureColorSpace;
     layerCount: number;
+    mipLevelCount: number;
     originalWidth: number;
     originalHeight: number;
     targetWidth: number;

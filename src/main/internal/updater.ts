@@ -13,7 +13,7 @@ import type { NahidaDesktop } from "..";
 import isDev from "./isDev";
 
 autoUpdater.allowDowngrade = false;
-autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.autoInstallOnAppQuit = false;
 autoUpdater.disableDifferentialDownload = true;
 autoUpdater.autoRunAppAfterInstall = true;
 autoUpdater.allowPrerelease = false;

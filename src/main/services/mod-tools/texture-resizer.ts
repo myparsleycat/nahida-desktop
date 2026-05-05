@@ -171,6 +171,14 @@ interface ParsedDDSMetadata {
     format: string;
     colorSpace: TextureColorSpace;
     layerCount: number;
+    mipLevelCount: number;
+}
+
+class DDSHeaderParseError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "DDSHeaderParseError";
+    }
 }
 
 const DEFAULT_SETTINGS: TextureResizeSettings = {
@@ -211,15 +219,7 @@ export class TextureResizer {
 
     public async saveSettings(nextSettings: Partial<TextureResizeSettings>) {
         const current = await this.getSettings();
-        const merged: TextureResizeSettings = {
-            mode: normalizeResizeMode(nextSettings.mode ?? current.mode),
-            operation: normalizeOperation(nextSettings.operation ?? current.operation),
-            percent: normalizePercent(nextSettings.percent ?? current.percent),
-            customWidth: normalizeDimension(nextSettings.customWidth ?? current.customWidth),
-            customHeight: normalizeDimension(nextSettings.customHeight ?? current.customHeight),
-            outputFormat: normalizeOutputFormat(nextSettings.outputFormat ?? current.outputFormat),
-            backup: nextSettings.backup ?? current.backup,
-        };
+        const merged = mergeTextureResizeSettings(current, nextSettings);
 
         await Promise.all([
             this.saveSettingValue(MODE_KEY, merged.mode),
@@ -242,7 +242,7 @@ export class TextureResizer {
 
         const normalizedTargetPath = path.resolve(normalizedTargetPathInput);
         const mergedSettings = settings
-            ? await this.saveSettings(settings)
+            ? mergeTextureResizeSettings(await this.getSettings(), settings)
             : await this.getSettings();
         const files = await resolveTargetFiles(normalizedTargetPath);
         return await buildTextureList(files, normalizedTargetPath, mergedSettings);
@@ -379,6 +379,7 @@ async function buildTextureListItem(
         format: info.format,
         colorSpace: info.colorSpace,
         layerCount: info.layerCount,
+        mipLevelCount: info.mipLevelCount,
         originalWidth,
         originalHeight,
         targetWidth: previewSize.width,
@@ -409,33 +410,48 @@ function buildResizeRequest(targetPath: string, settings: TextureResizeSettings)
     };
 }
 
+function mergeTextureResizeSettings(
+    current: TextureResizeSettings,
+    nextSettings: Partial<TextureResizeSettings>,
+): TextureResizeSettings {
+    return {
+        mode: normalizeResizeMode(nextSettings.mode ?? current.mode),
+        operation: normalizeOperation(nextSettings.operation ?? current.operation),
+        percent: normalizePercent(nextSettings.percent ?? current.percent),
+        customWidth: normalizeDimension(nextSettings.customWidth ?? current.customWidth),
+        customHeight: normalizeDimension(nextSettings.customHeight ?? current.customHeight),
+        outputFormat: normalizeOutputFormat(nextSettings.outputFormat ?? current.outputFormat),
+        backup: nextSettings.backup ?? current.backup,
+    };
+}
+
 function parseDDSMetadata(buffer: Buffer): ParsedDDSMetadata {
     if (buffer.byteLength < DDS_DX10_HEADER_OFFSET + 4) {
-        throw new Error("DDS header could not be parsed: file is too small.");
+        throw new DDSHeaderParseError("DDS header could not be parsed: file is too small.");
     }
 
     if (buffer.readUInt32LE(0) !== DDS_MAGIC) {
-        throw new Error("DDS header could not be parsed: invalid magic.");
+        throw new DDSHeaderParseError("DDS header could not be parsed: invalid magic.");
     }
 
     if (buffer.readUInt32LE(4) !== DDS_HEADER_SIZE) {
-        throw new Error("DDS header could not be parsed: invalid header size.");
+        throw new DDSHeaderParseError("DDS header could not be parsed: invalid header size.");
     }
 
     const flags = buffer.readUInt32LE(DDS_FLAGS_OFFSET);
     const width = buffer.readUInt32LE(DDS_WIDTH_OFFSET);
     const height = buffer.readUInt32LE(DDS_HEIGHT_OFFSET);
-    const mipmapCount =
+    const mipLevelCount =
         (flags & DDSD_MIPMAPCOUNT) !== 0
             ? Math.max(1, buffer.readUInt32LE(DDS_MIPMAP_COUNT_OFFSET))
             : 1;
     const caps2 = buffer.readUInt32LE(DDS_CAPS2_OFFSET);
-    const layerCount = (caps2 & DDSCAPS2_CUBEMAP) !== 0 ? 6 : mipmapCount;
+    const layerCount = (caps2 & DDSCAPS2_CUBEMAP) !== 0 ? 6 : 1;
     const format = detectDDSFormat(buffer);
     const colorSpace = detectDDSColorSpace(buffer, format);
 
     if (width === 0 || height === 0) {
-        throw new Error("DDS header could not be parsed: invalid dimensions.");
+        throw new DDSHeaderParseError("DDS header could not be parsed: invalid dimensions.");
     }
 
     return {
@@ -444,6 +460,7 @@ function parseDDSMetadata(buffer: Buffer): ParsedDDSMetadata {
         format,
         colorSpace,
         layerCount,
+        mipLevelCount,
     };
 }
 
@@ -480,18 +497,6 @@ function detectDDSFormat(buffer: Buffer) {
 }
 
 function detectDDSColorSpace(buffer: Buffer, format: string) {
-    if (buffer.byteLength < DDS_DX10_HEADER_OFFSET + 4) {
-        return format.endsWith("_SRGB") ? "srgb" : "unknown";
-    }
-
-    if (buffer.readUInt32LE(0) !== DDS_MAGIC) {
-        return "unknown";
-    }
-
-    if (buffer.readUInt32LE(4) !== DDS_HEADER_SIZE) {
-        return "unknown";
-    }
-
     const pixelFormatFlags = buffer.readUInt32LE(DDS_PIXEL_FORMAT_FLAGS_OFFSET);
     const fourCC = buffer.readUInt32LE(DDS_PIXEL_FORMAT_FOUR_CC_OFFSET);
 
@@ -631,7 +636,7 @@ function toRelativePath(rootPath: string, filePath: string) {
 }
 
 function shouldIgnoreTextureListError(error: unknown) {
-    return error instanceof Error && error.message.includes("DDS header could not be parsed");
+    return error instanceof DDSHeaderParseError;
 }
 
 function normalizeResizeMode(value?: string | null): TextureResizeSettings["mode"] {
@@ -639,7 +644,7 @@ function normalizeResizeMode(value?: string | null): TextureResizeSettings["mode
         return "percent";
     }
 
-    return value === "custom" ? value : "custom";
+    return "custom";
 }
 
 function normalizeOperation(value?: string | null): TextureResizeOperation {
