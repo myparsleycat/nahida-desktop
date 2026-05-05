@@ -61,9 +61,17 @@ function RootComponent() {
     });
     syncUpdaterStatus();
     window.api.invoke("transfer:list").then(setTransfers);
-    getSetting("general.language").then((language) => {
-      if (language) i18n.changeLanguage(language);
-    });
+    getSetting("general.language")
+      .then((language) => {
+        if (language) {
+          void i18n.changeLanguage(language).catch((error) => {
+            console.error("Failed to change language from getSetting(general.language)", error);
+          });
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to read getSetting(general.language)", error);
+      });
 
     return () => {
       removeStatusListener();
