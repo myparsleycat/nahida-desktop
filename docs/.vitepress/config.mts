@@ -11,6 +11,7 @@ export default defineConfig({
         nav: [
             { text: "Home", link: "/" },
             { text: "Guide", link: "/guide/what-is-nahida-desktop" },
+            { text: "nahida live", link: "https://nahida.live" },
         ],
         sidebar: [
             {
@@ -22,24 +23,37 @@ export default defineConfig({
             },
             {
                 text: "Features",
+                link: "/features/index",
+                base: "/features",
                 items: [
-                    { text: "Overview", link: "/features/index" },
-                    { text: "GameBanana", link: "/features/gamebanana" },
-                    { text: "Mod Manager", link: "/features/mod-manager" },
+                    { text: "GameBanana", link: "/gamebanana" },
+                    {
+                        text: "Mod Manager",
+                        link: "/mod-manager/index",
+                        collapsed: true,
+                        items: [
+                            {
+                                text: "Model Viewer",
+                                link: "/mod-manager/model-viewer",
+                            },
+                        ],
+                    },
                     {
                         text: "Mod Tools",
+                        base: "/features/mod-tools",
+                        collapsed: true,
                         items: [
                             {
                                 text: "d3d11.dll Builder",
-                                link: "/features/mod-tools/dll-builder",
+                                link: "/dll-builder",
                             },
                             {
                                 text: "Persist Toggles",
-                                link: "/features/mod-tools/persist-toggles",
+                                link: "/persist-toggles",
                             },
                             {
-                                text: "Static GLB Converter / Model Viewer",
-                                link: "/features/mod-tools/static-glb-converter",
+                                text: "Static GLB Converter",
+                                link: "/static-glb-converter",
                             },
                         ],
                     },
@@ -79,6 +93,7 @@ export default defineConfig({
                 nav: [
                     { text: "홈", link: "/ko/" },
                     { text: "가이드", link: "/ko/guide/what-is-nahida-desktop" },
+                    { text: "나히다 라이브", link: "https://nahida.live" },
                 ],
                 sidebar: [
                     {
@@ -103,7 +118,14 @@ export default defineConfig({
                             },
                             {
                                 text: "모드 매니저",
-                                link: "/mod-manager",
+                                link: "/mod-manager/index",
+                                collapsed: true,
+                                items: [
+                                    {
+                                        text: "모델 뷰어",
+                                        link: "/mod-manager/model-viewer",
+                                    },
+                                ],
                             },
                             {
                                 text: "모드 툴",
@@ -149,7 +171,7 @@ export default defineConfig({
                 nav: [
                     { text: "ホーム", link: "/ja/" },
                     { text: "ガイド", link: "/ja/guide/what-is-nahida-desktop" },
-                    { text: "機能", link: "/ja/features/index" },
+                    { text: "ナヒーダライブ", link: "https://nahida.live" },
                 ],
                 sidebar: [
                     {
@@ -169,7 +191,17 @@ export default defineConfig({
                         base: "/ja/features",
                         items: [
                             { text: "GameBanana", link: "/gamebanana" },
-                            { text: "MODマネージャー", link: "/mod-manager" },
+                            {
+                                text: "MODマネージャー",
+                                link: "/mod-manager/index",
+                                collapsed: true,
+                                items: [
+                                    {
+                                        text: "モデルビューア",
+                                        link: "/mod-manager/model-viewer",
+                                    },
+                                ],
+                            },
                             {
                                 text: "MOD ツール",
                                 base: "/ja/features/mod-tools",
@@ -184,7 +216,7 @@ export default defineConfig({
                                         link: "/persist-toggles",
                                     },
                                     {
-                                        text: "静的 GLB 変換 / モデルビューア",
+                                        text: "静的 GLB 変換",
                                         link: "/static-glb-converter",
                                     },
                                 ],
@@ -214,7 +246,7 @@ export default defineConfig({
                 nav: [
                     { text: "首页", link: "/zh-CN/" },
                     { text: "指南", link: "/zh-CN/guide/what-is-nahida-desktop" },
-                    { text: "功能", link: "/zh-CN/features/index" },
+                    { text: "纳西妲直播", link: "https://nahida.live" },
                 ],
                 sidebar: [
                     {
@@ -234,7 +266,17 @@ export default defineConfig({
                         base: "/zh-CN/features",
                         items: [
                             { text: "GameBanana", link: "/gamebanana" },
-                            { text: "模组管理器", link: "/mod-manager" },
+                            {
+                                text: "模组管理器",
+                                link: "/mod-manager/index",
+                                collapsed: true,
+                                items: [
+                                    {
+                                        text: "模型查看器",
+                                        link: "/mod-manager/model-viewer",
+                                    },
+                                ],
+                            },
                             {
                                 text: "模组工具",
                                 base: "/zh-CN/features/mod-tools",
@@ -249,7 +291,7 @@ export default defineConfig({
                                         link: "/persist-toggles",
                                     },
                                     {
-                                        text: "静态 GLB 转换器 / 模型查看器",
+                                        text: "静态 GLB 转换器",
                                         link: "/static-glb-converter",
                                     },
                                 ],
