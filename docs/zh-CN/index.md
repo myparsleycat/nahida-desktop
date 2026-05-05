@@ -5,7 +5,13 @@ hero:
   name: "Nahida Desktop"
   text: "面向 3DMigoto 模组的一体化管理器"
   tagline: "更轻松、更高效地管理基于 3DMigoto 的模组。"
+  image:
+    src: "/logo.png"
+    alt: Nahida Desktop
   actions:
+    - theme: brand
+      text: 下载
+      link: https://github.com/myparsleycat/nahida-desktop/releases/latest
     - theme: brand
       text: 指南
       link: /zh-CN/guide/what-is-nahida-desktop

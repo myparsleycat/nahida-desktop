@@ -5,8 +5,14 @@ hero:
   name: "나히다 데스크탑"
   text: "3dmigoto 모드를 위한 올인원 모드 매니저"
   tagline: "통합 탐색, 도구, 워크플로우로 3DMigoto 기반 모드를 더 빠르게 관리하세요."
+  image:
+    src: "/logo.png"
+    alt: Nahida Desktop
   actions:
     - theme: brand
+      text: 다운로드
+      link: https://github.com/myparsleycat/nahida-desktop/releases/latest
+    - theme: alt
       text: 가이드
       link: /ko/guide/what-is-nahida-desktop
 

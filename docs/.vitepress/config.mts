@@ -11,7 +11,6 @@ export default defineConfig({
         nav: [
             { text: "Home", link: "/" },
             { text: "Guide", link: "/guide/what-is-nahida-desktop" },
-            { text: "Features", link: "/features/index" },
         ],
         sidebar: [
             {
@@ -51,7 +50,17 @@ export default defineConfig({
                 items: [{ text: "Set Up XXMI", link: "/others/set-up-xxmi" }],
             },
         ],
+        footer: {
+            message:
+                "Nahida is a character from Genshin Impact, and the copyright for this character belongs to HoYoverse.",
+        },
         socialLinks: [{ icon: "github", link: "https://github.com/myparsleycat/nahida-desktop" }],
+        search: {
+            provider: "local",
+        },
+        editLink: {
+            pattern: "https://github.com/myparsleycat/nahida-desktop/edit/main/docs/:path",
+        },
     },
     locales: {
         root: {
@@ -261,4 +270,5 @@ export default defineConfig({
             },
         },
     },
+    lastUpdated: true,
 });
