@@ -547,7 +547,7 @@ export class Setting {
                 toStored: (value) => String(value),
                 afterSet: async (enabled) => {
                     if (enabled) {
-                        await this.desktop.setting.general.setRunInBackground(true);
+                        await this.set("general.runInBackground", true);
                     }
 
                     if (this.desktop.service?.modTools) {
@@ -566,7 +566,7 @@ export class Setting {
                 toStored: (value) => String(value),
                 afterSet: async (enabled) => {
                     if (enabled) {
-                        await this.desktop.setting.general.setRunInBackground(true);
+                        await this.set("general.runInBackground", true);
                     }
 
                     if (this.desktop.service?.modTools) {
