@@ -24,8 +24,8 @@ const (
 	dialogTitle            = "Nahida Desktop Latest Installer"
 )
 
-// Missing digests do not block installation; only present SHA-256 digests are enforced.
-const allowMissingDigest = true
+// Release assets must include a SHA-256 digest before installation can proceed.
+const allowMissingDigest = false
 
 var (
 	user32           = syscall.NewLazyDLL("user32.dll")

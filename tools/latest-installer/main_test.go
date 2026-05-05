@@ -86,11 +86,11 @@ func TestParseSHA256Digest(t *testing.T) {
 	}
 }
 
-func TestVerifyDigestAllowsMissingDigest(t *testing.T) {
+func TestVerifyDigestRejectsMissingDigest(t *testing.T) {
 	t.Parallel()
 
-	if err := verifyDigest("", sha256.New().Sum(nil)); err != nil {
-		t.Fatalf("verifyDigest returned error for missing digest: %v", err)
+	if err := verifyDigest("", sha256.New().Sum(nil)); err == nil {
+		t.Fatal("expected error for missing digest")
 	}
 }
 
