@@ -1039,18 +1039,7 @@ export class Setting {
         },
 
         setSidebarLayout: async (mode: SidebarLayoutMode) => {
-            const normalizedMode = normalizeSidebarLayoutMode(mode);
-
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({
-                    key: "mod_sidebar_layout",
-                    value: normalizedMode,
-                })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: normalizedMode },
-                });
+            await this.set("mod.sidebarLayout", mode);
         },
 
         getCharacterSidebarWidth: async () => {
@@ -1084,23 +1073,7 @@ export class Setting {
         },
 
         setCharacterSidebarWidth: async (width: number) => {
-            const normalizedWidth = clampIntegerSetting(
-                width,
-                MOD_CHARACTER_SIDEBAR_WIDTH_MIN,
-                MOD_CHARACTER_SIDEBAR_WIDTH_MAX,
-                MOD_CHARACTER_SIDEBAR_WIDTH_DEFAULT,
-            );
-
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({
-                    key: "mod_character_sidebar_width",
-                    value: String(normalizedWidth),
-                })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: String(normalizedWidth) },
-                });
+            await this.set("mod.characterSidebarWidth", width);
         },
 
         getArchiveExtractPathMode: async (): Promise<ArchiveExtractPathMode> => {
@@ -1124,16 +1097,7 @@ export class Setting {
         },
 
         setArchiveExtractPathMode: async (mode: ArchiveExtractPathMode) => {
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({
-                    key: "mod_archive_extract_path_mode",
-                    value: mode,
-                })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: mode },
-                });
+            await this.set("mod.archiveExtractPathMode", mode);
         },
 
         getDeleteArchiveAfterExtract: async () => {
@@ -1152,16 +1116,7 @@ export class Setting {
         },
 
         setDeleteArchiveAfterExtract: async (enabled: boolean) => {
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({
-                    key: "mod_delete_archive_after_extract",
-                    value: String(enabled),
-                })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: String(enabled) },
-                });
+            await this.set("mod.deleteArchiveAfterExtract", enabled);
         },
 
         getMoveFolderInsteadOfCopy: async () => {
@@ -1180,16 +1135,7 @@ export class Setting {
         },
 
         setMoveFolderInsteadOfCopy: async (enabled: boolean) => {
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({
-                    key: "mod_move_folder_instead_of_copy",
-                    value: String(enabled),
-                })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: String(enabled) },
-                });
+            await this.set("mod.moveFolderInsteadOfCopy", enabled);
         },
 
         getVirtualizationEnabled: async () => {
@@ -1208,13 +1154,7 @@ export class Setting {
         },
 
         setVirtualizationEnabled: async (enabled: boolean) => {
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "mod_virtualization_enabled", value: String(enabled) })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: String(enabled) },
-                });
+            await this.set("mod.virtualizationEnabled", enabled);
         },
 
         getVirtualizationThreshold: async () => {
@@ -1233,16 +1173,7 @@ export class Setting {
         },
 
         setVirtualizationThreshold: async (threshold: number) => {
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({
-                    key: "mod_virtualization_threshold",
-                    value: String(threshold),
-                })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: String(threshold) },
-                });
+            await this.set("mod.virtualizationThreshold", threshold);
         },
 
         getGridLayoutMode: async (): Promise<ModGridLayoutMode> => {
@@ -1261,14 +1192,7 @@ export class Setting {
         },
 
         setGridLayoutMode: async (mode: ModGridLayoutMode) => {
-            const normalizedMode = normalizeModGridLayoutMode(mode);
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "mod_grid_layout_mode", value: normalizedMode })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: normalizedMode },
-                });
+            await this.set("mod.gridLayoutMode", mode);
         },
 
         getGridResponsiveBaseWidth: async () => {
@@ -1293,23 +1217,7 @@ export class Setting {
         },
 
         setGridResponsiveBaseWidth: async (width: number) => {
-            const normalizedWidth = clampIntegerSetting(
-                width,
-                MOD_GRID_WIDTH_MIN,
-                MOD_GRID_WIDTH_MAX,
-                MOD_GRID_RESPONSIVE_BASE_WIDTH_DEFAULT,
-            );
-
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({
-                    key: "mod_grid_responsive_base_width",
-                    value: String(normalizedWidth),
-                })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: String(normalizedWidth) },
-                });
+            await this.set("mod.gridResponsiveBaseWidth", width);
         },
 
         getGridFixedCardWidth: async () => {
@@ -1334,23 +1242,7 @@ export class Setting {
         },
 
         setGridFixedCardWidth: async (width: number) => {
-            const normalizedWidth = clampIntegerSetting(
-                width,
-                MOD_GRID_WIDTH_MIN,
-                MOD_GRID_WIDTH_MAX,
-                MOD_GRID_FIXED_CARD_WIDTH_DEFAULT,
-            );
-
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({
-                    key: "mod_grid_fixed_card_width",
-                    value: String(normalizedWidth),
-                })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: String(normalizedWidth) },
-                });
+            await this.set("mod.gridFixedCardWidth", width);
         },
 
         getGridFixedColumnCount: async () => {
@@ -1375,23 +1267,7 @@ export class Setting {
         },
 
         setGridFixedColumnCount: async (count: number) => {
-            const normalizedCount = clampIntegerSetting(
-                count,
-                MOD_GRID_COLUMN_MIN,
-                MOD_GRID_COLUMN_MAX,
-                MOD_GRID_FIXED_COLUMN_COUNT_DEFAULT,
-            );
-
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({
-                    key: "mod_grid_fixed_column_count",
-                    value: String(normalizedCount),
-                })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: String(normalizedCount) },
-                });
+            await this.set("mod.gridFixedColumnCount", count);
         },
 
         getSearchModPreview: async () => {
@@ -1410,13 +1286,7 @@ export class Setting {
         },
 
         setSearchModPreview: async (enabled: boolean) => {
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "mod_search_mod_preview", value: String(enabled) })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: String(enabled) },
-                });
+            await this.set("mod.searchModPreview", enabled);
         },
 
         getCopyShaderFixesOnEnable: async () => {
@@ -1435,13 +1305,7 @@ export class Setting {
         },
 
         setCopyShaderFixesOnEnable: async (enabled: boolean) => {
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "mod_copy_shader_fixes_on_enable", value: String(enabled) })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: String(enabled) },
-                });
+            await this.set("mod.copyShaderFixesOnEnable", enabled);
         },
     };
 
@@ -1586,15 +1450,7 @@ export class Setting {
         },
 
         setNameSortPolicy: async (policy: DriveNameSortPolicy) => {
-            const value = normalizeDriveNameSortPolicy(policy);
-
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "drive_name_sort_policy", value })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value },
-                });
+            await this.set("drive.nameSortPolicy", policy);
         },
     };
 
