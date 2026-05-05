@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -28,6 +29,7 @@ const (
 const allowMissingDigest = false
 
 var (
+	httpClient       = &http.Client{Timeout: 30 * time.Second}
 	user32           = syscall.NewLazyDLL("user32.dll")
 	messageBoxW      = user32.NewProc("MessageBoxW")
 	kernel32         = syscall.NewLazyDLL("kernel32.dll")
@@ -89,7 +91,7 @@ func fetchLatestRelease() (*releaseResponse, error) {
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", userAgent)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to request latest release metadata: %w", err)
 	}
@@ -155,7 +157,7 @@ func downloadInstaller(asset *releaseAsset) (string, func(), error) {
 
 	req.Header.Set("User-Agent", userAgent)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to download installer %q: %w", asset.Name, err)
 	}
