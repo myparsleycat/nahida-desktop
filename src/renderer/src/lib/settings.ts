@@ -25,12 +25,16 @@ export function setSetting<K extends SettingKey>(key: K, value: AppSettings[K]) 
     return window.api.invoke("setting:set", key, value);
 }
 
+export function settingsManyQueryKey<K extends readonly SettingKey[]>(keys: K) {
+    return ["settings", "many", ...keys] as const;
+}
+
 export function prefetchSettings<K extends readonly SettingKey[]>(
     queryClient: QueryClient,
     keys: K,
 ) {
     return queryClient.prefetchQuery({
-        queryKey: ["settings", ...keys],
+        queryKey: settingsManyQueryKey(keys),
         queryFn: () => getSetting(keys),
     });
 }

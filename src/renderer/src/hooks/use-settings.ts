@@ -1,4 +1,4 @@
-import { getSetting, setSetting } from "@renderer/lib/settings";
+import { getSetting, setSetting, settingsManyQueryKey } from "@renderer/lib/settings";
 import type { AppSettings, SettingKey } from "@shared/settings";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -43,7 +43,7 @@ export function useSettings<TConfig extends SettingsConfig>(settingsConfig: TCon
         [settingsConfig],
     );
     const settingKeys = useMemo(() => entries.map(([, key]) => key), [entries]);
-    const queryKey = useMemo(() => ["settings", ...settingKeys] as const, [settingKeys]);
+    const queryKey = useMemo(() => settingsManyQueryKey(settingKeys), [settingKeys]);
 
     useInvalidateOnSettingUpdate(settingKeys, queryKey);
 
@@ -89,18 +89,18 @@ export function useSettings<TConfig extends SettingsConfig>(settingsConfig: TCon
 }
 
 export function useVirtualizationSettings() {
+    const keys = ["mod.virtualizationEnabled", "mod.virtualizationThreshold"] as const;
+    const queryKey = settingsManyQueryKey(keys);
+
     useInvalidateOnSettingUpdate(
-        ["mod.virtualizationEnabled", "mod.virtualizationThreshold"],
-        ["settings", "mod.virtualizationEnabled", "mod.virtualizationThreshold"],
+        keys,
+        queryKey,
     );
 
     return useQuery({
-        queryKey: ["settings", "mod.virtualizationEnabled", "mod.virtualizationThreshold"],
+        queryKey,
         queryFn: async () => {
-            const settings = await getSetting([
-                "mod.virtualizationEnabled",
-                "mod.virtualizationThreshold",
-            ] as const);
+            const settings = await getSetting(keys);
 
             return {
                 enabled: settings["mod.virtualizationEnabled"],
@@ -113,37 +113,23 @@ export function useVirtualizationSettings() {
 }
 
 export function useModGridLayoutSettings() {
+    const keys = [
+        "mod.gridLayoutMode",
+        "mod.gridResponsiveBaseWidth",
+        "mod.gridFixedCardWidth",
+        "mod.gridFixedColumnCount",
+    ] as const;
+    const queryKey = settingsManyQueryKey(keys);
+
     useInvalidateOnSettingUpdate(
-        [
-            "mod.gridLayoutMode",
-            "mod.gridResponsiveBaseWidth",
-            "mod.gridFixedCardWidth",
-            "mod.gridFixedColumnCount",
-        ],
-        [
-            "settings",
-            "mod.gridLayoutMode",
-            "mod.gridResponsiveBaseWidth",
-            "mod.gridFixedCardWidth",
-            "mod.gridFixedColumnCount",
-        ],
+        keys,
+        queryKey,
     );
 
     return useQuery({
-        queryKey: [
-            "settings",
-            "mod.gridLayoutMode",
-            "mod.gridResponsiveBaseWidth",
-            "mod.gridFixedCardWidth",
-            "mod.gridFixedColumnCount",
-        ],
+        queryKey,
         queryFn: async () => {
-            const settings = await getSetting([
-                "mod.gridLayoutMode",
-                "mod.gridResponsiveBaseWidth",
-                "mod.gridFixedCardWidth",
-                "mod.gridFixedColumnCount",
-            ] as const);
+            const settings = await getSetting(keys);
 
             return {
                 mode: settings["mod.gridLayoutMode"],
