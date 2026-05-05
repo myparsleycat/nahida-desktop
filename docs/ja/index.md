@@ -5,8 +5,14 @@ hero:
   name: "Nahida Desktop"
   text: "3DMigoto MOD 向けオールインワン MOD マネージャー"
   tagline: "3DMigoto ベースの MOD を、より簡単かつ素早く管理できます。"
+  image:
+    src: "/logo.png"
+    alt: Nahida Desktop
   actions:
     - theme: brand
+      text: ダウンロード
+      link: https://github.com/myparsleycat/nahida-desktop/releases/latest
+    - theme: alt
       text: ガイド
       link: /ja/guide/what-is-nahida-desktop
 

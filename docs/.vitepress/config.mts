@@ -11,7 +11,6 @@ export default defineConfig({
         nav: [
             { text: "Home", link: "/" },
             { text: "Guide", link: "/guide/what-is-nahida-desktop" },
-            { text: "Features", link: "/features/index" },
         ],
         sidebar: [
             {
@@ -48,12 +47,20 @@ export default defineConfig({
             },
             {
                 text: "Other",
-                items: [
-                    { text: "Set Up XXMI", link: "/others/set-up-xxmi" },
-                ],
+                items: [{ text: "Set Up XXMI", link: "/others/set-up-xxmi" }],
             },
         ],
+        footer: {
+            message:
+                "Nahida is a character from Genshin Impact, and the copyright for this character belongs to HoYoverse.",
+        },
         socialLinks: [{ icon: "github", link: "https://github.com/myparsleycat/nahida-desktop" }],
+        search: {
+            provider: "local",
+        },
+        editLink: {
+            pattern: "https://github.com/myparsleycat/nahida-desktop/edit/main/docs/:path",
+        },
     },
     locales: {
         root: {
@@ -76,40 +83,44 @@ export default defineConfig({
                 sidebar: [
                     {
                         text: "소개",
+                        base: "/ko/guide",
                         items: [
                             {
                                 text: "나히다 데스크탑에 대해",
-                                link: "/ko/guide/what-is-nahida-desktop",
+                                link: "/what-is-nahida-desktop",
                             },
-                            { text: "시작하기", link: "/ko/guide/getting-started" },
+                            { text: "시작하기", link: "/getting-started" },
                         ],
                     },
                     {
                         text: "상세 기능",
                         link: "/ko/features/index",
+                        base: "/ko/features",
                         items: [
                             {
                                 text: "게임바나나",
-                                link: "/ko/features/gamebanana",
+                                link: "/gamebanana",
                             },
                             {
                                 text: "모드 매니저",
-                                link: "/ko/features/mod-manager",
+                                link: "/mod-manager",
                             },
                             {
                                 text: "모드 툴",
+                                base: "/ko/features/mod-tools",
+                                collapsed: true,
                                 items: [
                                     {
                                         text: "d3d11.dll 빌더",
-                                        link: "/ko/features/mod-tools/dll-builder",
+                                        link: "/dll-builder",
                                     },
                                     {
                                         text: "토글 영구 저장",
-                                        link: "/ko/features/mod-tools/persist-toggles",
+                                        link: "/persist-toggles",
                                     },
                                     {
                                         text: "정적 GLB 변환기",
-                                        link: "/ko/features/mod-tools/static-glb-converter",
+                                        link: "/static-glb-converter",
                                     },
                                 ],
                             },
@@ -117,10 +128,11 @@ export default defineConfig({
                     },
                     {
                         text: "기타",
+                        base: "/ko/others",
                         items: [
                             {
                                 text: "XXMI 연결하기",
-                                link: "/ko/others/set-up-xxmi",
+                                link: "/set-up-xxmi",
                             },
                         ],
                     },
@@ -142,34 +154,38 @@ export default defineConfig({
                 sidebar: [
                     {
                         text: "紹介",
+                        base: "/ja/guide",
                         items: [
                             {
                                 text: "Nahida Desktop とは",
-                                link: "/ja/guide/what-is-nahida-desktop",
+                                link: "/what-is-nahida-desktop",
                             },
-                            { text: "はじめに", link: "/ja/guide/getting-started" },
+                            { text: "はじめに", link: "/getting-started" },
                         ],
                     },
                     {
                         text: "機能",
+                        link: "/ja/features/index",
+                        base: "/ja/features",
                         items: [
-                            { text: "概要", link: "/ja/features/index" },
-                            { text: "GameBanana", link: "/ja/features/gamebanana" },
-                            { text: "MODマネージャー", link: "/ja/features/mod-manager" },
+                            { text: "GameBanana", link: "/gamebanana" },
+                            { text: "MODマネージャー", link: "/mod-manager" },
                             {
                                 text: "MOD ツール",
+                                base: "/ja/features/mod-tools",
+                                collapsed: true,
                                 items: [
                                     {
                                         text: "d3d11.dll ビルダー",
-                                        link: "/ja/features/mod-tools/dll-builder",
+                                        link: "/dll-builder",
                                     },
                                     {
                                         text: "トグル状態の永続保存",
-                                        link: "/ja/features/mod-tools/persist-toggles",
+                                        link: "/persist-toggles",
                                     },
                                     {
                                         text: "静的 GLB 変換 / モデルビューア",
-                                        link: "/ja/features/mod-tools/static-glb-converter",
+                                        link: "/static-glb-converter",
                                     },
                                 ],
                             },
@@ -177,10 +193,11 @@ export default defineConfig({
                     },
                     {
                         text: "その他",
+                        base: "/ja/others",
                         items: [
                             {
                                 text: "XXMI の設定",
-                                link: "/ja/others/set-up-xxmi",
+                                link: "/set-up-xxmi",
                             },
                         ],
                     },
@@ -202,34 +219,38 @@ export default defineConfig({
                 sidebar: [
                     {
                         text: "介绍",
+                        base: "/zh-CN/guide",
                         items: [
                             {
                                 text: "什么是 Nahida Desktop",
-                                link: "/zh-CN/guide/what-is-nahida-desktop",
+                                link: "/what-is-nahida-desktop",
                             },
-                            { text: "快速开始", link: "/zh-CN/guide/getting-started" },
+                            { text: "快速开始", link: "/getting-started" },
                         ],
                     },
                     {
                         text: "功能",
+                        link: "/zh-CN/features/index",
+                        base: "/zh-CN/features",
                         items: [
-                            { text: "概览", link: "/zh-CN/features/index" },
-                            { text: "GameBanana", link: "/zh-CN/features/gamebanana" },
-                            { text: "模组管理器", link: "/zh-CN/features/mod-manager" },
+                            { text: "GameBanana", link: "/gamebanana" },
+                            { text: "模组管理器", link: "/mod-manager" },
                             {
                                 text: "模组工具",
+                                base: "/zh-CN/features/mod-tools",
+                                collapsed: true,
                                 items: [
                                     {
                                         text: "d3d11.dll 构建器",
-                                        link: "/zh-CN/features/mod-tools/dll-builder",
+                                        link: "/dll-builder",
                                     },
                                     {
                                         text: "切换状态持久化",
-                                        link: "/zh-CN/features/mod-tools/persist-toggles",
+                                        link: "/persist-toggles",
                                     },
                                     {
                                         text: "静态 GLB 转换器 / 模型查看器",
-                                        link: "/zh-CN/features/mod-tools/static-glb-converter",
+                                        link: "/static-glb-converter",
                                     },
                                 ],
                             },
@@ -237,10 +258,11 @@ export default defineConfig({
                     },
                     {
                         text: "其他",
+                        base: "/zh-CN/others",
                         items: [
                             {
                                 text: "连接 XXMI",
-                                link: "/zh-CN/others/set-up-xxmi",
+                                link: "/set-up-xxmi",
                             },
                         ],
                     },
@@ -248,4 +270,5 @@ export default defineConfig({
             },
         },
     },
+    lastUpdated: true,
 });
