@@ -26,6 +26,7 @@
     "clean": "rimraf dist",
     "build:unpack": "pnpm run clean && pnpm run build && electron-builder --dir",
     "build:win": "pnpm run clean && pnpm run build && electron-builder --win",
+    "build:latest-installer:win": "powershell -ExecutionPolicy Bypass -File ./tools/latest-installer/build.ps1",
     "build:mac": "pnpm run clean && pnpm run build && electron-builder --mac",
     "build:linux": "pnpm run clean && pnpm run build && electron-builder --linux",
     "release:win": "pnpm run clean && pnpm run build && electron-builder --win --publish always",
