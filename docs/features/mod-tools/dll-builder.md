@@ -54,7 +54,7 @@ After selecting all options, click **Start Build** to begin building the DLL.
 
 The XXMI Launcher shows a warning when you use an unverified DLL instead of an officially provided one.
 
-When you use a DLL built through the DLL Builder, **Unsafe Mode** is usually enabled automatically. However, if automatic activation does not apply correctly, you may still see a warning that the DLL signature is invalid.
+When you build a DLL through the DLL Builder, **Unsafe Mode** is enabled automatically. However, if automatic activation does not apply correctly, you may still see a warning that the DLL signature is invalid.
 
 If you see a warning that the `d3d11.dll` signature is invalid, enable **Unsafe Mode** manually in the XXMI Launcher settings.
 
