@@ -53,7 +53,7 @@ export default defineConfig({
                 ],
             },
         ],
-        socialLinks: [{ icon: "github", link: "https://github.com/myparlseycat/nahida-desktop" }],
+        socialLinks: [{ icon: "github", link: "https://github.com/myparsleycat/nahida-desktop" }],
     },
     locales: {
         root: {
