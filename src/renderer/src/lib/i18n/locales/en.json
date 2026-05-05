@@ -933,6 +933,9 @@
         "warning_description": "Changing settings here may affect app behavior."
       }
     },
+    "docs": {
+      "title": "Documentation"
+    },
     "report": {
       "title": "Report Issue",
       "reported_title": "Problem reported",

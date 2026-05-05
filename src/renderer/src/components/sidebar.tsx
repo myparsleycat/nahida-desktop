@@ -8,6 +8,7 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpDownIcon,
   BananaIcon,
+  BookOpenIcon,
   BugIcon,
   DatabaseBackupIcon,
   GamepadIcon,
@@ -21,10 +22,23 @@ import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
+function getDocumentationUrl(language: string) {
+  switch (language) {
+    case "ko":
+      return "https://desktop.nahida.live/ko/";
+    case "ja":
+      return "https://desktop.nahida.live/ja/";
+    case "zh":
+      return "https://desktop.nahida.live/zh-CN/";
+    default:
+      return "https://desktop.nahida.live";
+  }
+}
+
 export function Sidebar({ className }: { className?: string }) {
   const navi = useNavigate();
   const location = useLocation();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const appStatus = useGlobalStore((state) => state.appStatus);
   const transfers = useGlobalStore((state) => state.transfers);
   const { session } = useAuth();
@@ -53,6 +67,7 @@ export function Sidebar({ className }: { className?: string }) {
   const isToolsPage = pathname.startsWith("/tools");
   const isGameBananaPage = pathname.startsWith("/gamebanana");
   const isSettingPage = pathname.startsWith("/setting");
+  const documentationUrl = getDocumentationUrl(i18n.language);
   const getNavButtonClassName = (isActive: boolean) =>
     cn("relative overflow-visible", isActive && "text-accent hover:text-accent");
 
@@ -287,6 +302,24 @@ export function Sidebar({ className }: { className?: string }) {
               <Separator orientation="horizontal" />
             </>
           )}
+
+          <Tooltip disableHoverableContent={true}>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-lg"
+                onPointerDown={handlePointerDown}
+                onClick={() => {
+                  void window.api.invoke("util:openExternal", documentationUrl);
+                }}
+              >
+                <BookOpenIcon className={cn(iconSize)} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right" hideWhenDetached={true}>
+              {t("page.docs.title")}
+            </TooltipContent>
+          </Tooltip>
 
           <Tooltip disableHoverableContent={true}>
             <TooltipTrigger asChild>
