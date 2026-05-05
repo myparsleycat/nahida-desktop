@@ -3,6 +3,8 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -100,5 +102,49 @@ func TestVerifyDigestRejectsMismatch(t *testing.T) {
 	err := verifyDigest("sha256:"+hex.EncodeToString(expected[:]), actual[:])
 	if err == nil {
 		t.Fatal("expected digest mismatch error")
+	}
+}
+
+func TestResolveCacheDirUsesUserCacheDir(t *testing.T) {
+	t.Parallel()
+
+	cacheDir, err := resolveCacheDir()
+	if err != nil {
+		t.Fatalf("resolveCacheDir returned error: %v", err)
+	}
+
+	if filepath.Base(cacheDir) != "InstallerCache" {
+		t.Fatalf("unexpected cache dir: %q", cacheDir)
+	}
+}
+
+func TestPruneInstallerCacheRemovesOldInstallersOnly(t *testing.T) {
+	t.Parallel()
+
+	cacheDir := t.TempDir()
+	keepName := "Nahida Desktop Setup 2.35.2.exe"
+	removeName := "Nahida Desktop Setup 2.35.1.exe"
+	otherName := "notes.txt"
+
+	for _, name := range []string{keepName, removeName, otherName} {
+		if err := os.WriteFile(filepath.Join(cacheDir, name), []byte("x"), 0o644); err != nil {
+			t.Fatalf("WriteFile(%q) failed: %v", name, err)
+		}
+	}
+
+	if err := pruneInstallerCache(cacheDir, keepName); err != nil {
+		t.Fatalf("pruneInstallerCache returned error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(cacheDir, keepName)); err != nil {
+		t.Fatalf("expected keep file to remain: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(cacheDir, otherName)); err != nil {
+		t.Fatalf("expected non-installer file to remain: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(cacheDir, removeName)); !os.IsNotExist(err) {
+		t.Fatalf("expected old installer to be removed, got err=%v", err)
 	}
 }

@@ -1,1 +1,29 @@
 1 ICON "../../build/icon.ico"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION 1,1,0,0
+PRODUCTVERSION 1,1,0,0
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS 0x40004L
+FILETYPE 0x1L
+FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "nahida.live\0"
+            VALUE "FileDescription", "Nahida Desktop latest installer bootstrapper\0"
+            VALUE "FileVersion", "1.1.0.0\0"
+            VALUE "InternalName", "Nahida Desktop Latest Installer\0"
+            VALUE "OriginalFilename", "Nahida Desktop Latest Installer.exe\0"
+            VALUE "ProductName", "Nahida Desktop Latest Installer\0"
+            VALUE "ProductVersion", "1.1.0.0\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

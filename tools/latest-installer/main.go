@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -18,8 +19,9 @@ import (
 
 const (
 	githubLatestReleaseURL = "https://api.github.com/repos/myparsleycat/nahida-desktop/releases/latest"
-	userAgent              = "NahidaDesktopLatestInstaller/1.0"
-	tempFilePrefix         = "nahida-desktop-latest-installer-"
+	userAgent              = "NahidaDesktopLatestInstaller/1.1"
+	cacheDirName           = "Nahida Desktop\\InstallerCache"
+	dialogTitle            = "Nahida Desktop Latest Installer"
 )
 
 // Missing digests do not block installation; only present SHA-256 digests are enforced.
@@ -49,7 +51,7 @@ func main() {
 	hideConsoleWindow()
 
 	if err := run(); err != nil {
-		showError("Nahida Desktop Latest Installer", err.Error())
+		showError(dialogTitle, err.Error())
 		os.Exit(1)
 	}
 }
@@ -69,9 +71,9 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer cleanup()
 
 	if err := exec.Command(installerPath).Start(); err != nil {
+		cleanup()
 		return fmt.Errorf("failed to start installer %q: %w", asset.Name, err)
 	}
 
@@ -128,6 +130,24 @@ func isSetupInstallerAssetName(name string) bool {
 }
 
 func downloadInstaller(asset *releaseAsset) (string, func(), error) {
+	cacheDir, err := resolveCacheDir()
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to resolve installer cache directory: %w", err)
+	}
+
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return "", nil, fmt.Errorf("failed to create installer cache directory: %w", err)
+	}
+
+	if err := pruneInstallerCache(cacheDir, asset.Name); err != nil {
+		return "", nil, fmt.Errorf("failed to prepare installer cache directory: %w", err)
+	}
+
+	finalPath := filepath.Join(cacheDir, filepath.Base(asset.Name))
+	if err := verifyExistingInstaller(asset, finalPath); err == nil {
+		return finalPath, func() {}, nil
+	}
+
 	req, err := http.NewRequest(http.MethodGet, asset.BrowserDownloadURL, nil)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to prepare installer download request: %w", err)
@@ -145,10 +165,9 @@ func downloadInstaller(asset *releaseAsset) (string, func(), error) {
 		return "", nil, fmt.Errorf("failed to download installer %q: github returned HTTP %d", asset.Name, resp.StatusCode)
 	}
 
-	tempDir := os.TempDir()
-	tempFile, err := os.CreateTemp(tempDir, tempFilePrefix+"*.exe")
+	tempFile, err := os.CreateTemp(cacheDir, "download-*.tmp")
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to create temporary installer file: %w", err)
+		return "", nil, fmt.Errorf("failed to create temporary installer file in cache: %w", err)
 	}
 
 	tempPath := tempFile.Name()
@@ -174,15 +193,17 @@ func downloadInstaller(asset *releaseAsset) (string, func(), error) {
 		return "", nil, fmt.Errorf("failed to verify installer %q: %w", asset.Name, err)
 	}
 
-	finalPath := tempPath
-	if renamedPath, err := renameTempFile(tempPath, asset.Name); err == nil {
-		finalPath = renamedPath
-		cleanup = func() {
-			_ = os.Remove(finalPath)
-		}
+	if err := os.Remove(finalPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		cleanup()
+		return "", nil, fmt.Errorf("failed to replace cached installer %q: %w", asset.Name, err)
 	}
 
-	return finalPath, cleanup, nil
+	if err := os.Rename(tempPath, finalPath); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("failed to finalize cached installer %q: %w", asset.Name, err)
+	}
+
+	return finalPath, func() {}, nil
 }
 
 func verifyDigest(digest string, actual []byte) error {
@@ -233,18 +254,65 @@ func parseSHA256Digest(digest string) ([]byte, bool, error) {
 	return decoded, true, nil
 }
 
-func renameTempFile(currentPath string, assetName string) (string, error) {
-	baseName := filepath.Base(assetName)
-	if baseName == "." || baseName == string(filepath.Separator) || baseName == "" {
-		return "", errors.New("invalid asset name")
+func resolveCacheDir() (string, error) {
+	baseDir, err := os.UserCacheDir()
+	if err != nil {
+		localAppData := strings.TrimSpace(os.Getenv("LOCALAPPDATA"))
+		if localAppData == "" {
+			return "", err
+		}
+
+		baseDir = localAppData
 	}
 
-	finalPath := filepath.Join(filepath.Dir(currentPath), baseName)
-	if err := os.Rename(currentPath, finalPath); err != nil {
-		return "", err
+	return filepath.Join(baseDir, cacheDirName), nil
+}
+
+func verifyExistingInstaller(asset *releaseAsset, path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		return err
 	}
 
-	return finalPath, nil
+	return verifyDigest(asset.Digest, hasher.Sum(nil))
+}
+
+func pruneInstallerCache(cacheDir string, keepName string) error {
+	entries, err := os.ReadDir(cacheDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+
+		return err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		if filepath.Base(entry.Name()) == filepath.Base(keepName) {
+			continue
+		}
+
+		if !isSetupInstallerAssetName(entry.Name()) {
+			continue
+		}
+
+		path := filepath.Join(cacheDir, entry.Name())
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func equalBytes(a []byte, b []byte) bool {
@@ -272,14 +340,20 @@ func hideConsoleWindow() {
 }
 
 func showError(title string, message string) {
-	titlePtr, _ := syscall.UTF16PtrFromString(title)
-	messagePtr, _ := syscall.UTF16PtrFromString(message)
 	const mbIconError = 0x00000010
 	const mbOK = 0x00000000
-	messageBoxW.Call(
+	showMessageBox(title, message, mbOK|mbIconError)
+}
+
+func showMessageBox(title string, message string, style uintptr) uintptr {
+	titlePtr, _ := syscall.UTF16PtrFromString(title)
+	messagePtr, _ := syscall.UTF16PtrFromString(message)
+	result, _, _ := messageBoxW.Call(
 		0,
 		uintptr(unsafe.Pointer(messagePtr)),
 		uintptr(unsafe.Pointer(titlePtr)),
-		mbOK|mbIconError,
+		style,
 	)
+
+	return result
 }
