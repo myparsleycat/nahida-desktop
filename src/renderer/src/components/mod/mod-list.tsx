@@ -2,7 +2,6 @@ import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
 import { useFilteredMods } from "@renderer/hooks/use-filtered-mods";
-import { useModContextMenuData } from "@renderer/hooks/use-mod-context-menu-data";
 import { useModGroup } from "@renderer/hooks/use-mod-data";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModStore } from "@renderer/store/mod";
@@ -24,7 +23,6 @@ export function ModList(_props: ModListProps) {
   const { data: activeGroup, isPlaceholderData, isPending } = useModGroup(selectedGroupPath);
 
   const { toggleModMutation, exclusiveToggleModMutation } = useModMutations();
-  const { fixTools, presets } = useModContextMenuData();
 
   const mods = useFilteredMods(activeGroup?.mods || [], searchQuery);
   const getModRenderKey = useCallback(
@@ -78,8 +76,6 @@ export function ModList(_props: ModListProps) {
                       mod={mod}
                       selectedGroupPath={selectedGroupPath}
                       handleToggle={handleToggle}
-                      fixTools={fixTools}
-                      presets={presets}
                     />
                   ))}
                 </tbody>

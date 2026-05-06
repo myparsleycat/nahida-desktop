@@ -288,6 +288,52 @@
           "#": {
             "0": "プリセット名を入力してください"
           }
+        },
+        "wuwa-fix-runner": {
+          "install": {
+            "title": "Wuwa Mod Fixer をインストール",
+            "description": "Wuwa Mod Fixer がインストールされていません。今すぐ最新版をインストールしますか？",
+            "action": "インストール"
+          },
+          "update": {
+            "title": "Wuwa Mod Fixer を更新",
+            "description": "新しい Wuwa Mod Fixer が利用可能です。",
+            "installed": "インストール済みバージョン",
+            "latest": "最新バージョン",
+            "rate_limited_until": "GitHub API のレート制限は {{time}} まで有効です。",
+            "continue_without_update": "更新せずに続行",
+            "action": "更新"
+          },
+          "options": {
+            "title": "Wuwa Mod Fixer",
+            "rollback": "最近の Fix をロールバック",
+            "derived_hashes": {
+              "label": "Derived Hash を追加",
+              "description": "不足しているテクスチャ状態ハッシュ（例: LOD Bias High/Medium、カンタレラ wet、千咲 Enhanced E、エイメス Charged）を追加し、キャラクター MOD のテクスチャが正しく表示されるようにします。一部のキャラクターはまだ含まれていない場合があります。"
+            },
+            "stable_texture": {
+              "label": "Stable Texture を適用",
+              "description": "RabbitFX を使ってキャラクターに Stable Texture を適用します。現在はカンタレラ、千咲、カルテジア、シャコンヌ などに対応しており、最新の RabbitFX が必要です。"
+            },
+            "aemeath_mech": {
+              "label": "エイメスのメカ形態を修正",
+              "description": "すでに正常なエイメスのメカ MOD では、このオプションを有効にしないでください。同じ修正を二重に適用してはいけません。"
+            },
+            "aero_fix": {
+              "label": "Aero 女性漂泊者の目 Fix",
+              "description": "共鳴エネルギーが最大のときに目が崩れる問題がある場合に使用します。",
+              "options": {
+                "none": "なし",
+                "texcoord_override": "TexCoord Override",
+                "texture_mirror_flip": "Texture Mirror Flip"
+              },
+              "warning": "この問題が実際にある MOD にだけ有効化してください。"
+            },
+            "run": "実行"
+          },
+          "log": {
+            "input_placeholder": "入力..."
+          }
         }
       },
       "hooks": {

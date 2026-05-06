@@ -307,6 +307,52 @@
           "#": {
             "0": "Please enter a preset name"
           }
+        },
+        "wuwa-fix-runner": {
+          "install": {
+            "title": "Install Wuwa Mod Fixer",
+            "description": "Wuwa Mod Fixer is not installed. Install the latest version now?",
+            "action": "Install"
+          },
+          "update": {
+            "title": "Update Wuwa Mod Fixer",
+            "description": "A newer Wuwa Mod Fixer is available.",
+            "installed": "Installed",
+            "latest": "Latest",
+            "rate_limited_until": "GitHub API rate limit is active until {{time}}.",
+            "continue_without_update": "Continue Without Update",
+            "action": "Update"
+          },
+          "options": {
+            "title": "Wuwa Mod Fixer",
+            "rollback": "Rollback Latest Fix",
+            "derived_hashes": {
+              "label": "Add Derived Hashes",
+              "description": "Add missing texture state hashes (e.g. LOD Bias High/Medium, Cantarella wet, Chisa Enhanced E, Aemeath Charged) so character mod textures display correctly (some characters are not included)."
+            },
+            "stable_texture": {
+              "label": "Apply Stable Texture",
+              "description": "Use RabbitFX to set stable textures for characters (currently Cantarella, Chisa, Cartethyia, Ciaccona...). Requires the latest RabbitFX."
+            },
+            "aemeath_mech": {
+              "label": "Fix Aemeath Mech Form",
+              "description": "Do not enable this option for Aemeath mech mods that are already normal. Do not apply the fix twice."
+            },
+            "aero_fix": {
+              "label": "Aero FemaleRover Eye Fix",
+              "description": "Use this when the eyes glitch while resonance energy is full.",
+              "options": {
+                "none": "None",
+                "texcoord_override": "TexCoord Override",
+                "texture_mirror_flip": "Texture Mirror Flip"
+              },
+              "warning": "Enable this only if your mod actually has this issue."
+            },
+            "run": "Run"
+          },
+          "log": {
+            "input_placeholder": "Input..."
+          }
         }
       },
       "hooks": {

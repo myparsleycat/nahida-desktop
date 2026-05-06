@@ -117,10 +117,15 @@ export class ScriptExecutor {
         }
     }
 
+    private quoteWindowsArg(value: string) {
+        return `"${value.replace(/"/g, '""')}"`;
+    }
+
     public async execute(
         filePath: string,
         type: "python" | "exec",
         cwd: string,
+        args: string[] = [],
         signal?: AbortSignal,
     ): Promise<void> {
         this.stdoutBuffer = "";
@@ -147,23 +152,38 @@ export class ScriptExecutor {
 
             try {
                 if (process.platform === "win32") {
-                    // on windows, use chcp 65001 to force utf-8 console output
-                    const cmd =
-                        type === "python"
-                            ? `chcp 65001 > nul && python -u "${filePath}"`
-                            : `chcp 65001 > nul && "${filePath}"`;
+                    if (type === "python") {
+                        const command = `python -u ${[filePath, ...args]
+                            .map((arg) => this.quoteWindowsArg(arg))
+                            .join(" ")}`;
 
-                    child = spawn(cmd, [], {
-                        windowsHide: true,
-                        cwd,
-                        env,
-                        shell: true,
-                    });
+                        child = spawn(
+                            "cmd.exe",
+                            ["/d", "/s", "/c", `chcp 65001 > nul && ${command}`],
+                            {
+                                windowsHide: true,
+                                cwd,
+                                env,
+                                shell: false,
+                            },
+                        );
+                    } else {
+                        child = spawn(filePath, args, {
+                            windowsHide: true,
+                            cwd,
+                            env,
+                            shell: false,
+                        });
+                    }
                 } else {
                     if (type === "python") {
-                        child = spawn("python", ["-u", filePath], { windowsHide: false, cwd, env });
+                        child = spawn("python", ["-u", filePath, ...args], {
+                            windowsHide: false,
+                            cwd,
+                            env,
+                        });
                     } else {
-                        child = spawn(filePath, [], { windowsHide: false, cwd, env });
+                        child = spawn(filePath, args, { windowsHide: false, cwd, env });
                     }
                 }
             } catch (err) {

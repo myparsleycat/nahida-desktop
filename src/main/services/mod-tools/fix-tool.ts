@@ -173,7 +173,7 @@ export class FixTool {
                 throw new Error("Destination path is not a directory");
             }
 
-            await this._runScriptSafe(_script, destPath, mainWindow, signal);
+            await this._runScriptSafe(_script, destPath, mainWindow, signal, []);
         } catch (e) {
             this.desktop.logger.error(e);
             this.desktop.ipc.postMessageToWindow(
@@ -243,7 +243,7 @@ export class FixTool {
                     continue;
                 }
 
-                await this._runScriptSafe(_script, destPath, mainWindow, signal);
+                await this._runScriptSafe(_script, destPath, mainWindow, signal, []);
             }
 
             if (!signal.aborted) {
@@ -274,11 +274,80 @@ export class FixTool {
         }
     }
 
+    public async runExternalTool({
+        displayName,
+        filePath,
+        type,
+        cwd,
+        args = [],
+        postLaunchInputs = [],
+    }: {
+        displayName: string;
+        filePath: string;
+        type: "python" | "exec";
+        cwd: string;
+        args?: string[];
+        postLaunchInputs?: Array<{
+            delayMs: number;
+            input: string;
+        }>;
+    }) {
+        const mainWindow = this.desktop.window.main.window;
+        if (!mainWindow) throw new Error("Main window not found");
+
+        let prepared = false;
+        try {
+            const signal = this.prepareExecution(mainWindow);
+            prepared = true;
+
+            if (!(await fse.pathExists(filePath))) {
+                throw new Error(`${displayName} binary not found`);
+            }
+            if (!(await fse.pathExists(cwd))) {
+                throw new Error("Destination path does not exist");
+            }
+
+            this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", {
+                message: `Running ${displayName}...`,
+            });
+
+            for (const postLaunchInput of postLaunchInputs) {
+                setTimeout(() => {
+                    if (signal.aborted || !this.activeExecutor?.isRunning()) {
+                        return;
+                    }
+
+                    this.activeExecutor.sendInput(postLaunchInput.input);
+                    this.desktop.logger.info(
+                        `Sent delayed input to ${displayName}: ${JSON.stringify(postLaunchInput.input)}`,
+                        "FixTool",
+                    );
+                }, postLaunchInput.delayMs);
+            }
+
+            await this.activeExecutor?.execute(filePath, type, cwd, args, signal);
+
+            this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", {
+                message: `Completed ${displayName}`,
+            });
+        } catch (e) {
+            this.desktop.logger.error(e);
+            this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", {
+                message: `Error: ${(e as Error).message}`,
+            });
+        } finally {
+            if (prepared) {
+                this.cleanupExecution();
+            }
+        }
+    }
+
     private async _runScriptSafe(
         script: typeof scriptTable.$inferSelect,
         destPath: string,
         mainWindow: Electron.BrowserWindow,
         signal: AbortSignal,
+        args: string[],
     ): Promise<boolean> {
         if (!this.activeExecutor) return false;
 
@@ -314,6 +383,7 @@ export class FixTool {
                 scriptPath,
                 script.type as "python" | "exec",
                 destPath,
+                args,
                 signal,
             );
 

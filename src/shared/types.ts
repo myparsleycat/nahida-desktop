@@ -28,6 +28,40 @@ export interface FixToolLogEvent {
     replaceLast?: boolean;
 }
 
+export interface GitHubRateState {
+    limit: number;
+    remaining: number;
+    reset: number;
+    used: number;
+    resource: string;
+    updatedAt: string;
+}
+
+export interface WuwaFixerOptions {
+    derivedHashes: boolean;
+    stableTexture: boolean;
+    aemeathMech: boolean;
+    aeroFix: "none" | "1" | "2";
+    rollback: boolean;
+}
+
+export interface WuwaFixerStatus {
+    supported: boolean;
+    installed: boolean;
+    installedVersion: string | null;
+    latestVersion: string | null;
+    binaryPath: string | null;
+    updateAvailable: boolean;
+    rateState: GitHubRateState | null;
+    rateLimited: boolean;
+    nextCheckAt: string | null;
+}
+
+export interface WuwaFixerPrepareResult extends WuwaFixerStatus {
+    needsInstall: boolean;
+    checkedRemotely: boolean;
+}
+
 export type TextureResizeMode = "percent" | "custom";
 export type TextureResizeOperation = "resize" | "resize_and_convert" | "convert";
 export type TextureColorSpace = "srgb" | "linear" | "unknown";
