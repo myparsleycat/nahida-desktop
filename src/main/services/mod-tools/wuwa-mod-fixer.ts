@@ -90,7 +90,30 @@ export class WuwaModFixer {
             };
         }
 
-        const remoteResult = await this.refreshLatestReleaseIfNeeded();
+        let remoteResult: Awaited<ReturnType<typeof this.refreshLatestReleaseIfNeeded>>;
+        try {
+            remoteResult = await this.refreshLatestReleaseIfNeeded();
+        } catch (error) {
+            if (!installed.exists) {
+                throw error;
+            }
+
+            this.desktop.logger.warn(
+                `Failed to refresh Wuwa Mod Fixer release info before run: ${String(error)}`,
+                "WuwaModFixer",
+            );
+
+            return {
+                ...baseStatus,
+                supported,
+                installed: installed.exists,
+                installedVersion: installed.version,
+                binaryPath: installed.binaryPath,
+                checkedRemotely: false,
+                needsInstall: false,
+            };
+        }
+
         const latestVersion = remoteResult.latestRelease?.version ?? baseStatus.latestVersion;
         const updateAvailable =
             !!installed.version &&
