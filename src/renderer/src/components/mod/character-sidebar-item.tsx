@@ -49,7 +49,6 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   isSelected,
   onClick,
   onDrop,
-  canAcceptDrop,
   onCreateFolder,
   onDeleteFolder,
   itemRefs,
@@ -106,14 +105,6 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
     return Array.from(e.dataTransfer?.files ?? []);
   };
 
-  const canHandleDroppedFiles = (files: File[]) => {
-    if (files.length === 0) {
-      return false;
-    }
-
-    return canAcceptDrop ? canAcceptDrop(files) : true;
-  };
-
   const handleDragEnter = (e: React.DragEvent) => {
     if (!hasFiles(e)) return;
     e.preventDefault();
@@ -149,9 +140,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
     setDragOverIfChanged(false);
 
     const files = getDroppedFiles(e);
-    if (canHandleDroppedFiles(files)) {
-      onDrop?.(group, files);
-    }
+    onDrop?.(group, files);
   };
 
   const handlePrimaryClick = (e: React.MouseEvent) => {
