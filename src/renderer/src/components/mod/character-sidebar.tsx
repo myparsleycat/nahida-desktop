@@ -1,3 +1,13 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@renderer/components/ui/alert-dialog";
 import { ValidateName } from "@renderer/components/akasha/dialogs";
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -20,29 +30,33 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ScrollArea } from "../ui/scroll-area";
+import { hasPreviewFile, isPreviewMediaFile } from "./paste-preview";
 import { CharacterSidebarGrid } from "./character-sidebar-grid";
 import { CharacterSidebarRow } from "./character-sidebar-row";
 
 interface CharacterSidebarProps {
   groups: FolderGroup[];
   isLoading?: boolean;
-  onModDrop: (files: File[], groupPath: string, options?: { allowImages?: boolean }) => void;
 }
 
 export const CharacterSidebar = memo(function CharacterSidebar({
   groups,
   isLoading = false,
-  onModDrop,
 }: CharacterSidebarProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
   const setSelectedGroup = useModStore((s) => s.setSelectedGroup);
   const selectedGame = useModStore((s) => s.selectedGame);
+  const selectedGroup = useModStore((s) => s.selectedGroup);
   const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
   const [searchTerm, setSearchTerm] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [createFolderTarget, setCreateFolderTarget] = useState<FolderGroup | null>(null);
+  const [pendingPreviewDrop, setPendingPreviewDrop] = useState<{
+    group: FolderGroup;
+    file: File;
+  } | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
   const itemRefs = useRef<Map<string, { element: HTMLElement; group: FolderGroup }>>(new Map());
   const showSkeleton = useDelayedSkeleton(isLoading);
@@ -133,12 +147,74 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     [handleSelect],
   );
 
+  const invalidatePreviewQueries = useCallback(
+    async (groupPath: string) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] }),
+        queryClient.invalidateQueries({ queryKey: ["modGroup", groupPath] }),
+        selectedGroup?.path && selectedGroup.path !== groupPath
+          ? queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroup.path] })
+          : Promise.resolve(),
+      ]);
+    },
+    [queryClient, selectedGame, selectedGroup?.path],
+  );
+
+  const savePreviewFile = useCallback(
+    async (group: FolderGroup, file: File) => {
+      const filePath = window.webUtils.getPathForFile(file);
+      if (!filePath) {
+        toast.error(t("page.mod.toast.preview-drop.path-error"));
+        return;
+      }
+
+      const promise = window.api.invoke("mod:pastePreview", group.path, filePath, "path");
+      toast.promise(promise, {
+        loading: t("page.mod.toast.preview-drop.saving"),
+        success: t("page.mod.toast.preview-drop.success"),
+        error: t("page.mod.toast.preview-drop.error"),
+      });
+
+      promise
+        .then(() => invalidatePreviewQueries(group.path))
+        .catch((error) => {
+          console.error(error);
+        });
+    },
+    [invalidatePreviewQueries, t],
+  );
+
   const handleItemDrop = useCallback(
     (group: FolderGroup, files: File[]) => {
-      onModDrop(files, group.path, { allowImages: true });
+      if (files.length !== 1 || !isPreviewMediaFile(files[0])) {
+        toast.warning(t("page.mod.toast.preview-drop.unsupported"));
+        return;
+      }
+
+      const [file] = files;
+      if (hasPreviewFile(group.path, group.preview)) {
+        setPendingPreviewDrop({ group, file });
+        return;
+      }
+
+      void savePreviewFile(group, file);
     },
-    [onModDrop],
+    [savePreviewFile, t],
   );
+
+  const handlePreviewDropConfirm = useCallback(() => {
+    if (!pendingPreviewDrop) {
+      return;
+    }
+
+    const { group, file } = pendingPreviewDrop;
+    setPendingPreviewDrop(null);
+    void savePreviewFile(group, file);
+  }, [pendingPreviewDrop, savePreviewFile]);
+
+  const canAcceptPreviewDrop = useCallback((files: File[]) => {
+    return files.length === 1 && isPreviewMediaFile(files[0]);
+  }, []);
 
   const handleCreateFolderOpen = useCallback((group: FolderGroup) => {
     setCreateFolderTarget(group);
@@ -197,6 +273,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     itemRefs,
     onItemClick: handleItemClick,
     onItemDrop: handleItemDrop,
+    canAcceptDrop: canAcceptPreviewDrop,
     searchTerm,
     onCreateFolder: handleCreateFolderOpen,
     onDeleteFolder: handleDeleteFolder,
@@ -277,6 +354,31 @@ export const CharacterSidebar = memo(function CharacterSidebar({
           </form>
         </DialogContent>
       </Dialog>
+      <AlertDialog
+        open={!!pendingPreviewDrop}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingPreviewDrop(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("page.mod.dialog.overwrite-preview.title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("page.mod.dialog.overwrite-preview.description", {
+                name: pendingPreviewDrop?.group.name ?? "",
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={handlePreviewDropConfirm}>
+              {t("page.mod.dialog.overwrite-preview.confirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {confirmTrashDialog}
     </>
   );

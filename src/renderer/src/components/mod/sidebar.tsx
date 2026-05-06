@@ -1,12 +1,10 @@
 import { CharacterSidebar } from "@renderer/components/mod/character-sidebar";
 import { GamePresetSelector } from "@renderer/components/mod/game-preset-selector";
 import { useCharacters, useGames } from "@renderer/hooks/use-mod-data";
-import { useModDragDrop } from "@renderer/hooks/use-mod-drag-drop";
 import { useGameMutations } from "@renderer/hooks/use-mod-mutations";
 import { useCharacterSidebarWidthSetting } from "@renderer/hooks/use-settings";
 import { setSetting } from "@renderer/lib/settings";
 import { useModStore } from "@renderer/store/mod";
-import { useRouteContext } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const CHARACTER_SIDEBAR_WIDTH_DEFAULT = 256;
@@ -26,10 +24,7 @@ function clampCharacterSidebarWidth(width: number) {
 }
 
 export default function ModSidebar() {
-  const { queryClient } = useRouteContext({ from: "__root__" });
-
   const selectedGame = useModStore((s) => s.selectedGame);
-  const selectedGroup = useModStore((s) => s.selectedGroup);
   const setDeletingGame = useModStore((s) => s.setDeletingGame);
   const setIsDeleteGameDialogOpen = useModStore((s) => s.setIsDeleteGameDialogOpen);
 
@@ -37,7 +32,6 @@ export default function ModSidebar() {
   const { data: characters = [], isPlaceholderData, isPending } = useCharacters(selectedGame);
   const { data: storedWidth = CHARACTER_SIDEBAR_WIDTH_DEFAULT } = useCharacterSidebarWidthSetting();
 
-  const { handleFilesDrop } = useModDragDrop(selectedGroup?.path, queryClient, selectedGame || "");
   const [sidebarWidth, setSidebarWidth] = useState(CHARACTER_SIDEBAR_WIDTH_DEFAULT);
   const isDraggingRef = useRef(false);
   const dragStateRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(
@@ -213,11 +207,7 @@ export default function ModSidebar() {
       }}
     >
       <div className="flex-1 overflow-y-auto h-full">
-        <CharacterSidebar
-          groups={characters}
-          isLoading={isPending || isPlaceholderData}
-          onModDrop={handleFilesDrop}
-        />
+        <CharacterSidebar groups={characters} isLoading={isPending || isPlaceholderData} />
       </div>
 
       <GamePresetSelector

@@ -269,7 +269,7 @@
         },
         "overwrite-preview": {
           "title": "要覆盖现有预览吗？",
-          "description": "“{{name}}”已经有预览了。继续后会用新图片覆盖现有预览。",
+          "description": "“{{name}}”已经有预览了。继续后会用新文件覆盖现有预览。",
           "confirm": "覆盖"
         },
         "add-preset": {
@@ -359,6 +359,13 @@
           "save-error": "保存预览失败",
           "no-image": "剪贴板中没有图片、图片 URL 或图片文件。",
           "clipboard-error": "读取剪贴板失败。"
+        },
+        "preview-drop": {
+          "saving": "正在保存预览...",
+          "success": "预览已更新",
+          "error": "保存预览失败",
+          "unsupported": "侧边栏只接受 1 个图片或视频文件作为预览拖放。",
+          "path-error": "无法解析文件路径。"
         }
       },
       "log-dialog": {

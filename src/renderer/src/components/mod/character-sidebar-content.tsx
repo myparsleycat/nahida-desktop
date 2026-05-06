@@ -9,6 +9,7 @@ export interface CharacterSidebarContentProps {
   itemRefs: React.MutableRefObject<Map<string, { element: HTMLElement; group: FolderGroup }>>;
   onItemClick: (group: FolderGroup, e: React.MouseEvent) => void;
   onItemDrop: (group: FolderGroup, files: File[]) => void;
+  canAcceptDrop: (files: File[]) => boolean;
   searchTerm: string;
   onCreateFolder: (group: FolderGroup) => void;
   onDeleteFolder: (group: FolderGroup) => void;
@@ -84,6 +85,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   itemRefs,
   onItemClick,
   onItemDrop,
+  canAcceptDrop,
   onCollapseSelf,
   depth,
   searchTerm,
@@ -148,6 +150,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
           isSelected={selectedGroup?.path === group.path}
           onClick={handleItemClickInternal}
           onDrop={onItemDrop}
+          canAcceptDrop={canAcceptDrop}
           onCreateFolder={onCreateFolder}
           onDeleteFolder={onDeleteFolder}
           depth={depth}
@@ -167,6 +170,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
             itemRefs={itemRefs}
             onItemClick={handleChildItemClick}
             onItemDrop={onItemDrop}
+            canAcceptDrop={canAcceptDrop}
             onCollapseSelf={() => toggleExpandedGroup(group.path)}
             depth={depth + 1}
             searchTerm={searchTerm}
@@ -192,6 +196,7 @@ export function CharacterSidebarContent({
   itemRefs,
   onItemClick,
   onItemDrop,
+  canAcceptDrop,
   searchTerm,
   onCreateFolder,
   onDeleteFolder,
@@ -218,6 +223,7 @@ export function CharacterSidebarContent({
               itemRefs={itemRefs}
               onItemClick={onItemClick}
               onItemDrop={onItemDrop}
+              canAcceptDrop={canAcceptDrop}
               depth={0}
               searchTerm={searchTerm}
               onCreateFolder={onCreateFolder}

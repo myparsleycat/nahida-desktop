@@ -30,6 +30,7 @@ interface CharacterSidebarItemProps {
   isSelected: boolean;
   onClick: (group: FolderGroup, e: React.MouseEvent) => void;
   onDrop?: (group: FolderGroup, files: File[]) => void;
+  canAcceptDrop?: (files: File[]) => boolean;
   onCreateFolder?: (group: FolderGroup) => void;
   onDeleteFolder?: (group: FolderGroup) => void;
   itemRefs: React.MutableRefObject<Map<string, { element: HTMLElement; group: FolderGroup }>>;
@@ -47,6 +48,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   isSelected,
   onClick,
   onDrop,
+  canAcceptDrop,
   onCreateFolder,
   onDeleteFolder,
   itemRefs,
@@ -98,6 +100,18 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
 
   const hasFiles = (e: React.DragEvent) => e.dataTransfer?.types.includes("Files");
 
+  const getDroppedFiles = (e: React.DragEvent) => {
+    return Array.from(e.dataTransfer?.files ?? []);
+  };
+
+  const canHandleDroppedFiles = (files: File[]) => {
+    if (files.length === 0) {
+      return false;
+    }
+
+    return canAcceptDrop ? canAcceptDrop(files) : true;
+  };
+
   const handleDragEnter = (e: React.DragEvent) => {
     if (!hasFiles(e)) return;
     e.preventDefault();
@@ -132,8 +146,8 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
     e.stopPropagation();
     setDragOverIfChanged(false);
 
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
+    const files = getDroppedFiles(e);
+    if (canHandleDroppedFiles(files)) {
       onDrop?.(group, files);
     }
   };

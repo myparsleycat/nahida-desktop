@@ -2,25 +2,72 @@ import i18n from "@renderer/lib/i18n";
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+export const PREVIEW_IMAGE_EXTENSIONS = [
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".avif",
+  ".avifs",
+  ".gif",
+  ".bmp",
+] as const;
+
+export const PREVIEW_VIDEO_EXTENSIONS = [".mp4", ".webm", ".ogg", ".avi", ".mkv", ".mov"] as const;
+
+export const PREVIEW_MEDIA_EXTENSIONS = [
+  ...PREVIEW_IMAGE_EXTENSIONS,
+  ...PREVIEW_VIDEO_EXTENSIONS,
+] as const;
+
 interface PasteModPreviewOptions {
   modPath: string;
   selectedGroupPath?: string;
   queryClient: QueryClient;
 }
 
-export function hasModPreviewFile(modPath: string, previewPath?: string) {
+function getLowerCaseExtension(path: string) {
+  const normalizedPath = path.replace(/\\/g, "/");
+  const dotIndex = normalizedPath.lastIndexOf(".");
+
+  if (dotIndex === -1) {
+    return "";
+  }
+
+  return normalizedPath.slice(dotIndex).toLowerCase();
+}
+
+export function isPreviewImagePath(path: string) {
+  return PREVIEW_IMAGE_EXTENSIONS.includes(
+    getLowerCaseExtension(path) as (typeof PREVIEW_IMAGE_EXTENSIONS)[number],
+  );
+}
+
+export function isPreviewMediaPath(path: string) {
+  return PREVIEW_MEDIA_EXTENSIONS.includes(
+    getLowerCaseExtension(path) as (typeof PREVIEW_MEDIA_EXTENSIONS)[number],
+  );
+}
+
+export function isPreviewMediaFile(file: File) {
+  return isPreviewMediaPath(file.name);
+}
+
+export function hasPreviewFile(basePath: string, previewPath?: string) {
   if (!previewPath) return false;
 
-  const normalizedModPath = modPath.replace(/\\/g, "/").replace(/\/+$/, "");
+  const normalizedBasePath = basePath.replace(/\\/g, "/").replace(/\/+$/, "");
   const normalizedPreviewPath = previewPath.replace(/\\/g, "/");
 
-  if (!normalizedPreviewPath.startsWith(`${normalizedModPath}/`)) {
+  if (!normalizedPreviewPath.startsWith(`${normalizedBasePath}/`)) {
     return false;
   }
 
-  const relativePreviewPath = normalizedPreviewPath.slice(normalizedModPath.length + 1);
+  const relativePreviewPath = normalizedPreviewPath.slice(normalizedBasePath.length + 1);
   return /^preview\.[^/]+$/i.test(relativePreviewPath);
 }
+
+export const hasModPreviewFile = hasPreviewFile;
 
 export async function pasteModPreview({
   modPath,
@@ -31,7 +78,7 @@ export async function pasteModPreview({
     const files = await window.api.invoke("util:getClipboardFiles");
     if (files.length > 0) {
       const filePath = files[0];
-      if (filePath.match(/\.(jpeg|jpg|gif|png|webp|bmp)$/i)) {
+      if (isPreviewImagePath(filePath)) {
         const promise = window.api.invoke("mod:pastePreview", modPath, filePath, "path");
         toast.promise(promise, {
           loading: i18n.t("page.mod.toast.paste-preview.copying"),
@@ -50,7 +97,7 @@ export async function pasteModPreview({
     }
 
     const text = await navigator.clipboard.readText();
-    if (text?.startsWith("http") && text.match(/\.(jpeg|jpg|gif|png|webp|bmp)$/i)) {
+    if (text?.startsWith("http") && isPreviewImagePath(text)) {
       const promise = window.api.invoke("mod:pastePreview", modPath, text, "url");
       toast.promise(promise, {
         loading: i18n.t("page.mod.toast.paste-preview.downloading"),

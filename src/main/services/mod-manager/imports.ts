@@ -118,11 +118,18 @@ export class ModImportsService {
                 throw new Error(`Invalid paste type: ${type}`);
             }
 
-            const fileName = `preview${extension}`;
+            const existingEntries = await fse.readdir(modPath);
+            await Promise.all(
+                existingEntries
+                    .filter((entry) => /^preview\.[^.]+$/i.test(entry))
+                    .map((entry) => fse.remove(path.join(modPath, entry))),
+            );
+
+            const fileName = `preview${extension.toLowerCase()}`;
             const filePath = path.join(modPath, fileName);
 
             await fse.writeFile(filePath, buffer);
-            this.desktop.logger.info(`Saved preview image to ${filePath}`, "Mod:pastePreview");
+            this.desktop.logger.info(`Saved preview media to ${filePath}`, "Mod:pastePreview");
         } catch (error) {
             this.desktop.logger.error(error, `Mod:pastePreview:${modPath}`);
             throw error;

@@ -289,7 +289,7 @@
         },
         "overwrite-preview": {
           "title": "Overwrite Existing Preview?",
-          "description": "\"{{name}}\" already has a preview. Continue to replace it with the new image.",
+          "description": "\"{{name}}\" already has a preview. Continue to replace it with the new file.",
           "confirm": "Overwrite"
         },
         "add-preset": {
@@ -379,6 +379,13 @@
           "save-error": "Failed to save preview",
           "no-image": "No image, image URL, or image file found in the clipboard.",
           "clipboard-error": "Failed to read the clipboard."
+        },
+        "preview-drop": {
+          "saving": "Saving preview...",
+          "success": "Preview updated",
+          "error": "Failed to save preview",
+          "unsupported": "Only one image or video file can be dropped onto the sidebar as a preview.",
+          "path-error": "Failed to resolve the file path."
         }
       },
       "log-dialog": {
