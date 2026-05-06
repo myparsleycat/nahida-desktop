@@ -58,7 +58,7 @@ export function ModListRow({
         <td className="py-2 pl-2 align-middle text-center w-10">
           {mod.preview ? (
             <div className="preview-trigger" onClick={(e) => e.stopPropagation()}>
-              <ModPreviewLightbox preview={mod.preview} />
+              <ModPreviewLightbox preview={mod.preview} cacheKey={mod.mtime} />
             </div>
           ) : (
             <div className="size-10 rounded-sm bg-secondary/20 flex items-center justify-center overflow-hidden shrink-0">

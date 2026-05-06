@@ -13,8 +13,13 @@ function useInvalidateOnSettingUpdate(keys: readonly SettingKey[], queryKey: rea
     const queryClient = useQueryClient();
 
     useEffect(() => {
-        const removeListener = window.api.on("setting:update", ({ key }) => {
+        const removeListener = window.api.on("setting:update", ({ key, value }) => {
             if (keys.includes(key as SettingKey)) {
+                if (queryKey.length === 2 && queryKey[0] === "settings" && queryKey[1] === key) {
+                    queryClient.setQueryData(queryKey, value);
+                    return;
+                }
+
                 queryClient.invalidateQueries({ queryKey: [...queryKey] });
             }
         });
@@ -75,8 +80,10 @@ export function useSettings<TConfig extends SettingsConfig>(settingsConfig: TCon
 
     const update = async <K extends keyof TConfig>(key: K, value: SettingsShape<TConfig>[K]) => {
         const nextSettings = { ...settings, [key]: value };
+        const singleSettingQueryKey = ["settings", settingsConfig[key]] as const;
         setSettings(nextSettings);
         queryClient.setQueryData(queryKey, nextSettings);
+        queryClient.setQueryData<SettingsShape<TConfig>[K]>(singleSettingQueryKey, value);
         await setSetting(settingsConfig[key], value);
     };
 

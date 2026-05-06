@@ -10,12 +10,14 @@ interface CharacterSidebarItemGridProps {
   };
   depth: number;
   parentGroupName?: string;
+  previewCacheKey?: number;
 }
 
 export function CharacterSidebarItemGrid({
   group,
   depth,
   parentGroupName,
+  previewCacheKey,
 }: CharacterSidebarItemGridProps) {
   const isNestedGridItem = depth > 0;
 
@@ -34,6 +36,7 @@ export function CharacterSidebarItemGrid({
           <Preview
             path={group.preview}
             alt={group.name}
+            cacheKey={previewCacheKey}
             objectFit="cover"
             fallback={
               <span className="flex h-full w-full items-center justify-center text-center font-bold">

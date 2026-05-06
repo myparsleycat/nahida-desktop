@@ -56,6 +56,7 @@ export function ModPreviewContainer({ mod, selectedGroupPath, onPaste }: ModPrev
     <Preview
       path={mod.preview}
       alt={mod.name}
+      cacheKey={mod.mtime}
       objectFit="contain"
       className="absolute inset-0"
       fallback={

@@ -9,11 +9,13 @@ export interface CharacterSidebarContentProps {
   itemRefs: React.MutableRefObject<Map<string, { element: HTMLElement; group: FolderGroup }>>;
   onItemClick: (group: FolderGroup, e: React.MouseEvent) => void;
   onItemDrop: (group: FolderGroup, files: File[]) => void;
+  canAcceptDrop: (files: File[]) => boolean;
   searchTerm: string;
   onCreateFolder: (group: FolderGroup) => void;
   onDeleteFolder: (group: FolderGroup) => void;
   refreshKey: number;
   showSkeleton: boolean;
+  previewCacheKey: number;
 }
 
 interface CharacterSidebarContentLayoutProps extends CharacterSidebarContentProps {
@@ -77,6 +79,7 @@ interface CharacterSidebarItemWithChildrenProps {
   itemStyle?: (depth: number) => React.CSSProperties | undefined;
   parentGroupName?: string;
   onCollapseSelf?: () => void;
+  previewCacheKey: number;
 }
 
 const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithChildren({
@@ -84,12 +87,14 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   itemRefs,
   onItemClick,
   onItemDrop,
+  canAcceptDrop,
   onCollapseSelf,
   depth,
   searchTerm,
   onCreateFolder,
   onDeleteFolder,
   refreshKey,
+  previewCacheKey,
   layout,
   listClassName: _listClassName,
   listStyle: _listStyle,
@@ -148,9 +153,11 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
           isSelected={selectedGroup?.path === group.path}
           onClick={handleItemClickInternal}
           onDrop={onItemDrop}
+          canAcceptDrop={canAcceptDrop}
           onCreateFolder={onCreateFolder}
           onDeleteFolder={onDeleteFolder}
           depth={depth}
+          previewCacheKey={previewCacheKey}
           layout={layout}
           parentGroupName={parentGroupName}
           itemClassName={itemClassName}
@@ -167,12 +174,14 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
             itemRefs={itemRefs}
             onItemClick={handleChildItemClick}
             onItemDrop={onItemDrop}
+            canAcceptDrop={canAcceptDrop}
             onCollapseSelf={() => toggleExpandedGroup(group.path)}
             depth={depth + 1}
             searchTerm={searchTerm}
             onCreateFolder={onCreateFolder}
             onDeleteFolder={onDeleteFolder}
             refreshKey={refreshKey}
+            previewCacheKey={previewCacheKey}
             layout={layout}
             listClassName={_listClassName}
             listStyle={_listStyle}
@@ -192,11 +201,13 @@ export function CharacterSidebarContent({
   itemRefs,
   onItemClick,
   onItemDrop,
+  canAcceptDrop,
   searchTerm,
   onCreateFolder,
   onDeleteFolder,
   refreshKey,
   showSkeleton,
+  previewCacheKey,
   layout,
   listClassName,
   listStyle,
@@ -218,12 +229,14 @@ export function CharacterSidebarContent({
               itemRefs={itemRefs}
               onItemClick={onItemClick}
               onItemDrop={onItemDrop}
+              canAcceptDrop={canAcceptDrop}
               depth={0}
               searchTerm={searchTerm}
               onCreateFolder={onCreateFolder}
               onDeleteFolder={onDeleteFolder}
               refreshKey={refreshKey}
               layout={layout}
+              previewCacheKey={previewCacheKey}
               listClassName={listClassName}
               listStyle={listStyle}
               itemClassName={itemClassName}

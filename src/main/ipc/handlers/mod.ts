@@ -226,8 +226,18 @@ export function registerModHandlers(desktop: NahidaDesktop) {
 
     rh(
         "mod:pastePreview",
-        async (modPath: string, data: string, type: "url" | "base64" | "path") => {
-            return await desktop.service.mod.fn.pastePreview(modPath, data, type);
+        async (
+            modPath: string,
+            data: string,
+            type: "url" | "base64" | "path",
+            existingPreviewPath?: string,
+        ) => {
+            return await desktop.service.mod.fn.pastePreview(
+                modPath,
+                data,
+                type,
+                existingPreviewPath,
+            );
         },
     );
 

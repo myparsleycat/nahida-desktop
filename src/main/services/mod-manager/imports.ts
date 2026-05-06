@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { ArchiveExtractPathMode, ResolvedArchiveExtractPathMode } from "@shared/mod";
 import fse from "fs-extra";
+import writeFileAtomic from "write-file-atomic";
 import type { NahidaDesktop } from "../..";
 import type { ModShaderFixesService } from "./shader-fixes";
 
@@ -86,6 +87,7 @@ export class ModImportsService {
         modPath: string,
         data: string,
         type: "url" | "base64" | "path",
+        existingPreviewPath?: string,
     ): Promise<void> {
         try {
             let buffer: Buffer;
@@ -118,11 +120,33 @@ export class ModImportsService {
                 throw new Error(`Invalid paste type: ${type}`);
             }
 
-            const fileName = `preview${extension}`;
-            const filePath = path.join(modPath, fileName);
+            const normalizedModPath = path.resolve(modPath);
+            const fileName = `preview${extension.toLowerCase()}`;
+            const filePath = path.join(normalizedModPath, fileName);
 
-            await fse.writeFile(filePath, buffer);
-            this.desktop.logger.info(`Saved preview image to ${filePath}`, "Mod:pastePreview");
+            await writeFileAtomic(filePath, buffer);
+
+            const normalizedExistingPreviewPath = existingPreviewPath
+                ? path.resolve(existingPreviewPath)
+                : null;
+            const existingEntries = await fse.readdir(normalizedModPath);
+            const stalePreviewPaths = existingEntries
+                .filter((entry) => /^preview\.[^.]+$/i.test(entry))
+                .map((entry) => path.join(normalizedModPath, entry))
+                .filter((entryPath) => entryPath !== filePath);
+
+            if (
+                normalizedExistingPreviewPath &&
+                normalizedExistingPreviewPath.startsWith(`${normalizedModPath}${path.sep}`) &&
+                /^preview\.[^.]+$/i.test(path.basename(normalizedExistingPreviewPath)) &&
+                normalizedExistingPreviewPath !== filePath &&
+                !stalePreviewPaths.includes(normalizedExistingPreviewPath)
+            ) {
+                stalePreviewPaths.push(normalizedExistingPreviewPath);
+            }
+
+            await Promise.all(stalePreviewPaths.map((entryPath) => fse.remove(entryPath)));
+            this.desktop.logger.info(`Saved preview media atomically to ${filePath}`, "Mod:pastePreview");
         } catch (error) {
             this.desktop.logger.error(error, `Mod:pastePreview:${modPath}`);
             throw error;

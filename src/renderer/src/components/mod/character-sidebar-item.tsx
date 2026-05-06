@@ -30,6 +30,7 @@ interface CharacterSidebarItemProps {
   isSelected: boolean;
   onClick: (group: FolderGroup, e: React.MouseEvent) => void;
   onDrop?: (group: FolderGroup, files: File[]) => void;
+  canAcceptDrop?: (files: File[]) => boolean;
   onCreateFolder?: (group: FolderGroup) => void;
   onDeleteFolder?: (group: FolderGroup) => void;
   itemRefs: React.MutableRefObject<Map<string, { element: HTMLElement; group: FolderGroup }>>;
@@ -40,6 +41,7 @@ interface CharacterSidebarItemProps {
   selectedItemClassName?: string;
   nestedItemClassName?: string;
   itemStyle?: React.CSSProperties;
+  previewCacheKey?: number;
 }
 
 export const CharacterSidebarItem = memo(function CharacterSidebarItem({
@@ -57,6 +59,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   selectedItemClassName,
   nestedItemClassName,
   itemStyle,
+  previewCacheKey,
 }: CharacterSidebarItemProps) {
   const { t } = useTranslation();
   const expandedGroups = useModStore((s) => s.expandedGroups);
@@ -98,6 +101,10 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
 
   const hasFiles = (e: React.DragEvent) => e.dataTransfer?.types.includes("Files");
 
+  const getDroppedFiles = (e: React.DragEvent) => {
+    return Array.from(e.dataTransfer?.files ?? []);
+  };
+
   const handleDragEnter = (e: React.DragEvent) => {
     if (!hasFiles(e)) return;
     e.preventDefault();
@@ -132,10 +139,8 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
     e.stopPropagation();
     setDragOverIfChanged(false);
 
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-      onDrop?.(group, files);
-    }
+    const files = getDroppedFiles(e);
+    onDrop?.(group, files);
   };
 
   const handlePrimaryClick = (e: React.MouseEvent) => {
@@ -185,9 +190,14 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
                 group={group}
                 depth={depth}
                 parentGroupName={parentGroupName}
+                previewCacheKey={previewCacheKey}
               />
             ) : (
-              <CharacterSidebarItemRow group={group} depth={depth} />
+              <CharacterSidebarItemRow
+                group={group}
+                depth={depth}
+                previewCacheKey={previewCacheKey}
+              />
             )}
           </button>
 

@@ -5,13 +5,17 @@ import { createPortal } from "react-dom";
 
 interface ModPreviewLightboxProps {
   preview: string;
+  cacheKey?: string | number;
 }
 
-export function ModPreviewLightbox({ preview }: ModPreviewLightboxProps) {
+export function ModPreviewLightbox({ preview, cacheKey }: ModPreviewLightboxProps) {
   const [open, setOpen] = useState(false);
   const isVideo = preview.match(/\.(mp4|webm|ogg)$/i);
-  const localSrc = `local://${preview}`;
-  const origSrc = `${localSrc}?orig=true`;
+  const localSrc =
+    cacheKey === undefined
+      ? `local://${preview}`
+      : `local://${preview}?v=${encodeURIComponent(String(cacheKey))}`;
+  const origSrc = `${localSrc}${localSrc.includes("?") ? "&" : "?"}orig=true`;
 
   useEffect(() => {
     if (!open) return;

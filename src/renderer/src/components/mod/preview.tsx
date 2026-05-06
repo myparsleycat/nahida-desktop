@@ -8,6 +8,12 @@ interface PreviewProps {
   objectFit?: "contain" | "cover";
   fallback?: React.ReactNode;
   allowPlay?: boolean;
+  cacheKey?: string | number;
+}
+
+function buildLocalPreviewSrc(path: string, cacheKey?: string | number) {
+  const base = `local://${path}`;
+  return cacheKey === undefined ? base : `${base}?v=${encodeURIComponent(String(cacheKey))}`;
 }
 
 export function Preview({
@@ -17,6 +23,7 @@ export function Preview({
   objectFit = "cover",
   fallback,
   allowPlay = true,
+  cacheKey,
 }: PreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -64,6 +71,7 @@ export function Preview({
   if (!path) return <>{fallback}</>;
 
   const isVideo = path.toLowerCase().match(/\.(mp4|webm|avi|mkv|mov)$/);
+  const src = buildLocalPreviewSrc(path, cacheKey);
 
   const commonStyles: React.CSSProperties = {
     imageRendering: "-webkit-optimize-contrast",
@@ -75,7 +83,7 @@ export function Preview({
     return (
       <video
         ref={videoRef}
-        src={`local://${path}`}
+        src={src}
         className={cn(
           "w-full h-full",
           objectFit === "cover" ? "object-cover" : "object-contain",
@@ -91,7 +99,7 @@ export function Preview({
 
   return (
     <img
-      src={`local://${path}`}
+      src={src}
       alt={alt}
       className={cn(
         "w-full h-full",
