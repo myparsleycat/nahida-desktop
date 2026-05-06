@@ -89,7 +89,7 @@ export const ModCard = memo(function ModCard({
               style={{ transform: "translateZ(0)", willChange: "filter" }}
             >
               <img
-                src={`local://${mod.preview}`}
+                src={`local://${mod.preview}?v=${encodeURIComponent(String(mod.mtime))}`}
                 alt="preview"
                 className="w-full h-full object-fill"
               />

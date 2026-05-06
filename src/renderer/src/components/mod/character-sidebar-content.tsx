@@ -15,6 +15,7 @@ export interface CharacterSidebarContentProps {
   onDeleteFolder: (group: FolderGroup) => void;
   refreshKey: number;
   showSkeleton: boolean;
+  previewCacheKey: number;
 }
 
 interface CharacterSidebarContentLayoutProps extends CharacterSidebarContentProps {
@@ -78,6 +79,7 @@ interface CharacterSidebarItemWithChildrenProps {
   itemStyle?: (depth: number) => React.CSSProperties | undefined;
   parentGroupName?: string;
   onCollapseSelf?: () => void;
+  previewCacheKey: number;
 }
 
 const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithChildren({
@@ -92,6 +94,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   onCreateFolder,
   onDeleteFolder,
   refreshKey,
+  previewCacheKey,
   layout,
   listClassName: _listClassName,
   listStyle: _listStyle,
@@ -154,6 +157,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
           onCreateFolder={onCreateFolder}
           onDeleteFolder={onDeleteFolder}
           depth={depth}
+          previewCacheKey={previewCacheKey}
           layout={layout}
           parentGroupName={parentGroupName}
           itemClassName={itemClassName}
@@ -177,6 +181,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
             onCreateFolder={onCreateFolder}
             onDeleteFolder={onDeleteFolder}
             refreshKey={refreshKey}
+            previewCacheKey={previewCacheKey}
             layout={layout}
             listClassName={_listClassName}
             listStyle={_listStyle}
@@ -202,6 +207,7 @@ export function CharacterSidebarContent({
   onDeleteFolder,
   refreshKey,
   showSkeleton,
+  previewCacheKey,
   layout,
   listClassName,
   listStyle,
@@ -230,6 +236,7 @@ export function CharacterSidebarContent({
               onDeleteFolder={onDeleteFolder}
               refreshKey={refreshKey}
               layout={layout}
+              previewCacheKey={previewCacheKey}
               listClassName={listClassName}
               listStyle={listStyle}
               itemClassName={itemClassName}

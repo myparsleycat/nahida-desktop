@@ -8,9 +8,14 @@ interface CharacterSidebarItemRowProps {
     mods: unknown[];
   };
   depth: number;
+  previewCacheKey?: number;
 }
 
-export function CharacterSidebarItemRow({ group, depth }: CharacterSidebarItemRowProps) {
+export function CharacterSidebarItemRow({
+  group,
+  depth,
+  previewCacheKey,
+}: CharacterSidebarItemRowProps) {
   return (
     <>
       {depth > 0 && (
@@ -24,6 +29,7 @@ export function CharacterSidebarItemRow({ group, depth }: CharacterSidebarItemRo
         <Preview
           path={group.preview}
           alt={group.name}
+          cacheKey={previewCacheKey}
           objectFit="cover"
           fallback={<span className="text-center font-bold">?</span>}
           allowPlay={true}

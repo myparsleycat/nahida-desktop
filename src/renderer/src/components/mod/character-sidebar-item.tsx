@@ -41,6 +41,7 @@ interface CharacterSidebarItemProps {
   selectedItemClassName?: string;
   nestedItemClassName?: string;
   itemStyle?: React.CSSProperties;
+  previewCacheKey?: number;
 }
 
 export const CharacterSidebarItem = memo(function CharacterSidebarItem({
@@ -59,6 +60,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   selectedItemClassName,
   nestedItemClassName,
   itemStyle,
+  previewCacheKey,
 }: CharacterSidebarItemProps) {
   const { t } = useTranslation();
   const expandedGroups = useModStore((s) => s.expandedGroups);
@@ -199,9 +201,14 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
                 group={group}
                 depth={depth}
                 parentGroupName={parentGroupName}
+                previewCacheKey={previewCacheKey}
               />
             ) : (
-              <CharacterSidebarItemRow group={group} depth={depth} />
+              <CharacterSidebarItemRow
+                group={group}
+                depth={depth}
+                previewCacheKey={previewCacheKey}
+              />
             )}
           </button>
 

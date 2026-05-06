@@ -57,6 +57,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     group: FolderGroup;
     file: File;
   } | null>(null);
+  const [previewCacheKey, setPreviewCacheKey] = useState(0);
   const [newFolderName, setNewFolderName] = useState("");
   const itemRefs = useRef<Map<string, { element: HTMLElement; group: FolderGroup }>>(new Map());
   const showSkeleton = useDelayedSkeleton(isLoading);
@@ -176,7 +177,10 @@ export const CharacterSidebar = memo(function CharacterSidebar({
       });
 
       promise
-        .then(() => invalidatePreviewQueries(group.path))
+        .then(() => {
+          setPreviewCacheKey((prev) => prev + 1);
+          return invalidatePreviewQueries(group.path);
+        })
         .catch((error) => {
           console.error(error);
         });
@@ -279,6 +283,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     onDeleteFolder: handleDeleteFolder,
     refreshKey,
     showSkeleton,
+    previewCacheKey,
   };
 
   return (
