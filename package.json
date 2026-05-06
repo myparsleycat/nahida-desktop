@@ -59,7 +59,7 @@
     "filename-reserved-regex": "^4.0.0",
     "filesize": "^11.0.17",
     "fs-extra": "^11.3.4",
-    "hono": "^4.12.16",
+    "hono": "^4.12.18",
     "html-to-text": "9.0.5",
     "koffi": "^2.16.1",
     "ky": "^2.0.2",
@@ -92,9 +92,9 @@
     "@tailwindcss/vite": "^4.2.4",
     "@tanstack/react-form": "^1.29.1",
     "@tanstack/react-query": "^5.100.9",
-    "@tanstack/react-router": "^1.169.1",
+    "@tanstack/react-router": "^1.169.2",
     "@tanstack/react-virtual": "^3.13.24",
-    "@tanstack/router-plugin": "^1.167.32",
+    "@tanstack/router-plugin": "^1.167.34",
     "@types/auto-launch": "^5.0.5",
     "@types/better-sqlite3": "^7.6.13",
     "@types/electron-progressbar": "^2.2.0",
@@ -118,8 +118,8 @@
     "electron-vite": "^5.0.0",
     "lucide-react": "^1.14.0",
     "motion": "^12.38.0",
-    "oxfmt": "^0.47.0",
-    "oxlint": "^1.62.0",
+    "oxfmt": "^0.48.0",
+    "oxlint": "^1.63.0",
     "path-browserify": "^1.0.1",
     "radix-ui": "^1.4.3",
     "react": "^19.2.5",
@@ -135,8 +135,8 @@
     "typescript": "^6.0.3",
     "vite": "^8.0.10",
     "vitepress": "2.0.0-alpha.17",
-    "wrangler": "^4.68.0",
-    "zustand": "^5.0.12"
+    "wrangler": "^4.88.0",
+    "zustand": "^5.0.13"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
