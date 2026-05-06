@@ -169,7 +169,13 @@ export const CharacterSidebar = memo(function CharacterSidebar({
         return;
       }
 
-      const promise = window.api.invoke("mod:pastePreview", group.path, filePath, "path");
+      const promise = window.api.invoke(
+        "mod:pastePreview",
+        group.path,
+        filePath,
+        "path",
+        group.preview,
+      );
       toast.promise(promise, {
         loading: t("page.mod.toast.preview-drop.saving"),
         success: t("page.mod.toast.preview-drop.success"),

@@ -86,6 +86,7 @@ export class ModImportsService {
         modPath: string,
         data: string,
         type: "url" | "base64" | "path",
+        existingPreviewPath?: string,
     ): Promise<void> {
         try {
             let buffer: Buffer;
@@ -116,6 +117,19 @@ export class ModImportsService {
                 buffer = await fse.readFile(data);
             } else {
                 throw new Error(`Invalid paste type: ${type}`);
+            }
+
+            const normalizedModPath = path.resolve(modPath);
+            const normalizedExistingPreviewPath = existingPreviewPath
+                ? path.resolve(existingPreviewPath)
+                : null;
+
+            if (
+                normalizedExistingPreviewPath &&
+                normalizedExistingPreviewPath.startsWith(`${normalizedModPath}${path.sep}`) &&
+                /^preview\.[^.]+$/i.test(path.basename(normalizedExistingPreviewPath))
+            ) {
+                await fse.remove(normalizedExistingPreviewPath);
             }
 
             const existingEntries = await fse.readdir(modPath);
