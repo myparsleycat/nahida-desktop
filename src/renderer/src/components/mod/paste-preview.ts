@@ -28,13 +28,16 @@ interface PasteModPreviewOptions {
 
 function getLowerCaseExtension(path: string) {
   const normalizedPath = path.replace(/\\/g, "/");
-  const dotIndex = normalizedPath.lastIndexOf(".");
+  const queryOrFragmentIndex = normalizedPath.search(/[?#]/);
+  const cleanedPath =
+    queryOrFragmentIndex === -1 ? normalizedPath : normalizedPath.slice(0, queryOrFragmentIndex);
+  const dotIndex = cleanedPath.lastIndexOf(".");
 
   if (dotIndex === -1) {
     return "";
   }
 
-  return normalizedPath.slice(dotIndex).toLowerCase();
+  return cleanedPath.slice(dotIndex).toLowerCase();
 }
 
 export function isPreviewImagePath(path: string) {
