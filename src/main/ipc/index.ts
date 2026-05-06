@@ -14,6 +14,7 @@ import { registerToolsHandlers } from "./handlers/tools";
 import { registerTransferHandlers } from "./handlers/transfer";
 import { registerUtilHandlers } from "./handlers/util";
 import { registerWindowHandlers } from "./handlers/window";
+import { registerWuwaModFixerHandlers } from "./handlers/wuwa-mod-fixer";
 import { registerXXMIHandlers } from "./handlers/xxmi";
 
 export class IPC {
@@ -39,6 +40,7 @@ export class IPC {
             registerModHandlers(this.d);
             registerFixToolsManagerHandlers(this.d);
             registerToolsHandlers(this.d);
+            registerWuwaModFixerHandlers(this.d);
             registerXXMIHandlers(this.d);
         }
     }

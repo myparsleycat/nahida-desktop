@@ -16,6 +16,7 @@ import { DesktopHttpService } from "./internal/http";
 import Logger from "./internal/logger";
 import { NahidaProtocolHandler } from "./internal/protocol";
 import Updater from "./internal/updater";
+import { GitHubRateCoordinator } from "./internal/github-rate";
 import { IPC } from "./ipc";
 import Compressor from "./lib/compressor";
 import CryptoLib from "./lib/crypto";
@@ -59,6 +60,7 @@ export class NahidaDesktop {
     public initialized: boolean = false;
     public userAgent: string;
     public readonly httpService: DesktopHttpService;
+    public readonly githubRate: GitHubRateCoordinator;
 
     public setting: Setting;
     public readonly ipc: IPC;
@@ -103,6 +105,7 @@ export class NahidaDesktop {
         this.updater = new Updater(this);
         this.logger = new Logger(false, false);
         this.httpService = new DesktopHttpService(this);
+        this.githubRate = new GitHubRateCoordinator(this);
         this.window = {
             main: new MainWindow(this),
             auth: new LoginWindow(this),

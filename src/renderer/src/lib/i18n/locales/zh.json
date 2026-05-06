@@ -287,6 +287,52 @@
           "#": {
             "0": "请输入预设名称"
           }
+        },
+        "wuwa-fix-runner": {
+          "install": {
+            "title": "安装 Wuwa Mod Fixer",
+            "description": "尚未安装 Wuwa Mod Fixer。要现在安装最新版本吗？",
+            "action": "安装"
+          },
+          "update": {
+            "title": "更新 Wuwa Mod Fixer",
+            "description": "有更新版本的 Wuwa Mod Fixer 可用。",
+            "installed": "已安装版本",
+            "latest": "最新版本",
+            "rate_limited_until": "GitHub API 请求限制将持续到 {{time}}。",
+            "continue_without_update": "不更新继续",
+            "action": "更新"
+          },
+          "options": {
+            "title": "Wuwa Mod Fixer",
+            "rollback": "回滚最近的 Fix",
+            "derived_hashes": {
+              "label": "添加 Derived Hash",
+              "description": "添加缺失的纹理状态哈希（例如：LOD Bias High/Medium、坎特蕾拉 wet、千咲 Enhanced E、爱弥斯 Charged），让角色模组纹理能够正确显示。部分角色可能尚未包含在内。"
+            },
+            "stable_texture": {
+              "label": "应用 Stable Texture",
+              "description": "使用 RabbitFX 为角色应用 Stable Texture。目前支持坎特蕾拉、千咲、卡提希娅、夏空等角色，并且需要最新版本的 RabbitFX。"
+            },
+            "aemeath_mech": {
+              "label": "修复爱弥斯机甲形态",
+              "description": "如果爱弥斯机甲模组本身已经正常，请不要启用此选项。不要重复应用同一个修复。"
+            },
+            "aero_fix": {
+              "label": "Aero 女性漂泊者眼部 Fix",
+              "description": "当共鸣能量充满时，如果眼部出现异常，可使用此选项。",
+              "options": {
+                "none": "无",
+                "texcoord_override": "TexCoord Override",
+                "texture_mirror_flip": "Texture Mirror Flip"
+              },
+              "warning": "仅在模组确实存在这个问题时才启用。"
+            },
+            "run": "运行"
+          },
+          "log": {
+            "input_placeholder": "输入..."
+          }
         }
       },
       "hooks": {

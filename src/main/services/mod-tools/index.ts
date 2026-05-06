@@ -5,6 +5,7 @@ import { StaticGlb } from "./static-glb";
 import { TextureResizer } from "./texture-resizer";
 import { TogglePersist } from "./toggle-persist";
 import { ToggleViewer } from "./toggle-viewer";
+import { WuwaModFixer } from "./wuwa-mod-fixer";
 
 export class ModTools {
     public readonly fixTool: FixTool;
@@ -13,6 +14,7 @@ export class ModTools {
     public readonly toggleViewer: ToggleViewer;
     public readonly staticGlb: StaticGlb;
     public readonly textureResizer: TextureResizer;
+    public readonly wuwaModFixer: WuwaModFixer;
 
     constructor(private readonly desktop: NahidaDesktop) {
         this.fixTool = new FixTool(this.desktop);
@@ -21,6 +23,7 @@ export class ModTools {
         this.toggleViewer = new ToggleViewer(this.desktop);
         this.staticGlb = new StaticGlb(this.desktop);
         this.textureResizer = new TextureResizer(this.desktop);
+        this.wuwaModFixer = new WuwaModFixer(this.desktop);
     }
 
     public async startPersistWatcher() {

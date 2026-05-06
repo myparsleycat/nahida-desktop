@@ -1,3 +1,4 @@
+import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { Badge } from "@renderer/components/ui/badge";
 import { Separator } from "@renderer/components/ui/separator";
 import { cn } from "@renderer/lib/utils";
@@ -8,6 +9,7 @@ import { CalendarIcon, FolderIcon } from "lucide-react";
 import { memo, useRef, useState } from "react";
 import { ModCardHeader } from "./mod-card-header";
 import { ModContextMenu } from "./mod-context-menu";
+import { ModFixRunnerDialogs } from "./mod-fix-runner-dialogs";
 import { ModIniList } from "./mod-ini-list";
 import { pasteModPreview } from "./paste-preview";
 import { ModPreviewContainer } from "./mod-preview-container";
@@ -20,16 +22,6 @@ interface ModCardProps {
   onToggle: (mod: ModInfo, event?: React.MouseEvent) => void;
   isIniListExpanded: boolean;
   onIniListExpandedChange: (modPath: string, isExpanded: boolean) => void;
-  fixTools: {
-    id: string;
-    name: string;
-    type: string;
-    size: number;
-  }[];
-  presets: {
-    id: string;
-    name: string;
-  }[];
   onToggleKeyUpdate: (
     modPath: string,
     iniPath: string,
@@ -45,13 +37,12 @@ export const ModCard = memo(function ModCard({
   onToggle,
   isIniListExpanded,
   onIniListExpandedChange,
-  fixTools,
-  presets,
   onToggleKeyUpdate,
 }: ModCardProps) {
   const { queryClient } = useRouteContext({ from: "__root__" });
   const mouseDownTargetRef = useRef<EventTarget | null>(null);
   const [showTextureResizeDialog, setShowTextureResizeDialog] = useState(false);
+  const runner = useModFixRunner(mod.path);
 
   const handlePaste = () => pasteModPreview({ modPath: mod.path, selectedGroupPath, queryClient });
   const handleOpenTextureResizeDialog = () => setShowTextureResizeDialog(true);
@@ -61,8 +52,7 @@ export const ModCard = memo(function ModCard({
       <ModContextMenu
         mod={mod}
         selectedGroupPath={selectedGroupPath}
-        fixTools={fixTools}
-        presets={presets}
+        runner={runner}
         onOpenTextureResizeDialog={handleOpenTextureResizeDialog}
         onPaste={handlePaste}
       >
@@ -99,6 +89,7 @@ export const ModCard = memo(function ModCard({
           <ModCardHeader
             mod={mod}
             selectedGroupPath={selectedGroupPath}
+            runner={runner}
             onOpenTextureResizeDialog={(e) => {
               e.stopPropagation();
               handleOpenTextureResizeDialog();
@@ -162,6 +153,7 @@ export const ModCard = memo(function ModCard({
         modPath={mod.path}
         modName={mod.name}
       />
+      <ModFixRunnerDialogs runner={runner} />
     </>
   );
 });

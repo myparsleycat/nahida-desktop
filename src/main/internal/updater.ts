@@ -160,6 +160,19 @@ export class Updater {
             return;
         }
 
+        const rateCheck = await this.desktop.githubRate.canUseGitHubApi({
+            refreshIfMissing: true,
+        });
+        if (!rateCheck.allowed) {
+            if (userInitiated) {
+                const resetAt = rateCheck.rateState
+                    ? new Date(rateCheck.rateState.reset * 1000).toISOString()
+                    : "unknown";
+                throw new Error(`GitHub API rate limit is active until ${resetAt}`);
+            }
+            return;
+        }
+
         const mode = await this.desktop.setting.general.getAutoUpdateMode();
         autoUpdater.autoDownload = mode === "auto";
 

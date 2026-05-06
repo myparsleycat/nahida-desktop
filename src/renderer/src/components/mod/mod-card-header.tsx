@@ -2,13 +2,6 @@ import {
   ModelViewerDialog,
   type ModelViewerDialogSource,
 } from "@renderer/components/tools/model-viewer-dialog";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@renderer/components/ui/alert-dialog";
 import { Button, buttonVariants } from "@renderer/components/ui/button";
 import {
   DropdownMenu,
@@ -19,17 +12,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
-import { Input } from "@renderer/components/ui/input";
-import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
+import type { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { cn } from "@renderer/lib/utils";
 import type { ModInfo } from "@renderer/types/mod";
-import type { FixToolLogEvent } from "@shared/types";
 import { useRouteContext } from "@tanstack/react-router";
 import {
   BoxIcon,
-  ChevronRightIcon,
   FolderIcon,
   ImageIcon,
   Loader2Icon,
@@ -37,7 +27,7 @@ import {
   TrashIcon,
   WrenchIcon,
 } from "lucide-react";
-import { memo, useEffect, useRef, useState, type MouseEvent } from "react";
+import { memo, useEffect, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -45,81 +35,21 @@ interface ModCardHeaderProps {
   mod: ModInfo;
   selectedGroupPath?: string;
   onOpenTextureResizeDialog?: (event: MouseEvent) => void;
+  runner: ReturnType<typeof useModFixRunner>;
 }
 
 export const ModCardHeader = memo(function ModCardHeader({
   mod,
   selectedGroupPath,
   onOpenTextureResizeDialog,
+  runner,
 }: ModCardHeaderProps) {
   const { t } = useTranslation();
   const { queryClient } = useRouteContext({ from: "__root__" });
-
-  const [fixTools, setFixTools] = useState<
-    { id: string; name: string; type: string; size: number }[]
-  >([]);
-  const [presets, setPresets] = useState<{ id: string; name: string }[]>([]);
-  const [showLogModal, setShowLogModal] = useState(false);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [isRunning, setIsRunning] = useState(false);
   const [isConvertingModel, setIsConvertingModel] = useState(false);
   const [modelViewerSource, setModelViewerSource] = useState<ModelViewerDialogSource | null>(null);
   const [showModelViewer, setShowModelViewer] = useState(false);
-  const [inputCmd, setInputCmd] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const { confirmTrash, confirmTrashDialog } = useConfirmTrash();
-
-  useEffect(() => {
-    window.api.invoke("ftm:getScripts").then(setFixTools);
-    window.api.invoke("ftm:getPresets").then(setPresets);
-  }, []);
-
-  useEffect(() => {
-    if (!showLogModal) return;
-    const removeListener = window.api.on("ftm:log", (event: FixToolLogEvent) => {
-      setLogs((prev) => {
-        if (event.replaceLast && prev.length > 0) {
-          return [...prev.slice(0, -1), event.message];
-        }
-
-        return [...prev, event.message];
-      });
-    });
-    return () => removeListener();
-  }, [showLogModal]);
-
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [logs]);
-
-  const handleRun = async (type: "tool" | "preset", id: string) => {
-    setShowLogModal(true);
-    setLogs([]);
-    setIsRunning(true);
-    try {
-      if (type === "tool") {
-        await window.api.invoke("ftm:runScript", id, mod.path);
-      } else {
-        await window.api.invoke("ftm:runPreset", id, mod.path);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsRunning(false);
-    }
-  };
-
-  const handleCancel = () => {
-    window.api.invoke("ftm:cancelRun");
-  };
-
-  const handleSendInput = () => {
-    window.api.invoke("ftm:sendInput", `${inputCmd}\r\n`);
-    setInputCmd("");
-  };
 
   const handleDelete = (e: MouseEvent) => {
     e.stopPropagation();
@@ -250,13 +180,13 @@ export const ModCardHeader = memo(function ModCardHeader({
               <DropdownMenuSeparator />
 
               <DropdownMenuGroup>
-                <DropdownMenuLabel>Preset ({presets.length})</DropdownMenuLabel>
-                {presets.map((preset) => (
+                <DropdownMenuLabel>Preset ({runner.presets.length})</DropdownMenuLabel>
+                {runner.presets.map((preset) => (
                   <DropdownMenuItem
                     key={preset.id}
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleRun("preset", preset.id);
+                      runner.handleRun("preset", preset.id);
                     }}
                     className="p-0"
                   >
@@ -273,13 +203,13 @@ export const ModCardHeader = memo(function ModCardHeader({
               </DropdownMenuGroup>
 
               <DropdownMenuGroup>
-                <DropdownMenuLabel>Fix Tool ({fixTools.length})</DropdownMenuLabel>
-                {fixTools.map((tool) => (
+                <DropdownMenuLabel>Fix Tool ({runner.fixTools.length})</DropdownMenuLabel>
+                {runner.fixTools.map((tool) => (
                   <DropdownMenuItem
                     key={tool.id}
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleRun("tool", tool.id);
+                      runner.handleRun("tool", tool.id);
                     }}
                     className="p-0"
                   >
@@ -294,6 +224,19 @@ export const ModCardHeader = memo(function ModCardHeader({
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuGroup>
+              {runner.showWuwaFixer && (
+                <DropdownMenuGroup>
+                  <DropdownMenuItem
+                    disabled={runner.isPreparing}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void runner.handleOpenWuwaFixer();
+                    }}
+                  >
+                    Wuwa Mod Fixer
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -342,83 +285,6 @@ export const ModCardHeader = memo(function ModCardHeader({
           </Button>
         </div>
 
-        <AlertDialog open={showLogModal} onOpenChange={setShowLogModal}>
-          <AlertDialogContent
-            onEscapeKeyDown={(e) => {
-              if (isRunning) {
-                e.preventDefault();
-                handleCancel();
-              }
-            }}
-            onClick={(e) => e.stopPropagation()}
-            onOpenAutoFocus={(e) => {
-              e.preventDefault();
-              inputRef.current?.focus();
-            }}
-            className="min-w-xl"
-          >
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("page.mod.log-dialog.title")}</AlertDialogTitle>
-            </AlertDialogHeader>
-            <ScrollArea
-              viewportRef={scrollRef}
-              className="h-[calc(100vh-430px)] w-full rounded-md border bg-muted font-mono text-xs whitespace-pre-wrap break-all"
-            >
-              <div className="p-3 space-y-2">
-                {logs.map((log, i) => (
-                  <div key={`log-${i.toString()}`} className="flex flex-row space-x-1 w-full">
-                    <ChevronRightIcon className="size-4 shrink-0" />
-                    <div
-                      className={cn(
-                        log.toLowerCase().includes("complete") && "text-green-500",
-                        log.toLowerCase().includes("error") && "text-red-500",
-                        log.toLowerCase().includes("warning") && "text-yellow-500",
-                      )}
-                    >
-                      {log}
-                    </div>
-                  </div>
-                ))}
-                {isRunning && (
-                  <div className="animate-pulse text-primary">
-                    {t("page.mod.log-dialog.running")}
-                  </div>
-                )}
-              </div>
-            </ScrollArea>
-            <div className="flex gap-2">
-              <Input
-                ref={inputRef}
-                placeholder="Input..."
-                value={inputCmd}
-                onChange={(e) => setInputCmd(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleSendInput();
-                  }
-                }}
-              />
-              <Button
-                variant="outline"
-                size="icon"
-                className="shrink-0"
-                onClick={handleSendInput}
-                disabled={!isRunning}
-              >
-                <TerminalSquareIcon className="size-4" />
-              </Button>
-            </div>
-            <AlertDialogFooter>
-              {isRunning ? (
-                <Button variant="destructive" onClick={handleCancel}>
-                  {t("g.cancel")}
-                </Button>
-              ) : (
-                <Button onClick={() => setShowLogModal(false)}>{t("g.close")}</Button>
-              )}
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
         {confirmTrashDialog}
       </div>
       <ModelViewerDialog
