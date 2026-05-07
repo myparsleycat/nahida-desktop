@@ -456,6 +456,10 @@
         "mod": "모드"
       },
       "error_title": "GameBanana 데이터를 불러오지 못했습니다",
+      "error_description_unknown": "요청에 실패했습니다. GameBanana 로그인 상태를 확인하거나 잠시 후 다시 시도하세요.",
+      "error_description_auth": "GameBanana 인증에 실패했습니다. 다시 로그인하세요.",
+      "error_description_http": "GameBanana가 HTTP {{status}}{{statusText}} 응답을 반환했습니다.",
+      "error_description_schema": "GameBanana가 {{context}}에 대해 예상과 다른 데이터를 반환했습니다.",
       "game_overview_description": "선택한 게임의 개요와 주요 제출물을 확인합니다.",
       "open_profile": "웹에서 열기",
       "logout": "로그아웃",

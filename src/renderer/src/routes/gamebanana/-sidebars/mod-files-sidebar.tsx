@@ -14,6 +14,7 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { ErrorState, StatCard } from "../-shared/common";
+import { getGameBananaErrorPresentation } from "../-shared/errors";
 import type { ModOverviewQuery } from "../-types";
 import { formatEpoch, formatNumber, getSubmissionFullPreviewUrl } from "../-utils";
 
@@ -26,6 +27,7 @@ export function ModFilesSidebar({
   language: string;
   modOverviewQuery: ModOverviewQuery;
 }) {
+  const errorPresentation = getGameBananaErrorPresentation(modOverviewQuery.error, t);
   const files = modOverviewQuery.data?.profile._aFiles ?? [];
   const previewUrl = modOverviewQuery.data
     ? getSubmissionFullPreviewUrl(modOverviewQuery.data.profile)
@@ -62,7 +64,11 @@ export function ModFilesSidebar({
               <Skeleton className="h-20 w-full" />
             </div>
           ) : modOverviewQuery.error ? (
-            <ErrorState title={t("page.gamebanana.error_title")} />
+            <ErrorState
+              title={t("page.gamebanana.error_title")}
+              description={errorPresentation.description}
+              details={errorPresentation.details}
+            />
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
               <StatCard
@@ -109,7 +115,13 @@ export function ModFilesSidebar({
                   <Skeleton className="h-16 w-full" />
                 </>
               )}
-              {modOverviewQuery.error && <ErrorState title={t("page.gamebanana.error_title")} />}
+              {modOverviewQuery.error && (
+                <ErrorState
+                  title={t("page.gamebanana.error_title")}
+                  description={errorPresentation.description}
+                  details={errorPresentation.details}
+                />
+              )}
               {!modOverviewQuery.isLoading && !modOverviewQuery.error && files.length === 0 && (
                 <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
                   {t("page.gamebanana.no_files")}

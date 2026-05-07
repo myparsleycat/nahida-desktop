@@ -9,6 +9,11 @@ import { nativeBindingPlugin } from "./plugins/native-binding";
 
 export default defineConfig({
     main: {
+        build: {
+            externalizeDeps: {
+                exclude: ["html-to-text"],
+            },
+        },
         resolve: {
             alias: {
                 "@native": resolve("native"),

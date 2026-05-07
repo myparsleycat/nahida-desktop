@@ -454,11 +454,12 @@ function RouteComponent() {
                     isGameOverviewLoading={gameOverviewQuery.isLoading}
                     isCategoryOverviewLoading={categoryOverviewQuery.isLoading}
                     gameOverviewError={Boolean(gameOverviewQuery.error)}
+                    gameOverviewErrorObject={gameOverviewQuery.error}
                     categoryOverviewError={Boolean(categoryOverviewQuery.error)}
+                    categoryOverviewErrorObject={categoryOverviewQuery.error}
                     rootCategories={rootCategories}
                     categoryChildren={categoryChildren}
                     selectedCategoryId={selectedCategoryId}
-                    selectedCategoryName={selectedCategoryName}
                     onSelectCategory={selectCategory}
                     onResetToGameHome={resetToGameHome}
                   />

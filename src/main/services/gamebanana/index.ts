@@ -3,7 +3,7 @@ import { focus, getDefaultWebPreferences } from "@main/windows/utils";
 import { eq } from "drizzle-orm";
 import { BrowserWindow } from "electron";
 import ky, { type Input, type Options } from "ky";
-import { z, type ZodType } from "zod";
+import { z, ZodError, type ZodType } from "zod";
 import type { NahidaDesktop } from "@/main";
 import {
     GameBananaLoginRequiredSchema,
@@ -527,6 +527,16 @@ export class GameBananaService {
         });
     }
 
+    private formatSchemaIssues(error: ZodError) {
+        return error.issues
+            .slice(0, 3)
+            .map((issue) => {
+                const path = issue.path.length > 0 ? issue.path.join(".") : "root";
+                return `${path}: ${issue.message}`;
+            })
+            .join(" | ");
+    }
+
     private async request(
         input: Input,
         options?: Options & { _retryAuth?: boolean; _skipAuth?: boolean; _cookie?: string | null },
@@ -607,9 +617,31 @@ export class GameBananaService {
         return response;
     }
 
-    private async requestJson<T>(schema: ZodType<T>, input: Input, options?: Options): Promise<T> {
+    private async requestJson<T>(
+        schema: ZodType<T>,
+        input: Input,
+        options?: Options,
+        schemaContext = "response",
+    ): Promise<T> {
         const data = await (await this.request(input, options)).json();
-        return schema.parse(data);
+        try {
+            return schema.parse(data);
+        } catch (error) {
+            if (error instanceof ZodError) {
+                const details = this.formatSchemaIssues(error);
+                this.desktop.logger.error(
+                    {
+                        input: String(input),
+                        schemaContext,
+                        issues: error.issues,
+                    },
+                    "GameBananaService:requestJson",
+                );
+                throw new Error(`GAMEBANANA_SCHEMA_ERROR:${schemaContext}:${details}`);
+            }
+
+            throw error;
+        }
     }
 
     private getSubmissionReferer(modelName: GameBananaSubmissionModel, itemId: number) {
@@ -624,7 +656,7 @@ export class GameBananaService {
             headers: {
                 Referer: `https://gamebanana.com/games/${gameId}`,
             },
-        });
+        }, "game_profile");
     }
 
     public async getGameTopSubs(gameId: number) {
@@ -634,7 +666,7 @@ export class GameBananaService {
             headers: {
                 Referer: `https://gamebanana.com/games/${gameId}`,
             },
-        });
+        }, "game_top_submissions");
     }
 
     public async getGameSubfeed({
@@ -652,7 +684,7 @@ export class GameBananaService {
             headers: {
                 Referer: `https://gamebanana.com/games/${gameId}`,
             },
-        });
+        }, "game_subfeed");
     }
 
     public async getModCategoryProfile(categoryId: number) {
@@ -662,7 +694,7 @@ export class GameBananaService {
             headers: {
                 Referer: `https://gamebanana.com/mods/cats/${categoryId}`,
             },
-        });
+        }, "mod_category_profile");
     }
 
     public async getModIndex({
@@ -680,7 +712,7 @@ export class GameBananaService {
             headers: {
                 Referer: `https://gamebanana.com/mods/cats/${categoryId}`,
             },
-        });
+        }, "mod_index");
     }
 
     public async getModCategories({
@@ -703,7 +735,7 @@ export class GameBananaService {
             headers: {
                 Referer: `https://gamebanana.com/mods/cats/${categoryId}`,
             },
-        });
+        }, "mod_categories");
     }
 
     public async getModProfile(
@@ -716,7 +748,7 @@ export class GameBananaService {
             headers: {
                 Referer: this.getSubmissionReferer(modelName, itemId),
             },
-        });
+        }, `${modelName.toLowerCase()}_profile`);
     }
 
     public async getModConfig(
@@ -729,7 +761,7 @@ export class GameBananaService {
             headers: {
                 Referer: this.getSubmissionReferer(modelName, itemId),
             },
-        });
+        }, `${modelName.toLowerCase()}_config`);
     }
 
     public async getModPosts({
@@ -757,7 +789,7 @@ export class GameBananaService {
             headers: {
                 Referer: this.getSubmissionReferer(modelName, modId),
             },
-        });
+        }, `${modelName.toLowerCase()}_posts`);
     }
 
     public async getGameOverview(gameId: number) {

@@ -4,9 +4,13 @@ import { getMatchingImporter } from "@shared/xxmi-match";
 import fg from "fast-glob";
 import fse from "fs-extra";
 import { nanoid } from "nanoid";
+import Piscina from "piscina";
 import type { NahidaDesktop } from "../..";
+import sha256PiscinaWorker from "@main/worker/drive/sha256-piscina.worker?modulePath";
 import type { ModLibraryService } from "./library";
 import { isSameOrChildPath, normalizeModPath } from "./path-utils";
+
+const hashPool = new Piscina({ filename: sha256PiscinaWorker });
 
 interface ShaderFixesModManifestFile {
     file: string;
@@ -156,9 +160,7 @@ export class ModShaderFixesService {
     }
 
     private async hashFile(filePath: string): Promise<string> {
-        return createHash("sha256")
-            .update(await fse.readFile(filePath))
-            .digest("hex");
+        return await hashPool.run({ path: filePath });
     }
 
     private getShaderFixesModManifestPath(modPath: string): string {
