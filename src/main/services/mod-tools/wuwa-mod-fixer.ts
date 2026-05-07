@@ -179,6 +179,7 @@ export class WuwaModFixer {
             type: "exec",
             cwd: modPath,
             args,
+            windowsExecutionMode: "direct",
         });
     }
 
