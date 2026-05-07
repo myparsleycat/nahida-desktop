@@ -1,6 +1,6 @@
 {
   "name": "nahida-desktop",
-  "version": "2.36.2",
+  "version": "2.36.3",
   "description": "Native app for nahida.live",
   "homepage": "https://nahida.live",
   "author": "nahida.live",
@@ -37,6 +37,7 @@
     "release:docs": "pnpm run docs:build && pnpm exec wrangler pages deploy docs/.vitepress/dist --project-name nahida-desktop-docs --branch main"
   },
   "dependencies": {
+    "@borewit/text-codec": "^0.2.2",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@hono/node-server": "^2.0.1",
