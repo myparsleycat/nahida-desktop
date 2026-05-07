@@ -17,8 +17,8 @@ files:
     - "!native/**/*"
     - "!plugins/**/*"
     - "!local.db"
+    - "!tools/**/*"
 # asar: false
-disableDefaultIgnoredFiles: true
 asarUnpack:
     - resources/**
     - "**/*.node"
