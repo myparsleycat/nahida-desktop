@@ -281,6 +281,7 @@ export class FixTool {
         cwd,
         args = [],
         postLaunchInputs = [],
+        windowsExecutionMode = "legacy-shell",
     }: {
         displayName: string;
         filePath: string;
@@ -291,6 +292,7 @@ export class FixTool {
             delayMs: number;
             input: string;
         }>;
+        windowsExecutionMode?: "legacy-shell" | "direct";
     }) {
         const mainWindow = this.desktop.window.main.window;
         if (!mainWindow) throw new Error("Main window not found");
@@ -325,7 +327,14 @@ export class FixTool {
                 }, postLaunchInput.delayMs);
             }
 
-            await this.activeExecutor?.execute(filePath, type, cwd, args, signal);
+            await this.activeExecutor?.execute(
+                filePath,
+                type,
+                cwd,
+                args,
+                windowsExecutionMode,
+                signal,
+            );
 
             this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", {
                 message: `Completed ${displayName}`,
@@ -384,6 +393,7 @@ export class FixTool {
                 script.type as "python" | "exec",
                 destPath,
                 args,
+                "legacy-shell",
                 signal,
             );
 

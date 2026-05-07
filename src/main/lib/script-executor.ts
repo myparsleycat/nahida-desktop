@@ -121,11 +121,34 @@ export class ScriptExecutor {
         return `"${value.replace(/"/g, '""')}"`;
     }
 
+    private buildLegacyWindowsCommand(
+        filePath: string,
+        type: "python" | "exec",
+        args: string[],
+    ) {
+        const quotedArgs = args.map((arg) => this.quoteWindowsArg(arg)).join(" ");
+
+        if (type === "python") {
+            const parts = [`python -u ${this.quoteWindowsArg(filePath)}`];
+            if (quotedArgs) {
+                parts.push(quotedArgs);
+            }
+            return `chcp 65001 > nul && ${parts.join(" ")}`;
+        }
+
+        const parts = [this.quoteWindowsArg(filePath)];
+        if (quotedArgs) {
+            parts.push(quotedArgs);
+        }
+        return `chcp 65001 > nul && ${parts.join(" ")}`;
+    }
+
     public async execute(
         filePath: string,
         type: "python" | "exec",
         cwd: string,
         args: string[] = [],
+        windowsExecutionMode: "legacy-shell" | "direct" = "legacy-shell",
         signal?: AbortSignal,
     ): Promise<void> {
         this.stdoutBuffer = "";
@@ -152,27 +175,37 @@ export class ScriptExecutor {
 
             try {
                 if (process.platform === "win32") {
-                    if (type === "python") {
-                        const command = `python -u ${[filePath, ...args]
-                            .map((arg) => this.quoteWindowsArg(arg))
-                            .join(" ")}`;
+                    if (windowsExecutionMode === "direct") {
+                        if (type === "python") {
+                            const command = `python -u ${[filePath, ...args]
+                                .map((arg) => this.quoteWindowsArg(arg))
+                                .join(" ")}`;
 
-                        child = spawn(
-                            "cmd.exe",
-                            ["/d", "/s", "/c", `chcp 65001 > nul && ${command}`],
-                            {
+                            child = spawn(
+                                "cmd.exe",
+                                ["/d", "/s", "/c", `chcp 65001 > nul && ${command}`],
+                                {
+                                    windowsHide: true,
+                                    cwd,
+                                    env,
+                                    shell: false,
+                                },
+                            );
+                        } else {
+                            child = spawn(filePath, args, {
                                 windowsHide: true,
                                 cwd,
                                 env,
                                 shell: false,
-                            },
-                        );
+                            });
+                        }
                     } else {
-                        child = spawn(filePath, args, {
+                        const command = this.buildLegacyWindowsCommand(filePath, type, args);
+                        child = spawn(command, [], {
                             windowsHide: true,
                             cwd,
                             env,
-                            shell: false,
+                            shell: true,
                         });
                     }
                 } else {
