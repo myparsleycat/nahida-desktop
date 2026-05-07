@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@borewit/text-codec':
+        specifier: ^0.2.2
+        version: 0.2.2
       '@electron-toolkit/preload':
         specifier: ^3.0.2
         version: 3.0.2(electron@40.9.1)
