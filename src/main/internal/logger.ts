@@ -55,7 +55,12 @@ export class Logger {
                 }
 
                 this.logger = pino(
-                    { level: this.currentLevel },
+                    {
+                        level: this.currentLevel,
+                        formatters: {
+                            level: (label) => ({ level: label }),
+                        },
+                    },
                     createStream(pathModule.basename(this.dest), {
                         size: "10M",
                         interval: "7d",
