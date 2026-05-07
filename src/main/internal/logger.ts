@@ -57,6 +57,7 @@ export class Logger {
                 this.logger = pino(
                     {
                         level: this.currentLevel,
+                        base: undefined,
                         formatters: {
                             level: (label) => ({ level: label }),
                         },
