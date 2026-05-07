@@ -31,6 +31,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { ErrorState } from "../-shared/common";
+import { getGameBananaErrorPresentation } from "../-shared/errors";
 import type { ModOverviewQuery } from "../-types";
 import { formatEpoch, formatNumber, getSubmissionPreviewImages } from "../-utils";
 
@@ -238,6 +239,8 @@ export function ModDetailPanel({
   const [lightboxPreviewIndex, setLightboxPreviewIndex] = useState<number | null>(null);
   const [commentSort, setCommentSort] = useState<GameBananaModPostsSort>("popular");
   const commentsQuery = useGameBananaModPosts(modId, modelName, 1, commentSort, Boolean(modId));
+  const modErrorPresentation = getGameBananaErrorPresentation(modOverviewQuery.error, t);
+  const commentsErrorPresentation = getGameBananaErrorPresentation(commentsQuery.error, t);
   const lightboxPreview =
     lightboxPreviewIndex === null ? null : (previews[lightboxPreviewIndex] ?? null);
 
@@ -293,7 +296,11 @@ export function ModDetailPanel({
                   <Skeleton className="h-9 w-2/3" />
                 </div>
               ) : modOverviewQuery.error ? (
-                <ErrorState title={t("page.gamebanana.error_title")} />
+                <ErrorState
+                  title={t("page.gamebanana.error_title")}
+                  description={modErrorPresentation.description}
+                  details={modErrorPresentation.details}
+                />
               ) : modOverviewQuery.data ? (
                 <div className="space-y-2">
                   <div className="flex flex-wrap gap-2">
@@ -324,7 +331,11 @@ export function ModDetailPanel({
                   <Skeleton className="h-full rounded-2xl" />
                 </div>
               ) : modOverviewQuery.error ? (
-                <ErrorState title={t("page.gamebanana.error_title")} />
+                <ErrorState
+                  title={t("page.gamebanana.error_title")}
+                  description={modErrorPresentation.description}
+                  details={modErrorPresentation.details}
+                />
               ) : previews.length > 0 ? (
                 <div className="grid grid-cols-2 auto-rows-[140px] gap-2 sm:grid-cols-5 sm:auto-rows-[110px]">
                   {visiblePreviews.map((preview, index) => (
@@ -397,7 +408,11 @@ export function ModDetailPanel({
                   <Skeleton className="h-24 w-full rounded-xl" />
                 </div>
               ) : modOverviewQuery.error ? (
-                <ErrorState title={t("page.gamebanana.error_title")} />
+                <ErrorState
+                  title={t("page.gamebanana.error_title")}
+                  description={modErrorPresentation.description}
+                  details={modErrorPresentation.details}
+                />
               ) : modOverviewQuery.data ? (
                 descriptionHtml.trim() ? (
                   <div
@@ -440,7 +455,13 @@ export function ModDetailPanel({
             </CardHeader>
             <CardContent className="space-y-3">
               {isCommentsInitialLoading && <CommentSkeletonList />}
-              {commentsQuery.error && <ErrorState title={t("page.gamebanana.error_title")} />}
+              {commentsQuery.error && (
+                <ErrorState
+                  title={t("page.gamebanana.error_title")}
+                  description={commentsErrorPresentation.description}
+                  details={commentsErrorPresentation.details}
+                />
+              )}
               {!isCommentsInitialLoading && !commentsQuery.error && comments.length === 0 && (
                 <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
                   {t("page.gamebanana.no_comments")}

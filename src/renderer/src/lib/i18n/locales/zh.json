@@ -456,6 +456,10 @@
         "mod": "模组"
       },
       "error_title": "加载 GameBanana 数据失败",
+      "error_description_unknown": "请求失败。请检查 GameBanana 登录状态，或稍后重试。",
+      "error_description_auth": "GameBanana 认证失败。请重新登录。",
+      "error_description_http": "GameBanana 返回了 HTTP {{status}}{{statusText}}。",
+      "error_description_schema": "GameBanana 针对 {{context}} 返回了非预期的数据。",
       "game_overview_description": "查看所选游戏的概览和热门投稿。",
       "open_profile": "在网页中打开",
       "logout": "登出",

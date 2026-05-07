@@ -6,6 +6,7 @@ import type { TFunction } from "i18next";
 import { SearchIcon } from "lucide-react";
 import { ModGridCard } from "../-cards/mod-grid-card";
 import { ErrorState, OverviewSkeleton, PaginationButtons } from "../-shared/common";
+import { getGameBananaErrorPresentation } from "../-shared/errors";
 import type {
   CategoryOverviewQuery,
   GameBananaSubmissionSelection,
@@ -35,6 +36,7 @@ export function CategoryPanel({
   onSelectMod: (submission: GameBananaSubmissionSelection) => void;
   onModsPage: (page: number) => void;
 }) {
+  const errorPresentation = getGameBananaErrorPresentation(categoryOverviewQuery.error, t);
   const metadata = categoryOverviewQuery.data?.index._aMetadata;
   const hasCategoryData = categoryOverviewQuery.data != null;
   const isSearching = modSearch.trim().length > 0;
@@ -97,7 +99,11 @@ export function CategoryPanel({
                 <div className="space-y-4">
                   {categoryOverviewQuery.isLoading && <OverviewSkeleton />}
                   {categoryOverviewQuery.error && (
-                    <ErrorState title={t("page.gamebanana.error_title")} />
+                    <ErrorState
+                      title={t("page.gamebanana.error_title")}
+                      description={errorPresentation.description}
+                      details={errorPresentation.details}
+                    />
                   )}
                   {categoryOverviewQuery.data && (
                     <section className="space-y-3">

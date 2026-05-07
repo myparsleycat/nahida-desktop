@@ -457,6 +457,10 @@
         "mod": "MOD"
       },
       "error_title": "GameBanana データの読み込みに失敗しました",
+      "error_description_unknown": "リクエストに失敗しました。GameBanana のログイン状態を確認するか、しばらくしてから再試行してください。",
+      "error_description_auth": "GameBanana の認証に失敗しました。再度ログインしてください。",
+      "error_description_http": "GameBanana から HTTP {{status}}{{statusText}} が返されました。",
+      "error_description_schema": "GameBanana から {{context}} について想定外のデータが返されました。",
       "game_overview_description": "選択したゲームの概要と注目投稿を表示します。",
       "open_profile": "Webで開く",
       "logout": "ログアウト",

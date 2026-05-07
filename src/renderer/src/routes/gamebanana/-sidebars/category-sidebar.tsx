@@ -6,6 +6,7 @@ import { Skeleton } from "@renderer/components/ui/skeleton";
 import { cn } from "@renderer/lib/utils";
 import type { TFunction } from "i18next";
 import { ErrorState } from "../-shared/common";
+import { getGameBananaErrorPresentation } from "../-shared/errors";
 import type { CategoryChildItem, RootCategoryItem } from "../-types";
 import { formatNumber } from "../-utils";
 
@@ -16,11 +17,12 @@ export function CategorySidebar({
   isGameOverviewLoading,
   isCategoryOverviewLoading,
   gameOverviewError,
+  gameOverviewErrorObject,
   categoryOverviewError,
+  categoryOverviewErrorObject,
   rootCategories,
   categoryChildren,
   selectedCategoryId,
-  selectedCategoryName,
   onSelectCategory,
   onResetToGameHome,
 }: {
@@ -30,11 +32,12 @@ export function CategorySidebar({
   isGameOverviewLoading: boolean;
   isCategoryOverviewLoading: boolean;
   gameOverviewError: boolean;
+  gameOverviewErrorObject?: unknown;
   categoryOverviewError: boolean;
+  categoryOverviewErrorObject?: unknown;
   rootCategories: RootCategoryItem[];
   categoryChildren: CategoryChildItem[];
   selectedCategoryId?: number;
-  selectedCategoryName?: string;
   onSelectCategory: (categoryId: number, categoryName: string) => void;
   onResetToGameHome: () => void;
 }) {
@@ -43,6 +46,10 @@ export function CategorySidebar({
     : rootCategories;
   const isLoading = hasCategoryContext ? isCategoryOverviewLoading : isGameOverviewLoading;
   const hasError = hasCategoryContext ? categoryOverviewError : gameOverviewError;
+  const errorPresentation = getGameBananaErrorPresentation(
+    hasCategoryContext ? categoryOverviewErrorObject : gameOverviewErrorObject,
+    t,
+  );
 
   return (
     <Card className="flex h-full min-h-0 flex-col p-0">
@@ -68,7 +75,13 @@ export function CategorySidebar({
                 <Skeleton className="h-12 w-full" />
               </>
             )}
-            {hasError && <ErrorState title={t("page.gamebanana.error_title")} />}
+            {hasError && (
+              <ErrorState
+                title={t("page.gamebanana.error_title")}
+                description={errorPresentation.description}
+                details={errorPresentation.details}
+              />
+            )}
             {!isLoading && !hasError && categories.length === 0 && (
               <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
                 {t("page.gamebanana.no_categories")}

@@ -3,6 +3,7 @@ import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import type { TFunction } from "i18next";
 import { SubmissionCard } from "../-cards/submission-card";
 import { ErrorState, OverviewSkeleton, PaginationButtons } from "../-shared/common";
+import { getGameBananaErrorPresentation } from "../-shared/errors";
 import type { GameBananaSubmissionSelection, GameSubfeedQuery } from "../-types";
 import { getSubmissionDateKey } from "../-utils";
 
@@ -21,6 +22,7 @@ export function GameHomePanel({
   onSubfeedPage: (page: number) => void;
   onSelectMod: (submission: GameBananaSubmissionSelection) => void;
 }) {
+  const errorPresentation = getGameBananaErrorPresentation(subfeedQuery.error, t);
   const metadata = subfeedQuery.data?._aMetadata;
   const totalPages =
     metadata && metadata._nPerpage > 0
@@ -56,7 +58,13 @@ export function GameHomePanel({
               <ScrollArea className="h-full min-h-0">
                 <div className="space-y-3 p-4">
                   {subfeedQuery.isLoading && <OverviewSkeleton />}
-                  {subfeedQuery.error && <ErrorState title={t("page.gamebanana.error_title")} />}
+                  {subfeedQuery.error && (
+                    <ErrorState
+                      title={t("page.gamebanana.error_title")}
+                      description={errorPresentation.description}
+                      details={errorPresentation.details}
+                    />
+                  )}
                   <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                     {subfeedQuery.data?._aRecords.map((submission) => (
                       <SubmissionCard

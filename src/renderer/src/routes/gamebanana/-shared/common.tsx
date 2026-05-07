@@ -107,12 +107,26 @@ export function StatCard({
   );
 }
 
-export function ErrorState({ title }: { title: string }) {
+export function ErrorState({
+  title,
+  description,
+  details,
+}: {
+  title: string;
+  description?: string;
+  details?: string;
+}) {
   const { t } = useTranslation();
 
   return (
     <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
       <div className="mb-2 font-medium text-foreground">{title}</div>
+      {description ? <div className="mb-3">{description}</div> : null}
+      {details ? (
+        <div className="mb-3 break-words rounded-md bg-muted/50 px-3 py-2 text-left text-xs">
+          {details}
+        </div>
+      ) : null}
       <div className="flex items-center justify-center gap-2">
         <RefreshCwIcon className="size-4" />
         <span>{t("page.gamebanana.retry_later")}</span>

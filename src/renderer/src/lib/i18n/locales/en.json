@@ -476,6 +476,10 @@
         "mod": "Mod"
       },
       "error_title": "Failed to load GameBanana data",
+      "error_description_unknown": "The request failed. Check your GameBanana login or try again later.",
+      "error_description_auth": "Authentication with GameBanana failed. Sign in again.",
+      "error_description_http": "GameBanana returned HTTP {{status}}{{statusText}}.",
+      "error_description_schema": "GameBanana returned unexpected data for {{context}}.",
       "game_overview_description": "Overview and highlighted submissions for the selected game.",
       "open_profile": "Open in Browser",
       "logout": "Logout",
