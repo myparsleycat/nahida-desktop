@@ -421,6 +421,7 @@
     },
     "gamebanana": {
       "title": "GameBanana",
+      "back": "返回",
       "auth": {
         "checking_title": "正在检查 GameBanana 登录状态",
         "checking_description": "正在验证已保存的登录 Cookie，并在需要时重新打开登录。",

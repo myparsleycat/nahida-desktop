@@ -441,6 +441,7 @@
     },
     "gamebanana": {
       "title": "GameBanana",
+      "back": "Back",
       "auth": {
         "checking_title": "Checking your GameBanana login",
         "checking_description": "Verifying the saved login cookie and reopening login if needed.",

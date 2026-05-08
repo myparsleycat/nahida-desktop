@@ -421,6 +421,7 @@
     },
     "gamebanana": {
       "title": "GameBanana",
+      "back": "뒤로",
       "auth": {
         "checking_title": "GameBanana 로그인 상태를 확인하는 중입니다",
         "checking_description": "저장된 로그인 쿠키를 검사하고 필요하면 다시 로그인합니다.",

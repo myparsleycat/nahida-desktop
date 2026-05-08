@@ -422,6 +422,7 @@
     },
     "gamebanana": {
       "title": "GameBanana",
+      "back": "戻る",
       "auth": {
         "checking_title": "GameBanana のログイン状態を確認しています",
         "checking_description": "保存されたログイン Cookie を検証し、必要なら再ログインします。",
