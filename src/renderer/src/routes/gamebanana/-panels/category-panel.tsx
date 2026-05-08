@@ -66,12 +66,7 @@ export function CategoryPanel({
           <Card className="flex h-full min-h-0 flex-col">
             <CardHeader>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <div className="text-sm font-semibold">{t("page.gamebanana.mods")}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {t("page.gamebanana.mods_description")}
-                  </div>
-                </div>
+                <div></div>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <div className="relative w-full sm:w-64">
                     <SearchIcon className="pointer-events-none absolute left-2 top-2.5 size-4 text-muted-foreground" />
