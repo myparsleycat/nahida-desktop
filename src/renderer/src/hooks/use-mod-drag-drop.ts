@@ -111,6 +111,12 @@ export function useModDragDrop(
         };
     }, []);
 
+    useEffect(() => {
+        if (!groupPath) {
+            setIsDragging(false);
+        }
+    }, [groupPath]);
+
     const isArchive = (filePath: string): boolean => {
         const ext = path.extname(filePath).toLowerCase();
         return SUPPORTED_ARCHIVE_EXTENSIONS.includes(ext);
@@ -134,6 +140,9 @@ export function useModDragDrop(
         if (e.dataTransfer?.types.includes("Files")) {
             e.preventDefault();
             e.stopPropagation();
+            if (!groupPath) {
+                return;
+            }
             setIsDragging(true);
         }
     };
@@ -157,6 +166,9 @@ export function useModDragDrop(
         if (e.dataTransfer?.types.includes("Files")) {
             e.preventDefault();
             e.stopPropagation();
+            if (!groupPath) {
+                return;
+            }
             setIsDragging(true);
         }
     };
@@ -278,7 +290,6 @@ export function useModDragDrop(
         setIsDragging(false);
 
         if (!groupPath) {
-            toast.error(t("page.mod.drag_drop.group_path_not_set"));
             return;
         }
 
