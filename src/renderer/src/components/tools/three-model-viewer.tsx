@@ -38,6 +38,8 @@ import {
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type {
+  ModelViewerAnimationClip,
+  ModelViewerAnimationFrame,
   ModelViewerCameraState,
   ModelViewerHandle,
   ModelViewerRealtimeShapeKey,
@@ -63,10 +65,24 @@ type LoadedShapeKey = {
   }>;
 };
 
+type LoadedAnimationFrame = {
+  index: number;
+  meshes: Array<{
+    meshName: string;
+    indices?: Uint32Array;
+    position: Float32Array;
+    normal?: Float32Array;
+    tangent?: Float32Array;
+    texcoord0?: Float32Array;
+  }>;
+};
+
 export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurfaceProps>(
   function ThreeModelViewer(
     {
       className,
+      animationClip,
+      animationFrame,
       onError,
       onLoad,
       orientation,
@@ -126,7 +142,12 @@ export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurface
       <div className={cn("h-full w-full", className)}>
         <Canvas
           style={{ background: "transparent" }}
-          camera={{ far: 1000, fov: 45, near: 0.01, position: DEFAULT_CAMERA_POSITION.toArray() }}
+          camera={{
+            far: 1000,
+            fov: 45,
+            near: 0.01,
+            position: DEFAULT_CAMERA_POSITION.toArray(),
+          }}
           dpr={window.devicePixelRatio}
           gl={{ alpha: true, antialias: true, preserveDrawingBuffer: true }}
         >
@@ -142,6 +163,8 @@ export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurface
           <directionalLight intensity={lighting.directionalFill} position={[-6, 4, -8]} />
           <ThreeModelScene
             controllerRef={controllerRef}
+            animationClip={animationClip}
+            animationFrame={animationFrame}
             orientation={orientation}
             shapeKeys={shapeKeys}
             src={src}
@@ -160,6 +183,8 @@ export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurface
 
 function ThreeModelScene({
   controllerRef,
+  animationClip,
+  animationFrame,
   onError,
   onLoad,
   orientation,
@@ -182,10 +207,12 @@ function ThreeModelScene({
   const pendingLoadIdRef = useRef(0);
   const onLoadRef = useRef(onLoad);
   const onErrorRef = useRef(onError);
-  const shapeKeyCacheRef = useRef<Map<string, Promise<Float32Array>>>(new Map());
+  const floatBufferCacheRef = useRef<Map<string, Promise<Float32Array>>>(new Map());
+  const uint32BufferCacheRef = useRef<Map<string, Promise<Uint32Array>>>(new Map());
   const lastAppliedVariantSnapshotRef = useRef<Record<string, number | string> | null>(null);
   const lastAppliedModelRootRef = useRef<Object3D | null>(null);
   const lastAppliedShapeKeysRef = useRef<ModelViewerRealtimeShapeKey[] | undefined>(undefined);
+  const lastAppliedAnimationSignatureRef = useRef<string | null>(null);
   const desiredCameraDistanceRef = useRef<number | null>(null);
 
   const rotation = useMemo(() => {
@@ -476,8 +503,50 @@ function ThreeModelScene({
       lastAppliedVariantSnapshotRef.current = null;
       lastAppliedModelRootRef.current = null;
       lastAppliedShapeKeysRef.current = undefined;
+      lastAppliedAnimationSignatureRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!modelRoot || !animationClip || animationClip.frames.length === 0) {
+      lastAppliedAnimationSignatureRef.current = null;
+      return;
+    }
+
+    const normalizedFrame = Math.min(
+      Math.max(animationFrame ?? 0, 0),
+      animationClip.frames.length - 1,
+    );
+    const signature = `${animationClip.id}:${normalizedFrame}`;
+    if (lastAppliedAnimationSignatureRef.current === signature) {
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const nextFrame = await loadAnimationFrame(
+        animationClip.frames[normalizedFrame]!,
+        animationClip,
+        floatBufferCacheRef.current,
+        uint32BufferCacheRef.current,
+      );
+      if (cancelled) {
+        return;
+      }
+
+      applyAnimationFrameToScene(modelRoot, nextFrame);
+      lastAppliedAnimationSignatureRef.current = signature;
+      invalidate();
+    })().catch((error) => {
+      if (!cancelled) {
+        onErrorRef.current?.(error);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [animationClip, animationFrame, invalidate, modelRoot]);
 
   useEffect(() => {
     if (!modelRoot || !shapeKeys?.length) {
@@ -501,7 +570,7 @@ function ThreeModelScene({
     void (async () => {
       const loadedShapeKeys = (
         await Promise.all(
-          shapeKeys.map((shapeKey) => loadShapeKey(shapeKey, shapeKeyCacheRef.current)),
+          shapeKeys.map((shapeKey) => loadShapeKey(shapeKey, floatBufferCacheRef.current)),
         )
       ).filter((shapeKey): shapeKey is LoadedShapeKey => !!shapeKey);
 
@@ -622,6 +691,129 @@ async function loadFloatBuffer(
   return request;
 }
 
+async function loadUint32Buffer(
+  sourcePath: string,
+  cache: Map<string, Promise<Uint32Array>>,
+): Promise<Uint32Array> {
+  const existing = cache.get(sourcePath);
+  if (existing) {
+    return existing;
+  }
+
+  const request = fetch(modelViewerSourceToUrl(sourcePath))
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error(`Failed to load animation index buffer: ${sourcePath}`);
+      }
+      return new Uint32Array(await response.arrayBuffer());
+    })
+    .catch((error) => {
+      cache.delete(sourcePath);
+      throw error;
+    });
+  cache.set(sourcePath, request);
+  return request;
+}
+
+async function loadAnimationFrame(
+  frame: ModelViewerAnimationFrame,
+  clip: ModelViewerAnimationClip,
+  floatCache: Map<string, Promise<Float32Array>>,
+  uint32Cache: Map<string, Promise<Uint32Array>>,
+): Promise<LoadedAnimationFrame> {
+  const sharedBufferPathMap = new Map(
+    (clip.sharedBuffers ?? []).map((buffer) => [buffer.id, buffer.path]),
+  );
+  const meshes = await Promise.all(
+    frame.meshes.map(async (mesh) => ({
+      meshName: mesh.meshName,
+      indices: await loadOptionalUint32AnimationBuffer(
+        mesh.indicesBufferId,
+        mesh.indicesPath,
+        sharedBufferPathMap,
+        uint32Cache,
+      ),
+      position: await loadRequiredFloatAnimationBuffer(
+        mesh.positionBufferId,
+        mesh.positionPath,
+        sharedBufferPathMap,
+        floatCache,
+        `animation position buffer for ${mesh.meshName}`,
+      ),
+      normal: await loadOptionalFloatAnimationBuffer(
+        mesh.normalBufferId,
+        mesh.normalPath,
+        sharedBufferPathMap,
+        floatCache,
+      ),
+      tangent: await loadOptionalFloatAnimationBuffer(
+        mesh.tangentBufferId,
+        mesh.tangentPath,
+        sharedBufferPathMap,
+        floatCache,
+      ),
+      texcoord0: await loadOptionalFloatAnimationBuffer(
+        mesh.texcoord0BufferId,
+        mesh.texcoord0Path,
+        sharedBufferPathMap,
+        floatCache,
+      ),
+    })),
+  );
+
+  return {
+    index: frame.index,
+    meshes,
+  };
+}
+
+function resolveAnimationBufferPath(
+  bufferId: string | undefined,
+  sourcePath: string | undefined,
+  sharedBufferPathMap: Map<string, string>,
+): string | undefined {
+  if (bufferId) {
+    return sharedBufferPathMap.get(bufferId);
+  }
+
+  return sourcePath;
+}
+
+async function loadRequiredFloatAnimationBuffer(
+  bufferId: string | undefined,
+  sourcePath: string | undefined,
+  sharedBufferPathMap: Map<string, string>,
+  cache: Map<string, Promise<Float32Array>>,
+  label: string,
+): Promise<Float32Array> {
+  const resolvedPath = resolveAnimationBufferPath(bufferId, sourcePath, sharedBufferPathMap);
+  if (!resolvedPath) {
+    throw new Error(`Missing ${label}`);
+  }
+
+  return await loadFloatBuffer(resolvedPath, cache);
+}
+
+async function loadOptionalFloatAnimationBuffer(
+  bufferId: string | undefined,
+  sourcePath: string | undefined,
+  sharedBufferPathMap: Map<string, string>,
+  cache: Map<string, Promise<Float32Array>>,
+): Promise<Float32Array | undefined> {
+  const resolvedPath = resolveAnimationBufferPath(bufferId, sourcePath, sharedBufferPathMap);
+  return resolvedPath ? await loadFloatBuffer(resolvedPath, cache) : undefined;
+}
+
+async function loadOptionalUint32AnimationBuffer(
+  bufferId: string | undefined,
+  sourcePath: string | undefined,
+  sharedBufferPathMap: Map<string, string>,
+  cache: Map<string, Promise<Uint32Array>>,
+): Promise<Uint32Array | undefined> {
+  const resolvedPath = resolveAnimationBufferPath(bufferId, sourcePath, sharedBufferPathMap);
+  return resolvedPath ? await loadUint32Buffer(resolvedPath, cache) : undefined;
+}
+
 function applyShapeKeysToScene(
   root: Object3D,
   shapeKeys: LoadedShapeKey[],
@@ -641,6 +833,110 @@ function applyShapeKeysToScene(
 
     applyShapeKeyToGeometry(object.geometry, shapeKey, variantState);
   });
+}
+
+function applyAnimationFrameToScene(root: Object3D, frame: LoadedAnimationFrame) {
+  root.traverse((object) => {
+    if (!(object instanceof Mesh) || !(object.geometry instanceof BufferGeometry)) {
+      return;
+    }
+
+    const mesh = frame.meshes.find((entry) => entry.meshName === object.name);
+    if (!mesh) {
+      return;
+    }
+
+    applyAnimationMeshToGeometry(object.geometry, mesh);
+  });
+}
+
+function applyAnimationMeshToGeometry(
+  geometry: BufferGeometry,
+  mesh: LoadedAnimationFrame["meshes"][number],
+) {
+  const positionAttribute = geometry.getAttribute("position");
+  const normalAttribute = geometry.getAttribute("normal");
+  const tangentAttribute = geometry.getAttribute("tangent");
+  const uvAttribute = geometry.getAttribute("uv");
+  if (mesh.indices) {
+    applyIndexToGeometry(geometry, mesh.indices);
+  }
+
+  if (mesh.position.length % 3 !== 0) {
+    return;
+  }
+
+  if (positionAttribute instanceof BufferAttribute) {
+    const positionArray = positionAttribute.array as Float32Array;
+    if (positionArray.length === mesh.position.length) {
+      positionArray.set(mesh.position);
+      positionAttribute.needsUpdate = true;
+    } else {
+      geometry.setAttribute("position", new BufferAttribute(mesh.position.slice(), 3));
+    }
+  } else {
+    geometry.setAttribute("position", new BufferAttribute(mesh.position.slice(), 3));
+  }
+
+  if (normalAttribute instanceof BufferAttribute && mesh.normal) {
+    const normalArray = normalAttribute.array as Float32Array;
+    if (normalArray.length === mesh.normal.length) {
+      normalArray.set(mesh.normal);
+      normalAttribute.needsUpdate = true;
+    } else if (mesh.normal.length % 3 === 0) {
+      geometry.setAttribute("normal", new BufferAttribute(mesh.normal.slice(), 3));
+    }
+  } else if (mesh.normal && mesh.normal.length % 3 === 0) {
+    geometry.setAttribute("normal", new BufferAttribute(mesh.normal.slice(), 3));
+  }
+
+  if (tangentAttribute instanceof BufferAttribute && mesh.tangent) {
+    const tangentArray = tangentAttribute.array as Float32Array;
+    if (tangentArray.length === mesh.tangent.length) {
+      tangentArray.set(mesh.tangent);
+      tangentAttribute.needsUpdate = true;
+    } else if (mesh.tangent.length % 4 === 0) {
+      geometry.setAttribute("tangent", new BufferAttribute(mesh.tangent.slice(), 4));
+    }
+  } else if (mesh.tangent && mesh.tangent.length % 4 === 0) {
+    geometry.setAttribute("tangent", new BufferAttribute(mesh.tangent.slice(), 4));
+  }
+
+  if (uvAttribute instanceof BufferAttribute && mesh.texcoord0) {
+    const uvArray = uvAttribute.array as Float32Array;
+    if (uvArray.length === mesh.texcoord0.length) {
+      uvArray.set(mesh.texcoord0);
+      uvAttribute.needsUpdate = true;
+    } else if (mesh.texcoord0.length % 2 === 0) {
+      geometry.setAttribute("uv", new BufferAttribute(mesh.texcoord0.slice(), 2));
+    }
+  } else if (mesh.texcoord0 && mesh.texcoord0.length % 2 === 0) {
+    geometry.setAttribute("uv", new BufferAttribute(mesh.texcoord0.slice(), 2));
+  }
+
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+}
+
+function applyIndexToGeometry(geometry: BufferGeometry, indices: Uint32Array) {
+  const currentIndex = geometry.getIndex();
+  if (currentIndex instanceof BufferAttribute && currentIndex.array.length === indices.length) {
+    const indexArray = currentIndex.array;
+    if (indexArray instanceof Uint32Array) {
+      indexArray.set(indices);
+      currentIndex.needsUpdate = true;
+      return;
+    }
+
+    if (indexArray instanceof Uint16Array && maxUint32(indices) <= 65535) {
+      indexArray.set(indices);
+      currentIndex.needsUpdate = true;
+      return;
+    }
+  }
+
+  const nextIndices = maxUint32(indices) <= 65535 ? Uint16Array.from(indices) : indices.slice();
+  geometry.setIndex(new BufferAttribute(nextIndices, 1));
 }
 
 function applyShapeKeyToGeometry(
@@ -805,6 +1101,16 @@ function normalizeVec3(value: [number, number, number]): [number, number, number
     return [0, 0, 0];
   }
   return [value[0] / length, value[1] / length, value[2] / length];
+}
+
+function maxUint32(values: Uint32Array): number {
+  let max = 0;
+  for (const value of values) {
+    if (value > max) {
+      max = value;
+    }
+  }
+  return max;
 }
 
 function captureThreeCameraState(

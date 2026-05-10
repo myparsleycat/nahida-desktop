@@ -7,12 +7,12 @@ import {
     type ConvertModToGlbResult,
     convertModToVariantArtifacts,
     type ConvertModVariantArtifactsResult,
-    createStateKey,
     resolveVariantStateArtifact,
     type StaticGlbTextureFormat,
     type StaticGlbVariantManifest,
     type VariableStateMap,
 } from "@main/lib/mod-static-glb";
+import { createStateKey } from "@main/lib/mod-static-glb/shared";
 import { app } from "electron";
 import fse from "fs-extra";
 
