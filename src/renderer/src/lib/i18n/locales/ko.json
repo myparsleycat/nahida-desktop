@@ -736,15 +736,26 @@
           "texture": "텍스처",
           "renderer": "렌더러",
           "rendering": "렌더링",
+          "misc": "기타",
           "rotate": "회전",
           "reset": "초기화",
           "toggle": "토글",
+          "capture_set_preview": "캡처 후 프리뷰 지정",
           "save_to_ini": "INI에 저장"
+        },
+        "dialog": {
+          "overwrite_preview": {
+            "title": "프리뷰 교체",
+            "description": "\"{{name}}\"에 이미 프리뷰가 있습니다. 현재 뷰어 캡처로 교체할까요?",
+            "confirm": "프리뷰 교체"
+          }
         },
         "toast": {
           "save_to_ini_success": "현재 토글 상태를 INI에 저장했습니다.",
           "save_to_ini_no_changes": "저장할 persist 변수를 찾지 못했습니다.",
-          "save_to_ini_error": "INI 저장에 실패했습니다."
+          "save_to_ini_error": "INI 저장에 실패했습니다.",
+          "capture_preview_success": "현재 뷰어 캡처를 preview.png로 저장했습니다.",
+          "capture_preview_error": "현재 뷰어 캡처를 preview.png로 저장하지 못했습니다."
         },
         "rotate_actions": {
           "Left 90°": "왼쪽으로 90°",

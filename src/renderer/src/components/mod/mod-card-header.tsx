@@ -104,6 +104,7 @@ export const ModCardHeader = memo(function ModCardHeader({
               mode: "variant-set",
               artifactRoot: result.artifactRoot,
               manifestPath: result.manifestPath,
+              modPath: mod.path,
               manifest: result.manifest,
               defaultGlbPath: result.defaultGlbPath,
               activeGlbPath: result.activeGlbPath,
@@ -112,6 +113,7 @@ export const ModCardHeader = memo(function ModCardHeader({
           : {
               mode: "single",
               glbPath: result.glbPath,
+              modPath: mod.path,
               name: result.name,
             },
       );
@@ -297,6 +299,10 @@ export const ModCardHeader = memo(function ModCardHeader({
           }
         }}
         source={modelViewerSource}
+        existingPreviewPath={mod.preview}
+        onPreviewSaved={async () => {
+          await queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
+        }}
       />
     </>
   );

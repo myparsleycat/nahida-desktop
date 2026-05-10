@@ -1,3 +1,13 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@renderer/components/ui/alert-dialog";
 import { Button } from "@renderer/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
@@ -17,7 +27,7 @@ import {
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { getSetting, setSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
-import { Loader2Icon, RotateCcwIcon, SaveIcon } from "lucide-react";
+import { CameraIcon, Loader2Icon, RotateCcwIcon, SaveIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -84,12 +94,14 @@ export type ModelViewerDialogSource =
   | {
       mode: "single";
       glbPath: string;
+      modPath?: string;
       name: string;
     }
   | {
       mode: "variant-set";
       artifactRoot: string;
       manifestPath: string;
+      modPath: string;
       manifest: ModelViewerVariantManifest;
       defaultGlbPath: string;
       activeGlbPath: string;
@@ -100,10 +112,14 @@ export function ModelViewerDialog({
   open,
   onOpenChange,
   source,
+  existingPreviewPath,
+  onPreviewSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   source: ModelViewerDialogSource | null;
+  existingPreviewPath?: string;
+  onPreviewSaved?: () => void | Promise<void>;
 }) {
   const { t } = useTranslation();
   const [activeState, setActiveState] = useState<Record<string, VariableStateValue>>({});
@@ -117,6 +133,9 @@ export function ModelViewerDialog({
   const [threeToneMapping, setThreeToneMapping] = useState<ModelViewerThreeToneMapping>("neutral");
   const [threeEnvironment, setThreeEnvironment] = useState<ModelViewerThreeEnvironment>("studio");
   const [threeExposure, setThreeExposure] = useState(DEFAULT_THREE_EXPOSURE);
+  const [isViewerReady, setIsViewerReady] = useState(false);
+  const [isSavingPreview, setIsSavingPreview] = useState(false);
+  const [showOverwritePreviewDialog, setShowOverwritePreviewDialog] = useState(false);
   const viewerRefs = useRef<[ModelViewerHandle | null, ModelViewerHandle | null]>([null, null]);
   const doubleSidedEnabledRef = useRef(true);
   const viewerUrlsRef = useRef<[string, string]>(["", ""]);
@@ -164,6 +183,8 @@ export function ModelViewerDialog({
     }
 
     resetViewerSession({ resetOrientation: true });
+    setShowOverwritePreviewDialog(false);
+    setIsSavingPreview(false);
   }, [open]);
 
   useEffect(() => {
@@ -498,6 +519,8 @@ export function ModelViewerDialog({
     source?.mode === "variant-set" && manifest && (hasVariantTileUi || hasVariantToggleUi),
   );
   const isViewerBusy = isResolving || loadingViewerIndex !== null;
+  const canSaveCapturedPreview =
+    Boolean(source?.modPath) && isViewerReady && !isViewerBusy && !isSavingPreview;
 
   function resetViewerSession(options?: { resetOrientation?: boolean }) {
     const currentIndex = activeViewerIndexRef.current;
@@ -520,6 +543,7 @@ export function ModelViewerDialog({
     setLoadingViewerIndex(null);
     pendingCameraStateRef.current = null;
     initialCameraStateRef.current = null;
+    setIsViewerReady(false);
   }
 
   const handleViewerLoad = (index: 0 | 1) => {
@@ -530,8 +554,11 @@ export function ModelViewerDialog({
       }
 
       await viewer.setDoubleSided(doubleSidedEnabledRef.current);
+      const isPendingViewerSwap = loadingViewerIndexRef.current === index;
+      const isInitialActiveViewerLoad =
+        loadingViewerIndexRef.current === null && activeViewerIndexRef.current === index;
       const shouldRestorePendingCamera =
-        loadingViewerIndexRef.current === index && pendingCameraStateRef.current !== null;
+        isPendingViewerSwap && pendingCameraStateRef.current !== null;
       if (!shouldRestorePendingCamera) {
         await viewer.updateFraming();
       }
@@ -544,7 +571,7 @@ export function ModelViewerDialog({
         initialCameraStateRef.current = viewerRefs.current[index]?.captureCameraState() ?? null;
       });
 
-      if (loadingViewerIndexRef.current !== index) {
+      if (!isPendingViewerSwap && !isInitialActiveViewerLoad) {
         return;
       }
 
@@ -557,9 +584,12 @@ export function ModelViewerDialog({
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           activeViewerIndexRef.current = index;
-          loadingViewerIndexRef.current = null;
+          if (isPendingViewerSwap) {
+            loadingViewerIndexRef.current = null;
+          }
           setActiveViewerIndex(index);
           setLoadingViewerIndex(null);
+          setIsViewerReady(true);
         });
       });
     })();
@@ -575,318 +605,402 @@ export function ModelViewerDialog({
     loadingViewerIndexRef.current = null;
     setActiveViewerIndex(activeIndex);
     setLoadingViewerIndex(null);
+    setIsViewerReady(false);
     console.error("Failed to load model viewer source", error);
   };
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="flex min-w-[95vw] max-h-[92vh] h-full flex-col gap-3 p-3 focus:outline-none focus-visible:outline-none"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <DialogHeader className="pr-10">
-          <DialogTitle className="truncate" title={source?.name}>
-            {source?.name || t("page.tools.model_viewer.title")}
-          </DialogTitle>
-        </DialogHeader>
+  const captureAndSavePreview = async () => {
+    if (!source?.modPath) {
+      return;
+    }
 
-        <Menubar>
-          <MenubarMenu>
-            <MenubarTrigger>{t("page.tools.model_viewer.menu.model")}</MenubarTrigger>
-            <MenubarContent>
-              <MenubarGroup>
-                <MenubarLabel className="text-xs text-muted-foreground">
-                  {t("page.tools.model_viewer.menu.rotate")}
-                </MenubarLabel>
-                {MODEL_ROTATION_ACTIONS.map((action) => (
-                  <MenubarItem key={action.label} onClick={() => rotateModel(action.delta)}>
-                    {t(`page.tools.model_viewer.rotate_actions.${action.label}`)}
-                  </MenubarItem>
-                ))}
-              </MenubarGroup>
-              <MenubarSeparator />
-              <MenubarGroup>
-                <MenubarItem onClick={handleResetView}>
-                  <RotateCcwIcon />
-                  {t("page.tools.model_viewer.menu.reset")}
-                </MenubarItem>
-              </MenubarGroup>
-            </MenubarContent>
-          </MenubarMenu>
-          <MenubarMenu>
-            <MenubarTrigger>{t("page.tools.model_viewer.menu.texture")}</MenubarTrigger>
-            <MenubarContent>
-              <MenubarGroup>
-                <MenubarCheckboxItem
-                  checked={doubleSidedEnabled}
-                  onCheckedChange={(checked) => setDoubleSidedEnabled(checked === true)}
-                >
-                  Double Sided
-                </MenubarCheckboxItem>
-              </MenubarGroup>
-            </MenubarContent>
-          </MenubarMenu>
-          <MenubarMenu>
-            <MenubarTrigger>Rendering</MenubarTrigger>
-            <MenubarContent>
-              <MenubarGroup>
-                <MenubarLabel className="text-xs text-muted-foreground">Tone Mapping</MenubarLabel>
-                <MenubarRadioGroup
-                  value={threeToneMapping}
-                  onValueChange={(value) =>
-                    updateThreeToneMapping(value as ModelViewerThreeToneMapping)
-                  }
-                >
-                  <MenubarRadioItem value="neutral">Neutral</MenubarRadioItem>
-                  <MenubarRadioItem value="aces">ACES Filmic</MenubarRadioItem>
-                  <MenubarRadioItem value="none">None</MenubarRadioItem>
-                </MenubarRadioGroup>
-              </MenubarGroup>
-              <MenubarSeparator />
-              <MenubarGroup>
-                <MenubarLabel className="text-xs text-muted-foreground">Environment</MenubarLabel>
-                <MenubarRadioGroup
-                  value={threeEnvironment}
-                  onValueChange={(value) =>
-                    updateThreeEnvironment(value as ModelViewerThreeEnvironment)
-                  }
-                >
-                  <MenubarRadioItem value="studio">Studio</MenubarRadioItem>
-                  <MenubarRadioItem value="soft">Soft</MenubarRadioItem>
-                  <MenubarRadioItem value="none">None</MenubarRadioItem>
-                </MenubarRadioGroup>
-              </MenubarGroup>
-              <MenubarSeparator />
-              <MenubarGroup>
-                <MenubarLabel className="text-xs text-muted-foreground">Exposure</MenubarLabel>
-                <div className="px-1.5 py-1">
-                  <div className="mb-2 flex items-center gap-1">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2"
-                      onClick={() => updateThreeExposure(threeExposure - 0.1)}
-                    >
-                      -0.1
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2"
-                      onClick={() => updateThreeExposure(DEFAULT_THREE_EXPOSURE)}
-                    >
-                      Reset
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2"
-                      onClick={() => updateThreeExposure(threeExposure + 0.1)}
-                    >
-                      +0.1
-                    </Button>
-                  </div>
-                  <Input
-                    type="number"
-                    min={MIN_THREE_EXPOSURE}
-                    max={MAX_THREE_EXPOSURE}
-                    step={0.05}
-                    value={formatSliderValue(threeExposure)}
-                    onChange={(event) => {
-                      const nextValue = Number.parseFloat(event.target.value);
-                      if (Number.isFinite(nextValue)) {
-                        setThreeExposure(nextValue);
-                      }
-                    }}
-                    onBlur={(event) => {
-                      updateThreeExposure(Number.parseFloat(event.target.value));
-                    }}
-                  />
-                  <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span>{formatSliderValue(MIN_THREE_EXPOSURE)}</span>
-                    <span>{formatSliderValue(MAX_THREE_EXPOSURE)}</span>
-                  </div>
-                </div>
-              </MenubarGroup>
-            </MenubarContent>
-          </MenubarMenu>
-          {showToggleViewer ? (
+    const dataUrl =
+      (await viewerRefs.current[activeViewerIndexRef.current]?.captureSquarePngDataUrl()) ?? null;
+    if (!dataUrl) {
+      throw new Error(t("page.tools.model_viewer.toast.capture_preview_error"));
+    }
+
+    await window.api.invoke(
+      "mod:pastePreview",
+      source.modPath,
+      dataUrl,
+      "base64",
+      existingPreviewPath,
+    );
+    await onPreviewSaved?.();
+  };
+
+  const handleCapturePreviewClick = () => {
+    if (!source?.modPath || !canSaveCapturedPreview) {
+      return;
+    }
+
+    if (existingPreviewPath) {
+      setShowOverwritePreviewDialog(true);
+      return;
+    }
+
+    void handleConfirmCapturePreview();
+  };
+
+  const handleConfirmCapturePreview = async () => {
+    setShowOverwritePreviewDialog(false);
+    setIsSavingPreview(true);
+    try {
+      await captureAndSavePreview();
+      toast.success(t("page.tools.model_viewer.toast.capture_preview_success"));
+    } catch (error) {
+      toast.error(t("page.tools.model_viewer.toast.capture_preview_error"), {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setIsSavingPreview(false);
+    }
+  };
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent
+          className="flex min-w-[95vw] max-h-[92vh] h-full flex-col gap-3 p-3 focus:outline-none focus-visible:outline-none"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DialogHeader className="pr-10">
+            <DialogTitle className="truncate" title={source?.name}>
+              {source?.name || t("page.tools.model_viewer.title")}
+            </DialogTitle>
+          </DialogHeader>
+
+          <Menubar>
             <MenubarMenu>
-              <MenubarTrigger>{t("page.tools.model_viewer.menu.toggle")}</MenubarTrigger>
+              <MenubarTrigger>{t("page.tools.model_viewer.menu.model")}</MenubarTrigger>
               <MenubarContent>
                 <MenubarGroup>
-                  <MenubarItem onClick={handleSaveTogglesToIni} disabled={isViewerBusy}>
-                    <SaveIcon />
-                    {t("page.tools.model_viewer.menu.save_to_ini")}
-                  </MenubarItem>
-                  <MenubarSeparator />
-                  <MenubarItem onClick={handleResetToggles}>
+                  <MenubarLabel className="text-xs text-muted-foreground">
+                    {t("page.tools.model_viewer.menu.rotate")}
+                  </MenubarLabel>
+                  {MODEL_ROTATION_ACTIONS.map((action) => (
+                    <MenubarItem key={action.label} onClick={() => rotateModel(action.delta)}>
+                      {t(`page.tools.model_viewer.rotate_actions.${action.label}`)}
+                    </MenubarItem>
+                  ))}
+                </MenubarGroup>
+                <MenubarSeparator />
+                <MenubarGroup>
+                  <MenubarItem onClick={handleResetView}>
                     <RotateCcwIcon />
                     {t("page.tools.model_viewer.menu.reset")}
                   </MenubarItem>
                 </MenubarGroup>
               </MenubarContent>
             </MenubarMenu>
-          ) : null}
-        </Menubar>
+            <MenubarMenu>
+              <MenubarTrigger>{t("page.tools.model_viewer.menu.texture")}</MenubarTrigger>
+              <MenubarContent>
+                <MenubarGroup>
+                  <MenubarCheckboxItem
+                    checked={doubleSidedEnabled}
+                    onCheckedChange={(checked) => setDoubleSidedEnabled(checked === true)}
+                  >
+                    Double Sided
+                  </MenubarCheckboxItem>
+                </MenubarGroup>
+              </MenubarContent>
+            </MenubarMenu>
+            <MenubarMenu>
+              <MenubarTrigger>{t("page.tools.model_viewer.menu.rendering")}</MenubarTrigger>
+              <MenubarContent>
+                <MenubarGroup>
+                  <MenubarLabel className="text-xs text-muted-foreground">
+                    Tone Mapping
+                  </MenubarLabel>
+                  <MenubarRadioGroup
+                    value={threeToneMapping}
+                    onValueChange={(value) =>
+                      updateThreeToneMapping(value as ModelViewerThreeToneMapping)
+                    }
+                  >
+                    <MenubarRadioItem value="neutral">Neutral</MenubarRadioItem>
+                    <MenubarRadioItem value="aces">ACES Filmic</MenubarRadioItem>
+                    <MenubarRadioItem value="none">None</MenubarRadioItem>
+                  </MenubarRadioGroup>
+                </MenubarGroup>
+                <MenubarSeparator />
+                <MenubarGroup>
+                  <MenubarLabel className="text-xs text-muted-foreground">Environment</MenubarLabel>
+                  <MenubarRadioGroup
+                    value={threeEnvironment}
+                    onValueChange={(value) =>
+                      updateThreeEnvironment(value as ModelViewerThreeEnvironment)
+                    }
+                  >
+                    <MenubarRadioItem value="studio">Studio</MenubarRadioItem>
+                    <MenubarRadioItem value="soft">Soft</MenubarRadioItem>
+                    <MenubarRadioItem value="none">None</MenubarRadioItem>
+                  </MenubarRadioGroup>
+                </MenubarGroup>
+                <MenubarSeparator />
+                <MenubarGroup>
+                  <MenubarLabel className="text-xs text-muted-foreground">Exposure</MenubarLabel>
+                  <div className="px-1.5 py-1">
+                    <div className="mb-2 flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2"
+                        onClick={() => updateThreeExposure(threeExposure - 0.1)}
+                      >
+                        -0.1
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2"
+                        onClick={() => updateThreeExposure(DEFAULT_THREE_EXPOSURE)}
+                      >
+                        Reset
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2"
+                        onClick={() => updateThreeExposure(threeExposure + 0.1)}
+                      >
+                        +0.1
+                      </Button>
+                    </div>
+                    <Input
+                      type="number"
+                      min={MIN_THREE_EXPOSURE}
+                      max={MAX_THREE_EXPOSURE}
+                      step={0.05}
+                      value={formatSliderValue(threeExposure)}
+                      onChange={(event) => {
+                        const nextValue = Number.parseFloat(event.target.value);
+                        if (Number.isFinite(nextValue)) {
+                          setThreeExposure(nextValue);
+                        }
+                      }}
+                      onBlur={(event) => {
+                        updateThreeExposure(Number.parseFloat(event.target.value));
+                      }}
+                    />
+                    <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>{formatSliderValue(MIN_THREE_EXPOSURE)}</span>
+                      <span>{formatSliderValue(MAX_THREE_EXPOSURE)}</span>
+                    </div>
+                  </div>
+                </MenubarGroup>
+              </MenubarContent>
+            </MenubarMenu>
+            {showToggleViewer ? (
+              <MenubarMenu>
+                <MenubarTrigger>{t("page.tools.model_viewer.menu.toggle")}</MenubarTrigger>
+                <MenubarContent>
+                  <MenubarGroup>
+                    <MenubarItem onClick={handleSaveTogglesToIni} disabled={isViewerBusy}>
+                      <SaveIcon />
+                      {t("page.tools.model_viewer.menu.save_to_ini")}
+                    </MenubarItem>
+                    <MenubarSeparator />
+                    <MenubarItem onClick={handleResetToggles}>
+                      <RotateCcwIcon />
+                      {t("page.tools.model_viewer.menu.reset")}
+                    </MenubarItem>
+                  </MenubarGroup>
+                </MenubarContent>
+              </MenubarMenu>
+            ) : null}
+            <MenubarMenu>
+              <MenubarTrigger>{t("page.tools.model_viewer.menu.misc")}</MenubarTrigger>
+              <MenubarContent>
+                <MenubarGroup>
+                  <MenubarItem
+                    onClick={handleCapturePreviewClick}
+                    disabled={!canSaveCapturedPreview}
+                  >
+                    <CameraIcon />
+                    {t("page.tools.model_viewer.menu.capture_set_preview")}
+                  </MenubarItem>
+                </MenubarGroup>
+              </MenubarContent>
+            </MenubarMenu>
+          </Menubar>
 
-        <div
-          className={cn(
-            "grid min-h-0 flex-1 gap-3",
-            showToggleViewer && "lg:grid-cols-[minmax(0,1fr)_360px]",
-          )}
-        >
-          <div className="relative min-h-80 overflow-hidden rounded-md border bg-muted/30">
-            {viewerUrls.some((url) => Boolean(url)) ? (
-              <>
-                {([0, 1] as const).map((index) => (
-                  <ThreeModelViewer
-                    key={index}
-                    ref={(viewer) => {
-                      viewerRefs.current[index] = viewer;
-                    }}
-                    className={cn(
-                      "absolute inset-0 h-full w-full transition-opacity duration-200",
-                      activeViewerIndex === index
-                        ? "z-10 opacity-100"
-                        : "pointer-events-none z-0 opacity-0",
-                    )}
-                    src={viewerUrls[index]}
-                    orientation={modelOrientation}
-                    variantState={viewerVariantState}
-                    shapeKeys={shapeKeys}
-                    threeToneMapping={threeToneMapping}
-                    threeEnvironment={threeEnvironment}
-                    threeExposure={threeExposure}
-                    onLoad={() => handleViewerLoad(index)}
-                    onError={(error) => handleViewerError(index, error)}
-                  />
-                ))}
-                <div
-                  className={cn(
-                    "absolute inset-0 z-20 flex items-center justify-center bg-black/20 transition-opacity duration-200",
-                    isViewerBusy ? "cursor-progress opacity-100" : "pointer-events-none opacity-0",
-                  )}
-                >
+          <div
+            className={cn(
+              "grid min-h-0 flex-1 gap-3",
+              showToggleViewer && "lg:grid-cols-[minmax(0,1fr)_360px]",
+            )}
+          >
+            <div className="relative min-h-80 overflow-hidden rounded-md border bg-muted/30">
+              {viewerUrls.some((url) => Boolean(url)) ? (
+                <>
+                  {([0, 1] as const).map((index) => (
+                    <ThreeModelViewer
+                      key={index}
+                      ref={(viewer) => {
+                        viewerRefs.current[index] = viewer;
+                      }}
+                      className={cn(
+                        "absolute inset-0 h-full w-full transition-opacity duration-200",
+                        activeViewerIndex === index
+                          ? "z-10 opacity-100"
+                          : "pointer-events-none z-0 opacity-0",
+                      )}
+                      src={viewerUrls[index]}
+                      orientation={modelOrientation}
+                      variantState={viewerVariantState}
+                      shapeKeys={shapeKeys}
+                      threeToneMapping={threeToneMapping}
+                      threeEnvironment={threeEnvironment}
+                      threeExposure={threeExposure}
+                      onLoad={() => handleViewerLoad(index)}
+                      onError={(error) => handleViewerError(index, error)}
+                    />
+                  ))}
                   <div
                     className={cn(
-                      "inline-flex items-center gap-2 rounded-md border bg-background/90 px-3 py-2 text-sm text-foreground shadow-sm transition-all duration-200",
+                      "absolute inset-0 z-20 flex items-center justify-center bg-black/20 transition-opacity duration-200",
                       isViewerBusy
-                        ? "translate-y-0 scale-100 opacity-100"
-                        : "translate-y-1 scale-95 opacity-0",
+                        ? "cursor-progress opacity-100"
+                        : "pointer-events-none opacity-0",
                     )}
                   >
-                    <Loader2Icon className="size-4 animate-spin" />
-                    {t("page.tools.model_viewer.generating_selected_state")}
+                    <div
+                      className={cn(
+                        "inline-flex items-center gap-2 rounded-md border bg-background/90 px-3 py-2 text-sm text-foreground shadow-sm transition-all duration-200",
+                        isViewerBusy
+                          ? "translate-y-0 scale-100 opacity-100"
+                          : "translate-y-1 scale-95 opacity-0",
+                      )}
+                    >
+                      <Loader2Icon className="size-4 animate-spin" />
+                      {t("page.tools.model_viewer.generating_selected_state")}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
+                  {t("page.tools.model_viewer.model_data_unavailable")}
+                </div>
+              )}
+            </div>
+
+            {showToggleViewer ? (
+              <div
+                className={cn(
+                  "flex min-h-0 flex-col overflow-hidden rounded-md border bg-card/20 transition-opacity",
+                  isViewerBusy && "pointer-events-none opacity-60",
+                )}
+                aria-busy={isViewerBusy}
+              >
+                <div className="border-b px-4 py-3">
+                  <div className="text-sm font-medium">
+                    {t("page.tools.model_viewer.toggle_viewer")}
                   </div>
                 </div>
-              </>
-            ) : (
-              <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
-                {t("page.tools.model_viewer.model_data_unavailable")}
-              </div>
-            )}
-          </div>
-
-          {showToggleViewer ? (
-            <div
-              className={cn(
-                "flex min-h-0 flex-col overflow-hidden rounded-md border bg-card/20 transition-opacity",
-                isViewerBusy && "pointer-events-none opacity-60",
-              )}
-              aria-busy={isViewerBusy}
-            >
-              <div className="border-b px-4 py-3">
-                <div className="text-sm font-medium">
-                  {t("page.tools.model_viewer.toggle_viewer")}
-                </div>
-              </div>
-              <ScrollArea className="min-h-0 flex-1">
-                <div className="p-4">
-                  {hasVariantTileUi ? (
-                    <div
-                      className="mb-4 overflow-hidden rounded-md border bg-cover bg-center"
-                      style={{
-                        backgroundImage: tileBackgroundPath
-                          ? `url(${modelViewerSourceToUrl(tileBackgroundPath)})`
-                          : undefined,
-                      }}
-                    >
-                      <div className="grid grid-cols-3 gap-3 p-4">
-                        {tileVariables.map((variable) => (
-                          <VariantTile
-                            key={variable.id}
-                            variable={variable}
-                            activeValue={activeState[variable.id]}
-                            slotPath={slotPath}
-                            slotHoverPath={slotHoverPath}
-                            slotActivePath={slotActivePath}
-                            disabled={isViewerBusy}
-                            onSelect={handleSelectValue}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <div className="space-y-3">
-                    {tileVariables.map((variable) => (
-                      <div key={variable.id} className="rounded-md border bg-background/50 p-3">
-                        <div className="mb-2 text-sm font-medium">{variable.label}</div>
-                        <div className="flex flex-wrap gap-2">
-                          {variable.values.map((entry) => {
-                            const active = String(activeState[variable.id]) === String(entry.value);
-                            return (
-                              <Button
-                                key={`${variable.id}-${String(entry.value)}`}
-                                type="button"
-                                size="sm"
-                                variant={active ? "default" : "outline"}
-                                disabled={isViewerBusy}
-                                onClick={() => handleSelectValue(variable.id, entry.value)}
-                              >
-                                {entry.label}
-                              </Button>
-                            );
-                          })}
+                <ScrollArea className="min-h-0 flex-1">
+                  <div className="p-4">
+                    {hasVariantTileUi ? (
+                      <div
+                        className="mb-4 overflow-hidden rounded-md border bg-cover bg-center"
+                        style={{
+                          backgroundImage: tileBackgroundPath
+                            ? `url(${modelViewerSourceToUrl(tileBackgroundPath)})`
+                            : undefined,
+                        }}
+                      >
+                        <div className="grid grid-cols-3 gap-3 p-4">
+                          {tileVariables.map((variable) => (
+                            <VariantTile
+                              key={variable.id}
+                              variable={variable}
+                              activeValue={activeState[variable.id]}
+                              slotPath={slotPath}
+                              slotHoverPath={slotHoverPath}
+                              slotActivePath={slotActivePath}
+                              disabled={isViewerBusy}
+                              onSelect={handleSelectValue}
+                            />
+                          ))}
                         </div>
                       </div>
-                    ))}
-                    {sliderVariables.map((variable) => (
-                      <VariantSlider
-                        key={variable.id}
-                        variable={variable}
-                        activeValue={activeState[variable.id]}
-                        disabled={isViewerBusy}
-                        realtime={Boolean(
-                          shapeKeys?.some((shapeKey) =>
-                            shapeKey.dimensions.some(
-                              (dimension) => dimension.variableId === variable.id,
+                    ) : null}
+
+                    <div className="space-y-3">
+                      {tileVariables.map((variable) => (
+                        <div key={variable.id} className="rounded-md border bg-background/50 p-3">
+                          <div className="mb-2 text-sm font-medium">{variable.label}</div>
+                          <div className="flex flex-wrap gap-2">
+                            {variable.values.map((entry) => {
+                              const active =
+                                String(activeState[variable.id]) === String(entry.value);
+                              return (
+                                <Button
+                                  key={`${variable.id}-${String(entry.value)}`}
+                                  type="button"
+                                  size="sm"
+                                  variant={active ? "default" : "outline"}
+                                  disabled={isViewerBusy}
+                                  onClick={() => handleSelectValue(variable.id, entry.value)}
+                                >
+                                  {entry.label}
+                                </Button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                      {sliderVariables.map((variable) => (
+                        <VariantSlider
+                          key={variable.id}
+                          variable={variable}
+                          activeValue={activeState[variable.id]}
+                          disabled={isViewerBusy}
+                          realtime={Boolean(
+                            shapeKeys?.some((shapeKey) =>
+                              shapeKey.dimensions.some(
+                                (dimension) => dimension.variableId === variable.id,
+                              ),
                             ),
-                          ),
-                        )}
-                        onSelect={handleSelectValue}
-                      />
-                    ))}
+                          )}
+                          onSelect={handleSelectValue}
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
-              </ScrollArea>
-              {/* {isViewerBusy && (
-                <div className="border-t px-4 py-2 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-2">
-                    <Loader2Icon className="size-3 animate-spin" />
-                    Generating selected state
-                  </span>
-                </div>
-              )} */}
-            </div>
-          ) : null}
-        </div>
-      </DialogContent>
-    </Dialog>
+                </ScrollArea>
+              </div>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={showOverwritePreviewDialog} onOpenChange={setShowOverwritePreviewDialog}>
+        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("page.tools.model_viewer.dialog.overwrite_preview.title")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("page.tools.model_viewer.dialog.overwrite_preview.description", {
+                name: source?.name ?? "",
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void handleConfirmCapturePreview()}>
+              {t("page.tools.model_viewer.dialog.overwrite_preview.confirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 

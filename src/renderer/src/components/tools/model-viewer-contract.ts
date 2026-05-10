@@ -26,6 +26,7 @@ export type ModelViewerCameraState = {
 
 export type ModelViewerHandle = {
     captureCameraState: () => ModelViewerCameraState | null;
+    captureSquarePngDataUrl: () => Promise<string | null>;
     restoreCameraState: (
         state: ModelViewerCameraState | null,
         options?: {

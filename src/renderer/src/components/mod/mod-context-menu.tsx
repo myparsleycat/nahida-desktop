@@ -35,6 +35,7 @@ import {
 } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
 import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
+import type { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import type { ModInfo } from "@renderer/types/mod";
 import { useRouteContext } from "@tanstack/react-router";
@@ -52,7 +53,6 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { hasModPreviewFile } from "./paste-preview";
-import type { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 
 interface ModContextMenuProps {
   mod: ModInfo;
@@ -167,6 +167,7 @@ export function ModContextMenu({
               mode: "variant-set",
               artifactRoot: result.artifactRoot,
               manifestPath: result.manifestPath,
+              modPath: mod.path,
               manifest: result.manifest,
               defaultGlbPath: result.defaultGlbPath,
               activeGlbPath: result.activeGlbPath,
@@ -175,6 +176,7 @@ export function ModContextMenu({
           : {
               mode: "single",
               glbPath: result.glbPath,
+              modPath: mod.path,
               name: result.name,
             },
       );
@@ -276,7 +278,7 @@ export function ModContextMenu({
           <ContextMenuGroup>
             <ContextMenuLabel>Fix</ContextMenuLabel>
             <ContextMenuSub>
-                <ContextMenuSubTrigger>Preset</ContextMenuSubTrigger>
+              <ContextMenuSubTrigger>Preset</ContextMenuSubTrigger>
               <ContextMenuSubContent>
                 <ContextMenuGroup>
                   {runner.presets.map((preset) => (
@@ -312,7 +314,10 @@ export function ModContextMenu({
               </ContextMenuSubContent>
             </ContextMenuSub>
             {runner.showWuwaFixer && (
-              <ContextMenuItem disabled={runner.isPreparing} onClick={() => void runner.handleOpenWuwaFixer()}>
+              <ContextMenuItem
+                disabled={runner.isPreparing}
+                onClick={() => void runner.handleOpenWuwaFixer()}
+              >
                 Wuwa Mod Fixer
               </ContextMenuItem>
             )}
@@ -420,6 +425,8 @@ export function ModContextMenu({
           }
         }}
         source={modelViewerSource}
+        existingPreviewPath={mod.preview}
+        onPreviewSaved={invalidateModGroup}
       />
     </>
   );
