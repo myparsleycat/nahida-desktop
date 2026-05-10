@@ -195,6 +195,26 @@
         "unpersist-subgroups": "서브폴더 지정 해제",
         "persist-subgroups": "서브폴더로 지정"
       },
+      "drag_drop": {
+        "target_path_not_set": "대상 경로가 설정되지 않았습니다.",
+        "group_path_not_set": "그룹 경로가 설정되지 않았습니다.",
+        "file_path_unavailable": "파일 경로를 확인할 수 없습니다.",
+        "unsupported_file_with_images": "{{fileName}}은(는) 지원하는 파일 형식이 아닙니다. (압축 파일, 폴더, 이미지 파일만 가능)",
+        "unsupported_file_archive_only": "{{fileName}}은(는) 지원하는 파일 형식이 아닙니다. (압축 파일 또는 폴더만 가능)",
+        "already_exists_folder": "이미 존재하는 폴더입니다: {{folderName}}",
+        "already_exists_item": "이미 존재하는 항목입니다: {{folderName}}",
+        "processing_error": "파일 처리 중 오류가 발생했습니다.",
+        "extract": {
+          "loading": "{{fileName}} 압축 해제 중...",
+          "success": "{{fileName}} 압축 해제 완료",
+          "error": "{{fileName}} 압축 해제 실패"
+        },
+        "copy": {
+          "loading": "{{fileName}} 처리 중...",
+          "success": "{{fileName}} 추가 완료",
+          "error": "{{fileName}} 추가 실패"
+        }
+      },
       "dialog": {
         "extract_archive_path": {
           "title": "압축 해제 경로 선택",

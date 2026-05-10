@@ -196,6 +196,26 @@
         "unpersist-subgroups": "サブフォルダー指定を解除",
         "persist-subgroups": "サブフォルダーとして指定"
       },
+      "drag_drop": {
+        "target_path_not_set": "対象パスが設定されていません。",
+        "group_path_not_set": "グループパスが設定されていません。",
+        "file_path_unavailable": "ファイルパスを確認できません。",
+        "unsupported_file_with_images": "{{fileName}} は対応していないファイル形式です。 (圧縮ファイル、フォルダー、画像ファイルのみ対応)",
+        "unsupported_file_archive_only": "{{fileName}} は対応していないファイル形式です。 (圧縮ファイルまたはフォルダーのみ対応)",
+        "already_exists_folder": "既に存在するフォルダーです: {{folderName}}",
+        "already_exists_item": "既に存在する項目です: {{folderName}}",
+        "processing_error": "ファイル処理中にエラーが発生しました。",
+        "extract": {
+          "loading": "{{fileName}} を解凍中...",
+          "success": "{{fileName}} の解凍が完了しました",
+          "error": "{{fileName}} の解凍に失敗しました"
+        },
+        "copy": {
+          "loading": "{{fileName}} を処理中...",
+          "success": "{{fileName}} を追加しました",
+          "error": "{{fileName}} の追加に失敗しました"
+        }
+      },
       "dialog": {
         "extract_archive_path": {
           "title": "解凍パスを選択",

@@ -195,6 +195,26 @@
         "unpersist-subgroups": "取消子文件夹指定",
         "persist-subgroups": "指定为子文件夹"
       },
+      "drag_drop": {
+        "target_path_not_set": "未设置目标路径。",
+        "group_path_not_set": "未设置分组路径。",
+        "file_path_unavailable": "无法确认文件路径。",
+        "unsupported_file_with_images": "{{fileName}} 不是受支持的文件类型。 (仅支持压缩文件、文件夹和图片文件)",
+        "unsupported_file_archive_only": "{{fileName}} 不是受支持的文件类型。 (仅支持压缩文件或文件夹)",
+        "already_exists_folder": "文件夹已存在: {{folderName}}",
+        "already_exists_item": "项目已存在: {{folderName}}",
+        "processing_error": "处理文件时发生错误。",
+        "extract": {
+          "loading": "正在解压 {{fileName}}...",
+          "success": "{{fileName}} 解压完成",
+          "error": "{{fileName}} 解压失败"
+        },
+        "copy": {
+          "loading": "正在处理 {{fileName}}...",
+          "success": "{{fileName}} 添加完成",
+          "error": "{{fileName}} 添加失败"
+        }
+      },
       "dialog": {
         "extract_archive_path": {
           "title": "选择解压路径",

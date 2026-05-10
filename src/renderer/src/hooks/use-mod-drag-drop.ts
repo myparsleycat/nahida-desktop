@@ -5,6 +5,7 @@ import type { ArchiveExtractPathMode, ResolvedArchiveExtractPathMode } from "@sh
 import type { QueryClient } from "@tanstack/react-query";
 import path from "path-browserify";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 const SUPPORTED_ARCHIVE_EXTENSIONS = [".zip", ".rar", ".7z"];
@@ -24,6 +25,7 @@ export function useModDragDrop(
     queryClient: QueryClient,
     game: string,
 ) {
+    const { t } = useTranslation();
     const [isDragging, setIsDragging] = useState(false);
     const [archiveExtractDialogFileName, setArchiveExtractDialogFileName] = useState<string | null>(
         null,
@@ -165,7 +167,7 @@ export function useModDragDrop(
         options: { allowImages?: boolean } = {},
     ) => {
         if (!targetPath) {
-            toast.error("대상 경로가 설정되지 않았습니다.");
+            toast.error(t("page.mod.drag_drop.target_path_not_set"));
             return;
         }
 
@@ -177,7 +179,7 @@ export function useModDragDrop(
                 const filePath = window.webUtils.getPathForFile(file);
 
                 if (!filePath) {
-                    toast.error("파일 경로를 확인할 수 없습니다.");
+                    toast.error(t("page.mod.drag_drop.file_path_unavailable"));
                     continue;
                 }
 
@@ -187,8 +189,12 @@ export function useModDragDrop(
 
                 if (!isDir && !isArch && (!allowImages || !isImg)) {
                     const message = allowImages
-                        ? `${file.name}은(는) 지원하는 파일 형식이 아닙니다. (압축 파일, 폴더, 이미지 파일만 가능)`
-                        : `${file.name}은(는) 지원하는 파일 형식이 아닙니다. (압축 파일 또는 폴더만 가능)`;
+                        ? t("page.mod.drag_drop.unsupported_file_with_images", {
+                              fileName: file.name,
+                          })
+                        : t("page.mod.drag_drop.unsupported_file_archive_only", {
+                              fileName: file.name,
+                          });
                     toast.warning(message);
                     continue;
                 }
@@ -199,7 +205,9 @@ export function useModDragDrop(
                     toast.promise(
                         window.api.invoke("mod:extractArchive", filePath, targetPath, extractMode),
                         {
-                            loading: `${file.name} 압축 해제 중...`,
+                            loading: t("page.mod.drag_drop.extract.loading", {
+                                fileName: file.name,
+                            }),
                             success: () => {
                                 queryClient.invalidateQueries({
                                     queryKey: ["characters", game],
@@ -207,21 +215,29 @@ export function useModDragDrop(
                                 queryClient.invalidateQueries({
                                     queryKey: ["modGroup", currentSelectedGroup?.path],
                                 });
-                                return `${file.name} 압축 해제 완료`;
+                                return t("page.mod.drag_drop.extract.success", {
+                                    fileName: file.name,
+                                });
                             },
                             error: (error) => {
                                 Logger.error(error, "ModDragDrop:extractArchive");
                                 if (error.message?.includes("ALREADY_EXISTS")) {
                                     const folderName = error.message.split(":")[1];
-                                    return `이미 존재하는 폴더입니다: ${folderName}`;
+                                    return t("page.mod.drag_drop.already_exists_folder", {
+                                        folderName,
+                                    });
                                 }
-                                return `${file.name} 압축 해제 실패`;
+                                return t("page.mod.drag_drop.extract.error", {
+                                    fileName: file.name,
+                                });
                             },
                         },
                     );
                 } else if (isDir || (allowImages && isImg)) {
                     toast.promise(window.api.invoke("mod:copyFolder", filePath, targetPath), {
-                        loading: `${file.name} 처리 중...`,
+                        loading: t("page.mod.drag_drop.copy.loading", {
+                            fileName: file.name,
+                        }),
                         success: () => {
                             queryClient.invalidateQueries({
                                 queryKey: ["characters", game],
@@ -229,21 +245,27 @@ export function useModDragDrop(
                             queryClient.invalidateQueries({
                                 queryKey: ["modGroup", currentSelectedGroup?.path],
                             });
-                            return `${file.name} 추가 완료`;
+                            return t("page.mod.drag_drop.copy.success", {
+                                fileName: file.name,
+                            });
                         },
                         error: (error) => {
                             Logger.error(error, "ModDragDrop:copyFolder");
                             if (error.message?.includes("ALREADY_EXISTS")) {
                                 const folderName = error.message.split(":")[1];
-                                return `이미 존재하는 항목입니다: ${folderName}`;
+                                return t("page.mod.drag_drop.already_exists_item", {
+                                    folderName,
+                                });
                             }
-                            return `${file.name} 추가 실패`;
+                            return t("page.mod.drag_drop.copy.error", {
+                                fileName: file.name,
+                            });
                         },
                     });
                 }
             } catch (error) {
                 Logger.error(error, "ModDragDrop:handleDrop");
-                toast.error("파일 처리 중 오류가 발생했습니다.");
+                toast.error(t("page.mod.drag_drop.processing_error"));
             }
         }
     };
@@ -256,7 +278,7 @@ export function useModDragDrop(
         setIsDragging(false);
 
         if (!groupPath) {
-            toast.error("그룹 경로가 설정되지 않았습니다.");
+            toast.error(t("page.mod.drag_drop.group_path_not_set"));
             return;
         }
 
