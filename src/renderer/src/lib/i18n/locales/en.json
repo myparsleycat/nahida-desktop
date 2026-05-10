@@ -216,6 +216,26 @@
         "unpersist-subgroups": "Unpersist subgroups",
         "persist-subgroups": "Persist subgroups"
       },
+      "drag_drop": {
+        "target_path_not_set": "Target path is not set.",
+        "group_path_not_set": "Group path is not set.",
+        "file_path_unavailable": "Unable to resolve the file path.",
+        "unsupported_file_with_images": "{{fileName}} is not a supported file type. (Only archives, folders, and image files are allowed.)",
+        "unsupported_file_archive_only": "{{fileName}} is not a supported file type. (Only archives or folders are allowed.)",
+        "already_exists_folder": "Folder already exists: {{folderName}}",
+        "already_exists_item": "Item already exists: {{folderName}}",
+        "processing_error": "An error occurred while processing the file.",
+        "extract": {
+          "loading": "Extracting {{fileName}}...",
+          "success": "Extracted {{fileName}}.",
+          "error": "Failed to extract {{fileName}}."
+        },
+        "copy": {
+          "loading": "Processing {{fileName}}...",
+          "success": "Added {{fileName}}.",
+          "error": "Failed to add {{fileName}}."
+        }
+      },
       "dialog": {
         "extract_archive_path": {
           "title": "Choose extraction path",
@@ -441,6 +461,7 @@
     },
     "gamebanana": {
       "title": "GameBanana",
+      "back": "Back",
       "auth": {
         "checking_title": "Checking your GameBanana login",
         "checking_description": "Verifying the saved login cookie and reopening login if needed.",
@@ -733,15 +754,26 @@
           "texture": "Texture",
           "renderer": "Renderer",
           "rendering": "Rendering",
+          "misc": "Misc",
           "rotate": "Rotate",
           "reset": "Reset",
           "toggle": "Toggle",
+          "capture_set_preview": "Capture and set preview",
           "save_to_ini": "Save to INI"
+        },
+        "dialog": {
+          "overwrite_preview": {
+            "title": "Replace preview",
+            "description": "\"{{name}}\" already has a preview. Continue to replace it with the current viewer capture?",
+            "confirm": "Replace preview"
+          }
         },
         "toast": {
           "save_to_ini_success": "Saved current toggle values to INI",
           "save_to_ini_no_changes": "No matching persist variables were found to save",
-          "save_to_ini_error": "Failed to save toggle values to INI"
+          "save_to_ini_error": "Failed to save toggle values to INI",
+          "capture_preview_success": "Saved the current viewer capture as preview.png",
+          "capture_preview_error": "Failed to save the current viewer capture as preview.png"
         },
         "rotate_actions": {
           "Left 90°": "Left 90°",

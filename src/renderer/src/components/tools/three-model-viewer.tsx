@@ -85,6 +85,8 @@ export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurface
       ref,
       () => ({
         captureCameraState: () => controllerRef.current?.captureCameraState() ?? null,
+        captureSquarePngDataUrl: async () =>
+          (await controllerRef.current?.captureSquarePngDataUrl()) ?? null,
         restoreCameraState: (state, options) =>
           controllerRef.current?.restoreCameraState(state, options),
         setDoubleSided: (doubleSided) => controllerRef.current?.setDoubleSided(doubleSided),
@@ -126,7 +128,7 @@ export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurface
           style={{ background: "transparent" }}
           camera={{ far: 1000, fov: 45, near: 0.01, position: DEFAULT_CAMERA_POSITION.toArray() }}
           dpr={window.devicePixelRatio}
-          gl={{ alpha: true, antialias: true }}
+          gl={{ alpha: true, antialias: true, preserveDrawingBuffer: true }}
         >
           <ambientLight intensity={lighting.ambient} />
           {lighting.hemisphere > 0 ? (
@@ -357,6 +359,10 @@ function ThreeModelScene({
     controllerRef.current = {
       captureCameraState: () =>
         captureThreeCameraState(camera, controlsRef.current, groupRef.current),
+      captureSquarePngDataUrl: async () => {
+        const dataUrl = await captureSquareCanvasPngDataUrl(gl.domElement, invalidate);
+        return dataUrl;
+      },
       restoreCameraState: (state, options) => {
         restoreThreeCameraState(camera, controlsRef.current, groupRef.current, state, options);
         desiredCameraDistanceRef.current = getPerspectiveCameraDistance(
@@ -931,6 +937,49 @@ function collectStandardMaterials(root: Object3D): MeshStandardMaterial[] {
     }
   });
   return materials;
+}
+
+async function captureSquareCanvasPngDataUrl(
+  sourceCanvas: HTMLCanvasElement | null,
+  invalidate?: () => void,
+): Promise<string | null> {
+  if (!sourceCanvas) {
+    return null;
+  }
+
+  invalidate?.();
+  await waitForNextFrame();
+
+  const width = sourceCanvas.width;
+  const height = sourceCanvas.height;
+  const size = Math.min(width, height);
+  if (!width || !height || !size) {
+    return null;
+  }
+
+  const cropX = Math.floor((width - size) / 2);
+  const cropY = Math.floor((height - size) / 2);
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return null;
+  }
+
+  try {
+    context.drawImage(sourceCanvas, cropX, cropY, size, size, 0, 0, size, size);
+    return canvas.toDataURL("image/png");
+  } catch {
+    return null;
+  }
+}
+
+function waitForNextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
 }
 
 function getPerspectiveCameraDistance(

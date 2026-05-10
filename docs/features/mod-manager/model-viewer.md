@@ -44,6 +44,16 @@ In the list layout, right-click the mod and select `Model Viewer`.
 - **Toggle**: Saves or resets the current toggle state.
   - `Save to INI`: Applies the current state selected in the toggle viewer to the INI file.
   - `Reset`: Restores toggle states to the default values from the INI file.
+- **Misc**: Provides extra actions for the current mod.
+  - `Capture and set preview`: Captures the current visible viewer image as a centered 1:1 square PNG and saves it as `preview.png` in the current mod folder.
+
+## Capture a Preview from the Viewer
+
+If you want to use the current viewer image as the mod preview, open `Misc` → `Capture and set preview`.
+
+The viewer captures only the active 3D viewport. The menu bar and the toggle panel on the right are not included in the image.
+
+If the mod already has a `preview.*` file, the viewer asks for confirmation before replacing it with the new `preview.png`.
 
 ## Toggle Viewer on the Right
 

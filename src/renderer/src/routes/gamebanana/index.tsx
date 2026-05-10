@@ -194,6 +194,25 @@ function RouteComponent() {
     void window.api.invoke("util:openExternal", currentProfileUrl);
   };
 
+  const canGoBack = isViewingMod || hasCategoryContext;
+  const handleGoBack = () => {
+    if (isViewingMod) {
+      clearSelectedMod();
+      return;
+    }
+
+    if (!hasCategoryContext) {
+      return;
+    }
+
+    if (resolvedCategoryBreadcrumbs.length > 1) {
+      selectBreadcrumbCategory(resolvedCategoryBreadcrumbs.length - 2);
+      return;
+    }
+
+    resetToGameHome();
+  };
+
   const handleRetryAuth = () => {
     setAuthStatus("checking");
     setAuthErrorCode(null);
@@ -388,6 +407,8 @@ function RouteComponent() {
               onOpenGameProfile={handleOpenGameProfile}
               isLoggingOut={isLoggingOut}
               onLogout={handleLogout}
+              canGoBack={canGoBack}
+              onGoBack={handleGoBack}
               onBackToCategory={clearSelectedMod}
               onSelectBreadcrumbCategory={selectBreadcrumbCategory}
               canOpenProfile={Boolean(currentProfileUrl)}

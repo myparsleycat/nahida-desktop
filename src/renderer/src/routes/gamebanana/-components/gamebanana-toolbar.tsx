@@ -16,7 +16,7 @@ import {
   MenubarRadioItem,
   MenubarTrigger,
 } from "@renderer/components/ui/menubar";
-import { ExternalLinkIcon, LogOutIcon } from "lucide-react";
+import { ArrowLeftIcon, ExternalLinkIcon, LogOutIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { GameBananaBreadcrumbItem, GameOption } from "../-types";
 
@@ -30,10 +30,12 @@ export function GameBananaToolbar({
   isGamesLoading,
   gamesError,
   canOpenProfile,
+  canGoBack,
   isLoggingOut,
   onSelectGame,
   onOpenGameProfile,
   onLogout,
+  onGoBack,
   onBackToCategory,
   onSelectBreadcrumbCategory,
   onResetToGameHome,
@@ -47,10 +49,12 @@ export function GameBananaToolbar({
   isGamesLoading: boolean;
   gamesError: boolean;
   canOpenProfile: boolean;
+  canGoBack: boolean;
   isLoggingOut: boolean;
   onSelectGame: (game: GameOption["key"]) => void;
   onOpenGameProfile: () => void;
   onLogout: () => void;
+  onGoBack: () => void;
   onBackToCategory: () => void;
   onSelectBreadcrumbCategory: (index: number) => void;
   onResetToGameHome: () => void;
@@ -60,6 +64,13 @@ export function GameBananaToolbar({
   return (
     <div className="flex flex-col gap-3 lg:flex-row  justify-between">
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
+        {canGoBack && (
+          <Button variant="ghost" size="sm" className="h-9 gap-1 px-2" onClick={onGoBack}>
+            <ArrowLeftIcon className="size-4" />
+            {t("page.gamebanana.back")}
+          </Button>
+        )}
+
         <Menubar className="h-9 w-fit min-w-0">
           <MenubarMenu>
             <MenubarTrigger className="gap-2 px-3">

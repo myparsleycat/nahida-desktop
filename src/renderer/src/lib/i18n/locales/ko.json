@@ -195,6 +195,26 @@
         "unpersist-subgroups": "서브폴더 지정 해제",
         "persist-subgroups": "서브폴더로 지정"
       },
+      "drag_drop": {
+        "target_path_not_set": "대상 경로가 설정되지 않았습니다.",
+        "group_path_not_set": "그룹 경로가 설정되지 않았습니다.",
+        "file_path_unavailable": "파일 경로를 확인할 수 없습니다.",
+        "unsupported_file_with_images": "{{fileName}}은(는) 지원하는 파일 형식이 아닙니다. (압축 파일, 폴더, 이미지 파일만 가능)",
+        "unsupported_file_archive_only": "{{fileName}}은(는) 지원하는 파일 형식이 아닙니다. (압축 파일 또는 폴더만 가능)",
+        "already_exists_folder": "이미 존재하는 폴더입니다: {{folderName}}",
+        "already_exists_item": "이미 존재하는 항목입니다: {{folderName}}",
+        "processing_error": "파일 처리 중 오류가 발생했습니다.",
+        "extract": {
+          "loading": "{{fileName}} 압축 해제 중...",
+          "success": "{{fileName}} 압축 해제 완료",
+          "error": "{{fileName}} 압축 해제 실패"
+        },
+        "copy": {
+          "loading": "{{fileName}} 처리 중...",
+          "success": "{{fileName}} 추가 완료",
+          "error": "{{fileName}} 추가 실패"
+        }
+      },
       "dialog": {
         "extract_archive_path": {
           "title": "압축 해제 경로 선택",
@@ -421,6 +441,7 @@
     },
     "gamebanana": {
       "title": "GameBanana",
+      "back": "뒤로",
       "auth": {
         "checking_title": "GameBanana 로그인 상태를 확인하는 중입니다",
         "checking_description": "저장된 로그인 쿠키를 검사하고 필요하면 다시 로그인합니다.",
@@ -715,15 +736,26 @@
           "texture": "텍스처",
           "renderer": "렌더러",
           "rendering": "렌더링",
+          "misc": "기타",
           "rotate": "회전",
           "reset": "초기화",
           "toggle": "토글",
+          "capture_set_preview": "캡처 후 프리뷰 지정",
           "save_to_ini": "INI에 저장"
+        },
+        "dialog": {
+          "overwrite_preview": {
+            "title": "프리뷰 교체",
+            "description": "\"{{name}}\"에 이미 프리뷰가 있습니다. 현재 뷰어 캡처로 교체할까요?",
+            "confirm": "프리뷰 교체"
+          }
         },
         "toast": {
           "save_to_ini_success": "현재 토글 상태를 INI에 저장했습니다.",
           "save_to_ini_no_changes": "저장할 persist 변수를 찾지 못했습니다.",
-          "save_to_ini_error": "INI 저장에 실패했습니다."
+          "save_to_ini_error": "INI 저장에 실패했습니다.",
+          "capture_preview_success": "현재 뷰어 캡처를 preview.png로 저장했습니다.",
+          "capture_preview_error": "현재 뷰어 캡처를 preview.png로 저장하지 못했습니다."
         },
         "rotate_actions": {
           "Left 90°": "왼쪽으로 90°",
