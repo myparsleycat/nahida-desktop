@@ -968,8 +968,12 @@ async function captureSquareCanvasPngDataUrl(
     return null;
   }
 
-  context.drawImage(sourceCanvas, cropX, cropY, size, size, 0, 0, size, size);
-  return canvas.toDataURL("image/png");
+  try {
+    context.drawImage(sourceCanvas, cropX, cropY, size, size, 0, 0, size, size);
+    return canvas.toDataURL("image/png");
+  } catch {
+    return null;
+  }
 }
 
 function waitForNextFrame(): Promise<void> {
