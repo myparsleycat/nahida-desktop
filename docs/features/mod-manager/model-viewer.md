@@ -64,3 +64,9 @@ If the mod uses the in-game toggle viewer, related UI assets may also be display
 
 ![Image](/features/mod-manager/model-viewer/4.gif)
 If the mod uses sliders, interactive sliders are also shown in the toggle viewer.
+
+## Animation Playback
+
+If the mod includes animations, an animation playback panel will appear at the bottom of the viewer.
+
+You can use the playback controls to play, pause, or reset the animation, and drag the slider to scrub through specific frames.

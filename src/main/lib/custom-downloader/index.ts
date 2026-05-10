@@ -1,18 +1,27 @@
-import { open } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
-import { Readable, Transform } from "node:stream";
-import { pipeline } from "node:stream/promises";
-import type { ReadableStream } from "node:stream/web";
-import type { ArchiveExtractPathMode, ResolvedArchiveExtractPathMode } from "@shared/mod";
+import type { ResolvedArchiveExtractPathMode } from "@shared/mod";
 import type { TransferData } from "@shared/types";
 import { throttle } from "es-toolkit";
-import { fileTypeFromFile } from "file-type";
 import fse from "fs-extra";
 import ky from "ky";
 import { nanoid } from "nanoid";
-import type { NahidaDesktop } from "..";
-import { ParallelDownloader } from "./parallel-downloader";
+import type { NahidaDesktop } from "../..";
+import { ParallelDownloader } from "../parallel-downloader";
+import { downloadFile } from "./download-file";
+import {
+    isArchiveByResponseOrContent,
+    isHtmlContentType,
+    isHtmlResponseOrContent,
+} from "./file-detection";
+import { applySelectedExtractedName, finalizeStagedDownload } from "./file-operations";
+import {
+    createSiblingTempPath,
+    getDownloadTempExtension,
+    getPreviewTargetDir,
+    getStagingPaths,
+    parseContentLength,
+    parseDownloadFileName,
+} from "./utils";
 
 export class CustomDownloader {
     public desktop: NahidaDesktop;
@@ -34,96 +43,8 @@ export class CustomDownloader {
         });
     }
 
-    private async downloadFile(props: {
-        url: string;
-        savePath: string;
-        fileSize?: number;
-        signal?: AbortSignal;
-        onProgress?: (bytes: number) => void;
-    }) {
-        const { url, savePath, fileSize, signal, onProgress } = props;
-        const supportsRange = await this.downloader.checkRangeSupport(url);
-
-        if (supportsRange && fileSize) {
-            await this.downloader.download({
-                url,
-                savePath,
-                fileSize,
-                signal,
-                onProgress(bytes) {
-                    onProgress?.(bytes);
-                },
-                maxChunks: 8,
-            });
-        } else {
-            const fileStream = fse.createWriteStream(savePath);
-
-            const resp = await ky.get(url, {
-                signal,
-                headers: await this.desktop.httpService.getHeaders(url),
-                // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
-                dispatcher: await this.desktop.httpService.getAgent(),
-            });
-            if (!resp.ok) {
-                throw new Error(`Failed to download file: ${resp.statusText}`);
-            }
-
-            try {
-                if (!resp.body) {
-                    throw new Error("No response body");
-                }
-                const source = Readable.fromWeb(resp.body as unknown as ReadableStream);
-                const progressStream = new Transform({
-                    transform(chunk: Buffer, _encoding, callback) {
-                        onProgress?.(chunk.byteLength);
-                        callback(null, chunk);
-                    },
-                });
-                await pipeline(source, progressStream, fileStream, { signal });
-            } catch (err) {
-                fileStream.destroy();
-                await fse.remove(savePath).catch(() => {});
-                throw err;
-            }
-        }
-    }
-
-    private parseContentLength(contentLength?: string | null) {
-        if (!contentLength) {
-            return undefined;
-        }
-
-        const size = Number(contentLength);
-        return Number.isFinite(size) && size > 0 ? size : undefined;
-    }
-
-    private parseDownloadFileName(url: string, contentDisposition?: string | null) {
-        const fileNameFromDisposition = contentDisposition
-            ?.match(/filename\*\s*=\s*(?:UTF-8''|')?([^;]+)/i)?.[1]
-            ?.trim()
-            ?.replace(/^"(.*)"$/, "$1");
-
-        if (fileNameFromDisposition) {
-            return this.desktop.lib.fs.sanitizeWindowsFilename(
-                decodeURIComponent(fileNameFromDisposition),
-            );
-        }
-
-        const fileNamePlain = contentDisposition
-            ?.match(/filename\s*=\s*("?)([^";]+)\1/i)?.[2]
-            ?.trim();
-
-        if (fileNamePlain) {
-            return this.desktop.lib.fs.sanitizeWindowsFilename(fileNamePlain);
-        }
-
-        try {
-            const pathname = new URL(url).pathname;
-            const rawFileName = pathname.split("/").pop() || "download";
-            return this.desktop.lib.fs.sanitizeWindowsFilename(decodeURIComponent(rawFileName));
-        } catch {
-            return "download";
-        }
+    private sanitize(name: string) {
+        return this.desktop.lib.fs.sanitizeWindowsFilename(name);
     }
 
     private async promptForArchiveExtractMode(
@@ -177,8 +98,7 @@ export class CustomDownloader {
     private async resolveArchiveExtractMode(
         archivePath: string,
     ): Promise<ResolvedArchiveExtractPathMode> {
-        const extractMode: ArchiveExtractPathMode =
-            await this.desktop.setting.mod.getArchiveExtractPathMode();
+        const extractMode = await this.desktop.setting.mod.getArchiveExtractPathMode();
 
         if (extractMode !== "ask_every_time") {
             return extractMode;
@@ -229,152 +149,6 @@ export class CustomDownloader {
         return extractedPath;
     }
 
-    private createSiblingTempPath(targetPath: string, suffix: string) {
-        const parentPath = path.dirname(targetPath);
-        const baseName = path.basename(targetPath);
-
-        return path.join(parentPath, `${baseName}.${suffix}-${nanoid()}`);
-    }
-
-    private getDownloadTempExtension(fileName: string) {
-        const archiveExt = fileName.match(/\.(tar\.gz|tar\.bz2|tar\.xz|tgz|tbz2|txz)$/i)?.[0];
-        return archiveExt ?? (path.extname(fileName) || ".download");
-    }
-
-    private isArchiveFileName(fileName: string) {
-        return /\.(zip|7z|rar)$/i.test(fileName);
-    }
-
-    private async isArchiveByResponseOrContent(props: {
-        headers?: Headers;
-        originalFileName?: string;
-        filePath: string;
-    }) {
-        const { headers, originalFileName, filePath } = props;
-        const archiveExts = new Set(["zip", "7z", "rar"]);
-        const archiveMimes = new Set([
-            "application/zip",
-            "application/x-zip-compressed",
-            "application/x-7z-compressed",
-            "application/vnd.rar",
-            "application/x-rar-compressed",
-        ]);
-
-        if (originalFileName && this.isArchiveFileName(originalFileName)) {
-            return true;
-        }
-
-        const contentDisposition = headers?.get("Content-Disposition");
-        if (contentDisposition && this.isArchiveFileName(contentDisposition)) {
-            return true;
-        }
-
-        const contentType = headers?.get("Content-Type")?.split(";")[0]?.trim().toLowerCase();
-        if (contentType && archiveMimes.has(contentType)) {
-            return true;
-        }
-
-        const fileType = await fileTypeFromFile(filePath);
-        return !!fileType && archiveExts.has(fileType.ext);
-    }
-
-    private isHtmlContentType(headers?: Headers) {
-        const contentType = headers?.get("Content-Type")?.split(";")[0]?.trim().toLowerCase();
-        return contentType === "text/html" || contentType === "application/xhtml+xml";
-    }
-
-    private async isHtmlResponseOrContent(props: { headers?: Headers; filePath: string }) {
-        const { headers, filePath } = props;
-
-        if (this.isHtmlContentType(headers)) {
-            return true;
-        }
-
-        const fd = await open(filePath, "r");
-
-        try {
-            const buffer = Buffer.alloc(4096);
-            const { bytesRead } = await fd.read(buffer, 0, buffer.length, 0);
-            const snippet = buffer.subarray(0, bytesRead).toString("utf8").trimStart();
-            return /^(<!doctype\s+html\b|<html\b)/i.test(snippet);
-        } finally {
-            await fd.close();
-        }
-    }
-
-    private async moveWithOverwrite(sourcePath: string, destinationPath: string) {
-        if (await fse.pathExists(destinationPath)) {
-            await fse.remove(destinationPath);
-        }
-
-        await fse.move(sourcePath, destinationPath, { overwrite: true });
-    }
-
-    private getStagingPaths(fileName: string) {
-        const stagingRoot = path.join(os.tmpdir(), "nahida-desktop-downloads");
-        const stagingPath = path.join(
-            stagingRoot,
-            `${this.desktop.lib.fs.sanitizeWindowsFilename(fileName)}.staging-${nanoid()}`,
-        );
-        const stagedDownloadPath = path.join(stagingPath, fileName);
-
-        return {
-            stagingPath,
-            stagedDownloadPath,
-        };
-    }
-
-    private getPreviewTargetDir(stagedPath: string) {
-        return path.extname(stagedPath) ? path.dirname(stagedPath) : stagedPath;
-    }
-
-    private getArchiveRootName(fileName: string) {
-        const sanitized = this.desktop.lib.fs.sanitizeWindowsFilename(fileName);
-        const withoutArchiveExt = sanitized.replace(/\.(zip|7z|rar)$/i, "");
-        return withoutArchiveExt || sanitized;
-    }
-
-    private async applySelectedExtractedName(props: {
-        extractedPath: string;
-        stagingPath: string;
-        requestedFileName: string;
-        originalSuggestedFileName: string;
-    }) {
-        const { extractedPath, stagingPath, requestedFileName, originalSuggestedFileName } = props;
-
-        if (requestedFileName === originalSuggestedFileName || extractedPath === stagingPath) {
-            return extractedPath;
-        }
-
-        const stats = await fse.stat(extractedPath);
-        const desiredName = stats.isDirectory()
-            ? this.getArchiveRootName(requestedFileName)
-            : requestedFileName;
-
-        if (!desiredName || path.basename(extractedPath) === desiredName) {
-            return extractedPath;
-        }
-
-        const renamedPath = path.join(path.dirname(extractedPath), desiredName);
-        await this.moveWithOverwrite(extractedPath, renamedPath);
-        return renamedPath;
-    }
-
-    private async finalizeStagedDownload(stagingPath: string, destinationDir: string) {
-        await fse.ensureDir(destinationDir);
-
-        const stagedEntries = await fse.readdir(stagingPath);
-        if (stagedEntries.length === 0) {
-            throw new Error("Downloaded file did not produce staged content.");
-        }
-
-        for (const entry of stagedEntries) {
-            const sourcePath = path.join(stagingPath, entry);
-            const destinationPath = path.join(destinationDir, entry);
-            await this.moveWithOverwrite(sourcePath, destinationPath);
-        }
-    }
-
     public async downloadToGroup(url: string, groupPath: string): Promise<"started"> {
         const trimmedUrl = url.trim();
 
@@ -404,21 +178,22 @@ export class CustomDownloader {
         });
 
         const realFileUrl = resp.ok ? resp.url : trimmedUrl;
-        const fileSize = this.parseContentLength(resp.headers.get("Content-Length"));
-        const suggestedFileName = this.parseDownloadFileName(
+        const fileSize = parseContentLength(resp.headers.get("Content-Length"));
+        const suggestedFileName = parseDownloadFileName(
             realFileUrl,
+            this.sanitize.bind(this),
             resp.headers.get("Content-Disposition"),
         );
 
-        if (this.isHtmlContentType(resp.headers)) {
+        if (isHtmlContentType(resp.headers)) {
             throw new Error("DOWNLOAD_URL_HTML_PAGE");
         }
 
-        const savePath = this.createSiblingTempPath(
+        const savePath = createSiblingTempPath(
             groupPath,
-            `download${this.getDownloadTempExtension(suggestedFileName)}`,
+            `download${getDownloadTempExtension(suggestedFileName)}`,
         );
-        const stagingPath = this.createSiblingTempPath(groupPath, "staging");
+        const stagingPath = createSiblingTempPath(groupPath, "staging");
 
         const pid = nanoid();
         const abortController = new AbortController();
@@ -464,7 +239,7 @@ export class CustomDownloader {
                     });
                 }, 100);
 
-                await this.downloadFile({
+                await downloadFile({
                     url: realFileUrl,
                     savePath,
                     fileSize,
@@ -473,13 +248,15 @@ export class CustomDownloader {
                         downloadedBytes += bytes;
                         throttledUpdate(downloadedBytes);
                     },
+                    downloader: this.downloader,
+                    httpService: this.desktop.httpService,
                 });
 
                 throttledUpdate.flush();
 
                 if (abortController.signal.aborted) throw new Error("Aborted");
                 if (
-                    await this.isHtmlResponseOrContent({
+                    await isHtmlResponseOrContent({
                         headers: resp.headers,
                         filePath: savePath,
                     })
@@ -488,7 +265,7 @@ export class CustomDownloader {
                 }
 
                 await fse.ensureDir(stagingPath);
-                const shouldExtract = await this.isArchiveByResponseOrContent({
+                const shouldExtract = await isArchiveByResponseOrContent({
                     headers: resp.headers,
                     originalFileName: suggestedFileName,
                     filePath: savePath,
@@ -507,7 +284,7 @@ export class CustomDownloader {
                     throw new Error("Downloaded file did not produce staged content.");
                 }
 
-                await this.finalizeStagedDownload(stagingPath, groupPath);
+                await finalizeStagedDownload(stagingPath, groupPath);
 
                 this.desktop.service.transfer.markFileCompleted(pid, pid);
                 this.desktop.service.transfer.updateTransfer(pid, {
@@ -550,7 +327,6 @@ export class CustomDownloader {
         previewUrl?: string | null;
     }): Promise<"started" | "canceled"> {
         const { title: _title, fileUrl, previewUrl } = props;
-        // const title = this.desktop.lib.fs.sanitizeWindowsFilename(_title);
 
         const respPromise = ky.head(fileUrl, {
             redirect: "follow",
@@ -567,9 +343,10 @@ export class CustomDownloader {
         }
 
         const realFileUrl = resp.url;
-        const fileSize = this.parseContentLength(resp.headers.get("Content-Length"));
-        const suggestedFileName = this.parseDownloadFileName(
+        const fileSize = parseContentLength(resp.headers.get("Content-Length"));
+        const suggestedFileName = parseDownloadFileName(
             realFileUrl,
+            this.sanitize.bind(this),
             resp.headers.get("Content-Disposition"),
         );
 
@@ -579,7 +356,10 @@ export class CustomDownloader {
         const destinationPath = result.path;
 
         const finalFileName = result.fileName || suggestedFileName;
-        const { stagingPath, stagedDownloadPath } = this.getStagingPaths(finalFileName);
+        const { stagingPath, stagedDownloadPath } = getStagingPaths(
+            finalFileName,
+            this.sanitize.bind(this),
+        );
 
         const pid = nanoid();
         const abortController = new AbortController();
@@ -626,7 +406,7 @@ export class CustomDownloader {
                     });
                 }, 100);
 
-                await this.downloadFile({
+                await downloadFile({
                     url: realFileUrl,
                     savePath: stagedDownloadPath,
                     fileSize,
@@ -635,13 +415,15 @@ export class CustomDownloader {
                         downloadedBytes += bytes;
                         throttledUpdate(downloadedBytes);
                     },
+                    downloader: this.downloader,
+                    httpService: this.desktop.httpService,
                 });
 
                 throttledUpdate.flush();
 
                 if (abortController.signal.aborted) throw new Error("Aborted");
 
-                const shouldExtract = await this.isArchiveByResponseOrContent({
+                const shouldExtract = await isArchiveByResponseOrContent({
                     headers: resp.headers,
                     originalFileName: suggestedFileName,
                     filePath: stagedDownloadPath,
@@ -650,26 +432,29 @@ export class CustomDownloader {
                     ? await this.extractGBArchive(stagedDownloadPath)
                     : stagedDownloadPath;
                 const finalStagedPath = shouldExtract
-                    ? await this.applySelectedExtractedName({
+                    ? await applySelectedExtractedName({
                           extractedPath: stagedPath,
                           stagingPath,
                           requestedFileName: finalFileName,
                           originalSuggestedFileName: suggestedFileName,
+                          sanitizeWindowsFilename: this.sanitize.bind(this),
                       })
                     : stagedPath;
 
                 if (previewUrl) {
                     const previewSavePath = path.join(
-                        this.getPreviewTargetDir(finalStagedPath),
+                        getPreviewTargetDir(finalStagedPath),
                         "preview.jpg",
                     );
-                    await this.downloadFile({
+                    await downloadFile({
                         url: previewUrl,
                         savePath: previewSavePath,
+                        downloader: this.downloader,
+                        httpService: this.desktop.httpService,
                     });
                 }
 
-                await this.finalizeStagedDownload(stagingPath, destinationPath);
+                await finalizeStagedDownload(stagingPath, destinationPath);
 
                 this.desktop.service.transfer.markFileCompleted(pid, pid);
 
@@ -711,7 +496,7 @@ export class CustomDownloader {
         title: string;
     }): Promise<"started" | "canceled"> {
         const { title: _title, fileUrl } = props;
-        const title = this.desktop.lib.fs.sanitizeWindowsFilename(_title);
+        const title = this.sanitize(_title);
         const result = await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(title);
 
         if (!result.path) {
@@ -731,8 +516,11 @@ export class CustomDownloader {
         }
 
         const finalFileName = result.fileName || title;
-        const { stagingPath, stagedDownloadPath } = this.getStagingPaths(finalFileName);
-        const fileSize = this.parseContentLength(resp.headers.get("Content-Length"));
+        const { stagingPath, stagedDownloadPath } = getStagingPaths(
+            finalFileName,
+            this.sanitize.bind(this),
+        );
+        const fileSize = parseContentLength(resp.headers.get("Content-Length"));
 
         const pid = nanoid();
         const abortController = new AbortController();
@@ -779,7 +567,7 @@ export class CustomDownloader {
                     });
                 }, 100);
 
-                await this.downloadFile({
+                await downloadFile({
                     url: fileUrl,
                     savePath: stagedDownloadPath,
                     fileSize,
@@ -788,16 +576,19 @@ export class CustomDownloader {
                         downloadedBytes += bytes;
                         throttledUpdate(downloadedBytes);
                     },
+                    downloader: this.downloader,
+                    httpService: this.desktop.httpService,
                 });
 
                 throttledUpdate.flush();
 
                 if (abortController.signal.aborted) throw new Error("Aborted");
 
-                const shouldExtract = await this.isArchiveByResponseOrContent({
+                const shouldExtract = await isArchiveByResponseOrContent({
                     headers: resp.headers,
-                    originalFileName: this.parseDownloadFileName(
+                    originalFileName: parseDownloadFileName(
                         resp.url || fileUrl,
+                        this.sanitize.bind(this),
                         resp.headers.get("Content-Disposition"),
                     ),
                     filePath: stagedDownloadPath,
@@ -808,16 +599,17 @@ export class CustomDownloader {
                         stagedDownloadPath,
                         stagingPath,
                     );
-                    await this.applySelectedExtractedName({
+                    await applySelectedExtractedName({
                         extractedPath,
                         stagingPath,
                         requestedFileName: finalFileName,
                         originalSuggestedFileName: title,
+                        sanitizeWindowsFilename: this.sanitize.bind(this),
                     });
                     await fse.rm(stagedDownloadPath, { force: true });
                 }
 
-                await this.finalizeStagedDownload(stagingPath, destinationPath);
+                await finalizeStagedDownload(stagingPath, destinationPath);
 
                 this.desktop.service.transfer.markFileCompleted(pid, pid);
 

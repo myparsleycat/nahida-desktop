@@ -33,6 +33,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   formatOrientation,
+  type ModelViewerAnimationClip,
   type ModelViewerCameraState,
   type ModelViewerHandle,
   type ModelViewerRealtimeShapeKey,
@@ -83,6 +84,7 @@ type ModelViewerVariantManifest = {
     slotActivePath?: string;
   };
   shapeKeys?: ModelViewerRealtimeShapeKey[];
+  animations?: ModelViewerAnimationClip[];
   states: Array<{
     key: string;
     values: Record<string, VariableStateValue>;
@@ -124,6 +126,9 @@ export function ModelViewerDialog({
   const { t } = useTranslation();
   const [activeState, setActiveState] = useState<Record<string, VariableStateValue>>({});
   const [manifest, setManifest] = useState<ModelViewerVariantManifest | null>(null);
+  const [activeAnimationId, setActiveAnimationId] = useState<string | null>(null);
+  const [animationFrameIndex, setAnimationFrameIndex] = useState(0);
+  const [animationPlaying, setAnimationPlaying] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
   const [viewerUrls, setViewerUrls] = useState<[string, string]>(["", ""]);
   const [activeViewerIndex, setActiveViewerIndex] = useState<0 | 1>(0);
@@ -239,6 +244,9 @@ export function ModelViewerDialog({
       resetViewerSession({ resetOrientation: shouldResetOrientation });
       setActiveState({});
       setManifest(null);
+      setActiveAnimationId(null);
+      setAnimationFrameIndex(0);
+      setAnimationPlaying(false);
       setViewerUrl(0, "");
       setViewerUrl(1, "");
       return;
@@ -248,6 +256,9 @@ export function ModelViewerDialog({
       resetViewerSession({ resetOrientation: shouldResetOrientation });
       setActiveState({});
       setManifest(null);
+      setActiveAnimationId(null);
+      setAnimationFrameIndex(0);
+      setAnimationPlaying(false);
       setViewerUrl(0, source.glbPath);
       setViewerUrl(1, "");
       return;
@@ -256,9 +267,51 @@ export function ModelViewerDialog({
     resetViewerSession({ resetOrientation: shouldResetOrientation });
     setActiveState(source.manifest.defaultState);
     setManifest(source.manifest);
+    setActiveAnimationId(source.manifest.animations?.[0]?.id ?? null);
+    setAnimationFrameIndex(0);
+    setAnimationPlaying(false);
     setViewerUrl(0, source.activeGlbPath || source.defaultGlbPath);
     setViewerUrl(1, "");
   }, [source]);
+
+  const activeAnimation =
+    manifest?.animations?.find((animation) => animation.id === activeAnimationId) ??
+    manifest?.animations?.[0] ??
+    null;
+  const activeAnimationFrame = activeAnimation?.frames[animationFrameIndex] ?? null;
+  const animationVariableIds = new Set(activeAnimation?.variableIds ?? []);
+
+  useEffect(() => {
+    if (!activeAnimation) {
+      setAnimationFrameIndex(0);
+      setAnimationPlaying(false);
+      return;
+    }
+
+    setAnimationFrameIndex(0);
+    setAnimationPlaying(activeAnimation.frames.length > 1);
+  }, [activeAnimation]);
+
+  useEffect(() => {
+    if (!activeAnimation || !animationPlaying || activeAnimation.frames.length <= 1) {
+      return;
+    }
+
+    const intervalMs = 1000 / Math.max(activeAnimation.fps, 1);
+    const timer = window.setInterval(() => {
+      setAnimationFrameIndex((current) => {
+        const next = current + 1;
+        if (next < activeAnimation.frames.length) {
+          return next;
+        }
+        return activeAnimation.loop ? 0 : current;
+      });
+    }, intervalMs);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [activeAnimation, animationPlaying]);
 
   const updateThreeToneMapping = (value: ModelViewerThreeToneMapping) => {
     setThreeToneMapping(value);
@@ -502,9 +555,24 @@ export function ModelViewerDialog({
     }
   };
 
+  const handleAnimationTogglePlayback = () => {
+    if (!activeAnimation || activeAnimation.frames.length <= 1) {
+      return;
+    }
+
+    setAnimationPlaying((current) => !current);
+  };
+
+  const handleAnimationReset = () => {
+    setAnimationFrameIndex(0);
+    setAnimationPlaying(false);
+  };
+
   const variables = manifest?.variables ?? [];
   const uiAssets = manifest?.uiAssets;
-  const visibleVariables = variables.filter((variable) => variable.values.length > 0);
+  const visibleVariables = variables.filter(
+    (variable) => variable.values.length > 0 && !animationVariableIds.has(variable.id),
+  );
   const tileVariables = visibleVariables.filter((variable) => variable.controlType !== "slider");
   const sliderVariables = visibleVariables.filter((variable) => variable.controlType === "slider");
   const tileBackgroundPath = uiAssets?.backgroundPath;
@@ -512,7 +580,11 @@ export function ModelViewerDialog({
   const slotHoverPath = uiAssets?.slotHoverPath;
   const slotActivePath = uiAssets?.slotActivePath;
   const shapeKeys = manifest?.shapeKeys;
-  const viewerVariantState = normalizeRealtimeShapeKeyState(activeState, variables, shapeKeys);
+  const viewerState = {
+    ...activeState,
+    ...(activeAnimationFrame?.values ?? {}),
+  };
+  const viewerVariantState = normalizeRealtimeShapeKeyState(viewerState, variables, shapeKeys);
   const hasVariantTileUi = Boolean(tileBackgroundPath) && tileVariables.length > 0;
   const hasVariantToggleUi = visibleVariables.length > 0;
   const showToggleViewer = Boolean(
@@ -855,6 +927,8 @@ export function ModelViewerDialog({
                       orientation={modelOrientation}
                       variantState={viewerVariantState}
                       shapeKeys={shapeKeys}
+                      animationClip={activeAnimation ?? undefined}
+                      animationFrame={animationFrameIndex}
                       threeToneMapping={threeToneMapping}
                       threeEnvironment={threeEnvironment}
                       threeExposure={threeExposure}
@@ -977,6 +1051,55 @@ export function ModelViewerDialog({
               </div>
             ) : null}
           </div>
+
+          {activeAnimation ? (
+            <div className="flex items-center gap-2 px-2">
+              <div className="min-w-0 w-36">
+                <div className="text-sm font-medium">{activeAnimation.label}</div>
+                <div className="whitespace-nowrap text-xs text-muted-foreground">
+                  {activeAnimation.fps} FPS · Frame{" "}
+                  {activeAnimationFrame?.index ?? activeAnimation.frameStart} /{" "}
+                  {activeAnimation.frameEnd}
+                </div>
+              </div>
+
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {activeAnimation.frameStart}
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={Math.max(activeAnimation.frames.length - 1, 0)}
+                  step={1}
+                  value={animationFrameIndex}
+                  className="w-full accent-primary"
+                  onChange={(event) => {
+                    setAnimationPlaying(false);
+                    setAnimationFrameIndex(Number(event.currentTarget.value));
+                  }}
+                />
+                <span className="text-right text-xs tabular-nums text-muted-foreground">
+                  {activeAnimation.frameEnd}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleAnimationTogglePlayback}
+                  disabled={activeAnimation.frames.length <= 1}
+                >
+                  {animationPlaying ? "Pause" : "Play"}
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={handleAnimationReset}>
+                  Reset
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
 

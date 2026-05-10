@@ -12,15 +12,17 @@ type IniExpressionState = {
     tokens: IniExpressionToken[];
     index: number;
     variables: Map<string, number | string>;
+    runtimeValues?: Record<string, number | string>;
 };
 
 export function evaluateIniCondition(
     expression: string,
     variables: Map<string, number | string>,
     normalizeKey: (value: string) => string,
+    runtimeValues?: Record<string, number | string>,
 ): boolean {
     try {
-        return Boolean(evaluateIniExpression(expression, variables, normalizeKey));
+        return Boolean(evaluateIniExpression(expression, variables, normalizeKey, runtimeValues));
     } catch {
         return false;
     }
@@ -30,9 +32,10 @@ export function evaluateIniNumericExpression(
     expression: string,
     variables: Map<string, number | string>,
     normalizeKey: (value: string) => string,
+    runtimeValues?: Record<string, number | string>,
 ): number | null {
     try {
-        const value = evaluateIniExpression(expression, variables, normalizeKey);
+        const value = evaluateIniExpression(expression, variables, normalizeKey, runtimeValues);
         return typeof value === "number" && Number.isFinite(value) ? value : null;
     } catch {
         return null;
@@ -43,9 +46,10 @@ function evaluateIniExpression(
     expression: string,
     variables: Map<string, number | string>,
     normalizeKey: (value: string) => string,
+    runtimeValues?: Record<string, number | string>,
 ): IniExpressionValue {
     const tokens = tokenizeIniExpression(expression);
-    const state: IniExpressionState = { tokens, index: 0, variables };
+    const state: IniExpressionState = { tokens, index: 0, variables, runtimeValues };
     const value = parseIniLogicalOr(state, normalizeKey);
     if (state.index !== tokens.length) {
         throw new Error(`Unexpected token in expression: ${expression}`);
@@ -106,7 +110,7 @@ function tokenizeIniExpression(expression: string): IniExpressionToken[] {
         }
 
         const twoCharOperator = expression.slice(index, index + 2);
-        if (["&&", "||", "==", "!=", "<=", ">="].includes(twoCharOperator)) {
+        if (["&&", "||", "==", "!=", "<=", ">=", "//"].includes(twoCharOperator)) {
             tokens.push({ type: "operator", value: twoCharOperator });
             index += 2;
             continue;
@@ -250,6 +254,10 @@ function parseIniMultiplicative(
             left = toIniNumber(left) / toIniNumber(parseIniUnary(state, normalizeKey));
             continue;
         }
+        if (matchIniOperator(state, "//")) {
+            left = Math.floor(toIniNumber(left) / toIniNumber(parseIniUnary(state, normalizeKey)));
+            continue;
+        }
         if (matchIniOperator(state, "%")) {
             left = toIniNumber(left) % toIniNumber(parseIniUnary(state, normalizeKey));
             continue;
@@ -288,6 +296,10 @@ function parseIniPrimary(
     }
 
     if (token.type === "identifier") {
+        const runtimeValue = state.runtimeValues?.[normalizeKey(token.value)];
+        if (runtimeValue !== undefined) {
+            return runtimeValue;
+        }
         return state.variables.get(normalizeKey(token.value)) ?? 0;
     }
 
