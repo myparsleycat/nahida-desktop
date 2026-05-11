@@ -394,4 +394,4 @@ export function normalizeSrgbConfidence(value: string): PreparedTexture["srgbCon
     return value === "srgb" || value === "linear" || value === "unknown" ? value : "unknown";
 }
 
-export { convertDdsToPng } from "@native/native-util";
+export { convertDdsToPng } from "@native/utils";

@@ -1,10 +1,10 @@
 {
-  "name": "native-mod",
+  "name": "mod-manager",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "napi": {
-    "binaryName": "native-mod",
+    "binaryName": "mod-manager",
     "targets": [
       "x86_64-pc-windows-msvc"
     ]

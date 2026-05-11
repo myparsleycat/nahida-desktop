@@ -3,7 +3,7 @@ import {
     generateToggleViewerArtifact,
     type GeneratedToggleViewerArtifact,
 } from "@main/lib/toggle-viewer-core";
-import { findFiles } from "@native/native-fs";
+import { findFiles } from "@native/fs";
 import fse from "fs-extra";
 
 interface WorkerRequestBase {

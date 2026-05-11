@@ -1,11 +1,11 @@
 {
   "cmake.ignoreCMakeListsMissing": true,
   "rust-analyzer.linkedProjects": [
-    "native/native-mod/Cargo.toml",
+    "native/mod-manager/Cargo.toml",
     "native/extractor/Cargo.toml",
-    "native/native-util/Cargo.toml",
+    "native/utils/Cargo.toml",
     "native/dll-injector/Cargo.toml",
-    "native/native-fs/Cargo.toml"
+    "native/fs/Cargo.toml"
   ],
   "oxc.fmt.configPath": ".oxfmtrc.json",
   "oxc.format.enable": true,

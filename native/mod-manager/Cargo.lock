@@ -315,7 +315,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "native-mod"
+name = "mod-manager"
 version = "0.1.0"
 dependencies = [
  "alphanumeric-sort",

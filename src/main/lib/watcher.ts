@@ -1,4 +1,4 @@
-import { NativeWatcher, type WatchEvent } from "@native/native-fs";
+import { NativeWatcher, type WatchEvent } from "@native/fs";
 import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "..";
 

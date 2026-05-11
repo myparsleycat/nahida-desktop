@@ -6,9 +6,9 @@ out
 *.log*
 *.db*
 native/extractor/*.exe
-native/native-mod/build
-native/native-mod/target
-native/native-mod/*.node
+native/mod-manager/build
+native/mod-manager/target
+native/mod-manager/*.node
 native/extractor/target
 native/extractor/*.node
 

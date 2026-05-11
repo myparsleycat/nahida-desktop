@@ -2,7 +2,7 @@ import path from "node:path";
 import { toggleViewerArtifact } from "@main/internal/db/schema";
 import { replaceHotkeyInGeneratedIni, sha256 } from "@main/lib/toggle-viewer-core";
 import toggleViewerUtilityWorker from "@main/worker/mod-tools/toggle-viewer.utility?modulePath";
-import { findFiles } from "@native/native-fs";
+import { findFiles } from "@native/fs";
 import { and, eq } from "drizzle-orm";
 import { utilityProcess, type UtilityProcess } from "electron";
 import { debounce } from "es-toolkit";

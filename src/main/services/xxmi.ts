@@ -1,7 +1,7 @@
 import path from "node:path";
 import { setting } from "@main/internal/db/schema";
-import { findFileAcrossDrives, spawnPrivilegedProcess, waitForProcess } from "@native/native-util";
-import { WaitResult } from "@native/native-util/constants";
+import { findFileAcrossDrives, spawnPrivilegedProcess, waitForProcess } from "@native/utils";
+import { WaitResult } from "@native/utils/constants";
 import { type XXMIConfig, XXMIConfigSchema } from "@shared/schemas/xxmi";
 import { delay } from "es-toolkit";
 import fse from "fs-extra";

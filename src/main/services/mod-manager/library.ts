@@ -1,4 +1,4 @@
-import { getCharactersFolder, getMods } from "@native/native-mod";
+import { getCharactersFolder, getMods } from "@native/mod-manager";
 import type { FolderGroup, Preset } from "@shared/types";
 import { GAME_MATCH_CASES } from "@shared/xxmi-match";
 import { and, eq, ne } from "drizzle-orm";
