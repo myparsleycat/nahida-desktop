@@ -19,10 +19,8 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   formatOrientation,
-  type ModelViewerAnimationClip,
   type ModelViewerCameraState,
   type ModelViewerHandle,
-  type ModelViewerRealtimeShapeKey,
   type ModelViewerThreeEnvironment,
   type ModelViewerThreeToneMapping,
   parseOrientation,
@@ -145,7 +143,7 @@ export function ModelViewerDialog({
 
   useEffect(() => {
     void Promise.allSettled(
-      viewerRefs.current.map((viewer) => viewer?.setDoubleSided(doubleSidedEnabled)),
+      viewerRefs.current.map(async (viewer) => viewer?.setDoubleSided(doubleSidedEnabled)),
     );
   }, [doubleSidedEnabled]);
 
@@ -339,6 +337,8 @@ export function ModelViewerDialog({
       const result = await window.api.invoke("tools:convertStaticGlbForViewer", {
         artifactRoot: source.artifactRoot,
         manifestPath: source.manifestPath,
+        memorySessionId: source.memorySessionId,
+        modPath: source.modPath,
         state: artifactState,
       });
       if (result.mode !== "variant-set") {
@@ -456,6 +456,8 @@ export function ModelViewerDialog({
       const result = await window.api.invoke("tools:convertStaticGlbForViewer", {
         artifactRoot: source.artifactRoot,
         manifestPath: source.manifestPath,
+        memorySessionId: source.memorySessionId,
+        modPath: source.modPath,
         state: artifactState,
       });
       if (result.mode !== "variant-set") {

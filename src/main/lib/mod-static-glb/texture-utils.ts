@@ -1,7 +1,9 @@
 export type StaticGlbTextureFormat = "png" | "jpeg-safe" | "jpeg-force";
 
 export type PreparedTexture = {
-    imagePath: string;
+    image?: Buffer;
+    imageName: string;
+    imagePath?: string;
     mimeType: "image/png" | "image/jpeg";
     alphaMode?: "MASK";
     alphaCutoff?: number;

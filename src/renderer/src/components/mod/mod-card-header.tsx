@@ -75,7 +75,7 @@ export const ModCardHeader = memo(function ModCardHeader({
       await window.api.invoke(
         "tools:cleanupStaticGlbViewerFile",
         source.mode === "variant-set" ? source.artifactRoot : source.glbPath,
-        source.mode === "variant-set" ? source.memorySessionId : undefined,
+        source.memorySessionId,
       );
     } catch (error) {
       console.warn("Failed to clean up model viewer file", error);
@@ -115,6 +115,7 @@ export const ModCardHeader = memo(function ModCardHeader({
           : {
               mode: "single",
               glbPath: result.glbPath,
+              memorySessionId: result.memorySessionId,
               modPath: mod.path,
               name: result.name,
             },

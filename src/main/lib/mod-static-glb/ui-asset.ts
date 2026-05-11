@@ -1,9 +1,9 @@
 import path from "node:path";
 import fse from "fs-extra";
 import type { Logger } from "../../internal/logger";
-import { convertDdsToPng, convertDdsToPngFallback } from "./material";
+import { convertDdsToPng, convertDdsToPngBuffer, convertDdsToPngFallback } from "./material";
 import { normalizeKey } from "./shared";
-import type { IniSection, StaticGlbViewerUiAssets } from "./types";
+import type { IniSection, StaticGlbArtifactBufferWriter, StaticGlbViewerUiAssets } from "./types";
 
 export function collectViewerUiAssetPaths(sections: IniSection[]): StaticGlbViewerUiAssets {
     const resourceMap = new Map(
@@ -42,10 +42,12 @@ export async function materializeViewerUiAssets(
     uiAssets: StaticGlbViewerUiAssets,
     modDir: string,
     uiDir: string,
-    options: { logger?: Logger },
+    options: { artifactBufferWriter?: StaticGlbArtifactBufferWriter; logger?: Logger },
     warn: (message: string) => void,
 ): Promise<StaticGlbViewerUiAssets> {
-    await fse.ensureDir(uiDir);
+    if (!options.artifactBufferWriter) {
+        await fse.ensureDir(uiDir);
+    }
 
     return {
         backgroundPath: await materializeUiAssetPath(
@@ -103,7 +105,7 @@ export async function materializeUiAsset(
     outputDir: string,
     outputName: string,
     warn?: (message: string) => void,
-    options?: { logger?: Logger },
+    options?: { artifactBufferWriter?: StaticGlbArtifactBufferWriter; logger?: Logger },
 ): Promise<string | undefined> {
     if (!(await fse.pathExists(sourcePath))) {
         warn?.(`Missing UI asset: ${sourcePath}`);
@@ -114,11 +116,38 @@ export async function materializeUiAsset(
     const outputPath = path.join(outputDir, `${outputName}.png`);
 
     if (extension === ".png") {
+        if (options?.artifactBufferWriter) {
+            return options.artifactBufferWriter(outputName, await fse.readFile(sourcePath), {
+                contentType: "image/png",
+                fileName: `${outputName}.png`,
+            });
+        }
+
         await fse.copyFile(sourcePath, outputPath);
         return outputPath;
     }
 
     if (extension === ".dds") {
+        if (options?.artifactBufferWriter) {
+            try {
+                return await options.artifactBufferWriter(
+                    outputName,
+                    await convertDdsToPngBuffer(sourcePath),
+                    {
+                        contentType: "image/png",
+                        fileName: `${outputName}.png`,
+                    },
+                );
+            } catch (error) {
+                warn?.(
+                    `Failed to convert UI DDS ${sourcePath}: ${
+                        error instanceof Error ? error.message : String(error)
+                    }`,
+                );
+                return undefined;
+            }
+        }
+
         try {
             await convertDdsToPng(sourcePath, outputPath);
             return outputPath;

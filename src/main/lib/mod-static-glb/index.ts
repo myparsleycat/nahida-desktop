@@ -16,6 +16,7 @@ import type {
     ConvertModToGlbOptions,
     ConvertModToGlbResult,
     ConvertModVariantArtifactsResult,
+    StaticGlbArtifactBufferWriter,
     StaticGlbAnimationBufferWriter,
     StaticGlbVariantManifest,
     VariableStateMap,
@@ -30,6 +31,7 @@ export type {
     ConvertModToGlbOptions,
     ConvertModToGlbResult,
     ConvertModVariantArtifactsResult,
+    StaticGlbArtifactBufferWriter,
     StaticGlbAnimationClip,
     StaticGlbRealtimeShapeKey,
     StaticGlbVariantManifest,
@@ -75,6 +77,22 @@ async function writeVariantManifestAtomic(
     });
 }
 
+async function writeVariantManifest(
+    writer: StaticGlbArtifactBufferWriter | undefined,
+    manifestPath: string,
+    manifest: StaticGlbVariantManifest,
+): Promise<void> {
+    if (writer) {
+        await writer("manifest", Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8"), {
+            contentType: "application/json",
+            fileName: "manifest.json",
+        });
+        return;
+    }
+
+    await writeVariantManifestAtomic(manifestPath, manifest);
+}
+
 export async function convertModToGlb(
     options: ConvertModToGlbOptions,
 ): Promise<ConvertModToGlbResult> {
@@ -114,9 +132,12 @@ export async function convertModToGlbBuffer(
 
 export async function convertModToVariantArtifacts(
     options: Omit<ConvertModToGlbOptions, "outputPath"> & {
+        artifactBufferWriter?: StaticGlbArtifactBufferWriter;
         artifactRoot: string;
         animationBufferWriter?: StaticGlbAnimationBufferWriter;
         preGenerateVariableStates?: boolean;
+        textureCacheDir?: string;
+        useTextureCache?: boolean;
     },
 ): Promise<ConvertModVariantArtifactsResult | null> {
     const logTiming = createTimedStageLogger(
@@ -131,11 +152,17 @@ export async function convertModToVariantArtifacts(
         return null;
     }
 
-    const artifactRoot = path.resolve(options.artifactRoot);
+    const artifactRoot = options.artifactBufferWriter
+        ? options.artifactRoot
+        : path.resolve(options.artifactRoot);
     const glbDir = path.join(artifactRoot, "glb");
     const uiDir = path.join(artifactRoot, "ui");
-    const textureCacheDir = path.join(artifactRoot, ".texture-cache");
-    await fse.ensureDir(glbDir);
+    const textureCacheDir =
+        options.textureCacheDir ??
+        (options.artifactBufferWriter ? "" : path.join(artifactRoot, ".texture-cache"));
+    if (!options.artifactBufferWriter) {
+        await fse.ensureDir(glbDir);
+    }
     logTiming("Prepared artifact directories");
 
     const statesToGenerate = new Map<string, VariableStateMap>();
@@ -154,6 +181,7 @@ export async function convertModToVariantArtifacts(
     }
 
     const warning = createWarningCollector(options.onWarning);
+    const warn = (message: string) => warning.warn(message);
     const states: StaticGlbVariantManifest["states"] = [];
     let defaultGlbPath = "";
     let meshCount = 0;
@@ -166,17 +194,26 @@ export async function convertModToVariantArtifacts(
             const result = await buildModGlb({
                 ...options,
                 textureCacheDir,
+                useTextureCache: options.useTextureCache,
                 variableState: state,
             });
-            await fse.writeFile(glbPath, result.glb);
+            const artifactPath = options.artifactBufferWriter
+                ? await options.artifactBufferWriter(glbName, result.glb, {
+                      contentType: "model/gltf-binary",
+                      fileName: glbName,
+                  })
+                : glbPath;
+            if (!options.artifactBufferWriter) {
+                await fse.writeFile(artifactPath, result.glb);
+            }
             meshCount = Math.max(meshCount, result.meshCount);
             states.push({
                 key,
                 values: state,
-                glbPath,
+                glbPath: artifactPath,
             });
             if (key === createStateKey(analysis.defaultState)) {
-                defaultGlbPath = glbPath;
+                defaultGlbPath = artifactPath;
             }
             logTiming(
                 `Generated state GLB ${key} (meshCount=${result.meshCount}, warnings=${result.warningCount})`,
@@ -189,7 +226,7 @@ export async function convertModToVariantArtifacts(
             path.dirname(analysis.iniPath),
             uiDir,
             options,
-            warning.warn,
+            warn,
         );
         logTiming(
             `Materialized viewer UI assets (${Object.values(uiAssets).filter(Boolean).length})`,
@@ -203,7 +240,7 @@ export async function convertModToVariantArtifacts(
                           variable.iconPath,
                           uiDir,
                           `item-${variable.slot ?? variable.order}`,
-                          warning.warn,
+                          warn,
                           options,
                       )
                     : undefined,
@@ -215,7 +252,7 @@ export async function convertModToVariantArtifacts(
             artifactRoot,
             options,
             analysis.defaultState,
-            warning.warn,
+            warn,
             prepareStaticGlbBuildContext,
             getDrawBindingsForIb,
             options.animationBufferWriter,
@@ -234,7 +271,19 @@ export async function convertModToVariantArtifacts(
             states,
         };
         const manifestPath = path.join(artifactRoot, "manifest.json");
-        await writeVariantManifestAtomic(manifestPath, manifest);
+        const artifactManifestPath = options.artifactBufferWriter
+            ? await options.artifactBufferWriter(
+                  "manifest",
+                  Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8"),
+                  {
+                      contentType: "application/json",
+                      fileName: "manifest.json",
+                  },
+              )
+            : manifestPath;
+        if (!options.artifactBufferWriter) {
+            await writeVariantManifestAtomic(artifactManifestPath, manifest);
+        }
         logTiming("Wrote variant manifest");
 
         return {
@@ -243,11 +292,11 @@ export async function convertModToVariantArtifacts(
             defaultGlbPath,
             meshCount,
             warningCount: warning.count,
-            manifestPath,
+            manifestPath: artifactManifestPath,
             manifest,
         };
     } finally {
-        if (!options.debug && (await fse.pathExists(textureCacheDir))) {
+        if (textureCacheDir && !options.debug && (await fse.pathExists(textureCacheDir))) {
             await fse.rm(textureCacheDir, { recursive: true, force: true });
         }
     }
@@ -255,9 +304,13 @@ export async function convertModToVariantArtifacts(
 
 export async function resolveVariantStateArtifact(
     options: Omit<ConvertModToGlbOptions, "outputPath"> & {
+        artifactBufferWriter?: StaticGlbArtifactBufferWriter;
         artifactRoot: string;
+        manifest?: StaticGlbVariantManifest;
         state: VariableStateMap;
         manifestPath?: string;
+        textureCacheDir?: string;
+        useTextureCache?: boolean;
     },
 ): Promise<{
     glbPath: string;
@@ -266,66 +319,117 @@ export async function resolveVariantStateArtifact(
     meshCount: number;
     warningCount: number;
 }> {
-    return withVariantArtifactManifestLock(path.resolve(options.artifactRoot), async () => {
-        const logTiming = createTimedStageLogger(
-            options.logger,
-            "mod-static-glb.resolveVariantStateArtifact",
-        );
-        const artifactRoot = path.resolve(options.artifactRoot);
-        const manifestPath = options.manifestPath
-            ? path.resolve(options.manifestPath)
-            : path.join(artifactRoot, "manifest.json");
-        let manifest: StaticGlbVariantManifest;
-        try {
-            manifest = (await fse.readJson(manifestPath)) as StaticGlbVariantManifest;
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            throw new Error(`Failed to read variant manifest at ${manifestPath}: ${message}`);
-        }
-        logTiming("Loaded variant manifest");
-
-        const key = createStateKey(options.state);
-        const existing = manifest.states.find((entry) => entry.key === key);
-        if (existing && (await fse.pathExists(existing.glbPath))) {
-            logTiming(`Reused existing state artifact ${key}`);
-            return {
-                glbPath: existing.glbPath,
-                manifestPath,
-                manifest,
-                meshCount: 0,
-                warningCount: 0,
-            };
-        }
-
-        const textureCacheDir = path.join(artifactRoot, ".texture-cache");
-        try {
-            const buildStartedAt = Date.now();
-            const result = await buildModGlb({
-                ...options,
-                modPath: manifest.modPath,
-                textureCacheDir,
-                variableState: options.state,
-            });
-            logTiming(
-                `Built requested state GLB ${key} (meshCount=${result.meshCount}, warnings=${result.warningCount})`,
-                buildStartedAt,
+    return withVariantArtifactManifestLock(
+        options.artifactBufferWriter ? options.artifactRoot : path.resolve(options.artifactRoot),
+        async () => {
+            const logTiming = createTimedStageLogger(
+                options.logger,
+                "mod-static-glb.resolveVariantStateArtifact",
             );
-            const glbDir = path.join(artifactRoot, "glb");
-            await fse.ensureDir(glbDir);
-            const glbPath = path.join(glbDir, createStateArtifactFileName(key));
-            await fse.writeFile(glbPath, result.glb);
-            logTiming(`Wrote requested state GLB ${key}`);
+            const artifactRoot = options.artifactBufferWriter
+                ? options.artifactRoot
+                : path.resolve(options.artifactRoot);
+            const manifestPath = options.manifestPath
+                ? options.artifactBufferWriter
+                    ? options.manifestPath
+                    : path.resolve(options.manifestPath)
+                : path.join(artifactRoot, "manifest.json");
+            let manifest: StaticGlbVariantManifest;
+            if (options.manifest) {
+                manifest = options.manifest;
+            } else {
+                try {
+                    manifest = (await fse.readJson(manifestPath)) as StaticGlbVariantManifest;
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    throw new Error(
+                        `Failed to read variant manifest at ${manifestPath}: ${message}`,
+                    );
+                }
+            }
+            logTiming("Loaded variant manifest");
 
-            const current = manifest.states.find((entry) => entry.key === key);
-            if (!current) {
-                const entry = {
-                    key,
-                    values: options.state,
-                    glbPath,
+            const key = createStateKey(options.state);
+            const existing = manifest.states.find((entry) => entry.key === key);
+            if (
+                existing &&
+                (options.artifactBufferWriter || (await fse.pathExists(existing.glbPath)))
+            ) {
+                logTiming(`Reused existing state artifact ${key}`);
+                return {
+                    glbPath: existing.glbPath,
+                    manifestPath,
+                    manifest,
+                    meshCount: 0,
+                    warningCount: 0,
                 };
-                manifest.states.push(entry);
-                await writeVariantManifestAtomic(manifestPath, manifest);
-                logTiming(`Appended state manifest entry ${key}`);
+            }
+
+            const textureCacheDir =
+                options.textureCacheDir ??
+                (options.artifactBufferWriter ? "" : path.join(artifactRoot, ".texture-cache"));
+            try {
+                const buildStartedAt = Date.now();
+                const result = await buildModGlb({
+                    ...options,
+                    modPath: manifest.modPath,
+                    textureCacheDir,
+                    useTextureCache: options.useTextureCache,
+                    variableState: options.state,
+                });
+                logTiming(
+                    `Built requested state GLB ${key} (meshCount=${result.meshCount}, warnings=${result.warningCount})`,
+                    buildStartedAt,
+                );
+                const glbDir = path.join(artifactRoot, "glb");
+                if (!options.artifactBufferWriter) {
+                    await fse.ensureDir(glbDir);
+                }
+                const glbName = createStateArtifactFileName(key);
+                const glbPath = options.artifactBufferWriter
+                    ? await options.artifactBufferWriter(glbName, result.glb, {
+                          contentType: "model/gltf-binary",
+                          fileName: glbName,
+                      })
+                    : path.join(glbDir, glbName);
+                if (!options.artifactBufferWriter) {
+                    await fse.writeFile(glbPath, result.glb);
+                }
+                logTiming(`Wrote requested state GLB ${key}`);
+
+                const current = manifest.states.find((entry) => entry.key === key);
+                if (!current) {
+                    const entry = {
+                        key,
+                        values: options.state,
+                        glbPath,
+                    };
+                    manifest.states.push(entry);
+                    await writeVariantManifest(
+                        options.artifactBufferWriter,
+                        manifestPath,
+                        manifest,
+                    );
+                    logTiming(`Appended state manifest entry ${key}`);
+                    return {
+                        glbPath,
+                        manifestPath,
+                        manifest,
+                        meshCount: result.meshCount,
+                        warningCount: result.warningCount,
+                    };
+                }
+
+                if (current.glbPath !== glbPath) {
+                    current.glbPath = glbPath;
+                    await writeVariantManifest(
+                        options.artifactBufferWriter,
+                        manifestPath,
+                        manifest,
+                    );
+                    logTiming(`Updated state manifest entry ${key}`);
+                }
+
                 return {
                     glbPath,
                     manifestPath,
@@ -333,23 +437,11 @@ export async function resolveVariantStateArtifact(
                     meshCount: result.meshCount,
                     warningCount: result.warningCount,
                 };
+            } finally {
+                if (textureCacheDir) {
+                    await fse.rm(textureCacheDir, { recursive: true, force: true }).catch(() => {});
+                }
             }
-
-            if (current.glbPath !== glbPath) {
-                current.glbPath = glbPath;
-                await writeVariantManifestAtomic(manifestPath, manifest);
-                logTiming(`Updated state manifest entry ${key}`);
-            }
-
-            return {
-                glbPath,
-                manifestPath,
-                manifest,
-                meshCount: result.meshCount,
-                warningCount: result.warningCount,
-            };
-        } finally {
-            await fse.rm(textureCacheDir, { recursive: true, force: true }).catch(() => {});
-        }
-    });
+        },
+    );
 }

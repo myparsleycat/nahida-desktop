@@ -76,7 +76,7 @@ export type TextureBinding = {
 export type MaterialBinding = {
     materialIndex: number;
     textureResourceName: string;
-    imagePath: string;
+    imagePath?: string;
     mimeType: "image/png" | "image/jpeg";
 };
 
@@ -240,6 +240,14 @@ export type PresentAnimationPattern = {
 };
 
 export type StaticGlbAnimationBufferWriter = (bufferId: string, buffer: Buffer) => Promise<string>;
+export type StaticGlbArtifactBufferWriter = (
+    bufferId: string,
+    buffer: Buffer,
+    options?: {
+        contentType?: string;
+        fileName?: string;
+    },
+) => Promise<string>;
 
 export type StaticGlbBuildContext = {
     iniPath: string;
@@ -279,7 +287,8 @@ export type ConvertModToGlbOptions = {
 };
 
 export type ConvertModToGlbBufferOptions = Omit<ConvertModToGlbOptions, "outputPath"> & {
-    textureCacheDir: string;
+    textureCacheDir?: string;
+    useTextureCache?: boolean;
     variableState?: VariableStateMap;
 };
 

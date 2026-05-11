@@ -60,6 +60,7 @@ export type ModelViewerDialogSource =
     | {
           mode: "single";
           glbPath: string;
+          memorySessionId?: string;
           modPath?: string;
           name: string;
       }
