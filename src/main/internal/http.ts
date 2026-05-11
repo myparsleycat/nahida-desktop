@@ -37,7 +37,6 @@ export class DesktopHttpService {
         const token = await this.desktop.service.auth.getToken();
         return {
             ...(token && this.isNHD(url) && { Authorization: `Bearer ${token}` }),
-            Origin: "https://nahida.live",
             "User-Agent": `Nahida Desktop/${appVersion}`,
         };
     }
