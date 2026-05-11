@@ -214,6 +214,13 @@ export function collectIbResources(
         group.push(binding);
         bindingsByIbName.set(key, group);
     }
+    const drawBindingsByIbName = new Map<string, TextureOverrideBinding[]>();
+    for (const binding of drawBindings) {
+        const key = normalizeKey(binding.ibResourceName);
+        const group = drawBindingsByIbName.get(key) ?? [];
+        group.push(binding);
+        drawBindingsByIbName.set(key, group);
+    }
     const referencedIbNames = new Set([
         ...bindingsByIbName.keys(),
         ...drawBindings.map((binding) => normalizeKey(binding.ibResourceName)),
@@ -251,9 +258,10 @@ export function collectIbResources(
             const stem = path.basename(resource.filename!, path.extname(resource.filename!));
             const key = bestKeyForIb(stem, resource.name, bufferKeys);
             const bindings = bindingsByIbName.get(normalizeKey(resource.name)) ?? [];
+            const linkedDrawBindings = drawBindingsByIbName.get(normalizeKey(resource.name)) ?? [];
             const overrideHashes = Array.from(
                 new Set(
-                    bindings
+                    [...bindings, ...linkedDrawBindings]
                         .map((binding) => binding.overrideHash?.trim())
                         .filter((value): value is string => !!value),
                 ),

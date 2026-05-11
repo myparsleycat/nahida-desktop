@@ -166,7 +166,53 @@ async function findHashBasedFmtForIb(
         return parsed[0]?.fmt ?? null;
     }
 
+    const metadataPaths = await fg("**/Metadata.json", {
+        cwd: path.resolve(assetDir),
+        absolute: true,
+        onlyFiles: true,
+        caseSensitiveMatch: false,
+    });
+    for (const metadataPath of metadataPaths) {
+        const metadata = await loadWwmiMetadata(metadataPath);
+        if (!metadata) {
+            continue;
+        }
+        if (!hashCandidates.includes(normalizeKey(metadata.vb0_hash || ""))) {
+            continue;
+        }
+
+        const fmtPaths = await fg("Component *.fmt", {
+            cwd: path.dirname(metadataPath),
+            absolute: true,
+            onlyFiles: true,
+            caseSensitiveMatch: false,
+        });
+        if (fmtPaths.length === 0) {
+            continue;
+        }
+
+        const parsed = await Promise.all(
+            fmtPaths.map(async (file) => ({
+                file,
+                fmt: parseFmt(await fse.readFile(file, "utf8"), stride, ib.format),
+            })),
+        );
+        parsed.sort(
+            (left, right) =>
+                left.fmt.stride - right.fmt.stride || left.file.localeCompare(right.file),
+        );
+        return parsed[0]?.fmt ?? null;
+    }
+
     return null;
+}
+
+async function loadWwmiMetadata(metadataPath: string): Promise<{ vb0_hash?: string } | null> {
+    try {
+        return JSON.parse(await fse.readFile(metadataPath, "utf8")) as { vb0_hash?: string };
+    } catch {
+        return null;
+    }
 }
 
 export async function findRecursive(
