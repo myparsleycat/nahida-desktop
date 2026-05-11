@@ -16,6 +16,7 @@ import type {
     ConvertModToGlbOptions,
     ConvertModToGlbResult,
     ConvertModVariantArtifactsResult,
+    StaticGlbAnimationBufferWriter,
     StaticGlbVariantManifest,
     VariableStateMap,
 } from "./types";
@@ -114,6 +115,7 @@ export async function convertModToGlbBuffer(
 export async function convertModToVariantArtifacts(
     options: Omit<ConvertModToGlbOptions, "outputPath"> & {
         artifactRoot: string;
+        animationBufferWriter?: StaticGlbAnimationBufferWriter;
         preGenerateVariableStates?: boolean;
     },
 ): Promise<ConvertModVariantArtifactsResult | null> {
@@ -216,6 +218,7 @@ export async function convertModToVariantArtifacts(
             warning.warn,
             prepareStaticGlbBuildContext,
             getDrawBindingsForIb,
+            options.animationBufferWriter,
         );
         logTiming(`Materialized animation clips (${animations.length})`);
         const manifest: StaticGlbVariantManifest = {

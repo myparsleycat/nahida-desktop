@@ -58,18 +58,19 @@ export type ModelViewerVariantManifest = {
 
 export type ModelViewerDialogSource =
     | {
-        mode: "single";
-        glbPath: string;
-        modPath?: string;
-        name: string;
-    }
+          mode: "single";
+          glbPath: string;
+          modPath?: string;
+          name: string;
+      }
     | {
-        mode: "variant-set";
-        artifactRoot: string;
-        manifestPath: string;
-        modPath: string;
-        manifest: ModelViewerVariantManifest;
-        defaultGlbPath: string;
-        activeGlbPath: string;
-        name: string;
-    };
+          mode: "variant-set";
+          artifactRoot: string;
+          manifestPath: string;
+          modPath: string;
+          manifest: ModelViewerVariantManifest;
+          memorySessionId?: string;
+          defaultGlbPath: string;
+          activeGlbPath: string;
+          name: string;
+      };

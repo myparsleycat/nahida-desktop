@@ -72,7 +72,7 @@ export function registerToolsHandlers(d: NahidaDesktop) {
         (iniPath: string, state: Record<string, string | number>) =>
             d.service.modTools.togglePersist.persistStateToIni(iniPath, state),
     );
-    rh("tools:cleanupStaticGlbViewerFile", (glbPath: string) =>
-        d.service.modTools.staticGlb.cleanupViewerFile(glbPath),
+    rh("tools:cleanupStaticGlbViewerFile", (glbPath: string, memorySessionId?: string) =>
+        d.service.modTools.staticGlb.cleanupViewerFile(glbPath, memorySessionId),
     );
 }

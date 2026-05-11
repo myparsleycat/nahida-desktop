@@ -13,6 +13,11 @@ import {
     type VariableStateMap,
 } from "@main/lib/mod-static-glb";
 import { createStateKey } from "@main/lib/mod-static-glb/shared";
+import {
+    cleanupModelViewerMemorySession,
+    createModelViewerMemorySession,
+    writeModelViewerMemoryBuffer,
+} from "@main/services/protocol/model-viewer-memory";
 import { app } from "electron";
 import fse from "fs-extra";
 
@@ -53,6 +58,7 @@ export type StaticGlbVariantResult = {
     artifactRoot: string;
     manifestPath: string;
     manifest: StaticGlbVariantManifest;
+    memorySessionId?: string;
     defaultGlbPath: string;
     activeGlbPath: string;
     meshCount: number;
@@ -231,6 +237,7 @@ export class StaticGlb {
 
     public async convertForViewer(input: StaticGlbViewerInput): Promise<StaticGlbPreviewResult> {
         const startedAt = Date.now();
+        let memorySessionId: string | undefined;
         let lastCheckpointAt = startedAt;
         const logTiming = (stage: string) => {
             const now = Date.now();
@@ -296,6 +303,10 @@ export class StaticGlb {
         const textureCacheDir = path.join(tempDir, "textures");
         const glbPath = path.join(tempDir, `${sanitizeModelViewerFileName(modName)}.glb`);
         const warnings: string[] = [];
+        const writeAnimationBuffer = async (bufferId: string, buffer: Buffer) => {
+            memorySessionId ??= createModelViewerMemorySession();
+            return writeModelViewerMemoryBuffer(memorySessionId, bufferId, buffer);
+        };
         logTiming("Created viewer temp directory");
 
         try {
@@ -303,6 +314,7 @@ export class StaticGlb {
                 modPath,
                 assetPath,
                 artifactRoot: tempDir,
+                animationBufferWriter: writeAnimationBuffer,
                 preGenerateVariableStates: false,
                 textureFormat: textureSettings.textureFormat,
                 jpegQuality: textureSettings.jpegQuality,
@@ -325,6 +337,7 @@ export class StaticGlb {
                     artifactRoot: tempDir,
                     manifestPath: variantResult.manifestPath,
                     manifest: variantResult.manifest,
+                    memorySessionId,
                     defaultGlbPath: variantResult.defaultGlbPath,
                     activeGlbPath: variantResult.defaultGlbPath,
                     meshCount: variantResult.meshCount,
@@ -371,6 +384,7 @@ export class StaticGlb {
                 name: modName,
             };
         } catch (error) {
+            cleanupModelViewerMemorySession(memorySessionId);
             await this.cleanupViewerFile(glbPath);
             this.desktop.logger.error(
                 `Model viewer conversion failed after ${Date.now() - startedAt}ms`,
@@ -390,7 +404,8 @@ export class StaticGlb {
         }
     }
 
-    public async cleanupViewerFile(targetPath: string): Promise<void> {
+    public async cleanupViewerFile(targetPath: string, memorySessionId?: string): Promise<void> {
+        cleanupModelViewerMemorySession(memorySessionId);
         if (!targetPath) {
             return;
         }

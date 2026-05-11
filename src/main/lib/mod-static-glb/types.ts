@@ -239,6 +239,8 @@ export type PresentAnimationPattern = {
     frameEndToken: string;
 };
 
+export type StaticGlbAnimationBufferWriter = (bufferId: string, buffer: Buffer) => Promise<string>;
+
 export type StaticGlbBuildContext = {
     iniPath: string;
     sections: IniSection[];

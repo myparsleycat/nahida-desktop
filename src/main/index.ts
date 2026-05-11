@@ -12,11 +12,11 @@ import { IS_ELECTRON } from "./const";
 import { DB_FILE_NAME } from "./internal/const";
 import { InitDB } from "./internal/db";
 import * as schema from "./internal/db/schema";
+import { GitHubRateCoordinator } from "./internal/github-rate";
 import { DesktopHttpService } from "./internal/http";
 import Logger from "./internal/logger";
 import { NahidaProtocolHandler } from "./internal/protocol";
 import Updater from "./internal/updater";
-import { GitHubRateCoordinator } from "./internal/github-rate";
 import { IPC } from "./ipc";
 import Compressor from "./lib/compressor";
 import CryptoLib from "./lib/crypto";
@@ -250,6 +250,16 @@ if (process.defaultApp) {
 protocol.registerSchemesAsPrivileged([
     {
         scheme: "local",
+        privileges: {
+            standard: true,
+            secure: true,
+            supportFetchAPI: true,
+            bypassCSP: true,
+            stream: true,
+        },
+    },
+    {
+        scheme: "model-viewer-memory",
         privileges: {
             standard: true,
             secure: true,

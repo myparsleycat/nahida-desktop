@@ -5,7 +5,9 @@ function toLocalUrl(filePath: string): string {
 
 export function modelViewerSourceToUrl(source: File | ArrayBuffer | string): string {
     if (typeof source === "string") {
-        return source.startsWith("file:///") || source.startsWith("local://")
+        return source.startsWith("file:///") ||
+            source.startsWith("local://") ||
+            source.startsWith("model-viewer-memory://")
             ? source
             : toLocalUrl(source);
     }
