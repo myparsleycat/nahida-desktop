@@ -1,7 +1,7 @@
 import {
   ModelViewerDialog,
   type ModelViewerDialogSource,
-} from "@renderer/components/tools/model-viewer-dialog";
+} from "@renderer/components/tools/model-viewer/model-viewer-dialog";
 import {
   AlertDialog,
   AlertDialogAction,

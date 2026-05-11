@@ -1,4 +1,4 @@
-import { ModelViewerPage } from "@renderer/components/tools/model-viewer-page";
+import { ModelViewerPage } from "@renderer/components/tools/model-viewer/model-viewer-page";
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/tools/model-viewer")({
