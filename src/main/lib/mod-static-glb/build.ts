@@ -8,6 +8,7 @@ import { buildMaterials } from "./material";
 import { bestKeyForIb, keyMatchesIb, strictKeyMatchesIb } from "./mesh-key";
 import * as overrideAnalysis from "./override-analysis";
 import {
+    collectEfmiBufferGroups,
     collectMihoyoBufferGroups,
     collectResources,
     collectWwmiBufferGroups,
@@ -45,9 +46,20 @@ export async function prepareStaticGlbBuildContext(
     const bufferGroups =
         layout === "wwmi"
             ? await collectWwmiBufferGroups(modDir, resources, warn)
-            : await collectMihoyoBufferGroups(modDir, resources, warn);
+            : layout === "efmi"
+              ? await collectEfmiBufferGroups(modDir, resources, warn)
+              : await collectMihoyoBufferGroups(modDir, resources, warn);
 
-    const drawBindings = overrideAnalysis.collectTextureOverrideDrawBindings(sections);
+    const drawBindings =
+        layout === "efmi"
+            ? overrideAnalysis.collectTextureOverrideDrawBindings(
+                  sections,
+                  new Map([
+                      ["$mod_enabled", 1],
+                      ["DRAW_TYPE", 4],
+                  ]),
+              )
+            : overrideAnalysis.collectTextureOverrideDrawBindings(sections);
 
     return {
         iniPath,
@@ -72,7 +84,9 @@ export async function buildModGlb(
     const context = await prepareStaticGlbBuildContext(options, warning.warn);
     const resolvedVariables = overrideAnalysis.mergeVariableState(
         context.defaultVariables,
-        options.variableState,
+        context.layout === "efmi"
+            ? { ...options.variableState, $mod_enabled: 1, DRAW_TYPE: 4 }
+            : options.variableState,
     );
     const textureBindings = overrideAnalysis.collectTextureBindings(
         context.sections,

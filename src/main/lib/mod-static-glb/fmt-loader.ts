@@ -77,10 +77,10 @@ export async function loadFmtForIb(
         return parseFmt(await fse.readFile(assetFmt, "utf8"), stride, ib.format);
     }
 
-    if (layout === "wwmi") {
-        const wwmiFmt = await findWwmiFmtForIb(assetDir, ib, stride);
-        if (wwmiFmt) {
-            return wwmiFmt;
+    if (layout === "wwmi" || layout === "efmi") {
+        const hashFmt = await findHashBasedFmtForIb(assetDir, ib, stride);
+        if (hashFmt) {
+            return hashFmt;
         }
     }
 
@@ -131,7 +131,7 @@ export async function loadFmtForIb(
     );
 }
 
-async function findWwmiFmtForIb(
+async function findHashBasedFmtForIb(
     assetDir: string,
     ib: IbResource,
     stride: number,

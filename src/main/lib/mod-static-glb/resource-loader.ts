@@ -4,6 +4,7 @@ import fse from "fs-extra";
 import { normalizeKey } from "./shared";
 import type {
     BufferGroup,
+    EfmiBufferResourceGroup,
     IniSection,
     MihoyoBufferResourceGroup,
     Resource,
@@ -27,6 +28,16 @@ export function detectStaticGlbModLayout(
     sections: IniSection[],
     resources: Resource[],
 ): StaticGlbModLayout {
+    if (
+        sections.some(
+            (section) =>
+                section.header === "Constants" &&
+                section.lines.some((line) => /\$required_efmi_version\b/i.test(line)),
+        )
+    ) {
+        return "efmi";
+    }
+
     if (
         sections.some(
             (section) =>
@@ -319,4 +330,76 @@ function interleaveBufferSet(
     }
 
     return output;
+}
+
+export function parseEfmiBufferResourceName(resourceName: string): {
+    key: string;
+    slot: "vb0" | "vb1" | "vb2";
+} | null {
+    const match = resourceName.match(/^(.*?)_(VB[012])(?:_LOD)?$/i);
+    if (!match) return null;
+    const [, prefix, slot] = match;
+    return { key: prefix, slot: slot.toLowerCase() as "vb0" | "vb1" | "vb2" };
+}
+
+export async function collectEfmiBufferGroups(
+    modDir: string,
+    resources: Resource[],
+    warn: (message: string) => void,
+): Promise<BufferGroup[]> {
+    const byKey = new Map<string, EfmiBufferResourceGroup>();
+
+    for (const resource of resources) {
+        if (!resource.filename || !resource.stride) continue;
+        const typed = parseEfmiBufferResourceName(resource.name);
+        if (!typed) continue;
+        const group = ensureEfmiBufferResourceGroup(byKey, typed.key);
+        if (typed.slot === "vb0") group.vb0 = resource;
+        else if (typed.slot === "vb1") group.vb1 = resource;
+        else group.vb2 = resource;
+    }
+
+    const groups: BufferGroup[] = [];
+    for (const [key, group] of byKey) {
+        if (!group.vb0?.filename || !group.vb1?.filename || !group.vb2?.filename) {
+            continue;
+        }
+
+        const [vb0, vb1, vb2] = await Promise.all([
+            readResourceBytes(modDir, group.vb0),
+            readResourceBytes(modDir, group.vb1),
+            readResourceBytes(modDir, group.vb2),
+        ]);
+
+        const items = [
+            { bytes: vb0, stride: group.vb0.stride! },
+            { bytes: vb1, stride: group.vb1.stride! },
+            { bytes: vb2, stride: group.vb2.stride! },
+        ];
+        const stride = items.reduce((sum, item) => sum + item.stride, 0);
+        const vertexCount = Math.min(
+            ...items.map((item) => Math.floor(item.bytes.length / (item.stride || 1))),
+        );
+
+        const vb = interleaveBufferSet(items, vertexCount);
+        if (vb.length !== vertexCount * stride) {
+            throw new Error(`Unexpected EFMI interleaved buffer length for ${key}`);
+        }
+
+        groups.push({ key, vbFilename: `${key}.vb`, vbBytes: vb, stride });
+    }
+
+    return groups;
+}
+
+function ensureEfmiBufferResourceGroup(
+    map: Map<string, EfmiBufferResourceGroup>,
+    key: string,
+): EfmiBufferResourceGroup {
+    let value = map.get(key);
+    if (!value) {
+        value = {};
+        map.set(key, value);
+    }
+    return value;
 }

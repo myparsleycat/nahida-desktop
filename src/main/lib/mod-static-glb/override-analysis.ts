@@ -119,8 +119,14 @@ export function collectTextureBindings(
 
 export function collectTextureOverrideDrawBindings(
     sections: IniSection[],
+    runtimeVariables?: Map<string, number | string>,
 ): TextureOverrideBinding[] {
     const variables = collectDefaultIniVariables(sections);
+    if (runtimeVariables) {
+        for (const [key, value] of runtimeVariables) {
+            variables.set(normalizeKey(key), value);
+        }
+    }
     const sectionByFullName = new Map(
         sections.map((section) => [normalizeKey(getSectionFullName(section)), section]),
     );
@@ -514,12 +520,31 @@ function collectSectionDrawContext(
             continue;
         }
 
-        const drawMatch = trimmed.match(/^drawindexed\s*=\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)$/i);
-        if (!drawMatch) continue;
+        const drawMatch = trimmed.match(
+            /^drawindexed\s*=\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)$/i,
+        );
+        const drawInstancedMatch = !drawMatch
+            ? trimmed.match(
+                  /^drawindexedinstanced\s*=\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)$/i,
+              )
+            : null;
+        if (!drawMatch && !drawInstancedMatch) continue;
 
-        const indexCount = evaluateIniNumericExpression(drawMatch[1], variables, normalizeKey);
-        const startIndex = evaluateIniNumericExpression(drawMatch[2], variables, normalizeKey);
-        const baseVertex = evaluateIniNumericExpression(drawMatch[3], variables, normalizeKey);
+        const indexCount = evaluateIniNumericExpression(
+            (drawMatch ?? drawInstancedMatch)![1],
+            variables,
+            normalizeKey,
+        );
+        const startIndex = evaluateIniNumericExpression(
+            drawMatch ? drawMatch[2] : drawInstancedMatch![3],
+            variables,
+            normalizeKey,
+        );
+        const baseVertex = evaluateIniNumericExpression(
+            drawMatch ? drawMatch[3] : drawInstancedMatch![4],
+            variables,
+            normalizeKey,
+        );
         if (indexCount === null || startIndex === null || baseVertex === null) {
             continue;
         }

@@ -1,6 +1,10 @@
 import path from "node:path";
 import * as overrideAnalysis from "./override-analysis";
-import { parseMihoyoBufferGroupResourceName, parseWwmiBufferResourceName } from "./resource-loader";
+import {
+    parseEfmiBufferResourceName,
+    parseMihoyoBufferGroupResourceName,
+    parseWwmiBufferResourceName,
+} from "./resource-loader";
 import { normalizeKey } from "./shared";
 import type {
     IniSection,
@@ -142,7 +146,8 @@ export function collectRealtimeShapeKeys(
 export function deriveBufferGroupKey(resourceName: string): string | undefined {
     return (
         parseMihoyoBufferGroupResourceName(resourceName)?.key ||
-        parseWwmiBufferResourceName(resourceName)?.key
+        parseWwmiBufferResourceName(resourceName)?.key ||
+        parseEfmiBufferResourceName(resourceName)?.key
     );
 }
 

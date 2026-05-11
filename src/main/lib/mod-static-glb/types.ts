@@ -40,7 +40,7 @@ export type BufferGroup = {
     stride: number;
 };
 
-export type StaticGlbModLayout = "mihoyo" | "wwmi";
+export type StaticGlbModLayout = "mihoyo" | "wwmi" | "efmi";
 
 export type MihoyoBufferResourceGroup = {
     position?: Resource;
@@ -55,6 +55,12 @@ export type WwmiBufferResourceGroup = {
     blend?: Resource;
     color?: Resource;
     texcoord?: Resource;
+};
+
+export type EfmiBufferResourceGroup = {
+    vb0?: Resource;
+    vb1?: Resource;
+    vb2?: Resource;
 };
 
 export type IbResource = {
