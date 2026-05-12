@@ -103,6 +103,7 @@ export class ModPresetsService {
         }
 
         const snapshot = await this.getPresetSnapshot(game);
+        const itemCount = snapshot.length;
 
         const id = nanoid();
         const now = new Date().toISOString();
@@ -113,7 +114,7 @@ export class ModPresetsService {
                 game,
                 name: trimmedName,
                 description: trimmedDescription || null,
-                itemCount: 0,
+                itemCount,
                 createdAt: now,
                 updatedAt: now,
                 version: MOD_PRESET_VERSION,
