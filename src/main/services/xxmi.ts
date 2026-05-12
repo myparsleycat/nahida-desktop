@@ -112,6 +112,14 @@ export class XXMI {
 
     public async findXXMIPath() {
         const xxmiConfigName = "XXMI Launcher Config.json";
+        const appDataPath = process.env.APPDATA;
+        if (appDataPath) {
+            const configPath = path.join(appDataPath, "XXMI Launcher", xxmiConfigName);
+            if ((await fse.pathExists(configPath)) && (await this.checkConfigFile(configPath))) {
+                return path.dirname(configPath);
+            }
+        }
+
         const result = await findFileAcrossDrives(xxmiConfigName, {
             excludeDirs: ["Backups"],
         });
