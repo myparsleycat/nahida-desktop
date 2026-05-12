@@ -342,6 +342,10 @@ export async function resolveVariantStateArtifact(
             let manifest: StaticGlbVariantManifest;
             if (options.manifest) {
                 manifest = options.manifest;
+            } else if (options.artifactBufferWriter) {
+                throw new Error(
+                    "resolveVariantStateArtifact requires options.manifest when options.artifactBufferWriter is set",
+                );
             } else {
                 try {
                     manifest = (await fse.readJson(manifestPath)) as StaticGlbVariantManifest;
