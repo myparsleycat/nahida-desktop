@@ -1,6 +1,6 @@
 import { ArrowUpFromLine, ArrowDownToLine, Filter } from "lucide-react";
-import { TransferTabType } from "./types";
 import { useTranslation } from "react-i18next";
+import { TransferTabType } from "./types";
 
 interface TransferEmptyStateProps {
   activeTab: TransferTabType;

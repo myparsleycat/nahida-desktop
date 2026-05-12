@@ -15,9 +15,7 @@ export function registerGameBananaHandlers(d: NahidaDesktop) {
         d.service.gamebanana.getModCategoryOverview(input),
     );
     rh("gamebanana:getModIndex", async (input) => d.service.gamebanana.getModIndex(input));
-    rh("gamebanana:getModOverview", async (input) =>
-        d.service.gamebanana.getModOverview(input),
-    );
+    rh("gamebanana:getModOverview", async (input) => d.service.gamebanana.getModOverview(input));
     rh("gamebanana:getModPosts", async (input) => d.service.gamebanana.getModPosts(input));
     rh("gamebanana:logout", async () => d.service.gamebanana.logout());
 }

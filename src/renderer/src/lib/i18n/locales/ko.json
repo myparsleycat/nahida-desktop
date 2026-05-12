@@ -240,7 +240,10 @@
           "title": "게임 설정",
           "path_label": "모드 폴더 경로",
           "importer_label": "Importer",
-          "no_importer": "없음"
+          "no_importer": "없음",
+          "order_label": "표시 순서",
+          "order_value": "{{total}}개 중 {{current}}번째",
+          "order_description": "위아래 버튼으로 드롭다운에 표시되는 게임 순서를 변경합니다."
         },
         "preset-management": {
           "description": "이 프리셋에는 {{length}}개의 모드가 저장되어 있습니다.",
@@ -370,6 +373,10 @@
           },
           "update-game-mutation": {
             "success": "게임 설정이 저장되었습니다."
+          },
+          "reorder-games-mutation": {
+            "success": "게임 순서가 저장되었습니다.",
+            "failed": "게임 순서를 저장하지 못했습니다."
           },
           "toggle-mutation": {
             "0": "이미 {{name}} 폴더가 존재합니다",

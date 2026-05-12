@@ -5,10 +5,10 @@ import type { ModInfo } from "@renderer/types/mod";
 import { formatDate, formatSize } from "@shared/utils";
 import { useRouteContext } from "@tanstack/react-router";
 import { FolderIcon } from "lucide-react";
-import { pasteModPreview } from "./paste-preview";
 import { ModContextMenu } from "./mod-context-menu";
 import { ModFixRunnerDialogs } from "./mod-fix-runner-dialogs";
 import { ModPreviewLightbox } from "./mod-preview-lightbox";
+import { pasteModPreview } from "./paste-preview";
 import { getModColorClass } from "./utils";
 
 export function ModListRow({
@@ -26,7 +26,12 @@ export function ModListRow({
 
   return (
     <>
-      <ModContextMenu mod={mod} selectedGroupPath={selectedGroupPath} runner={runner} onPaste={handlePaste}>
+      <ModContextMenu
+        mod={mod}
+        selectedGroupPath={selectedGroupPath}
+        runner={runner}
+        onPaste={handlePaste}
+      >
         <tr
           className={cn(
             "relative group cursor-pointer border-b border-transparent transition-colors",

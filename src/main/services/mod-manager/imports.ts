@@ -146,7 +146,10 @@ export class ModImportsService {
             }
 
             await Promise.all(stalePreviewPaths.map((entryPath) => fse.remove(entryPath)));
-            this.desktop.logger.info(`Saved preview media atomically to ${filePath}`, "Mod:pastePreview");
+            this.desktop.logger.info(
+                `Saved preview media atomically to ${filePath}`,
+                "Mod:pastePreview",
+            );
         } catch (error) {
             this.desktop.logger.error(error, `Mod:pastePreview:${modPath}`);
             throw error;

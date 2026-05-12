@@ -42,19 +42,21 @@ export function useDrag() {
 
         if (paths.length < 1) return;
 
-        const { selectedPaths, conflicts } = await window.api.invoke("drive:fn:getUploadConflicts", {
-            destId: itemId,
-            paths,
-        });
+        const { selectedPaths, conflicts } = await window.api.invoke(
+            "drive:fn:getUploadConflicts",
+            {
+                destId: itemId,
+                paths,
+            },
+        );
 
         if (!selectedPaths || selectedPaths.length < 1) return;
 
         let conflictStrategy: "suffix" | "skip" = "suffix";
         if (conflicts.length > 0) {
-            const result = await dialogStore.getState().showDialog<"suffix" | "skip" | "cancel">(
-                "conflictNameDialog",
-                { conflicts },
-            );
+            const result = await dialogStore
+                .getState()
+                .showDialog<"suffix" | "skip" | "cancel">("conflictNameDialog", { conflicts });
             if (result === "cancel") return;
             conflictStrategy = result;
         }

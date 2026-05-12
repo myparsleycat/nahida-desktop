@@ -1,10 +1,9 @@
-import { StrictMode, useEffect, useState } from "react";
-import ReactDOM from "react-dom/client";
-import "./index.css";
-import "@renderer/lib/i18n";
-
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createHashHistory, createRouter, RouterProvider } from "@tanstack/react-router";
+import "./index.css";
+import "@renderer/lib/i18n";
+import { StrictMode, useEffect, useState } from "react";
+import ReactDOM from "react-dom/client";
 import { routeTree } from "./routeTree.gen";
 // Import the generated route tree
 import { setupWindowControls } from "./window-controls";

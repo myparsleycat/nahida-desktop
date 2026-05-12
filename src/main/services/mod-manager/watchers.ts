@@ -1,6 +1,6 @@
 import path from "node:path";
-import type { NahidaDesktop } from "../..";
 import fse from "fs-extra";
+import type { NahidaDesktop } from "../..";
 import type { ModLibraryService } from "./library";
 
 const WATCHER_SETTLE_DELAY_MS = 800;

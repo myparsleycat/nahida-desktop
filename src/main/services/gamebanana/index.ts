@@ -66,7 +66,7 @@ export class GameBananaService {
         },
     } as const;
 
-    constructor(private readonly desktop: NahidaDesktop) { }
+    constructor(private readonly desktop: NahidaDesktop) {}
 
     private getParentWindow() {
         const mainWindow = this.desktop.window.main.window;
@@ -524,7 +524,9 @@ export class GameBananaService {
         options?: Options & { _retryAuth?: boolean; _skipAuth?: boolean; _cookie?: string | null },
     ): Promise<Response & { mergedCookie?: string | null }> {
         const { _retryAuth = true, _skipAuth = false, _cookie, ...kyOptions } = options ?? {};
-        const cookie = _skipAuth ? (_cookie ?? null) : ((_cookie ?? await this.getCookie()) ?? null);
+        const cookie = _skipAuth
+            ? (_cookie ?? null)
+            : (_cookie ?? (await this.getCookie()) ?? null);
 
         const response = (await ky(input, {
             ...kyOptions,
@@ -538,14 +540,17 @@ export class GameBananaService {
         })) as Response & { mergedCookie?: string | null };
 
         const normalizedHeaders = Object.fromEntries(
-            Array.from(response.headers.entries()).map(([key, value]) => [key.toLowerCase(), value]),
+            Array.from(response.headers.entries()).map(([key, value]) => [
+                key.toLowerCase(),
+                value,
+            ]),
         );
         const setCookieHeaders =
             typeof response.headers.getSetCookie === "function"
                 ? response.headers.getSetCookie()
                 : normalizedHeaders["set-cookie"]
-                    ? [normalizedHeaders["set-cookie"]]
-                    : undefined;
+                  ? [normalizedHeaders["set-cookie"]]
+                  : undefined;
         const mergedCookie = await this.persistMergedCookie(cookie, setCookieHeaders);
         response.mergedCookie = mergedCookie;
 
@@ -633,22 +638,32 @@ export class GameBananaService {
 
     public async getGameProfile(gameId: number) {
         const url = this.formatUrl(this.baseUrls.game.profilePage, gameId);
-        return await this.requestJson(GameProfileSchema, url, {
-            method: "GET",
-            headers: {
-                Referer: `https://gamebanana.com/games/${gameId}`,
+        return await this.requestJson(
+            GameProfileSchema,
+            url,
+            {
+                method: "GET",
+                headers: {
+                    Referer: `https://gamebanana.com/games/${gameId}`,
+                },
             },
-        }, "game_profile");
+            "game_profile",
+        );
     }
 
     public async getGameTopSubs(gameId: number) {
         const url = this.formatUrl(this.baseUrls.game.topSubs, gameId);
-        return await this.requestJson(GameTopSubsSchema, url, {
-            method: "GET",
-            headers: {
-                Referer: `https://gamebanana.com/games/${gameId}`,
+        return await this.requestJson(
+            GameTopSubsSchema,
+            url,
+            {
+                method: "GET",
+                headers: {
+                    Referer: `https://gamebanana.com/games/${gameId}`,
+                },
             },
-        }, "game_top_submissions");
+            "game_top_submissions",
+        );
     }
 
     public async getGameSubfeed({
@@ -661,22 +676,32 @@ export class GameBananaService {
         page?: number;
     }) {
         const url = this.formatUrl(this.baseUrls.game.subfeed, gameId, sort, page);
-        return await this.requestJson(GameSubfeedSchema, url, {
-            method: "GET",
-            headers: {
-                Referer: `https://gamebanana.com/games/${gameId}`,
+        return await this.requestJson(
+            GameSubfeedSchema,
+            url,
+            {
+                method: "GET",
+                headers: {
+                    Referer: `https://gamebanana.com/games/${gameId}`,
+                },
             },
-        }, "game_subfeed");
+            "game_subfeed",
+        );
     }
 
     public async getModCategoryProfile(categoryId: number) {
         const url = this.formatUrl(this.baseUrls.modCategory.profilePage, categoryId);
-        return await this.requestJson(ModCategoryProfileSchema, url, {
-            method: "GET",
-            headers: {
-                Referer: `https://gamebanana.com/mods/cats/${categoryId}`,
+        return await this.requestJson(
+            ModCategoryProfileSchema,
+            url,
+            {
+                method: "GET",
+                headers: {
+                    Referer: `https://gamebanana.com/mods/cats/${categoryId}`,
+                },
             },
-        }, "mod_category_profile");
+            "mod_category_profile",
+        );
     }
 
     public async getModIndex({
@@ -689,12 +714,17 @@ export class GameBananaService {
         page?: number;
     }) {
         const url = this.formatUrl(this.baseUrls.modCategory.index, perPage, categoryId, page);
-        return await this.requestJson(ModIndexSchema, url, {
-            method: "GET",
-            headers: {
-                Referer: `https://gamebanana.com/mods/cats/${categoryId}`,
+        return await this.requestJson(
+            ModIndexSchema,
+            url,
+            {
+                method: "GET",
+                headers: {
+                    Referer: `https://gamebanana.com/mods/cats/${categoryId}`,
+                },
             },
-        }, "mod_index");
+            "mod_index",
+        );
     }
 
     public async getModCategories({
@@ -712,38 +742,47 @@ export class GameBananaService {
             sort,
             showEmpty,
         );
-        return await this.requestJson(ModCategoriesSchema, url, {
-            method: "GET",
-            headers: {
-                Referer: `https://gamebanana.com/mods/cats/${categoryId}`,
+        return await this.requestJson(
+            ModCategoriesSchema,
+            url,
+            {
+                method: "GET",
+                headers: {
+                    Referer: `https://gamebanana.com/mods/cats/${categoryId}`,
+                },
             },
-        }, "mod_categories");
+            "mod_categories",
+        );
     }
 
-    public async getModProfile(
-        itemId: number,
-        modelName: GameBananaSubmissionModel = "Mod",
-    ) {
+    public async getModProfile(itemId: number, modelName: GameBananaSubmissionModel = "Mod") {
         const url = this.formatUrl(`${this.apiBaseUrl}/${modelName}/{}/ProfilePage`, itemId);
-        return await this.requestJson(ModProfileSchema, url, {
-            method: "GET",
-            headers: {
-                Referer: this.getSubmissionReferer(modelName, itemId),
+        return await this.requestJson(
+            ModProfileSchema,
+            url,
+            {
+                method: "GET",
+                headers: {
+                    Referer: this.getSubmissionReferer(modelName, itemId),
+                },
             },
-        }, `${modelName.toLowerCase()}_profile`);
+            `${modelName.toLowerCase()}_profile`,
+        );
     }
 
-    public async getModConfig(
-        itemId: number,
-        modelName: GameBananaSubmissionModel = "Mod",
-    ) {
+    public async getModConfig(itemId: number, modelName: GameBananaSubmissionModel = "Mod") {
         const url = this.formatUrl(`${this.apiBaseUrl}/${modelName}/{}/Config`, itemId);
-        return await this.requestJson(ModConfigSchema, url, {
-            method: "GET",
-            headers: {
-                Referer: this.getSubmissionReferer(modelName, itemId),
+        return await this.requestJson(
+            ModConfigSchema,
+            url,
+            {
+                method: "GET",
+                headers: {
+                    Referer: this.getSubmissionReferer(modelName, itemId),
+                },
             },
-        }, `${modelName.toLowerCase()}_config`);
+            `${modelName.toLowerCase()}_config`,
+        );
     }
 
     public async getModPosts({
@@ -766,12 +805,17 @@ export class GameBananaService {
             perPage,
             sort,
         );
-        return await this.requestJson(ModPostsSchema, url, {
-            method: "GET",
-            headers: {
-                Referer: this.getSubmissionReferer(modelName, modId),
+        return await this.requestJson(
+            ModPostsSchema,
+            url,
+            {
+                method: "GET",
+                headers: {
+                    Referer: this.getSubmissionReferer(modelName, modId),
+                },
             },
-        }, `${modelName.toLowerCase()}_posts`);
+            `${modelName.toLowerCase()}_posts`,
+        );
     }
 
     public async getGameOverview(gameId: number) {
@@ -867,9 +911,9 @@ function formatKyInput(input: Input) {
 
 export type GameBananaGameOverview =
     z.infer<typeof GameProfileSchema> extends infer T
-    ? {
-        profile: T;
-        topSubs: z.infer<typeof GameTopSubsSchema>;
-        subfeed: z.infer<typeof GameSubfeedSchema>;
-    }
-    : never;
+        ? {
+              profile: T;
+              topSubs: z.infer<typeof GameTopSubsSchema>;
+              subfeed: z.infer<typeof GameSubfeedSchema>;
+          }
+        : never;

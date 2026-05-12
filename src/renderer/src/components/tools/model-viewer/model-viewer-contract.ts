@@ -90,11 +90,8 @@ export type ModelViewerSurfaceProps = {
     onLoad?: () => void;
 };
 
-export function parseOrientation(
-    orientation: string,
-): [number, number, number] {
-    const [roll = "0deg", pitch = "0deg", yaw = "0deg"] =
-        orientation.split(/\s+/);
+export function parseOrientation(orientation: string): [number, number, number] {
+    const [roll = "0deg", pitch = "0deg", yaw = "0deg"] = orientation.split(/\s+/);
     return [roll, pitch, yaw].map((value) => Number.parseFloat(value) || 0) as [
         number,
         number,
@@ -102,14 +99,8 @@ export function parseOrientation(
     ];
 }
 
-export function formatOrientation([roll, pitch, yaw]: [
-    number,
-    number,
-    number,
-]): string {
-    return [roll, pitch, yaw]
-        .map((value) => `${normalizeDegrees(value)}deg`)
-        .join(" ");
+export function formatOrientation([roll, pitch, yaw]: [number, number, number]): string {
+    return [roll, pitch, yaw].map((value) => `${normalizeDegrees(value)}deg`).join(" ");
 }
 
 function normalizeDegrees(value: number): number {

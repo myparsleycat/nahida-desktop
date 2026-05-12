@@ -25,7 +25,10 @@ export class Utils {
             this.isPreventAppSuspension = false;
             this.preventAppSuspensionId = null;
             return null;
-        } else if ((v && this.isPreventAppSuspension) || (!v && this.preventAppSuspensionId === null)) {
+        } else if (
+            (v && this.isPreventAppSuspension) ||
+            (!v && this.preventAppSuspensionId === null)
+        ) {
             return this.preventAppSuspensionId;
         } else {
             throw new Error("Invalid arguments");

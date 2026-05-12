@@ -10,5 +10,7 @@ export function registerWuwaModFixerHandlers(d: NahidaDesktop) {
         d.service.modTools.wuwaModFixer.prepareRun(importer),
     );
     rh("wuwaFixer:installOrUpdate", () => d.service.modTools.wuwaModFixer.installOrUpdate());
-    rh("wuwaFixer:run", (modPath, options) => d.service.modTools.wuwaModFixer.run(modPath, options));
+    rh("wuwaFixer:run", (modPath, options) =>
+        d.service.modTools.wuwaModFixer.run(modPath, options),
+    );
 }

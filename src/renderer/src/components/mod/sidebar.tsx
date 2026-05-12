@@ -87,8 +87,9 @@ export default function ModSidebar() {
     return await window.api.invoke("mod:pickFolder");
   }, []);
 
-  const { addGameMutation, updateGameMutation } = useGameMutations();
+  const { addGameMutation, reorderGamesMutation, updateGameMutation } = useGameMutations();
   const { mutate: addGame } = addGameMutation;
+  const { mutate: reorderGames } = reorderGamesMutation;
   const { mutate: updateGame } = updateGameMutation;
 
   const handleDeleteGameClick = useCallback(
@@ -111,6 +112,13 @@ export default function ModSidebar() {
       updateGame({ game, updates });
     },
     [updateGame],
+  );
+
+  const handleReorderGames = useCallback(
+    (games: string[]) => {
+      reorderGames(games);
+    },
+    [reorderGames],
   );
 
   useEffect(() => {
@@ -216,6 +224,7 @@ export default function ModSidebar() {
         onPickFolder={handlePickFolder}
         onAddGame={handleAddGame}
         onUpdateGame={handleUpdateGame}
+        onReorderGames={handleReorderGames}
       />
 
       <div

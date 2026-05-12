@@ -60,6 +60,7 @@ C:\Users\User\AppData\Roaming\XXMI Launcher\GIMI\Mods\SomeCharacterMod
 ```txt
 C:\Users\User\AppData\Roaming\XXMI Launcher\GIMI\Mods\Character\SomeCharacterMod
 ```
+
 :::
 
 ### 子分组

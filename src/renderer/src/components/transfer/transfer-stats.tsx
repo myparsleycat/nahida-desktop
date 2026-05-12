@@ -1,8 +1,8 @@
-import React from "react";
-import { ArrowUpFromLine, ArrowDownToLine, HardDrive, Clock } from "lucide-react";
 import { cn } from "@renderer/lib/utils";
-import { TransferStatsProps } from "./types";
+import { ArrowUpFromLine, ArrowDownToLine, HardDrive, Clock } from "lucide-react";
+import React from "react";
 import { useTranslation } from "react-i18next";
+import { TransferStatsProps } from "./types";
 
 interface StatCardProps {
   icon: React.ReactNode;

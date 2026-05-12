@@ -1,6 +1,6 @@
-import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { Badge } from "@renderer/components/ui/badge";
 import { Separator } from "@renderer/components/ui/separator";
+import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { cn } from "@renderer/lib/utils";
 import type { ModInfo } from "@renderer/types/mod";
 import { formatDate, formatSize } from "@shared/utils";
@@ -11,8 +11,8 @@ import { ModCardHeader } from "./mod-card-header";
 import { ModContextMenu } from "./mod-context-menu";
 import { ModFixRunnerDialogs } from "./mod-fix-runner-dialogs";
 import { ModIniList } from "./mod-ini-list";
-import { pasteModPreview } from "./paste-preview";
 import { ModPreviewContainer } from "./mod-preview-container";
+import { pasteModPreview } from "./paste-preview";
 import { TextureResizeDialog } from "./texture-resize-dialog";
 import { getModColorClass } from "./utils";
 

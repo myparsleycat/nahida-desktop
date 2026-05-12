@@ -48,6 +48,10 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         },
     );
 
+    rh("mod:reorderGames", async (games: string[]) => {
+        return await desktop.service.mod.fn.reorderGames(games);
+    });
+
     rh("mod:pickFolder", async () => {
         const result = await dialog.showOpenDialog({
             properties: ["openDirectory"],
@@ -126,12 +130,9 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         },
     );
 
-    rh(
-        "mod:resolveDownloadArchiveExtractPrompt",
-        async (requestId: string, mode) => {
-            desktop.lib.customDownloader.resolveArchiveExtractPrompt(requestId, mode);
-        },
-    );
+    rh("mod:resolveDownloadArchiveExtractPrompt", async (requestId: string, mode) => {
+        desktop.lib.customDownloader.resolveArchiveExtractPrompt(requestId, mode);
+    });
 
     rh(
         "mod:updateToggleKey",

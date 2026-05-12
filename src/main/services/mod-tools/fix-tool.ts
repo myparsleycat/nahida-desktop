@@ -1,10 +1,10 @@
 import crypto from "node:crypto";
 import path from "node:path";
 import { ScriptExecutor } from "@main/lib/script-executor";
+import type { FixToolLogEvent } from "@shared/types";
 import { sortBy } from "es-toolkit";
 import fse from "fs-extra";
 import { nanoid } from "nanoid";
-import type { FixToolLogEvent } from "@shared/types";
 import type { NahidaDesktop } from "@/main";
 import type { ScriptRow } from "@/main/internal/db";
 
@@ -62,9 +62,8 @@ export class FixTool {
         const script = await this.desktop.lib.db.scripts.findById(scriptId);
         if (!script) throw new Error("Script not found");
 
-        const usedInPresets = await this.desktop.lib.db.scriptPresetItems.findUsageByScriptId(
-            scriptId,
-        );
+        const usedInPresets =
+            await this.desktop.lib.db.scriptPresetItems.findUsageByScriptId(scriptId);
         if (usedInPresets) {
             throw new Error(`Script is used in a preset: ${usedInPresets.presetName}`);
         }
@@ -161,11 +160,9 @@ export class FixTool {
             await this._runScriptSafe(_script, destPath, mainWindow, signal, []);
         } catch (e) {
             this.desktop.logger.error(e);
-            this.desktop.ipc.postMessageToWindow(
-                mainWindow,
-                "ftm:log",
-                { message: `Error: ${(e as Error).message}` },
-            );
+            this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", {
+                message: `Error: ${(e as Error).message}`,
+            });
         } finally {
             if (prepared) {
                 this.cleanupExecution();
@@ -196,30 +193,24 @@ export class FixTool {
 
             const sortedItems = sortBy(preset.scripts, ["order"]);
 
-            this.desktop.ipc.postMessageToWindow(
-                mainWindow,
-                "ftm:log",
-                { message: `Starting Preset: ${preset.name}` },
-            );
+            this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", {
+                message: `Starting Preset: ${preset.name}`,
+            });
 
             for (const item of sortedItems) {
                 if (signal.aborted) {
-                    this.desktop.ipc.postMessageToWindow(
-                        mainWindow,
-                        "ftm:log",
-                        { message: `Preset execution aborted by user.` },
-                    );
+                    this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", {
+                        message: `Preset execution aborted by user.`,
+                    });
                     break;
                 }
 
                 const _script = await this.desktop.lib.db.scripts.findById(item.scriptId);
 
                 if (!_script) {
-                    this.desktop.ipc.postMessageToWindow(
-                        mainWindow,
-                        "ftm:log",
-                        { message: `Script not found (ID: ${item.scriptId}), skipping...` },
-                    );
+                    this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", {
+                        message: `Script not found (ID: ${item.scriptId}), skipping...`,
+                    });
                     continue;
                 }
 
@@ -233,11 +224,9 @@ export class FixTool {
             }
         } catch (e) {
             this.desktop.logger.error(e);
-            this.desktop.ipc.postMessageToWindow(
-                mainWindow,
-                "ftm:log",
-                { message: `Error: ${(e as Error).message}` },
-            );
+            this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", {
+                message: `Error: ${(e as Error).message}`,
+            });
         } finally {
             if (prepared) {
                 this.cleanupExecution();
@@ -359,11 +348,9 @@ export class FixTool {
                 await fse.writeFile(scriptPath, script.source);
             }
 
-            this.desktop.ipc.postMessageToWindow(
-                mainWindow,
-                "ftm:log",
-                { message: `Running ${script.name}...` },
-            );
+            this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", {
+                message: `Running ${script.name}...`,
+            });
 
             await this.activeExecutor.execute(
                 scriptPath,
@@ -381,17 +368,13 @@ export class FixTool {
         } catch (e) {
             const errorMessage = (e as Error).message;
             if (errorMessage === "Aborted") {
-                this.desktop.ipc.postMessageToWindow(
-                    mainWindow,
-                    "ftm:log",
-                    { message: `Cancelled ${script.name}` },
-                );
+                this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", {
+                    message: `Cancelled ${script.name}`,
+                });
             } else {
-                this.desktop.ipc.postMessageToWindow(
-                    mainWindow,
-                    "ftm:log",
-                    { message: `Failed ${script.name}: ${errorMessage}` },
-                );
+                this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", {
+                    message: `Failed ${script.name}: ${errorMessage}`,
+                });
             }
             return false;
         } finally {

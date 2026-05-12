@@ -41,8 +41,15 @@ export function useGameMutations() {
     };
 
     const addGameMutation = useMutation({
-        mutationFn: ({ name, path, importer }: { name: string; path: string; importer: string | null }) =>
-            window.api.invoke("mod:addGame", name, path, importer),
+        mutationFn: ({
+            name,
+            path,
+            importer,
+        }: {
+            name: string;
+            path: string;
+            importer: string | null;
+        }) => window.api.invoke("mod:addGame", name, path, importer),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["games"] });
             setNewGameName("");
@@ -166,7 +173,33 @@ export function useGameMutations() {
         },
     });
 
-    return { addGameMutation, deleteGameMutation, updateGameMutation };
+    const reorderGamesMutation = useMutation({
+        mutationFn: (games: string[]) => window.api.invoke("mod:reorderGames", games),
+        onSuccess: (_, orderedGames) => {
+            const currentGames =
+                (queryClient.getQueryData(["games"]) as GameConfig[] | undefined) ?? [];
+            const gameMap = new Map(currentGames.map((game) => [game.game, game]));
+            const reorderedGames = orderedGames
+                .map((gameName, index) => {
+                    const game = gameMap.get(gameName);
+                    if (!game) {
+                        return null;
+                    }
+
+                    return { ...game, order: index + 1 };
+                })
+                .filter((game): game is GameConfig => game !== null);
+
+            queryClient.setQueryData(["games"], reorderedGames);
+            queryClient.invalidateQueries({ queryKey: ["games"] });
+            toast.success(t("page.mod.hooks.use-mod-mutations.reorder-games-mutation.success"));
+        },
+        onError: () => {
+            toast.error(t("page.mod.hooks.use-mod-mutations.reorder-games-mutation.failed"));
+        },
+    });
+
+    return { addGameMutation, deleteGameMutation, updateGameMutation, reorderGamesMutation };
 }
 
 export function useModMutations() {

@@ -1,3 +1,4 @@
+import { useModStore } from "@renderer/store/mod";
 import {
   type GitHubRateState,
   type WuwaFixerOptions,
@@ -9,7 +10,6 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useGames } from "./use-mod-data";
-import { useModStore } from "@renderer/store/mod";
 
 const defaultWuwaOptions = (): WuwaFixerOptions => ({
   derivedHashes: false,

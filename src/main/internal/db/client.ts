@@ -292,7 +292,11 @@ export class DatabaseClient {
     public readonly gamePaths = {
         getByGame: async (game: string) => {
             const row = this.get<GamePathRow>(
-                `SELECT "game", "modFolderPath", "importer"
+                `SELECT "game", "modFolderPath", "importer",
+                        CASE
+                            WHEN "order" = 0 THEN rowid
+                            ELSE "order"
+                        END AS "order"
                  FROM "game_paths" WHERE "game" = ? LIMIT 1`,
                 [game],
             );
@@ -300,12 +304,22 @@ export class DatabaseClient {
         },
         list: async () =>
             this.all<GamePathRow>(
-                `SELECT "game", "modFolderPath", "importer"
-                 FROM "game_paths" ORDER BY "game"`,
+                `SELECT "game", "modFolderPath", "importer",
+                        CASE
+                            WHEN "order" = 0 THEN rowid
+                            ELSE "order"
+                        END AS "order"
+                 FROM "game_paths"
+                 ORDER BY
+                    CASE
+                        WHEN "order" = 0 THEN rowid
+                        ELSE "order"
+                    END,
+                    rowid`,
             ),
         findByGameOrModFolderPath: async (game: string, modFolderPath: string) => {
             const row = this.get<GamePathRow>(
-                `SELECT "game", "modFolderPath", "importer"
+                `SELECT "game", "modFolderPath", "importer", "order"
                  FROM "game_paths"
                  WHERE "game" = ? OR "modFolderPath" = ?
                  LIMIT 1`,
@@ -315,7 +329,7 @@ export class DatabaseClient {
         },
         findByModFolderPathOtherGame: async (game: string, modFolderPath: string) => {
             const row = this.get<GamePathRow>(
-                `SELECT "game", "modFolderPath", "importer"
+                `SELECT "game", "modFolderPath", "importer", "order"
                  FROM "game_paths"
                  WHERE "modFolderPath" = ? AND "game" <> ?
                  LIMIT 1`,
@@ -323,18 +337,33 @@ export class DatabaseClient {
             );
             return row ?? null;
         },
-        insert: async (row: GamePathRow) => {
+        insert: async (row: Omit<GamePathRow, "order">) => {
+            const maxOrder =
+                this.get<{ maxOrder: number | null }>(
+                    `SELECT MAX(
+                        CASE
+                            WHEN "order" = 0 THEN rowid
+                            ELSE "order"
+                        END
+                    ) AS "maxOrder"
+                     FROM "game_paths"`,
+                )?.maxOrder ?? 0;
+
             this.run(
-                `INSERT INTO "game_paths" ("game", "modFolderPath", "importer") VALUES (?, ?, ?)`,
-                [row.game, row.modFolderPath, row.importer],
+                `INSERT INTO "game_paths" ("game", "modFolderPath", "importer", "order")
+                 VALUES (?, ?, ?, ?)`,
+                [row.game, row.modFolderPath, row.importer, maxOrder + 1],
             );
         },
         upsert: async (row: GamePathRow) => {
             this.run(
-                `INSERT INTO "game_paths" ("game", "modFolderPath", "importer") VALUES (?, ?, ?)
+                `INSERT INTO "game_paths" ("game", "modFolderPath", "importer", "order")
+                 VALUES (?, ?, ?, ?)
                  ON CONFLICT("game") DO UPDATE
-                 SET "modFolderPath" = excluded."modFolderPath", "importer" = excluded."importer"`,
-                [row.game, row.modFolderPath, row.importer],
+                 SET "modFolderPath" = excluded."modFolderPath",
+                     "importer" = excluded."importer",
+                     "order" = excluded."order"`,
+                [row.game, row.modFolderPath, row.importer, row.order],
             );
         },
         update: async (game: string, updates: Pick<GamePathRow, "modFolderPath" | "importer">) => {
@@ -342,6 +371,20 @@ export class DatabaseClient {
                 `UPDATE "game_paths" SET "modFolderPath" = ?, "importer" = ? WHERE "game" = ?`,
                 [updates.modFolderPath, updates.importer, game],
             );
+        },
+        reorder: async (games: string[]) => {
+            const statement = this.prepare(`UPDATE "game_paths" SET "order" = ? WHERE "game" = ?`);
+
+            this.exec("BEGIN");
+            try {
+                games.forEach((game, index) => {
+                    statement.run(index + 1, game);
+                });
+                this.exec("COMMIT");
+            } catch (error) {
+                this.exec("ROLLBACK");
+                throw error;
+            }
         },
         delete: async (game: string) => {
             this.run(`DELETE FROM "game_paths" WHERE "game" = ?`, [game]);

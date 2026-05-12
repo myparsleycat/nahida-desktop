@@ -1,10 +1,7 @@
 import { cn } from "@renderer/lib/utils";
-import type {
-  ModelViewerVariantManifest,
-  VariableStateValue,
-} from "./model-viewer-dialog-types";
-import { modelViewerSourceToUrl } from "./model-viewer-session";
 import { useEffect, useRef, useState } from "react";
+import type { ModelViewerVariantManifest, VariableStateValue } from "./model-viewer-dialog-types";
+import { modelViewerSourceToUrl } from "./model-viewer-session";
 
 export function formatSliderValue(value: number): string {
   if (Number.isInteger(value)) {
@@ -32,9 +29,7 @@ export function VariantTile({
   onSelect: (variableId: string, value: VariableStateValue) => void;
 }) {
   const isActive = String(activeValue) !== String(variable.defaultValue);
-  const framePath = isActive
-    ? slotActivePath || slotHoverPath || slotPath
-    : slotPath;
+  const framePath = isActive ? slotActivePath || slotHoverPath || slotPath : slotPath;
 
   return (
     <button
@@ -51,9 +46,7 @@ export function VariantTile({
           return;
         }
         const nextIndex =
-          variable.values.findIndex(
-            (entry) => String(entry.value) === String(activeValue),
-          ) + 1;
+          variable.values.findIndex((entry) => String(entry.value) === String(activeValue)) + 1;
         const next = variable.values[nextIndex % variable.values.length];
         if (!next) {
           return;
@@ -101,9 +94,7 @@ export function VariantSlider({
       ? variable.defaultValue
       : Number(variable.values[0]?.value ?? 0);
   const resolvedValue =
-    typeof activeValue === "number"
-      ? activeValue
-      : Number(activeValue ?? fallbackValue);
+    typeof activeValue === "number" ? activeValue : Number(activeValue ?? fallbackValue);
   const [draftValue, setDraftValue] = useState(resolvedValue);
   const commitTimeoutRef = useRef<number | null>(null);
 
@@ -156,10 +147,7 @@ export function VariantSlider({
         step={slider.step}
         value={draftValue}
         disabled={disabled}
-        className={cn(
-          "w-full accent-primary",
-          disabled && "cursor-not-allowed opacity-60",
-        )}
+        className={cn("w-full accent-primary", disabled && "cursor-not-allowed opacity-60")}
         onChange={(event) => {
           const nextValue = Number(event.currentTarget.value);
           setDraftValue(nextValue);

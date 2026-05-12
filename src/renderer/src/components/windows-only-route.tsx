@@ -4,25 +4,25 @@ import { useEffect, type ReactNode } from "react";
 import { useGlobalStore } from "../store/global";
 
 export function WindowsOnlyRoute({
-    children,
-    fallbackTo,
+  children,
+  fallbackTo,
 }: {
-    children: ReactNode;
-    fallbackTo: "/transfer" | "/setting/gen";
+  children: ReactNode;
+  fallbackTo: "/transfer" | "/setting/gen";
 }) {
-    const navi = useNavigate();
-    const appStatus = useGlobalStore((state) => state.appStatus);
-    const isWindows = supportsWindowsDesktopFeatures(appStatus?.platform);
+  const navi = useNavigate();
+  const appStatus = useGlobalStore((state) => state.appStatus);
+  const isWindows = supportsWindowsDesktopFeatures(appStatus?.platform);
 
-    useEffect(() => {
-        if (appStatus && !isWindows) {
-            navi({ to: fallbackTo });
-        }
-    }, [appStatus, fallbackTo, isWindows, navi]);
-
-    if (!appStatus || !isWindows) {
-        return null;
+  useEffect(() => {
+    if (appStatus && !isWindows) {
+      navi({ to: fallbackTo });
     }
+  }, [appStatus, fallbackTo, isWindows, navi]);
 
-    return <>{children}</>;
+  if (!appStatus || !isWindows) {
+    return null;
+  }
+
+  return <>{children}</>;
 }

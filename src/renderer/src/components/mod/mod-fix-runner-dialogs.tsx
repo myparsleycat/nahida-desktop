@@ -208,24 +208,24 @@ export function ModFixRunnerDialogs({ runner }: { runner: ModFixRunner }) {
                       }))
                     }
                     disabled={rollbackEnabled}
-                    >
-                      <SelectTrigger className="w-44">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent position="popper">
-                        <SelectGroup>
-                          <SelectItem value="none">
-                            {t(`${translationKey}.options.aero_fix.options.none`)}
-                          </SelectItem>
-                          <SelectItem value="1">
-                            {t(`${translationKey}.options.aero_fix.options.texcoord_override`)}
-                          </SelectItem>
-                          <SelectItem value="2">
-                            {t(`${translationKey}.options.aero_fix.options.texture_mirror_flip`)}
-                          </SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
+                  >
+                    <SelectTrigger className="w-44">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectGroup>
+                        <SelectItem value="none">
+                          {t(`${translationKey}.options.aero_fix.options.none`)}
+                        </SelectItem>
+                        <SelectItem value="1">
+                          {t(`${translationKey}.options.aero_fix.options.texcoord_override`)}
+                        </SelectItem>
+                        <SelectItem value="2">
+                          {t(`${translationKey}.options.aero_fix.options.texture_mirror_flip`)}
+                        </SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {runner.wuwaOptions.aeroFix !== "none" && (

@@ -146,11 +146,7 @@ export function AddGameDialog({ onPickFolder, onAddGame }: AddGameDialogProps) {
                 <AlertDescription>
                   <div className="flex flex-col gap-3">
                     <span>{t("page.mod.dialog.add-game.xxmi_path_required")}</span>
-                    <Button
-                      variant="outline"
-                      className="w-fit"
-                      onClick={handleOpenXXMISettings}
-                    >
+                    <Button variant="outline" className="w-fit" onClick={handleOpenXXMISettings}>
                       {t("page.mod.dialog.add-game.open_xxmi_settings")}
                     </Button>
                   </div>

@@ -9,7 +9,9 @@ const OptionalNumericId = z.preprocess((value) => {
     }
 
     const numberValue =
-        typeof value === "number" ? value : Number(typeof value === "string" ? value.trim() : value);
+        typeof value === "number"
+            ? value
+            : Number(typeof value === "string" ? value.trim() : value);
 
     return Number.isFinite(numberValue) ? numberValue : undefined;
 }, z.number().optional());

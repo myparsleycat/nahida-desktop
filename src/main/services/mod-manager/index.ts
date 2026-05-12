@@ -49,6 +49,7 @@ export class ModManager {
         updatePresetName: ModPresetsService["updatePresetName"];
         addGame: ModLibraryService["addGame"];
         updateGame: ModLibraryService["updateGame"];
+        reorderGames: ModLibraryService["reorderGames"];
         removeGame: ModLibraryService["removeGame"];
         setLastGame: ModLibraryService["setLastGame"];
         setExpandedGroups: ModLibraryService["setExpandedGroups"];
@@ -102,6 +103,7 @@ export class ModManager {
             updatePresetName: this.presets.updatePresetName.bind(this.presets),
             addGame: this.library.addGame.bind(this.library),
             updateGame: this.library.updateGame.bind(this.library),
+            reorderGames: this.library.reorderGames.bind(this.library),
             removeGame: this.library.removeGame.bind(this.library),
             setLastGame: this.library.setLastGame.bind(this.library),
             setExpandedGroups: this.library.setExpandedGroups.bind(this.library),

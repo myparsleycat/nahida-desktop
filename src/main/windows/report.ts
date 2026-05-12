@@ -1,8 +1,8 @@
 import { fileURLToPath } from "node:url";
 import { is } from "@electron-toolkit/utils";
 import { BrowserWindow } from "electron";
-import icon from "../../../resources/nahida.png?asset";
 import type { NahidaDesktop } from "..";
+import icon from "../../../resources/nahida.png?asset";
 import { focus, getDefaultWebPreferences } from "./utils";
 
 export class ReportWindow {

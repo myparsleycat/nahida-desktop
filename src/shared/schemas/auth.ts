@@ -18,8 +18,8 @@ export const SessionSchema = z.object({
     }),
     drive: z.object({
         id: z.string(),
-        rootId: z.string()
-    })
+        rootId: z.string(),
+    }),
 });
 
 export type Session = z.infer<typeof SessionSchema>;
