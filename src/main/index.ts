@@ -145,6 +145,30 @@ export class NahidaDesktop {
         this.service.xxmi = new XXMI(this);
     }
 
+    private async syncAutoLaunchSetting() {
+        if (!app.isPackaged) {
+            return;
+        }
+
+        try {
+            const runOnStartup = await this.setting.general.getRunOnStartup();
+            const autoLaunch = new AutoLaunch({
+                name: "Nahida Desktop",
+                path: app.getPath("exe"),
+                isHidden: true,
+            });
+
+            if (runOnStartup) {
+                await autoLaunch.enable();
+                return;
+            }
+
+            await autoLaunch.disable();
+        } catch (error) {
+            this.logger.error(`Failed to sync auto launch setting: ${String(error)}`, "App");
+        }
+    }
+
     public async init() {
         if (this.initialized) return;
 
@@ -192,22 +216,8 @@ export class NahidaDesktop {
         const logLevel = await this.setting.general.getLogLevel();
         this.logger.setLevel(logLevel);
 
-        if (app.isPackaged) {
-            const runOnStartup = await this.setting.general.getRunOnStartup();
-            const autoLaunch = new AutoLaunch({
-                name: "Nahida Desktop",
-                path: app.getPath("exe"),
-                isHidden: true,
-            });
-
-            if (runOnStartup) {
-                await autoLaunch.enable();
-            } else {
-                await autoLaunch.disable();
-            }
-        }
-
         await this.window.main.createMainWindow();
+        void this.syncAutoLaunchSetting();
     }
 }
 
