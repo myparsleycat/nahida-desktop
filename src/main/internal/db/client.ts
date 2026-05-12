@@ -922,7 +922,10 @@ export class DatabaseClient {
                 return { type: "rebuild" as const };
             }
 
-            if (Boolean(target.primaryKey) !== existing.pk > 0) {
+            if (
+                (spec.compositePrimaryKey?.length ?? 0) === 0 &&
+                Boolean(target.primaryKey) !== existing.pk > 0
+            ) {
                 return { type: "rebuild" as const };
             }
 
