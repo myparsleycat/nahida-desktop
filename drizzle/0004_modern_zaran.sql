@@ -1,1 +1,0 @@
-ALTER TABLE `image_cache` ADD `size` integer NOT NULL;

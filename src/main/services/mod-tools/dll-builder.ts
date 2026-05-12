@@ -4,8 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
-import { appState } from "@main/internal/db/schema";
-import { eq } from "drizzle-orm";
 import fse from "fs-extra";
 import ky from "ky";
 import ms from "ms";
@@ -59,7 +57,7 @@ export class DllBuilder {
             name: "mod-tools:d3d-build",
             run: () => this.cleanupStaleBuildDirs(),
         });
-        this.updateReleases();
+        void this.updateReleases();
     }
 
     public getBuilderState() {
@@ -282,32 +280,19 @@ export class DllBuilder {
 
     private async trackBuildTempDir(buildId: string, tempDir: string) {
         const state: D3DBuildState = { id: buildId, tempDir };
-        await this.desktop.lib.db
-            .insert(appState)
-            .values({
-                key: this.getBuildStateKey(buildId),
-                value: JSON.stringify(state),
-                updatedAt: new Date().toISOString(),
-            })
-            .onConflictDoUpdate({
-                target: appState.key,
-                set: {
-                    value: JSON.stringify(state),
-                    updatedAt: new Date().toISOString(),
-                },
-            });
+        await this.desktop.lib.db.appState.upsert(
+            this.getBuildStateKey(buildId),
+            JSON.stringify(state),
+            new Date().toISOString(),
+        );
     }
 
     private async untrackBuildTempDir(buildId: string) {
-        await this.desktop.lib.db
-            .delete(appState)
-            .where(eq(appState.key, this.getBuildStateKey(buildId)));
+        await this.desktop.lib.db.appState.delete(this.getBuildStateKey(buildId));
     }
 
     private async cleanupStaleBuildDirs() {
-        const states = (await this.desktop.lib.db.select().from(appState)).filter((state) =>
-            state.key.startsWith(D3D_BUILD_STATE_KEY_PREFIX),
-        );
+        const states = await this.desktop.lib.db.appState.listByPrefix(D3D_BUILD_STATE_KEY_PREFIX);
 
         for (const state of states) {
             const buildId = state.key.slice(D3D_BUILD_STATE_KEY_PREFIX.length);
@@ -316,7 +301,7 @@ export class DllBuilder {
                     `Skipping invalid D3D build state key: ${state.key}`,
                     "DllBuilder:cleanupStaleBuildDirs",
                 );
-                await this.desktop.lib.db.delete(appState).where(eq(appState.key, state.key));
+                await this.desktop.lib.db.appState.delete(state.key);
                 continue;
             }
 
@@ -326,7 +311,7 @@ export class DllBuilder {
                     "DllBuilder:cleanupStaleBuildDirs",
                 );
             });
-            await this.desktop.lib.db.delete(appState).where(eq(appState.key, state.key));
+            await this.desktop.lib.db.appState.delete(state.key);
         }
     }
 
@@ -531,7 +516,7 @@ export class DllBuilder {
             }
         } catch (error) {
             this.desktop.logger.error(
-                `Failed to update config for ${importerKey}: ${error}`,
+                `Failed to update config for ${importerKey}: ${String(error)}`,
                 "DllBuilder:enableUnsafeMode",
             );
         }

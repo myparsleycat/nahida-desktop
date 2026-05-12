@@ -1,6 +1,4 @@
-import { appState } from "@main/internal/db/schema";
 import type { GitHubRateState } from "@shared/types";
-import { eq } from "drizzle-orm";
 import type { NahidaDesktop } from "..";
 
 const GITHUB_CORE_RATE_KEY = "github:core-rate";
@@ -14,9 +12,7 @@ export class GitHubRateCoordinator {
     constructor(private readonly desktop: NahidaDesktop) {}
 
     public async getRateState(): Promise<GitHubRateState | null> {
-        const row = await this.desktop.lib.db.query.appState.findFirst({
-            where: eq(appState.key, GITHUB_CORE_RATE_KEY),
-        });
+        const row = await this.desktop.lib.db.appState.get(GITHUB_CORE_RATE_KEY);
 
         if (!row?.value) {
             return null;
@@ -138,19 +134,11 @@ export class GitHubRateCoordinator {
     }
 
     private async saveRateState(rateState: GitHubRateState) {
-        await this.desktop.lib.db
-            .insert(appState)
-            .values({
-                key: GITHUB_CORE_RATE_KEY,
-                value: JSON.stringify(rateState),
-                updatedAt: new Date().toISOString(),
-            })
-            .onConflictDoUpdate({
-                target: appState.key,
-                set: {
-                    value: JSON.stringify(rateState),
-                    updatedAt: new Date().toISOString(),
-                },
-            });
+        const updatedAt = new Date().toISOString();
+        await this.desktop.lib.db.appState.upsert(
+            GITHUB_CORE_RATE_KEY,
+            JSON.stringify(rateState),
+            updatedAt,
+        );
     }
 }

@@ -4,14 +4,10 @@ import { electronApp, optimizer } from "@electron-toolkit/utils";
 import { BACKEND_URL } from "@shared/const";
 import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import AutoLaunch from "auto-launch";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
 import { app, crashReporter, protocol } from "electron";
 import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
 import { IS_ELECTRON } from "./const";
-import { DB_FILE_NAME } from "./internal/const";
-import { InitDB } from "./internal/db";
-import * as schema from "./internal/db/schema";
+import { db, InitDB } from "./internal/db";
 import { GitHubRateCoordinator } from "./internal/github-rate";
 import { DesktopHttpService } from "./internal/http";
 import Logger from "./internal/logger";
@@ -51,10 +47,6 @@ if (IS_ELECTRON) {
     app?.commandLine.appendSwitch("disable-pinch-zoom");
     app?.commandLine.appendSwitch("disable-pinch");
 }
-
-const dbPath = !app.isPackaged ? DB_FILE_NAME : path.join(app.getPath("userData"), "data.db");
-const sqlite = new Database(dbPath);
-const db = drizzle(sqlite, { schema });
 
 export class NahidaDesktop {
     public initialized: boolean = false;
@@ -175,29 +167,24 @@ export class NahidaDesktop {
         }
 
         // init db
-        await InitDB(this.lib.db);
+        await InitDB();
         await this.service.startupCleanup.runAll();
 
         // init lang
-        const lang = await this.lib.db.query.setting.findFirst({
-            where: (t, { eq }) => eq(t.key, "language"),
-        });
+        const lang = await this.lib.db.settings.getValue("language");
         if (!lang) {
             const locale = app.getLocale();
-            if (locale.startsWith("en"))
-                await this.lib.db.insert(schema.setting).values({ key: "language", value: "en" });
-            else if (locale === "ko")
-                await this.lib.db.insert(schema.setting).values({ key: "language", value: "ko" });
-            else if (locale.startsWith("zh"))
-                await this.lib.db.insert(schema.setting).values({ key: "language", value: "zh" });
-            else await this.lib.db.insert(schema.setting).values({ key: "language", value: "en" });
+            if (locale.startsWith("en")) await this.lib.db.settings.upsert("language", "en");
+            else if (locale === "ko") await this.lib.db.settings.upsert("language", "ko");
+            else if (locale.startsWith("zh")) await this.lib.db.settings.upsert("language", "zh");
+            else await this.lib.db.settings.upsert("language", "en");
         }
 
         // make server
         try {
             await startServer();
         } catch (error) {
-            this.logger.error(`Failed to start server on port 1027: ${error}`, "Server");
+            this.logger.error(`Failed to start server on port 1027: ${String(error)}`, "Server");
             throw error;
         }
 
@@ -226,9 +213,9 @@ export class NahidaDesktop {
             });
 
             if (runOnStartup) {
-                autoLaunch.enable();
+                await autoLaunch.enable();
             } else {
-                autoLaunch.disable();
+                await autoLaunch.disable();
             }
         }
 
@@ -273,7 +260,7 @@ protocol.registerSchemesAsPrivileged([
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(async () => {
+void app.whenReady().then(async () => {
     const gotTheLock = app.requestSingleInstanceLock();
 
     if (!gotTheLock) {
@@ -305,7 +292,7 @@ app.whenReady().then(async () => {
 
             desktop.window.main.focus();
         } catch (error) {
-            desktop.logger.error(`Failed to handle second-instance event: ${error}`, "App");
+            desktop.logger.error(`Failed to handle second-instance event: ${String(error)}`, "App");
             return;
         }
     });

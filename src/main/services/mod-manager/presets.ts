@@ -1,10 +1,9 @@
 import path from "node:path";
 import type { ApplyPresetResult, Preset } from "@shared/types";
-import { and, eq } from "drizzle-orm";
 import { trim } from "es-toolkit";
 import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "../..";
-import { modPresetItems, modPresets } from "../../internal/db/schema";
+import type { ModPresetItemRow, ModPresetRow } from "../../internal/db";
 import type { ModLibraryService } from "./library";
 import type { ModActionsService } from "./mod-actions";
 import {
@@ -51,9 +50,7 @@ export class ModPresetsService {
     ) {}
 
     public async presets(game: string): Promise<Preset[]> {
-        const results = await this.desktop.lib.db.query.modPresets.findMany({
-            where: eq(modPresets.game, game),
-        });
+        const results = await this.desktop.lib.db.modPresets.listByGame(game);
 
         return results
             .sort((a, b) => a.name.localeCompare(b.name))
@@ -85,9 +82,10 @@ export class ModPresetsService {
             throw new Error("INVALID_PRESET_NAME");
         }
 
-        const existingPreset = await this.desktop.lib.db.query.modPresets.findFirst({
-            where: and(eq(modPresets.game, game), eq(modPresets.name, trimmedName)),
-        });
+        const existingPreset = await this.desktop.lib.db.modPresets.findByGameAndName(
+            game,
+            trimmedName,
+        );
         if (existingPreset) {
             throw new Error("PRESET_NAME_EXISTS");
         }
@@ -109,19 +107,17 @@ export class ModPresetsService {
         const id = nanoid();
         const now = new Date().toISOString();
 
-        this.desktop.lib.db.transaction((tx) => {
-            tx.insert(modPresets)
-                .values({
-                    id,
-                    game,
-                    name: trimmedName,
-                    description: trimmedDescription || null,
-                    itemCount: 0,
-                    createdAt: now,
-                    updatedAt: now,
-                    version: MOD_PRESET_VERSION,
-                })
-                .run();
+        this.desktop.lib.db.transaction(() => {
+            this.desktop.lib.db.modPresets.insert({
+                id,
+                game,
+                name: trimmedName,
+                description: trimmedDescription || null,
+                itemCount: 0,
+                createdAt: now,
+                updatedAt: now,
+                version: MOD_PRESET_VERSION,
+            } satisfies ModPresetRow);
 
             if (snapshot.length > 0) {
                 const presetItems = snapshot.map((item, index) => ({
@@ -135,14 +131,12 @@ export class ModPresetsService {
                     startIndex < presetItems.length;
                     startIndex += MOD_PRESET_ITEM_INSERT_BATCH_SIZE
                 ) {
-                    tx.insert(modPresetItems)
-                        .values(
-                            presetItems.slice(
-                                startIndex,
-                                startIndex + MOD_PRESET_ITEM_INSERT_BATCH_SIZE,
-                            ),
-                        )
-                        .run();
+                    this.desktop.lib.db.modPresetItems.insertMany(
+                        presetItems.slice(
+                            startIndex,
+                            startIndex + MOD_PRESET_ITEM_INSERT_BATCH_SIZE,
+                        ) satisfies ModPresetItemRow[],
+                    );
                 }
             }
         });
@@ -160,9 +154,7 @@ export class ModPresetsService {
     }
 
     public async applyPreset(presetId: string): Promise<ApplyPresetResult> {
-        const preset = await this.desktop.lib.db.query.modPresets.findFirst({
-            where: eq(modPresets.id, presetId),
-        });
+        const preset = await this.desktop.lib.db.modPresets.findById(presetId);
 
         if (!preset) {
             throw new Error(`Preset ${presetId} not found`);
@@ -172,9 +164,7 @@ export class ModPresetsService {
             throw new Error("LEGACY_PRESET_NOT_SUPPORTED");
         }
 
-        const presetItems = await this.desktop.lib.db.query.modPresetItems.findMany({
-            where: eq(modPresetItems.presetId, presetId),
-        });
+        const presetItems = await this.desktop.lib.db.modPresetItems.listByPresetId(presetId);
         const currentItems = await this.getPresetSnapshot(preset.game);
         const currentByKey = new Map(currentItems.map((item) => [item.modKey, item] as const));
         const currentByRelativePath = new Map(
@@ -225,13 +215,11 @@ export class ModPresetsService {
     }
 
     public async deletePreset(presetId: string): Promise<void> {
-        await this.desktop.lib.db.delete(modPresets).where(eq(modPresets.id, presetId));
+        await this.desktop.lib.db.modPresets.delete(presetId);
     }
 
     public async updatePresetName(presetId: string, newName: string): Promise<void> {
-        const preset = await this.desktop.lib.db.query.modPresets.findFirst({
-            where: eq(modPresets.id, presetId),
-        });
+        const preset = await this.desktop.lib.db.modPresets.findById(presetId);
 
         if (!preset) {
             throw new Error(`Preset ${presetId} not found`);
@@ -242,17 +230,19 @@ export class ModPresetsService {
             throw new Error("INVALID_PRESET_NAME");
         }
 
-        const existingPreset = await this.desktop.lib.db.query.modPresets.findFirst({
-            where: and(eq(modPresets.game, preset.game), eq(modPresets.name, trimmedName)),
-        });
+        const existingPreset = await this.desktop.lib.db.modPresets.findByGameAndName(
+            preset.game,
+            trimmedName,
+        );
         if (existingPreset && existingPreset.id !== presetId) {
             throw new Error("PRESET_NAME_EXISTS");
         }
 
-        await this.desktop.lib.db
-            .update(modPresets)
-            .set({ name: trimmedName, updatedAt: new Date().toISOString() })
-            .where(eq(modPresets.id, presetId));
+        await this.desktop.lib.db.modPresets.updateName(
+            presetId,
+            trimmedName,
+            new Date().toISOString(),
+        );
     }
 
     private buildModKey(gamePath: string, groupPath: string, modPath: string): string {

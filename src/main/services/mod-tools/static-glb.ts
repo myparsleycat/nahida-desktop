@@ -1,6 +1,5 @@
 import path from "node:path";
 import type { NahidaDesktop } from "@main/index";
-import { setting } from "@main/internal/db/schema";
 import {
     convertModToGlb,
     convertModToGlbBuffer,
@@ -118,13 +117,7 @@ export class StaticGlb {
             throw new Error("Asset path must be a directory.");
         }
 
-        await this.desktop.lib.db
-            .insert(setting)
-            .values({ key: ASSET_PATH_SETTING_KEY, value: normalized })
-            .onConflictDoUpdate({
-                target: setting.key,
-                set: { value: normalized },
-            });
+        await this.desktop.lib.db.settings.upsert(ASSET_PATH_SETTING_KEY, normalized);
 
         return normalized;
     }
@@ -530,18 +523,11 @@ export class StaticGlb {
     }
 
     private async getSettingValue(key: string): Promise<string | null> {
-        const saved = await this.desktop.lib.db.query.setting.findFirst({
-            where: (t, { eq }) => eq(t.key, key),
-        });
-
-        return saved?.value ?? null;
+        return await this.desktop.lib.db.settings.getValue(key);
     }
 
     private async saveSettingValue(key: string, value: string): Promise<void> {
-        await this.desktop.lib.db.insert(setting).values({ key, value }).onConflictDoUpdate({
-            target: setting.key,
-            set: { value },
-        });
+        await this.desktop.lib.db.settings.upsert(key, value);
     }
 }
 
