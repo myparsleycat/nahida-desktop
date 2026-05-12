@@ -1,10 +1,8 @@
-import os from "node:os";
 import path from "node:path";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
-import { BACKEND_URL } from "@shared/const";
 import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import AutoLaunch from "auto-launch";
-import { app, crashReporter, protocol } from "electron";
+import { app, protocol } from "electron";
 import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
 import { IS_ELECTRON } from "./const";
 import { db, InitDB } from "./internal/db";
@@ -149,16 +147,6 @@ export class NahidaDesktop {
 
     public async init() {
         if (this.initialized) return;
-
-        crashReporter.start({
-            submitURL: `${BACKEND_URL}/desktop/crash-report`,
-            globalExtra: {
-                cpus: os.cpus().length.toString(),
-                ram: os.totalmem().toString(),
-                platform: os.platform(),
-                release: os.release(),
-            },
-        });
 
         await this.initializePlatformServices();
 
