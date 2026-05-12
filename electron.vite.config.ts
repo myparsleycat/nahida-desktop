@@ -11,7 +11,7 @@ export default defineConfig({
     main: {
         build: {
             externalizeDeps: {
-                exclude: ["html-to-text"],
+                exclude: ["html-to-text", "file-type"],
             },
         },
         resolve: {
