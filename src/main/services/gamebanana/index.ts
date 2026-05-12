@@ -35,7 +35,7 @@ type GameBananaCookieMap = Map<string, string>;
 
 export class GameBananaService {
     public readonly games = gameBananaGames;
-    private readonly apiBaseUrl = "https://gamebanana.com/apiv11";
+    private readonly apiBaseUrl = "https://gamebanana.com/apiv12";
     private readonly loginUrl = "https://gamebanana.com/members/account/login";
     private readonly logoutUrl = "https://gamebanana.com/members/account/logout";
     private readonly authUrls = [
