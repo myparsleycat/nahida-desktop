@@ -61,6 +61,7 @@ type ReconcileCandidate = {
     actualName: string | null;
     shape: ExistingTableShape | null;
 };
+type NonPromise<T> = T extends PromiseLike<unknown> ? never : T;
 
 function quoteIdentifier(value: string) {
     return `"${value.replaceAll('"', '""')}"`;
@@ -72,11 +73,7 @@ function normalizeDefaultSql(value: string | null | undefined) {
     }
 
     let normalized = value.trim();
-    while (
-        normalized.startsWith("(") &&
-        normalized.endsWith(")") &&
-        normalized.length > 1
-    ) {
+    while (normalized.startsWith("(") && normalized.endsWith(")") && normalized.length > 1) {
         normalized = normalized.slice(1, -1).trim();
     }
 
@@ -170,9 +167,7 @@ function buildCreateTableSql(spec: TableSpec, tableName = spec.name) {
     );
 
     if (compositePrimaryKey) {
-        definitions.push(
-            `PRIMARY KEY (${compositePrimaryKey.map(quoteIdentifier).join(", ")})`,
-        );
+        definitions.push(`PRIMARY KEY (${compositePrimaryKey.map(quoteIdentifier).join(", ")})`);
     }
 
     for (const foreignKey of spec.foreignKeys ?? []) {
@@ -237,10 +232,7 @@ export class DatabaseClient {
         list: async () =>
             this.all<SettingRow>(`SELECT "key", "value" FROM "setting" ORDER BY "key"`),
         insert: async (row: SettingRow) => {
-            this.run(`INSERT INTO "setting" ("key", "value") VALUES (?, ?)`, [
-                row.key,
-                row.value,
-            ]);
+            this.run(`INSERT INTO "setting" ("key", "value") VALUES (?, ?)`, [row.key, row.value]);
         },
         upsert: async (key: string, value: string | null) => {
             this.run(
@@ -476,11 +468,10 @@ export class DatabaseClient {
             return { ...row, image: toBuffer(row.image) } satisfies ImageCacheRow;
         },
         insertIgnore: async (row: ImageCacheRow) => {
-            this.run(`INSERT OR IGNORE INTO "image_cache" ("hash", "image", "size") VALUES (?, ?, ?)`, [
-                row.hash,
-                row.image,
-                row.size,
-            ]);
+            this.run(
+                `INSERT OR IGNORE INTO "image_cache" ("hash", "image", "size") VALUES (?, ?, ?)`,
+                [row.hash, row.image, row.size],
+            );
         },
         sumSize: async () => {
             const row = this.get<{ totalSize: number | null }>(
@@ -612,7 +603,12 @@ export class DatabaseClient {
                 [presetId],
             ),
         findUsageByScriptId: async (scriptId: string) => {
-            const row = this.get<{ presetId: string; scriptId: string; order: number; presetName: string }>(
+            const row = this.get<{
+                presetId: string;
+                scriptId: string;
+                order: number;
+                presetName: string;
+            }>(
                 `SELECT spi."preset_id" AS "presetId",
                         spi."script_id" AS "scriptId",
                         spi."order" AS "order",
@@ -758,7 +754,7 @@ export class DatabaseClient {
         this.sqlite.exec(sql);
     }
 
-    public transaction<T>(fn: (tx: DatabaseTransaction) => T): T {
+    public transaction<T>(fn: (tx: DatabaseTransaction) => NonPromise<T>): NonPromise<T> {
         this.sqlite.exec("BEGIN IMMEDIATE");
         const tx = new DatabaseTransaction(this);
         try {
@@ -777,7 +773,9 @@ export class DatabaseClient {
                 `SELECT "name" FROM "sqlite_schema" WHERE "type" = 'table' AND "name" NOT LIKE 'sqlite_%'`,
             ).map((row) => row.name),
         );
-        const candidates = TABLE_SPECS.map((spec) => this.buildReconcileCandidate(spec, tableNames));
+        const candidates = TABLE_SPECS.map((spec) =>
+            this.buildReconcileCandidate(spec, tableNames),
+        );
 
         this.exec(`PRAGMA foreign_keys = OFF`);
         try {
@@ -815,7 +813,9 @@ export class DatabaseClient {
         const foreignKeyRows = this.all<ForeignKeyRow>(
             `PRAGMA foreign_key_list(${quoteIdentifier(tableName)})`,
         );
-        const indexList = this.all<IndexListRow>(`PRAGMA index_list(${quoteIdentifier(tableName)})`);
+        const indexList = this.all<IndexListRow>(
+            `PRAGMA index_list(${quoteIdentifier(tableName)})`,
+        );
         const foreignKeys = this.groupForeignKeys(foreignKeyRows);
         const indexes = indexList
             .filter((index) => index.origin !== "pk")
@@ -922,7 +922,7 @@ export class DatabaseClient {
                 return { type: "rebuild" as const };
             }
 
-            if (Boolean(target.primaryKey) !== (existing.pk > 0)) {
+            if (Boolean(target.primaryKey) !== existing.pk > 0) {
                 return { type: "rebuild" as const };
             }
 
@@ -934,7 +934,10 @@ export class DatabaseClient {
         }
 
         const existingCompositePk = sortStrings(
-            shape.columns.filter((column) => column.pk > 0).sort((a, b) => a.pk - b.pk).map((column) => column.name),
+            shape.columns
+                .filter((column) => column.pk > 0)
+                .sort((a, b) => a.pk - b.pk)
+                .map((column) => column.name),
         );
         const targetCompositePk = sortStrings(spec.compositePrimaryKey ?? []);
         if (JSON.stringify(existingCompositePk) !== JSON.stringify(targetCompositePk)) {
@@ -1028,9 +1031,11 @@ export class DatabaseClient {
 
     private ensureIndexes(spec: TableSpec) {
         const existingIndexes = new Set(
-            this.all<IndexListRow>(`PRAGMA index_list(${quoteIdentifier(spec.name)})`).map(
-                (row) => normalizeIndexSignature({
-                    columns: this.all<IndexInfoRow>(`PRAGMA index_info(${quoteIdentifier(row.name)})`)
+            this.all<IndexListRow>(`PRAGMA index_list(${quoteIdentifier(spec.name)})`).map((row) =>
+                normalizeIndexSignature({
+                    columns: this.all<IndexInfoRow>(
+                        `PRAGMA index_info(${quoteIdentifier(row.name)})`,
+                    )
                         .sort((left, right) => left.seqno - right.seqno)
                         .map((column) => column.name),
                     name: row.name,
