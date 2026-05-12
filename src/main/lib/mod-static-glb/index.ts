@@ -16,8 +16,8 @@ import type {
     ConvertModToGlbOptions,
     ConvertModToGlbResult,
     ConvertModVariantArtifactsResult,
-    StaticGlbArtifactBufferWriter,
     StaticGlbAnimationBufferWriter,
+    StaticGlbArtifactBufferWriter,
     StaticGlbVariantManifest,
     VariableStateMap,
 } from "./types";
@@ -31,8 +31,8 @@ export type {
     ConvertModToGlbOptions,
     ConvertModToGlbResult,
     ConvertModVariantArtifactsResult,
-    StaticGlbArtifactBufferWriter,
     StaticGlbAnimationClip,
+    StaticGlbArtifactBufferWriter,
     StaticGlbRealtimeShapeKey,
     StaticGlbVariantManifest,
     StaticGlbVariantSlider,
@@ -296,7 +296,12 @@ export async function convertModToVariantArtifacts(
             manifest,
         };
     } finally {
-        if (textureCacheDir && !options.debug && (await fse.pathExists(textureCacheDir))) {
+        if (
+            textureCacheDir &&
+            !options.debug &&
+            options.useTextureCache !== true &&
+            (await fse.pathExists(textureCacheDir))
+        ) {
             await fse.rm(textureCacheDir, { recursive: true, force: true });
         }
     }
