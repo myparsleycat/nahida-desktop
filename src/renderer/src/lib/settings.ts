@@ -16,9 +16,7 @@ export function getSetting<K extends SettingKey | readonly SettingKey[]>(keyOrKe
 
     const key = keyOrKeys as Extract<K, SettingKey>;
 
-    return window.api.invoke("setting:get", key) as Promise<
-        AppSettings[Extract<K, SettingKey>]
-    >;
+    return window.api.invoke("setting:get", key) as Promise<AppSettings[Extract<K, SettingKey>]>;
 }
 
 export function setSetting<K extends SettingKey>(key: K, value: AppSettings[K]) {

@@ -261,7 +261,10 @@
           "title": "Edit Game",
           "path_label": "Mod folder path",
           "importer_label": "Importer",
-          "no_importer": "None"
+          "no_importer": "None",
+          "order_label": "Display order",
+          "order_value": "{{current}} of {{total}}",
+          "order_description": "Use the arrow buttons to change this game's position in the dropdown."
         },
         "preset-management": {
           "legacy-badge": "Legacy",
@@ -390,6 +393,10 @@
           },
           "update-game-mutation": {
             "success": "Game settings saved"
+          },
+          "reorder-games-mutation": {
+            "success": "Game order saved",
+            "failed": "Failed to save game order"
           },
           "toggle-mutation": {
             "0": "The {{name}} folder already exists",

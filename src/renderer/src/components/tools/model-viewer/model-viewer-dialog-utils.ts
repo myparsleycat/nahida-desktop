@@ -1,4 +1,9 @@
 import type {
+    ModelViewerRealtimeShapeKey,
+    ModelViewerThreeEnvironment,
+    ModelViewerThreeToneMapping,
+} from "./model-viewer-contract";
+import type {
     ModelViewerDialogSource,
     ModelViewerVariantManifest,
     VariableStateValue,
@@ -8,25 +13,20 @@ import {
     MAX_THREE_EXPOSURE,
     MIN_THREE_EXPOSURE,
 } from "./model-viewer-dialog-types";
-import type { ModelViewerRealtimeShapeKey, ModelViewerThreeEnvironment, ModelViewerThreeToneMapping } from "./model-viewer-contract";
 
 export function withCacheBuster(url: string): string {
     const separator = url.includes("?") ? "&" : "?";
     return `${url}${separator}v=${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function createStateKey(
-    state: Record<string, VariableStateValue>,
-): string {
+export function createStateKey(state: Record<string, VariableStateValue>): string {
     return Object.entries(state)
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([key, value]) => `${key.toLowerCase()}=${String(value)}`)
         .join("&");
 }
 
-export function getSourceSessionKey(
-    source: ModelViewerDialogSource | null,
-): string | null {
+export function getSourceSessionKey(source: ModelViewerDialogSource | null): string | null {
     if (!source) {
         return null;
     }
@@ -52,17 +52,13 @@ export function clampThreeExposure(value: number): number {
 export function normalizeThreeToneMapping(
     value: string | null | undefined,
 ): ModelViewerThreeToneMapping {
-    return value === "aces" || value === "none" || value === "neutral"
-        ? value
-        : "neutral";
+    return value === "aces" || value === "none" || value === "neutral" ? value : "neutral";
 }
 
 export function normalizeThreeEnvironment(
     value: string | null | undefined,
 ): ModelViewerThreeEnvironment {
-    return value === "soft" || value === "none" || value === "studio"
-        ? value
-        : "studio";
+    return value === "soft" || value === "none" || value === "studio" ? value : "studio";
 }
 
 export function stripRealtimeShapeKeyState(

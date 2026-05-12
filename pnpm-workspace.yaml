@@ -1,1 +1,16 @@
-{ shamefullyHoist: true, autoInstallPeers: true, allowBuilds: { better-sqlite3: true, cbor-extract: true, electron: true, electron-winstaller: true, esbuild: true, koffi: true, lzma-native: true, sharp: true, workerd: true } }
+{
+    shamefullyHoist: true,
+    autoInstallPeers: true,
+    allowBuilds:
+        {
+            better-sqlite3: true,
+            cbor-extract: true,
+            electron: true,
+            electron-winstaller: true,
+            esbuild: true,
+            koffi: true,
+            lzma-native: true,
+            sharp: true,
+            workerd: true,
+        },
+}

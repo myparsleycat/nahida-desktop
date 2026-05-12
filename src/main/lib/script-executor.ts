@@ -121,11 +121,7 @@ export class ScriptExecutor {
         return `"${value.replace(/"/g, '""')}"`;
     }
 
-    private buildLegacyWindowsCommand(
-        filePath: string,
-        type: "python" | "exec",
-        args: string[],
-    ) {
+    private buildLegacyWindowsCommand(filePath: string, type: "python" | "exec", args: string[]) {
         const quotedArgs = args.map((arg) => this.quoteWindowsArg(arg)).join(" ");
 
         if (type === "python") {

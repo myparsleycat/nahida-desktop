@@ -26,6 +26,7 @@ interface GamePresetSelectorProps {
   onPickFolder: () => Promise<string | null>;
   onAddGame: (name: string, path: string, importer: string | null) => void;
   onUpdateGame: (game: string, updates: { modFolderPath: string; importer: string | null }) => void;
+  onReorderGames: (games: string[]) => void;
 }
 
 export const GamePresetSelector = memo(function GamePresetSelector({
@@ -34,6 +35,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
   onPickFolder,
   onAddGame,
   onUpdateGame,
+  onReorderGames,
 }: GamePresetSelectorProps) {
   const { t } = useTranslation();
   const location = useLocation();
@@ -169,10 +171,12 @@ export const GamePresetSelector = memo(function GamePresetSelector({
       </div>
 
       <EditGameDialog
+        games={games}
         enabledImporters={enabledImporters}
         onPickFolder={onPickFolder}
         onUpdateGame={onUpdateGame}
         onDeleteGameClick={onDeleteGameClick}
+        onReorderGames={onReorderGames}
       />
     </div>
   );

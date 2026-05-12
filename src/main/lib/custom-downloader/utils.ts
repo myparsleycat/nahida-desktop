@@ -25,9 +25,7 @@ export function parseDownloadFileName(
         return sanitizeWindowsFilename(decodeURIComponent(fileNameFromDisposition));
     }
 
-    const fileNamePlain = contentDisposition
-        ?.match(/filename\s*=\s*("?)([^";]+)\1/i)?.[2]
-        ?.trim();
+    const fileNamePlain = contentDisposition?.match(/filename\s*=\s*("?)([^";]+)\1/i)?.[2]?.trim();
 
     if (fileNamePlain) {
         return sanitizeWindowsFilename(fileNamePlain);

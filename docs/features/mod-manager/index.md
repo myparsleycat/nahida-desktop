@@ -60,6 +60,7 @@ This structure is recommended instead:
 ```txt
 C:\Users\User\AppData\Roaming\XXMI Launcher\GIMI\Mods\Character\SomeCharacterMod
 ```
+
 :::
 
 ### Subgroups

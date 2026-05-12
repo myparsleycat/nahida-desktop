@@ -28,9 +28,7 @@ function RouteComponent() {
         <p className="text-muted-foreground mb-4">
           {t("page.setting.acc.not_logged_in.description")}
         </p>
-        <Button onClick={() => startLogin()}>
-          {t("page.setting.acc.not_logged_in.login")}
-        </Button>
+        <Button onClick={() => startLogin()}>{t("page.setting.acc.not_logged_in.login")}</Button>
       </main>
     );
   }
@@ -63,9 +61,7 @@ function RouteComponent() {
       </Card>
 
       <div className="flex flex-row items-center justify-end">
-        <Button onClick={() => startLogout()}>
-          {t("page.setting.acc.logout")}
-        </Button>
+        <Button onClick={() => startLogout()}>{t("page.setting.acc.logout")}</Button>
       </div>
     </main>
   );

@@ -1,3 +1,4 @@
+import { ValidateName } from "@renderer/components/akasha/dialogs";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -8,7 +9,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@renderer/components/ui/alert-dialog";
-import { ValidateName } from "@renderer/components/akasha/dialogs";
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -30,9 +30,9 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ScrollArea } from "../ui/scroll-area";
-import { hasPreviewFile, isPreviewMediaFile } from "./paste-preview";
 import { CharacterSidebarGrid } from "./character-sidebar-grid";
 import { CharacterSidebarRow } from "./character-sidebar-row";
+import { hasPreviewFile, isPreviewMediaFile } from "./paste-preview";
 
 interface CharacterSidebarProps {
   groups: FolderGroup[];

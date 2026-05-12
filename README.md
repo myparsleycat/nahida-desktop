@@ -22,6 +22,7 @@ Nahida Desktop is a desktop application that provides a unified interface for ma
 ## Features
 
 ### Mod Manager
+
 - Enable, disable, and toggle mods per game with a single click
 - **Exclusive toggle** — automatically disable conflicting mods in the same group
 - **Presets** — save and restore sets of enabled mods instantly
@@ -33,24 +34,30 @@ Nahida Desktop is a desktop application that provides a unified interface for ma
 - Support nested folder structures through subgroups
 
 ### XXMI Launcher Integration
+
 - Automatically detects your XXMI installation by scanning all drives
 - Launch games directly from Nahida Desktop via XXMI Launcher
 - Built-in d3d11.dll build functionality
 
 ### ☁️ Cloud Drive & File Transfer
+
 - Upload and download files to/from your Nahida Drive
 - Multi-threaded uploads with configurable concurrency (up to 16 threads)gurable)
 - Download directly from GameBanana and nahida.live into character folders registered in the mod manager through Nahida Desktop
 
 ## Download
+
 Latest release can be downloaded either from [Releases](https://github.com/myparsleycat/nahida-desktop/releases/latest) page.
 Visit the latest release page above to download and install the app.
 
 ## FAQ
+
 ### Can I use it without a nahida.live account?
+
 Yes. You can use the mod manager and tools, as well as download from the Nahida Live website through Nahida Desktop, without logging in.
 
 ### Installation does not proceed
+
 Windows Defender and some antivirus programs may occasionally block the installer. Try adding the installer as an exception or temporarily disabling real-time protection, then try again.
 
 ## License

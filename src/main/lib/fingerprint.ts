@@ -1,8 +1,8 @@
-import fse from "fs-extra";
-import fg from "fast-glob";
-import { mapAsync } from "es-toolkit/array";
-import path from "path";
 import crypto from "crypto";
+import path from "path";
+import { mapAsync } from "es-toolkit/array";
+import fg from "fast-glob";
+import fse from "fs-extra";
 
 export type FloatArray = Float32Array;
 
@@ -57,7 +57,7 @@ const TARGET_EXTENSIONS = new Set([
     ".buf",
     ".dds",
     ".assets",
-    ".hlsl"
+    ".hlsl",
 ]);
 
 const DEFAULT_BUILD_OPTIONS: Required<BuildOptions> = {
@@ -125,7 +125,10 @@ function shannonEntropyFromCounts(counts: number[], total: number): number {
     return entropy;
 }
 
-function chooseSampleWindows(fileSize: number, sampleBudget: number): Array<{ start: number; length: number }> {
+function chooseSampleWindows(
+    fileSize: number,
+    sampleBudget: number,
+): Array<{ start: number; length: number }> {
     if (fileSize <= 0) return [];
 
     const windowCount = Math.max(1, Math.min(8, Math.floor(sampleBudget / 4096) || 1));
@@ -151,7 +154,11 @@ function chooseSampleWindows(fileSize: number, sampleBudget: number): Array<{ st
     return windows;
 }
 
-async function sampleFileBytes(filePath: string, fileSize: number, sampleBudget: number): Promise<Buffer> {
+async function sampleFileBytes(
+    filePath: string,
+    fileSize: number,
+    sampleBudget: number,
+): Promise<Buffer> {
     const fd = await fse.open(filePath, "r");
     try {
         const windows = chooseSampleWindows(fileSize, sampleBudget);
@@ -291,7 +298,7 @@ function popcount8(n: number): number {
 
 async function collectFiles(root: string, maxFiles: number): Promise<string[]> {
     const files: string[] = [];
-    const stream = fg.stream('**/*', { cwd: root, absolute: true, onlyFiles: true });
+    const stream = fg.stream("**/*", { cwd: root, absolute: true, onlyFiles: true });
 
     for await (const entry of stream) {
         files.push(entry as string);
@@ -307,10 +314,16 @@ export class FingerprintService {
 
     constructor(buildOptions?: BuildOptions, compareOptions?: CompareOptions) {
         this.defaultBuildOptions = this.mergeBuildOptions(DEFAULT_BUILD_OPTIONS, buildOptions);
-        this.defaultCompareOptions = this.mergeCompareOptions(DEFAULT_COMPARE_OPTIONS, compareOptions);
+        this.defaultCompareOptions = this.mergeCompareOptions(
+            DEFAULT_COMPARE_OPTIONS,
+            compareOptions,
+        );
     }
 
-    private mergeBuildOptions(base: Required<BuildOptions>, overrides?: BuildOptions): Required<BuildOptions> {
+    private mergeBuildOptions(
+        base: Required<BuildOptions>,
+        overrides?: BuildOptions,
+    ): Required<BuildOptions> {
         const merged: Required<BuildOptions> = {
             ...base,
             ...overrides,
@@ -324,10 +337,14 @@ export class FingerprintService {
             throw new Error(`vectorDim must be >= 64, got ${merged.vectorDim}`);
         }
         if (merged.simhashBits < 64 || merged.simhashBits % 8 !== 0) {
-            throw new Error(`simhashBits must be a multiple of 8 and >= 64, got ${merged.simhashBits}`);
+            throw new Error(
+                `simhashBits must be a multiple of 8 and >= 64, got ${merged.simhashBits}`,
+            );
         }
         if (merged.vectorDim < merged.simhashBits) {
-            throw new Error(`vectorDim (${merged.vectorDim}) must be >= simhashBits (${merged.simhashBits})`);
+            throw new Error(
+                `vectorDim (${merged.vectorDim}) must be >= simhashBits (${merged.simhashBits})`,
+            );
         }
         if (merged.concurrency < 1) {
             throw new Error(`concurrency must be >= 1, got ${merged.concurrency}`);
@@ -336,7 +353,10 @@ export class FingerprintService {
         return merged;
     }
 
-    private mergeCompareOptions(base: Required<CompareOptions>, overrides?: CompareOptions): Required<CompareOptions> {
+    private mergeCompareOptions(
+        base: Required<CompareOptions>,
+        overrides?: CompareOptions,
+    ): Required<CompareOptions> {
         const merged = { ...base, ...overrides };
         const sum = merged.cosineWeight + merged.hammingWeight;
         if (sum <= 0) {
@@ -347,7 +367,10 @@ export class FingerprintService {
         return merged;
     }
 
-    public async fingerprintFile(filePath: string, options?: BuildOptions): Promise<FileFingerprint | null> {
+    public async fingerprintFile(
+        filePath: string,
+        options?: BuildOptions,
+    ): Promise<FileFingerprint | null> {
         const opt = this.mergeBuildOptions(this.defaultBuildOptions, options);
         const st = await fse.stat(filePath);
 
@@ -376,7 +399,10 @@ export class FingerprintService {
         return fp;
     }
 
-    public async buildFolderFingerprint(folderPath: string, options?: BuildOptions): Promise<FolderFingerprint> {
+    public async buildFolderFingerprint(
+        folderPath: string,
+        options?: BuildOptions,
+    ): Promise<FolderFingerprint> {
         const opt = this.mergeBuildOptions(this.defaultBuildOptions, options);
         const selectedFiles = await collectFiles(folderPath, opt.maxFiles);
 
@@ -385,12 +411,18 @@ export class FingerprintService {
             async (filePath) => {
                 try {
                     const value = await this.fingerprintFile(filePath, opt);
-                    return { status: "fulfilled", value } as PromiseSettledResult<FileFingerprint | null>;
+                    return {
+                        status: "fulfilled",
+                        value,
+                    } as PromiseSettledResult<FileFingerprint | null>;
                 } catch (reason) {
-                    return { status: "rejected", reason } as PromiseSettledResult<FileFingerprint | null>;
+                    return {
+                        status: "rejected",
+                        reason,
+                    } as PromiseSettledResult<FileFingerprint | null>;
                 }
             },
-            { concurrency: opt.concurrency }
+            { concurrency: opt.concurrency },
         );
 
         const fileFingerprints: FileFingerprint[] = [];
@@ -406,7 +438,7 @@ export class FingerprintService {
 
         const folderVector = averageNormalizedVectors(
             fileFingerprints.map((f) => f.vector),
-            opt.vectorDim
+            opt.vectorDim,
         );
 
         const simhashHex = FingerprintService.vectorToSimhashHex(folderVector, opt.simhashBits);
@@ -423,7 +455,7 @@ export class FingerprintService {
     public compareFingerprints(
         a: FolderFingerprint,
         b: FolderFingerprint,
-        options?: CompareOptions
+        options?: CompareOptions,
     ): CompareResult {
         const opt = this.mergeCompareOptions(this.defaultCompareOptions, options);
 

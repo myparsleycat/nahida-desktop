@@ -211,6 +211,7 @@ export interface GameConfig {
     game: string;
     modFolderPath: string;
     importer: string | null;
+    order: number;
 }
 
 export type IpcEvents = {

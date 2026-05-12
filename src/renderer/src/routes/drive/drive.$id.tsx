@@ -44,7 +44,7 @@ function RouteComponent() {
   const { id } = Route.useParams();
   const { session } = useAuth();
   const location = useLocation();
-  const effectiveId = id === "root" ? session?.drive.rootId ?? id : id;
+  const effectiveId = id === "root" ? (session?.drive.rootId ?? id) : id;
 
   const { onDragEnter, onDragLeave, onDragOver, onDrop } = useDrag();
   const searchInDirQuery = useViewStore((s) => s.searchInDirQuery);

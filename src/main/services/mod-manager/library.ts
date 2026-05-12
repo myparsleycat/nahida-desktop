@@ -162,7 +162,13 @@ export class ModLibraryService {
     }
 
     public async setGamePath(game: string, modFolderPath: string) {
-        await this.desktop.lib.db.gamePaths.upsert({ game, modFolderPath, importer: null });
+        const existing = await this.desktop.lib.db.gamePaths.getByGame(game);
+        await this.desktop.lib.db.gamePaths.upsert({
+            game,
+            modFolderPath,
+            importer: null,
+            order: existing?.order ?? 0,
+        });
     }
 
     public async addGame(game: string, modFolderPath: string, importer: string | null) {
@@ -217,6 +223,21 @@ export class ModLibraryService {
 
     public async removeGame(game: string) {
         await this.desktop.lib.db.gamePaths.delete(game);
+    }
+
+    public async reorderGames(games: string[]) {
+        const existingGames = await this.games();
+        const existingGameNames = new Set(existingGames.map((game) => game.game));
+
+        if (games.length !== existingGames.length) {
+            throw new Error("INVALID_GAME_ORDER");
+        }
+
+        if (games.some((game) => !existingGameNames.has(game))) {
+            throw new Error("INVALID_GAME_ORDER");
+        }
+
+        await this.desktop.lib.db.gamePaths.reorder(games);
     }
 
     public async setLastGame(game: string) {

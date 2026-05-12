@@ -19,17 +19,19 @@ import {
 } from "@renderer/components/ui/select";
 import { useModStore } from "@renderer/store/mod";
 import type { GameConfig } from "@shared/types";
-import { FolderOpen, Trash2Icon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, FolderOpen, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 const NO_IMPORTER_VALUE = "__none__";
 
 interface EditGameDialogProps {
+  games: GameConfig[];
   enabledImporters: Array<{ key: string }>;
   onPickFolder: () => Promise<string | null>;
   onUpdateGame: (game: string, updates: { modFolderPath: string; importer: string | null }) => void;
   onDeleteGameClick: (game: string) => void;
+  onReorderGames: (games: string[]) => void;
 }
 
 export function openEditGameDialog(
@@ -48,10 +50,12 @@ export function openEditGameDialog(
 }
 
 export function EditGameDialog({
+  games,
   enabledImporters,
   onPickFolder,
   onUpdateGame,
   onDeleteGameClick,
+  onReorderGames,
 }: EditGameDialogProps) {
   const { t } = useTranslation();
   const isOpen = useModStore((s) => s.isEditGameDialogOpen);
@@ -62,6 +66,11 @@ export function EditGameDialog({
   const setEditGamePath = useModStore((s) => s.setEditGamePath);
   const editGameImporter = useModStore((s) => s.editGameImporter);
   const setEditGameImporter = useModStore((s) => s.setEditGameImporter);
+  const currentGameIndex = editingGame
+    ? games.findIndex((game) => game.game === editingGame.game)
+    : -1;
+  const canMoveUp = currentGameIndex > 0;
+  const canMoveDown = currentGameIndex >= 0 && currentGameIndex < games.length - 1;
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
@@ -95,6 +104,22 @@ export function EditGameDialog({
     });
   };
 
+  const handleMove = (direction: -1 | 1) => {
+    if (!editingGame || currentGameIndex < 0) {
+      return;
+    }
+
+    const targetIndex = currentGameIndex + direction;
+    if (targetIndex < 0 || targetIndex >= games.length) {
+      return;
+    }
+
+    const reorderedGames = [...games];
+    const [movedGame] = reorderedGames.splice(currentGameIndex, 1);
+    reorderedGames.splice(targetIndex, 0, movedGame);
+    onReorderGames(reorderedGames.map((game) => game.game));
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="w-100">
@@ -102,6 +127,20 @@ export function EditGameDialog({
           <DialogTitle>{editingGame?.game}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label>{t("page.mod.dialog.edit-game.path_label")}</Label>
+            <div className="flex gap-2">
+              <Input
+                placeholder={t("page.mod.dialog.add-game.path_input_placeholder")}
+                value={editGamePath}
+                readOnly
+              />
+              <Button variant="outline" size="icon" onClick={handlePickFolder}>
+                <FolderOpen className="size-4" />
+              </Button>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Label>{t("page.mod.dialog.edit-game.importer_label")}</Label>
             <Select
@@ -127,19 +166,40 @@ export function EditGameDialog({
               </SelectContent>
             </Select>
           </div>
+
           <div className="space-y-2">
-            <Label>{t("page.mod.dialog.edit-game.path_label")}</Label>
-            <div className="flex gap-2">
-              <Input
-                placeholder={t("page.mod.dialog.add-game.path_input_placeholder")}
-                value={editGamePath}
-                readOnly
-              />
-              <Button variant="outline" size="icon" onClick={handlePickFolder}>
-                <FolderOpen className="size-4" />
-              </Button>
+            <Label>{t("page.mod.dialog.edit-game.order_label")}</Label>
+            <div className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2">
+              <span className="text-sm text-muted-foreground">
+                {t("page.mod.dialog.edit-game.order_value", {
+                  current: currentGameIndex + 1,
+                  total: games.length,
+                })}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  disabled={!canMoveUp}
+                  onClick={() => handleMove(-1)}
+                >
+                  <ArrowUpIcon className="size-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  disabled={!canMoveDown}
+                  onClick={() => handleMove(1)}
+                >
+                  <ArrowDownIcon className="size-4" />
+                </Button>
+              </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              {t("page.mod.dialog.edit-game.order_description")}
+            </p>
           </div>
+
           <div className="flex justify-end items-center">
             <Button
               variant="outline"

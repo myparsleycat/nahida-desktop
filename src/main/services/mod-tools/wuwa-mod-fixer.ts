@@ -69,7 +69,9 @@ export class WuwaModFixer {
             rateState,
             rateLimited: this.desktop.githubRate.isRateLimited(rateState),
             nextCheckAt: latestRelease
-                ? new Date(new Date(latestRelease.checkedAt).getTime() + WUWA_CHECK_COOLDOWN_MS).toISOString()
+                ? new Date(
+                      new Date(latestRelease.checkedAt).getTime() + WUWA_CHECK_COOLDOWN_MS,
+                  ).toISOString()
                 : null,
         };
     }
@@ -384,7 +386,8 @@ export class WuwaModFixer {
             return {
                 exists: true,
                 binaryPath,
-                version: storedVersion ?? this.extractVersionFromFileName(path.basename(binaryPath)),
+                version:
+                    storedVersion ?? this.extractVersionFromFileName(path.basename(binaryPath)),
             };
         }
 
@@ -453,8 +456,14 @@ export class WuwaModFixer {
     }
 
     private compareVersions(left: string, right: string) {
-        const leftParts = left.replace(/^v/i, "").split(".").map((part) => Number(part));
-        const rightParts = right.replace(/^v/i, "").split(".").map((part) => Number(part));
+        const leftParts = left
+            .replace(/^v/i, "")
+            .split(".")
+            .map((part) => Number(part));
+        const rightParts = right
+            .replace(/^v/i, "")
+            .split(".")
+            .map((part) => Number(part));
         const maxLength = Math.max(leftParts.length, rightParts.length);
 
         for (let index = 0; index < maxLength; index += 1) {

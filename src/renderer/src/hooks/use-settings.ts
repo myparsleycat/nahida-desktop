@@ -99,10 +99,7 @@ export function useVirtualizationSettings() {
     const keys = ["mod.virtualizationEnabled", "mod.virtualizationThreshold"] as const;
     const queryKey = settingsManyQueryKey(keys);
 
-    useInvalidateOnSettingUpdate(
-        keys,
-        queryKey,
-    );
+    useInvalidateOnSettingUpdate(keys, queryKey);
 
     return useQuery({
         queryKey,
@@ -128,10 +125,7 @@ export function useModGridLayoutSettings() {
     ] as const;
     const queryKey = settingsManyQueryKey(keys);
 
-    useInvalidateOnSettingUpdate(
-        keys,
-        queryKey,
-    );
+    useInvalidateOnSettingUpdate(keys, queryKey);
 
     return useQuery({
         queryKey,

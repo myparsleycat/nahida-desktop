@@ -1,7 +1,7 @@
+import { modStore } from "@renderer/store/mod";
 import type { QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { toast } from "sonner";
-import { modStore } from "@renderer/store/mod";
 
 export function useModRefreshOnFocus(selectedGame: string | null, queryClient: QueryClient) {
     useEffect(() => {
@@ -28,7 +28,9 @@ export function useDownloadCompletionHandler(
             const invalidations: Promise<unknown>[] = [];
 
             if (selectedGame) {
-                invalidations.push(queryClient.invalidateQueries({ queryKey: ["mods", selectedGame] }));
+                invalidations.push(
+                    queryClient.invalidateQueries({ queryKey: ["mods", selectedGame] }),
+                );
             }
 
             if (

@@ -1,4 +1,3 @@
-import { Button } from "@renderer/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -9,6 +8,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@renderer/components/ui/alert-dialog";
+import { Button } from "@renderer/components/ui/button";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { useGlobalStore } from "@renderer/store/global";
 import type { ReactNode } from "react";
@@ -52,11 +52,7 @@ function renderReleaseNoteLine(line: string, lineIndex: number) {
     const linkLabel = (splitIndex >= 0 ? prefix.slice(splitIndex) : prefix).trimEnd();
 
     if (leadingText) {
-      nodes.push(
-        <span key={`text-${lineIndex}-${matchIndex}`}>
-          {leadingText}
-        </span>,
-      );
+      nodes.push(<span key={`text-${lineIndex}-${matchIndex}`}>{leadingText}</span>);
     }
 
     if (linkLabel) {
@@ -72,11 +68,7 @@ function renderReleaseNoteLine(line: string, lineIndex: number) {
         </button>,
       );
     } else if (prefix && !leadingText) {
-      nodes.push(
-        <span key={`text-${lineIndex}-${matchIndex}`}>
-          {prefix}
-        </span>,
-      );
+      nodes.push(<span key={`text-${lineIndex}-${matchIndex}`}>{prefix}</span>);
     } else {
       nodes.push(
         <button
@@ -148,7 +140,7 @@ export function UpdateAlertDialog() {
   const displayedReleaseNotesText =
     hasTranslatedReleaseNotes && !showOriginalReleaseNotes
       ? releaseNotes.translated
-      : releaseNotes?.original ?? releaseNotes?.translated ?? null;
+      : (releaseNotes?.original ?? releaseNotes?.translated ?? null);
 
   useEffect(() => {
     setShowOriginalReleaseNotes(false);

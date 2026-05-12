@@ -1,75 +1,75 @@
 name: Release macOS
 
 on:
-  workflow_dispatch:
+    workflow_dispatch:
 
 permissions:
-  contents: write
+    contents: write
 
 jobs:
-  release-macos:
-    runs-on: macos-latest
-    env:
-      CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      GH_TOKEN: ${{ github.token }}
+    release-macos:
+        runs-on: macos-latest
+        env:
+            CSC_IDENTITY_AUTO_DISCOVERY: "false"
+            GH_TOKEN: ${{ github.token }}
 
-    steps:
-      - name: Checkout selected ref
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        steps:
+            - name: Checkout selected ref
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v4
+              with:
+                  version: 10
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
 
-      - name: Resolve release version
-        id: version
-        shell: bash
-        run: |
-          VERSION="$(node -p "require('./package.json').version")"
-          TAG="v${VERSION}"
+            - name: Resolve release version
+              id: version
+              shell: bash
+              run: |
+                  VERSION="$(node -p "require('./package.json').version")"
+                  TAG="v${VERSION}"
 
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+                  echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+                  echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
 
-      - name: Build macOS artifacts
-        run: pnpm run build:mac
+            - name: Build macOS artifacts
+              run: pnpm run build:mac
 
-      - name: Create or update GitHub release
-        shell: bash
-        run: |
-          shopt -s nullglob
-          files=(dist/*.dmg dist/*.zip dist/*.blockmap dist/latest-mac.yml)
+            - name: Create or update GitHub release
+              shell: bash
+              run: |
+                  shopt -s nullglob
+                  files=(dist/*.dmg dist/*.zip dist/*.blockmap dist/latest-mac.yml)
 
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "No macOS release artifacts found in dist." >&2
-            exit 1
-          fi
+                  if [ "${#files[@]}" -eq 0 ]; then
+                    echo "No macOS release artifacts found in dist." >&2
+                    exit 1
+                  fi
 
-          if gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
-            gh release upload "${{ steps.version.outputs.tag }}" "${files[@]}" --clobber
-            exit 0
-          fi
+                  if gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+                    gh release upload "${{ steps.version.outputs.tag }}" "${files[@]}" --clobber
+                    exit 0
+                  fi
 
-          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
-            gh release create "${{ steps.version.outputs.tag }}" "${files[@]}" \
-              --verify-tag \
-              --title "${{ steps.version.outputs.tag }}" \
-              --generate-notes
-            exit 0
-          fi
+                  if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+                    gh release create "${{ steps.version.outputs.tag }}" "${files[@]}" \
+                      --verify-tag \
+                      --title "${{ steps.version.outputs.tag }}" \
+                      --generate-notes
+                    exit 0
+                  fi
 
-          gh release create "${{ steps.version.outputs.tag }}" "${files[@]}" \
-            --title "${{ steps.version.outputs.tag }}" \
-            --generate-notes
+                  gh release create "${{ steps.version.outputs.tag }}" "${files[@]}" \
+                    --title "${{ steps.version.outputs.tag }}" \
+                    --generate-notes
