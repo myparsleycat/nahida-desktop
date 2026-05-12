@@ -5,14 +5,14 @@
 
 ```bash
 pnpm install          # install deps
-pnpm dev              # start dev (auto-runs db:generate first, triggers codegen)
-pnpm build            # production build (auto-runs db:generate)
+pnpm dev              # start dev (triggers codegen)
+pnpm build            # production build (triggers codegen)
 pnpm lint             # oxlint (NOT eslint)
 pnpm lint:fix         # oxlint --fix
 pnpm fmt              # oxfmt (NOT prettier)
 pnpm fmt:check        # oxfmt --check
 pnpm typecheck        # oxlint --type-aware --type-check (NOT tsc)
-pnpm db:generate      # regenerate Drizzle migrations → drizzle/
+pnpm db:generate      # generate/update schema-spec client artifacts for the persistence layer
 pnpm build:native     # build all 7 Rust napi-rs native addons
 
 ```
@@ -23,7 +23,7 @@ pnpm build:native     # build all 7 Rust napi-rs native addons
 
 - **Electron + React + Vite** (`electron-vite`): main process `src/main/`, preload `src/preload/`, renderer `src/renderer/src/`
 - **Windows-first**: mod management, XXMI launcher, and mod tools are only loaded on Windows via `supportsWindowsDesktopFeatures()` — they use dynamic `import()` at runtime (`src/main/index.ts:145`)
-- **Database**: SQLite via better-sqlite3 + Drizzle ORM. Schema at `src/main/internal/db/schema.ts`. Migrations in `drizzle/`. DB file is `local.db` (dev) or `{userData}/data.db` (packaged)
+- **Database**: SQLite via `node:sqlite` (`DatabaseSync`). Schema spec at `src/main/internal/db/schema.ts` with `TABLE_SPECS` and auto-reconciliation at runtime. DB file is `local.db` (dev) or `{userData}/data.db` (packaged)
 - **Native addons**: 7 Rust (napi-rs) packages under `native/`. Their `index.js` CJS glue is auto-patched by `plugins/native-binding.ts` at build time
 - **Sibling repo**: references `../backend` (Elysia server) for shared types via tsconfig paths
 - **Shadcn/ui** ("new-york" style) with Tailwind v4, components under `src/renderer/src/components/ui/`
