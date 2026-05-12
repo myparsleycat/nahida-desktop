@@ -438,7 +438,11 @@ export async function resolveVariantStateArtifact(
                     warningCount: result.warningCount,
                 };
             } finally {
-                if (textureCacheDir) {
+                if (
+                    textureCacheDir &&
+                    options.useTextureCache === false &&
+                    (await fse.pathExists(textureCacheDir))
+                ) {
                     await fse.rm(textureCacheDir, { recursive: true, force: true }).catch(() => {});
                 }
             }
