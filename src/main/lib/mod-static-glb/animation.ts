@@ -27,6 +27,7 @@ import type {
     PreparedAnimationClip,
     PresentAnimationPattern,
     SlotVariableBinding,
+    StaticGlbAnimationBufferWriter,
     StaticGlbAnimationClip,
     StaticGlbAnimationFrame,
     StaticGlbAnimationSharedBuffer,
@@ -427,6 +428,7 @@ export async function materializeAnimationClips(
         context: StaticGlbBuildContext,
         ibName: string,
     ) => TextureOverrideBinding[],
+    writeAnimationBuffer?: StaticGlbAnimationBufferWriter,
 ): Promise<StaticGlbAnimationClip[]> {
     const logTiming = createTimedStageLogger(
         options.logger,
@@ -527,6 +529,7 @@ export async function materializeAnimationClips(
                     sharedBuffersById,
                     `${meshStem}.indices`,
                     uint32ArrayToBuffer(geometry.indices),
+                    writeAnimationBuffer,
                 );
                 const positionBuf = await writeSharedAnimationBuffer(
                     sharedBufferDir,
@@ -534,6 +537,7 @@ export async function materializeAnimationClips(
                     sharedBuffersById,
                     `${meshStem}.position`,
                     float32ArrayToBuffer(geometry.position),
+                    writeAnimationBuffer,
                 );
 
                 let normalBufferId: string | undefined;
@@ -545,6 +549,7 @@ export async function materializeAnimationClips(
                             sharedBuffersById,
                             `${meshStem}.normal`,
                             float32ArrayToBuffer(geometry.normal),
+                            writeAnimationBuffer,
                         )
                     ).id;
                 }
@@ -558,6 +563,7 @@ export async function materializeAnimationClips(
                             sharedBuffersById,
                             `${meshStem}.tangent`,
                             float32ArrayToBuffer(geometry.tangent),
+                            writeAnimationBuffer,
                         )
                     ).id;
                 }
@@ -571,6 +577,7 @@ export async function materializeAnimationClips(
                             sharedBuffersById,
                             `${meshStem}.texcoord0`,
                             float32ArrayToBuffer(geometry.texcoord0),
+                            writeAnimationBuffer,
                         )
                     ).id;
                 }
@@ -791,6 +798,7 @@ async function writeSharedAnimationBuffer(
     byId: Map<string, StaticGlbAnimationSharedBuffer>,
     name: string,
     buffer: Buffer,
+    writeAnimationBuffer?: StaticGlbAnimationBufferWriter,
 ): Promise<StaticGlbAnimationSharedBuffer> {
     const digest = crypto.createHash("sha256").update(buffer).digest("hex").slice(0, 16);
     const key = `${buffer.byteLength}:${digest}`;
@@ -801,9 +809,13 @@ async function writeSharedAnimationBuffer(
 
     const baseName = sanitizeArtifactName(name).replace(/\.bin$/i, "");
     const id = `${baseName}-${digest}`;
-    const outputPath = path.join(outputDir, `${id}.bin`);
-    await fse.ensureDir(outputDir);
-    await fse.writeFile(outputPath, buffer);
+    const outputPath = writeAnimationBuffer
+        ? await writeAnimationBuffer(id, buffer)
+        : path.join(outputDir, `${id}.bin`);
+    if (!writeAnimationBuffer) {
+        await fse.ensureDir(outputDir);
+        await fse.writeFile(outputPath, buffer);
+    }
 
     const entry = { id, path: outputPath };
     byKey.set(key, entry);

@@ -1,6 +1,5 @@
 import path from "node:path";
 import type { NahidaDesktop } from "@main/index";
-import { setting } from "@main/internal/db/schema";
 import { resizeTextures } from "@native/mod-tools";
 import type {
     TextureColorSpace,
@@ -278,17 +277,11 @@ export class TextureResizer {
     }
 
     private async getSettingValue(key: string) {
-        const saved = await this.desktop.lib.db.query.setting.findFirst({
-            where: (table, { eq }) => eq(table.key, key),
-        });
-        return saved?.value ?? null;
+        return await this.desktop.lib.db.settings.getValue(key);
     }
 
     private async saveSettingValue(key: string, value: string) {
-        await this.desktop.lib.db.insert(setting).values({ key, value }).onConflictDoUpdate({
-            target: setting.key,
-            set: { value },
-        });
+        await this.desktop.lib.db.settings.upsert(key, value);
     }
 }
 

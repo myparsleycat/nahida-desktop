@@ -1,6 +1,6 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
-import { getPreviousPids, getProcessName, getTopmostPid, startTracking } from "@native/native-util";
+import { getPreviousPids, getProcessName, getTopmostPid, startTracking } from "@native/utils";
 import psList from "ps-list";
 
 const execAsync = promisify(exec);

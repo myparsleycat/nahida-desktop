@@ -1,6 +1,4 @@
-import { setting } from "@main/internal/db/schema";
 import { focus, getDefaultWebPreferences } from "@main/windows/utils";
-import { eq } from "drizzle-orm";
 import { BrowserWindow } from "electron";
 import ky, { type Input, type Options } from "ky";
 import { z, ZodError, type ZodType } from "zod";
@@ -88,13 +86,7 @@ export class GameBananaService {
 
         const encryptedCookie = this.desktop.lib.crypto.encryptString(rmcCookie);
 
-        await this.desktop.lib.db
-            .insert(setting)
-            .values({ key: this.cookieSettingKey, value: encryptedCookie })
-            .onConflictDoUpdate({
-                target: setting.key,
-                set: { value: encryptedCookie },
-            });
+        await this.desktop.lib.db.settings.upsert(this.cookieSettingKey, encryptedCookie);
 
         this.sessionCookie = cookie;
     }
@@ -104,16 +96,13 @@ export class GameBananaService {
             return this.sessionCookie;
         }
 
-        const cookie = await this.desktop.lib.db.query.setting.findFirst({
-            where: eq(setting.key, this.cookieSettingKey),
-        });
-
-        if (!cookie?.value) {
+        const cookie = await this.desktop.lib.db.settings.getValue(this.cookieSettingKey);
+        if (!cookie) {
             return null;
         }
 
         try {
-            return this.desktop.lib.crypto.decryptString(cookie.value);
+            return this.desktop.lib.crypto.decryptString(cookie);
         } catch {
             await this.removeCookie();
             return null;
@@ -122,14 +111,7 @@ export class GameBananaService {
 
     private async removeCookie() {
         this.sessionCookie = null;
-
-        await this.desktop.lib.db
-            .insert(setting)
-            .values({ key: this.cookieSettingKey, value: null })
-            .onConflictDoUpdate({
-                target: setting.key,
-                set: { value: null },
-            });
+        await this.desktop.lib.db.settings.upsert(this.cookieSettingKey, null);
     }
 
     private parseCookieHeader(cookie: string | null | undefined): GameBananaCookieMap {
@@ -301,7 +283,7 @@ export class GameBananaService {
 
         const authPromise = this.openLoginWindow();
         this.authPromise = authPromise;
-        authPromise.finally(() => {
+        void authPromise.finally(() => {
             if (this.authPromise === authPromise) {
                 this.authPromise = null;
             }
@@ -495,7 +477,7 @@ export class GameBananaService {
                 });
 
                 loginWindow.webContents.setWindowOpenHandler(({ url }) => {
-                    loginWindow.loadURL(url);
+                    void loginWindow.loadURL(url);
                     return { action: "deny" };
                 });
 
@@ -548,7 +530,7 @@ export class GameBananaService {
             ...kyOptions,
             throwHttpErrors: false,
             headers: {
-                ...kyOptions.headers,
+                ...normalizeKyHeaders(kyOptions.headers),
                 ...(cookie ? { Cookie: cookie } : {}),
                 "User-Agent":
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
@@ -631,7 +613,7 @@ export class GameBananaService {
                 const details = this.formatSchemaIssues(error);
                 this.desktop.logger.error(
                     {
-                        input: String(input),
+                        input: formatKyInput(input),
                         schemaContext,
                         issues: error.issues,
                     },
@@ -849,6 +831,38 @@ export class GameBananaService {
             config,
         };
     }
+}
+
+function normalizeKyHeaders(headers: Options["headers"]) {
+    if (!headers) {
+        return {};
+    }
+
+    if (headers instanceof Headers) {
+        return Object.fromEntries(headers.entries());
+    }
+
+    if (Array.isArray(headers)) {
+        return Object.fromEntries(headers);
+    }
+
+    return headers;
+}
+
+function formatKyInput(input: Input) {
+    if (typeof input === "string") {
+        return input;
+    }
+
+    if (input instanceof URL) {
+        return input.toString();
+    }
+
+    if (input instanceof Request) {
+        return input.url;
+    }
+
+    return "";
 }
 
 export type GameBananaGameOverview =

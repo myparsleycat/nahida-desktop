@@ -1,7 +1,6 @@
 import path from "node:path";
-import { setting } from "@main/internal/db/schema";
-import { findFileAcrossDrives, spawnPrivilegedProcess, waitForProcess } from "@native/native-util";
-import { WaitResult } from "@native/native-util/constants";
+import { findFileAcrossDrives, spawnPrivilegedProcess, waitForProcess } from "@native/utils";
+import { WaitResult } from "@native/utils/constants";
 import { type XXMIConfig, XXMIConfigSchema } from "@shared/schemas/xxmi";
 import { delay } from "es-toolkit";
 import fse from "fs-extra";
@@ -55,7 +54,10 @@ export class XXMI {
                 await this.desktop.service.modTools.stopToggleViewerWatcher();
             }
         } catch (error) {
-            this.desktop.logger.error(`Failed to initialize XXMI: ${error}`, "XXMI.initialize");
+            this.desktop.logger.error(
+                `Failed to initialize XXMI: ${String(error)}`,
+                "XXMI.initialize",
+            );
             this.xxmiConfig = null;
         }
     }
@@ -66,7 +68,10 @@ export class XXMI {
             XXMIConfigSchema.parse(xxmiConfig);
             return true;
         } catch (error) {
-            this.desktop.logger.error(`Invalid XXMI config file: ${error}`, "XXMI.checkConfigFile");
+            this.desktop.logger.error(
+                `Invalid XXMI config file: ${String(error)}`,
+                "XXMI.checkConfigFile",
+            );
             return false;
         }
     }
@@ -85,15 +90,7 @@ export class XXMI {
     }
 
     public async getXXMIPath() {
-        const path = await this.desktop.lib.db.query.setting.findFirst({
-            where: (t, { eq }) => eq(t.key, "xxmi.path"),
-        });
-
-        if (path?.value) {
-            return path.value;
-        }
-
-        return null;
+        return await this.desktop.lib.db.settings.getValue("xxmi.path");
     }
 
     public async saveXXMIPath(inputPath: string) {
@@ -105,16 +102,7 @@ export class XXMI {
             throw new Error("XXMI Launcher Config.json is invalid");
         }
 
-        await this.desktop.lib.db
-            .insert(setting)
-            .values({
-                key: "xxmi.path",
-                value: inputPath,
-            })
-            .onConflictDoUpdate({
-                target: setting.key,
-                set: { value: inputPath },
-            });
+        await this.desktop.lib.db.settings.upsert("xxmi.path", inputPath);
 
         await this.initialize();
         if (this.xxmiConfig) {
@@ -124,6 +112,14 @@ export class XXMI {
 
     public async findXXMIPath() {
         const xxmiConfigName = "XXMI Launcher Config.json";
+        const appDataPath = process.env.APPDATA;
+        if (appDataPath) {
+            const configPath = path.join(appDataPath, "XXMI Launcher", xxmiConfigName);
+            if ((await fse.pathExists(configPath)) && (await this.checkConfigFile(configPath))) {
+                return path.dirname(configPath);
+            }
+        }
+
         const result = await findFileAcrossDrives(xxmiConfigName, {
             excludeDirs: ["Backups"],
         });
@@ -235,7 +231,7 @@ export class XXMI {
             this.desktop.logger.info(`Detected ${processName} (PID: ${pid})`, "XXMI.startGame");
             await delay(1000);
         } catch (error) {
-            this.desktop.logger.error(`Failed to start game: ${error}`, "XXMI.startGame");
+            this.desktop.logger.error(`Failed to start game: ${String(error)}`, "XXMI.startGame");
             throw error;
         } finally {
             this.busy = false;

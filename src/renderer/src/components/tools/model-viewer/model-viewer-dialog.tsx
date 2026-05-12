@@ -10,105 +10,43 @@ import {
 } from "@renderer/components/ui/alert-dialog";
 import { Button } from "@renderer/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@renderer/components/ui/dialog";
-import { Input } from "@renderer/components/ui/input";
-import {
-  Menubar,
-  MenubarCheckboxItem,
-  MenubarContent,
-  MenubarGroup,
-  MenubarItem,
-  MenubarLabel,
-  MenubarMenu,
-  MenubarRadioGroup,
-  MenubarRadioItem,
-  MenubarSeparator,
-  MenubarTrigger,
-} from "@renderer/components/ui/menubar";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { getSetting, setSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
-import { CameraIcon, Loader2Icon, RotateCcwIcon, SaveIcon } from "lucide-react";
+import { Loader2Icon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   formatOrientation,
-  type ModelViewerAnimationClip,
   type ModelViewerCameraState,
   type ModelViewerHandle,
-  type ModelViewerRealtimeShapeKey,
   type ModelViewerThreeEnvironment,
   type ModelViewerThreeToneMapping,
   parseOrientation,
 } from "./model-viewer-contract";
+import type {
+  ModelViewerDialogSource,
+  ModelViewerVariantManifest,
+  VariableStateValue,
+} from "./model-viewer-dialog-types";
+import { DEFAULT_MODEL_ORIENTATION, DEFAULT_THREE_EXPOSURE } from "./model-viewer-dialog-types";
+import {
+  clampThreeExposure,
+  createStateKey,
+  getSourceSessionKey,
+  normalizeRealtimeShapeKeyState,
+  normalizeThreeEnvironment,
+  normalizeThreeToneMapping,
+  stripRealtimeShapeKeyState,
+  withCacheBuster,
+} from "./model-viewer-dialog-utils";
+import { VariantSlider, VariantTile } from "./model-viewer-dialog-variants";
+import { ModelViewerMenuBar } from "./model-viewer-menu-bar";
 import { cleanupModelViewerUrl, modelViewerSourceToUrl } from "./model-viewer-session";
 import { ThreeModelViewer } from "./three-model-viewer";
 
-type VariableStateValue = number | string;
-type ModelRotationAction = { label: string; delta: [number, number, number] };
-
-const DEFAULT_MODEL_ORIENTATION = "0deg 0deg 0deg";
-const DEFAULT_THREE_EXPOSURE = 0.7;
-const MIN_THREE_EXPOSURE = 0;
-const MAX_THREE_EXPOSURE = 4;
-const MODEL_ROTATION_ACTIONS: ModelRotationAction[] = [
-  { label: "Left 90°", delta: [0, 0, -90] },
-  { label: "Right 90°", delta: [0, 0, 90] },
-  { label: "Up 90°", delta: [0, -90, 0] },
-  { label: "Down 90°", delta: [0, 90, 0] },
-  { label: "Flip 180°", delta: [0, 0, 180] },
-];
-
-type ModelViewerVariantManifest = {
-  iniPath: string;
-  defaultState: Record<string, VariableStateValue>;
-  variables: Array<{
-    id: string;
-    label: string;
-    defaultValue: VariableStateValue;
-    values: Array<{ value: VariableStateValue; label: string }>;
-    order: number;
-    slot?: number;
-    iconPath?: string;
-    controlType?: "buttons" | "slider";
-    slider?: {
-      min: number;
-      max: number;
-      step: number;
-    };
-  }>;
-  uiAssets: {
-    backgroundPath?: string;
-    slotPath?: string;
-    slotHoverPath?: string;
-    slotActivePath?: string;
-  };
-  shapeKeys?: ModelViewerRealtimeShapeKey[];
-  animations?: ModelViewerAnimationClip[];
-  states: Array<{
-    key: string;
-    values: Record<string, VariableStateValue>;
-    glbPath: string;
-  }>;
-};
-
-export type ModelViewerDialogSource =
-  | {
-      mode: "single";
-      glbPath: string;
-      modPath?: string;
-      name: string;
-    }
-  | {
-      mode: "variant-set";
-      artifactRoot: string;
-      manifestPath: string;
-      modPath: string;
-      manifest: ModelViewerVariantManifest;
-      defaultGlbPath: string;
-      activeGlbPath: string;
-      name: string;
-    };
+export type { ModelViewerDialogSource } from "./model-viewer-dialog-types";
 
 export function ModelViewerDialog({
   open,
@@ -205,7 +143,7 @@ export function ModelViewerDialog({
 
   useEffect(() => {
     void Promise.allSettled(
-      viewerRefs.current.map((viewer) => viewer?.setDoubleSided(doubleSidedEnabled)),
+      viewerRefs.current.map(async (viewer) => viewer?.setDoubleSided(doubleSidedEnabled)),
     );
   }, [doubleSidedEnabled]);
 
@@ -399,6 +337,8 @@ export function ModelViewerDialog({
       const result = await window.api.invoke("tools:convertStaticGlbForViewer", {
         artifactRoot: source.artifactRoot,
         manifestPath: source.manifestPath,
+        memorySessionId: source.memorySessionId,
+        modPath: source.modPath,
         state: artifactState,
       });
       if (result.mode !== "variant-set") {
@@ -516,6 +456,8 @@ export function ModelViewerDialog({
       const result = await window.api.invoke("tools:convertStaticGlbForViewer", {
         artifactRoot: source.artifactRoot,
         manifestPath: source.manifestPath,
+        memorySessionId: source.memorySessionId,
+        modPath: source.modPath,
         state: artifactState,
       });
       if (result.mode !== "variant-set") {
@@ -743,164 +685,25 @@ export function ModelViewerDialog({
             </DialogTitle>
           </DialogHeader>
 
-          <Menubar>
-            <MenubarMenu>
-              <MenubarTrigger>{t("page.tools.model_viewer.menu.model")}</MenubarTrigger>
-              <MenubarContent>
-                <MenubarGroup>
-                  <MenubarLabel className="text-xs text-muted-foreground">
-                    {t("page.tools.model_viewer.menu.rotate")}
-                  </MenubarLabel>
-                  {MODEL_ROTATION_ACTIONS.map((action) => (
-                    <MenubarItem key={action.label} onClick={() => rotateModel(action.delta)}>
-                      {t(`page.tools.model_viewer.rotate_actions.${action.label}`)}
-                    </MenubarItem>
-                  ))}
-                </MenubarGroup>
-                <MenubarSeparator />
-                <MenubarGroup>
-                  <MenubarItem onClick={handleResetView}>
-                    <RotateCcwIcon />
-                    {t("page.tools.model_viewer.menu.reset")}
-                  </MenubarItem>
-                </MenubarGroup>
-              </MenubarContent>
-            </MenubarMenu>
-            <MenubarMenu>
-              <MenubarTrigger>{t("page.tools.model_viewer.menu.texture")}</MenubarTrigger>
-              <MenubarContent>
-                <MenubarGroup>
-                  <MenubarCheckboxItem
-                    checked={doubleSidedEnabled}
-                    onCheckedChange={(checked) => setDoubleSidedEnabled(checked === true)}
-                  >
-                    Double Sided
-                  </MenubarCheckboxItem>
-                </MenubarGroup>
-              </MenubarContent>
-            </MenubarMenu>
-            <MenubarMenu>
-              <MenubarTrigger>{t("page.tools.model_viewer.menu.rendering")}</MenubarTrigger>
-              <MenubarContent>
-                <MenubarGroup>
-                  <MenubarLabel className="text-xs text-muted-foreground">
-                    Tone Mapping
-                  </MenubarLabel>
-                  <MenubarRadioGroup
-                    value={threeToneMapping}
-                    onValueChange={(value) =>
-                      updateThreeToneMapping(value as ModelViewerThreeToneMapping)
-                    }
-                  >
-                    <MenubarRadioItem value="neutral">Neutral</MenubarRadioItem>
-                    <MenubarRadioItem value="aces">ACES Filmic</MenubarRadioItem>
-                    <MenubarRadioItem value="none">None</MenubarRadioItem>
-                  </MenubarRadioGroup>
-                </MenubarGroup>
-                <MenubarSeparator />
-                <MenubarGroup>
-                  <MenubarLabel className="text-xs text-muted-foreground">Environment</MenubarLabel>
-                  <MenubarRadioGroup
-                    value={threeEnvironment}
-                    onValueChange={(value) =>
-                      updateThreeEnvironment(value as ModelViewerThreeEnvironment)
-                    }
-                  >
-                    <MenubarRadioItem value="studio">Studio</MenubarRadioItem>
-                    <MenubarRadioItem value="soft">Soft</MenubarRadioItem>
-                    <MenubarRadioItem value="none">None</MenubarRadioItem>
-                  </MenubarRadioGroup>
-                </MenubarGroup>
-                <MenubarSeparator />
-                <MenubarGroup>
-                  <MenubarLabel className="text-xs text-muted-foreground">Exposure</MenubarLabel>
-                  <div className="px-1.5 py-1">
-                    <div className="mb-2 flex items-center gap-1">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2"
-                        onClick={() => updateThreeExposure(threeExposure - 0.1)}
-                      >
-                        -0.1
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2"
-                        onClick={() => updateThreeExposure(DEFAULT_THREE_EXPOSURE)}
-                      >
-                        Reset
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2"
-                        onClick={() => updateThreeExposure(threeExposure + 0.1)}
-                      >
-                        +0.1
-                      </Button>
-                    </div>
-                    <Input
-                      type="number"
-                      min={MIN_THREE_EXPOSURE}
-                      max={MAX_THREE_EXPOSURE}
-                      step={0.05}
-                      value={formatSliderValue(threeExposure)}
-                      onChange={(event) => {
-                        const nextValue = Number.parseFloat(event.target.value);
-                        if (Number.isFinite(nextValue)) {
-                          setThreeExposure(nextValue);
-                        }
-                      }}
-                      onBlur={(event) => {
-                        updateThreeExposure(Number.parseFloat(event.target.value));
-                      }}
-                    />
-                    <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
-                      <span>{formatSliderValue(MIN_THREE_EXPOSURE)}</span>
-                      <span>{formatSliderValue(MAX_THREE_EXPOSURE)}</span>
-                    </div>
-                  </div>
-                </MenubarGroup>
-              </MenubarContent>
-            </MenubarMenu>
-            {showToggleViewer ? (
-              <MenubarMenu>
-                <MenubarTrigger>{t("page.tools.model_viewer.menu.toggle")}</MenubarTrigger>
-                <MenubarContent>
-                  <MenubarGroup>
-                    <MenubarItem onClick={handleSaveTogglesToIni} disabled={isViewerBusy}>
-                      <SaveIcon />
-                      {t("page.tools.model_viewer.menu.save_to_ini")}
-                    </MenubarItem>
-                    <MenubarSeparator />
-                    <MenubarItem onClick={handleResetToggles}>
-                      <RotateCcwIcon />
-                      {t("page.tools.model_viewer.menu.reset")}
-                    </MenubarItem>
-                  </MenubarGroup>
-                </MenubarContent>
-              </MenubarMenu>
-            ) : null}
-            <MenubarMenu>
-              <MenubarTrigger>{t("page.tools.model_viewer.menu.misc")}</MenubarTrigger>
-              <MenubarContent>
-                <MenubarGroup>
-                  <MenubarItem
-                    onClick={handleCapturePreviewClick}
-                    disabled={!canSaveCapturedPreview}
-                  >
-                    <CameraIcon />
-                    {t("page.tools.model_viewer.menu.capture_set_preview")}
-                  </MenubarItem>
-                </MenubarGroup>
-              </MenubarContent>
-            </MenubarMenu>
-          </Menubar>
+          <ModelViewerMenuBar
+            rotateModel={rotateModel}
+            onResetView={handleResetView}
+            doubleSidedEnabled={doubleSidedEnabled}
+            onDoubleSidedChange={(v) => setDoubleSidedEnabled(v)}
+            toneMapping={threeToneMapping}
+            onToneMappingChange={updateThreeToneMapping}
+            environment={threeEnvironment}
+            onEnvironmentChange={updateThreeEnvironment}
+            exposure={threeExposure}
+            onExposureDraftChange={(v) => setThreeExposure(v)}
+            onExposureCommit={updateThreeExposure}
+            showToggleViewer={showToggleViewer}
+            isViewerBusy={isViewerBusy}
+            onSaveTogglesToIni={handleSaveTogglesToIni}
+            onResetToggles={handleResetToggles}
+            canSaveCapturedPreview={canSaveCapturedPreview}
+            onCapturePreviewClick={handleCapturePreviewClick}
+          />
 
           <div
             className={cn(
@@ -1125,262 +928,4 @@ export function ModelViewerDialog({
       </AlertDialog>
     </>
   );
-}
-
-function VariantTile({
-  variable,
-  activeValue,
-  slotPath,
-  slotHoverPath,
-  slotActivePath,
-  disabled,
-  onSelect,
-}: {
-  variable: ModelViewerVariantManifest["variables"][number];
-  activeValue: VariableStateValue | undefined;
-  slotPath?: string;
-  slotHoverPath?: string;
-  slotActivePath?: string;
-  disabled?: boolean;
-  onSelect: (variableId: string, value: VariableStateValue) => void;
-}) {
-  const isActive = String(activeValue) !== String(variable.defaultValue);
-  const framePath = isActive ? slotActivePath || slotHoverPath || slotPath : slotPath;
-
-  return (
-    <button
-      type="button"
-      className={cn(
-        "relative flex aspect-square min-h-20 items-end justify-center overflow-hidden rounded-md border bg-black/20 p-2 text-white transition",
-        disabled ? "cursor-not-allowed opacity-60" : "hover:bg-black/30",
-      )}
-      disabled={disabled}
-      aria-disabled={disabled}
-      tabIndex={disabled ? -1 : 0}
-      onClick={() => {
-        if (disabled || variable.values.length === 0) {
-          return;
-        }
-
-        const nextIndex =
-          variable.values.findIndex((entry) => String(entry.value) === String(activeValue)) + 1;
-        const next = variable.values[nextIndex % variable.values.length];
-        if (!next) {
-          return;
-        }
-
-        onSelect(variable.id, next.value);
-      }}
-    >
-      {framePath ? (
-        <img
-          src={modelViewerSourceToUrl(framePath)}
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-      ) : null}
-      {variable.iconPath ? (
-        <img
-          src={modelViewerSourceToUrl(variable.iconPath)}
-          className="absolute inset-3 h-[calc(100%-24px)] w-[calc(100%-24px)] object-contain"
-        />
-      ) : null}
-      <div className="relative z-10 rounded bg-black/60 px-2 py-1 text-[11px] leading-none">
-        {variable.label}
-      </div>
-    </button>
-  );
-}
-
-function VariantSlider({
-  variable,
-  activeValue,
-  disabled,
-  realtime,
-  onSelect,
-}: {
-  variable: ModelViewerVariantManifest["variables"][number];
-  activeValue: VariableStateValue | undefined;
-  disabled?: boolean;
-  realtime?: boolean;
-  onSelect: (variableId: string, value: VariableStateValue) => void;
-}) {
-  const slider = variable.slider;
-  const fallbackValue =
-    typeof variable.defaultValue === "number"
-      ? variable.defaultValue
-      : Number(variable.values[0]?.value ?? 0);
-  const resolvedValue =
-    typeof activeValue === "number" ? activeValue : Number(activeValue ?? fallbackValue);
-  const [draftValue, setDraftValue] = useState(resolvedValue);
-  const commitTimeoutRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    setDraftValue(resolvedValue);
-  }, [resolvedValue]);
-
-  useEffect(() => {
-    return () => {
-      if (commitTimeoutRef.current !== null) {
-        window.clearTimeout(commitTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  if (!slider) {
-    return null;
-  }
-
-  const scheduleCommit = (nextValue: number) => {
-    if (commitTimeoutRef.current !== null) {
-      window.clearTimeout(commitTimeoutRef.current);
-    }
-    commitTimeoutRef.current = window.setTimeout(() => {
-      onSelect(variable.id, nextValue);
-      commitTimeoutRef.current = null;
-    }, 150);
-  };
-
-  return (
-    <div className="rounded-md border bg-background/50 p-3">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          {variable.iconPath ? (
-            <img
-              src={modelViewerSourceToUrl(variable.iconPath)}
-              className="size-8 rounded object-contain"
-            />
-          ) : null}
-          <div className="text-sm font-medium">{variable.label}</div>
-        </div>
-        <div className="text-xs tabular-nums text-muted-foreground">
-          {formatSliderValue(draftValue)}
-        </div>
-      </div>
-      <input
-        type="range"
-        min={slider.min}
-        max={slider.max}
-        step={slider.step}
-        value={draftValue}
-        disabled={disabled}
-        className={cn("w-full accent-primary", disabled && "cursor-not-allowed opacity-60")}
-        onChange={(event) => {
-          const nextValue = Number(event.currentTarget.value);
-          setDraftValue(nextValue);
-          if (!disabled) {
-            if (realtime) {
-              onSelect(variable.id, nextValue);
-            } else {
-              scheduleCommit(nextValue);
-            }
-          }
-        }}
-      />
-      <div className="mt-2 flex items-center justify-between text-[11px] tabular-nums text-muted-foreground">
-        <span>{formatSliderValue(slider.min)}</span>
-        <span>{formatSliderValue(slider.max)}</span>
-      </div>
-    </div>
-  );
-}
-
-function formatSliderValue(value: number): string {
-  if (Number.isInteger(value)) {
-    return String(value);
-  }
-
-  return value.toFixed(2).replace(/\.?0+$/, "");
-}
-
-function stripRealtimeShapeKeyState(
-  state: Record<string, VariableStateValue>,
-  shapeKeys?: ModelViewerRealtimeShapeKey[],
-): Record<string, VariableStateValue> {
-  if (!shapeKeys?.length) {
-    return state;
-  }
-
-  const stripped = { ...state };
-  for (const shapeKey of shapeKeys) {
-    for (const dimension of shapeKey.dimensions) {
-      delete stripped[dimension.variableId];
-    }
-  }
-  return stripped;
-}
-
-function normalizeRealtimeShapeKeyState(
-  state: Record<string, VariableStateValue>,
-  variables: ModelViewerVariantManifest["variables"],
-  shapeKeys?: ModelViewerRealtimeShapeKey[],
-): Record<string, VariableStateValue> {
-  if (!shapeKeys?.length) {
-    return state;
-  }
-
-  const normalized = { ...state };
-  const realtimeVariableIds = new Set(
-    shapeKeys.flatMap((shapeKey) => shapeKey.dimensions.map((dimension) => dimension.variableId)),
-  );
-
-  for (const variable of variables) {
-    if (!realtimeVariableIds.has(variable.id) || !variable.slider) {
-      continue;
-    }
-
-    const rawValue = normalized[variable.id];
-    if (typeof rawValue !== "number") {
-      continue;
-    }
-
-    const range = variable.slider.max - variable.slider.min;
-    if (range <= 0) {
-      normalized[variable.id] = 0.5;
-      continue;
-    }
-
-    normalized[variable.id] = Math.min(1, Math.max(0, (rawValue - variable.slider.min) / range));
-  }
-
-  return normalized;
-}
-
-function withCacheBuster(url: string): string {
-  const separator = url.includes("?") ? "&" : "?";
-  return `${url}${separator}v=${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function createStateKey(state: Record<string, VariableStateValue>): string {
-  return Object.entries(state)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, value]) => `${key.toLowerCase()}=${String(value)}`)
-    .join("&");
-}
-
-function getSourceSessionKey(source: ModelViewerDialogSource | null): string | null {
-  if (!source) {
-    return null;
-  }
-
-  if (source.mode === "single") {
-    return `single:${source.glbPath}`;
-  }
-
-  return `variant:${source.manifestPath}`;
-}
-
-function clampThreeExposure(value: number): number {
-  if (!Number.isFinite(value)) {
-    return DEFAULT_THREE_EXPOSURE;
-  }
-
-  return Math.min(MAX_THREE_EXPOSURE, Math.max(MIN_THREE_EXPOSURE, Math.round(value * 100) / 100));
-}
-
-function normalizeThreeToneMapping(value: string | null | undefined): ModelViewerThreeToneMapping {
-  return value === "aces" || value === "none" || value === "neutral" ? value : "neutral";
-}
-
-function normalizeThreeEnvironment(value: string | null | undefined): ModelViewerThreeEnvironment {
-  return value === "soft" || value === "none" || value === "studio" ? value : "studio";
 }

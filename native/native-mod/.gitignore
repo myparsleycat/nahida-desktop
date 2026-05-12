@@ -117,6 +117,7 @@ dist
 #Added by cargo
 
 /target
+Cargo.lock
 
 *.node
 .pnp.*
@@ -127,6 +128,3 @@ dist
 !.yarn/sdks
 !.yarn/versions
 /npm
-
-index.d.ts
-index.js

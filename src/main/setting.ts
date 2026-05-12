@@ -1,5 +1,4 @@
 import type { NahidaDesktop } from "@main/index";
-import { imageCache, setting } from "@main/internal/db/schema";
 import { normalizeDriveNameSortPolicy, type DriveNameSortPolicy } from "@shared/drive";
 import {
     ARCHIVE_EXTRACT_PATH_MODES,
@@ -18,7 +17,6 @@ import {
 } from "@shared/settings";
 import type { AutoUpdateMode } from "@shared/updater";
 import AutoLaunch from "auto-launch";
-import { eq, sum } from "drizzle-orm";
 import { app, BrowserWindow } from "electron";
 import { LogLevel } from "./internal/logger";
 
@@ -611,19 +609,11 @@ export class Setting {
     }
 
     private async findStoredSetting(storageKey: string) {
-        return await this.desktop.lib.db.query.setting.findFirst({
-            where: (t, { eq }) => eq(t.key, storageKey),
-        });
+        return await this.desktop.lib.db.settings.get(storageKey);
     }
 
-    private async upsertStoredSetting(storageKey: string, value: string) {
-        await this.desktop.lib.db
-            .insert(setting)
-            .values({ key: storageKey, value })
-            .onConflictDoUpdate({
-                target: setting.key,
-                set: { value },
-            });
+    private async upsertStoredSetting(storageKey: string, value: string | null) {
+        await this.desktop.lib.db.settings.upsert(storageKey, value);
     }
 
     public async get<K extends SettingKey>(key: K): Promise<AppSettings[K]> {
@@ -673,9 +663,7 @@ export class Setting {
     }
 
     private async getStoredBounds(key: string) {
-        const qr = await this.desktop.lib.db.query.setting.findFirst({
-            where: (t, { eq }) => eq(t.key, key),
-        });
+        const qr = await this.desktop.lib.db.settings.get(key);
 
         if (!qr) return null;
 
@@ -686,10 +674,7 @@ export class Setting {
 
     private async setStoredBounds(key: string, bounds: Bounds) {
         const value = JSON.stringify(bounds);
-        await this.desktop.lib.db.insert(setting).values({ key, value }).onConflictDoUpdate({
-            target: setting.key,
-            set: { value },
-        });
+        await this.desktop.lib.db.settings.upsert(key, value);
     }
 
     public async getBounds() {
@@ -709,912 +694,137 @@ export class Setting {
     }
 
     general = {
-        getRunOnStartup: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "runOnStartup"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "runOnStartup", value: "false" });
-                return false;
-            }
-
-            return qr.value === "true";
-        },
-
-        setRunOnStartup: async (enabled: boolean) => {
-            const current = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "runOnStartup"),
-            });
-            if (current) {
-                await this.desktop.lib.db
-                    .update(setting)
-                    .set({ value: String(enabled) })
-                    .where(eq(setting.key, "runOnStartup"));
-            } else {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "runOnStartup", value: String(enabled) });
-            }
-
-            if (app.isPackaged) {
-                const autoLaunch = new AutoLaunch({
-                    name: "Nahida Desktop",
-                    path: app.getPath("exe"),
-                    isHidden: true,
-                });
-
-                if (enabled) {
-                    await autoLaunch.enable();
-                } else {
-                    await autoLaunch.disable();
-                }
-            }
-        },
-
-        getLanguage: async (): Promise<string> => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "language"),
-            });
-
-            const systemLocale = app.getSystemLocale();
-            const fallbackLanguage = ["ko", "en", "ja", "zh"].includes(systemLocale.split("-")[0])
-                ? systemLocale.split("-")[0]
-                : "en";
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "language", value: fallbackLanguage });
-                return fallbackLanguage;
-            }
-
-            if (!qr.value) {
-                await this.desktop.lib.db
-                    .update(setting)
-                    .set({ value: fallbackLanguage })
-                    .where(eq(setting.key, "language"));
-                return fallbackLanguage;
-            }
-
-            return qr.value;
-        },
-
-        setLanguage: async (language: string) => {
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "language", value: language })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: language },
-                });
-
-            this.desktop.ipc.broadcast("language:update", language);
-            await this.desktop.updater.handleLanguageChanged(language);
-        },
-
-        getMoveTransferPageWhenStartTransfer: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "moveTransferPageWhenStartTransfer"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "moveTransferPageWhenStartTransfer", value: "false" });
-                return false;
-            }
-
-            return qr.value === "true";
-        },
-
-        setMoveTransferPageWhenStartTransfer: async (enabled: boolean) => {
-            const current = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "moveTransferPageWhenStartTransfer"),
-            });
-            if (current) {
-                await this.desktop.lib.db
-                    .update(setting)
-                    .set({ value: String(enabled) })
-                    .where(eq(setting.key, "moveTransferPageWhenStartTransfer"));
-            } else {
-                await this.desktop.lib.db.insert(setting).values({
-                    key: "moveTransferPageWhenStartTransfer",
-                    value: String(enabled),
-                });
-            }
-        },
-
-        getPowerSaveBlockInTransfer: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "powerSaveBlockInTransfer"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "powerSaveBlockInTransfer", value: "false" });
-                return false;
-            }
-
-            return qr.value === "true";
-        },
-
-        setPowerSaveBlockInTransfer: async (enabled: boolean) => {
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "powerSaveBlockInTransfer", value: String(enabled) })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: String(enabled) },
-                });
-        },
-
-        getDefaultStartPage: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "defaultStartPage"),
-            });
-            const defaultPage = getDefaultStartPageForPlatform(process.platform);
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "defaultStartPage", value: defaultPage });
-                return defaultPage;
-            }
-
-            return sanitizeDefaultStartPage(qr.value, process.platform);
-        },
-
-        setDefaultStartPage: async (page: string | null) => {
-            const nextPage = sanitizeDefaultStartPage(page, process.platform);
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "defaultStartPage", value: nextPage })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: nextPage },
-                });
-        },
-
-        getTitlebarStyle: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "titlebarStyle"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "titlebarStyle", value: "modern" });
-                return "modern";
-            }
-
-            return qr.value;
-        },
-
-        setTitlebarStyle: async (style: string) => {
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "titlebarStyle", value: style })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: style },
-                });
-
-            const windows = BrowserWindow.getAllWindows();
-            for (const window of windows) {
-                window.close();
-            }
-            await this.desktop.window.main.focusAndNavigate("/setting/gen");
-        },
-
-        getAutoUpdateMode: async (): Promise<AutoUpdateMode> => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "autoUpdate"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "autoUpdate", value: "auto" });
-                return "auto";
-            }
-
-            const mode = normalizeAutoUpdateMode(qr.value);
-
-            if (qr.value !== mode) {
-                await this.desktop.lib.db
-                    .update(setting)
-                    .set({ value: mode })
-                    .where(eq(setting.key, "autoUpdate"));
-            }
-
-            return mode;
-        },
-
-        setAutoUpdateMode: async (mode: AutoUpdateMode) => {
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "autoUpdate", value: mode })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: mode },
-                });
-
-            await this.desktop.updater.handleAutoUpdateModeChanged(mode);
-        },
-
-        getRunInBackground: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "runInBackground"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "runInBackground", value: "true" });
-                return true;
-            }
-
-            return qr.value === "true";
-        },
-
-        setRunInBackground: async (enabled: boolean) => {
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "runInBackground", value: String(enabled) })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: String(enabled) },
-                });
-        },
-
-        getImageCacheSize: async () => {
-            const [result] = await this.desktop.lib.db
-                .select({ totalSize: sum(imageCache.size) })
-                .from(imageCache);
-            return Number(result?.totalSize || 0);
-        },
-
+        getRunOnStartup: async () => await this.get("general.runOnStartup"),
+        setRunOnStartup: async (enabled: boolean) =>
+            await this.set("general.runOnStartup", enabled),
+        getLanguage: async (): Promise<string> => await this.get("general.language"),
+        setLanguage: async (language: string) => await this.set("general.language", language),
+        getMoveTransferPageWhenStartTransfer: async () =>
+            await this.get("general.moveTransferPageWhenStartTransfer"),
+        setMoveTransferPageWhenStartTransfer: async (enabled: boolean) =>
+            await this.set("general.moveTransferPageWhenStartTransfer", enabled),
+        getPowerSaveBlockInTransfer: async () => await this.get("general.powerSaveBlockInTransfer"),
+        setPowerSaveBlockInTransfer: async (enabled: boolean) =>
+            await this.set("general.powerSaveBlockInTransfer", enabled),
+        getDefaultStartPage: async () => await this.get("general.defaultStartPage"),
+        setDefaultStartPage: async (page: string | null) =>
+            await this.set("general.defaultStartPage", page ?? ""),
+        getTitlebarStyle: async () => await this.get("general.titlebarStyle"),
+        setTitlebarStyle: async (style: string) => await this.set("general.titlebarStyle", style),
+        getAutoUpdateMode: async (): Promise<AutoUpdateMode> =>
+            await this.get("general.autoUpdateMode"),
+        setAutoUpdateMode: async (mode: AutoUpdateMode) =>
+            await this.set("general.autoUpdateMode", mode),
+        getRunInBackground: async () => await this.get("general.runInBackground"),
+        setRunInBackground: async (enabled: boolean) =>
+            await this.set("general.runInBackground", enabled),
+        getImageCacheSize: async () => await this.desktop.lib.db.imageCache.sumSize(),
         clearImageCache: async () => {
-            await this.desktop.lib.db.delete(imageCache);
+            await this.desktop.lib.db.imageCache.deleteAll();
         },
-
-        getLogLevel: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "logLevel"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "logLevel", value: "error" });
-                return "error";
-            } else if (!qr.value) {
-                return "error";
-            }
-
-            return qr.value as LogLevel;
-        },
-
-        setLogLevel: async (level: LogLevel) => {
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "logLevel", value: level })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: level },
-                });
-
-            this.desktop.logger.setLevel(level);
-        },
+        getLogLevel: async () => (await this.get("general.logLevel")) as LogLevel,
+        setLogLevel: async (level: LogLevel) => await this.set("general.logLevel", level),
     };
 
     mod = {
-        getSidebarLayout: async (): Promise<SidebarLayoutMode> => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "mod_sidebar_layout"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db.insert(setting).values({
-                    key: "mod_sidebar_layout",
-                    value: "row",
-                });
-                return "row";
-            }
-
-            const normalizedLayout = normalizeSidebarLayoutMode(qr.value);
-
-            if (qr.value !== normalizedLayout) {
-                await this.desktop.lib.db
-                    .update(setting)
-                    .set({ value: normalizedLayout })
-                    .where(eq(setting.key, "mod_sidebar_layout"));
-            }
-
-            return normalizedLayout;
-        },
-
+        getSidebarLayout: async (): Promise<SidebarLayoutMode> =>
+            await this.get("mod.sidebarLayout"),
         setSidebarLayout: async (mode: SidebarLayoutMode) => {
             await this.set("mod.sidebarLayout", mode);
         },
-
-        getCharacterSidebarWidth: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "mod_character_sidebar_width"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db.insert(setting).values({
-                    key: "mod_character_sidebar_width",
-                    value: String(MOD_CHARACTER_SIDEBAR_WIDTH_DEFAULT),
-                });
-                return MOD_CHARACTER_SIDEBAR_WIDTH_DEFAULT;
-            }
-
-            const normalizedWidth = clampIntegerSetting(
-                parseInt(qr.value as string, 10),
-                MOD_CHARACTER_SIDEBAR_WIDTH_MIN,
-                MOD_CHARACTER_SIDEBAR_WIDTH_MAX,
-                MOD_CHARACTER_SIDEBAR_WIDTH_DEFAULT,
-            );
-
-            if (String(normalizedWidth) !== qr.value) {
-                await this.desktop.lib.db
-                    .update(setting)
-                    .set({ value: String(normalizedWidth) })
-                    .where(eq(setting.key, "mod_character_sidebar_width"));
-            }
-
-            return normalizedWidth;
-        },
-
+        getCharacterSidebarWidth: async () => await this.get("mod.characterSidebarWidth"),
         setCharacterSidebarWidth: async (width: number) => {
             await this.set("mod.characterSidebarWidth", width);
         },
-
-        getArchiveExtractPathMode: async (): Promise<ArchiveExtractPathMode> => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "mod_archive_extract_path_mode"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db.insert(setting).values({
-                    key: "mod_archive_extract_path_mode",
-                    value: "flatten_single_root",
-                });
-                return "flatten_single_root";
-            }
-
-            if (ARCHIVE_EXTRACT_PATH_MODES.includes(qr.value as ArchiveExtractPathMode)) {
-                return qr.value as ArchiveExtractPathMode;
-            }
-
-            return "flatten_single_root";
-        },
-
+        getArchiveExtractPathMode: async (): Promise<ArchiveExtractPathMode> =>
+            await this.get("mod.archiveExtractPathMode"),
         setArchiveExtractPathMode: async (mode: ArchiveExtractPathMode) => {
             await this.set("mod.archiveExtractPathMode", mode);
         },
-
-        getDeleteArchiveAfterExtract: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "mod_delete_archive_after_extract"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "mod_delete_archive_after_extract", value: "true" });
-                return true;
-            }
-
-            return qr.value === "true";
-        },
-
+        getDeleteArchiveAfterExtract: async () => await this.get("mod.deleteArchiveAfterExtract"),
         setDeleteArchiveAfterExtract: async (enabled: boolean) => {
             await this.set("mod.deleteArchiveAfterExtract", enabled);
         },
-
-        getMoveFolderInsteadOfCopy: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "mod_move_folder_instead_of_copy"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "mod_move_folder_instead_of_copy", value: "true" });
-                return true;
-            }
-
-            return qr.value === "true";
-        },
-
+        getMoveFolderInsteadOfCopy: async () => await this.get("mod.moveFolderInsteadOfCopy"),
         setMoveFolderInsteadOfCopy: async (enabled: boolean) => {
             await this.set("mod.moveFolderInsteadOfCopy", enabled);
         },
-
-        getVirtualizationEnabled: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "mod_virtualization_enabled"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "mod_virtualization_enabled", value: "true" });
-                return true;
-            }
-
-            return qr.value === "true";
-        },
-
+        getVirtualizationEnabled: async () => await this.get("mod.virtualizationEnabled"),
         setVirtualizationEnabled: async (enabled: boolean) => {
             await this.set("mod.virtualizationEnabled", enabled);
         },
-
-        getVirtualizationThreshold: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "mod_virtualization_threshold"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "mod_virtualization_threshold", value: "30" });
-                return 30;
-            }
-
-            return parseInt(qr.value as string) || 30;
-        },
-
+        getVirtualizationThreshold: async () => await this.get("mod.virtualizationThreshold"),
         setVirtualizationThreshold: async (threshold: number) => {
             await this.set("mod.virtualizationThreshold", threshold);
         },
-
-        getGridLayoutMode: async (): Promise<ModGridLayoutMode> => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "mod_grid_layout_mode"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "mod_grid_layout_mode", value: "responsive" });
-                return "responsive";
-            }
-
-            return normalizeModGridLayoutMode(qr.value as string | null | undefined);
-        },
-
+        getGridLayoutMode: async (): Promise<ModGridLayoutMode> =>
+            await this.get("mod.gridLayoutMode"),
         setGridLayoutMode: async (mode: ModGridLayoutMode) => {
             await this.set("mod.gridLayoutMode", mode);
         },
-
-        getGridResponsiveBaseWidth: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "mod_grid_responsive_base_width"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db.insert(setting).values({
-                    key: "mod_grid_responsive_base_width",
-                    value: String(MOD_GRID_RESPONSIVE_BASE_WIDTH_DEFAULT),
-                });
-                return MOD_GRID_RESPONSIVE_BASE_WIDTH_DEFAULT;
-            }
-
-            return clampIntegerSetting(
-                parseInt(qr.value as string, 10),
-                MOD_GRID_WIDTH_MIN,
-                MOD_GRID_WIDTH_MAX,
-                MOD_GRID_RESPONSIVE_BASE_WIDTH_DEFAULT,
-            );
-        },
-
+        getGridResponsiveBaseWidth: async () => await this.get("mod.gridResponsiveBaseWidth"),
         setGridResponsiveBaseWidth: async (width: number) => {
             await this.set("mod.gridResponsiveBaseWidth", width);
         },
-
-        getGridFixedCardWidth: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "mod_grid_fixed_card_width"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db.insert(setting).values({
-                    key: "mod_grid_fixed_card_width",
-                    value: String(MOD_GRID_FIXED_CARD_WIDTH_DEFAULT),
-                });
-                return MOD_GRID_FIXED_CARD_WIDTH_DEFAULT;
-            }
-
-            return clampIntegerSetting(
-                parseInt(qr.value as string, 10),
-                MOD_GRID_WIDTH_MIN,
-                MOD_GRID_WIDTH_MAX,
-                MOD_GRID_FIXED_CARD_WIDTH_DEFAULT,
-            );
-        },
-
+        getGridFixedCardWidth: async () => await this.get("mod.gridFixedCardWidth"),
         setGridFixedCardWidth: async (width: number) => {
             await this.set("mod.gridFixedCardWidth", width);
         },
-
-        getGridFixedColumnCount: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "mod_grid_fixed_column_count"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db.insert(setting).values({
-                    key: "mod_grid_fixed_column_count",
-                    value: String(MOD_GRID_FIXED_COLUMN_COUNT_DEFAULT),
-                });
-                return MOD_GRID_FIXED_COLUMN_COUNT_DEFAULT;
-            }
-
-            return clampIntegerSetting(
-                parseInt(qr.value as string, 10),
-                MOD_GRID_COLUMN_MIN,
-                MOD_GRID_COLUMN_MAX,
-                MOD_GRID_FIXED_COLUMN_COUNT_DEFAULT,
-            );
-        },
-
+        getGridFixedColumnCount: async () => await this.get("mod.gridFixedColumnCount"),
         setGridFixedColumnCount: async (count: number) => {
             await this.set("mod.gridFixedColumnCount", count);
         },
-
-        getSearchModPreview: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "mod_search_mod_preview"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "mod_search_mod_preview", value: "false" });
-                return false;
-            }
-
-            return qr.value === "true";
-        },
-
+        getSearchModPreview: async () => await this.get("mod.searchModPreview"),
         setSearchModPreview: async (enabled: boolean) => {
             await this.set("mod.searchModPreview", enabled);
         },
-
-        getCopyShaderFixesOnEnable: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "mod_copy_shader_fixes_on_enable"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "mod_copy_shader_fixes_on_enable", value: "true" });
-                return true;
-            }
-
-            return qr.value === "true";
-        },
-
+        getCopyShaderFixesOnEnable: async () => await this.get("mod.copyShaderFixesOnEnable"),
         setCopyShaderFixesOnEnable: async (enabled: boolean) => {
             await this.set("mod.copyShaderFixesOnEnable", enabled);
         },
     };
 
     transfer = {
-        getDownloadConcurrency: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "transfer_download_concurrency"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db.insert(setting).values({
-                    key: "transfer_download_concurrency",
-                    value: String(TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT),
-                });
-                return TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT;
-            }
-
-            return clampTransferConcurrency(
-                parseInt(qr.value as string, 10),
-                TRANSFER_DOWNLOAD_CONCURRENCY_MIN_MAX[0],
-                TRANSFER_DOWNLOAD_CONCURRENCY_MIN_MAX[1],
-                TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT,
-            );
-        },
-
-        setDownloadConcurrency: async (concurrency: number) => {
-            const value = String(
-                clampTransferConcurrency(
-                    concurrency,
-                    TRANSFER_DOWNLOAD_CONCURRENCY_MIN_MAX[0],
-                    TRANSFER_DOWNLOAD_CONCURRENCY_MIN_MAX[1],
-                    TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT,
-                ),
-            );
-
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "transfer_download_concurrency", value })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value },
-                });
-        },
-
-        getUploadConcurrency: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "transfer_upload_concurrency"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db.insert(setting).values({
-                    key: "transfer_upload_concurrency",
-                    value: String(TRANSFER_UPLOAD_CONCURRENCY_DEFAULT),
-                });
-                return TRANSFER_UPLOAD_CONCURRENCY_DEFAULT;
-            }
-
-            return clampTransferConcurrency(
-                parseInt(qr.value as string, 10),
-                TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX[0],
-                TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX[1],
-                TRANSFER_UPLOAD_CONCURRENCY_DEFAULT,
-            );
-        },
-
-        setUploadConcurrency: async (concurrency: number) => {
-            const value = String(
-                clampTransferConcurrency(
-                    concurrency,
-                    TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX[0],
-                    TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX[1],
-                    TRANSFER_UPLOAD_CONCURRENCY_DEFAULT,
-                ),
-            );
-
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "transfer_upload_concurrency", value })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value },
-                });
-        },
-
-        getUploadCreateManyConcurrency: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "transfer_upload_create_many_concurrency"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db.insert(setting).values({
-                    key: "transfer_upload_create_many_concurrency",
-                    value: String(TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT),
-                });
-                return TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT;
-            }
-
-            return clampTransferConcurrency(
-                parseInt(qr.value as string, 10),
-                TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[0],
-                TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[1],
-                TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT,
-            );
-        },
-
-        setUploadCreateManyConcurrency: async (concurrency: number) => {
-            const value = String(
-                clampTransferConcurrency(
-                    concurrency,
-                    TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[0],
-                    TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[1],
-                    TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT,
-                ),
-            );
-
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "transfer_upload_create_many_concurrency", value })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value },
-                });
-        },
+        getDownloadConcurrency: async () => await this.get("transfer.downloadConcurrency"),
+        setDownloadConcurrency: async (concurrency: number) =>
+            await this.set("transfer.downloadConcurrency", concurrency),
+        getUploadConcurrency: async () => await this.get("transfer.uploadConcurrency"),
+        setUploadConcurrency: async (concurrency: number) =>
+            await this.set("transfer.uploadConcurrency", concurrency),
+        getUploadCreateManyConcurrency: async () =>
+            await this.get("transfer.uploadCreateManyConcurrency"),
+        setUploadCreateManyConcurrency: async (concurrency: number) =>
+            await this.set("transfer.uploadCreateManyConcurrency", concurrency),
     };
 
     drive = {
-        getNameSortPolicy: async (): Promise<DriveNameSortPolicy> => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "drive_name_sort_policy"),
-            });
-
-            if (!qr) {
-                const value = normalizeDriveNameSortPolicy(null);
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "drive_name_sort_policy", value })
-                    .onConflictDoNothing();
-                return value;
-            }
-
-            return normalizeDriveNameSortPolicy(qr.value);
-        },
-
+        getNameSortPolicy: async (): Promise<DriveNameSortPolicy> =>
+            await this.get("drive.nameSortPolicy"),
         setNameSortPolicy: async (policy: DriveNameSortPolicy) => {
             await this.set("drive.nameSortPolicy", policy);
         },
     };
 
     modelViewer = {
-        getToneMapping: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "model_viewer_tone_mapping"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db.insert(setting).values({
-                    key: "model_viewer_tone_mapping",
-                    value: DEFAULT_MODEL_VIEWER_TONE_MAPPING,
-                });
-                return DEFAULT_MODEL_VIEWER_TONE_MAPPING;
-            }
-
-            return normalizeModelViewerToneMapping(qr.value);
-        },
-
-        setToneMapping: async (toneMapping: string) => {
-            const value = normalizeModelViewerToneMapping(toneMapping);
-
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "model_viewer_tone_mapping", value })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value },
-                });
-        },
-
-        getEnvironment: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "model_viewer_environment"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db.insert(setting).values({
-                    key: "model_viewer_environment",
-                    value: DEFAULT_MODEL_VIEWER_ENVIRONMENT,
-                });
-                return DEFAULT_MODEL_VIEWER_ENVIRONMENT;
-            }
-
-            return normalizeModelViewerEnvironment(qr.value);
-        },
-
-        setEnvironment: async (environment: string) => {
-            const value = normalizeModelViewerEnvironment(environment);
-
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "model_viewer_environment", value })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value },
-                });
-        },
-
-        getExposure: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "model_viewer_exposure"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db.insert(setting).values({
-                    key: "model_viewer_exposure",
-                    value: String(DEFAULT_MODEL_VIEWER_EXPOSURE),
-                });
-                return DEFAULT_MODEL_VIEWER_EXPOSURE;
-            }
-
-            return clampModelViewerExposure(Number.parseFloat(qr.value as string));
-        },
-
-        setExposure: async (exposure: number) => {
-            const value = String(clampModelViewerExposure(exposure));
-
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "model_viewer_exposure", value })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value },
-                });
-        },
+        getToneMapping: async () => await this.get("modelViewer.toneMapping"),
+        setToneMapping: async (toneMapping: string) =>
+            await this.set("modelViewer.toneMapping", normalizeModelViewerToneMapping(toneMapping)),
+        getEnvironment: async () => await this.get("modelViewer.environment"),
+        setEnvironment: async (environment: string) =>
+            await this.set("modelViewer.environment", normalizeModelViewerEnvironment(environment)),
+        getExposure: async () => await this.get("modelViewer.exposure"),
+        setExposure: async (exposure: number) => await this.set("modelViewer.exposure", exposure),
     };
 
     xxmi = {
-        getPersistToggles: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "xxmi_persist_toggles"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db
-                    .insert(setting)
-                    .values({ key: "xxmi_persist_toggles", value: "false" });
-                return false;
-            }
-
-            return qr.value === "true";
-        },
-
+        getPersistToggles: async () => await this.get("xxmi.persistToggles"),
         getPersistLogs: async () => {
             return this.desktop.service.modTools.togglePersist.getPersistLogs();
         },
-
-        setPersistToggles: async (enabled: boolean) => {
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({ key: "xxmi_persist_toggles", value: String(enabled) })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: String(enabled) },
-                });
-
-            if (enabled) {
-                await this.desktop.setting.general.setRunInBackground(true);
-            }
-
-            if (this.desktop.service?.modTools) {
-                if (enabled) {
-                    this.desktop.service.modTools.startPersistWatcher();
-                } else {
-                    this.desktop.service.modTools.stopPersistWatcher();
-                }
-            }
-        },
-
-        getToggleViewerAutoGenerate: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "xxmi_toggle_viewer_auto_generate"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db.insert(setting).values({
-                    key: "xxmi_toggle_viewer_auto_generate",
-                    value: "false",
-                });
-                return false;
-            }
-
-            return qr.value === "true";
-        },
-
-        getToggleViewerHotkey: async () => {
-            const qr = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, "xxmi_toggle_viewer_hotkey"),
-            });
-
-            if (!qr) {
-                await this.desktop.lib.db.insert(setting).values({
-                    key: "xxmi_toggle_viewer_hotkey",
-                    value: DEFAULT_TOGGLE_VIEWER_HOTKEY,
-                });
-                return DEFAULT_TOGGLE_VIEWER_HOTKEY;
-            }
-
-            const value = (qr.value || "").trim();
-            return value || DEFAULT_TOGGLE_VIEWER_HOTKEY;
-        },
-
+        setPersistToggles: async (enabled: boolean) =>
+            await this.set("xxmi.persistToggles", enabled),
+        getToggleViewerAutoGenerate: async () => await this.get("xxmi.toggleViewerAutoGenerate"),
+        getToggleViewerHotkey: async () => await this.get("xxmi.toggleViewerHotkey"),
         getToggleViewerLogs: async () => {
             return this.desktop.service.modTools.toggleViewer.getLogs();
         },
@@ -1634,66 +844,15 @@ export class Setting {
         cancelToggleViewerWork: async () => {
             this.desktop.service.modTools.toggleViewer.cancelCurrentWork();
         },
-
-        setToggleViewerHotkey: async (hotkey: string) => {
-            const normalizedHotkey = hotkey.trim() || DEFAULT_TOGGLE_VIEWER_HOTKEY;
-
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({
-                    key: "xxmi_toggle_viewer_hotkey",
-                    value: normalizedHotkey,
-                })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: normalizedHotkey },
-                });
-
-            if (this.desktop.service?.modTools) {
-                await this.desktop.service.modTools.toggleViewer.applyHotkeyToArtifacts(
-                    normalizedHotkey,
-                );
-            }
-        },
-
-        setToggleViewerAutoGenerate: async (enabled: boolean) => {
-            await this.desktop.lib.db
-                .insert(setting)
-                .values({
-                    key: "xxmi_toggle_viewer_auto_generate",
-                    value: String(enabled),
-                })
-                .onConflictDoUpdate({
-                    target: setting.key,
-                    set: { value: String(enabled) },
-                });
-
-            if (enabled) {
-                await this.desktop.setting.general.setRunInBackground(true);
-            }
-
-            if (this.desktop.service?.modTools) {
-                if (enabled) {
-                    const toggleViewerState = this.desktop.service.modTools.toggleViewer.getState();
-                    if (toggleViewerState.mode === "generate") {
-                        this.desktop.logger.info(
-                            "Deferred toggle viewer watcher start until manual generate completes",
-                            "Setting.xxmi.setToggleViewerAutoGenerate",
-                        );
-                    } else {
-                        await this.desktop.service.modTools.startToggleViewerWatcher();
-                    }
-                } else {
-                    this.desktop.service.modTools.toggleViewer.cancelCurrentWork();
-                    await this.desktop.service.modTools.stopToggleViewerWatcher();
-                }
-            }
-        },
+        setToggleViewerHotkey: async (hotkey: string) =>
+            await this.set("xxmi.toggleViewerHotkey", hotkey),
+        setToggleViewerAutoGenerate: async (enabled: boolean) =>
+            await this.set("xxmi.toggleViewerAutoGenerate", enabled),
     };
 
     advanced = {
         getAll: async () => {
-            const rows = await this.desktop.lib.db.select().from(setting);
+            const rows = await this.desktop.lib.db.settings.list();
             const sensitiveKeys = ["password", "token", "secret", "credentials"];
 
             return rows.map((row) => {
@@ -1706,15 +865,13 @@ export class Setting {
         },
 
         set: async (key: string, value: string) => {
-            const existing = await this.desktop.lib.db.query.setting.findFirst({
-                where: (t, { eq }) => eq(t.key, key),
-            });
+            const existing = await this.desktop.lib.db.settings.get(key);
 
             if (!existing) {
                 throw new Error(`Setting key "${key}" not found.`);
             }
 
-            await this.desktop.lib.db.update(setting).set({ value }).where(eq(setting.key, key));
+            await this.desktop.lib.db.settings.updateValue(key, value);
             this.desktop.ipc.broadcast("setting:update", { key, value });
             this.desktop.ipc.broadcast("renderer:reload");
         },

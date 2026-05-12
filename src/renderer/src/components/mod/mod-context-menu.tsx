@@ -1,7 +1,7 @@
 import {
   ModelViewerDialog,
   type ModelViewerDialogSource,
-} from "@renderer/components/tools/model-viewer-dialog";
+} from "@renderer/components/tools/model-viewer/model-viewer-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -139,6 +139,7 @@ export function ModContextMenu({
       await window.api.invoke(
         "tools:cleanupStaticGlbViewerFile",
         source.mode === "variant-set" ? source.artifactRoot : source.glbPath,
+        source.memorySessionId,
       );
     } catch (error) {
       console.warn("Failed to clean up model viewer file", error);
@@ -169,6 +170,7 @@ export function ModContextMenu({
               manifestPath: result.manifestPath,
               modPath: mod.path,
               manifest: result.manifest,
+              memorySessionId: result.memorySessionId,
               defaultGlbPath: result.defaultGlbPath,
               activeGlbPath: result.activeGlbPath,
               name: result.name,
@@ -176,6 +178,7 @@ export function ModContextMenu({
           : {
               mode: "single",
               glbPath: result.glbPath,
+              memorySessionId: result.memorySessionId,
               modPath: mod.path,
               name: result.name,
             },

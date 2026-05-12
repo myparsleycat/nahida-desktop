@@ -1,9 +1,7 @@
 import type { NahidaDesktop } from "@main/index";
-import { setting } from "@main/internal/db/schema";
 import { focus } from "@main/windows/utils";
 import { BACKEND_URL } from "@shared/const";
 import { SessionSchema } from "@shared/schemas/auth";
-import { eq } from "drizzle-orm";
 import ky from "ky";
 import { parseServerSentEvents } from "parse-sse";
 import { Nullable, validate } from "valdex";
@@ -26,36 +24,24 @@ export class Auth {
 
     public async saveToken(key: string) {
         const encryptedKey = this.desktop.lib.crypto.encryptString(key);
-
-        await this.desktop.lib.db
-            .insert(setting)
-            .values({ key: "token", value: encryptedKey })
-            .onConflictDoUpdate({
-                target: setting.key,
-                set: { value: encryptedKey },
-            });
+        await this.desktop.lib.db.settings.upsert("token", encryptedKey);
     }
 
     public async getToken() {
-        const key = await this.desktop.lib.db.query.setting.findFirst({
-            where: eq(setting.key, "token"),
-        });
-        if (!key || !key.value) {
+        const key = await this.desktop.lib.db.settings.getValue("token");
+        if (!key) {
             return null;
         }
         try {
-            return this.desktop.lib.crypto.decryptString(key.value);
+            return this.desktop.lib.crypto.decryptString(key);
         } catch {
-            this.removeToken();
+            void this.removeToken();
             return null;
         }
     }
 
     public async removeToken() {
-        await this.desktop.lib.db
-            .update(setting)
-            .set({ value: null })
-            .where(eq(setting.key, "token"));
+        await this.desktop.lib.db.settings.updateValue("token", null);
     }
 
     public async getSession() {

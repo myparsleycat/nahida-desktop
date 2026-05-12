@@ -93,9 +93,23 @@ export class MainWindow {
             icon,
         });
 
-        this.window.on("ready-to-show", async () => {
-            this.window?.show();
+        let hasShownWindow = false;
+        const showWindow = async () => {
+            if (!this.window || this.window.isDestroyed() || hasShownWindow) {
+                return;
+            }
+
+            hasShownWindow = true;
+            this.window.show();
             void this.desktop.updater.showPendingDialogsIfNeeded();
+        };
+
+        this.window.once("ready-to-show", () => {
+            void showWindow();
+        });
+
+        this.window.webContents.once("did-finish-load", () => {
+            void showWindow();
         });
 
         const saveBounds = debounce(async () => {
@@ -146,9 +160,12 @@ export class MainWindow {
             // this.window.loadFile(path.join(__dirname, "../renderer/index.html"));
 
             // esm
-            this.window.loadFile(fileURLToPath(new URL("../renderer/index.html", import.meta.url)), {
-                hash: initialRoute ? initialRoute.slice(1) : undefined,
-            });
+            this.window.loadFile(
+                fileURLToPath(new URL("../renderer/index.html", import.meta.url)),
+                {
+                    hash: initialRoute ? initialRoute.slice(1) : undefined,
+                },
+            );
         }
 
         this.window.on("blur", () => {

@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import path from "node:path";
 import type { NahidaDesktop } from "@main/index";
-import { imageCache } from "@main/internal/db/schema";
 import { fileTypeFromBuffer } from "file-type";
 import fse from "fs-extra";
 import PQueue from "p-queue";
@@ -56,9 +55,7 @@ export class LocalProtocol {
 
         if (!isOrig && fileType && convertImageMime.includes(fileType.mime)) {
             const imgHash = crypto.createHash("sha256").update(buffer).digest("hex");
-            const cachedImg = await this.desktop.lib.db.query.imageCache.findFirst({
-                where: (t, { eq }) => eq(t.hash, imgHash),
-            });
+            const cachedImg = await this.desktop.lib.db.imageCache.getByHash(imgHash);
 
             if (cachedImg) {
                 const imgArrayBuffer = new Uint8Array(cachedImg.image);
@@ -95,14 +92,11 @@ export class LocalProtocol {
                 }
 
                 const blob = new Blob([new Uint8Array(resizedImg)], { type: "image/webp" });
-                await this.desktop.lib.db
-                    .insert(imageCache)
-                    .values({
-                        hash: imgHash,
-                        image: Buffer.from(resizedImg),
-                        size: resizedImg.length,
-                    })
-                    .onConflictDoNothing();
+                await this.desktop.lib.db.imageCache.insertIgnore({
+                    hash: imgHash,
+                    image: Buffer.from(resizedImg),
+                    size: resizedImg.length,
+                });
                 return new Response(blob);
             }
         } else {

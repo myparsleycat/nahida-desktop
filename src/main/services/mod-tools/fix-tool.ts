@@ -1,13 +1,12 @@
 import crypto from "node:crypto";
 import path from "node:path";
-import { scriptPreset, scriptPresetItem, script as scriptTable } from "@main/internal/db/schema";
 import { ScriptExecutor } from "@main/lib/script-executor";
-import { eq } from "drizzle-orm";
 import { sortBy } from "es-toolkit";
 import fse from "fs-extra";
 import { nanoid } from "nanoid";
 import type { FixToolLogEvent } from "@shared/types";
 import type { NahidaDesktop } from "@/main";
+import type { ScriptRow } from "@/main/internal/db";
 
 export class FixTool {
     private currentAbortController: AbortController | null = null;
@@ -29,9 +28,7 @@ export class FixTool {
         const fileData = await fse.readFile(inputPath);
         const fileHash = crypto.createHash("sha256").update(fileData).digest("hex");
 
-        const _script = await this.desktop.lib.db.query.script.findFirst({
-            where: (t, { eq, or }) => or(eq(t.sha256, fileHash), eq(t.name, fileName)),
-        });
+        const _script = await this.desktop.lib.db.scripts.findBySha256OrName(fileHash, fileName);
 
         if (_script) {
             if (_script.sha256 === fileHash) throw new Error("Already exists same file");
@@ -48,7 +45,7 @@ export class FixTool {
         const zstdFileData = await this.desktop.lib.compressor.zstd.compress(fileData);
         const zstdFileHash = crypto.createHash("sha256").update(zstdFileData).digest("hex");
 
-        await this.desktop.lib.db.insert(scriptTable).values({
+        await this.desktop.lib.db.scripts.insert({
             id: nanoid(),
             name: fileName,
             type: fileType,
@@ -62,33 +59,25 @@ export class FixTool {
     }
 
     public async deleteScript(scriptId: string) {
-        const script = await this.desktop.lib.db.query.script.findFirst({
-            where: eq(scriptTable.id, scriptId),
-        });
+        const script = await this.desktop.lib.db.scripts.findById(scriptId);
         if (!script) throw new Error("Script not found");
 
-        const usedInPresets = await this.desktop.lib.db.query.scriptPresetItem.findFirst({
-            where: eq(scriptPresetItem.scriptId, scriptId),
-            with: { preset: true },
-        });
+        const usedInPresets = await this.desktop.lib.db.scriptPresetItems.findUsageByScriptId(
+            scriptId,
+        );
         if (usedInPresets) {
-            throw new Error(`Script is used in a preset: ${usedInPresets.preset.name}`);
+            throw new Error(`Script is used in a preset: ${usedInPresets.presetName}`);
         }
 
-        await this.desktop.lib.db.delete(scriptTable).where(eq(scriptTable.id, scriptId));
+        await this.desktop.lib.db.scripts.delete(scriptId);
     }
 
     public async getScripts() {
-        return await this.desktop.lib.db.query.script.findMany({
-            columns: { id: true, name: true, type: true, size: true },
-        });
+        return await this.desktop.lib.db.scripts.listBasic();
     }
 
     public async getPresets() {
-        return await this.desktop.lib.db.query.scriptPreset.findMany({
-            columns: { id: true, name: true },
-            with: { scripts: true },
-        });
+        return await this.desktop.lib.db.scriptPresets.listWithScripts();
     }
 
     public async createPreset({ name, scriptIds }: { name: string; scriptIds: string[] }) {
@@ -97,17 +86,15 @@ export class FixTool {
             throw new Error("Invalid preset name: name cannot be empty or only whitespace");
         }
 
-        const nameConflict = await this.desktop.lib.db.query.scriptPreset.findFirst({
-            where: eq(scriptPreset.name, trimmedName),
-        });
+        const nameConflict = await this.desktop.lib.db.scriptPresets.findByName(trimmedName);
 
         if (nameConflict) throw new Error("Preset with same name already exists");
         if (scriptIds.length === 0) throw new Error("No scripts selected");
 
         const presetId = nanoid();
 
-        this.desktop.lib.db.transaction((tx) => {
-            tx.insert(scriptPreset).values({ id: presetId, name: trimmedName }).run();
+        this.desktop.lib.db.transaction(() => {
+            this.desktop.lib.db.scriptPresets.insert({ id: presetId, name: trimmedName });
 
             const presetItems = scriptIds.map((scriptId, index) => ({
                 presetId: presetId,
@@ -115,12 +102,12 @@ export class FixTool {
                 order: index,
             }));
 
-            tx.insert(scriptPresetItem).values(presetItems).run();
+            this.desktop.lib.db.scriptPresetItems.insertMany(presetItems);
         });
     }
 
     public async deletePreset(presetId: string) {
-        await this.desktop.lib.db.delete(scriptPreset).where(eq(scriptPreset.id, presetId));
+        await this.desktop.lib.db.scriptPresets.delete(presetId);
     }
 
     public cancelRun() {
@@ -160,9 +147,7 @@ export class FixTool {
             const signal = this.prepareExecution(mainWindow);
             prepared = true;
 
-            const _script = await this.desktop.lib.db.query.script.findFirst({
-                where: eq(scriptTable.id, scriptId),
-            });
+            const _script = await this.desktop.lib.db.scripts.findById(scriptId);
 
             if (!_script) throw new Error("Script not found");
             if (!(await fse.pathExists(destPath))) {
@@ -197,10 +182,7 @@ export class FixTool {
             const signal = this.prepareExecution(mainWindow);
             prepared = true;
 
-            const preset = await this.desktop.lib.db.query.scriptPreset.findFirst({
-                where: eq(scriptPreset.id, presetId),
-                with: { scripts: true },
-            });
+            const preset = await this.desktop.lib.db.scriptPresets.findByIdWithScripts(presetId);
 
             if (!preset) throw new Error("Preset not found");
             if (preset.scripts.length === 0) throw new Error("Preset has no scripts");
@@ -230,9 +212,7 @@ export class FixTool {
                     break;
                 }
 
-                const _script = await this.desktop.lib.db.query.script.findFirst({
-                    where: eq(scriptTable.id, item.scriptId),
-                });
+                const _script = await this.desktop.lib.db.scripts.findById(item.scriptId);
 
                 if (!_script) {
                     this.desktop.ipc.postMessageToWindow(
@@ -352,7 +332,7 @@ export class FixTool {
     }
 
     private async _runScriptSafe(
-        script: typeof scriptTable.$inferSelect,
+        script: ScriptRow,
         destPath: string,
         mainWindow: Electron.BrowserWindow,
         signal: AbortSignal,
@@ -370,15 +350,12 @@ export class FixTool {
                 await fse.writeFile(scriptPath, decomp);
             } else {
                 const comp = await this.desktop.lib.compressor.zstd.compress(script.source);
-                await this.desktop.lib.db
-                    .update(scriptTable)
-                    .set({
-                        source: comp,
-                        isSrcZstd: true,
-                        zstdSha256: crypto.createHash("sha256").update(comp).digest("hex"),
-                        zstdSize: comp.length,
-                    })
-                    .where(eq(scriptTable.id, script.id));
+                await this.desktop.lib.db.scripts.updateCompressedSource(
+                    script.id,
+                    comp,
+                    crypto.createHash("sha256").update(comp).digest("hex"),
+                    comp.length,
+                );
                 await fse.writeFile(scriptPath, script.source);
             }
 

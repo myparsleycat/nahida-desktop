@@ -1,9 +1,7 @@
 import path from "node:path";
-import { toggleViewerArtifact } from "@main/internal/db/schema";
 import { replaceHotkeyInGeneratedIni, sha256 } from "@main/lib/toggle-viewer-core";
 import toggleViewerUtilityWorker from "@main/worker/mod-tools/toggle-viewer.utility?modulePath";
-import { findFiles } from "@native/native-fs";
-import { and, eq } from "drizzle-orm";
+import { findFiles } from "@native/fs";
 import { utilityProcess, type UtilityProcess } from "electron";
 import { debounce } from "es-toolkit";
 import fse from "fs-extra";
@@ -234,7 +232,7 @@ export class ToggleViewer {
                     await this.startWatcher();
                 } catch (error) {
                     this.logError(
-                        `Failed to start watcher after manual generate completion: ${error}`,
+                        `Failed to start watcher after manual generate completion: ${String(error)}`,
                     );
                 }
             } else if (!autoGenerateEnabled) {
@@ -274,7 +272,7 @@ export class ToggleViewer {
             }
             const enabledModsRootAliases = await this.expandRootAliases(enabledModsRoots);
 
-            const records = await this.desktop.lib.db.select().from(toggleViewerArtifact);
+            const records = await this.desktop.lib.db.toggleViewerArtifacts.list();
             const targetRecords = records.filter((record) =>
                 enabledModsRootAliases.some((modsRoot) =>
                     this.isPathInRoot(record.targetIniPath, modsRoot),
@@ -306,14 +304,10 @@ export class ToggleViewer {
                     continue;
                 }
 
-                await this.desktop.lib.db
-                    .delete(toggleViewerArtifact)
-                    .where(
-                        and(
-                            eq(toggleViewerArtifact.id, record.id),
-                            eq(toggleViewerArtifact.targetIniPath, record.targetIniPath),
-                        ),
-                    );
+                await this.desktop.lib.db.toggleViewerArtifacts.deleteByIdAndTargetIniPath(
+                    record.id,
+                    record.targetIniPath,
+                );
                 deletedRecords += 1;
             }
 
@@ -331,7 +325,7 @@ export class ToggleViewer {
 
     public async applyHotkeyToArtifacts(hotkey: string) {
         const normalizedHotkey = hotkey.trim() || DEFAULT_TOGGLE_VIEWER_HOTKEY;
-        const records = await this.desktop.lib.db.select().from(toggleViewerArtifact);
+        const records = await this.desktop.lib.db.toggleViewerArtifacts.list();
         let updatedCount = 0;
 
         for (const record of records) {
@@ -348,16 +342,16 @@ export class ToggleViewer {
 
                 await fse.writeFile(record.toggleIniPath, nextContent, "utf-8");
                 const updatedAt = new Date().toISOString();
-                await this.desktop.lib.db
-                    .update(toggleViewerArtifact)
-                    .set({
-                        toggleIniHash: sha256(nextContent),
-                        updatedAt,
-                    })
-                    .where(eq(toggleViewerArtifact.id, record.id));
+                await this.desktop.lib.db.toggleViewerArtifacts.updateHashes(
+                    record.id,
+                    sha256(nextContent),
+                    updatedAt,
+                );
                 updatedCount += 1;
             } catch (error) {
-                this.logError(`Failed to apply hotkey to ${record.toggleIniPath}: ${error}`);
+                this.logError(
+                    `Failed to apply hotkey to ${record.toggleIniPath}: ${String(error)}`,
+                );
             }
         }
 
@@ -645,27 +639,15 @@ export class ToggleViewer {
             await this.writeIfChanged(artifact.toggleIniPath, artifact.iniContent);
 
             const updatedAt = new Date().toISOString();
-            await this.desktop.lib.db
-                .insert(toggleViewerArtifact)
-                .values({
-                    id: nanoid(),
-                    targetIniPath: artifact.targetIniPath,
-                    toggleTxtPath: artifact.toggleTxtPath,
-                    toggleIniPath: artifact.toggleIniPath,
-                    toggleTxtHash: artifact.toggleTxtHash,
-                    toggleIniHash: artifact.toggleIniHash,
-                    updatedAt,
-                })
-                .onConflictDoUpdate({
-                    target: toggleViewerArtifact.targetIniPath,
-                    set: {
-                        toggleTxtPath: artifact.toggleTxtPath,
-                        toggleIniPath: artifact.toggleIniPath,
-                        toggleTxtHash: artifact.toggleTxtHash,
-                        toggleIniHash: artifact.toggleIniHash,
-                        updatedAt,
-                    },
-                });
+            await this.desktop.lib.db.toggleViewerArtifacts.upsert({
+                id: nanoid(),
+                targetIniPath: artifact.targetIniPath,
+                toggleTxtPath: artifact.toggleTxtPath,
+                toggleIniPath: artifact.toggleIniPath,
+                toggleTxtHash: artifact.toggleTxtHash,
+                toggleIniHash: artifact.toggleIniHash,
+                updatedAt,
+            });
         }
     }
 
@@ -720,13 +702,13 @@ export class ToggleViewer {
             await fse.remove(filePath);
             return "deleted" as const;
         } catch (error) {
-            this.logError(`Failed to delete artifact file ${filePath}: ${error}`);
+            this.logError(`Failed to delete artifact file ${filePath}: ${String(error)}`);
             return "error" as const;
         }
     }
 
     private async deleteStaleRecords(seenTargetIniPaths: Set<string>) {
-        const records = await this.desktop.lib.db.select().from(toggleViewerArtifact);
+        const records = await this.desktop.lib.db.toggleViewerArtifacts.list();
         for (const record of records) {
             if (seenTargetIniPaths.has(record.targetIniPath)) continue;
             await this.deleteArtifactRecordByIdAndPath(record.id, record.targetIniPath);
@@ -734,10 +716,8 @@ export class ToggleViewer {
     }
 
     private async deleteArtifactRecordByTargetIniPath(targetIniPath: string) {
-        const records = await this.desktop.lib.db
-            .select()
-            .from(toggleViewerArtifact)
-            .where(eq(toggleViewerArtifact.targetIniPath, targetIniPath));
+        const records =
+            await this.desktop.lib.db.toggleViewerArtifacts.listByTargetIniPath(targetIniPath);
         for (const record of records) {
             await this.deleteArtifactRecordByIdAndPath(record.id, record.targetIniPath);
         }
@@ -745,7 +725,7 @@ export class ToggleViewer {
 
     private async deleteArtifactRecordsByPathPrefix(targetPathPrefix: string) {
         const normalizedPrefix = path.resolve(targetPathPrefix).toLowerCase();
-        const records = await this.desktop.lib.db.select().from(toggleViewerArtifact);
+        const records = await this.desktop.lib.db.toggleViewerArtifacts.list();
         for (const record of records) {
             const normalizedTarget = path.resolve(record.targetIniPath).toLowerCase();
             if (
@@ -771,18 +751,16 @@ export class ToggleViewer {
                 if ((error as NodeJS.ErrnoException).code === "ENOENT") {
                     continue;
                 }
-                this.logError(`Failed to delete managed artifact file ${artifactPath}: ${error}`);
+                this.logError(
+                    `Failed to delete managed artifact file ${artifactPath}: ${String(error)}`,
+                );
             }
         }
 
-        await this.desktop.lib.db
-            .delete(toggleViewerArtifact)
-            .where(
-                and(
-                    eq(toggleViewerArtifact.id, id),
-                    eq(toggleViewerArtifact.targetIniPath, targetIniPath),
-                ),
-            );
+        await this.desktop.lib.db.toggleViewerArtifacts.deleteByIdAndTargetIniPath(
+            id,
+            targetIniPath,
+        );
         this.logInfo(`Removed stale toggle-viewer artifact record: ${targetIniPath}`);
     }
 

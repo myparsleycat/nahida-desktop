@@ -21,6 +21,7 @@ import {
 } from "@renderer/components/ui/select";
 import { useModStore } from "@renderer/store/mod";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { FolderOpen, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -34,6 +35,7 @@ interface AddGameDialogProps {
 
 export function AddGameDialog({ onPickFolder, onAddGame }: AddGameDialogProps) {
   const { t } = useTranslation();
+  const navi = useNavigate();
 
   const isOpen = useModStore((s) => s.isAddGameDialogOpen);
   const setIsOpen = useModStore((s) => s.setIsAddGameDialogOpen);
@@ -75,6 +77,11 @@ export function AddGameDialog({ onPickFolder, onAddGame }: AddGameDialogProps) {
     if (!open) {
       setNewGameImporter(null);
     }
+  };
+
+  const handleOpenXXMISettings = () => {
+    handleOpenChange(false);
+    navi({ to: "/setting/xxmi" });
   };
 
   return (
@@ -137,7 +144,16 @@ export function AddGameDialog({ onPickFolder, onAddGame }: AddGameDialogProps) {
             {!isXXMIConfigured && (
               <Alert>
                 <AlertDescription>
-                  {t("page.mod.dialog.add-game.xxmi_path_required")}
+                  <div className="flex flex-col gap-3">
+                    <span>{t("page.mod.dialog.add-game.xxmi_path_required")}</span>
+                    <Button
+                      variant="outline"
+                      className="w-fit"
+                      onClick={handleOpenXXMISettings}
+                    >
+                      {t("page.mod.dialog.add-game.open_xxmi_settings")}
+                    </Button>
+                  </div>
                 </AlertDescription>
               </Alert>
             )}

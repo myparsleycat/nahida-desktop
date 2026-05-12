@@ -1,13 +1,11 @@
 import crypto from "node:crypto";
 import path from "node:path";
-import { appState } from "@main/internal/db/schema";
 import type {
     GitHubRateState,
     WuwaFixerOptions,
     WuwaFixerPrepareResult,
     WuwaFixerStatus,
 } from "@shared/types";
-import { eq } from "drizzle-orm";
 import { app } from "electron";
 import fse from "fs-extra";
 import type { NahidaDesktop } from "@/main";
@@ -438,27 +436,11 @@ export class WuwaModFixer {
     }
 
     private async getAppState(key: string) {
-        const row = await this.desktop.lib.db.query.appState.findFirst({
-            where: eq(appState.key, key),
-        });
-        return row?.value ?? null;
+        return await this.desktop.lib.db.appState.getValue(key);
     }
 
     private async setAppState(key: string, value: string) {
-        await this.desktop.lib.db
-            .insert(appState)
-            .values({
-                key,
-                value,
-                updatedAt: new Date().toISOString(),
-            })
-            .onConflictDoUpdate({
-                target: appState.key,
-                set: {
-                    value,
-                    updatedAt: new Date().toISOString(),
-                },
-            });
+        await this.desktop.lib.db.appState.upsert(key, value, new Date().toISOString());
     }
 
     private isSupportedImporter(importer: string | null) {

@@ -1,7 +1,7 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
-import { getLockingProcesses } from "@native/native-fs";
-import type { ProcessInfo } from "@native/native-fs";
+import type { ProcessInfo } from "@native/fs";
+import { getLockingProcesses } from "@native/fs";
 import fg from "fast-glob";
 import fse from "fs-extra";
 import type { NahidaDesktop } from "..";

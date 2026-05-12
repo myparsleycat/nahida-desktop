@@ -1,9 +1,7 @@
-import { getCharactersFolder, getMods } from "@native/native-mod";
+import { getCharactersFolder, getMods } from "@native/mod-manager";
 import type { FolderGroup, Preset } from "@shared/types";
 import { GAME_MATCH_CASES } from "@shared/xxmi-match";
-import { and, eq, ne } from "drizzle-orm";
 import type { NahidaDesktop } from "../..";
-import { gamePaths, modPresets, setting } from "../../internal/db/schema";
 
 const MOD_PRESET_VERSION = 2;
 
@@ -11,9 +9,7 @@ export class ModLibraryService {
     constructor(private readonly desktop: NahidaDesktop) {}
 
     public async gamePath(game: string): Promise<string | null> {
-        const result = await this.desktop.lib.db.query.gamePaths.findFirst({
-            where: eq(gamePaths.game, game),
-        });
+        const result = await this.desktop.lib.db.gamePaths.getByGame(game);
         return result?.modFolderPath || null;
     }
 
@@ -55,9 +51,7 @@ export class ModLibraryService {
     }
 
     public async presets(game: string): Promise<Preset[]> {
-        const results = await this.desktop.lib.db.query.modPresets.findMany({
-            where: eq(modPresets.game, game),
-        });
+        const results = await this.desktop.lib.db.modPresets.listByGame(game);
 
         return results
             .sort((a, b) => a.name.localeCompare(b.name))
@@ -74,23 +68,18 @@ export class ModLibraryService {
     }
 
     public async games() {
-        return await this.desktop.lib.db.select().from(gamePaths);
+        return await this.desktop.lib.db.gamePaths.list();
     }
 
     public async lastGame(): Promise<string | null> {
-        const result = await this.desktop.lib.db.query.setting.findFirst({
-            where: eq(setting.key, "last_game"),
-        });
-        return result?.value || null;
+        return await this.desktop.lib.db.settings.getValue("last_game");
     }
 
     public async expandedGroups(): Promise<string[]> {
-        const result = await this.desktop.lib.db.query.setting.findFirst({
-            where: eq(setting.key, "expanded_groups"),
-        });
-        if (!result?.value) return [];
+        const value = await this.desktop.lib.db.settings.getValue("expanded_groups");
+        if (!value) return [];
         try {
-            return JSON.parse(result.value) as string[];
+            return JSON.parse(value) as string[];
         } catch {
             return [];
         }
@@ -173,13 +162,7 @@ export class ModLibraryService {
     }
 
     public async setGamePath(game: string, modFolderPath: string) {
-        await this.desktop.lib.db
-            .insert(gamePaths)
-            .values({ game, modFolderPath, importer: null })
-            .onConflictDoUpdate({
-                target: gamePaths.game,
-                set: { modFolderPath },
-            });
+        await this.desktop.lib.db.gamePaths.upsert({ game, modFolderPath, importer: null });
     }
 
     public async addGame(game: string, modFolderPath: string, importer: string | null) {
@@ -187,9 +170,10 @@ export class ModLibraryService {
             throw new Error("INVALID_PARAMS");
         }
 
-        const exists = await this.desktop.lib.db.query.gamePaths.findFirst({
-            where: (t, { eq, or }) => or(eq(t.game, game), eq(t.modFolderPath, modFolderPath)),
-        });
+        const exists = await this.desktop.lib.db.gamePaths.findByGameOrModFolderPath(
+            game,
+            modFolderPath,
+        );
 
         if (exists) {
             if (exists.game === game) {
@@ -199,7 +183,7 @@ export class ModLibraryService {
             }
         }
 
-        await this.desktop.lib.db.insert(gamePaths).values({ game, modFolderPath, importer });
+        await this.desktop.lib.db.gamePaths.insert({ game, modFolderPath, importer });
     }
 
     public async updateGame(
@@ -213,56 +197,33 @@ export class ModLibraryService {
             throw new Error("Game and modFolderPath are required");
         }
 
-        const existingGame = await this.desktop.lib.db.query.gamePaths.findFirst({
-            where: (t, { eq }) => eq(t.game, game),
-        });
+        const existingGame = await this.desktop.lib.db.gamePaths.getByGame(game);
 
         if (!existingGame) {
             throw new Error(`Game ${game} not found`);
         }
 
-        const duplicatePath = await this.desktop.lib.db.query.gamePaths.findFirst({
-            where: and(
-                eq(gamePaths.modFolderPath, updates.modFolderPath),
-                ne(gamePaths.game, game),
-            ),
-        });
+        const duplicatePath = await this.desktop.lib.db.gamePaths.findByModFolderPathOtherGame(
+            game,
+            updates.modFolderPath,
+        );
 
         if (duplicatePath) {
             throw new Error("DUPLICATE_MOD_FOLDER_PATH");
         }
 
-        await this.desktop.lib.db
-            .update(gamePaths)
-            .set({
-                modFolderPath: updates.modFolderPath,
-                importer: updates.importer,
-            })
-            .where(eq(gamePaths.game, game));
+        await this.desktop.lib.db.gamePaths.update(game, updates);
     }
 
     public async removeGame(game: string) {
-        await this.desktop.lib.db.delete(gamePaths).where(eq(gamePaths.game, game));
+        await this.desktop.lib.db.gamePaths.delete(game);
     }
 
     public async setLastGame(game: string) {
-        await this.desktop.lib.db
-            .insert(setting)
-            .values({ key: "last_game", value: game })
-            .onConflictDoUpdate({
-                target: setting.key,
-                set: { value: game },
-            });
+        await this.desktop.lib.db.settings.upsert("last_game", game);
     }
 
     public async setExpandedGroups(paths: string[]) {
-        const value = JSON.stringify(paths);
-        await this.desktop.lib.db
-            .insert(setting)
-            .values({ key: "expanded_groups", value })
-            .onConflictDoUpdate({
-                target: setting.key,
-                set: { value },
-            });
+        await this.desktop.lib.db.settings.upsert("expanded_groups", JSON.stringify(paths));
     }
 }

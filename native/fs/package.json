@@ -1,10 +1,10 @@
 {
-  "name": "native-fs",
+  "name": "fs",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "napi": {
-    "binaryName": "native-fs",
+    "binaryName": "fs",
     "targets": [
       "x86_64-pc-windows-msvc"
     ]

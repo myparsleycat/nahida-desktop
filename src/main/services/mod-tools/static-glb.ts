@@ -1,6 +1,5 @@
 import path from "node:path";
 import type { NahidaDesktop } from "@main/index";
-import { setting } from "@main/internal/db/schema";
 import {
     convertModToGlb,
     convertModToGlbBuffer,
@@ -13,6 +12,11 @@ import {
     type VariableStateMap,
 } from "@main/lib/mod-static-glb";
 import { createStateKey } from "@main/lib/mod-static-glb/shared";
+import {
+    cleanupModelViewerMemorySession,
+    createModelViewerMemorySession,
+    writeModelViewerMemoryBuffer,
+} from "@main/services/protocol/model-viewer-memory";
 import { app } from "electron";
 import fse from "fs-extra";
 
@@ -42,6 +46,7 @@ export type StaticGlbSingleResult = {
     mode: "single";
     iniPath: string;
     glbPath: string;
+    memorySessionId?: string;
     meshCount: number;
     warningCount: number;
     name: string;
@@ -53,6 +58,7 @@ export type StaticGlbVariantResult = {
     artifactRoot: string;
     manifestPath: string;
     manifest: StaticGlbVariantManifest;
+    memorySessionId?: string;
     defaultGlbPath: string;
     activeGlbPath: string;
     meshCount: number;
@@ -80,10 +86,19 @@ export type StaticGlbViewerInput =
           modPath?: string;
           artifactRoot?: string;
           manifestPath?: string;
+          memorySessionId?: string;
           state?: VariableStateMap;
       };
 
+type ViewerMemorySession = {
+    manifest?: StaticGlbVariantManifest;
+    manifestPath?: string;
+    modPath: string;
+};
+
 export class StaticGlb {
+    private readonly viewerMemorySessions = new Map<string, ViewerMemorySession>();
+
     constructor(private readonly desktop: NahidaDesktop) {
         this.desktop.service.startupCleanup.register({
             name: "mod-tools:static-glb-viewer",
@@ -102,13 +117,7 @@ export class StaticGlb {
             throw new Error("Asset path must be a directory.");
         }
 
-        await this.desktop.lib.db
-            .insert(setting)
-            .values({ key: ASSET_PATH_SETTING_KEY, value: normalized })
-            .onConflictDoUpdate({
-                target: setting.key,
-                set: { value: normalized },
-            });
+        await this.desktop.lib.db.settings.upsert(ASSET_PATH_SETTING_KEY, normalized);
 
         return normalized;
     }
@@ -231,6 +240,7 @@ export class StaticGlb {
 
     public async convertForViewer(input: StaticGlbViewerInput): Promise<StaticGlbPreviewResult> {
         const startedAt = Date.now();
+        let memorySessionId: string | undefined;
         let lastCheckpointAt = startedAt;
         const logTiming = (stage: string) => {
             const now = Date.now();
@@ -252,20 +262,49 @@ export class StaticGlb {
         logTiming("Loaded asset path and texture settings");
 
         if (typeof input !== "string" && input.artifactRoot && input.state) {
+            const session = input.memorySessionId
+                ? this.viewerMemorySessions.get(input.memorySessionId)
+                : undefined;
+            if (input.memorySessionId && !session) {
+                throw new Error(`Missing model viewer memory session: ${input.memorySessionId}`);
+            }
+            const writeMemoryBuffer = async (
+                bufferId: string,
+                buffer: Buffer,
+                options?: { contentType?: string },
+            ) => {
+                if (!input.memorySessionId) {
+                    throw new Error("Missing model viewer memory session.");
+                }
+
+                return writeModelViewerMemoryBuffer(
+                    input.memorySessionId,
+                    bufferId,
+                    buffer,
+                    options?.contentType,
+                );
+            };
             const result = await resolveVariantStateArtifact({
                 artifactRoot: input.artifactRoot,
-                manifestPath: input.manifestPath,
+                artifactBufferWriter: session ? writeMemoryBuffer : undefined,
+                manifest: session?.manifest,
+                manifestPath: session?.manifestPath ?? input.manifestPath,
                 state: input.state,
                 assetPath,
-                modPath: input.modPath || input.artifactRoot,
+                modPath: session?.modPath ?? input.modPath ?? input.artifactRoot,
                 textureFormat: textureSettings.textureFormat,
                 jpegQuality: textureSettings.jpegQuality,
+                useTextureCache: !session,
                 logger: this.desktop.logger,
                 onWarning: (message) => {
                     this.desktop.logger.warn(message, "StaticGlb.convertForViewer");
                 },
             });
             logTiming("Resolved variant state artifact");
+            if (session) {
+                session.manifest = result.manifest;
+                session.manifestPath = result.manifestPath;
+            }
 
             return {
                 mode: "variant-set",
@@ -273,6 +312,7 @@ export class StaticGlb {
                 artifactRoot: input.artifactRoot,
                 manifestPath: result.manifestPath,
                 manifest: result.manifest,
+                memorySessionId: input.memorySessionId,
                 defaultGlbPath:
                     result.manifest.states.find(
                         (entry) =>
@@ -292,20 +332,37 @@ export class StaticGlb {
         }
 
         const modName = path.basename(modPath.replace(/[\\/]+$/, ""));
-        const tempDir = await fse.mkdtemp(path.join(app.getPath("temp"), MODEL_VIEWER_TEMP_PREFIX));
-        const textureCacheDir = path.join(tempDir, "textures");
-        const glbPath = path.join(tempDir, `${sanitizeModelViewerFileName(modName)}.glb`);
+        memorySessionId = createModelViewerMemorySession();
         const warnings: string[] = [];
-        logTiming("Created viewer temp directory");
+        const writeMemoryBuffer = async (
+            bufferId: string,
+            buffer: Buffer,
+            options?: { contentType?: string },
+        ) => {
+            if (!memorySessionId) {
+                throw new Error("Missing model viewer memory session.");
+            }
+
+            return writeModelViewerMemoryBuffer(
+                memorySessionId,
+                bufferId,
+                buffer,
+                options?.contentType,
+            );
+        };
+        logTiming("Created viewer memory session");
 
         try {
             const variantResult = await convertModToVariantArtifacts({
                 modPath,
                 assetPath,
-                artifactRoot: tempDir,
+                artifactRoot: memorySessionId,
+                artifactBufferWriter: writeMemoryBuffer,
+                animationBufferWriter: writeMemoryBuffer,
                 preGenerateVariableStates: false,
                 textureFormat: textureSettings.textureFormat,
                 jpegQuality: textureSettings.jpegQuality,
+                useTextureCache: false,
                 logger: this.desktop.logger,
                 onWarning: (message) => {
                     warnings.push(message);
@@ -315,6 +372,11 @@ export class StaticGlb {
             logTiming("Attempted variant artifact conversion");
 
             if (variantResult) {
+                this.viewerMemorySessions.set(memorySessionId, {
+                    manifest: variantResult.manifest,
+                    manifestPath: variantResult.manifestPath,
+                    modPath,
+                });
                 this.desktop.logger.info(
                     `Completed model viewer conversion in ${Date.now() - startedAt}ms`,
                     "StaticGlb.convertForViewer",
@@ -322,9 +384,10 @@ export class StaticGlb {
                 return {
                     mode: "variant-set",
                     iniPath: variantResult.iniPath,
-                    artifactRoot: tempDir,
+                    artifactRoot: memorySessionId,
                     manifestPath: variantResult.manifestPath,
                     manifest: variantResult.manifest,
+                    memorySessionId,
                     defaultGlbPath: variantResult.defaultGlbPath,
                     activeGlbPath: variantResult.defaultGlbPath,
                     meshCount: variantResult.meshCount,
@@ -336,9 +399,9 @@ export class StaticGlb {
             const result = await convertModToGlbBuffer({
                 modPath,
                 assetPath,
-                textureCacheDir,
                 textureFormat: textureSettings.textureFormat,
                 jpegQuality: textureSettings.jpegQuality,
+                useTextureCache: false,
                 logger: this.desktop.logger,
                 onWarning: (message) => {
                     warnings.push(message);
@@ -347,8 +410,12 @@ export class StaticGlb {
             });
             logTiming("Converted mod to GLB buffer");
 
-            await fse.writeFile(glbPath, result.glb);
-            logTiming("Wrote GLB file");
+            const glbPath = await writeMemoryBuffer(
+                `${sanitizeModelViewerFileName(modName)}.glb`,
+                result.glb,
+                { contentType: "model/gltf-binary" },
+            );
+            logTiming("Stored GLB buffer");
 
             if (warnings.length > 0) {
                 this.desktop.window.main.window?.webContents.send(
@@ -366,32 +433,34 @@ export class StaticGlb {
                 mode: "single",
                 iniPath: result.iniPath,
                 glbPath,
+                memorySessionId,
                 meshCount: result.meshCount,
                 warningCount: result.warningCount,
                 name: modName,
             };
         } catch (error) {
-            await this.cleanupViewerFile(glbPath);
+            cleanupModelViewerMemorySession(memorySessionId);
+            if (memorySessionId) {
+                this.viewerMemorySessions.delete(memorySessionId);
+            }
             this.desktop.logger.error(
                 `Model viewer conversion failed after ${Date.now() - startedAt}ms`,
                 "StaticGlb.convertForViewer",
             );
             throw error;
-        } finally {
-            await fse.remove(textureCacheDir).catch((error) => {
-                this.desktop.logger.warn(
-                    `Failed to remove model viewer texture cache: ${
-                        error instanceof Error ? error.message : String(error)
-                    }`,
-                    "StaticGlb.convertForViewer",
-                );
-            });
-            logTiming("Removed texture cache directory");
         }
     }
 
-    public async cleanupViewerFile(targetPath: string): Promise<void> {
+    public async cleanupViewerFile(targetPath: string, memorySessionId?: string): Promise<void> {
+        cleanupModelViewerMemorySession(memorySessionId);
+        if (memorySessionId) {
+            this.viewerMemorySessions.delete(memorySessionId);
+        }
         if (!targetPath) {
+            return;
+        }
+
+        if (targetPath.startsWith("model-viewer-memory://") || targetPath === memorySessionId) {
             return;
         }
 
@@ -454,18 +523,11 @@ export class StaticGlb {
     }
 
     private async getSettingValue(key: string): Promise<string | null> {
-        const saved = await this.desktop.lib.db.query.setting.findFirst({
-            where: (t, { eq }) => eq(t.key, key),
-        });
-
-        return saved?.value ?? null;
+        return await this.desktop.lib.db.settings.getValue(key);
     }
 
     private async saveSettingValue(key: string, value: string): Promise<void> {
-        await this.desktop.lib.db.insert(setting).values({ key, value }).onConflictDoUpdate({
-            target: setting.key,
-            set: { value },
-        });
+        await this.desktop.lib.db.settings.upsert(key, value);
     }
 }
 

@@ -24,7 +24,7 @@ export async function buildMaterials(
     builder: GlbBuilder,
     options: ConvertModToGlbBufferOptions,
     modDir: string,
-    textureCacheDir: string,
+    textureCacheDir: string | undefined,
     resources: Resource[],
     textureBindings: TextureBinding[],
     warn: (message: string) => void,
@@ -35,7 +35,7 @@ export async function buildMaterials(
     );
     const materialByIb = new Map<string, MaterialBinding>();
     const textureCache = new Map<string, MaterialBinding>();
-    const textureOutDir = path.resolve(textureCacheDir);
+    const textureOutDir = textureCacheDir ? path.resolve(textureCacheDir) : "";
 
     options.logger?.debug(`Building materials. Cache dir: ${textureOutDir}`, "StaticGLB");
 
@@ -197,14 +197,14 @@ export async function buildMaterials(
             const materialCreateStartedAt = Date.now();
 
             options.logger?.debug(
-                `Prepared texture: ${texture.imagePath} (${texture.mimeType}, alpha: ${texture.usesAlpha}, inverted: ${texture.invertedAlpha}, score: ${texture.selectionScore})`,
+                `Prepared texture: ${texture.imagePath ?? texture.imageName} (${texture.mimeType}, alpha: ${texture.usesAlpha}, inverted: ${texture.invertedAlpha}, score: ${texture.selectionScore})`,
                 "StaticGLB",
             );
 
             const imageIndex = builder.addImage(
-                await fse.readFile(texture.imagePath),
+                await readPreparedTextureBuffer(texture),
                 texture.mimeType,
-                path.basename(texture.imagePath),
+                texture.imageName,
             );
             const textureIndex = builder.addTexture(imageIndex);
             const materialIndex = builder.addMaterial({
@@ -263,20 +263,21 @@ export async function prepareTextureImage(
 ): Promise<PreparedTexture | null> {
     const startedAt = Date.now();
     try {
+        const useTextureCache = options.useTextureCache !== false && textureOutDir.length > 0;
         const nativeStartedAt = Date.now();
         const prepared = await prepareTextureForMaterial({
             texturePath,
             resourceName,
             textureFormat: resolveTextureFormatOption(options.textureFormat),
             jpegQuality: normalizeJpegQualityOption(options.jpegQuality),
-            allowCacheReuse: true,
-            cacheDir: textureOutDir,
+            allowCacheReuse: useTextureCache,
+            cacheDir: useTextureCache ? textureOutDir : "",
         });
         const nativeElapsedMs = Date.now() - nativeStartedAt;
         const outputStartedAt = Date.now();
-        const imagePath = await writePreparedTextureImage(
+        const image = await resolvePreparedTextureImage(
             texturePath,
-            textureOutDir,
+            useTextureCache ? textureOutDir : "",
             prepared.imagePath,
             prepared.image,
             prepared.imageExtension,
@@ -290,7 +291,7 @@ export async function prepareTextureImage(
         );
 
         return {
-            imagePath,
+            ...image,
             mimeType: prepared.mimeType as PreparedTexture["mimeType"],
             alphaMode: prepared.alphaMode === "MASK" ? "MASK" : undefined,
             alphaCutoff: prepared.alphaCutoff ?? undefined,
@@ -342,35 +343,73 @@ export function normalizeJpegQualityOption(quality?: number): number {
     return Math.max(1, Math.min(100, Math.round(quality)));
 }
 
-async function writePreparedTextureImage(
+async function resolvePreparedTextureImage(
     texturePath: string,
     textureOutDir: string,
     preparedImagePath: string | undefined,
     image: Buffer | undefined,
     imageExtension: string,
-    mimeType: PreparedTexture["mimeType"] | string,
+    mimeType: string,
     jpegQuality: number,
-): Promise<string> {
-    if (preparedImagePath) {
-        return preparedImagePath;
-    }
-
+): Promise<Pick<PreparedTexture, "image" | "imageName" | "imagePath">> {
     const fileName =
         mimeType === "image/png"
             ? `${createTextureCacheBaseName(texturePath)}-prepared.${imageExtension}`
             : `${createTextureCacheBaseName(texturePath)}-q${jpegQuality}.${imageExtension}`;
-    const outputPath = path.join(textureOutDir, fileName);
+
+    if (preparedImagePath) {
+        return {
+            imageName: path.basename(preparedImagePath),
+            imagePath: preparedImagePath,
+        };
+    }
+
     if (!image) {
         throw new Error(`Missing prepared texture bytes for ${texturePath}`);
     }
+    if (!textureOutDir) {
+        return {
+            image,
+            imageName: fileName,
+        };
+    }
+
+    const outputPath = path.join(textureOutDir, fileName);
     await fse.ensureDir(textureOutDir);
     await fse.writeFile(outputPath, image);
-    return outputPath;
+    return {
+        imageName: fileName,
+        imagePath: outputPath,
+    };
+}
+
+async function readPreparedTextureBuffer(texture: PreparedTexture): Promise<Buffer> {
+    if (texture.image) {
+        return texture.image;
+    }
+
+    if (!texture.imagePath) {
+        throw new Error(`Missing prepared texture bytes for ${texture.imageName}`);
+    }
+
+    return fse.readFile(texture.imagePath);
 }
 
 export async function convertDdsToPngFallback(texturePath: string, pngPath: string): Promise<void> {
     const png = await decodeDdsToPngObject(texturePath);
     await writePngBuffer(png, pngPath);
+}
+
+export async function convertDdsToPngBuffer(texturePath: string): Promise<Buffer> {
+    const png = await decodeDdsToPngObject(texturePath);
+    const chunks: Buffer[] = [];
+    await new Promise<void>((resolve, reject) => {
+        png.pack()
+            .on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)))
+            .on("end", resolve)
+            .on("error", reject);
+    });
+    return Buffer.concat(chunks);
 }
 
 export async function decodeDdsToPngObject(texturePath: string): Promise<PNG> {
@@ -394,4 +433,4 @@ export function normalizeSrgbConfidence(value: string): PreparedTexture["srgbCon
     return value === "srgb" || value === "linear" || value === "unknown" ? value : "unknown";
 }
 
-export { convertDdsToPng } from "@native/native-util";
+export { convertDdsToPng } from "@native/utils";

@@ -1,22 +1,17 @@
-import os from "node:os";
 import path from "node:path";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
-import { BACKEND_URL } from "@shared/const";
 import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import AutoLaunch from "auto-launch";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { app, crashReporter, protocol } from "electron";
+import { app, protocol } from "electron";
 import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
 import { IS_ELECTRON } from "./const";
 import { DB_FILE_NAME } from "./internal/const";
-import { InitDB } from "./internal/db";
-import * as schema from "./internal/db/schema";
+import { DatabaseClient } from "./internal/db/client";
+import { GitHubRateCoordinator } from "./internal/github-rate";
 import { DesktopHttpService } from "./internal/http";
 import Logger from "./internal/logger";
 import { NahidaProtocolHandler } from "./internal/protocol";
 import Updater from "./internal/updater";
-import { GitHubRateCoordinator } from "./internal/github-rate";
 import { IPC } from "./ipc";
 import Compressor from "./lib/compressor";
 import CryptoLib from "./lib/crypto";
@@ -53,8 +48,6 @@ if (IS_ELECTRON) {
 }
 
 const dbPath = !app.isPackaged ? DB_FILE_NAME : path.join(app.getPath("userData"), "data.db");
-const sqlite = new Database(dbPath);
-const db = drizzle(sqlite, { schema });
 
 export class NahidaDesktop {
     public initialized: boolean = false;
@@ -75,7 +68,7 @@ export class NahidaDesktop {
         report: ReportWindow;
     };
     public lib: {
-        db: typeof db;
+        db: DatabaseClient;
         fs: FS;
         utils: Utils;
         tray: Tray;
@@ -112,7 +105,7 @@ export class NahidaDesktop {
             report: new ReportWindow(this),
         };
         this.lib = {
-            db: db,
+            db: new DatabaseClient(dbPath),
             fs: new FS(this),
             utils: new Utils(this),
             tray: new Tray(this),
@@ -155,18 +148,32 @@ export class NahidaDesktop {
         this.service.xxmi = new XXMI(this);
     }
 
+    private async syncAutoLaunchSetting() {
+        if (!app.isPackaged) {
+            return;
+        }
+
+        try {
+            const runOnStartup = await this.setting.general.getRunOnStartup();
+            const autoLaunch = new AutoLaunch({
+                name: "Nahida Desktop",
+                path: app.getPath("exe"),
+                isHidden: true,
+            });
+
+            if (runOnStartup) {
+                await autoLaunch.enable();
+                return;
+            }
+
+            await autoLaunch.disable();
+        } catch (error) {
+            this.logger.error(`Failed to sync auto launch setting: ${String(error)}`, "App");
+        }
+    }
+
     public async init() {
         if (this.initialized) return;
-
-        crashReporter.start({
-            submitURL: `${BACKEND_URL}/desktop/crash-report`,
-            globalExtra: {
-                cpus: os.cpus().length.toString(),
-                ram: os.totalmem().toString(),
-                platform: os.platform(),
-                release: os.release(),
-            },
-        });
 
         await this.initializePlatformServices();
 
@@ -175,29 +182,25 @@ export class NahidaDesktop {
         }
 
         // init db
-        await InitDB(this.lib.db);
+        await this.lib.db.reconcile();
+
         await this.service.startupCleanup.runAll();
 
         // init lang
-        const lang = await this.lib.db.query.setting.findFirst({
-            where: (t, { eq }) => eq(t.key, "language"),
-        });
+        const lang = await this.lib.db.settings.getValue("language");
         if (!lang) {
             const locale = app.getLocale();
-            if (locale.startsWith("en"))
-                await this.lib.db.insert(schema.setting).values({ key: "language", value: "en" });
-            else if (locale === "ko")
-                await this.lib.db.insert(schema.setting).values({ key: "language", value: "ko" });
-            else if (locale.startsWith("zh"))
-                await this.lib.db.insert(schema.setting).values({ key: "language", value: "zh" });
-            else await this.lib.db.insert(schema.setting).values({ key: "language", value: "en" });
+            if (locale.startsWith("en")) await this.lib.db.settings.upsert("language", "en");
+            else if (locale === "ko") await this.lib.db.settings.upsert("language", "ko");
+            else if (locale.startsWith("zh")) await this.lib.db.settings.upsert("language", "zh");
+            else await this.lib.db.settings.upsert("language", "en");
         }
 
         // make server
         try {
             await startServer();
         } catch (error) {
-            this.logger.error(`Failed to start server on port 1027: ${error}`, "Server");
+            this.logger.error(`Failed to start server on port 1027: ${String(error)}`, "Server");
             throw error;
         }
 
@@ -217,22 +220,8 @@ export class NahidaDesktop {
         const logLevel = await this.setting.general.getLogLevel();
         this.logger.setLevel(logLevel);
 
-        if (app.isPackaged) {
-            const runOnStartup = await this.setting.general.getRunOnStartup();
-            const autoLaunch = new AutoLaunch({
-                name: "Nahida Desktop",
-                path: app.getPath("exe"),
-                isHidden: true,
-            });
-
-            if (runOnStartup) {
-                autoLaunch.enable();
-            } else {
-                autoLaunch.disable();
-            }
-        }
-
         await this.window.main.createMainWindow();
+        void this.syncAutoLaunchSetting();
     }
 }
 
@@ -258,12 +247,22 @@ protocol.registerSchemesAsPrivileged([
             stream: true,
         },
     },
+    {
+        scheme: "model-viewer-memory",
+        privileges: {
+            standard: true,
+            secure: true,
+            supportFetchAPI: true,
+            bypassCSP: true,
+            stream: true,
+        },
+    },
 ]);
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(async () => {
+void app.whenReady().then(async () => {
     const gotTheLock = app.requestSingleInstanceLock();
 
     if (!gotTheLock) {
@@ -295,7 +294,7 @@ app.whenReady().then(async () => {
 
             desktop.window.main.focus();
         } catch (error) {
-            desktop.logger.error(`Failed to handle second-instance event: ${error}`, "App");
+            desktop.logger.error(`Failed to handle second-instance event: ${String(error)}`, "App");
             return;
         }
     });

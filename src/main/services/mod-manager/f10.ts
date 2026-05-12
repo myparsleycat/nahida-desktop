@@ -1,5 +1,5 @@
 import path from "node:path";
-import { sendF10 } from "@native/native-mod";
+import { sendF10 } from "@native/mod-manager";
 import type { NahidaDesktop } from "../..";
 import type { ModLibraryService } from "./library";
 
