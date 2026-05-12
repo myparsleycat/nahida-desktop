@@ -3,16 +3,16 @@ import type { ApplyPresetResult, Preset } from "@shared/types";
 import { trim } from "es-toolkit";
 import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "../..";
-import type { ModPresetItemRow, ModPresetRow } from "../../internal/db";
+import type { ModPresetItemRow, ModPresetRow } from "../../internal/db/schema";
 import type { ModLibraryService } from "./library";
 import type { ModActionsService } from "./mod-actions";
 import {
     DISABLED_PREFIX_REGEX,
+    normalizeModPath,
     renameWithUniqueName,
     restoreDisabledPrefix,
     stripDisabledPrefix,
     toGameRelativePath,
-    normalizeModPath,
 } from "./path-utils";
 
 interface PresetSnapshotItemRecord {

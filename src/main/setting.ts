@@ -695,7 +695,8 @@ export class Setting {
 
     general = {
         getRunOnStartup: async () => await this.get("general.runOnStartup"),
-        setRunOnStartup: async (enabled: boolean) => await this.set("general.runOnStartup", enabled),
+        setRunOnStartup: async (enabled: boolean) =>
+            await this.set("general.runOnStartup", enabled),
         getLanguage: async (): Promise<string> => await this.get("general.language"),
         setLanguage: async (language: string) => await this.set("general.language", language),
         getMoveTransferPageWhenStartTransfer: async () =>
@@ -726,7 +727,8 @@ export class Setting {
     };
 
     mod = {
-        getSidebarLayout: async (): Promise<SidebarLayoutMode> => await this.get("mod.sidebarLayout"),
+        getSidebarLayout: async (): Promise<SidebarLayoutMode> =>
+            await this.get("mod.sidebarLayout"),
         setSidebarLayout: async (mode: SidebarLayoutMode) => {
             await this.set("mod.sidebarLayout", mode);
         },
@@ -755,7 +757,8 @@ export class Setting {
         setVirtualizationThreshold: async (threshold: number) => {
             await this.set("mod.virtualizationThreshold", threshold);
         },
-        getGridLayoutMode: async (): Promise<ModGridLayoutMode> => await this.get("mod.gridLayoutMode"),
+        getGridLayoutMode: async (): Promise<ModGridLayoutMode> =>
+            await this.get("mod.gridLayoutMode"),
         setGridLayoutMode: async (mode: ModGridLayoutMode) => {
             await this.set("mod.gridLayoutMode", mode);
         },
@@ -818,7 +821,8 @@ export class Setting {
         getPersistLogs: async () => {
             return this.desktop.service.modTools.togglePersist.getPersistLogs();
         },
-        setPersistToggles: async (enabled: boolean) => await this.set("xxmi.persistToggles", enabled),
+        setPersistToggles: async (enabled: boolean) =>
+            await this.set("xxmi.persistToggles", enabled),
         getToggleViewerAutoGenerate: async () => await this.get("xxmi.toggleViewerAutoGenerate"),
         getToggleViewerHotkey: async () => await this.get("xxmi.toggleViewerHotkey"),
         getToggleViewerLogs: async () => {

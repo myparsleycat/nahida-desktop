@@ -5,7 +5,8 @@ import AutoLaunch from "auto-launch";
 import { app, protocol } from "electron";
 import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
 import { IS_ELECTRON } from "./const";
-import { db, InitDB } from "./internal/db";
+import { DB_FILE_NAME } from "./internal/const";
+import { DatabaseClient } from "./internal/db/client";
 import { GitHubRateCoordinator } from "./internal/github-rate";
 import { DesktopHttpService } from "./internal/http";
 import Logger from "./internal/logger";
@@ -46,6 +47,8 @@ if (IS_ELECTRON) {
     app?.commandLine.appendSwitch("disable-pinch");
 }
 
+const dbPath = !app.isPackaged ? DB_FILE_NAME : path.join(app.getPath("userData"), "data.db");
+
 export class NahidaDesktop {
     public initialized: boolean = false;
     public userAgent: string;
@@ -65,7 +68,7 @@ export class NahidaDesktop {
         report: ReportWindow;
     };
     public lib: {
-        db: typeof db;
+        db: DatabaseClient;
         fs: FS;
         utils: Utils;
         tray: Tray;
@@ -102,7 +105,7 @@ export class NahidaDesktop {
             report: new ReportWindow(this),
         };
         this.lib = {
-            db: db,
+            db: new DatabaseClient(dbPath),
             fs: new FS(this),
             utils: new Utils(this),
             tray: new Tray(this),
@@ -179,7 +182,8 @@ export class NahidaDesktop {
         }
 
         // init db
-        await InitDB();
+        await this.lib.db.reconcile();
+
         await this.service.startupCleanup.runAll();
 
         // init lang
