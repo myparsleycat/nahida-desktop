@@ -251,6 +251,7 @@
           "name_input_placeholder": "Game Name (e.g. Genshin)",
           "path_input_placeholder": "Mod folder path",
           "xxmi_path_required": "Set the XXMI path first to load importers.",
+          "open_xxmi_settings": "Open Importer settings",
           "#": {
             "0": "Please enter a game name",
             "1": "Please select a mod folder path"
