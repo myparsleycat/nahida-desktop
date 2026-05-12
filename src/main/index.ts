@@ -242,6 +242,7 @@ protocol.registerSchemesAsPrivileged([
         privileges: {
             standard: true,
             secure: true,
+            corsEnabled: true,
             supportFetchAPI: true,
             bypassCSP: true,
             stream: true,
@@ -252,6 +253,7 @@ protocol.registerSchemesAsPrivileged([
         privileges: {
             standard: true,
             secure: true,
+            corsEnabled: true,
             supportFetchAPI: true,
             bypassCSP: true,
             stream: true,
