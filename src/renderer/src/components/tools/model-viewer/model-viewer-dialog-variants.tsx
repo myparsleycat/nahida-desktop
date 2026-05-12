@@ -64,12 +64,14 @@ export function VariantTile({
       {framePath ? (
         <img
           src={modelViewerSourceToUrl(framePath)}
+          alt=""
           className="absolute inset-0 h-full w-full object-cover"
         />
       ) : null}
       {variable.iconPath ? (
         <img
           src={modelViewerSourceToUrl(variable.iconPath)}
+          alt={variable.label}
           className="absolute inset-3 h-[calc(100%-24px)] w-[calc(100%-24px)] object-contain"
         />
       ) : null}
