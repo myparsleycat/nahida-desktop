@@ -81,16 +81,16 @@ async function writeVariantManifest(
     writer: StaticGlbArtifactBufferWriter | undefined,
     manifestPath: string,
     manifest: StaticGlbVariantManifest,
-): Promise<void> {
+) {
     if (writer) {
-        await writer("manifest", Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8"), {
+        return writer("manifest", Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8"), {
             contentType: "application/json",
             fileName: "manifest.json",
         });
-        return;
     }
 
     await writeVariantManifestAtomic(manifestPath, manifest);
+    return manifestPath;
 }
 
 export async function convertModToGlb(
@@ -329,7 +329,7 @@ export async function resolveVariantStateArtifact(
             const artifactRoot = options.artifactBufferWriter
                 ? options.artifactRoot
                 : path.resolve(options.artifactRoot);
-            const manifestPath = options.manifestPath
+            let manifestPath = options.manifestPath
                 ? options.artifactBufferWriter
                     ? options.manifestPath
                     : path.resolve(options.manifestPath)
@@ -405,7 +405,7 @@ export async function resolveVariantStateArtifact(
                         glbPath,
                     };
                     manifest.states.push(entry);
-                    await writeVariantManifest(
+                    manifestPath = await writeVariantManifest(
                         options.artifactBufferWriter,
                         manifestPath,
                         manifest,
@@ -422,7 +422,7 @@ export async function resolveVariantStateArtifact(
 
                 if (current.glbPath !== glbPath) {
                     current.glbPath = glbPath;
-                    await writeVariantManifest(
+                    manifestPath = await writeVariantManifest(
                         options.artifactBufferWriter,
                         manifestPath,
                         manifest,
