@@ -457,8 +457,9 @@
           "title": "rmc トークンを手動設定",
           "description": "ブラウザから取得した GameBanana の rmc Cookie 値を直接入力します。",
           "empty": "rmc 値を入力してください。",
-          "invalid": "無効な rmc トークンです。",
-          "failed": "rmc トークンの保存に失敗しました。"
+          "GAMEBANANA_INVALID_RMC": "無効な rmc トークンです。",
+          "GAMEBANANA_SERVER_UNREACHABLE": "サーバーが応答していません。",
+          "GAMEBANANA_MANUAL_RMC_SAVE_FAILED": "rmc トークンの保存に失敗しました。"
         }
       },
       "supported_games": "対応ゲーム",

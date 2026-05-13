@@ -32,6 +32,22 @@ export type GameBananaFeedSort = "default";
 export type GameBananaModPostsSort = "popular" | "newest";
 export type GameBananaSubmissionModel = "Mod" | "Tool" | (string & {});
 type GameBananaCookieMap = Map<string, string>;
+type ManualRmcValidationResult =
+    | { ok: true; cookie: string }
+    | {
+          ok: false;
+          errorCode:
+              | "GAMEBANANA_INVALID_RMC"
+              | "GAMEBANANA_SERVER_UNREACHABLE"
+              | "GAMEBANANA_MANUAL_RMC_SAVE_FAILED";
+      };
+type ManualRmcErrorCode = Extract<ManualRmcValidationResult, { ok: false }>["errorCode"];
+type ManualRmcSaveResult =
+    | { ok: true }
+    | {
+          ok: false;
+          errorCode: ManualRmcErrorCode;
+      };
 
 export class GameBananaService {
     public readonly games = gameBananaGames;
@@ -239,7 +255,40 @@ export class GameBananaService {
         return mergedCookie;
     }
 
-    private async tryRefreshSession(cookie: string) {
+    private getManualRmcErrorCode(error: unknown): ManualRmcErrorCode {
+        if (!(error instanceof Error)) {
+            return "GAMEBANANA_MANUAL_RMC_SAVE_FAILED";
+        }
+
+        if (
+            error.message === "GAMEBANANA_AUTH_FAILED" ||
+            error.message === "GAMEBANANA_INVALID_RMC" ||
+            error.message.startsWith("GAMEBANANA_HTTP_ERROR:401:") ||
+            error.message.startsWith("GAMEBANANA_HTTP_ERROR:403:")
+        ) {
+            return "GAMEBANANA_INVALID_RMC";
+        }
+
+        if (
+            error.message === "fetch failed" ||
+            error.message.includes("timed out") ||
+            error.message.includes("network")
+        ) {
+            return "GAMEBANANA_SERVER_UNREACHABLE";
+        }
+
+        if (error.message.startsWith("GAMEBANANA_HTTP_ERROR:5")) {
+            return "GAMEBANANA_SERVER_UNREACHABLE";
+        }
+
+        if (error instanceof SyntaxError) {
+            return "GAMEBANANA_INVALID_RMC";
+        }
+
+        return "GAMEBANANA_MANUAL_RMC_SAVE_FAILED";
+    }
+
+    private async validateManualRmcCookie(cookie: string): Promise<ManualRmcValidationResult> {
         try {
             const response = await this.request(this.navigatorPersonalUrl, {
                 method: "GET",
@@ -250,21 +299,45 @@ export class GameBananaService {
                     Cookie: cookie,
                 },
             });
+            const body = await response.text();
+            if (!body.trim()) {
+                return {
+                    ok: false,
+                    errorCode: "GAMEBANANA_INVALID_RMC",
+                };
+            }
 
-            const data = await response.json();
+            const data = JSON.parse(body) as unknown;
 
             if (GameBananaLoginRequiredSchema.safeParse(data).success) {
-                return null;
+                return {
+                    ok: false,
+                    errorCode: "GAMEBANANA_INVALID_RMC",
+                };
             }
 
             if (!MemberNavigatorPersonalSchema.safeParse(data).success) {
-                return null;
+                return {
+                    ok: false,
+                    errorCode: "GAMEBANANA_MANUAL_RMC_SAVE_FAILED",
+                };
             }
 
-            return response.mergedCookie ?? cookie;
-        } catch {
-            return null;
+            return {
+                ok: true,
+                cookie: response.mergedCookie ?? cookie,
+            };
+        } catch (error) {
+            return {
+                ok: false,
+                errorCode: this.getManualRmcErrorCode(error),
+            };
         }
+    }
+
+    private async tryRefreshSession(cookie: string) {
+        const result = await this.validateManualRmcCookie(cookie);
+        return result.ok ? result.cookie : null;
     }
 
     private async validateCookie(cookie: string) {
@@ -334,14 +407,15 @@ export class GameBananaService {
         await this.openAuthenticatedSession();
     }
 
-    public async setManualRmcToken(input: string) {
+    public async setManualRmcToken(input: string): Promise<ManualRmcSaveResult> {
         const cookie = this.normalizeManualRmcCookie(input);
-        const refreshedCookie = await this.tryRefreshSession(cookie);
-        if (!refreshedCookie) {
-            throw new Error("GAMEBANANA_INVALID_RMC");
+        const validationResult = await this.validateManualRmcCookie(cookie);
+        if (!validationResult.ok) {
+            return validationResult;
         }
 
-        await this.saveCookie(refreshedCookie);
+        await this.saveCookie(validationResult.cookie);
+        return { ok: true };
     }
 
     public async logout() {
