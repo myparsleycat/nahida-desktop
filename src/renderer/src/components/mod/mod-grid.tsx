@@ -70,6 +70,10 @@ export function ModGrid(_props: ModGridProps) {
     [availableWidth, gridLayoutSettings],
   );
   const columnCount = resolvedGridLayout.columnCount;
+  const overscan = useMemo(() => {
+    const targetOverscanCardCount = 16;
+    return Math.max(2, Math.min(6, Math.ceil(targetOverscanCardCount / columnCount)));
+  }, [columnCount]);
 
   const rows = useMemo(() => chunk(mods, columnCount), [mods, columnCount]);
   const getModRenderKey = useCallback(
@@ -87,7 +91,7 @@ export function ModGrid(_props: ModGridProps) {
     },
     getScrollElement: () => viewport,
     estimateSize: useCallback(() => 400 + 12, []), // card height (400) + gap (12)
-    overscan: 10,
+    overscan,
     measureElement: (element) => element?.getBoundingClientRect().height,
   });
 
