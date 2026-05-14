@@ -280,7 +280,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
         open={renameDialogState !== null}
         onOpenChange={(open) => !open && setRenameDialogState(null)}
       >
-        <DialogContent aria-describedby={undefined} onClick={(event) => event.stopPropagation()}>
+        <DialogContent onClick={(event) => event.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>{t("page.mod.dialog.rename-mod.title")}</DialogTitle>
             <DialogDescription>{t("page.mod.dialog.rename-mod.description")}</DialogDescription>
