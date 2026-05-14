@@ -2,11 +2,12 @@ import { Badge } from "@renderer/components/ui/badge";
 import { Separator } from "@renderer/components/ui/separator";
 import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { cn } from "@renderer/lib/utils";
+import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
 import { formatDate, formatSize } from "@shared/utils";
 import { useRouteContext } from "@tanstack/react-router";
 import { CalendarIcon, FolderIcon } from "lucide-react";
-import { memo, useRef, useState } from "react";
+import { memo, useCallback, useRef, useState } from "react";
 import { ModCardHeader } from "./mod-card-header";
 import { ModContextMenu } from "./mod-context-menu";
 import { ModFixRunnerDialogs } from "./mod-fix-runner-dialogs";
@@ -20,8 +21,6 @@ interface ModCardProps {
   mod: ModInfo;
   selectedGroupPath?: string;
   onToggle: (mod: ModInfo, event?: React.MouseEvent) => void;
-  isIniListExpanded: boolean;
-  onIniListExpandedChange: (modPath: string, isExpanded: boolean) => void;
   onToggleKeyUpdate: (
     modPath: string,
     iniPath: string,
@@ -35,17 +34,28 @@ export const ModCard = memo(function ModCard({
   mod,
   selectedGroupPath,
   onToggle,
-  isIniListExpanded,
-  onIniListExpandedChange,
   onToggleKeyUpdate,
 }: ModCardProps) {
   const { queryClient } = useRouteContext({ from: "__root__" });
+  const setIniListExpanded = useModStore((s) => s.setIniListExpanded);
+  const isIniListExpanded = useModStore((s) =>
+    selectedGroupPath
+      ? (s.iniListExpandedByGroupPath[selectedGroupPath]?.[mod.path] ?? true)
+      : true,
+  );
   const mouseDownTargetRef = useRef<EventTarget | null>(null);
   const [showTextureResizeDialog, setShowTextureResizeDialog] = useState(false);
   const runner = useModFixRunner(mod.path);
 
   const handlePaste = () => pasteModPreview({ modPath: mod.path, selectedGroupPath, queryClient });
   const handleOpenTextureResizeDialog = () => setShowTextureResizeDialog(true);
+  const handleIniListExpandedChange = useCallback(() => {
+    if (!selectedGroupPath) {
+      return;
+    }
+
+    setIniListExpanded(selectedGroupPath, mod.path, !isIniListExpanded);
+  }, [isIniListExpanded, mod.path, selectedGroupPath, setIniListExpanded]);
 
   return (
     <>
@@ -114,7 +124,7 @@ export const ModCard = memo(function ModCard({
                     style={{ cursor: "col-resize" }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      onIniListExpandedChange(mod.path, !isIniListExpanded);
+                      handleIniListExpandedChange();
                     }}
                   />
                 </div>

@@ -21,8 +21,6 @@ interface ModGridProps {
 export function ModGrid(_props: ModGridProps) {
   const { t } = useTranslation();
   const searchQuery = useModStore((s) => s.searchQuery);
-  const iniListExpandedByGroupPath = useModStore((s) => s.iniListExpandedByGroupPath);
-  const setIniListExpanded = useModStore((s) => s.setIniListExpanded);
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
 
   // const [parent] = useAutoAnimate({ duration: 150 });
@@ -134,18 +132,6 @@ export function ModGrid(_props: ModGridProps) {
     [updateToggleKeyMutation.mutate],
   );
 
-  const handleIniListExpandedChange = useCallback(
-    (modId: string, isExpanded: boolean) => {
-      if (!selectedGroupPath) return;
-      setIniListExpanded(selectedGroupPath, modId, isExpanded);
-    },
-    [selectedGroupPath, setIniListExpanded],
-  );
-
-  const iniListExpandedByModId = selectedGroupPath
-    ? (iniListExpandedByGroupPath[selectedGroupPath] ?? {})
-    : {};
-
   if (!selectedGroupPath) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground h-full min-h-0">
@@ -198,8 +184,6 @@ export function ModGrid(_props: ModGridProps) {
                   mod={mod}
                   selectedGroupPath={selectedGroupPath}
                   onToggle={handleToggle}
-                  isIniListExpanded={iniListExpandedByModId[mod.path] ?? true}
-                  onIniListExpandedChange={handleIniListExpandedChange}
                   onToggleKeyUpdate={handleToggleKeyUpdate}
                 />
               ))}
@@ -243,8 +227,6 @@ export function ModGrid(_props: ModGridProps) {
                           mod={mod}
                           selectedGroupPath={selectedGroupPath}
                           onToggle={handleToggle}
-                          isIniListExpanded={iniListExpandedByModId[mod.path] ?? true}
-                          onIniListExpandedChange={handleIniListExpandedChange}
                           onToggleKeyUpdate={handleToggleKeyUpdate}
                         />
                       ))}
