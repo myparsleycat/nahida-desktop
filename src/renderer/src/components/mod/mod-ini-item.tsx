@@ -1,11 +1,5 @@
 import { Button } from "@renderer/components/ui/button";
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@renderer/components/ui/context-menu";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -56,6 +50,7 @@ function KeySettingDialog({
   value,
   otherKeys,
   onSave,
+  // oxlint-disable-next-line no-unused-vars
   onDelete,
   children,
 }: {
@@ -83,30 +78,9 @@ function KeySettingDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      {onDelete ? (
-        <ContextMenu>
-          <ContextMenuTrigger asChild>
-            <DialogTrigger asChild onClick={(e) => e.stopPropagation()}>
-              {trigger}
-            </DialogTrigger>
-          </ContextMenuTrigger>
-          <ContextMenuContent onClick={(e) => e.stopPropagation()}>
-            <ContextMenuItem
-              variant="destructive"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-            >
-              Delete {label}
-            </ContextMenuItem>
-          </ContextMenuContent>
-        </ContextMenu>
-      ) : (
-        <DialogTrigger asChild onClick={(e) => e.stopPropagation()}>
-          {trigger}
-        </DialogTrigger>
-      )}
+      <DialogTrigger asChild onClick={(e) => e.stopPropagation()}>
+        {trigger}
+      </DialogTrigger>
       <DialogContent onClick={(e) => e.stopPropagation()}>
         <DialogHeader>
           <DialogTitle className="capitalize">{label}</DialogTitle>
