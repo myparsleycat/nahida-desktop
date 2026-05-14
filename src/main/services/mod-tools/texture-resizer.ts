@@ -344,12 +344,17 @@ async function buildTextureList(
                 return rightPixels - leftPixels;
             }
 
-            const nameComparison = left.fileName.localeCompare(right.fileName);
+            const nameComparison =
+                left.fileName < right.fileName ? -1 : left.fileName > right.fileName ? 1 : 0;
             if (nameComparison !== 0) {
                 return nameComparison;
             }
 
-            return left.relativePath.localeCompare(right.relativePath);
+            return left.relativePath < right.relativePath
+                ? -1
+                : left.relativePath > right.relativePath
+                  ? 1
+                  : 0;
         });
 }
 
