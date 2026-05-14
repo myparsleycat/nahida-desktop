@@ -361,10 +361,18 @@ export function useModMutations() {
     });
 
     const renameModMutation = useMutation({
-        mutationFn: async ({ mod, newName }: { mod: ModInfo; newName: string }) => {
+        mutationFn: async ({
+            mod,
+            newName,
+            groupPath,
+        }: {
+            mod: ModInfo;
+            newName: string;
+            groupPath?: string;
+        }) => {
             try {
                 await window.api.invoke("mod:rename", mod.path, newName);
-                const currentGroupPath = selectedGroup?.path;
+                const currentGroupPath = groupPath ?? selectedGroup?.path;
                 if (currentGroupPath) {
                     const refreshedGroup = (await window.api.invoke(
                         "mod:getMods",

@@ -260,18 +260,29 @@ function RouteComponent() {
     setManualRmcError(null);
     void window.api
       .invoke("gamebanana:setManualRmcToken", nextValue)
-      .then(() => {
+      .then((result) => {
+        if (result.ok === false) {
+          setManualRmcError(t(`page.gamebanana.auth.manual_rmc.${result.errorCode}`));
+          return;
+        }
+
         setIsManualRmcDialogOpen(false);
         setManualRmcValue("");
         setAuthErrorCode(null);
         setAuthStatus("ready");
       })
       .catch((error) => {
-        const isInvalidToken = error instanceof Error && error.message === "GAMEBANANA_INVALID_RMC";
         setManualRmcError(
-          isInvalidToken
-            ? t("page.gamebanana.auth.manual_rmc.invalid")
-            : t("page.gamebanana.auth.manual_rmc.failed"),
+          t(
+            error instanceof Error &&
+              [
+                "GAMEBANANA_INVALID_RMC",
+                "GAMEBANANA_SERVER_UNREACHABLE",
+                "GAMEBANANA_MANUAL_RMC_SAVE_FAILED",
+              ].includes(error.message)
+              ? `page.gamebanana.auth.manual_rmc.${error.message}`
+              : "page.gamebanana.auth.manual_rmc.GAMEBANANA_MANUAL_RMC_SAVE_FAILED",
+          ),
         );
       })
       .finally(() => {

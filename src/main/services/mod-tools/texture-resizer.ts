@@ -335,7 +335,27 @@ async function buildTextureList(
             }),
         ),
     );
-    return items.filter((item): item is TextureResizeListItem => item != null);
+    return items
+        .filter((item): item is TextureResizeListItem => item != null)
+        .sort((left, right) => {
+            const leftPixels = left.originalWidth * left.originalHeight;
+            const rightPixels = right.originalWidth * right.originalHeight;
+            if (leftPixels !== rightPixels) {
+                return rightPixels - leftPixels;
+            }
+
+            const nameComparison =
+                left.fileName < right.fileName ? -1 : left.fileName > right.fileName ? 1 : 0;
+            if (nameComparison !== 0) {
+                return nameComparison;
+            }
+
+            return left.relativePath < right.relativePath
+                ? -1
+                : left.relativePath > right.relativePath
+                  ? 1
+                  : 0;
+        });
 }
 
 async function buildTextureListItem(

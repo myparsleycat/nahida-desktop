@@ -483,8 +483,9 @@
           "title": "Set rmc Token",
           "description": "Enter the GameBanana rmc cookie value from your browser.",
           "empty": "Enter an rmc value.",
-          "invalid": "The rmc token is invalid.",
-          "failed": "Failed to save the rmc token."
+          "GAMEBANANA_INVALID_RMC": "The rmc token is invalid.",
+          "GAMEBANANA_SERVER_UNREACHABLE": "The server is not responding.",
+          "GAMEBANANA_MANUAL_RMC_SAVE_FAILED": "Failed to save the rmc token."
         }
       },
       "supported_games": "Supported Games",

@@ -34,6 +34,15 @@ import { CharacterSidebarGrid } from "./character-sidebar-grid";
 import { CharacterSidebarRow } from "./character-sidebar-row";
 import { hasPreviewFile, isPreviewMediaFile } from "./paste-preview";
 
+function getParentGroupPath(groupPath: string) {
+  const separatorIndex = Math.max(groupPath.lastIndexOf("\\"), groupPath.lastIndexOf("/"));
+  if (separatorIndex < 0) {
+    return null;
+  }
+
+  return groupPath.slice(0, separatorIndex);
+}
+
 interface CharacterSidebarProps {
   groups: FolderGroup[];
   isLoading?: boolean;
@@ -51,7 +60,6 @@ export const CharacterSidebar = memo(function CharacterSidebar({
   const selectedGroup = useModStore((s) => s.selectedGroup);
   const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
   const [searchTerm, setSearchTerm] = useState("");
-  const [refreshKey, setRefreshKey] = useState(0);
   const [createFolderTarget, setCreateFolderTarget] = useState<FolderGroup | null>(null);
   const [pendingPreviewDrop, setPendingPreviewDrop] = useState<{
     group: FolderGroup;
@@ -70,24 +78,28 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     },
     onSuccess: async (_, variables) => {
       setExpandedGroup(variables.groupPath, true);
-      setRefreshKey((prev) => prev + 1);
       setCreateFolderTarget(null);
       setNewFolderName("");
       toast.success(t("page.mod.dialog.create-folder.#.success", { name: variables.name }));
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] }),
         queryClient.invalidateQueries({ queryKey: ["modGroup", variables.groupPath] }),
+        queryClient.invalidateQueries({ queryKey: ["subGroups", variables.groupPath] }),
       ]);
     },
     onError: (error) => {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes("INVALID_WINDOWS_FILENAME")) {
         toast.error(t("page.mod.dialog.create-folder.#.invalid-name"));
-      } else if (message.includes("ALREADY_EXISTS")) {
-        toast.warning(t("page.mod.dialog.create-folder.#.already-exists"));
-      } else {
-        toast.error(t("page.mod.dialog.create-folder.#.failed"));
+        return;
       }
+
+      if (message.includes("ALREADY_EXISTS")) {
+        toast.warning(t("page.mod.dialog.create-folder.#.already-exists"));
+        return;
+      }
+
+      toast.error(t("page.mod.dialog.create-folder.#.failed"));
     },
   });
 
@@ -127,20 +139,6 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     return () => clearTimeout(timer);
   }, [searchTerm, handleSelect]);
 
-  useEffect(() => {
-    const refreshSidebar = () => {
-      setRefreshKey((prev) => prev + 1);
-    };
-
-    const removeGameListener = window.api.on("mod:update-game", refreshSidebar);
-    const removeModsListener = window.api.on("mod:update-mods", refreshSidebar);
-
-    return () => {
-      removeGameListener();
-      removeModsListener();
-    };
-  }, []);
-
   const handleItemClick = useCallback(
     (group: FolderGroup, _e: React.MouseEvent) => {
       handleSelect(group, true);
@@ -153,6 +151,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] }),
         queryClient.invalidateQueries({ queryKey: ["modGroup", groupPath] }),
+        queryClient.invalidateQueries({ queryKey: ["subGroups", groupPath] }),
         selectedGroup?.path && selectedGroup.path !== groupPath
           ? queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroup.path] })
           : Promise.resolve(),
@@ -240,10 +239,13 @@ export const CharacterSidebar = memo(function CharacterSidebar({
         successMessage: t("page.mod.dialog.delete-folder.#.success"),
         errorMessage: t("page.mod.dialog.delete-folder.#.failed"),
         onSuccess: async () => {
-          setRefreshKey((prev) => prev + 1);
+          const parentGroupPath = getParentGroupPath(group.path);
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] }),
             queryClient.invalidateQueries({ queryKey: ["modGroup", group.path] }),
+            parentGroupPath
+              ? queryClient.invalidateQueries({ queryKey: ["subGroups", parentGroupPath] })
+              : Promise.resolve(),
           ]);
         },
       });
@@ -287,7 +289,6 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     searchTerm,
     onCreateFolder: handleCreateFolderOpen,
     onDeleteFolder: handleDeleteFolder,
-    refreshKey,
     showSkeleton,
     previewCacheKey,
   };
@@ -385,7 +386,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
           <AlertDialogFooter>
             <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={handlePreviewDropConfirm}>
-              {t("page.mod.dialog.overwrite-preview.confirm")}
+              {t("g.confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -456,8 +456,9 @@
           "title": "手动设置 rmc Token",
           "description": "直接输入从浏览器获取的 GameBanana rmc Cookie 值。",
           "empty": "请输入 rmc 值。",
-          "invalid": "rmc token 无效。",
-          "failed": "保存 rmc token 失败。"
+          "GAMEBANANA_INVALID_RMC": "rmc token 无效。",
+          "GAMEBANANA_SERVER_UNREACHABLE": "服务器没有响应。",
+          "GAMEBANANA_MANUAL_RMC_SAVE_FAILED": "保存 rmc token 失败。"
         }
       },
       "supported_games": "支持的游戏",

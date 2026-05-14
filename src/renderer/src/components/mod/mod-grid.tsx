@@ -2,8 +2,10 @@ import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
 import { useFilteredMods } from "@renderer/hooks/use-filtered-mods";
+import { useModActions } from "@renderer/hooks/use-mod-actions";
 import { useModGroup } from "@renderer/hooks/use-mod-data";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
+import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
 import { useModGridLayoutSettings, useVirtualizationSettings } from "@renderer/hooks/use-settings";
 import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
@@ -21,19 +23,19 @@ interface ModGridProps {
 export function ModGrid(_props: ModGridProps) {
   const { t } = useTranslation();
   const searchQuery = useModStore((s) => s.searchQuery);
-  const iniListExpandedByGroupPath = useModStore((s) => s.iniListExpandedByGroupPath);
-  const setIniListExpanded = useModStore((s) => s.setIniListExpanded);
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
 
   // const [parent] = useAutoAnimate({ duration: 150 });
 
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
   const { data: activeGroup, isPlaceholderData, isPending } = useModGroup(selectedGroupPath);
+  const actions = useModActions(selectedGroupPath);
 
   const { toggleModMutation, exclusiveToggleModMutation, updateToggleKeyMutation } =
     useModMutations();
 
   const mods = useFilteredMods(activeGroup?.mods || [], searchQuery);
+  useModShortcuts(searchQuery, mods);
   const isLoading = isPending || isPlaceholderData;
   const showSkeleton = useDelayedSkeleton(isLoading);
 
@@ -70,6 +72,10 @@ export function ModGrid(_props: ModGridProps) {
     [availableWidth, gridLayoutSettings],
   );
   const columnCount = resolvedGridLayout.columnCount;
+  const overscan = useMemo(() => {
+    const targetOverscanCardCount = 16;
+    return Math.max(2, Math.min(6, Math.ceil(targetOverscanCardCount / columnCount)));
+  }, [columnCount]);
 
   const rows = useMemo(() => chunk(mods, columnCount), [mods, columnCount]);
   const getModRenderKey = useCallback(
@@ -87,7 +93,7 @@ export function ModGrid(_props: ModGridProps) {
     },
     getScrollElement: () => viewport,
     estimateSize: useCallback(() => 400 + 12, []), // card height (400) + gap (12)
-    overscan: 10,
+    overscan,
     measureElement: (element) => element?.getBoundingClientRect().height,
   });
 
@@ -129,18 +135,6 @@ export function ModGrid(_props: ModGridProps) {
     },
     [updateToggleKeyMutation.mutate],
   );
-
-  const handleIniListExpandedChange = useCallback(
-    (modId: string, isExpanded: boolean) => {
-      if (!selectedGroupPath) return;
-      setIniListExpanded(selectedGroupPath, modId, isExpanded);
-    },
-    [selectedGroupPath, setIniListExpanded],
-  );
-
-  const iniListExpandedByModId = selectedGroupPath
-    ? (iniListExpandedByGroupPath[selectedGroupPath] ?? {})
-    : {};
 
   if (!selectedGroupPath) {
     return (
@@ -193,9 +187,8 @@ export function ModGrid(_props: ModGridProps) {
                   key={getModRenderKey(mod)}
                   mod={mod}
                   selectedGroupPath={selectedGroupPath}
+                  actions={actions}
                   onToggle={handleToggle}
-                  isIniListExpanded={iniListExpandedByModId[mod.path] ?? true}
-                  onIniListExpandedChange={handleIniListExpandedChange}
                   onToggleKeyUpdate={handleToggleKeyUpdate}
                 />
               ))}
@@ -238,9 +231,8 @@ export function ModGrid(_props: ModGridProps) {
                           key={getModRenderKey(mod)}
                           mod={mod}
                           selectedGroupPath={selectedGroupPath}
+                          actions={actions}
                           onToggle={handleToggle}
-                          isIniListExpanded={iniListExpandedByModId[mod.path] ?? true}
-                          onIniListExpandedChange={handleIniListExpandedChange}
                           onToggleKeyUpdate={handleToggleKeyUpdate}
                         />
                       ))}
@@ -252,6 +244,7 @@ export function ModGrid(_props: ModGridProps) {
           )}
         </div>
       </ScrollArea>
+      {actions.overlays}
     </div>
   );
 }
