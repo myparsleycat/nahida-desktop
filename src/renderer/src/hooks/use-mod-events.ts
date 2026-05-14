@@ -64,9 +64,16 @@ export function useModWatcherEvents(
 ) {
     useEffect(() => {
         const removeGameListener = window.api.on("mod:update-game", () => {
+            const invalidations: Promise<unknown>[] = [];
+
             if (selectedGame) {
-                queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] });
+                invalidations.push(
+                    queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] }),
+                );
             }
+
+            invalidations.push(queryClient.invalidateQueries({ queryKey: ["subGroups"] }));
+            void Promise.all(invalidations);
         });
 
         const removeModsListener = window.api.on("mod:update-mods", () => {
@@ -84,6 +91,7 @@ export function useModWatcherEvents(
                 );
             }
 
+            invalidations.push(queryClient.invalidateQueries({ queryKey: ["subGroups"] }));
             void Promise.all(invalidations);
         });
 
