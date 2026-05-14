@@ -107,7 +107,7 @@ export function Preview({
         className,
       )}
       style={commonStyles}
-      loading="eager"
+      loading="lazy"
       decoding="async"
     />
   );
