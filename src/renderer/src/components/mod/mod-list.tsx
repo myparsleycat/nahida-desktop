@@ -2,8 +2,10 @@ import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
 import { useFilteredMods } from "@renderer/hooks/use-filtered-mods";
+import { useModActions } from "@renderer/hooks/use-mod-actions";
 import { useModGroup } from "@renderer/hooks/use-mod-data";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
+import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
 import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
 import { useCallback } from "react";
@@ -21,10 +23,12 @@ export function ModList(_props: ModListProps) {
 
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
   const { data: activeGroup, isPlaceholderData, isPending } = useModGroup(selectedGroupPath);
+  const actions = useModActions(selectedGroupPath);
 
   const { toggleModMutation, exclusiveToggleModMutation } = useModMutations();
 
   const mods = useFilteredMods(activeGroup?.mods || [], searchQuery);
+  useModShortcuts(searchQuery, mods);
   const getModRenderKey = useCallback(
     (mod: ModInfo) => `${selectedGroupPath ?? ""}::${mod.path}`,
     [selectedGroupPath],
@@ -74,7 +78,7 @@ export function ModList(_props: ModListProps) {
                     <ModListRow
                       key={getModRenderKey(mod)}
                       mod={mod}
-                      selectedGroupPath={selectedGroupPath}
+                      actions={actions}
                       handleToggle={handleToggle}
                     />
                   ))}
@@ -84,6 +88,7 @@ export function ModList(_props: ModListProps) {
           </ScrollArea>
         </>
       )}
+      {actions.overlays}
     </div>
   );
 }

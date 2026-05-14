@@ -19,7 +19,7 @@ const defaultWuwaOptions = (): WuwaFixerOptions => ({
   rollback: false,
 });
 
-export function useModFixRunner(modPath: string) {
+export function useModFixRunner() {
   const { t } = useTranslation();
   const selectedGame = useModStore((s) => s.selectedGame);
   const { data: games = [] } = useGames();
@@ -37,6 +37,7 @@ export function useModFixRunner(modPath: string) {
     queryFn: () => window.api.invoke("ftm:getPresets"),
   });
 
+  const [activeModPath, setActiveModPath] = useState<string | null>(null);
   const [showLogModal, setShowLogModal] = useState(false);
   const [showInstallDialog, setShowInstallDialog] = useState(false);
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
@@ -70,7 +71,8 @@ export function useModFixRunner(modPath: string) {
     }
   }, [logs]);
 
-  const handleRun = async (type: "tool" | "preset", id: string) => {
+  const handleRun = async (type: "tool" | "preset", id: string, modPath: string) => {
+    setActiveModPath(modPath);
     setShowLogModal(true);
     setLogs([]);
     setIsRunning(true);
@@ -111,12 +113,13 @@ export function useModFixRunner(modPath: string) {
     setShowOptionsDialog(true);
   };
 
-  const handleOpenWuwaFixer = async () => {
+  const handleOpenWuwaFixer = async (modPath: string) => {
     if (!showWuwaFixer) {
       toast.error("Wuwa Mod Fixer is only available for WWMI or importer-less games.");
       return;
     }
 
+    setActiveModPath(modPath);
     setIsPreparing(true);
     try {
       const result = await window.api.invoke("wuwaFixer:prepareRun", selectedImporter);
@@ -161,12 +164,16 @@ export function useModFixRunner(modPath: string) {
   };
 
   const handleRunWuwaFixer = async () => {
+    if (!activeModPath) {
+      return;
+    }
+
     setShowLogModal(true);
     setLogs([]);
     setIsRunning(true);
     setShowOptionsDialog(false);
     try {
-      await window.api.invoke("wuwaFixer:run", modPath, wuwaOptions);
+      await window.api.invoke("wuwaFixer:run", activeModPath, wuwaOptions);
     } catch (error) {
       console.error(error);
     } finally {
@@ -202,6 +209,7 @@ export function useModFixRunner(modPath: string) {
     fixTools,
     presets,
     showWuwaFixer,
+    activeModPath,
     selectedImporter,
     showLogModal,
     setShowLogModal,

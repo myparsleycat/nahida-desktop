@@ -1,72 +1,63 @@
 import { Button } from "@renderer/components/ui/button";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "@renderer/components/ui/context-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@renderer/components/ui/dialog";
 import { Kbd } from "@renderer/components/ui/kbd";
 import { cn } from "@renderer/lib/utils";
-import type { ModInfo, ModIni, ToggleKey } from "@renderer/types/mod";
+import type { ModIni, ToggleKey } from "@renderer/types/mod";
 import { formatKeyLabel } from "@shared/key-formatter";
 import { FileCogIcon, PlusIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
-import { KeyRecorder } from "./key-recorder";
+import { type ReactNode, memo, useMemo } from "react";
+
+interface KeySettingRequest {
+  id: string;
+  label: string;
+  sectionName: string;
+  value: string;
+  otherKeys: string[];
+}
 
 interface ModToggleKeyItemProps {
-  modPath: string;
-  iniPath: string;
   toggleKey: ToggleKey;
   otherKeys: string[];
-  onToggleKeyUpdate: (
-    modPath: string,
-    iniPath: string,
-    sectionName: string,
-    variable: string,
-    value: string,
-  ) => void;
+  onOpenKeySetting: (setting: KeySettingRequest) => void;
+}
+
+interface ModIniItemProps {
+  ini: ModIni;
+  otherKeysById: Record<string, string[]>;
+  onOpenKeySetting: (setting: KeySettingRequest) => void;
 }
 
 function KeyDisplay({ keys }: { keys: string }) {
-  return (
-    <div className="flex flex-wrap items-center gap-1">
-      {keys
+  const labels = useMemo(
+    () =>
+      keys
         .split(" ")
         .map((k) => formatKeyLabel(k))
-        .filter((k): k is string => k !== null)
-        .map((label, idx) => (
-          <Kbd key={idx.toString()} className="text-xs">
-            {label}
-          </Kbd>
-        ))}
+        .filter((k): k is string => k !== null),
+    [keys],
+  );
+
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {labels.map((label, idx) => (
+        <Kbd key={`${keys}:${idx.toString()}`} className="text-xs">
+          {label}
+        </Kbd>
+      ))}
     </div>
   );
 }
 
-function KeySettingDialog({
+function KeySettingTrigger({
   label,
   value,
-  otherKeys,
-  onSave,
-  onDelete,
+  onOpen,
   children,
 }: {
   label: string;
   value: string;
-  otherKeys: string[];
-  onSave: (newValue: string) => void;
-  onDelete?: () => void;
+  onOpen: () => void;
   children?: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
   const trigger = children ?? (
     <button
       type="button"
@@ -75,62 +66,36 @@ function KeySettingDialog({
         "border border-white/20 space-x-1 bg-foreground/5 hover:bg-background/10 p-2 rounded-lg",
         "justify-start flex-row size-full p-1",
       )}
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpen();
+      }}
     >
       <span className="text-sm">{label}:</span>
       <KeyDisplay keys={value} />
     </button>
   );
 
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      {onDelete ? (
-        <ContextMenu>
-          <ContextMenuTrigger asChild>
-            <DialogTrigger asChild onClick={(e) => e.stopPropagation()}>
-              {trigger}
-            </DialogTrigger>
-          </ContextMenuTrigger>
-          <ContextMenuContent onClick={(e) => e.stopPropagation()}>
-            <ContextMenuItem
-              variant="destructive"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-            >
-              Delete {label}
-            </ContextMenuItem>
-          </ContextMenuContent>
-        </ContextMenu>
-      ) : (
-        <DialogTrigger asChild onClick={(e) => e.stopPropagation()}>
-          {trigger}
-        </DialogTrigger>
-      )}
-      <DialogContent onClick={(e) => e.stopPropagation()}>
-        <DialogHeader>
-          <DialogTitle className="capitalize">{label}</DialogTitle>
-          <DialogDescription>Press the key combination to set</DialogDescription>
-        </DialogHeader>
-        <KeyRecorder
-          defaultValue={value}
-          otherKeys={otherKeys}
-          onSave={(newValue) => {
-            onSave(newValue);
-            setOpen(false);
-          }}
-        />
-      </DialogContent>
-    </Dialog>
-  );
+  if (children) {
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen();
+        }}
+      >
+        {children}
+      </div>
+    );
+  }
+
+  return trigger;
 }
 
-function ModToggleKeyItem({
-  modPath,
-  iniPath,
+const ModToggleKeyItem = memo(function ModToggleKeyItem({
   toggleKey,
   otherKeys,
-  onToggleKeyUpdate,
+  onOpenKeySetting,
 }: ModToggleKeyItemProps) {
   return (
     <div className="space-y-1 rounded-lg shadow-sm p-1 bg-foreground/5">
@@ -142,22 +107,31 @@ function ModToggleKeyItem({
       </div>
 
       {toggleKey.key ? (
-        <KeySettingDialog
+        <KeySettingTrigger
           label="key"
           value={toggleKey.key}
-          otherKeys={otherKeys}
-          onSave={(newValue) =>
-            onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "key", newValue)
+          onOpen={() =>
+            onOpenKeySetting({
+              id: `${toggleKey.sectionName}:key`,
+              label: "key",
+              sectionName: toggleKey.sectionName,
+              value: toggleKey.key ?? "",
+              otherKeys,
+            })
           }
-          onDelete={() => onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "key", "")}
         />
       ) : (
-        <KeySettingDialog
+        <KeySettingTrigger
           label="key"
           value=""
-          otherKeys={otherKeys}
-          onSave={(newValue) =>
-            onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "key", newValue)
+          onOpen={() =>
+            onOpenKeySetting({
+              id: `${toggleKey.sectionName}:key`,
+              label: "key",
+              sectionName: toggleKey.sectionName,
+              value: "",
+              otherKeys,
+            })
           }
         >
           <Button
@@ -168,26 +142,35 @@ function ModToggleKeyItem({
             <PlusIcon className="size-3 mr-1.5" />
             Add key
           </Button>
-        </KeySettingDialog>
+        </KeySettingTrigger>
       )}
 
       {toggleKey.back ? (
-        <KeySettingDialog
+        <KeySettingTrigger
           label="back"
           value={toggleKey.back}
-          otherKeys={otherKeys}
-          onSave={(newValue) =>
-            onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "back", newValue)
+          onOpen={() =>
+            onOpenKeySetting({
+              id: `${toggleKey.sectionName}:back`,
+              label: "back",
+              sectionName: toggleKey.sectionName,
+              value: toggleKey.back ?? "",
+              otherKeys,
+            })
           }
-          onDelete={() => onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "back", "")}
         />
       ) : (
-        <KeySettingDialog
+        <KeySettingTrigger
           label="back"
           value=""
-          otherKeys={otherKeys}
-          onSave={(newValue) =>
-            onToggleKeyUpdate(modPath, iniPath, toggleKey.sectionName, "back", newValue)
+          onOpen={() =>
+            onOpenKeySetting({
+              id: `${toggleKey.sectionName}:back`,
+              label: "back",
+              sectionName: toggleKey.sectionName,
+              value: "",
+              otherKeys,
+            })
           }
         >
           <Button
@@ -202,29 +185,17 @@ function ModToggleKeyItem({
             <PlusIcon className="size-3 mr-1.5" />
             Add back
           </Button>
-        </KeySettingDialog>
+        </KeySettingTrigger>
       )}
     </div>
   );
-}
+});
 
-interface ModIniItemProps {
-  mod: ModInfo;
-  ini: ModIni;
-  onToggleKeyUpdate: (
-    modPath: string,
-    iniFileName: string,
-    sectionName: string,
-    variable: string,
-    value: string,
-  ) => void;
-}
-
-export function ModIniItem({ mod, ini, onToggleKeyUpdate }: ModIniItemProps) {
-  const otherKeys = mod.inis.flatMap((i) =>
-    i.toggleKeys.map((t) => ({ key: t.key, sectionName: t.sectionName, path: i.path })),
-  );
-
+export const ModIniItem = memo(function ModIniItem({
+  ini,
+  otherKeysById,
+  onOpenKeySetting,
+}: ModIniItemProps) {
   return (
     <div className="space-y-1 text-[13px]">
       <div className="flex items-center justify-between gap-1">
@@ -248,19 +219,16 @@ export function ModIniItem({ mod, ini, onToggleKeyUpdate }: ModIniItemProps) {
         <div className="space-y-2.5">
           {ini.toggleKeys.map((toggleKey, idx) => (
             <ModToggleKeyItem
-              key={idx.toString()}
-              modPath={mod.path}
-              iniPath={ini.path}
+              key={`${ini.path}:${toggleKey.sectionName}:${idx.toString()}`}
               toggleKey={toggleKey}
-              otherKeys={otherKeys
-                .filter((o) => o.sectionName !== toggleKey.sectionName || o.path !== ini.path)
-                .map((o) => o.key)
-                .filter((k): k is string => !!k)}
-              onToggleKeyUpdate={onToggleKeyUpdate}
+              otherKeys={
+                otherKeysById[`${ini.path}:${toggleKey.sectionName}:${idx.toString()}`] ?? []
+              }
+              onOpenKeySetting={onOpenKeySetting}
             />
           ))}
         </div>
       )}
     </div>
   );
-}
+});

@@ -1,7 +1,8 @@
 import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
 import type { SidebarLayoutMode } from "@shared/mod";
-import { memo, useCallback, useEffect, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { memo, useCallback, useMemo } from "react";
 import { CharacterSidebarItem, CharacterSidebarItemSkeleton } from "./character-sidebar-item";
 
 export interface CharacterSidebarContentProps {
@@ -13,7 +14,6 @@ export interface CharacterSidebarContentProps {
   searchTerm: string;
   onCreateFolder: (group: FolderGroup) => void;
   onDeleteFolder: (group: FolderGroup) => void;
-  refreshKey: number;
   showSkeleton: boolean;
   previewCacheKey: number;
 }
@@ -28,34 +28,13 @@ interface CharacterSidebarContentLayoutProps extends CharacterSidebarContentProp
   itemStyle?: (depth: number) => React.CSSProperties | undefined;
 }
 
-function useSubGroups(group: FolderGroup, shouldFetch: boolean, refreshKey: number) {
-  const [subGroups, setSubGroups] = useState<FolderGroup[]>([]);
-
-  useEffect(() => {
-    if (!shouldFetch) {
-      setSubGroups([]);
-      return;
-    }
-
-    let cancelled = false;
-
-    window.api
-      .invoke("mod:getSubGroups", group.path)
-      .then((result: FolderGroup[]) => {
-        if (!cancelled) {
-          setSubGroups(result);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSubGroups([]);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [shouldFetch, group.path, refreshKey]);
+function useSubGroups(group: FolderGroup, shouldFetch: boolean) {
+  const { data: subGroups = [] } = useQuery<FolderGroup[]>({
+    queryKey: ["subGroups", group.path],
+    queryFn: () => window.api.invoke("mod:getSubGroups", group.path),
+    enabled: shouldFetch,
+    placeholderData: keepPreviousData,
+  });
 
   return subGroups;
 }
@@ -65,11 +44,11 @@ interface CharacterSidebarItemWithChildrenProps {
   itemRefs: React.MutableRefObject<Map<string, { element: HTMLElement; group: FolderGroup }>>;
   onItemClick: (group: FolderGroup, e: React.MouseEvent) => void;
   onItemDrop: (group: FolderGroup, files: File[]) => void;
+  canAcceptDrop: (files: File[]) => boolean;
   depth: number;
   searchTerm: string;
   onCreateFolder: (group: FolderGroup) => void;
   onDeleteFolder: (group: FolderGroup) => void;
-  refreshKey: number;
   layout: SidebarLayoutMode;
   listClassName: string;
   listStyle?: React.CSSProperties;
@@ -78,7 +57,7 @@ interface CharacterSidebarItemWithChildrenProps {
   nestedItemClassName?: string;
   itemStyle?: (depth: number) => React.CSSProperties | undefined;
   parentGroupName?: string;
-  onCollapseSelf?: () => void;
+  collapseGroupPath?: string;
   previewCacheKey: number;
 }
 
@@ -88,12 +67,10 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   onItemClick,
   onItemDrop,
   canAcceptDrop,
-  onCollapseSelf,
   depth,
   searchTerm,
   onCreateFolder,
   onDeleteFolder,
-  refreshKey,
   previewCacheKey,
   layout,
   listClassName: _listClassName,
@@ -103,20 +80,18 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   nestedItemClassName,
   itemStyle,
   parentGroupName,
+  collapseGroupPath,
 }: CharacterSidebarItemWithChildrenProps) {
-  const selectedGroup = useModStore((s) => s.selectedGroup);
-  const expandedGroups = useModStore((s) => s.expandedGroups);
+  const isExpanded = useModStore((s) => s.expandedGroups.has(group.path));
+  const isPersistent = useModStore((s) => s.persistentGroups.has(group.path));
   const toggleExpandedGroup = useModStore((s) => s.toggleExpandedGroup);
   const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
-  const persistentGroups = useModStore((s) => s.persistentGroups);
-
-  const isExpanded = expandedGroups.has(group.path);
-  const isPersistent = persistentGroups.has(group.path);
   const shouldFetchSubGroups = isExpanded || (!!searchTerm && isPersistent);
-  const subGroups = useSubGroups(group, shouldFetchSubGroups, refreshKey);
+  const subGroups = useSubGroups(group, shouldFetchSubGroups);
   const isSelfMatch = group.name.toLowerCase().includes(searchTerm.toLowerCase());
   const shouldShowParent = !searchTerm || isSelfMatch;
   const showSubGroups = isExpanded || (!!searchTerm && isPersistent);
+  const resolvedItemStyle = useMemo(() => itemStyle?.(depth), [depth, itemStyle]);
 
   const handleChildItemClick = useCallback(
     (clickedGroup: FolderGroup, e: React.MouseEvent) => {
@@ -130,14 +105,14 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
 
   const handleItemClickInternal = useCallback(
     (clickedGroup: FolderGroup, e: React.MouseEvent) => {
-      if (e.ctrlKey && onCollapseSelf) {
-        onCollapseSelf();
+      if (e.ctrlKey && collapseGroupPath) {
+        toggleExpandedGroup(collapseGroupPath);
         return;
       }
 
       onItemClick(clickedGroup, e);
     },
-    [onCollapseSelf, onItemClick],
+    [collapseGroupPath, onItemClick, toggleExpandedGroup],
   );
 
   if (!shouldShowParent && !showSubGroups) {
@@ -150,7 +125,6 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
         <CharacterSidebarItem
           itemRefs={itemRefs}
           group={group}
-          isSelected={selectedGroup?.path === group.path}
           onClick={handleItemClickInternal}
           onDrop={onItemDrop}
           canAcceptDrop={canAcceptDrop}
@@ -163,7 +137,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
           itemClassName={itemClassName}
           selectedItemClassName={selectedItemClassName}
           nestedItemClassName={nestedItemClassName}
-          itemStyle={itemStyle?.(depth)}
+          itemStyle={resolvedItemStyle}
         />
       )}
       {showSubGroups &&
@@ -175,12 +149,11 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
             onItemClick={handleChildItemClick}
             onItemDrop={onItemDrop}
             canAcceptDrop={canAcceptDrop}
-            onCollapseSelf={() => toggleExpandedGroup(group.path)}
+            collapseGroupPath={group.path}
             depth={depth + 1}
             searchTerm={searchTerm}
             onCreateFolder={onCreateFolder}
             onDeleteFolder={onDeleteFolder}
-            refreshKey={refreshKey}
             previewCacheKey={previewCacheKey}
             layout={layout}
             listClassName={_listClassName}
@@ -205,7 +178,6 @@ export function CharacterSidebarContent({
   searchTerm,
   onCreateFolder,
   onDeleteFolder,
-  refreshKey,
   showSkeleton,
   previewCacheKey,
   layout,
@@ -234,7 +206,6 @@ export function CharacterSidebarContent({
               searchTerm={searchTerm}
               onCreateFolder={onCreateFolder}
               onDeleteFolder={onDeleteFolder}
-              refreshKey={refreshKey}
               layout={layout}
               previewCacheKey={previewCacheKey}
               listClassName={listClassName}
