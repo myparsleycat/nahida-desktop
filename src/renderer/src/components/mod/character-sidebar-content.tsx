@@ -104,14 +104,10 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   itemStyle,
   parentGroupName,
 }: CharacterSidebarItemWithChildrenProps) {
-  const selectedGroup = useModStore((s) => s.selectedGroup);
-  const expandedGroups = useModStore((s) => s.expandedGroups);
+  const isExpanded = useModStore((s) => s.expandedGroups.has(group.path));
+  const isPersistent = useModStore((s) => s.persistentGroups.has(group.path));
   const toggleExpandedGroup = useModStore((s) => s.toggleExpandedGroup);
   const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
-  const persistentGroups = useModStore((s) => s.persistentGroups);
-
-  const isExpanded = expandedGroups.has(group.path);
-  const isPersistent = persistentGroups.has(group.path);
   const shouldFetchSubGroups = isExpanded || (!!searchTerm && isPersistent);
   const subGroups = useSubGroups(group, shouldFetchSubGroups, refreshKey);
   const isSelfMatch = group.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -150,7 +146,6 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
         <CharacterSidebarItem
           itemRefs={itemRefs}
           group={group}
-          isSelected={selectedGroup?.path === group.path}
           onClick={handleItemClickInternal}
           onDrop={onItemDrop}
           canAcceptDrop={canAcceptDrop}

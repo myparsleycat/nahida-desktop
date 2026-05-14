@@ -27,7 +27,6 @@ import { CharacterSidebarItemRow } from "./character-sidebar-item-row";
 
 interface CharacterSidebarItemProps {
   group: FolderGroup;
-  isSelected: boolean;
   onClick: (group: FolderGroup, e: React.MouseEvent) => void;
   onDrop?: (group: FolderGroup, files: File[]) => void;
   canAcceptDrop?: (files: File[]) => boolean;
@@ -46,7 +45,6 @@ interface CharacterSidebarItemProps {
 
 export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   group,
-  isSelected,
   onClick,
   onDrop,
   onCreateFolder,
@@ -62,13 +60,11 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   previewCacheKey,
 }: CharacterSidebarItemProps) {
   const { t } = useTranslation();
-  const expandedGroups = useModStore((s) => s.expandedGroups);
-  const persistentGroups = useModStore((s) => s.persistentGroups);
+  const isSelected = useModStore((s) => s.selectedGroup?.path === group.path);
+  const isExpanded = useModStore((s) => s.expandedGroups.has(group.path));
+  const isPersistent = useModStore((s) => s.persistentGroups.has(group.path));
   const toggleExpandedGroup = useModStore((s) => s.toggleExpandedGroup);
   const togglePersistentGroup = useModStore((s) => s.togglePersistentGroup);
-
-  const isExpanded = expandedGroups.has(group.path);
-  const isPersistent = persistentGroups.has(group.path);
   const isGridLayout = layout === "grid";
 
   const ref = useRef<HTMLButtonElement>(null);
