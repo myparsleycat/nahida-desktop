@@ -2,7 +2,7 @@ import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
 import type { SidebarLayoutMode } from "@shared/mod";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { memo, useCallback } from "react";
+import { memo, useCallback, useMemo } from "react";
 import { CharacterSidebarItem, CharacterSidebarItemSkeleton } from "./character-sidebar-item";
 
 export interface CharacterSidebarContentProps {
@@ -57,7 +57,7 @@ interface CharacterSidebarItemWithChildrenProps {
   nestedItemClassName?: string;
   itemStyle?: (depth: number) => React.CSSProperties | undefined;
   parentGroupName?: string;
-  onCollapseSelf?: () => void;
+  collapseGroupPath?: string;
   previewCacheKey: number;
 }
 
@@ -67,7 +67,6 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   onItemClick,
   onItemDrop,
   canAcceptDrop,
-  onCollapseSelf,
   depth,
   searchTerm,
   onCreateFolder,
@@ -81,6 +80,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   nestedItemClassName,
   itemStyle,
   parentGroupName,
+  collapseGroupPath,
 }: CharacterSidebarItemWithChildrenProps) {
   const isExpanded = useModStore((s) => s.expandedGroups.has(group.path));
   const isPersistent = useModStore((s) => s.persistentGroups.has(group.path));
@@ -91,6 +91,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   const isSelfMatch = group.name.toLowerCase().includes(searchTerm.toLowerCase());
   const shouldShowParent = !searchTerm || isSelfMatch;
   const showSubGroups = isExpanded || (!!searchTerm && isPersistent);
+  const resolvedItemStyle = useMemo(() => itemStyle?.(depth), [depth, itemStyle]);
 
   const handleChildItemClick = useCallback(
     (clickedGroup: FolderGroup, e: React.MouseEvent) => {
@@ -104,14 +105,14 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
 
   const handleItemClickInternal = useCallback(
     (clickedGroup: FolderGroup, e: React.MouseEvent) => {
-      if (e.ctrlKey && onCollapseSelf) {
-        onCollapseSelf();
+      if (e.ctrlKey && collapseGroupPath) {
+        toggleExpandedGroup(collapseGroupPath);
         return;
       }
 
       onItemClick(clickedGroup, e);
     },
-    [onCollapseSelf, onItemClick],
+    [collapseGroupPath, onItemClick, toggleExpandedGroup],
   );
 
   if (!shouldShowParent && !showSubGroups) {
@@ -136,7 +137,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
           itemClassName={itemClassName}
           selectedItemClassName={selectedItemClassName}
           nestedItemClassName={nestedItemClassName}
-          itemStyle={itemStyle?.(depth)}
+          itemStyle={resolvedItemStyle}
         />
       )}
       {showSubGroups &&
@@ -148,7 +149,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
             onItemClick={handleChildItemClick}
             onItemDrop={onItemDrop}
             canAcceptDrop={canAcceptDrop}
-            onCollapseSelf={() => toggleExpandedGroup(group.path)}
+            collapseGroupPath={group.path}
             depth={depth + 1}
             searchTerm={searchTerm}
             onCreateFolder={onCreateFolder}
