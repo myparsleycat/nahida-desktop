@@ -372,10 +372,11 @@ export function useModMutations() {
         }) => {
             try {
                 await window.api.invoke("mod:rename", mod.path, newName);
-                if (groupPath) {
+                const currentGroupPath = groupPath ?? selectedGroup?.path;
+                if (currentGroupPath) {
                     const refreshedGroup = (await window.api.invoke(
                         "mod:getMods",
-                        groupPath,
+                        currentGroupPath,
                     )) as FolderGroup;
                     return refreshedGroup;
                 }
