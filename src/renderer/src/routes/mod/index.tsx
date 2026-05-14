@@ -51,7 +51,8 @@ function ModRouteContent() {
 
   const selectedGame = useModStore((s) => s.selectedGame);
   const setSelectedGame = useModStore((s) => s.setSelectedGame);
-  const selectedGroup = useModStore((s) => s.selectedGroup);
+  const selectedGroupName = useModStore((s) => s.selectedGroup?.name);
+  const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
   const setSelectedGroup = useModStore((s) => s.setSelectedGroup);
   const isCustomDownloadDialogOpen = useModStore((s) => s.isCustomDownloadDialogOpen);
   const setIsCustomDownloadDialogOpen = useModStore((s) => s.setIsCustomDownloadDialogOpen);
@@ -62,11 +63,10 @@ function ModRouteContent() {
 
   const { data: games = [] } = useGames();
   const { data: characters = [] } = useCharacters(selectedGame);
-  const selectedGroupData = selectedGroup ?? undefined;
 
   useModRefreshOnFocus(selectedGame, queryClient);
-  useDownloadCompletionHandler(selectedGame, selectedGroupData?.path, queryClient);
-  useModWatcherEvents(selectedGame, selectedGroupData?.path, queryClient);
+  useDownloadCompletionHandler(selectedGame, selectedGroupPath, queryClient);
+  useModWatcherEvents(selectedGame, selectedGroupPath, queryClient);
 
   const {
     isDragging,
@@ -78,7 +78,7 @@ function ModRouteContent() {
     confirmArchiveExtractDialog,
     keepArchiveRootDialog,
     closeArchiveExtractDialog,
-  } = useModDragDrop(selectedGroupData?.path, queryClient, selectedGame || "");
+  } = useModDragDrop(selectedGroupPath, queryClient, selectedGame || "");
 
   const initExpandedGroups = useModStore((s) => s.initExpandedGroups);
 
@@ -142,24 +142,24 @@ function ModRouteContent() {
 
   useEffect(() => {
     if (characters.length > 0) {
-      const isSelectedInTopLevel = selectedGroup
-        ? characters.some((g) => g.path === selectedGroup.path)
+      const isSelectedInTopLevel = selectedGroupPath
+        ? characters.some((g) => g.path === selectedGroupPath)
         : false;
-      const isSelectedSubOfTopLevel = selectedGroup
+      const isSelectedSubOfTopLevel = selectedGroupPath
         ? characters.some(
             (g) =>
-              selectedGroup.path.startsWith(`${g.path}\\`) ||
-              selectedGroup.path.startsWith(`${g.path}/`),
+              selectedGroupPath.startsWith(`${g.path}\\`) ||
+              selectedGroupPath.startsWith(`${g.path}/`),
           )
         : false;
 
-      if (selectedGroup && !isSelectedInTopLevel && !isSelectedSubOfTopLevel) {
+      if (selectedGroupPath && !isSelectedInTopLevel && !isSelectedSubOfTopLevel) {
         setSelectedGroup(null);
       }
     } else {
       setSelectedGroup(null);
     }
-  }, [characters, selectedGroup, setSelectedGroup]);
+  }, [characters, selectedGroupPath, setSelectedGroup]);
 
   useEffect(() => {
     if (selectedGame) {
@@ -168,10 +168,10 @@ function ModRouteContent() {
   }, [selectedGame]);
 
   useEffect(() => {
-    if (selectedGroupData?.path) {
-      window.api.invoke("mod:watchCharacter", selectedGroupData.path);
+    if (selectedGroupPath) {
+      window.api.invoke("mod:watchCharacter", selectedGroupPath);
     }
-  }, [selectedGroupData?.path]);
+  }, [selectedGroupPath]);
 
   return (
     <>
@@ -187,7 +187,7 @@ function ModRouteContent() {
           onDragOver={handleDragOver}
           onDrop={handleDrop}
         >
-          {selectedGroup && <ContentHeader />}
+          {selectedGroupPath && <ContentHeader />}
 
           <div className="relative flex flex-1 min-h-0 flex-col overflow-hidden">
             {viewMode === "grid" ? (
@@ -200,7 +200,7 @@ function ModRouteContent() {
               <div className="absolute flex-1 h-full inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm border-2 border-dashed border-primary">
                 <div className="text-center">
                   <p className="text-2xl font-bold">
-                    {t("page.mod.dad_section.title", { name: selectedGroup?.name })}
+                    {t("page.mod.dad_section.title", { name: selectedGroupName })}
                   </p>
                   <p className="text-sm text-muted-foreground mt-2">
                     {t("page.mod.dad_section.description")}
@@ -221,8 +221,8 @@ function ModRouteContent() {
       <CustomDownloadDialog
         open={isCustomDownloadDialogOpen}
         onOpenChange={setIsCustomDownloadDialogOpen}
-        groupName={selectedGroup?.name}
-        groupPath={selectedGroup?.path}
+        groupName={selectedGroupName}
+        groupPath={selectedGroupPath}
       />
 
       <AlertDialog
