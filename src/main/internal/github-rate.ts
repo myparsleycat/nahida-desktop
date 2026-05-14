@@ -11,13 +11,9 @@ type RateLimitApiResponse = {
 export class GitHubRateCoordinator {
     constructor(private readonly desktop: NahidaDesktop) {}
 
-    public async getRateState(): Promise<GitHubRateState | null> {
+    public async getRateState() {
         const row = await this.desktop.lib.db.appState.get(GITHUB_CORE_RATE_KEY);
-
-        if (!row?.value) {
-            return null;
-        }
-
+        if (!row?.value) return null;
         try {
             return JSON.parse(row.value) as GitHubRateState;
         } catch {
@@ -25,30 +21,21 @@ export class GitHubRateCoordinator {
         }
     }
 
-    public isRateLimited(rateState: GitHubRateState | null): boolean {
-        if (!rateState) {
-            return false;
-        }
-
+    public isRateLimited(rateState: GitHubRateState | null) {
+        if (!rateState) return false;
         return rateState.remaining <= 0 && rateState.reset * 1000 > Date.now();
     }
 
-    public async canUseGitHubApi(options?: {
-        refreshIfMissing?: boolean;
-    }): Promise<{ allowed: boolean; rateState: GitHubRateState | null }> {
-        let rateState = await this.getRateState();
-
-        if (!rateState && options?.refreshIfMissing) {
-            rateState = await this.refreshRateState();
+    public async canUseGitHubApi(options?: { refreshIfMissing?: boolean }) {
+        const rateState = await this.getRateState();
+        if (rateState || !options?.refreshIfMissing) {
+            return { allowed: !this.isRateLimited(rateState), rateState };
         }
-
-        return {
-            allowed: !this.isRateLimited(rateState),
-            rateState,
-        };
+        const refreshed = await this.refreshRateState();
+        return { allowed: !this.isRateLimited(refreshed), rateState: refreshed };
     }
 
-    public async refreshRateState(): Promise<GitHubRateState | null> {
+    public async refreshRateState() {
         try {
             const response = await this.desktop.httpService.fetcher(GITHUB_RATE_LIMIT_URL, {
                 method: "GET",
@@ -60,54 +47,26 @@ export class GitHubRateCoordinator {
             const data = (await response.json()) as RateLimitApiResponse;
             const state =
                 this.extractRateStateFromHeaders(response.headers) ??
-                this.normalizeRateState(data.rate ?? null);
-
-            if (state) {
-                await this.saveRateState(state);
-            }
-
+                normalizeRateState(data.rate ?? null);
+            if (state) await this.saveRateState(state);
             return state;
         } catch (error) {
             this.desktop.logger.warn(
                 `Failed to refresh GitHub rate state: ${String(error)}`,
                 "GitHubRateCoordinator",
             );
-            return await this.getRateState();
+            return this.getRateState();
         }
     }
 
-    public async captureFromResponse(response: Response): Promise<GitHubRateState | null> {
+    public async captureFromResponse(response: Response) {
         const state = this.extractRateStateFromHeaders(response.headers);
-        if (!state) {
-            return null;
-        }
-
+        if (!state) return null;
         await this.saveRateState(state);
         return state;
     }
 
-    private normalizeRateState(rate: Partial<GitHubRateState> | null): GitHubRateState | null {
-        if (
-            !rate ||
-            typeof rate.limit !== "number" ||
-            typeof rate.remaining !== "number" ||
-            typeof rate.reset !== "number" ||
-            typeof rate.used !== "number"
-        ) {
-            return null;
-        }
-
-        return {
-            limit: rate.limit,
-            remaining: rate.remaining,
-            reset: rate.reset,
-            used: rate.used,
-            resource: typeof rate.resource === "string" ? rate.resource : "core",
-            updatedAt: new Date().toISOString(),
-        };
-    }
-
-    private extractRateStateFromHeaders(headers: Headers): GitHubRateState | null {
+    private extractRateStateFromHeaders(headers: Headers) {
         const limit = Number(headers.get("x-ratelimit-limit"));
         const remaining = Number(headers.get("x-ratelimit-remaining"));
         const reset = Number(headers.get("x-ratelimit-reset"));
@@ -134,11 +93,31 @@ export class GitHubRateCoordinator {
     }
 
     private async saveRateState(rateState: GitHubRateState) {
-        const updatedAt = new Date().toISOString();
         await this.desktop.lib.db.appState.upsert(
             GITHUB_CORE_RATE_KEY,
             JSON.stringify(rateState),
-            updatedAt,
+            new Date().toISOString(),
         );
     }
+}
+
+function normalizeRateState(rate: Partial<GitHubRateState> | null) {
+    if (
+        !rate ||
+        typeof rate.limit !== "number" ||
+        typeof rate.remaining !== "number" ||
+        typeof rate.reset !== "number" ||
+        typeof rate.used !== "number"
+    ) {
+        return null;
+    }
+
+    return {
+        limit: rate.limit,
+        remaining: rate.remaining,
+        reset: rate.reset,
+        used: rate.used,
+        resource: typeof rate.resource === "string" ? rate.resource : "core",
+        updatedAt: new Date().toISOString(),
+    };
 }
