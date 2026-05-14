@@ -127,12 +127,6 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
     });
   }, [renameDialogState]);
 
-  useEffect(() => {
-    return () => {
-      scheduleModelViewerCleanup(modelViewerState?.source ?? null);
-    };
-  }, [modelViewerState]);
-
   const handlePastePreview = async (mod: ModInfo, groupPath = selectedGroupPath) => {
     await pasteModPreview({
       modPath: mod.path,
