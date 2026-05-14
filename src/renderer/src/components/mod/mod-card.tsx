@@ -1,25 +1,22 @@
 import { Badge } from "@renderer/components/ui/badge";
 import { Separator } from "@renderer/components/ui/separator";
-import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
+import type { ModActionApi } from "@renderer/hooks/use-mod-actions";
 import { cn } from "@renderer/lib/utils";
 import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
 import { formatDate, formatSize } from "@shared/utils";
-import { useRouteContext } from "@tanstack/react-router";
 import { CalendarIcon, FolderIcon } from "lucide-react";
-import { memo, useCallback, useRef, useState } from "react";
+import { memo, useCallback, useRef } from "react";
 import { ModCardHeader } from "./mod-card-header";
 import { ModContextMenu } from "./mod-context-menu";
-import { ModFixRunnerDialogs } from "./mod-fix-runner-dialogs";
 import { ModIniList } from "./mod-ini-list";
 import { ModPreviewContainer } from "./mod-preview-container";
-import { pasteModPreview } from "./paste-preview";
-import { TextureResizeDialog } from "./texture-resize-dialog";
 import { getModColorClass } from "./utils";
 
 interface ModCardProps {
   mod: ModInfo;
   selectedGroupPath?: string;
+  actions: ModActionApi;
   onToggle: (mod: ModInfo, event?: React.MouseEvent) => void;
   onToggleKeyUpdate: (
     modPath: string,
@@ -33,10 +30,10 @@ interface ModCardProps {
 export const ModCard = memo(function ModCard({
   mod,
   selectedGroupPath,
+  actions,
   onToggle,
   onToggleKeyUpdate,
 }: ModCardProps) {
-  const { queryClient } = useRouteContext({ from: "__root__" });
   const setIniListExpanded = useModStore((s) => s.setIniListExpanded);
   const isIniListExpanded = useModStore((s) =>
     selectedGroupPath
@@ -44,11 +41,6 @@ export const ModCard = memo(function ModCard({
       : true,
   );
   const mouseDownTargetRef = useRef<EventTarget | null>(null);
-  const [showTextureResizeDialog, setShowTextureResizeDialog] = useState(false);
-  const runner = useModFixRunner(mod.path);
-
-  const handlePaste = () => pasteModPreview({ modPath: mod.path, selectedGroupPath, queryClient });
-  const handleOpenTextureResizeDialog = () => setShowTextureResizeDialog(true);
   const handleIniListExpandedChange = useCallback(() => {
     if (!selectedGroupPath) {
       return;
@@ -59,13 +51,7 @@ export const ModCard = memo(function ModCard({
 
   return (
     <>
-      <ModContextMenu
-        mod={mod}
-        selectedGroupPath={selectedGroupPath}
-        runner={runner}
-        onOpenTextureResizeDialog={handleOpenTextureResizeDialog}
-        onPaste={handlePaste}
-      >
+      <ModContextMenu mod={mod} actions={actions}>
         <div
           className={cn(
             "rounded-sm overflow-hidden border-border/75 cursor-pointer p-1 h-100 relative hover:shadow-lg transition-shadow duration-150",
@@ -96,21 +82,13 @@ export const ModCard = memo(function ModCard({
             </div>
           )}
 
-          <ModCardHeader
-            mod={mod}
-            selectedGroupPath={selectedGroupPath}
-            runner={runner}
-            onOpenTextureResizeDialog={(e) => {
-              e.stopPropagation();
-              handleOpenTextureResizeDialog();
-            }}
-          />
+          <ModCardHeader mod={mod} actions={actions} />
 
           <div className="flex flex-row h-[calc(100%-2rem)] space-x-2 relative z-10">
             <ModPreviewContainer
               mod={mod}
-              selectedGroupPath={selectedGroupPath}
-              onPaste={handlePaste}
+              onDeletePreview={() => actions.openDeletePreview(mod)}
+              onPaste={() => actions.openPastePreview(mod)}
             />
 
             {mod.inis.length > 0 && (
@@ -156,14 +134,6 @@ export const ModCard = memo(function ModCard({
           </div>
         </div>
       </ModContextMenu>
-
-      <TextureResizeDialog
-        open={showTextureResizeDialog}
-        onOpenChange={setShowTextureResizeDialog}
-        modPath={mod.path}
-        modName={mod.name}
-      />
-      <ModFixRunnerDialogs runner={runner} />
     </>
   );
 });

@@ -2,6 +2,7 @@ import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
 import { useFilteredMods } from "@renderer/hooks/use-filtered-mods";
+import { useModActions } from "@renderer/hooks/use-mod-actions";
 import { useModGroup } from "@renderer/hooks/use-mod-data";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
@@ -22,6 +23,7 @@ export function ModList(_props: ModListProps) {
 
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
   const { data: activeGroup, isPlaceholderData, isPending } = useModGroup(selectedGroupPath);
+  const actions = useModActions(selectedGroupPath);
 
   const { toggleModMutation, exclusiveToggleModMutation } = useModMutations();
 
@@ -76,7 +78,7 @@ export function ModList(_props: ModListProps) {
                     <ModListRow
                       key={getModRenderKey(mod)}
                       mod={mod}
-                      selectedGroupPath={selectedGroupPath}
+                      actions={actions}
                       handleToggle={handleToggle}
                     />
                   ))}
@@ -86,6 +88,7 @@ export function ModList(_props: ModListProps) {
           </ScrollArea>
         </>
       )}
+      {actions.overlays}
     </div>
   );
 }

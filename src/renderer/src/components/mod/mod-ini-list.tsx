@@ -91,9 +91,9 @@ export function ModIniList({ mod, expanded, onToggleKeyUpdate }: ModIniListProps
           className={cn(
             "p-1.5 rounded space-y-2 overflow-hidden transition-all duration-200",
             expanded ? "w-42.5" : "w-0 p-0",
-            "backdrop-blur-xl bg-background/10 dark:bg-background/10",
+            "bg-background/10 dark:bg-background/10",
           )}
-          style={{ transform: "translateZ(0)", willChange: "backdrop-filter" }}
+          // style={{ transform: "translateZ(0)", willChange: "backdrop-filter" }}
         >
           {mod.inis.map((ini, idx) => (
             <div key={ini.path}>

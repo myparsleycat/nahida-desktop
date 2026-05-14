@@ -2,6 +2,7 @@ import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
 import { useFilteredMods } from "@renderer/hooks/use-filtered-mods";
+import { useModActions } from "@renderer/hooks/use-mod-actions";
 import { useModGroup } from "@renderer/hooks/use-mod-data";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
@@ -28,6 +29,7 @@ export function ModGrid(_props: ModGridProps) {
 
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
   const { data: activeGroup, isPlaceholderData, isPending } = useModGroup(selectedGroupPath);
+  const actions = useModActions(selectedGroupPath);
 
   const { toggleModMutation, exclusiveToggleModMutation, updateToggleKeyMutation } =
     useModMutations();
@@ -185,6 +187,7 @@ export function ModGrid(_props: ModGridProps) {
                   key={getModRenderKey(mod)}
                   mod={mod}
                   selectedGroupPath={selectedGroupPath}
+                  actions={actions}
                   onToggle={handleToggle}
                   onToggleKeyUpdate={handleToggleKeyUpdate}
                 />
@@ -228,6 +231,7 @@ export function ModGrid(_props: ModGridProps) {
                           key={getModRenderKey(mod)}
                           mod={mod}
                           selectedGroupPath={selectedGroupPath}
+                          actions={actions}
                           onToggle={handleToggle}
                           onToggleKeyUpdate={handleToggleKeyUpdate}
                         />
@@ -240,6 +244,7 @@ export function ModGrid(_props: ModGridProps) {
           )}
         </div>
       </ScrollArea>
+      {actions.overlays}
     </div>
   );
 }
