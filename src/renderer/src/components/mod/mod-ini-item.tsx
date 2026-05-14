@@ -1,30 +1,15 @@
 import { Button } from "@renderer/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@renderer/components/ui/dialog";
 import { Kbd } from "@renderer/components/ui/kbd";
 import { cn } from "@renderer/lib/utils";
-import type { ModInfo, ModIni, ToggleKey } from "@renderer/types/mod";
+import type { ModIni, ToggleKey } from "@renderer/types/mod";
 import { formatKeyLabel } from "@shared/key-formatter";
 import { FileCogIcon, PlusIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
-import { KeyRecorder } from "./key-recorder";
-
-interface ActiveKeySetting {
-  id: string;
-  label: string;
-  value: string;
-  otherKeys: string[];
-  onSave: (newValue: string) => void;
-}
+import { type ReactNode, memo, useMemo } from "react";
 
 interface KeySettingRequest {
   id: string;
   label: string;
+  sectionName: string;
   value: string;
   otherKeys: string[];
 }
@@ -36,58 +21,29 @@ interface ModToggleKeyItemProps {
 }
 
 interface ModIniItemProps {
-  mod: ModInfo;
   ini: ModIni;
-  onToggleKeyUpdate: (
-    modPath: string,
-    iniFileName: string,
-    sectionName: string,
-    variable: string,
-    value: string,
-  ) => void;
+  otherKeysById: Record<string, string[]>;
+  onOpenKeySetting: (setting: KeySettingRequest) => void;
 }
 
 function KeyDisplay({ keys }: { keys: string }) {
-  return (
-    <div className="flex flex-wrap items-center gap-1">
-      {keys
+  const labels = useMemo(
+    () =>
+      keys
         .split(" ")
         .map((k) => formatKeyLabel(k))
-        .filter((k): k is string => k !== null)
-        .map((label, idx) => (
-          <Kbd key={idx.toString()} className="text-xs">
-            {label}
-          </Kbd>
-        ))}
-    </div>
+        .filter((k): k is string => k !== null),
+    [keys],
   );
-}
 
-function KeySettingDialog({
-  activeKeySetting,
-  onOpenChange,
-}: {
-  activeKeySetting: ActiveKeySetting | null;
-  onOpenChange: (open: boolean) => void;
-}) {
   return (
-    <Dialog open={activeKeySetting !== null} onOpenChange={onOpenChange}>
-      <DialogContent onClick={(e) => e.stopPropagation()}>
-        <DialogHeader>
-          <DialogTitle className="capitalize">{activeKeySetting?.label ?? ""}</DialogTitle>
-          <DialogDescription>Press the key combination to set</DialogDescription>
-        </DialogHeader>
-        <KeyRecorder
-          key={activeKeySetting?.id ?? "empty"}
-          defaultValue={activeKeySetting?.value ?? ""}
-          otherKeys={activeKeySetting?.otherKeys ?? []}
-          onSave={(newValue) => {
-            activeKeySetting?.onSave(newValue);
-            onOpenChange(false);
-          }}
-        />
-      </DialogContent>
-    </Dialog>
+    <div className="flex flex-wrap items-center gap-1">
+      {labels.map((label, idx) => (
+        <Kbd key={`${keys}:${idx.toString()}`} className="text-xs">
+          {label}
+        </Kbd>
+      ))}
+    </div>
   );
 }
 
@@ -136,7 +92,11 @@ function KeySettingTrigger({
   return trigger;
 }
 
-function ModToggleKeyItem({ toggleKey, otherKeys, onOpenKeySetting }: ModToggleKeyItemProps) {
+const ModToggleKeyItem = memo(function ModToggleKeyItem({
+  toggleKey,
+  otherKeys,
+  onOpenKeySetting,
+}: ModToggleKeyItemProps) {
   return (
     <div className="space-y-1 rounded-lg shadow-sm p-1 bg-foreground/5">
       <div className="p-0 h-4.5 grid grid-cols-[1.5rem_1fr]">
@@ -154,6 +114,7 @@ function ModToggleKeyItem({ toggleKey, otherKeys, onOpenKeySetting }: ModToggleK
             onOpenKeySetting({
               id: `${toggleKey.sectionName}:key`,
               label: "key",
+              sectionName: toggleKey.sectionName,
               value: toggleKey.key ?? "",
               otherKeys,
             })
@@ -167,6 +128,7 @@ function ModToggleKeyItem({ toggleKey, otherKeys, onOpenKeySetting }: ModToggleK
             onOpenKeySetting({
               id: `${toggleKey.sectionName}:key`,
               label: "key",
+              sectionName: toggleKey.sectionName,
               value: "",
               otherKeys,
             })
@@ -191,6 +153,7 @@ function ModToggleKeyItem({ toggleKey, otherKeys, onOpenKeySetting }: ModToggleK
             onOpenKeySetting({
               id: `${toggleKey.sectionName}:back`,
               label: "back",
+              sectionName: toggleKey.sectionName,
               value: toggleKey.back ?? "",
               otherKeys,
             })
@@ -204,6 +167,7 @@ function ModToggleKeyItem({ toggleKey, otherKeys, onOpenKeySetting }: ModToggleK
             onOpenKeySetting({
               id: `${toggleKey.sectionName}:back`,
               label: "back",
+              sectionName: toggleKey.sectionName,
               value: "",
               otherKeys,
             })
@@ -225,22 +189,15 @@ function ModToggleKeyItem({ toggleKey, otherKeys, onOpenKeySetting }: ModToggleK
       )}
     </div>
   );
-}
+});
 
-export function ModIniItem({ mod, ini, onToggleKeyUpdate }: ModIniItemProps) {
-  const [activeKeySetting, setActiveKeySetting] = useState<ActiveKeySetting | null>(null);
-  const otherKeys = mod.inis.flatMap((i) =>
-    i.toggleKeys.map((t) => ({ key: t.key, sectionName: t.sectionName, path: i.path })),
-  );
-
+export const ModIniItem = memo(function ModIniItem({
+  ini,
+  otherKeysById,
+  onOpenKeySetting,
+}: ModIniItemProps) {
   return (
     <div className="space-y-1 text-[13px]">
-      <KeySettingDialog
-        activeKeySetting={activeKeySetting}
-        onOpenChange={(open) => {
-          if (!open) setActiveKeySetting(null);
-        }}
-      />
       <div className="flex items-center justify-between gap-1">
         <p className="truncate opacity-80 whitespace-normal" title={ini.name}>
           {ini.name}
@@ -262,30 +219,16 @@ export function ModIniItem({ mod, ini, onToggleKeyUpdate }: ModIniItemProps) {
         <div className="space-y-2.5">
           {ini.toggleKeys.map((toggleKey, idx) => (
             <ModToggleKeyItem
-              key={idx.toString()}
+              key={`${ini.path}:${toggleKey.sectionName}:${idx.toString()}`}
               toggleKey={toggleKey}
-              otherKeys={otherKeys
-                .filter((o) => o.sectionName !== toggleKey.sectionName || o.path !== ini.path)
-                .map((o) => o.key)
-                .filter((k): k is string => !!k)}
-              onOpenKeySetting={(setting) =>
-                setActiveKeySetting({
-                  ...setting,
-                  id: `${ini.path}:${setting.id}`,
-                  onSave: (newValue) =>
-                    onToggleKeyUpdate(
-                      mod.path,
-                      ini.path,
-                      toggleKey.sectionName,
-                      setting.label,
-                      newValue,
-                    ),
-                })
+              otherKeys={
+                otherKeysById[`${ini.path}:${toggleKey.sectionName}:${idx.toString()}`] ?? []
               }
+              onOpenKeySetting={onOpenKeySetting}
             />
           ))}
         </div>
       )}
     </div>
   );
-}
+});
