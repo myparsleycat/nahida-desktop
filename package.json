@@ -14,7 +14,7 @@
     "build:native-static-glb": "cd native/static-glb && pnpm install && pnpm run build",
     "build:fs": "cd native/fs && pnpm install && pnpm run build",
     "build:native": "pnpm run build:dll-injector && pnpm run build:extractor && pnpm run build:mod-manager && pnpm run build:mod-manager-tools && pnpm run build:utils && pnpm run build:native-static-glb && pnpm run build:fs",
-    "lint": "oxlint",
+    "lint": "oxlint --type-aware --type-check",
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
