@@ -26,6 +26,7 @@ import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
 import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import type { ModInfo } from "@renderer/types/mod";
+import type { QueryClient } from "@tanstack/react-query";
 import { useRouteContext } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -81,6 +82,13 @@ export interface ModActionApi {
   runTool: (mod: ModInfo, toolId: string) => Promise<void>;
 }
 
+function invalidateModGroup(
+  queryClient: QueryClient,
+  groupPath?: string,
+) {
+  return queryClient.invalidateQueries({ queryKey: ["modGroup", groupPath] });
+}
+
 export function useModActions(selectedGroupPath?: string): ModActionApi {
   const { t } = useTranslation();
   const { queryClient } = useRouteContext({ from: "__root__" });
@@ -89,41 +97,46 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
   const runner = useModFixRunner();
 
   const [textureResizeMod, setTextureResizeMod] = useState<ModInfo | null>(null);
-  const [renameMod, setRenameMod] = useState<ModInfo | null>(null);
+  const [renameDialogState, setRenameDialogState] = useState<{
+    groupPath?: string;
+    mod: ModInfo;
+  } | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const [pastePreviewMod, setPastePreviewMod] = useState<ModInfo | null>(null);
+  const [pastePreviewState, setPastePreviewState] = useState<{
+    groupPath?: string;
+    mod: ModInfo;
+  } | null>(null);
   const [convertingModelPath, setConvertingModelPath] = useState<string | null>(null);
-  const [modelViewerMod, setModelViewerMod] = useState<ModInfo | null>(null);
-  const [modelViewerSource, setModelViewerSource] = useState<ModelViewerDialogSource | null>(null);
+  const [modelViewerState, setModelViewerState] = useState<{
+    groupPath?: string;
+    mod: ModInfo;
+    source: ModelViewerDialogSource;
+  } | null>(null);
   const [showModelViewer, setShowModelViewer] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  const invalidateModGroup = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
-  };
-
   useEffect(() => {
-    if (!renameMod) {
+    if (!renameDialogState) {
       return;
     }
 
-    setRenameValue(getRenameDefaultValue(renameMod.name));
+    setRenameValue(getRenameDefaultValue(renameDialogState.mod.name));
     queueMicrotask(() => {
       renameInputRef.current?.focus();
       renameInputRef.current?.select();
     });
-  }, [renameMod]);
+  }, [renameDialogState]);
 
   useEffect(() => {
     return () => {
-      scheduleModelViewerCleanup(modelViewerSource);
+      scheduleModelViewerCleanup(modelViewerState?.source ?? null);
     };
-  }, [modelViewerSource]);
+  }, [modelViewerState]);
 
-  const handlePastePreview = async (mod: ModInfo) => {
+  const handlePastePreview = async (mod: ModInfo, groupPath = selectedGroupPath) => {
     await pasteModPreview({
       modPath: mod.path,
-      selectedGroupPath,
+      selectedGroupPath: groupPath,
       queryClient,
     });
   };
@@ -133,7 +146,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
       path: mod.path,
       title: t("page.mod.dialog.delete-mod.title"),
       description: t("page.mod.dialog.delete-mod.description"),
-      onSuccess: invalidateModGroup,
+      onSuccess: () => invalidateModGroup(queryClient, selectedGroupPath),
     });
   };
 
@@ -146,17 +159,17 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
       path: mod.preview,
       title: t("page.mod.dialog.delete-preview.title"),
       description: t("page.mod.dialog.delete-preview.description", { name: mod.name }),
-      onSuccess: invalidateModGroup,
+      onSuccess: () => invalidateModGroup(queryClient, selectedGroupPath),
     });
   };
 
   const openPastePreview = (mod: ModInfo) => {
     if (mod.preview) {
-      setPastePreviewMod(mod);
+      setPastePreviewState({ mod, groupPath: selectedGroupPath });
       return;
     }
 
-    void handlePastePreview(mod);
+    void handlePastePreview(mod, selectedGroupPath);
   };
 
   const openModelViewer = async (mod: ModInfo) => {
@@ -167,28 +180,30 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
     setConvertingModelPath(mod.path);
     try {
       const result = await window.api.invoke("tools:convertStaticGlbForViewer", mod.path);
-      setModelViewerMod(mod);
-      setModelViewerSource(
-        result.mode === "variant-set"
-          ? {
-              mode: "variant-set",
-              artifactRoot: result.artifactRoot,
-              manifestPath: result.manifestPath,
-              modPath: mod.path,
-              manifest: result.manifest,
-              memorySessionId: result.memorySessionId,
-              defaultGlbPath: result.defaultGlbPath,
-              activeGlbPath: result.activeGlbPath,
-              name: result.name,
-            }
-          : {
-              mode: "single",
-              glbPath: result.glbPath,
-              memorySessionId: result.memorySessionId,
-              modPath: mod.path,
-              name: result.name,
-            },
-      );
+      setModelViewerState({
+        mod,
+        groupPath: selectedGroupPath,
+        source:
+          result.mode === "variant-set"
+            ? {
+                mode: "variant-set",
+                artifactRoot: result.artifactRoot,
+                manifestPath: result.manifestPath,
+                modPath: mod.path,
+                manifest: result.manifest,
+                memorySessionId: result.memorySessionId,
+                defaultGlbPath: result.defaultGlbPath,
+                activeGlbPath: result.activeGlbPath,
+                name: result.name,
+              }
+            : {
+                mode: "single",
+                glbPath: result.glbPath,
+                memorySessionId: result.memorySessionId,
+                modPath: mod.path,
+                name: result.name,
+              },
+      });
       setShowModelViewer(true);
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : String(error);
@@ -212,7 +227,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
   const handleRenameSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!renameMod) {
+    if (!renameDialogState) {
       return;
     }
 
@@ -223,8 +238,12 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
     }
 
     try {
-      await renameModMutation.mutateAsync({ mod: renameMod, newName: nextName });
-      setRenameMod(null);
+      await renameModMutation.mutateAsync({
+        mod: renameDialogState.mod,
+        newName: nextName,
+        groupPath: renameDialogState.groupPath,
+      });
+      setRenameDialogState(null);
     } catch {
       return;
     }
@@ -233,15 +252,15 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
   const overlays = (
     <>
       <AlertDialog
-        open={pastePreviewMod !== null}
-        onOpenChange={(open) => !open && setPastePreviewMod(null)}
+        open={pastePreviewState !== null}
+        onOpenChange={(open) => !open && setPastePreviewState(null)}
       >
         <AlertDialogContent onClick={(event) => event.stopPropagation()}>
           <AlertDialogHeader>
             <AlertDialogTitle>{t("page.mod.dialog.overwrite-preview.title")}</AlertDialogTitle>
             <AlertDialogDescription>
               {t("page.mod.dialog.overwrite-preview.description", {
-                name: pastePreviewMod?.name ?? "",
+                name: pastePreviewState?.mod.name ?? "",
               })}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -249,12 +268,12 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
             <AlertDialogCancel>{t("g.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (!pastePreviewMod) {
+                if (!pastePreviewState) {
                   return;
                 }
 
-                void handlePastePreview(pastePreviewMod);
-                setPastePreviewMod(null);
+                void handlePastePreview(pastePreviewState.mod, pastePreviewState.groupPath);
+                setPastePreviewState(null);
               }}
             >
               {t("page.mod.dialog.overwrite-preview.confirm")}
@@ -263,7 +282,10 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={renameMod !== null} onOpenChange={(open) => !open && setRenameMod(null)}>
+      <Dialog
+        open={renameDialogState !== null}
+        onOpenChange={(open) => !open && setRenameDialogState(null)}
+      >
         <DialogContent aria-describedby={undefined} onClick={(event) => event.stopPropagation()}>
           <DialogHeader>
             <DialogTitle>{t("page.mod.dialog.rename-mod.title")}</DialogTitle>
@@ -282,7 +304,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setRenameMod(null)}
+                onClick={() => setRenameDialogState(null)}
                 disabled={renameModMutation.isPending}
               >
                 {t("g.cancel")}
@@ -307,14 +329,13 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
         onOpenChange={(open) => {
           setShowModelViewer(open);
           if (!open) {
-            scheduleModelViewerCleanup(modelViewerSource);
-            setModelViewerSource(null);
-            setModelViewerMod(null);
+            scheduleModelViewerCleanup(modelViewerState?.source ?? null);
+            setModelViewerState(null);
           }
         }}
-        source={modelViewerSource}
-        existingPreviewPath={modelViewerMod?.preview}
-        onPreviewSaved={invalidateModGroup}
+        source={modelViewerState?.source ?? null}
+        existingPreviewPath={modelViewerState?.mod.preview}
+        onPreviewSaved={() => invalidateModGroup(queryClient, modelViewerState?.groupPath)}
       />
 
       {confirmTrashDialog}
@@ -330,7 +351,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
     openDeletePreview,
     openModelViewer,
     openPastePreview,
-    openRenameDialog: (mod) => setRenameMod(mod),
+    openRenameDialog: (mod) => setRenameDialogState({ mod, groupPath: selectedGroupPath }),
     openTextureResizeDialog: (mod) => setTextureResizeMod(mod),
     openWuwaFixer: async (mod) => {
       await runner.handleOpenWuwaFixer(mod.path);
