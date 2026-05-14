@@ -25,7 +25,6 @@ import {
   useModRefreshOnFocus,
   useModWatcherEvents,
 } from "@renderer/hooks/use-mod-events";
-import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { modStore, useModStore } from "@renderer/store/mod";
 import type { ResolvedArchiveExtractPathMode } from "@shared/mod";
@@ -68,7 +67,6 @@ function ModRouteContent() {
   useModRefreshOnFocus(selectedGame, queryClient);
   useDownloadCompletionHandler(selectedGame, selectedGroupData?.path, queryClient);
   useModWatcherEvents(selectedGame, selectedGroupData?.path, queryClient);
-  useModShortcuts();
 
   const {
     isDragging,

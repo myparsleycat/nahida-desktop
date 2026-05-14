@@ -4,6 +4,7 @@ import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
 import { useFilteredMods } from "@renderer/hooks/use-filtered-mods";
 import { useModGroup } from "@renderer/hooks/use-mod-data";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
+import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
 import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
 import { useCallback } from "react";
@@ -25,6 +26,7 @@ export function ModList(_props: ModListProps) {
   const { toggleModMutation, exclusiveToggleModMutation } = useModMutations();
 
   const mods = useFilteredMods(activeGroup?.mods || [], searchQuery);
+  useModShortcuts(searchQuery, mods);
   const getModRenderKey = useCallback(
     (mod: ModInfo) => `${selectedGroupPath ?? ""}::${mod.path}`,
     [selectedGroupPath],

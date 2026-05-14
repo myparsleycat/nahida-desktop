@@ -4,6 +4,7 @@ import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
 import { useFilteredMods } from "@renderer/hooks/use-filtered-mods";
 import { useModGroup } from "@renderer/hooks/use-mod-data";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
+import { useModShortcuts } from "@renderer/hooks/use-mod-shortcuts";
 import { useModGridLayoutSettings, useVirtualizationSettings } from "@renderer/hooks/use-settings";
 import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
@@ -32,6 +33,7 @@ export function ModGrid(_props: ModGridProps) {
     useModMutations();
 
   const mods = useFilteredMods(activeGroup?.mods || [], searchQuery);
+  useModShortcuts(searchQuery, mods);
   const isLoading = isPending || isPlaceholderData;
   const showSkeleton = useDelayedSkeleton(isLoading);
 
