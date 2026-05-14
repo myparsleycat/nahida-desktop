@@ -42,13 +42,14 @@ export function ModIniList({ mod, expanded, onToggleKeyUpdate }: ModIniListProps
         path: ini.path,
         sectionName: toggleKey.sectionName,
         key: toggleKey.key,
+        back: toggleKey.back,
       })),
     );
 
     return entries.reduce<Record<string, string[]>>((acc, entry) => {
       acc[entry.id] = entries
         .filter((other) => other.sectionName !== entry.sectionName || other.path !== entry.path)
-        .map((other) => other.key)
+        .flatMap((other) => [other.key, other.back])
         .filter((key): key is string => !!key);
       return acc;
     }, {});
