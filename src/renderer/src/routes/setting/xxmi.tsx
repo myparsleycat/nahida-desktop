@@ -1,6 +1,5 @@
 import { XXMIImporters } from "@renderer/components/setting/xxmi/xxmi-importers";
 import { XXMIPath } from "@renderer/components/setting/xxmi/xxmi-path";
-import { WindowsOnlyRoute } from "@renderer/components/windows-only-route";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 
@@ -13,11 +12,7 @@ import type { IpcHandlers } from "@shared/types";
 export type XXMIData = Awaited<ReturnType<IpcHandlers["xxmi:getXXMIData"]>>;
 
 function RouteComponent() {
-  return (
-    <WindowsOnlyRoute fallbackTo="/setting/gen">
-      <XXMIRouteContent />
-    </WindowsOnlyRoute>
-  );
+  return <XXMIRouteContent />;
 }
 
 function XXMIRouteContent() {

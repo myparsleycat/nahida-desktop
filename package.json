@@ -4,6 +4,9 @@
   "description": "Native app for nahida.live",
   "homepage": "https://nahida.live",
   "author": "nahida.live",
+  "os": [
+    "win32"
+  ],
   "main": "./out/main/index.js",
   "scripts": {
     "build:dll-injector": "pnpm --dir native/dll-injector run build",

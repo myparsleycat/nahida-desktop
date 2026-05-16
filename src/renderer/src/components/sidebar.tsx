@@ -2,7 +2,6 @@ import { useAuth } from "@renderer/hooks/use-auth";
 import { cn } from "@renderer/lib/utils";
 import { viewStore } from "@renderer/store/drive";
 import { useGlobalStore } from "@renderer/store/global";
-import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import { getAggregateTransferProgress } from "@shared/transfer-progress";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
@@ -42,7 +41,6 @@ export function Sidebar({ className }: { className?: string }) {
   const appStatus = useGlobalStore((state) => state.appStatus);
   const transfers = useGlobalStore((state) => state.transfers);
   const { session } = useAuth();
-  const hasWindowsDesktopFeatures = supportsWindowsDesktopFeatures(appStatus?.platform);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -161,27 +159,25 @@ export function Sidebar({ className }: { className?: string }) {
 
           <Separator />
 
-          {hasWindowsDesktopFeatures && (
-            <Tooltip disableHoverableContent={true}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-lg"
-                  className={getNavButtonClassName(isModPage)}
-                  aria-current={isModPage ? "page" : undefined}
-                  onPointerDown={handlePointerDown}
-                  onClick={() => {
-                    navi({ to: "/mod" });
-                  }}
-                >
-                  <GamepadIcon className={cn(iconSize)} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right" hideWhenDetached={true}>
-                {t("page.mod.title")}
-              </TooltipContent>
-            </Tooltip>
-          )}
+          <Tooltip disableHoverableContent={true}>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-lg"
+                className={getNavButtonClassName(isModPage)}
+                aria-current={isModPage ? "page" : undefined}
+                onPointerDown={handlePointerDown}
+                onClick={() => {
+                  navi({ to: "/mod" });
+                }}
+              >
+                <GamepadIcon className={cn(iconSize)} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right" hideWhenDetached={true}>
+              {t("page.mod.title")}
+            </TooltipContent>
+          </Tooltip>
 
           {appStatus?.isDev && (
             <Tooltip disableHoverableContent={true}>
@@ -205,27 +201,25 @@ export function Sidebar({ className }: { className?: string }) {
             </Tooltip>
           )}
 
-          {hasWindowsDesktopFeatures && (
-            <Tooltip disableHoverableContent={true}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-lg"
-                  className={getNavButtonClassName(isToolsPage)}
-                  aria-current={isToolsPage ? "page" : undefined}
-                  onPointerDown={handlePointerDown}
-                  onClick={() => {
-                    navi({ to: "/tools" });
-                  }}
-                >
-                  <WrenchIcon className={cn(iconSize)} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right" hideWhenDetached={true}>
-                Tools
-              </TooltipContent>
-            </Tooltip>
-          )}
+          <Tooltip disableHoverableContent={true}>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-lg"
+                className={getNavButtonClassName(isToolsPage)}
+                aria-current={isToolsPage ? "page" : undefined}
+                onPointerDown={handlePointerDown}
+                onClick={() => {
+                  navi({ to: "/tools" });
+                }}
+              >
+                <WrenchIcon className={cn(iconSize)} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right" hideWhenDetached={true}>
+              Tools
+            </TooltipContent>
+          </Tooltip>
 
           <Separator orientation="horizontal" />
 

@@ -170,50 +170,38 @@ export class ScriptExecutor {
             let child: ChildProcess;
 
             try {
-                if (process.platform === "win32") {
-                    if (windowsExecutionMode === "direct") {
-                        if (type === "python") {
-                            const command = `python -u ${[filePath, ...args]
-                                .map((arg) => this.quoteWindowsArg(arg))
-                                .join(" ")}`;
+                if (windowsExecutionMode === "direct") {
+                    if (type === "python") {
+                        const command = `python -u ${[filePath, ...args]
+                            .map((arg) => this.quoteWindowsArg(arg))
+                            .join(" ")}`;
 
-                            child = spawn(
-                                "cmd.exe",
-                                ["/d", "/s", "/c", `chcp 65001 > nul && ${command}`],
-                                {
-                                    windowsHide: true,
-                                    cwd,
-                                    env,
-                                    shell: false,
-                                },
-                            );
-                        } else {
-                            child = spawn(filePath, args, {
+                        child = spawn(
+                            "cmd.exe",
+                            ["/d", "/s", "/c", `chcp 65001 > nul && ${command}`],
+                            {
                                 windowsHide: true,
                                 cwd,
                                 env,
                                 shell: false,
-                            });
-                        }
+                            },
+                        );
                     } else {
-                        const command = this.buildLegacyWindowsCommand(filePath, type, args);
-                        child = spawn(command, [], {
+                        child = spawn(filePath, args, {
                             windowsHide: true,
                             cwd,
                             env,
-                            shell: true,
+                            shell: false,
                         });
                     }
                 } else {
-                    if (type === "python") {
-                        child = spawn("python", ["-u", filePath, ...args], {
-                            windowsHide: false,
-                            cwd,
-                            env,
-                        });
-                    } else {
-                        child = spawn(filePath, args, { windowsHide: false, cwd, env });
-                    }
+                    const command = this.buildLegacyWindowsCommand(filePath, type, args);
+                    child = spawn(command, [], {
+                        windowsHide: true,
+                        cwd,
+                        env,
+                        shell: true,
+                    });
                 }
             } catch (err) {
                 settled = true;
@@ -227,10 +215,8 @@ export class ScriptExecutor {
                 settled = true;
 
                 try {
-                    if (process.platform === "win32" && child.pid) {
+                    if (child.pid) {
                         spawn("taskkill", ["/pid", child.pid.toString(), "/f", "/t"]);
-                    } else {
-                        child.kill();
                     }
                 } catch {}
 

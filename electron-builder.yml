@@ -1,6 +1,5 @@
 appId: com.nahida.app
 productName: Nahida Desktop
-afterSign: scripts/after-sign-mac.js
 directories:
     buildResources: build
 files:
@@ -39,26 +38,6 @@ nsis:
     createDesktopShortcut: true
     include: build/installer.nsh
     deleteAppDataOnUninstall: true
-mac:
-    identity: null
-    entitlementsInherit: build/entitlements.mac.plist
-    extendInfo:
-        - NSCameraUsageDescription: Application requests access to the device's camera.
-        - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-        - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-        - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
-    notarize: false
-dmg:
-    artifactName: ${productName}.${ext}
-linux:
-    target:
-        - AppImage
-        - snap
-        - deb
-    maintainer: electronjs.org
-    category: Utility
-appImage:
-    artifactName: ${productName}.${ext}
 npmRebuild: false
 publish:
     provider: github

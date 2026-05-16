@@ -68,7 +68,7 @@ export async function execCommand(command: string, trimStdOut: boolean = true): 
         exec(
             command,
             {
-                shell: process.platform === "win32" ? "cmd.exe" : "/bin/sh",
+                shell: "cmd.exe",
             },
             (err, stdout, stderr) => {
                 if (err || stderr) {
@@ -110,17 +110,7 @@ export function deserializeError(serializedError: SerializedError): Error {
 
 export async function isProcessRunning(processName: string): Promise<boolean> {
     return await new Promise<boolean>((resolve, reject) => {
-        let command = "";
-
-        if (process.platform === "win32") {
-            command = `tasklist /FI "IMAGENAME eq ${processName}"`;
-        } else if (process.platform === "darwin" || process.platform === "linux") {
-            command = `pgrep -f ${processName}`;
-        } else {
-            reject(false);
-
-            return;
-        }
+        const command = `tasklist /FI "IMAGENAME eq ${processName}"`;
 
         exec(command, (err, stdout, stderr) => {
             if (err) {
@@ -182,34 +172,12 @@ export type DriveInfo = {
     isExternal: boolean;
 };
 
-export type LinuxDrive = {
-    name: string;
-    type: string;
-    mountpoint?: string;
-    fstype?: string;
-    model?: string;
-    serial?: string;
-    size?: string;
-    state?: string;
-    rota?: boolean;
-    children?: LinuxDrive[];
-};
-
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function getDiskType(filePath: string): Promise<DriveInfo | null> {
     return null; // Temporary disabled
 
     /*const normalizedPath = pathModule.resolve(filePath)
-
-    if (process.platform === "win32") {
-        return await getDiskTypeWindows(normalizedPath)
-    } else if (process.platform === "darwin") {
-        return await getDiskTypeMacOS(normalizedPath)
-    } else if (process.platform === "linux") {
-        return await getDiskTypeLinux(normalizedPath)
-    } else {
-        throw new Error(`Unsupported platform: ${process.platform}`)
-    }*/
+    return await getDiskTypeWindows(normalizedPath)*/
 }
 
 export async function getDiskTypeWindows(filePath: string): Promise<DriveInfo | null> {
@@ -236,100 +204,6 @@ export async function getDiskTypeWindows(filePath: string): Promise<DriveInfo | 
         isPhysical,
         isExternal,
     };
-}
-
-export async function getDiskTypeMacOS(filePath: string): Promise<DriveInfo | null> {
-    try {
-        const mountOutput = await execCommand(`df "${filePath}" | tail -1 | awk '{print $1}'`);
-
-        if (!mountOutput || mountOutput.length <= 0) {
-            return null;
-        }
-
-        const volumePath = mountOutput.trim();
-        const stdout = await execCommand(`diskutil info -plist "${volumePath}"`);
-
-        if (stdout.length <= 0) {
-            return null;
-        }
-
-        const lines = stdout.split("\n");
-        const internalKeyIndex = lines.findIndex((line) => line.includes("<key>Internal</key>"));
-
-        if (internalKeyIndex === -1) {
-            return null;
-        }
-
-        const internalValueLine = lines[internalKeyIndex + 1];
-
-        if (!internalValueLine || internalValueLine.length <= 0) {
-            return null;
-        }
-
-        const isInternal = internalValueLine.includes("true");
-        const isExternal = !isInternal;
-
-        return {
-            isPhysical: isInternal,
-            isExternal: isExternal,
-        };
-    } catch {
-        return null;
-    }
-}
-
-export async function getDiskTypeLinux(filePath: string): Promise<DriveInfo | null> {
-    try {
-        const stdout = await execCommand(
-            "lsblk -o NAME,TYPE,MOUNTPOINT,FSTYPE,MODEL,SERIAL,SIZE,STATE,ROTA --json",
-        );
-        const drives: { blockdevices: LinuxDrive[] } = JSON.parse(stdout);
-        const targetDrive = findLinuxDiskByPath(drives.blockdevices, filePath);
-
-        if (!targetDrive) {
-            return null;
-        }
-
-        const isPhysical =
-            targetDrive.type === "disk" ||
-            [
-                "ext2",
-                "ext3",
-                "ext4",
-                "xfs",
-                "btrfs",
-                "zfs",
-                "reiserfs",
-                "ntfs",
-                "zfs_member",
-            ].includes(targetDrive.fstype ?? "");
-        const isExternal = !isPhysical;
-
-        return {
-            isPhysical,
-            isExternal,
-        };
-    } catch {
-        return null;
-    }
-}
-
-export function findLinuxDiskByPath(drives: LinuxDrive[], filePath: string): LinuxDrive | null {
-    for (const drive of drives) {
-        if (drive.mountpoint && filePath.startsWith(drive.mountpoint)) {
-            return drive;
-        }
-
-        if (drive.children) {
-            const childDrive = findLinuxDiskByPath(drive.children, filePath);
-
-            if (childDrive) {
-                return childDrive;
-            }
-        }
-    }
-
-    return null;
 }
 
 export async function getLocalDirectorySize(path: string): Promise<{

@@ -1,6 +1,5 @@
 import path from "node:path";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
-import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import AutoLaunch from "auto-launch";
 import { app, protocol } from "electron";
 import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
@@ -131,10 +130,6 @@ export class NahidaDesktop {
     }
 
     private async initializePlatformServices() {
-        if (!supportsWindowsDesktopFeatures(process.platform)) {
-            return;
-        }
-
         const [{ NativeLib }, { default: ModManager }, { ModTools }, { XXMI }] = await Promise.all([
             import("./lib/native"),
             import("./services/mod-manager"),
@@ -176,10 +171,7 @@ export class NahidaDesktop {
         if (this.initialized) return;
 
         await this.initializePlatformServices();
-
-        if (supportsWindowsDesktopFeatures(process.platform)) {
-            this.lib.native.startTracking();
-        }
+        this.lib.native.startTracking();
 
         // init db
         await this.lib.db.reconcile();
@@ -213,9 +205,7 @@ export class NahidaDesktop {
         this.initialized = true;
 
         this.updater.initialize();
-        if (supportsWindowsDesktopFeatures(process.platform)) {
-            await this.service.xxmi.init();
-        }
+        await this.service.xxmi.init();
 
         const logLevel = await this.setting.general.getLogLevel();
         this.logger.setLevel(logLevel);
@@ -313,17 +303,8 @@ void app.whenReady().then(async () => {
     });
 
     await desktop.init();
-
-    // app.on('activate', async () => {
-    //     // On macOS it's common to re-create a window in the app when the
-    //     // dock icon is clicked and there are no other windows open.
-    //     if (BrowserWindow.getAllWindows().length === 0) await createMainWindow()
-    // })
 });
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
 app.on("window-all-closed", async () => {
     if (desktop.shouldExitOnQuit) {
         app.quit();

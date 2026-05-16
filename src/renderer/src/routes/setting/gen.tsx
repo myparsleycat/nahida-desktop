@@ -24,7 +24,6 @@ import { useAuth } from "@renderer/hooks/use-auth";
 import { useSettings } from "@renderer/hooks/use-settings";
 import { getFallbackStartPage, requiresAuthForStartPage } from "@renderer/lib/start-page";
 import { useGlobalStore } from "@renderer/store/global";
-import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import type { AutoUpdateMode } from "@shared/updater";
 import { formatSize } from "@shared/utils";
 import { createFileRoute } from "@tanstack/react-router";
@@ -59,7 +58,6 @@ function RouteComponent() {
   const updaterMode = useGlobalStore((state) => state.updaterMode);
   const updaterChecking = useGlobalStore((state) => state.updaterChecking);
   const updaterDownloading = useGlobalStore((state) => state.updaterDownloading);
-  const hasWindowsDesktopFeatures = supportsWindowsDesktopFeatures(appStatus?.platform);
 
   const { settings, update, isLoading, setSettings } = useSettings(settingsConfig);
 
@@ -79,11 +77,6 @@ function RouteComponent() {
       return;
     }
 
-    if (!hasWindowsDesktopFeatures) {
-      await update("runInBackground", false);
-      return;
-    }
-
     const [persistEnabled, toggleViewerEnabled] = await Promise.all([
       window.api.invoke("setting:xxmi:getPersistToggles"),
       window.api.invoke("setting:xxmi:getToggleViewerAutoGenerate"),
@@ -99,11 +92,11 @@ function RouteComponent() {
   };
 
   const isLoggedIn = !!session;
-  const startPageFallback = getFallbackStartPage(appStatus?.platform);
+  const startPageFallback = getFallbackStartPage();
   const startPageOptions = [
     { value: "/transfer", label: t("page.transfer.title") },
     { value: "/gamebanana", label: t("page.gamebanana.title") },
-    ...(hasWindowsDesktopFeatures ? [{ value: "/mod", label: t("page.mod.title") }] : []),
+    { value: "/mod", label: t("page.mod.title") },
     {
       value: "/drive/drive/root",
       label: t("page.drive.title"),

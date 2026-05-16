@@ -8,7 +8,6 @@ import {
     type ModGridLayoutMode,
     type SidebarLayoutMode,
 } from "@shared/mod";
-import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import {
     APP_SETTINGS,
     type AppSettings,
@@ -87,17 +86,13 @@ function clampModelViewerExposure(value: number) {
     );
 }
 
-function getDefaultStartPageForPlatform(platform: NodeJS.Platform) {
-    return supportsWindowsDesktopFeatures(platform) ? "/mod" : "/transfer";
+function getDefaultStartPage() {
+    return "/mod";
 }
 
-function sanitizeDefaultStartPage(page: string | null | undefined, platform: NodeJS.Platform) {
-    const fallback = getDefaultStartPageForPlatform(platform);
+function sanitizeDefaultStartPage(page: string | null | undefined) {
+    const fallback = getDefaultStartPage();
     if (!page) {
-        return fallback;
-    }
-
-    if (!supportsWindowsDesktopFeatures(platform) && page === "/mod") {
         return fallback;
     }
 
@@ -226,9 +221,9 @@ export class Setting {
             },
             "general.defaultStartPage": {
                 definition: APP_SETTINGS["general.defaultStartPage"],
-                getDefault: () => getDefaultStartPageForPlatform(process.platform),
-                fromStored: (value) => sanitizeDefaultStartPage(value, process.platform),
-                normalize: (value) => sanitizeDefaultStartPage(value, process.platform),
+                getDefault: () => getDefaultStartPage(),
+                fromStored: (value) => sanitizeDefaultStartPage(value),
+                normalize: (value) => sanitizeDefaultStartPage(value),
             },
             "general.titlebarStyle": {
                 definition: APP_SETTINGS["general.titlebarStyle"],

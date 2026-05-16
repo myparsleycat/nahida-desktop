@@ -45,7 +45,6 @@ export class ReportWindow {
             frame: isNativeTitlebar,
             maximizable: false,
             autoHideMenuBar: true,
-            ...(process.platform === "linux" ? { icon } : {}),
             webPreferences: {
                 ...getDefaultWebPreferences(),
             },
