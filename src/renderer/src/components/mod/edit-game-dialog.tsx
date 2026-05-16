@@ -1,3 +1,4 @@
+// oxlint-disable react/no-children-prop
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -7,8 +8,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@renderer/components/ui/dialog";
+import { Field, FieldError, FieldLabel } from "@renderer/components/ui/field";
 import { Input } from "@renderer/components/ui/input";
-import { Label } from "@renderer/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -19,7 +20,9 @@ import {
 } from "@renderer/components/ui/select";
 import { useModStore } from "@renderer/store/mod";
 import type { GameConfig } from "@shared/types";
+import { useForm } from "@tanstack/react-form";
 import { ArrowDownIcon, ArrowUpIcon, FolderOpen, Trash2Icon } from "lucide-react";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -38,14 +41,10 @@ export function openEditGameDialog(
   game: GameConfig,
   setters: {
     setEditingGame: (game: GameConfig) => void;
-    setEditGamePath: (path: string) => void;
-    setEditGameImporter: (importer: string | null) => void;
     setIsEditGameDialogOpen: (open: boolean) => void;
   },
 ) {
   setters.setEditingGame(game);
-  setters.setEditGamePath(game.modFolderPath);
-  setters.setEditGameImporter(game.importer);
   setters.setIsEditGameDialogOpen(true);
 }
 
@@ -57,51 +56,72 @@ export function EditGameDialog({
   onDeleteGameClick,
   onReorderGames,
 }: EditGameDialogProps) {
+  const formId = "edit-game-dialog-form";
   const { t } = useTranslation();
   const isOpen = useModStore((s) => s.isEditGameDialogOpen);
   const setIsOpen = useModStore((s) => s.setIsEditGameDialogOpen);
   const editingGame = useModStore((s) => s.editingGame);
   const setEditingGame = useModStore((s) => s.setEditingGame);
-  const editGamePath = useModStore((s) => s.editGamePath);
-  const setEditGamePath = useModStore((s) => s.setEditGamePath);
-  const editGameImporter = useModStore((s) => s.editGameImporter);
-  const setEditGameImporter = useModStore((s) => s.setEditGameImporter);
   const currentGameIndex = editingGame
     ? games.findIndex((game) => game.game === editingGame.game)
     : -1;
   const canMoveUp = currentGameIndex > 0;
   const canMoveDown = currentGameIndex >= 0 && currentGameIndex < games.length - 1;
 
+  const form = useForm({
+    defaultValues: {
+      path: "",
+      importer: NO_IMPORTER_VALUE,
+    },
+    onSubmit: async ({ value }) => {
+      if (!editingGame) {
+        return;
+      }
+
+      const path = value.path.trim();
+      if (!path) {
+        toast.warning(t("page.mod.dialog.add-game.#.1"));
+        return;
+      }
+
+      onUpdateGame(editingGame.game, {
+        modFolderPath: path,
+        importer: value.importer === NO_IMPORTER_VALUE ? null : value.importer,
+      });
+    },
+  });
+
+  useEffect(() => {
+    if (!isOpen || !editingGame) {
+      form.reset({
+        path: "",
+        importer: NO_IMPORTER_VALUE,
+      });
+      return;
+    }
+
+    form.reset({
+      path: editingGame.modFolderPath,
+      importer: editingGame.importer ?? NO_IMPORTER_VALUE,
+    });
+  }, [editingGame, form, isOpen]);
+
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
     if (!open) {
       setEditingGame(null);
-      setEditGamePath("");
-      setEditGameImporter(null);
+      form.reset({
+        path: "",
+        importer: NO_IMPORTER_VALUE,
+      });
     }
   };
 
   const handlePickFolder = async () => {
     const path = await onPickFolder();
     if (path) {
-      setEditGamePath(path);
+      form.setFieldValue("path", path);
     }
-  };
-
-  const handleSave = () => {
-    if (!editingGame) {
-      return;
-    }
-
-    if (!editGamePath.trim()) {
-      toast.warning(t("page.mod.dialog.add-game.#.1"));
-      return;
-    }
-
-    onUpdateGame(editingGame.game, {
-      modFolderPath: editGamePath,
-      importer: editGameImporter,
-    });
   };
 
   const handleMove = (direction: -1 | 1) => {
@@ -126,49 +146,70 @@ export function EditGameDialog({
         <DialogHeader>
           <DialogTitle>{editingGame?.game}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label>{t("page.mod.dialog.edit-game.path_label")}</Label>
-            <div className="flex gap-2">
-              <Input
-                placeholder={t("page.mod.dialog.add-game.path_input_placeholder")}
-                value={editGamePath}
-                readOnly
-              />
-              <Button variant="outline" size="icon" onClick={handlePickFolder}>
-                <FolderOpen className="size-4" />
-              </Button>
-            </div>
-          </div>
+        <form
+          id={formId}
+          className="space-y-4 py-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void form.handleSubmit();
+          }}
+        >
+          <form.Field
+            name="path"
+            validators={{
+              onChange: ({ value }) =>
+                value.trim() ? undefined : t("page.mod.dialog.add-game.#.1"),
+            }}
+            children={(field) => (
+              <Field>
+                <FieldLabel>{t("page.mod.dialog.edit-game.path_label")}</FieldLabel>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder={t("page.mod.dialog.add-game.path_input_placeholder")}
+                    value={field.state.value}
+                    readOnly
+                    onBlur={field.handleBlur}
+                  />
+                  <Button type="button" variant="outline" size="icon" onClick={handlePickFolder}>
+                    <FolderOpen className="size-4" />
+                  </Button>
+                </div>
+                {field.state.meta.isTouched && !field.state.meta.isValid ? (
+                  <FieldError>{field.state.meta.errors.join(", ")}</FieldError>
+                ) : null}
+              </Field>
+            )}
+          />
+
+          <form.Field
+            name="importer"
+            children={(field) => (
+              <Field>
+                <FieldLabel>{t("page.mod.dialog.edit-game.importer_label")}</FieldLabel>
+                <Select value={field.state.value} onValueChange={field.handleChange}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={t("g.select")} />
+                  </SelectTrigger>
+                  <SelectContent aria-describedby={undefined} position="popper">
+                    <SelectGroup>
+                      <SelectItem value={NO_IMPORTER_VALUE}>
+                        {t("page.mod.dialog.edit-game.no_importer")}
+                      </SelectItem>
+                      {enabledImporters.map((importer) => (
+                        <SelectItem key={importer.key} value={importer.key}>
+                          {importer.key}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+          />
 
           <div className="space-y-2">
-            <Label>{t("page.mod.dialog.edit-game.importer_label")}</Label>
-            <Select
-              value={editGameImporter ?? NO_IMPORTER_VALUE}
-              onValueChange={(value) =>
-                setEditGameImporter(value === NO_IMPORTER_VALUE ? null : value)
-              }
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={t("g.select")} />
-              </SelectTrigger>
-              <SelectContent aria-describedby={undefined} position="popper">
-                <SelectGroup>
-                  <SelectItem value={NO_IMPORTER_VALUE}>
-                    {t("page.mod.dialog.edit-game.no_importer")}
-                  </SelectItem>
-                  {enabledImporters.map((importer) => (
-                    <SelectItem key={importer.key} value={importer.key}>
-                      {importer.key}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>{t("page.mod.dialog.edit-game.order_label")}</Label>
+            <FieldLabel>{t("page.mod.dialog.edit-game.order_label")}</FieldLabel>
             <div className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2">
               <span className="text-sm text-muted-foreground">
                 {t("page.mod.dialog.edit-game.order_value", {
@@ -178,6 +219,7 @@ export function EditGameDialog({
               </span>
               <div className="flex gap-2">
                 <Button
+                  type="button"
                   variant="outline"
                   size="icon"
                   disabled={!canMoveUp}
@@ -186,6 +228,7 @@ export function EditGameDialog({
                   <ArrowUpIcon className="size-4" />
                 </Button>
                 <Button
+                  type="button"
                   variant="outline"
                   size="icon"
                   disabled={!canMoveDown}
@@ -202,6 +245,7 @@ export function EditGameDialog({
 
           <div className="flex justify-end items-center">
             <Button
+              type="button"
               variant="outline"
               disabled={!editingGame}
               onClick={() => {
@@ -214,12 +258,21 @@ export function EditGameDialog({
               {t("page.mod.dialog.delete-game.title")}
             </Button>
           </div>
-        </div>
+        </form>
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline">{t("g.cancel")}</Button>
+            <Button type="button" variant="outline">
+              {t("g.cancel")}
+            </Button>
           </DialogClose>
-          <Button onClick={handleSave}>{t("g.save")}</Button>
+          <form.Subscribe
+            selector={(state) => [state.canSubmit, state.isSubmitting]}
+            children={([canSubmit, isSubmitting]) => (
+              <Button form={formId} type="submit" disabled={!canSubmit || isSubmitting}>
+                {t("g.save")}
+              </Button>
+            )}
+          />
         </DialogFooter>
       </DialogContent>
     </Dialog>

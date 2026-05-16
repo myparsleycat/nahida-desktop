@@ -18,14 +18,9 @@ export function useGameMutations() {
     const setDeletingGame = useModStore((s) => s.setDeletingGame);
     const setSelectedGroup = useModStore((s) => s.setSelectedGroup);
     const setSelectedPreset = useModStore((s) => s.setSelectedPreset);
-    const setNewGameName = useModStore((s) => s.setNewGameName);
-    const setNewGamePath = useModStore((s) => s.setNewGamePath);
-    const setNewGameImporter = useModStore((s) => s.setNewGameImporter);
     const setIsAddGameDialogOpen = useModStore((s) => s.setIsAddGameDialogOpen);
     const setIsDeleteGameDialogOpen = useModStore((s) => s.setIsDeleteGameDialogOpen);
     const setEditingGame = useModStore((s) => s.setEditingGame);
-    const setEditGamePath = useModStore((s) => s.setEditGamePath);
-    const setEditGameImporter = useModStore((s) => s.setEditGameImporter);
     const setIsEditGameDialogOpen = useModStore((s) => s.setIsEditGameDialogOpen);
     const getMutationErrorMessage = (error: unknown) => {
         if (error instanceof Error) {
@@ -51,10 +46,7 @@ export function useGameMutations() {
             importer: string | null;
         }) => window.api.invoke("mod:addGame", name, path, importer),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["games"] });
-            setNewGameName("");
-            setNewGamePath("");
-            setNewGameImporter(null);
+            void queryClient.invalidateQueries({ queryKey: ["games"] });
             setIsAddGameDialogOpen(false);
             toast.success(t("page.mod.hooks.use-mod-mutations.add-game-mutation.success"));
         },
@@ -105,8 +97,6 @@ export function useGameMutations() {
             const editingGame = modStore.getState().editingGame;
             if (editingGame?.game === deletedGame) {
                 setEditingGame(null);
-                setEditGamePath("");
-                setEditGameImporter(null);
                 setIsEditGameDialogOpen(false);
             }
 
@@ -118,7 +108,7 @@ export function useGameMutations() {
             queryClient.removeQueries({ queryKey: ["characters", deletedGame] });
             queryClient.removeQueries({ queryKey: ["presets", deletedGame] });
             queryClient.removeQueries({ queryKey: ["modGroup"] });
-            queryClient.invalidateQueries({ queryKey: ["games"] });
+            void queryClient.invalidateQueries({ queryKey: ["games"] });
             toast.success(t("page.mod.hooks.use-mod-mutations.delete-game-mutation.success"));
         },
         onError: (err) => {
@@ -135,18 +125,16 @@ export function useGameMutations() {
             updates: { modFolderPath: string; importer: string | null };
         }) => window.api.invoke("mod:updateGame", game, updates),
         onSuccess: async (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: ["games"] });
+            void queryClient.invalidateQueries({ queryKey: ["games"] });
 
             if (selectedGame === variables.game) {
                 setSelectedGroup(null);
-                queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] });
-                queryClient.invalidateQueries({ queryKey: ["modGroup"] });
+                void queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] });
+                void queryClient.invalidateQueries({ queryKey: ["modGroup"] });
                 await window.api.invoke("mod:watchGame", variables.game);
             }
 
             setEditingGame(null);
-            setEditGamePath("");
-            setEditGameImporter(null);
             setIsEditGameDialogOpen(false);
             toast.success(t("page.mod.hooks.use-mod-mutations.update-game-mutation.success"));
         },
@@ -191,7 +179,7 @@ export function useGameMutations() {
                 .filter((game): game is GameConfig => game !== null);
 
             queryClient.setQueryData(["games"], reorderedGames);
-            queryClient.invalidateQueries({ queryKey: ["games"] });
+            void queryClient.invalidateQueries({ queryKey: ["games"] });
             toast.success(t("page.mod.hooks.use-mod-mutations.reorder-games-mutation.success"));
         },
         onError: () => {
@@ -406,31 +394,33 @@ export function usePresetMutations() {
     const { t } = useTranslation();
     const queryClient = useQueryClient();
     const selectedGame = useModStore((s) => s.selectedGame);
-    const newPresetName = useModStore((s) => s.newPresetName);
-    const newPresetDescription = useModStore((s) => s.newPresetDescription);
-    const setNewPresetName = useModStore((s) => s.setNewPresetName);
-    const setNewPresetDescription = useModStore((s) => s.setNewPresetDescription);
     const setIsPresetDialogOpen = useModStore((s) => s.setIsPresetDialogOpen);
     const setIsSelectedPresetDialogOpen = useModStore((s) => s.setIsSelectedPresetDialogOpen);
     const setSelectedPreset = useModStore((s) => s.setSelectedPreset);
 
     const createPresetMutation = useMutation({
-        mutationFn: ({ resolveConflicts = false }: { resolveConflicts?: boolean } = {}) => {
+        mutationFn: ({
+            name,
+            description,
+            resolveConflicts = false,
+        }: {
+            name: string;
+            description: string;
+            resolveConflicts?: boolean;
+        }) => {
             if (!selectedGame) {
                 throw new Error("GAME_NOT_SELECTED");
             }
             return window.api.invoke(
                 "mod:createPreset",
                 selectedGame,
-                newPresetName,
-                newPresetDescription,
+                name,
+                description,
                 resolveConflicts,
             );
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["presets", selectedGame] });
-            setNewPresetName("");
-            setNewPresetDescription("");
+            void queryClient.invalidateQueries({ queryKey: ["presets", selectedGame] });
             setIsPresetDialogOpen(false);
             toast.success(t("page.mod.hooks.use-mod-mutations.create-preset-mutation.success"));
         },
@@ -464,8 +454,8 @@ export function usePresetMutations() {
         mutationFn: (presetId: string) =>
             window.api.invoke("mod:applyPreset", presetId) as Promise<ApplyPresetResult>,
         onSuccess: (result) => {
-            queryClient.invalidateQueries({ queryKey: ["modGroup"] });
-            queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] });
+            void queryClient.invalidateQueries({ queryKey: ["modGroup"] });
+            void queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] });
             setIsSelectedPresetDialogOpen(false);
             if (result.missing.length > 0) {
                 toast.warning(
@@ -487,7 +477,7 @@ export function usePresetMutations() {
     const deletePresetMutation = useMutation({
         mutationFn: (presetId: string) => window.api.invoke("mod:deletePreset", presetId),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["presets", selectedGame] });
+            void queryClient.invalidateQueries({ queryKey: ["presets", selectedGame] });
             setSelectedPreset(null);
             setIsSelectedPresetDialogOpen(false);
             toast.success(t("page.mod.hooks.use-mod-mutations.delete-preset-mutation.success"));
