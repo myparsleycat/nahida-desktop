@@ -169,10 +169,13 @@ export class WuwaModFixer {
         if (!installed.exists || !installed.binaryPath) {
             throw new Error("Wuwa Mod Fixer is not installed");
         }
+        if (!(await fse.pathExists(modPath))) {
+            throw new Error("Destination path does not exist");
+        }
 
-        await this.ensureLatestConfig();
+        const configPath = await this.ensureLatestConfig();
 
-        const args = this.buildCliArgs(modPath, options);
+        const args = this.buildCliArgs(modPath, configPath, options);
         await this.desktop.service.modTools.fixTool.runExternalTool({
             displayName: "Wuwa Mod Fixer",
             filePath: installed.binaryPath,
@@ -183,12 +186,12 @@ export class WuwaModFixer {
         });
     }
 
-    private buildCliArgs(modPath: string, options: WuwaFixerOptions) {
+    private buildCliArgs(modPath: string, configPath: string, options: WuwaFixerOptions) {
         if (options.derivedHashes && options.stableTexture) {
             throw new Error("Derived hashes and stable texture cannot be enabled together");
         }
 
-        const args = ["--cli", "--path", modPath];
+        const args = ["--cli", "--path", modPath, "--config", configPath];
 
         if (options.rollback) {
             args.push("--rollback");
@@ -228,6 +231,7 @@ export class WuwaModFixer {
         const buffer = Buffer.from(await response.arrayBuffer());
         await fse.writeFile(tempPath, buffer);
         await fse.move(tempPath, configPath, { overwrite: true });
+        return configPath;
     }
 
     private async getLatestReleaseForInstall(): Promise<WuwaLatestReleaseCache> {
