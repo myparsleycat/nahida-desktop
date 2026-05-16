@@ -10,7 +10,7 @@ import {
   ConflictNameDialog,
   DeleteItemsDialog,
   NewDirectoryDialog,
-  PubLinkDialog,
+  // PubLinkDialog,
   RenameDialog,
 } from "@renderer/components/akasha/dialogs";
 import { Center, ServerCrash } from "@renderer/components/common";
@@ -227,7 +227,7 @@ function RouteComponent() {
         <DeleteItemsDialog />
         <ConflictNameDialog />
         <NewDirectoryDialog contents={sortedContents} />
-        <PubLinkDialog />
+        {/* <PubLinkDialog /> */}
       </>
     );
   } else {
