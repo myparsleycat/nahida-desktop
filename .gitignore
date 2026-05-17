@@ -13,3 +13,4 @@ native/extractor/target
 native/extractor/*.node
 
 *.gen.ts
+plans
