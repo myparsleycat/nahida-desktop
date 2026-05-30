@@ -45,7 +45,7 @@
     "@hono/zod-validator": "^0.8.0",
     "auto-launch": "^5.0.6",
     "cbor-x": "^1.6.4",
-    "date-fns": "^4.3.0",
+    "date-fns": "^4.4.0",
     "dds-ktx-parser": "^1.0.1",
     "electron-devtools-installer": "^4.0.0",
     "electron-log": "^5.4.4",
@@ -85,11 +85,11 @@
     "@react-three/fiber": "^9.6.1",
     "@rolldown/plugin-babel": "^0.2.3",
     "@tailwindcss/vite": "^4.3.0",
-    "@tanstack/react-form": "^1.32.1",
+    "@tanstack/react-form": "^1.33.0",
     "@tanstack/react-query": "^5.100.14",
-    "@tanstack/react-router": "^1.170.8",
+    "@tanstack/react-router": "^1.170.10",
     "@tanstack/react-virtual": "^3.13.26",
-    "@tanstack/router-plugin": "^1.168.11",
+    "@tanstack/router-plugin": "^1.168.13",
     "@types/auto-launch": "^5.0.5",
     "@types/electron-progressbar": "^2.2.0",
     "@types/filename-reserved-regex": "^3.0.0",
@@ -110,7 +110,7 @@
     "electron-builder": "^26.8.1",
     "electron-rebuild": "^3.2.9",
     "electron-vite": "^5.0.0",
-    "lucide-react": "^1.16.0",
+    "lucide-react": "^1.17.0",
     "motion": "^12.40.0",
     "oxfmt": "^0.52.0",
     "oxlint": "^1.67.0",
@@ -131,7 +131,7 @@
     "vite": "^8.0.14",
     "vitepress": "2.0.0-alpha.17",
     "wrangler": "^4.95.0",
-    "zustand": "^5.0.13"
+    "zustand": "^5.0.14"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
