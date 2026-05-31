@@ -102,31 +102,8 @@ export function registerModHandlers(desktop: NahidaDesktop) {
 
     rh(
         "mod:downloadGameBananaFile",
-        async (
-            propsOrFileUrl:
-                | {
-                      fileUrl: string;
-                      title: string;
-                      previewUrl?: string | null;
-                  }
-                | string,
-            title?: string,
-            previewUrl?: string | null,
-        ) => {
-            const props =
-                typeof propsOrFileUrl === "string"
-                    ? {
-                          fileUrl: propsOrFileUrl,
-                          title: title ?? "",
-                          previewUrl,
-                      }
-                    : propsOrFileUrl;
-
-            return await desktop.lib.customDownloader.GBDownloader({
-                fileUrl: props.fileUrl,
-                title: props.title,
-                previewUrl: props.previewUrl,
-            });
+        async (props: { itemId: number; fileId: number; modelName?: string }) => {
+            return await desktop.lib.customDownloader.GBDownloader(props);
         },
     );
 

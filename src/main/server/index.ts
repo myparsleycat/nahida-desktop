@@ -8,7 +8,7 @@ import { cors } from "hono/cors";
 import { z } from "zod";
 import { desktop } from "..";
 
-const uploadTypes = z.enum(["live", "gb", "hui"]);
+const uploadTypes = z.enum(["live", "hui"]);
 
 const linkData = z
     .object({
@@ -50,13 +50,6 @@ const liveData = z.object({
             totalBytes: z.number(),
         })
         .optional(),
-});
-
-const gbData = z.object({
-    type: uploadTypes,
-    title: z.string(),
-    fileUrl: z.string(),
-    previewUrl: z.string().optional().nullable(),
 });
 
 const huiData = z.object({
@@ -111,13 +104,6 @@ app.get(
                             link,
                             suggestedName,
                             data,
-                        });
-                    } else if (decoded.type === "gb") {
-                        const { title, fileUrl, previewUrl } = gbData.parse(decoded);
-                        downloadStatus = await desktop.lib.customDownloader.GBDownloader({
-                            title,
-                            fileUrl,
-                            previewUrl,
                         });
                     } else if (decoded.type === "hui") {
                         const { title, fileUrl } = huiData.parse(decoded);

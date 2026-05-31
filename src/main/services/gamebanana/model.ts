@@ -136,6 +136,9 @@ const ModFileSchema = z
         _tsDateAdded: z.number(),
         _nDownloadCount: z.number(),
         _sDownloadUrl: HttpUrlString,
+        _sMd5Checksum: z.string().optional(),
+        _sVersion: z.string().optional(),
+        _sDescription: z.string().optional(),
     })
     .catchall(z.unknown());
 

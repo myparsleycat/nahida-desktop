@@ -18,11 +18,16 @@ export async function finalizeStagedDownload(stagingPath: string, destinationDir
         throw new Error("Downloaded file did not produce staged content.");
     }
 
+    const destinationPaths: string[] = [];
+
     for (const entry of stagedEntries) {
         const sourcePath = path.join(stagingPath, entry);
-        const destinationPath_ = path.join(destinationDir, entry);
-        await moveWithOverwrite(sourcePath, destinationPath_);
+        const destinationPath = path.join(destinationDir, entry);
+        await moveWithOverwrite(sourcePath, destinationPath);
+        destinationPaths.push(destinationPath);
     }
+
+    return destinationPaths;
 }
 
 export async function applySelectedExtractedName(props: {

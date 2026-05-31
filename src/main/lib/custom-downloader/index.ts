@@ -6,6 +6,10 @@ import fse from "fs-extra";
 import ky from "ky";
 import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "../..";
+import {
+    type ModDownloadMetadataInput,
+    writeModDownloadMetadataToDirectories,
+} from "../mod-download-metadata";
 import { ParallelDownloader } from "../parallel-downloader";
 import { downloadFile } from "./download-file";
 import {
@@ -79,7 +83,7 @@ export class CustomDownloader {
 
             const mainWindow = this.desktop.window.main.window;
             if (!mainWindow) {
-                this.desktop.window.main.createMainWindow().then((window) => {
+                void this.desktop.window.main.createMainWindow().then((window) => {
                     if (window?.webContents.isLoading()) {
                         window.webContents.once("did-finish-load", () => {
                             setTimeout(sendPrompt, 500);
@@ -284,7 +288,11 @@ export class CustomDownloader {
                     throw new Error("Downloaded file did not produce staged content.");
                 }
 
-                await finalizeStagedDownload(stagingPath, groupPath);
+                const finalizedPaths = await finalizeStagedDownload(stagingPath, groupPath);
+                await writeModDownloadMetadataToDirectories(finalizedPaths, {
+                    source: "mod",
+                    downloadedAt: new Date().toISOString(),
+                });
 
                 this.desktop.service.transfer.markFileCompleted(pid, pid);
                 this.desktop.service.transfer.updateTransfer(pid, {
@@ -322,11 +330,16 @@ export class CustomDownloader {
     }
 
     public async GBDownloader(props: {
-        fileUrl: string;
-        title: string;
-        previewUrl?: string | null;
+        itemId: number;
+        fileId: number;
+        modelName?: string;
     }): Promise<"started" | "canceled"> {
-        const { title: _title, fileUrl, previewUrl } = props;
+        const downloadFilePayload = await this.desktop.service.gamebanana.getDownloadFilePayload({
+            itemId: props.itemId,
+            fileId: props.fileId,
+            modelName: props.modelName,
+        });
+        const { title: _title, fileUrl, previewUrl } = downloadFilePayload;
 
         const respPromise = ky.head(fileUrl, {
             redirect: "follow",
@@ -454,7 +467,25 @@ export class CustomDownloader {
                     });
                 }
 
-                await finalizeStagedDownload(stagingPath, destinationPath);
+                const finalizedPaths = await finalizeStagedDownload(stagingPath, destinationPath);
+                const metadata: ModDownloadMetadataInput = {
+                    source: "gamebanana",
+                    downloadedAt: new Date().toISOString(),
+                    mod: {
+                        id: downloadFilePayload.modId,
+                        pageUrl: downloadFilePayload.modPageUrl,
+                        version: downloadFilePayload.version,
+                    },
+                    author: {
+                        name: downloadFilePayload.authorName,
+                        url: downloadFilePayload.authorUrl,
+                    },
+                    file: {
+                        downloadUrl: downloadFilePayload.fileUrl,
+                        md5: downloadFilePayload.fileMd5,
+                    },
+                };
+                await writeModDownloadMetadataToDirectories(finalizedPaths, metadata);
 
                 this.desktop.service.transfer.markFileCompleted(pid, pid);
 
