@@ -22,6 +22,22 @@ function suffixToString(value: number): string {
     return String(value);
 }
 
+function stripNormalizedSuffix(value: string): string {
+    return value.replace(/\d+$/, "");
+}
+
+function baseMatches(stem: string, name: string, key: string): boolean {
+    const keyBase = stripNormalizedSuffix(key);
+    const stemBase = stripNormalizedSuffix(stem);
+    const nameBase = stripNormalizedSuffix(name);
+    return (
+        stemBase.includes(keyBase) ||
+        nameBase.includes(keyBase) ||
+        keyBase.includes(stemBase) ||
+        keyBase.includes(nameBase)
+    );
+}
+
 export function keyMatchesIb(groupKey: string, ibKey: string): boolean {
     const a = normalizeKey(canonicalizeMeshFamilyKey(groupKey));
     const b = normalizeKey(canonicalizeMeshFamilyKey(ibKey));
@@ -32,7 +48,7 @@ export function keyMatchesIb(groupKey: string, ibKey: string): boolean {
     const groupSuffix = extractNumericSuffix(groupKey);
     const ibSuffix = extractNumericSuffix(ibKey);
     if (groupSuffix !== null || ibSuffix !== null) {
-        if (groupSuffix !== ibSuffix) {
+        if (groupSuffix !== null && ibSuffix !== null && groupSuffix !== ibSuffix) {
             return false;
         }
 
@@ -92,24 +108,20 @@ export function bestKeyForIb(stem: string, resourceName: string, keys: string[])
     }
 
     return (
-        sameSuffixKeys.find((key) => {
-            const normalizedKey = normalizeKey(canonicalizeMeshFamilyKey(key));
-            return (
-                normalizedStem.includes(normalizedKey) ||
-                normalizedName.includes(normalizedKey) ||
-                normalizedKey.includes(normalizedStem) ||
-                normalizedKey.includes(normalizedName)
-            );
-        }) ||
-        sorted.find((key) => {
-            const normalizedKey = normalizeKey(canonicalizeMeshFamilyKey(key));
-            return (
-                normalizedStem.includes(normalizedKey) ||
-                normalizedName.includes(normalizedKey) ||
-                normalizedKey.includes(normalizedStem) ||
-                normalizedKey.includes(normalizedName)
-            );
-        }) ||
+        sameSuffixKeys.find((key) =>
+            baseMatches(
+                normalizedStem,
+                normalizedName,
+                normalizeKey(canonicalizeMeshFamilyKey(key)),
+            ),
+        ) ||
+        sorted.find((key) =>
+            baseMatches(
+                normalizedStem,
+                normalizedName,
+                normalizeKey(canonicalizeMeshFamilyKey(key)),
+            ),
+        ) ||
         stem
     );
 }
