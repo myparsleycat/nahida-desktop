@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { ErrorState, StatCard } from "../-shared/common";
 import { getGameBananaErrorPresentation } from "../-shared/errors";
 import type { ModOverviewQuery } from "../-types";
-import { formatEpoch, formatNumber, getSubmissionFullPreviewUrl } from "../-utils";
+import { formatEpoch, formatNumber } from "../-utils";
 
 export function ModFilesSidebar({
   t,
@@ -29,20 +29,21 @@ export function ModFilesSidebar({
 }) {
   const errorPresentation = getGameBananaErrorPresentation(modOverviewQuery.error, t);
   const files = modOverviewQuery.data?.profile._aFiles ?? [];
-  const previewUrl = modOverviewQuery.data
-    ? getSubmissionFullPreviewUrl(modOverviewQuery.data.profile)
-    : undefined;
+  const profile = modOverviewQuery.data?.profile;
   const [pendingFileId, setPendingFileId] = useState<number | null>(null);
 
-  const handleDownload = async (fileId: number, fileUrl: string, title: string) => {
+  const handleDownload = async (fileId: number) => {
     if (pendingFileId !== null) return;
+
+    const selectedFile = files.find((file) => file._idRow === fileId);
+    if (!profile || !selectedFile) return;
 
     setPendingFileId(fileId);
     try {
       await window.api.invoke("mod:downloadGameBananaFile", {
-        fileUrl,
-        title,
-        previewUrl: previewUrl ?? null,
+        itemId: profile._idRow,
+        fileId: selectedFile._idRow,
+        modelName: "Mod",
       });
     } catch (error) {
       toast.error("다운로드를 시작하지 못했습니다.");
@@ -74,22 +75,22 @@ export function ModFilesSidebar({
               <StatCard
                 icon={<HeartIcon className="size-4" />}
                 label={t("page.gamebanana.stats.likes")}
-                value={formatNumber(modOverviewQuery.data?.profile._nLikeCount, language)}
+                value={formatNumber(modOverviewQuery.data?.profile._nLikeCount ?? 0, language)}
               />
               <StatCard
                 icon={<MessageSquareIcon className="size-4" />}
                 label={t("page.gamebanana.stats.posts")}
-                value={formatNumber(modOverviewQuery.data?.profile._nPostCount, language)}
+                value={formatNumber(modOverviewQuery.data?.profile._nPostCount ?? 0, language)}
               />
               <StatCard
                 icon={<UsersIcon className="size-4" />}
                 label={t("page.gamebanana.stats.views")}
-                value={formatNumber(modOverviewQuery.data?.profile._nViewCount, language)}
+                value={formatNumber(modOverviewQuery.data?.profile._nViewCount ?? 0, language)}
               />
               <StatCard
                 icon={<FileArchiveIcon className="size-4" />}
                 label={t("page.gamebanana.stats.downloads")}
-                value={formatNumber(modOverviewQuery.data?.profile._nDownloadCount, language)}
+                value={formatNumber(modOverviewQuery.data?.profile._nDownloadCount ?? 0, language)}
               />
             </div>
           )}
@@ -139,9 +140,7 @@ export function ModFilesSidebar({
                       disabled={pendingFileId !== null}
                       aria-busy={isPending}
                       className="w-full overflow-hidden rounded-xl border px-3 py-3 text-left transition-colors hover:bg-muted/40 disabled:cursor-wait disabled:opacity-70"
-                      onClick={() =>
-                        void handleDownload(file._idRow, file._sDownloadUrl, file._sFile)
-                      }
+                      onClick={() => void handleDownload(file._idRow)}
                     >
                       <div className="flex items-start gap-2">
                         {isPending && (

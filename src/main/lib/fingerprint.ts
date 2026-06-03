@@ -58,6 +58,7 @@ const TARGET_EXTENSIONS = new Set([
     ".dds",
     ".assets",
     ".hlsl",
+    ".bin",
 ]);
 
 const DEFAULT_BUILD_OPTIONS: Required<BuildOptions> = {

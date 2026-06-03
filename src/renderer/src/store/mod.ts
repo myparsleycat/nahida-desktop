@@ -10,10 +10,6 @@ interface ModState {
     setSelectedGroup: (group: FolderGroup | null) => void;
     selectedPreset: Preset | null;
     setSelectedPreset: (preset: Preset | null) => void;
-    newPresetName: string;
-    setNewPresetName: (name: string) => void;
-    newPresetDescription: string;
-    setNewPresetDescription: (description: string) => void;
     isPresetDialogOpen: boolean;
     setIsPresetDialogOpen: (open: boolean) => void;
     isSelectedPresetDialogOpen: boolean;
@@ -22,18 +18,8 @@ interface ModState {
     setIsAddGameDialogOpen: (open: boolean) => void;
     isDeleteGameDialogOpen: boolean;
     setIsDeleteGameDialogOpen: (open: boolean) => void;
-    newGameName: string;
-    setNewGameName: (name: string) => void;
-    newGamePath: string;
-    setNewGamePath: (path: string) => void;
-    newGameImporter: string | null;
-    setNewGameImporter: (importer: string | null) => void;
     editingGame: GameConfig | null;
     setEditingGame: (game: GameConfig | null) => void;
-    editGamePath: string;
-    setEditGamePath: (path: string) => void;
-    editGameImporter: string | null;
-    setEditGameImporter: (importer: string | null) => void;
     isEditGameDialogOpen: boolean;
     setIsEditGameDialogOpen: (open: boolean) => void;
     isCustomDownloadDialogOpen: boolean;
@@ -70,10 +56,6 @@ export const modStore = createStore<ModState>((set) => ({
     setSelectedGroup: (selectedGroup) => set({ selectedGroup }),
     selectedPreset: null,
     setSelectedPreset: (selectedPreset) => set({ selectedPreset }),
-    newPresetName: "",
-    setNewPresetName: (newPresetName) => set({ newPresetName }),
-    newPresetDescription: "",
-    setNewPresetDescription: (newPresetDescription) => set({ newPresetDescription }),
     isPresetDialogOpen: false,
     setIsPresetDialogOpen: (isPresetDialogOpen) => set({ isPresetDialogOpen }),
     isSelectedPresetDialogOpen: false,
@@ -83,18 +65,8 @@ export const modStore = createStore<ModState>((set) => ({
     setIsAddGameDialogOpen: (isAddGameDialogOpen) => set({ isAddGameDialogOpen }),
     isDeleteGameDialogOpen: false,
     setIsDeleteGameDialogOpen: (isDeleteGameDialogOpen) => set({ isDeleteGameDialogOpen }),
-    newGameName: "",
-    setNewGameName: (newGameName) => set({ newGameName }),
-    newGamePath: "",
-    setNewGamePath: (newGamePath) => set({ newGamePath }),
-    newGameImporter: null,
-    setNewGameImporter: (newGameImporter) => set({ newGameImporter }),
     editingGame: null,
     setEditingGame: (editingGame) => set({ editingGame }),
-    editGamePath: "",
-    setEditGamePath: (editGamePath) => set({ editGamePath }),
-    editGameImporter: null,
-    setEditGameImporter: (editGameImporter) => set({ editGameImporter }),
     isEditGameDialogOpen: false,
     setIsEditGameDialogOpen: (isEditGameDialogOpen) => set({ isEditGameDialogOpen }),
     isCustomDownloadDialogOpen: false,
@@ -140,7 +112,7 @@ export const modStore = createStore<ModState>((set) => ({
                 nextExpanded.add(path);
             }
 
-            window.api.invoke("mod:setExpandedGroups", Array.from(nextPersistent));
+            void window.api.invoke("mod:setExpandedGroups", Array.from(nextPersistent));
             return { expandedGroups: nextExpanded, persistentGroups: nextPersistent };
         }),
 

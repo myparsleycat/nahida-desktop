@@ -1,3 +1,4 @@
+// oxlint-disable react/no-children-prop
 import { ValidateName } from "@renderer/components/akasha/dialogs";
 import {
   AlertDialog,
@@ -18,12 +19,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@renderer/components/ui/dialog";
+import { Field, FieldError } from "@renderer/components/ui/field";
 import { Input } from "@renderer/components/ui/input";
 import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
 import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
 import { useSidebarLayoutSetting } from "@renderer/hooks/use-settings";
 import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
+import { useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2Icon, Search } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
@@ -53,6 +56,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
   isLoading = false,
 }: CharacterSidebarProps) {
   const { t } = useTranslation();
+  const createFolderFormId = "character-sidebar-create-folder-form";
   const queryClient = useQueryClient();
 
   const setSelectedGroup = useModStore((s) => s.setSelectedGroup);
@@ -66,11 +70,36 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     file: File;
   } | null>(null);
   const [previewCacheKey, setPreviewCacheKey] = useState(0);
-  const [newFolderName, setNewFolderName] = useState("");
   const itemRefs = useRef<Map<string, { element: HTMLElement; group: FolderGroup }>>(new Map());
   const showSkeleton = useDelayedSkeleton(isLoading);
   const { confirmTrash, confirmTrashDialog } = useConfirmTrash();
   const { data: sidebarLayout = "row" } = useSidebarLayoutSetting();
+  const createFolderForm = useForm({
+    defaultValues: {
+      name: "",
+    },
+    onSubmit: async ({ value }) => {
+      if (!createFolderTarget) {
+        return;
+      }
+
+      const trimmedName = value.name.trim();
+      if (!trimmedName) {
+        return;
+      }
+
+      const validationMessage = ValidateName(trimmedName);
+      if (validationMessage) {
+        toast.warning(validationMessage);
+        return;
+      }
+
+      await createFolderMutation.mutateAsync({
+        groupPath: createFolderTarget.path,
+        name: trimmedName,
+      });
+    },
+  });
 
   const createFolderMutation = useMutation({
     mutationFn: async ({ groupPath, name }: { groupPath: string; name: string }) => {
@@ -79,7 +108,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     onSuccess: async (_, variables) => {
       setExpandedGroup(variables.groupPath, true);
       setCreateFolderTarget(null);
-      setNewFolderName("");
+      createFolderForm.reset();
       toast.success(t("page.mod.dialog.create-folder.#.success", { name: variables.name }));
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] }),
@@ -227,7 +256,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
 
   const handleCreateFolderOpen = useCallback((group: FolderGroup) => {
     setCreateFolderTarget(group);
-    setNewFolderName("");
+    createFolderForm.reset();
   }, []);
 
   const handleDeleteFolder = useCallback(
@@ -251,33 +280,6 @@ export const CharacterSidebar = memo(function CharacterSidebar({
       });
     },
     [confirmTrash, queryClient, selectedGame, t],
-  );
-
-  const handleCreateFolderSubmit = useCallback(
-    async (e: React.SubmitEvent<HTMLFormElement>) => {
-      e.preventDefault();
-
-      if (!createFolderTarget) {
-        return;
-      }
-
-      const trimmedName = newFolderName.trim();
-      if (!trimmedName) {
-        return;
-      }
-
-      const validationMessage = ValidateName(trimmedName);
-      if (validationMessage) {
-        toast.warning(validationMessage);
-        return;
-      }
-
-      await createFolderMutation.mutateAsync({
-        groupPath: createFolderTarget.path,
-        name: trimmedName,
-      });
-    },
-    [createFolderMutation, createFolderTarget, newFolderName],
   );
 
   const contentProps = {
@@ -323,7 +325,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
         onOpenChange={(open) => {
           if (!open && !createFolderMutation.isPending) {
             setCreateFolderTarget(null);
-            setNewFolderName("");
+            createFolderForm.reset();
           }
         }}
       >
@@ -336,34 +338,68 @@ export const CharacterSidebar = memo(function CharacterSidebar({
               })}
             </DialogDescription>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={handleCreateFolderSubmit}>
-            <Input
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              placeholder={t("page.mod.dialog.create-folder.name-placeholder")}
-              maxLength={255}
-              autoFocus
-              required
-              disabled={createFolderMutation.isPending}
+          <form
+            id={createFolderFormId}
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              void createFolderForm.handleSubmit();
+            }}
+          >
+            <createFolderForm.Field
+              name="name"
+              validators={{
+                onChange: ({ value }) =>
+                  value.trim() ? undefined : t("page.mod.dialog.create-folder.name-placeholder"),
+              }}
+              children={(field) => (
+                <Field>
+                  <Input
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    placeholder={t("page.mod.dialog.create-folder.name-placeholder")}
+                    maxLength={255}
+                    autoFocus
+                    required
+                    disabled={createFolderMutation.isPending}
+                  />
+                  {field.state.meta.isTouched && !field.state.meta.isValid ? (
+                    <FieldError>{field.state.meta.errors.join(", ")}</FieldError>
+                  ) : null}
+                </Field>
+              )}
             />
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setCreateFolderTarget(null);
-                  setNewFolderName("");
-                }}
-                disabled={createFolderMutation.isPending}
-              >
-                {t("g.cancel")}
-              </Button>
-              <Button type="submit" disabled={createFolderMutation.isPending}>
-                {createFolderMutation.isPending && <Loader2Icon className="size-4 animate-spin" />}
-                {t("g.create")}
-              </Button>
-            </DialogFooter>
           </form>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setCreateFolderTarget(null);
+                createFolderForm.reset();
+              }}
+              disabled={createFolderMutation.isPending}
+            >
+              {t("g.cancel")}
+            </Button>
+            <createFolderForm.Subscribe
+              selector={(state) => [state.canSubmit, state.isSubmitting]}
+              children={([canSubmit, isSubmitting]) => (
+                <Button
+                  form={createFolderFormId}
+                  type="submit"
+                  disabled={!canSubmit || createFolderMutation.isPending || isSubmitting}
+                >
+                  {createFolderMutation.isPending && (
+                    <Loader2Icon className="size-4 animate-spin" />
+                  )}
+                  {t("g.create")}
+                </Button>
+              )}
+            />
+          </DialogFooter>
         </DialogContent>
       </Dialog>
       <AlertDialog

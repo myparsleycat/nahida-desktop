@@ -149,7 +149,7 @@ export default function D3D11Builder() {
             {t("page.tools.d3d11_builder.provider")}
           </label>
           <div className="flex flex-wrap gap-2">
-            {["SpectrumQT", "myparsleycat"].map((v) => (
+            {["SpectrumQT"].map((v) => (
               <button
                 key={v}
                 onClick={() => setProvider(v)}

@@ -5,10 +5,6 @@ import "@renderer/lib/i18n";
 import { StrictMode, useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { routeTree } from "./routeTree.gen";
-// Import the generated route tree
-import { setupWindowControls } from "./window-controls";
-
-setupWindowControls();
 
 const hashHistory = createHashHistory();
 const queryClient = new QueryClient();

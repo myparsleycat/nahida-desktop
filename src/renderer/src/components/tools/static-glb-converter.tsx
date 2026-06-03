@@ -1,4 +1,6 @@
+// oxlint-disable react/no-children-prop
 import { Button } from "@renderer/components/ui/button";
+import { Field, FieldLabel } from "@renderer/components/ui/field";
 import { Input } from "@renderer/components/ui/input";
 import {
   Select,
@@ -9,9 +11,10 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Switch } from "@renderer/components/ui/switch";
+import { useForm } from "@tanstack/react-form";
 import { useNavigate } from "@tanstack/react-router";
 import { BoxIcon, CircleCheckIcon, CircleXIcon, FolderOpenIcon, Loader2Icon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ScrollArea } from "../ui/scroll-area";
@@ -40,13 +43,6 @@ function joinPath(dir: string, name: string) {
 export default function StaticGlbConverter() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const [assetPath, setAssetPath] = useState("");
-  const [modPath, setModPath] = useState("");
-  const [outputPath, setOutputPath] = useState("");
-  const [textureFormat, setTextureFormat] = useState<TextureFormat>("jpeg-safe");
-  const [jpegQuality, setJpegQuality] = useState(85);
-  const [includeTangents, setIncludeTangents] = useState(false);
-  const [debug, setDebug] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<{
     mode: "single" | "variant-set";
@@ -57,6 +53,41 @@ export default function StaticGlbConverter() {
     manifestPath?: string;
     artifactRoot?: string;
   } | null>(null);
+  const form = useForm({
+    defaultValues: {
+      assetPath: "",
+      modPath: "",
+      outputPath: "",
+      textureFormat: "jpeg-safe" as TextureFormat,
+      jpegQuality: 85,
+      includeTangents: false,
+      debug: false,
+    },
+    onSubmit: async ({ value }) => {
+      if (!canConvertStaticGlb(value) || isRunning) {
+        return;
+      }
+
+      setIsRunning(true);
+      setResult(null);
+      try {
+        const nextResult = await window.api.invoke("tools:convertStaticGlb", value);
+        setResult(nextResult);
+        toast.success(t("page.tools.static_glb_converter.toast.created"), {
+          description: t("page.tools.static_glb_converter.toast.created_description", {
+            meshCount: nextResult.meshCount,
+            warningCount: nextResult.warningCount,
+          }),
+        });
+      } catch (error) {
+        toast.error(t("page.tools.static_glb_converter.toast.failed"), {
+          description: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        setIsRunning(false);
+      }
+    },
+  });
 
   useEffect(() => {
     Promise.all([
@@ -64,18 +95,18 @@ export default function StaticGlbConverter() {
       window.api.invoke("tools:getStaticGlbTextureSettings"),
     ])
       .then(([nextAssetPath, settings]) => {
-        setAssetPath(nextAssetPath);
-        setTextureFormat(settings.textureFormat);
-        setJpegQuality(clampJpegQuality(settings.jpegQuality));
+        form.reset({
+          assetPath: nextAssetPath,
+          modPath: "",
+          outputPath: "",
+          textureFormat: settings.textureFormat,
+          jpegQuality: clampJpegQuality(settings.jpegQuality),
+          includeTangents: false,
+          debug: false,
+        });
       })
       .catch(() => {});
-  }, []);
-
-  const canConvert = useMemo(
-    () => assetPath.trim().length > 0 && modPath.trim().length > 0 && outputPath.trim().length > 0,
-    [assetPath, modPath, outputPath],
-  );
-  const usesJpeg = JPEG_TEXTURE_FORMATS.includes(textureFormat);
+  }, [form]);
 
   const selectFolder = async (onSelect: (path: string) => void) => {
     const selected = await window.api.invoke("util:showOpenDialog", {
@@ -87,7 +118,7 @@ export default function StaticGlbConverter() {
 
   const selectAssetPath = () => {
     void selectFolder((filePath) => {
-      setAssetPath(filePath);
+      form.setFieldValue("assetPath", filePath);
       window.api.invoke("tools:setStaticGlbAssetPath", filePath).catch((error) => {
         toast.error(t("page.tools.static_glb_converter.toast.save_asset_path_failed"), {
           description: error.message,
@@ -98,60 +129,29 @@ export default function StaticGlbConverter() {
 
   const selectModPath = () => {
     void selectFolder((filePath) => {
-      setModPath(filePath);
-      if (!outputPath) {
-        setOutputPath(joinPath(filePath, `${basename(filePath)}.glb`));
+      form.setFieldValue("modPath", filePath);
+      if (!form.state.values.outputPath) {
+        form.setFieldValue("outputPath", joinPath(filePath, `${basename(filePath)}.glb`));
       }
     });
   };
 
   const selectOutputFolder = () => {
     void selectFolder((filePath) => {
-      const name = basename(modPath || filePath);
-      setOutputPath(joinPath(filePath, `${name}.glb`));
+      const name = basename(form.state.values.modPath || filePath);
+      form.setFieldValue("outputPath", joinPath(filePath, `${name}.glb`));
     });
   };
 
-  const convert = async () => {
-    if (!canConvert || isRunning) return;
-
-    setIsRunning(true);
-    setResult(null);
-    try {
-      const nextResult = await window.api.invoke("tools:convertStaticGlb", {
-        modPath,
-        assetPath,
-        outputPath,
-        textureFormat,
-        jpegQuality,
-        includeTangents,
-        debug,
-      });
-      setResult(nextResult);
-      toast.success(t("page.tools.static_glb_converter.toast.created"), {
-        description: t("page.tools.static_glb_converter.toast.created_description", {
-          meshCount: nextResult.meshCount,
-          warningCount: nextResult.warningCount,
-        }),
-      });
-    } catch (error) {
-      toast.error(t("page.tools.static_glb_converter.toast.failed"), {
-        description: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      setIsRunning(false);
-    }
-  };
-
   const handleTextureFormatChange = async (value: TextureFormat) => {
-    const previous = textureFormat;
-    setTextureFormat(value);
+    const previous = form.state.values.textureFormat;
+    form.setFieldValue("textureFormat", value);
 
     try {
       const saved = await window.api.invoke("tools:setStaticGlbTextureFormat", value);
-      setTextureFormat(saved);
+      form.setFieldValue("textureFormat", saved);
     } catch (error) {
-      setTextureFormat(previous);
+      form.setFieldValue("textureFormat", previous);
       toast.error(t("page.tools.static_glb_converter.toast.save_texture_settings_failed"), {
         description: error instanceof Error ? error.message : String(error),
       });
@@ -164,15 +164,15 @@ export default function StaticGlbConverter() {
       return;
     }
 
-    const previous = jpegQuality;
+    const previous = form.state.values.jpegQuality;
     const normalized = clampJpegQuality(parsed);
-    setJpegQuality(normalized);
+    form.setFieldValue("jpegQuality", normalized);
 
     try {
       const saved = await window.api.invoke("tools:setStaticGlbJpegQuality", normalized);
-      setJpegQuality(clampJpegQuality(saved));
+      form.setFieldValue("jpegQuality", clampJpegQuality(saved));
     } catch (error) {
-      setJpegQuality(previous);
+      form.setFieldValue("jpegQuality", previous);
       toast.error(t("page.tools.static_glb_converter.toast.save_texture_settings_failed"), {
         description: error instanceof Error ? error.message : String(error),
       });
@@ -181,7 +181,7 @@ export default function StaticGlbConverter() {
 
   const openResult = () => {
     if (!result) return;
-    navigate({
+    void navigate({
       to: "/tools/model-viewer",
       search: {
         path: result.glbPath,
@@ -194,173 +194,251 @@ export default function StaticGlbConverter() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex h-full min-h-0 flex-col space-y-3 p-4">
-        <div className="grid gap-4 rounded-lg border bg-card p-4">
-          <div className="space-y-2">
-            <label className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-              {t("page.tools.static_glb_converter.asset_layout_path")}
-            </label>
-            <div className="flex gap-2">
-              <Input
-                value={assetPath}
-                onChange={(e) => setAssetPath(e.target.value)}
-                placeholder={t("page.tools.static_glb_converter.asset_layout_placeholder")}
-                disabled={isRunning}
-              />
-              <Button
-                variant="outline"
-                className="shrink-0 gap-1"
-                onClick={selectAssetPath}
-                disabled={isRunning}
-              >
-                <FolderOpenIcon className="size-4" />
-                {t("page.tools.static_glb_converter.browse")}
-              </Button>
-            </div>
-            {/* <p className="text-xs text-muted-foreground">
-            {t("page.tools.static_glb_converter.asset_layout_hint")}
-          </p> */}
-          </div>
+      <form
+        className="flex h-full min-h-0 flex-col space-y-3 p-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          void form.handleSubmit();
+        }}
+      >
+        <form.Subscribe
+          selector={(state) => state.values}
+          children={(values) => {
+            const canConvert = canConvertStaticGlb(values);
+            const usesJpeg = JPEG_TEXTURE_FORMATS.includes(values.textureFormat);
 
-          <div className="space-y-2">
-            <label className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-              {t("page.tools.static_glb_converter.target_mod_path")}
-            </label>
-            <div className="flex gap-2">
-              <Input
-                value={modPath}
-                onChange={(e) => setModPath(e.target.value)}
-                placeholder={t("page.tools.static_glb_converter.target_mod_placeholder")}
-                disabled={isRunning}
-              />
-              <Button
-                variant="outline"
-                className="shrink-0 gap-1"
-                onClick={selectModPath}
-                disabled={isRunning}
-              >
-                <FolderOpenIcon className="size-4" />
-                {t("page.tools.static_glb_converter.browse")}
-              </Button>
-            </div>
-          </div>
+            return (
+              <>
+                <div className="grid gap-4 rounded-lg border bg-card p-4">
+                  <form.Field
+                    name="assetPath"
+                    children={(field) => (
+                      <Field>
+                        <FieldLabel className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                          {t("page.tools.static_glb_converter.asset_layout_path")}
+                        </FieldLabel>
+                        <div className="flex gap-2">
+                          <Input
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(e) => field.handleChange(e.target.value)}
+                            placeholder={t(
+                              "page.tools.static_glb_converter.asset_layout_placeholder",
+                            )}
+                            disabled={isRunning}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="shrink-0 gap-1"
+                            onClick={selectAssetPath}
+                            disabled={isRunning}
+                          >
+                            <FolderOpenIcon className="size-4" />
+                            {t("page.tools.static_glb_converter.browse")}
+                          </Button>
+                        </div>
+                      </Field>
+                    )}
+                  />
 
-          <div className="space-y-2">
-            <label className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-              {t("page.tools.static_glb_converter.output_glb_path")}
-            </label>
-            <div className="flex gap-2">
-              <Input
-                value={outputPath}
-                onChange={(e) => setOutputPath(e.target.value)}
-                placeholder={t("page.tools.static_glb_converter.output_glb_placeholder")}
-                disabled={isRunning}
-              />
-              <Button
-                variant="outline"
-                className="shrink-0 gap-1"
-                onClick={selectOutputFolder}
-                disabled={isRunning}
-              >
-                <FolderOpenIcon className="size-4" />
-                {t("page.tools.static_glb_converter.folder")}
-              </Button>
-            </div>
-          </div>
+                  <form.Field
+                    name="modPath"
+                    children={(field) => (
+                      <Field>
+                        <FieldLabel className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                          {t("page.tools.static_glb_converter.target_mod_path")}
+                        </FieldLabel>
+                        <div className="flex gap-2">
+                          <Input
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(e) => field.handleChange(e.target.value)}
+                            placeholder={t(
+                              "page.tools.static_glb_converter.target_mod_placeholder",
+                            )}
+                            disabled={isRunning}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="shrink-0 gap-1"
+                            onClick={selectModPath}
+                            disabled={isRunning}
+                          >
+                            <FolderOpenIcon className="size-4" />
+                            {t("page.tools.static_glb_converter.browse")}
+                          </Button>
+                        </div>
+                      </Field>
+                    )}
+                  />
 
-          <div className="grid gap-4 rounded-md border bg-background/40 p-3 md:grid-cols-[minmax(0,1fr)_160px]">
-            <div className="space-y-2">
-              <label className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-                {t("page.tools.static_glb_converter.texture_format")}
-              </label>
-              <Select
-                value={textureFormat}
-                onValueChange={(value) => void handleTextureFormatChange(value as TextureFormat)}
-              >
-                <SelectTrigger disabled={isRunning}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent position="popper">
-                  <SelectGroup>
-                    <SelectItem value="png">
-                      {t("page.tools.static_glb_converter.texture_format_options.png")}
-                    </SelectItem>
-                    <SelectItem value="jpeg-safe">
-                      {t("page.tools.static_glb_converter.texture_format_options.jpeg_safe")}
-                    </SelectItem>
-                    <SelectItem value="jpeg-force">
-                      {t("page.tools.static_glb_converter.texture_format_options.jpeg_force")}
-                    </SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {t(`page.tools.static_glb_converter.texture_format_descriptions.${textureFormat}`)}
-              </p>
-            </div>
+                  <form.Field
+                    name="outputPath"
+                    children={(field) => (
+                      <Field>
+                        <FieldLabel className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                          {t("page.tools.static_glb_converter.output_glb_path")}
+                        </FieldLabel>
+                        <div className="flex gap-2">
+                          <Input
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(e) => field.handleChange(e.target.value)}
+                            placeholder={t(
+                              "page.tools.static_glb_converter.output_glb_placeholder",
+                            )}
+                            disabled={isRunning}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="shrink-0 gap-1"
+                            onClick={selectOutputFolder}
+                            disabled={isRunning}
+                          >
+                            <FolderOpenIcon className="size-4" />
+                            {t("page.tools.static_glb_converter.folder")}
+                          </Button>
+                        </div>
+                      </Field>
+                    )}
+                  />
 
-            <div className="space-y-2">
-              <label className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-                {t("page.tools.static_glb_converter.jpeg_quality")}
-              </label>
-              <Input
-                type="number"
-                min={1}
-                max={100}
-                step={1}
-                value={jpegQuality}
-                onChange={(e) => void handleJpegQualityChange(e.target.value)}
-                disabled={isRunning || !usesJpeg}
-              />
-            </div>
-          </div>
+                  <div className="grid gap-4 rounded-md border bg-background/40 p-3 md:grid-cols-[minmax(0,1fr)_160px]">
+                    <form.Field
+                      name="textureFormat"
+                      children={(field) => (
+                        <Field>
+                          <FieldLabel className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                            {t("page.tools.static_glb_converter.texture_format")}
+                          </FieldLabel>
+                          <Select
+                            value={field.state.value}
+                            onValueChange={(value) =>
+                              void handleTextureFormatChange(value as TextureFormat)
+                            }
+                          >
+                            <SelectTrigger disabled={isRunning}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent position="popper">
+                              <SelectGroup>
+                                <SelectItem value="png">
+                                  {t("page.tools.static_glb_converter.texture_format_options.png")}
+                                </SelectItem>
+                                <SelectItem value="jpeg-safe">
+                                  {t(
+                                    "page.tools.static_glb_converter.texture_format_options.jpeg_safe",
+                                  )}
+                                </SelectItem>
+                                <SelectItem value="jpeg-force">
+                                  {t(
+                                    "page.tools.static_glb_converter.texture_format_options.jpeg_force",
+                                  )}
+                                </SelectItem>
+                              </SelectGroup>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            {t(
+                              `page.tools.static_glb_converter.texture_format_descriptions.${field.state.value}`,
+                            )}
+                          </p>
+                        </Field>
+                      )}
+                    />
 
-          <div className="flex w-full flex-row gap-2">
-            <div className="flex flex-1 items-center justify-between rounded-md border bg-background/40 p-3">
-              <div>
-                <div className="text-sm font-medium">
-                  {t("page.tools.static_glb_converter.include_tangents")}
+                    <form.Field
+                      name="jpegQuality"
+                      children={(field) => (
+                        <Field>
+                          <FieldLabel className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                            {t("page.tools.static_glb_converter.jpeg_quality")}
+                          </FieldLabel>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={100}
+                            step={1}
+                            value={field.state.value}
+                            onBlur={field.handleBlur}
+                            onChange={(e) => void handleJpegQualityChange(e.target.value)}
+                            disabled={isRunning || !usesJpeg}
+                          />
+                        </Field>
+                      )}
+                    />
+                  </div>
+
+                  <div className="flex w-full flex-row gap-2">
+                    <form.Field
+                      name="includeTangents"
+                      children={(field) => (
+                        <div className="flex flex-1 items-center justify-between rounded-md border bg-background/40 p-3">
+                          <div>
+                            <div className="text-sm font-medium">
+                              {t("page.tools.static_glb_converter.include_tangents")}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {t("page.tools.static_glb_converter.include_tangents_description")}
+                            </div>
+                          </div>
+                          <Switch
+                            checked={field.state.value}
+                            onCheckedChange={field.handleChange}
+                            disabled={isRunning}
+                          />
+                        </div>
+                      )}
+                    />
+
+                    <form.Field
+                      name="debug"
+                      children={(field) => (
+                        <div className="flex flex-1 items-center justify-between rounded-md border bg-background/40 p-3">
+                          <div>
+                            <div className="text-sm font-medium">
+                              {t("page.tools.static_glb_converter.debug_mode")}
+                            </div>
+                          </div>
+                          <Switch
+                            checked={field.state.value}
+                            onCheckedChange={field.handleChange}
+                            disabled={isRunning}
+                          />
+                        </div>
+                      )}
+                    />
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  {t("page.tools.static_glb_converter.include_tangents_description")}
-                </div>
-              </div>
-              <Switch
-                checked={includeTangents}
-                onCheckedChange={setIncludeTangents}
-                disabled={isRunning}
-              />
-            </div>
 
-            <div className="flex flex-1 items-center justify-between rounded-md border bg-background/40 p-3">
-              <div>
-                <div className="text-sm font-medium">
-                  {t("page.tools.static_glb_converter.debug_mode")}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button type="submit" disabled={!canConvert || isRunning} className="gap-2">
+                    {isRunning ? (
+                      <Loader2Icon className="size-4 animate-spin" />
+                    ) : (
+                      <BoxIcon className="size-4" />
+                    )}
+                    {isRunning
+                      ? t("page.tools.static_glb_converter.converting")
+                      : t("page.tools.static_glb_converter.convert_to_glb")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={openResult}
+                    disabled={!result || isRunning}
+                  >
+                    {t("page.tools.static_glb_converter.open_in_model_viewer")}
+                  </Button>
                 </div>
-                {/*<div className="text-xs text-muted-foreground">
-              {t("page.tools.static_glb_converter.debug_mode_description")}
-            </div>*/}
-              </div>
-              <Switch checked={debug} onCheckedChange={setDebug} disabled={isRunning} />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={convert} disabled={!canConvert || isRunning} className="gap-2">
-            {isRunning ? (
-              <Loader2Icon className="size-4 animate-spin" />
-            ) : (
-              <BoxIcon className="size-4" />
-            )}
-            {isRunning
-              ? t("page.tools.static_glb_converter.converting")
-              : t("page.tools.static_glb_converter.convert_to_glb")}
-          </Button>
-          <Button variant="outline" onClick={openResult} disabled={!result || isRunning}>
-            {t("page.tools.static_glb_converter.open_in_model_viewer")}
-          </Button>
-        </div>
+              </>
+            );
+          }}
+        />
 
         {result && (
           <div className="flex items-start gap-2 rounded-lg border bg-card p-3 text-sm">
@@ -388,7 +466,15 @@ export default function StaticGlbConverter() {
             </div>
           </div>
         )}
-      </div>
+      </form>
     </ScrollArea>
+  );
+}
+
+function canConvertStaticGlb(values: { assetPath: string; modPath: string; outputPath: string }) {
+  return (
+    values.assetPath.trim().length > 0 &&
+    values.modPath.trim().length > 0 &&
+    values.outputPath.trim().length > 0
   );
 }

@@ -69,10 +69,7 @@ export class DllBuilder {
     }
 
     public async updateReleases() {
-        await Promise.all([
-            this.fetchProviderReleases("SpectrumQT"),
-            this.fetchProviderReleases("myparsleycat"),
-        ]);
+        await this.fetchProviderReleases("SpectrumQT");
     }
 
     private async fetchProviderReleases(provider: string) {
@@ -103,8 +100,7 @@ export class DllBuilder {
 
     private async fetchProviderReleasesInternal(provider: string) {
         try {
-            const owner = provider === "myparsleycat" ? "myparsleycat" : "SpectrumQT";
-            const url = `https://api.github.com/repos/${owner}/XXMI-Libs-Package/releases`;
+            const url = `https://api.github.com/repos/${provider}/XXMI-Libs-Package/releases`;
             const resp = await ky.get(url, {
                 headers: {
                     "User-Agent":
@@ -368,8 +364,7 @@ export class DllBuilder {
             throw new Error("No version selected");
         }
 
-        const owner = provider === "myparsleycat" ? "myparsleycat" : "SpectrumQT";
-        const url = `https://github.com/${owner}/XXMI-Libs-Package/archive/refs/tags/${selectedVersion}.zip`;
+        const url = `https://github.com/${provider}/XXMI-Libs-Package/archive/refs/tags/${selectedVersion}.zip`;
 
         const zipPath = path.join(targetDir, "repo.zip");
 

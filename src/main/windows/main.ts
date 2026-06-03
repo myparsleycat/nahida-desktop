@@ -86,7 +86,6 @@ export class MainWindow {
             show: false,
             frame: isNativeTitlebar,
             autoHideMenuBar: true,
-            ...(process.platform === "linux" ? { icon } : {}),
             webPreferences: {
                 ...getDefaultWebPreferences(),
             },

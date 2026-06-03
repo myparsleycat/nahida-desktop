@@ -35,10 +35,6 @@
 - **Provider**：
   选择要用于构建的 `XXMI-Libs-Package` 仓库提供者。
 
-  ::: warning
-  不要选择 `myparsleycat` 提供的仓库，因为它已经不再维护。
-  :::
-
 - **Version**：
   选择要构建的 XXMI 库版本。
 

@@ -24,7 +24,7 @@ export function getAppStatus(): AppStatus {
         version: app.getVersion(),
         isPackaged: app.isPackaged,
         isDev: isDev,
-        platform: process.platform,
+        platform: "win32",
     };
 }
 
@@ -118,7 +118,7 @@ export function getClipboardFiles(): string[] {
             .map((line) => {
                 const url = new URL(line.trim());
                 let p = decodeURIComponent(url.pathname);
-                if (process.platform === "win32" && p.startsWith("/")) {
+                if (p.startsWith("/")) {
                     p = p.slice(1);
                 }
                 return p;

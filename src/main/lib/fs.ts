@@ -148,7 +148,7 @@ export class FS {
         await fsp.rename(oldPath as string, newPath as string);
     }
 
-    public async ensureDir(path: string, options?: number | fse.EnsureOptions | undefined) {
+    public async ensureDir(path: string, options?: number | fse.EnsureOptions) {
         await fse.ensureDir(path, options);
     }
 
@@ -225,22 +225,6 @@ export class FS {
     }
 
     public sanitizePath(input: string) {
-        if (process.platform === "darwin") {
-            const parsed = path.parse(input);
-
-            if (!parsed.base) {
-                return input;
-            }
-
-            const sanitizedBase = this.sanitizeWindowsFilename(parsed.base);
-
-            if (!parsed.dir) {
-                return sanitizedBase;
-            }
-
-            return path.join(parsed.dir, sanitizedBase);
-        }
-
         return input
             .split(path.sep)
             .map((part, index) => {

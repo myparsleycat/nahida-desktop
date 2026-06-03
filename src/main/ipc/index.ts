@@ -1,4 +1,3 @@
-import { supportsWindowsDesktopFeatures } from "@shared/platform";
 import type { IpcEvents } from "@shared/types";
 import { BrowserWindow } from "electron";
 import type { NahidaDesktop } from "../index";
@@ -36,13 +35,11 @@ export class IPC {
         registerLoggerHandlers(this.d);
         registerPathSelectorHandlers();
 
-        if (supportsWindowsDesktopFeatures(process.platform)) {
-            registerModHandlers(this.d);
-            registerFixToolsManagerHandlers(this.d);
-            registerToolsHandlers(this.d);
-            registerWuwaModFixerHandlers(this.d);
-            registerXXMIHandlers(this.d);
-        }
+        registerModHandlers(this.d);
+        registerFixToolsManagerHandlers(this.d);
+        registerToolsHandlers(this.d);
+        registerWuwaModFixerHandlers(this.d);
+        registerXXMIHandlers(this.d);
     }
 
     public postMessageToWindow<K extends keyof IpcEvents>(

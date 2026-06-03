@@ -13,6 +13,7 @@ import {
     ModCategoryProfileSchema,
     ModConfigSchema,
     ModIndexSchema,
+    type ModProfile,
     ModPostsSchema,
     ModProfileSchema,
 } from "./model";
@@ -60,6 +61,11 @@ export class GameBananaService {
     ] as const;
     private readonly navigatorPersonalUrl = `${this.apiBaseUrl}/Member/Navigator/Personal`;
     private readonly cookieSettingKey = "gamebanana_auth_cookies";
+    private lastViewedModProfile: {
+        itemId: number;
+        modelName: GameBananaSubmissionModel;
+        profile: ModProfile;
+    } | null = null;
     private loginWindow: BrowserWindow | null = null;
     private authPromise: Promise<string> | null = null;
     private sessionCookie: string | null = null;
@@ -710,6 +716,63 @@ export class GameBananaService {
         return `https://gamebanana.com/${segment}s/${itemId}`;
     }
 
+    private setLastViewedModProfile(
+        itemId: number,
+        modelName: GameBananaSubmissionModel,
+        profile: ModProfile,
+    ) {
+        this.lastViewedModProfile = { itemId, modelName, profile };
+    }
+
+    private getLastViewedModProfile(itemId: number, modelName: GameBananaSubmissionModel) {
+        if (
+            this.lastViewedModProfile?.itemId === itemId &&
+            this.lastViewedModProfile.modelName === modelName
+        ) {
+            return this.lastViewedModProfile.profile;
+        }
+
+        return null;
+    }
+
+    private getModPreviewUrl(profile: Awaited<ReturnType<GameBananaService["getModProfile"]>>) {
+        const preview = profile._aPreviewMedia?._aImages?.[0];
+        if (!preview) {
+            return null;
+        }
+
+        const absoluteUrl = [
+            preview._sFile,
+            preview._sFile800,
+            preview._sFile530,
+            preview._sUrl,
+        ].find((value) => Boolean(value && /^https?:\/\//i.test(value)));
+        if (absoluteUrl) {
+            return absoluteUrl;
+        }
+
+        const relativeUrl = [
+            preview._sFile,
+            preview._sFile800,
+            preview._sFile530,
+            preview._sUrl,
+        ].find(Boolean);
+        if (!relativeUrl || !preview._sBaseUrl) {
+            return /^https?:\/\//i.test(preview._sBaseUrl ?? "")
+                ? (preview._sBaseUrl ?? null)
+                : null;
+        }
+
+        try {
+            return new URL(
+                relativeUrl,
+                preview._sBaseUrl.endsWith("/") ? preview._sBaseUrl : `${preview._sBaseUrl}/`,
+            ).toString();
+        } catch {
+            return null;
+        }
+    }
+
     public async getGameProfile(gameId: number) {
         const url = this.formatUrl(this.baseUrls.game.profilePage, gameId);
         return await this.requestJson(
@@ -831,7 +894,7 @@ export class GameBananaService {
 
     public async getModProfile(itemId: number, modelName: GameBananaSubmissionModel = "Mod") {
         const url = this.formatUrl(`${this.apiBaseUrl}/${modelName}/{}/ProfilePage`, itemId);
-        return await this.requestJson(
+        const profile = await this.requestJson(
             ModProfileSchema,
             url,
             {
@@ -842,6 +905,8 @@ export class GameBananaService {
             },
             `${modelName.toLowerCase()}_profile`,
         );
+        this.setLastViewedModProfile(itemId, modelName, profile);
+        return profile;
     }
 
     public async getModConfig(itemId: number, modelName: GameBananaSubmissionModel = "Mod") {
@@ -947,6 +1012,37 @@ export class GameBananaService {
         return {
             profile,
             config,
+        };
+    }
+
+    public async getDownloadFilePayload({
+        itemId,
+        fileId,
+        modelName = "Mod",
+    }: {
+        itemId: number;
+        fileId: number;
+        modelName?: GameBananaSubmissionModel;
+    }) {
+        const profile =
+            this.getLastViewedModProfile(itemId, modelName) ??
+            (await this.getModProfile(itemId, modelName));
+        const file = profile._aFiles?.find((entry) => entry._idRow === fileId);
+
+        if (!file) {
+            throw new Error("GAMEBANANA_FILE_NOT_FOUND");
+        }
+
+        return {
+            fileUrl: file._sDownloadUrl,
+            title: file._sFile,
+            previewUrl: this.getModPreviewUrl(profile),
+            modId: profile._idRow,
+            modPageUrl: profile._sProfileUrl,
+            authorName: profile._aSubmitter._sName,
+            authorUrl: profile._aSubmitter._sProfileUrl ?? null,
+            fileMd5: file._sMd5Checksum ?? null,
+            version: file._sVersion ?? null,
         };
     }
 }

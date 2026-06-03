@@ -17,7 +17,6 @@ import {
   AlertDialogTitle,
 } from "@renderer/components/ui/alert-dialog";
 import { Label } from "@renderer/components/ui/label";
-import { WindowsOnlyRoute } from "@renderer/components/windows-only-route";
 import { useCharacters, useGames } from "@renderer/hooks/use-mod-data";
 import { useModDragDrop } from "@renderer/hooks/use-mod-drag-drop";
 import {
@@ -37,11 +36,7 @@ export const Route = createFileRoute("/mod/")({
 });
 
 function RouteComponent() {
-  return (
-    <WindowsOnlyRoute fallbackTo="/transfer">
-      <ModRouteContent />
-    </WindowsOnlyRoute>
-  );
+  return <ModRouteContent />;
 }
 
 function ModRouteContent() {

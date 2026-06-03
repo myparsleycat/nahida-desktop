@@ -108,7 +108,6 @@ export class SettingWindow {
             frame: isNativeTitlebar,
             maximizable: false,
             autoHideMenuBar: true,
-            ...(process.platform === "linux" ? { icon } : {}),
             webPreferences: {
                 ...getDefaultWebPreferences(),
             },

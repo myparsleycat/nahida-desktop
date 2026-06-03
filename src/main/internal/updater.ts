@@ -559,21 +559,10 @@ export class Updater {
             this.desktop.logger.log("error", e);
         }
 
-        if (process.platform === "darwin") {
-            autoUpdater.quitAndInstall(true, true);
-
-            setTimeout(() => {
-                app.exit(0);
-            }, 1500);
-        } else {
-            autoUpdater.quitAndInstall(false, true);
-
-            if (process.platform === "win32") {
-                setTimeout(() => {
-                    app.exit(0);
-                }, 1000);
-            }
-        }
+        autoUpdater.quitAndInstall(false, true);
+        setTimeout(() => {
+            app.exit(0);
+        }, 1000);
     }
 }
 

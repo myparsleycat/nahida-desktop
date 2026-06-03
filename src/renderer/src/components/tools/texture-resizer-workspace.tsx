@@ -1,3 +1,4 @@
+// oxlint-disable react/no-children-prop
 import {
   TextureResizerForm,
   formatTextureFormatLabel,
@@ -19,6 +20,7 @@ import type {
   TextureResizeSettings,
 } from "@shared/types";
 import { formatSize, getTextureResizeCandidates, pickTextureResizeCandidate } from "@shared/utils";
+import { useForm } from "@tanstack/react-form";
 import { FolderOpenIcon, ImageIcon, Loader2Icon, RefreshCwIcon } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -47,13 +49,19 @@ export function TextureResizerWorkspace({
 }: TextureResizerWorkspaceProps) {
   const { t } = useTranslation();
   const [targetPath, setTargetPath] = useState(fixedTargetPath ?? "");
-  const [settings, setSettings] = useState<TextureResizeSettings>(DEFAULT_SETTINGS);
   const [textures, setTextures] = useState<TextureResizeListItem[]>([]);
   const [isListing, setIsListing] = useState(false);
   const [runningFilePath, setRunningFilePath] = useState<string | null>(null);
   const [loadedTargetPath, setLoadedTargetPath] = useState("");
   const [selectedTexture, setSelectedTexture] = useState<TextureResizeListItem | null>(null);
-  const [dialogSettings, setDialogSettings] = useState<TextureResizeSettings>(DEFAULT_SETTINGS);
+  const settingsForm = useForm({
+    defaultValues: DEFAULT_SETTINGS,
+    onSubmit: async () => {},
+  });
+  const dialogSettingsForm = useForm({
+    defaultValues: DEFAULT_SETTINGS,
+    onSubmit: async () => {},
+  });
 
   useEffect(() => {
     setTargetPath(fixedTargetPath ?? "");
@@ -63,7 +71,7 @@ export function TextureResizerWorkspace({
     window.api
       .invoke("tools:getTextureResizeSettings")
       .then((nextSettings) => {
-        setSettings(nextSettings);
+        settingsForm.reset(nextSettings);
         if (mode === "mod" && fixedTargetPath) {
           void loadTextures(fixedTargetPath, nextSettings);
         }
@@ -73,7 +81,7 @@ export function TextureResizerWorkspace({
           description: error instanceof Error ? error.message : String(error),
         });
       });
-  }, [fixedTargetPath, mode, t]);
+  }, [fixedTargetPath, mode, settingsForm, t]);
 
   const browseTargetPath = async () => {
     const selected = await window.api.invoke("util:showOpenDialog", {
@@ -82,11 +90,14 @@ export function TextureResizerWorkspace({
     const filePath = selected.filePaths[0];
     if (filePath) {
       setTargetPath(filePath);
-      await loadTextures(filePath, settings);
+      await loadTextures(filePath, settingsForm.state.values);
     }
   };
 
-  const loadTextures = async (nextTargetPath = targetPath, nextSettings = settings) => {
+  const loadTextures = async (
+    nextTargetPath = targetPath,
+    nextSettings = settingsForm.state.values,
+  ) => {
     const normalizedTargetPath = nextTargetPath.trim();
     if (!normalizedTargetPath) {
       return;
@@ -116,7 +127,7 @@ export function TextureResizerWorkspace({
 
     setRunningFilePath(filePath);
     try {
-      setSettings(nextSettings);
+      settingsForm.reset(nextSettings);
       const nextResult = await window.api.invoke("tools:resizeTextureFile", {
         filePath,
         settings: nextSettings,
@@ -139,8 +150,6 @@ export function TextureResizerWorkspace({
   };
 
   const hasTarget = targetPath.trim().length > 0;
-  const selectedTexturePreview =
-    selectedTexture != null ? resolveTexturePreview(selectedTexture, dialogSettings) : null;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
@@ -226,7 +235,9 @@ export function TextureResizerWorkspace({
                         disabled={isListing || runningFilePath !== null}
                         onProcess={() => {
                           setSelectedTexture(texture);
-                          setDialogSettings(buildDialogSettings(settings, texture));
+                          dialogSettingsForm.reset(
+                            buildDialogSettings(settingsForm.state.values, texture),
+                          );
                         }}
                       />
                       {index < textures.length - 1 && (
@@ -269,82 +280,109 @@ export function TextureResizerWorkspace({
           </DialogHeader>
 
           <ScrollArea className="min-h-0">
-            <div className="space-y-3 pr-4">
-              {selectedTexture && (
-                <div className="space-y-1 text-xs text-muted-foreground">
-                  <div className="break-all">{selectedTexture.relativePath}</div>
-                  <div>
-                    {selectedTexture.originalWidth}x{selectedTexture.originalHeight} -&gt;{" "}
-                    {selectedTexturePreview?.width ?? selectedTexture.targetWidth}x
-                    {selectedTexturePreview?.height ?? selectedTexture.targetHeight}
-                  </div>
-                  <div>
-                    {formatTextureFormatLabel(selectedTexture.format)} /{" "}
-                    {t(`page.tools.texture_resizer.color_space.${selectedTexture.colorSpace}`)}
-                  </div>
-                  <div>
-                    {t("page.tools.texture_resizer.current_output_format")}:{" "}
-                    {formatTextureFormatLabel(
-                      dialogSettings.outputFormat || selectedTexture.outputFormatDefault,
+            <dialogSettingsForm.Subscribe
+              selector={(state) => state.values}
+              children={(dialogSettings) => {
+                const selectedTexturePreview =
+                  selectedTexture != null
+                    ? resolveTexturePreview(selectedTexture, dialogSettings)
+                    : null;
+
+                return (
+                  <div className="space-y-3 pr-4">
+                    {selectedTexture && (
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        <div className="break-all">{selectedTexture.relativePath}</div>
+                        <div>
+                          {selectedTexture.originalWidth}x{selectedTexture.originalHeight} -&gt;{" "}
+                          {selectedTexturePreview?.width ?? selectedTexture.targetWidth}x
+                          {selectedTexturePreview?.height ?? selectedTexture.targetHeight}
+                        </div>
+                        <div>
+                          {formatTextureFormatLabel(selectedTexture.format)} /{" "}
+                          {t(
+                            `page.tools.texture_resizer.color_space.${selectedTexture.colorSpace}`,
+                          )}
+                        </div>
+                        <div>
+                          {t("page.tools.texture_resizer.current_output_format")}:{" "}
+                          {formatTextureFormatLabel(
+                            dialogSettings.outputFormat || selectedTexture.outputFormatDefault,
+                          )}
+                        </div>
+                        {selectedTexture.formatConversionMessage && (
+                          <div>{selectedTexture.formatConversionMessage}</div>
+                        )}
+                      </div>
                     )}
-                  </div>
-                  {selectedTexture.formatConversionMessage && (
-                    <div>{selectedTexture.formatConversionMessage}</div>
-                  )}
-                </div>
-              )}
-              <TextureResizerForm
-                settings={dialogSettings}
-                onSettingsChange={setDialogSettings}
-                disabled={runningFilePath != null}
-                showTargetPath={false}
-                availableOutputFormats={selectedTexture?.availableOutputFormats}
-                currentFormat={selectedTexture?.outputFormatDefault}
-                currentColorSpace={selectedTexture?.colorSpace}
-                formatConversionMessage={selectedTexture?.formatConversionMessage}
-                resizeSource={
-                  selectedTexture
-                    ? {
-                        width: selectedTexture.originalWidth,
-                        height: selectedTexture.originalHeight,
+                    <TextureResizerForm
+                      settings={dialogSettings}
+                      onSettingsChange={(nextSettings) => {
+                        dialogSettingsForm.setFieldValue("mode", nextSettings.mode);
+                        dialogSettingsForm.setFieldValue("operation", nextSettings.operation);
+                        dialogSettingsForm.setFieldValue("percent", nextSettings.percent);
+                        dialogSettingsForm.setFieldValue("customWidth", nextSettings.customWidth);
+                        dialogSettingsForm.setFieldValue("customHeight", nextSettings.customHeight);
+                        dialogSettingsForm.setFieldValue("outputFormat", nextSettings.outputFormat);
+                        dialogSettingsForm.setFieldValue("backup", nextSettings.backup);
+                      }}
+                      disabled={runningFilePath != null}
+                      showTargetPath={false}
+                      availableOutputFormats={selectedTexture?.availableOutputFormats}
+                      currentFormat={selectedTexture?.outputFormatDefault}
+                      currentColorSpace={selectedTexture?.colorSpace}
+                      formatConversionMessage={selectedTexture?.formatConversionMessage}
+                      resizeSource={
+                        selectedTexture
+                          ? {
+                              width: selectedTexture.originalWidth,
+                              height: selectedTexture.originalHeight,
+                            }
+                          : null
                       }
-                    : null
-                }
-              />
-            </div>
+                    />
+                  </div>
+                );
+              }}
+            />
           </ScrollArea>
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setSelectedTexture(null)}
-              disabled={runningFilePath != null}
-            >
-              {t("g.cancel")}
-            </Button>
-            <Button
-              type="button"
-              className="gap-2"
-              disabled={
-                !selectedTexture ||
-                runningFilePath != null ||
-                !canRun(dialogSettings, selectedTexture)
-              }
-              onClick={() =>
-                selectedTexture && void processTexture(selectedTexture.filePath, dialogSettings)
-              }
-            >
-              {runningFilePath === selectedTexture?.filePath ? (
-                <Loader2Icon className="size-4 animate-spin" />
-              ) : (
-                <ImageIcon className="size-4" />
-              )}
-              {runningFilePath === selectedTexture?.filePath
-                ? t("page.tools.texture_resizer.running")
-                : t("page.tools.texture_resizer.process_single")}
-            </Button>
-          </DialogFooter>
+          <dialogSettingsForm.Subscribe
+            selector={(state) => state.values}
+            children={(dialogSettings) => (
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setSelectedTexture(null)}
+                  disabled={runningFilePath != null}
+                >
+                  {t("g.cancel")}
+                </Button>
+                <Button
+                  type="button"
+                  className="gap-2"
+                  disabled={
+                    !selectedTexture ||
+                    runningFilePath != null ||
+                    !canRun(dialogSettings, selectedTexture)
+                  }
+                  onClick={() =>
+                    selectedTexture && void processTexture(selectedTexture.filePath, dialogSettings)
+                  }
+                >
+                  {runningFilePath === selectedTexture?.filePath ? (
+                    <Loader2Icon className="size-4 animate-spin" />
+                  ) : (
+                    <ImageIcon className="size-4" />
+                  )}
+                  {runningFilePath === selectedTexture?.filePath
+                    ? t("page.tools.texture_resizer.running")
+                    : t("page.tools.texture_resizer.process_single")}
+                </Button>
+              </DialogFooter>
+            )}
+          />
         </DialogContent>
       </Dialog>
     </div>
@@ -375,7 +413,7 @@ function TextureItemRow({
           className="block w-full cursor-pointer truncate text-sm font-medium"
           title={texture.fileName}
           onClick={() => {
-            window.api.invoke("util:openExternal", texture.filePath);
+            void window.api.invoke("util:openExternal", texture.filePath);
           }}
         >
           {texture.fileName}

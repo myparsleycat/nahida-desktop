@@ -1,3 +1,4 @@
+import { createWriteStream } from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -350,7 +351,7 @@ class FileDownloadTask {
         if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
         if (!response.body) throw new Error("No response body");
 
-        const fileStream = fse.createWriteStream(targetPath);
+        const fileStream = createWriteStream(targetPath);
         const source = Readable.fromWeb(response.body as unknown as ReadableStream);
 
         try {
@@ -454,7 +455,7 @@ class FileDownloadTask {
         const abortController = new AbortController();
         const combinedSignal = AbortSignal.any([signal, abortController.signal]);
 
-        let speedCheckTimeout: NodeJS.Timeout | null = null;
+        let speedCheckTimeout: ReturnType<typeof setInterval> | null = null;
         let currentBytes = 0;
 
         try {
@@ -495,7 +496,7 @@ class FileDownloadTask {
         onSlow: () => void,
         retryCount: number,
         maxRetries: number,
-    ): NodeJS.Timeout {
+    ): ReturnType<typeof setInterval> {
         const CHECK_INTERVAL = ms("1s");
         const SLOW_SPEED_THRESHOLD = 500 * 1024; // 500KB/s
 
@@ -623,7 +624,7 @@ export class DownloadLib {
 
                 const filePath = path.join(parentPath, file.name);
 
-                this.fileQueue.add(async () => {
+                void this.fileQueue.add(async () => {
                     if (abort.signal.aborted) return;
                     if (parentPath && !ensuredDirs.has(parentPath)) {
                         await this.desktop.lib.fs.ensureDir(parentPath);
@@ -650,7 +651,7 @@ export class DownloadLib {
             for (const dirPath of pathMap.values()) {
                 if (abort.signal.aborted) break;
                 if (!ensuredDirs.has(dirPath)) {
-                    this.fileQueue.add(async () => {
+                    void this.fileQueue.add(async () => {
                         if (abort.signal.aborted) return;
                         await this.desktop.lib.fs.ensureDir(dirPath);
                         ensuredDirs.add(dirPath);
@@ -663,7 +664,7 @@ export class DownloadLib {
 
             if (abort.signal.aborted) return;
 
-            this.finalizeDownload(pid, params.savePath, data.root.name);
+            await this.finalizeDownload(pid, params.savePath, data.root.name);
         } catch (err) {
             if (abort.signal.aborted) return;
             this.desktop.service.transfer.updateTransfer(pid, {
@@ -737,7 +738,7 @@ export class DownloadLib {
         }
     }
 
-    private finalizeDownload(pid: string, savePath: string, rootName: string) {
+    private async finalizeDownload(pid: string, savePath: string, rootName: string) {
         this.desktop.service.transfer.updateTransfer(pid, {
             status: "completed",
             progress: 100,

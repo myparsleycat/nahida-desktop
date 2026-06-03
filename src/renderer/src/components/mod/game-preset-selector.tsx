@@ -46,8 +46,6 @@ export const GamePresetSelector = memo(function GamePresetSelector({
   const setIsSelectedPresetDialogOpen = useModStore((s) => s.setIsSelectedPresetDialogOpen);
   const isSelectedPresetDialogOpen = useModStore((s) => s.isSelectedPresetDialogOpen);
   const setEditingGame = useModStore((s) => s.setEditingGame);
-  const setEditGamePath = useModStore((s) => s.setEditGamePath);
-  const setEditGameImporter = useModStore((s) => s.setEditGameImporter);
   const setIsEditGameDialogOpen = useModStore((s) => s.setIsEditGameDialogOpen);
 
   const { data: presets = [] } = usePresets(selectedGame);
@@ -69,8 +67,6 @@ export const GamePresetSelector = memo(function GamePresetSelector({
   const handleEditGameClick = (game: GameConfig) => {
     openEditGameDialog(game, {
       setEditingGame,
-      setEditGamePath,
-      setEditGameImporter,
       setIsEditGameDialogOpen,
     });
   };

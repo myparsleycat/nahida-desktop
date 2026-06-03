@@ -35,10 +35,6 @@ On the build screen, you can configure the following options:
 - **Provider**:
   Select the provider of the `XXMI-Libs-Package` repository to use for the build.
 
-  ::: warning
-  Do not select the repository from `myparsleycat`, because it is no longer maintained.
-  :::
-
 - **Version**:
   Select the XXMI library version to build.
 

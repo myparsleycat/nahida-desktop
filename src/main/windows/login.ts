@@ -33,7 +33,6 @@ export class LoginWindow {
             frame: isNativeTitlebar,
             maximizable: false,
             autoHideMenuBar: true,
-            ...(process.platform === "linux" ? { icon } : {}),
             webPreferences: {
                 ...getDefaultWebPreferences(),
             },

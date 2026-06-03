@@ -13,7 +13,6 @@ import {
 } from "@renderer/components/ui/select";
 import { Separator } from "@renderer/components/ui/separator";
 import { Switch } from "@renderer/components/ui/switch";
-import { WindowsOnlyRoute } from "@renderer/components/windows-only-route";
 import { useSettings } from "@renderer/hooks/use-settings";
 import { Logger } from "@renderer/lib/logger";
 import {
@@ -48,11 +47,7 @@ const settingsConfig = {
 } as const;
 
 function RouteComponent() {
-  return (
-    <WindowsOnlyRoute fallbackTo="/setting/gen">
-      <ModSettingsRouteContent />
-    </WindowsOnlyRoute>
-  );
+  return <ModSettingsRouteContent />;
 }
 
 function ModSettingsRouteContent() {

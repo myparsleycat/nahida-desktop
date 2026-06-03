@@ -166,7 +166,7 @@ function RouteComponent() {
           <Dialog>
             <form>
               <DialogTrigger asChild>
-                <Button className="gap-2">
+                <Button type="button" className="gap-2">
                   <Plus className="h-4 w-4" />
                   백업 생성
                 </Button>
@@ -190,6 +190,7 @@ function RouteComponent() {
                     <div className="flex gap-2">
                       <Input value={localPath} readOnly />
                       <Button
+                        type="button"
                         variant="outline"
                         onClick={async () => {
                           const result = await window.api.invoke("util:showOpenDialog", {
@@ -212,8 +213,10 @@ function RouteComponent() {
                         open={selectCloudPathDialogOpen}
                         onOpenChange={setSelectCloudPathDialogOpen}
                       >
-                        <DialogTrigger>
-                          <Button variant="outline">선택</Button>
+                        <DialogTrigger asChild>
+                          <Button type="button" variant="outline">
+                            선택
+                          </Button>
                         </DialogTrigger>
 
                         <DialogContent
@@ -293,9 +296,12 @@ function RouteComponent() {
 
                             <div className="flex justify-end space-x-2 pt-4 shrink-0">
                               <DialogClose asChild>
-                                <Button variant="outline">취소</Button>
+                                <Button type="button" variant="outline">
+                                  취소
+                                </Button>
                               </DialogClose>
                               <Button
+                                type="button"
                                 disabled={!selectedItemId}
                                 onClick={() => {
                                   const cloudPath =
@@ -316,7 +322,9 @@ function RouteComponent() {
                 </div>
                 <DialogFooter>
                   <DialogClose asChild>
-                    <Button variant="outline">취소</Button>
+                    <Button type="button" variant="outline">
+                      취소
+                    </Button>
                   </DialogClose>
                   <Button type="submit">생성</Button>
                 </DialogFooter>
