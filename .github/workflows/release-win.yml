@@ -14,16 +14,19 @@ concurrency:
 
 jobs:
   release-windows:
-    runs-on: windows-latest
+    runs-on: windows-2025
 
     env:
       GH_TOKEN: ${{ github.token }}
       VCPKG_ROOT: C:\vcpkg
-      VCPKG_DEFAULT_TRIPLET: x64-windows
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static
 
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -44,13 +47,15 @@ jobs:
       - name: Install vcpkg and libarchive
         shell: pwsh
         run: |
-          git clone https://github.com/microsoft/vcpkg C:\vcpkg
+          if (!(Test-Path "C:\vcpkg")) {
+            git clone https://github.com/microsoft/vcpkg C:\vcpkg
+          }
+
           C:\vcpkg\bootstrap-vcpkg.bat
-          C:\vcpkg\vcpkg.exe install libarchive:x64-windows
-          C:\vcpkg\vcpkg.exe integrate install
+          C:\vcpkg\vcpkg.exe install libarchive:x64-windows-static
 
           echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
-          echo "VCPKG_DEFAULT_TRIPLET=x64-windows" >> $env:GITHUB_ENV
+          echo "VCPKG_DEFAULT_TRIPLET=x64-windows-static" >> $env:GITHUB_ENV
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
