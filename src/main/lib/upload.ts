@@ -118,6 +118,7 @@ export class UploadLib {
             ".webm",
             ".blend",
             ".pck",
+            ".bin",
         ];
         const allowedExt = [...defaultAllowedExt, ...additionalExt].map((ext) =>
             ext.startsWith(".") ? ext.toLowerCase() : `.${ext.toLowerCase()}`,
