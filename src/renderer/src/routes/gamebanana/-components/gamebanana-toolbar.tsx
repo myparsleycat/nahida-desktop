@@ -16,7 +16,7 @@ import {
   MenubarRadioItem,
   MenubarTrigger,
 } from "@renderer/components/ui/menubar";
-import { ArrowLeftIcon, ExternalLinkIcon, LogOutIcon } from "lucide-react";
+import { ArrowLeftIcon, ExternalLinkIcon, LinkIcon, LogOutIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { GameBananaBreadcrumbItem, GameOption } from "../-types";
 
@@ -33,6 +33,7 @@ export function GameBananaToolbar({
   canGoBack,
   isLoggingOut,
   onSelectGame,
+  onOpenModUrlDialog,
   onOpenGameProfile,
   onLogout,
   onGoBack,
@@ -52,6 +53,7 @@ export function GameBananaToolbar({
   canGoBack: boolean;
   isLoggingOut: boolean;
   onSelectGame: (game: GameOption["key"]) => void;
+  onOpenModUrlDialog: () => void;
   onOpenGameProfile: () => void;
   onLogout: () => void;
   onGoBack: () => void;
@@ -157,6 +159,10 @@ export function GameBananaToolbar({
 
       <div className="flex items-center gap-2">
         <Badge variant="outline">{stageLabel}</Badge>
+        <Button variant="outline" size="sm" onClick={onOpenModUrlDialog}>
+          <LinkIcon />
+          {t("page.gamebanana.open_mod_url.button")}
+        </Button>
         {canOpenProfile && (
           <Button variant="outline" size="sm" onClick={onOpenGameProfile}>
             <ExternalLinkIcon />

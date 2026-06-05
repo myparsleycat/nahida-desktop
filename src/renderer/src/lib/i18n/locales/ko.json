@@ -492,6 +492,14 @@
       "error_description_schema": "GameBanana가 {{context}}에 대해 예상과 다른 데이터를 반환했습니다.",
       "game_overview_description": "선택한 게임의 개요와 주요 제출물을 확인합니다.",
       "open_profile": "웹에서 열기",
+      "open_mod_url": {
+        "button": "URL 열기",
+        "title": "GameBanana 모드 URL 열기",
+        "description": "GameBanana 모드 페이지 URL을 입력하면 상세 정보를 엽니다.",
+        "placeholder": "https://gamebanana.com/mods/...",
+        "invalid": "올바른 GameBanana 모드 URL을 입력해 주세요.",
+        "confirm": "열기"
+      },
       "logout": "로그아웃",
       "stats": {
         "subscribers": "구독자",
