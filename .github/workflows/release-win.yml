@@ -19,6 +19,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       VCPKG_ROOT: C:\vcpkg
+      VCPKG_TAG: 2026.06.01
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
 
     steps:
@@ -51,6 +52,8 @@ jobs:
             git clone https://github.com/microsoft/vcpkg C:\vcpkg
           }
 
+          git -C C:\vcpkg fetch --tags --force origin
+          git -C C:\vcpkg checkout $env:VCPKG_TAG
           C:\vcpkg\bootstrap-vcpkg.bat
           C:\vcpkg\vcpkg.exe install libarchive:x64-windows-static
 
