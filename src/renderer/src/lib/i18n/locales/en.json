@@ -512,6 +512,13 @@
       "error_description_schema": "GameBanana returned unexpected data for {{context}}.",
       "game_overview_description": "Overview and highlighted submissions for the selected game.",
       "open_profile": "Open in Browser",
+      "open_mod_url": {
+        "button": "Open URL",
+        "title": "Open by Mod URL",
+        "placeholder": "https://gamebanana.com/mods/...",
+        "invalid": "Enter a valid GameBanana mod URL.",
+        "confirm": "Open"
+      },
       "logout": "Logout",
       "stats": {
         "subscribers": "Subscribers",

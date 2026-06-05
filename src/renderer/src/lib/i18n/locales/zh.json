@@ -485,6 +485,13 @@
       "error_description_schema": "GameBanana 针对 {{context}} 返回了非预期的数据。",
       "game_overview_description": "查看所选游戏的概览和热门投稿。",
       "open_profile": "在网页中打开",
+      "open_mod_url": {
+        "button": "打开 URL",
+        "title": "通过 Mod URL 打开",
+        "placeholder": "https://gamebanana.com/mods/...",
+        "invalid": "请输入有效的 GameBanana Mod URL。",
+        "confirm": "打开"
+      },
       "logout": "登出",
       "stats": {
         "subscribers": "订阅者",

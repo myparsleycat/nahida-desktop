@@ -23,6 +23,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Loader2Icon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import isURL from "validator/lib/isURL";
 import { GameBananaToolbar } from "./-components/gamebanana-toolbar";
 import { CategoryPanel } from "./-panels/category-panel";
 import { GameHomePanel } from "./-panels/game-home-panel";
@@ -38,6 +39,31 @@ export const Route = createFileRoute("/gamebanana/")({
   component: RouteComponent,
 });
 
+function parseGameBananaModUrl(value: string) {
+  const trimmedValue = value.trim();
+  if (
+    !isURL(trimmedValue, {
+      protocols: ["http", "https"],
+      require_protocol: true,
+      host_whitelist: ["gamebanana.com"],
+      disallow_auth: true,
+      allow_fragments: true,
+      allow_query_components: true,
+    })
+  ) {
+    return undefined;
+  }
+
+  const url = new URL(trimmedValue);
+  const match = /^\/mods\/(\d+)\/?$/i.exec(url.pathname);
+  if (!match) return undefined;
+
+  return {
+    id: Number(match[1]),
+    modelName: "Mod",
+  };
+}
+
 function RouteComponent() {
   const { t, i18n } = useTranslation();
   const [authStatus, setAuthStatus] = useState<"checking" | "ready" | "error">("checking");
@@ -47,6 +73,9 @@ function RouteComponent() {
   const [manualRmcValue, setManualRmcValue] = useState("");
   const [manualRmcError, setManualRmcError] = useState<string | null>(null);
   const [isSavingManualRmc, setIsSavingManualRmc] = useState(false);
+  const [isModUrlDialogOpen, setIsModUrlDialogOpen] = useState(false);
+  const [modUrlValue, setModUrlValue] = useState("");
+  const [modUrlError, setModUrlError] = useState<string | null>(null);
   const isAuthReady = authStatus === "ready";
   const {
     data: gamesMap,
@@ -192,6 +221,24 @@ function RouteComponent() {
   const handleOpenGameProfile = () => {
     if (!currentProfileUrl) return;
     void window.api.invoke("util:openExternal", currentProfileUrl);
+  };
+
+  const handleOpenModUrlDialog = () => {
+    setModUrlError(null);
+    setIsModUrlDialogOpen(true);
+  };
+
+  const handleOpenModUrl = () => {
+    const selection = parseGameBananaModUrl(modUrlValue);
+    if (!selection) {
+      setModUrlError(t("page.gamebanana.open_mod_url.invalid"));
+      return;
+    }
+
+    selectMod(selection);
+    setIsModUrlDialogOpen(false);
+    setModUrlValue("");
+    setModUrlError(null);
   };
 
   const canGoBack = isViewingMod || hasCategoryContext;
@@ -415,6 +462,7 @@ function RouteComponent() {
               isGamesLoading={isGamesLoading}
               gamesError={Boolean(gamesError)}
               onSelectGame={setSelectedGame}
+              onOpenModUrlDialog={handleOpenModUrlDialog}
               onOpenGameProfile={handleOpenGameProfile}
               isLoggingOut={isLoggingOut}
               onLogout={handleLogout}
@@ -500,6 +548,43 @@ function RouteComponent() {
             )}
           </div>
         </div>
+        <Dialog
+          open={isModUrlDialogOpen}
+          onOpenChange={(open) => {
+            setIsModUrlDialogOpen(open);
+            if (!open) {
+              setModUrlError(null);
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("page.gamebanana.open_mod_url.title")}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Input
+                value={modUrlValue}
+                placeholder={t("page.gamebanana.open_mod_url.placeholder")}
+                onChange={(event) => setModUrlValue(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    handleOpenModUrl();
+                  }
+                }}
+              />
+              {modUrlError && <p className="text-sm text-destructive">{modUrlError}</p>}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsModUrlDialogOpen(false)}>
+                {t("g.cancel")}
+              </Button>
+              <Button onClick={handleOpenModUrl}>
+                {t("page.gamebanana.open_mod_url.confirm")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </main>
     </>
   );
