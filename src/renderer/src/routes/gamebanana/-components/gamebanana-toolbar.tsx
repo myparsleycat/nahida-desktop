@@ -1,4 +1,3 @@
-import { Badge } from "@renderer/components/ui/badge";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -8,6 +7,7 @@ import {
   BreadcrumbSeparator,
 } from "@renderer/components/ui/breadcrumb";
 import { Button } from "@renderer/components/ui/button";
+import { ButtonGroup, ButtonGroupText } from "@renderer/components/ui/button-group";
 import {
   Menubar,
   MenubarContent,
@@ -64,7 +64,7 @@ export function GameBananaToolbar({
   const { t } = useTranslation();
 
   return (
-    <div className="flex flex-col gap-3 lg:flex-row  justify-between">
+    <div className="flex flex-col justify-between gap-3 lg:flex-row">
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
         {canGoBack && (
           <Button variant="ghost" size="sm" className="h-9 gap-1 px-2" onClick={onGoBack}>
@@ -157,23 +157,25 @@ export function GameBananaToolbar({
         </Breadcrumb>
       </div>
 
-      <div className="flex items-center gap-2">
-        <Badge variant="outline">{stageLabel}</Badge>
-        <Button variant="outline" size="sm" onClick={onOpenModUrlDialog}>
+      <ButtonGroup className="shrink-0">
+        <ButtonGroupText className="h-8 text-xs text-muted-foreground">
+          {stageLabel}
+        </ButtonGroupText>
+        <Button variant="outline" onClick={onOpenModUrlDialog}>
           <LinkIcon />
-          {t("page.gamebanana.open_mod_url.button")}
+          {/* {t("page.gamebanana.open_mod_url.button")} */}
         </Button>
         {canOpenProfile && (
-          <Button variant="outline" size="sm" onClick={onOpenGameProfile}>
+          <Button variant="outline" onClick={onOpenGameProfile}>
             <ExternalLinkIcon />
-            {t("page.gamebanana.open_profile")}
+            {/* {t("page.gamebanana.open_profile")} */}
           </Button>
         )}
-        <Button variant="outline" size="sm" onClick={onLogout} disabled={isLoggingOut}>
+        <Button variant="outline" onClick={onLogout} disabled={isLoggingOut}>
           <LogOutIcon />
-          {t("page.gamebanana.logout")}
+          {/* {t("page.gamebanana.logout")} */}
         </Button>
-      </div>
+      </ButtonGroup>
     </div>
   );
 }
