@@ -10,6 +10,7 @@ import {
 import { useModStore } from "@renderer/store/mod";
 import { useNavigate } from "@tanstack/react-router";
 import { FolderOpen, Grid3x3 } from "lucide-react";
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 interface PathSelectorDialogProps {
@@ -28,26 +29,51 @@ export function PathSelectorDialog({
   const { t } = useTranslation();
   const navi = useNavigate();
   const setDownloadMode = useModStore((s) => s.setDownloadMode);
+  const skipCancelOnCloseRef = useRef(false);
+
+  const closeWithoutCancel = () => {
+    skipCancelOnCloseRef.current = true;
+    onOpenChange(false);
+  };
+
+  const cancelSelection = async () => {
+    await window.api.invoke("pathSelector:cancel", selectionId);
+  };
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      onOpenChange(true);
+      return;
+    }
+
+    if (skipCancelOnCloseRef.current) {
+      skipCancelOnCloseRef.current = false;
+      onOpenChange(false);
+      return;
+    }
+
+    void cancelSelection().finally(() => onOpenChange(false));
+  };
 
   const handleFolderSelect = async () => {
     await window.api.invoke("pathSelector:selectFolderPath", selectionId);
-    onOpenChange(false);
+    closeWithoutCancel();
   };
 
   const handleModManagerSelect = () => {
     // Navigate to mod page with download mode set
     setDownloadMode({ downloadId: selectionId, suggestedName });
-    navi({ to: "/mod" });
-    onOpenChange(false);
+    void navi({ to: "/mod" });
+    closeWithoutCancel();
   };
 
   const handleCancel = async () => {
-    await window.api.invoke("pathSelector:cancel", selectionId);
-    onOpenChange(false);
+    await cancelSelection();
+    closeWithoutCancel();
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent onOpenAutoFocus={(e) => e.preventDefault()} showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>{t("components.path-selector-dialog.title")}</DialogTitle>
