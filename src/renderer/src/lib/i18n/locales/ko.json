@@ -494,8 +494,7 @@
       "open_profile": "웹에서 열기",
       "open_mod_url": {
         "button": "URL 열기",
-        "title": "GameBanana 모드 URL 열기",
-        "description": "GameBanana 모드 페이지 URL을 입력하면 상세 정보를 엽니다.",
+        "title": "모드 URL로 열기",
         "placeholder": "https://gamebanana.com/mods/...",
         "invalid": "올바른 GameBanana 모드 URL을 입력해 주세요.",
         "confirm": "열기"

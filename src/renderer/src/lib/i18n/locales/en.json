@@ -514,8 +514,7 @@
       "open_profile": "Open in Browser",
       "open_mod_url": {
         "button": "Open URL",
-        "title": "Open GameBanana Mod URL",
-        "description": "Enter a GameBanana mod page URL to open its details.",
+        "title": "Open by Mod URL",
         "placeholder": "https://gamebanana.com/mods/...",
         "invalid": "Enter a valid GameBanana mod URL.",
         "confirm": "Open"

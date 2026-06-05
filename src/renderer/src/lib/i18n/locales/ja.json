@@ -488,8 +488,7 @@
       "open_profile": "Webで開く",
       "open_mod_url": {
         "button": "URL を開く",
-        "title": "GameBanana Mod URL を開く",
-        "description": "GameBanana の Mod ページ URL を入力すると詳細を開きます。",
+        "title": "Mod URLで開く",
         "placeholder": "https://gamebanana.com/mods/...",
         "invalid": "有効な GameBanana Mod URL を入力してください。",
         "confirm": "開く"

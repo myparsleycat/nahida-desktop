@@ -560,7 +560,6 @@ function RouteComponent() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{t("page.gamebanana.open_mod_url.title")}</DialogTitle>
-              <DialogDescription>{t("page.gamebanana.open_mod_url.description")}</DialogDescription>
             </DialogHeader>
             <div className="space-y-2">
               <Input

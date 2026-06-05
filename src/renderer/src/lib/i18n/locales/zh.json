@@ -487,8 +487,7 @@
       "open_profile": "在网页中打开",
       "open_mod_url": {
         "button": "打开 URL",
-        "title": "打开 GameBanana Mod URL",
-        "description": "输入 GameBanana Mod 页面 URL 以打开其详情。",
+        "title": "通过 Mod URL 打开",
         "placeholder": "https://gamebanana.com/mods/...",
         "invalid": "请输入有效的 GameBanana Mod URL。",
         "confirm": "打开"
