@@ -43,4 +43,3 @@ publish:
     provider: github
     owner: myparsleycat
     repo: nahida-desktop
-    releaseType: release
