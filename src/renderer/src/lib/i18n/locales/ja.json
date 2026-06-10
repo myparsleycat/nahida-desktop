@@ -1007,19 +1007,6 @@
     },
     "docs": {
       "title": "使い方"
-    },
-    "report": {
-      "title": "問題を報告",
-      "reported_title": "問題が報告されました",
-      "report_id": "report id: {{id}}",
-      "description_label": "経験した問題をできるだけ詳しく説明してください。",
-      "fields": {
-        "title": "タイトル",
-        "title_placeholder": "任意",
-        "description": "問題の説明",
-        "attach_log": "デバッグに役立つログファイルを添付する"
-      },
-      "submit": "送信"
     }
   },
   "components": {

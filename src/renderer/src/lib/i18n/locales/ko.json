@@ -1026,19 +1026,6 @@
     },
     "docs": {
       "title": "사용 방법"
-    },
-    "report": {
-      "title": "문제 신고",
-      "reported_title": "문제가 신고되었습니다",
-      "report_id": "report id: {{id}}",
-      "description_label": "경험한 문제를 가능한 자세히 설명해주세요.",
-      "fields": {
-        "title": "제목",
-        "title_placeholder": "선택적",
-        "description": "문제 설명",
-        "attach_log": "디버그에 도움을 줄 수 있는 로그 파일 첨부"
-      },
-      "submit": "제출"
     }
   },
   "components": {

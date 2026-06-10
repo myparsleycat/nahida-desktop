@@ -1006,19 +1006,6 @@
     },
     "docs": {
       "title": "使用说明"
-    },
-    "report": {
-      "title": "报告问题",
-      "reported_title": "问题已报告",
-      "report_id": "report id: {{id}}",
-      "description_label": "请尽可能详细地说明您遇到的问题。",
-      "fields": {
-        "title": "标题",
-        "title_placeholder": "可选",
-        "description": "问题说明",
-        "attach_log": "附加有助于调试的日志文件"
-      },
-      "submit": "提交"
     }
   },
   "components": {

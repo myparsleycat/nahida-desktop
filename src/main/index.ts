@@ -35,7 +35,6 @@ import type { XXMI } from "./services/xxmi";
 import Setting from "./setting";
 import LoginWindow from "./windows/login";
 import MainWindow from "./windows/main";
-import ReportWindow from "./windows/report";
 
 if (IS_ELECTRON) {
     // Needs to be here, otherwise Chromium's FileSystemAccess API won't work. Waiting for the electron team to fix it.
@@ -64,7 +63,6 @@ export class NahidaDesktop {
     public window: {
         main: MainWindow;
         auth: LoginWindow;
-        report: ReportWindow;
     };
     public lib: {
         db: DatabaseClient;
@@ -101,7 +99,6 @@ export class NahidaDesktop {
         this.window = {
             main: new MainWindow(this),
             auth: new LoginWindow(this),
-            report: new ReportWindow(this),
         };
         this.lib = {
             db: new DatabaseClient(dbPath),
