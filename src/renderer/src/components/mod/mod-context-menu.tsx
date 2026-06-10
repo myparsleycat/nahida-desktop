@@ -120,7 +120,7 @@ export function ModContextMenu({ mod, actions, children }: ModContextMenuProps) 
               disabled={actions.runner.isPreparing}
               onClick={() => void actions.openWuwaFixer(mod)}
             >
-              <img src={wuwaModFixerIcon} className="mr-2 size-4" />
+              <img src={wuwaModFixerIcon} className="size-4" />
               Wuwa Mod Fixer
             </ContextMenuItem>
           )}
