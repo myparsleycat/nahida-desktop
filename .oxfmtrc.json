@@ -24,7 +24,7 @@
       }
     },
     {
-      "files": ["*.json"],
+      "files": ["*.json", "*.yaml"],
       "options": {
         "tabWidth": 2
       }
