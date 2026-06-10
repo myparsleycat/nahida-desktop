@@ -194,6 +194,8 @@
       "content-header": {
         "all_enabled": "All mods enabled",
         "all_disabled": "All mods disabled",
+        "tools": "Tools",
+        "wuwa-mod-fixer": "Wuwa Mod Fixer",
         "download_dialog": {
           "title": "Download from URL",
           "description": "Download the archive to the selected character folder and extract it automatically.",
@@ -214,7 +216,9 @@
         "collapse-subgroups": "Collapse subgroups",
         "expand-subgroups": "Expand subgroups",
         "unpersist-subgroups": "Unpersist subgroups",
-        "persist-subgroups": "Persist subgroups"
+        "persist-subgroups": "Persist subgroups",
+        "tools": "Tools",
+        "wuwa-mod-fixer": "Wuwa Mod Fixer"
       },
       "drag_drop": {
         "target_path_not_set": "Target path is not set.",

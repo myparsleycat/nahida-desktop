@@ -2,6 +2,7 @@ import { DownloadConfirmationOverlay } from "@renderer/components/download-confi
 import { ContentHeader } from "@renderer/components/mod/content-header";
 import { CustomDownloadDialog } from "@renderer/components/mod/custom-download-dialog";
 import { DeleteGameDialog } from "@renderer/components/mod/delete-game-dialog";
+import { ModFixRunnerDialogs } from "@renderer/components/mod/mod-fix-runner-dialogs";
 import { ModGrid } from "@renderer/components/mod/mod-grid";
 import { ModList } from "@renderer/components/mod/mod-list";
 import { PresetManagementDialog } from "@renderer/components/mod/preset-management-dialog";
@@ -24,6 +25,7 @@ import {
   useModRefreshOnFocus,
   useModWatcherEvents,
 } from "@renderer/hooks/use-mod-events";
+import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { modStore, useModStore } from "@renderer/store/mod";
 import type { ResolvedArchiveExtractPathMode } from "@shared/mod";
@@ -55,6 +57,8 @@ function ModRouteContent() {
   const archiveExtractPrompt = useModStore((s) => s.archiveExtractPrompt);
   const setArchiveExtractPrompt = useModStore((s) => s.setArchiveExtractPrompt);
   const viewMode = useModStore((s) => s.viewMode);
+
+  const runner = useModFixRunner();
 
   const { data: games = [] } = useGames();
   const { data: characters = [] } = useCharacters(selectedGame);
@@ -173,7 +177,10 @@ function ModRouteContent() {
       <Titlebar title={{ text: t("page.mod.title"), position: "center" }} />
 
       <div className="flex-1 flex overflow-hidden h-full">
-        <ModSidebar />
+        <ModSidebar
+          showWuwaFixer={runner.showWuwaFixer}
+          onOpenWuwaFixer={runner.handleOpenWuwaFixer}
+        />
 
         <div
           className="flex-1 flex flex-col overflow-hidden relative"
@@ -182,7 +189,13 @@ function ModRouteContent() {
           onDragOver={handleDragOver}
           onDrop={handleDrop}
         >
-          {selectedGroupPath && <ContentHeader />}
+          {selectedGroupPath && (
+            <ContentHeader
+              showWuwaFixer={runner.showWuwaFixer}
+              handleOpenWuwaFixer={runner.handleOpenWuwaFixer}
+              isPreparing={runner.isPreparing}
+            />
+          )}
 
           <div className="relative flex flex-1 min-h-0 flex-col overflow-hidden">
             {viewMode === "grid" ? (
@@ -316,6 +329,7 @@ function ModRouteContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <ModFixRunnerDialogs runner={runner} />
     </>
   );
 }
