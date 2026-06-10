@@ -173,6 +173,8 @@
       "content-header": {
         "all_enabled": "所有模组已启用",
         "all_disabled": "所有模组已禁用",
+        "tools": "工具",
+        "wuwa-mod-fixer": "Wuwa Mod Fixer",
         "download_dialog": {
           "title": "通过 URL 下载",
           "description": "将输入的压缩包 URL 下载到当前选中的角色文件夹，并自动解压。",
@@ -193,7 +195,9 @@
         "collapse-subgroups": "折叠子文件夹",
         "expand-subgroups": "探索子文件夹",
         "unpersist-subgroups": "取消子文件夹指定",
-        "persist-subgroups": "指定为子文件夹"
+        "persist-subgroups": "指定为子文件夹",
+        "tools": "工具",
+        "wuwa-mod-fixer": "Wuwa Mod Fixer"
       },
       "drag_drop": {
         "target_path_not_set": "未设置目标路径。",

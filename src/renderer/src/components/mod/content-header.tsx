@@ -5,6 +5,9 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
 import { Input } from "@renderer/components/ui/input";
@@ -34,11 +37,23 @@ import {
   LayoutGridIcon,
   ListIcon,
   Search,
+  WrenchIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import wuwaModFixerIcon from "@/renderer/assets/img/wuwa-mod-fixer-icon.png";
 
-export function ContentHeader() {
+interface ContentHeaderProps {
+  showWuwaFixer: boolean;
+  handleOpenWuwaFixer: (path: string) => Promise<void>;
+  isPreparing: boolean;
+}
+
+export function ContentHeader({
+  showWuwaFixer,
+  handleOpenWuwaFixer,
+  isPreparing,
+}: ContentHeaderProps) {
   const { t } = useTranslation();
 
   const searchValue = useModStore((s) => s.searchQuery);
@@ -210,6 +225,27 @@ export function ContentHeader() {
               <DownloadIcon />
               {t("g.download")}
             </DropdownMenuItem>
+
+            {showWuwaFixer && hasSelectedGroup && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <WrenchIcon className="h-4 w-4" />
+                    {t("page.mod.content-header.tools")}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem
+                      disabled={isPreparing}
+                      onClick={() => void handleOpenWuwaFixer(groupPath!)}
+                    >
+                      <img src={wuwaModFixerIcon} className="size-4" />
+                      {t("page.mod.content-header.wuwa-mod-fixer")}
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

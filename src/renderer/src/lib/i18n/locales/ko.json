@@ -173,6 +173,8 @@
       "content-header": {
         "all_enabled": "모든 모드가 활성화되었습니다",
         "all_disabled": "모든 모드가 비활성화되었습니다",
+        "tools": "도구",
+        "wuwa-mod-fixer": "Wuwa Mod Fixer",
         "download_dialog": {
           "title": "URL로 다운로드",
           "description": "입력한 압축 파일 URL을 현재 선택한 캐릭터 폴더에 다운로드하고 자동으로 압축을 해제합니다.",
@@ -193,7 +195,9 @@
         "collapse-subgroups": "서브폴더 접기",
         "expand-subgroups": "서브폴더로 탐색",
         "unpersist-subgroups": "서브폴더 지정 해제",
-        "persist-subgroups": "서브폴더로 지정"
+        "persist-subgroups": "서브폴더로 지정",
+        "tools": "도구",
+        "wuwa-mod-fixer": "Wuwa Mod Fixer"
       },
       "drag_drop": {
         "target_path_not_set": "대상 경로가 설정되지 않았습니다.",

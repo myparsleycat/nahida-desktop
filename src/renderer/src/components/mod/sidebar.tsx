@@ -23,7 +23,13 @@ function clampCharacterSidebarWidth(width: number) {
   );
 }
 
-export default function ModSidebar() {
+export default function ModSidebar({
+  showWuwaFixer,
+  onOpenWuwaFixer,
+}: {
+  showWuwaFixer: boolean;
+  onOpenWuwaFixer: (path: string) => Promise<void>;
+}) {
   const selectedGame = useModStore((s) => s.selectedGame);
   const setDeletingGame = useModStore((s) => s.setDeletingGame);
   const setIsDeleteGameDialogOpen = useModStore((s) => s.setIsDeleteGameDialogOpen);
@@ -215,7 +221,12 @@ export default function ModSidebar() {
       }}
     >
       <div className="flex-1 overflow-y-auto h-full">
-        <CharacterSidebar groups={characters} isLoading={isPending || isPlaceholderData} />
+        <CharacterSidebar
+          groups={characters}
+          isLoading={isPending || isPlaceholderData}
+          showWuwaFixer={showWuwaFixer}
+          onOpenWuwaFixer={onOpenWuwaFixer}
+        />
       </div>
 
       <GamePresetSelector

@@ -3,6 +3,9 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@renderer/components/ui/context-menu";
 import { Skeleton } from "@renderer/components/ui/skeleton";
@@ -18,9 +21,11 @@ import {
   FolderPlus,
   FolderTree,
   TrashIcon,
+  WrenchIcon,
 } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import wuwaModFixerIcon from "@/renderer/assets/img/wuwa-mod-fixer-icon.png";
 import { buttonVariants } from "../ui/button";
 import { CharacterSidebarItemGrid } from "./character-sidebar-item-grid";
 import { CharacterSidebarItemRow } from "./character-sidebar-item-row";
@@ -41,6 +46,8 @@ interface CharacterSidebarItemProps {
   nestedItemClassName?: string;
   itemStyle?: React.CSSProperties;
   previewCacheKey?: number;
+  showWuwaFixer?: boolean;
+  onOpenWuwaFixer?: (path: string) => Promise<void>;
 }
 
 export const CharacterSidebarItem = memo(function CharacterSidebarItem({
@@ -58,6 +65,8 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   nestedItemClassName,
   itemStyle,
   previewCacheKey,
+  showWuwaFixer,
+  onOpenWuwaFixer,
 }: CharacterSidebarItemProps) {
   const { t } = useTranslation();
   const isSelected = useModStore((s) => s.selectedGroup?.path === group.path);
@@ -216,17 +225,17 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
 
       <ContextMenuContent className="w-56">
         <ContextMenuItem onClick={() => window.api.invoke("util:openPath", group.path)}>
-          <FolderIcon className="mr-2 h-4 w-4" />
+          <FolderIcon className="h-4 w-4" />
           {t("page.mod.character-sidebar.open-in-explorer")}
         </ContextMenuItem>
 
         <ContextMenuItem onClick={() => onCreateFolder?.(group)}>
-          <FolderPlus className="mr-2 h-4 w-4" />
+          <FolderPlus className="h-4 w-4" />
           {t("page.mod.character-sidebar.create-folder")}
         </ContextMenuItem>
 
         <ContextMenuItem variant="destructive" onClick={() => onDeleteFolder?.(group)}>
-          <TrashIcon className="mr-2 h-4 w-4" />
+          <TrashIcon className="h-4 w-4" />
           {t("page.mod.character-sidebar.delete-folder")}
         </ContextMenuItem>
 
@@ -236,12 +245,12 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
           <ContextMenuItem onClick={() => toggleExpandedGroup(group.path)}>
             {isExpanded ? (
               <>
-                <FolderMinus className="mr-2 h-4 w-4" />
+                <FolderMinus className="h-4 w-4" />
                 {t("page.mod.character-sidebar.collapse-subgroups")}
               </>
             ) : (
               <>
-                <FolderTree className="mr-2 h-4 w-4" />
+                <FolderTree className="h-4 w-4" />
                 {t("page.mod.character-sidebar.expand-subgroups")}
               </>
             )}
@@ -251,16 +260,34 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
         <ContextMenuItem onClick={() => togglePersistentGroup(group.path)}>
           {isPersistent ? (
             <>
-              <FolderMinus className="mr-2 h-4 w-4 text-destructive" />
+              <FolderMinus className="h-4 w-4 text-destructive" />
               {t("page.mod.character-sidebar.unpersist-subgroups")}
             </>
           ) : (
             <>
-              <FolderTree className="mr-2 h-4 w-4 text-primary" />
+              <FolderTree className="h-4 w-4 text-primary" />
               {t("page.mod.character-sidebar.persist-subgroups")}
             </>
           )}
         </ContextMenuItem>
+
+        {showWuwaFixer && onOpenWuwaFixer && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <WrenchIcon className="h-4 w-4" />
+                {t("page.mod.character-sidebar.tools")}
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent>
+                <ContextMenuItem onClick={() => void onOpenWuwaFixer(group.path)}>
+                  <img src={wuwaModFixerIcon} className="size-4" />
+                  {t("page.mod.character-sidebar.wuwa-mod-fixer")}
+                </ContextMenuItem>
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+          </>
+        )}
       </ContextMenuContent>
     </ContextMenu>
   );

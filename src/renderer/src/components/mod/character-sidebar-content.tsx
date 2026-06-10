@@ -16,6 +16,8 @@ export interface CharacterSidebarContentProps {
   onDeleteFolder: (group: FolderGroup) => void;
   showSkeleton: boolean;
   previewCacheKey: number;
+  showWuwaFixer?: boolean;
+  onOpenWuwaFixer?: (path: string) => Promise<void>;
 }
 
 interface CharacterSidebarContentLayoutProps extends CharacterSidebarContentProps {
@@ -59,6 +61,8 @@ interface CharacterSidebarItemWithChildrenProps {
   parentGroupName?: string;
   collapseGroupPath?: string;
   previewCacheKey: number;
+  showWuwaFixer?: boolean;
+  onOpenWuwaFixer?: (path: string) => Promise<void>;
 }
 
 const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithChildren({
@@ -81,6 +85,8 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   itemStyle,
   parentGroupName,
   collapseGroupPath,
+  showWuwaFixer,
+  onOpenWuwaFixer,
 }: CharacterSidebarItemWithChildrenProps) {
   const isExpanded = useModStore((s) => s.expandedGroups.has(group.path));
   const isPersistent = useModStore((s) => s.persistentGroups.has(group.path));
@@ -138,6 +144,8 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
           selectedItemClassName={selectedItemClassName}
           nestedItemClassName={nestedItemClassName}
           itemStyle={resolvedItemStyle}
+          showWuwaFixer={showWuwaFixer}
+          onOpenWuwaFixer={onOpenWuwaFixer}
         />
       )}
       {showSubGroups &&
@@ -163,6 +171,8 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
             nestedItemClassName={nestedItemClassName}
             itemStyle={itemStyle}
             parentGroupName={group.name}
+            showWuwaFixer={showWuwaFixer}
+            onOpenWuwaFixer={onOpenWuwaFixer}
           />
         ))}
     </>
@@ -187,6 +197,8 @@ export function CharacterSidebarContent({
   selectedItemClassName,
   nestedItemClassName,
   itemStyle,
+  showWuwaFixer,
+  onOpenWuwaFixer,
 }: CharacterSidebarContentLayoutProps) {
   return (
     <div className={listClassName} style={listStyle}>
@@ -214,6 +226,8 @@ export function CharacterSidebarContent({
               selectedItemClassName={selectedItemClassName}
               nestedItemClassName={nestedItemClassName}
               itemStyle={itemStyle}
+              showWuwaFixer={showWuwaFixer}
+              onOpenWuwaFixer={onOpenWuwaFixer}
             />
           ))}
     </div>

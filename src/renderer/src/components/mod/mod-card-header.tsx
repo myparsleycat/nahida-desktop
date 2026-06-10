@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
+import wuwaModFixerIcon from "@/renderer/assets/img/wuwa-mod-fixer-icon.png";
 
 interface ModCardHeaderProps {
   mod: ModInfo;
@@ -61,9 +62,22 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                   actions.openTextureResizeDialog(mod);
                 }}
               >
-                <ImageIcon className="mr-2 size-4" />
+                <ImageIcon className="size-4" />
                 {t("page.tools.texture_resizer.title")}
               </DropdownMenuItem>
+
+              {actions.runner.showWuwaFixer && (
+                <DropdownMenuItem
+                  disabled={actions.runner.isPreparing}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void actions.openWuwaFixer(mod);
+                  }}
+                >
+                  <img src={wuwaModFixerIcon} className="size-4" />
+                  Wuwa Mod Fixer
+                </DropdownMenuItem>
+              )}
             </DropdownMenuGroup>
 
             <DropdownMenuSeparator />
@@ -113,19 +127,6 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                 </DropdownMenuItem>
               ))}
             </DropdownMenuGroup>
-            {actions.runner.showWuwaFixer && (
-              <DropdownMenuGroup>
-                <DropdownMenuItem
-                  disabled={actions.runner.isPreparing}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void actions.openWuwaFixer(mod);
-                  }}
-                >
-                  Wuwa Mod Fixer
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-            )}
           </DropdownMenuContent>
         </DropdownMenu>
 

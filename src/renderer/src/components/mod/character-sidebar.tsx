@@ -49,11 +49,15 @@ function getParentGroupPath(groupPath: string) {
 interface CharacterSidebarProps {
   groups: FolderGroup[];
   isLoading?: boolean;
+  showWuwaFixer?: boolean;
+  onOpenWuwaFixer?: (path: string) => Promise<void>;
 }
 
 export const CharacterSidebar = memo(function CharacterSidebar({
   groups,
   isLoading = false,
+  showWuwaFixer,
+  onOpenWuwaFixer,
 }: CharacterSidebarProps) {
   const { t } = useTranslation();
   const createFolderFormId = "character-sidebar-create-folder-form";
@@ -293,6 +297,8 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     onDeleteFolder: handleDeleteFolder,
     showSkeleton,
     previewCacheKey,
+    showWuwaFixer,
+    onOpenWuwaFixer,
   };
 
   return (
