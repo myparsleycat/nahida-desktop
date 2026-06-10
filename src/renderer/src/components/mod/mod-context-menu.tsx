@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import wuwaModFixerIcon from "@/renderer/assets/img/wuwa-mod-fixer-icon.png";
 
 interface ModContextMenuProps {
   mod: ModInfo;
@@ -119,6 +120,7 @@ export function ModContextMenu({ mod, actions, children }: ModContextMenuProps) 
               disabled={actions.runner.isPreparing}
               onClick={() => void actions.openWuwaFixer(mod)}
             >
+              <img src={wuwaModFixerIcon} className="mr-2 size-4" />
               Wuwa Mod Fixer
             </ContextMenuItem>
           )}
