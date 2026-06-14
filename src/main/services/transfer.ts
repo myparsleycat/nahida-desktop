@@ -29,23 +29,25 @@ export class TransferService {
         this.desktop = desktop;
     }
 
-    private async checkSettingAndChangePowerSaveBlock() {
+    public async refreshPowerSaveBlock() {
         const powerSaveBlockInTransfer =
             await this.desktop.setting.general.getPowerSaveBlockInTransfer();
         const anyTransfering = this.transfers.some(
             (t) => t.status === "progress" || t.status === "preparing",
         );
+        const shouldBlock = anyTransfering && powerSaveBlockInTransfer;
 
-        if (anyTransfering && powerSaveBlockInTransfer) {
-            if (!this.isPowerSaveBlockerActive) {
-                try {
-                    await this.desktop.lib.utils.preventAppSuspension(true);
-                    this.isPowerSaveBlockerActive = true;
-                } catch (e) {
-                    this.desktop.logger.error(e, "Transfer:preventAppSuspension:start");
-                }
+        if (shouldBlock && !this.isPowerSaveBlockerActive) {
+            try {
+                await this.desktop.lib.utils.preventAppSuspension(true);
+                this.isPowerSaveBlockerActive = true;
+            } catch (e) {
+                this.desktop.logger.error(e, "Transfer:preventAppSuspension:start");
             }
-        } else if (!anyTransfering && this.isPowerSaveBlockerActive) {
+            return;
+        }
+
+        if (!shouldBlock && this.isPowerSaveBlockerActive) {
             try {
                 await this.desktop.lib.utils.preventAppSuspension(false);
                 this.isPowerSaveBlockerActive = false;
@@ -249,7 +251,7 @@ export class TransferService {
             throttle(() => this.emitUpdate(), 500),
         );
 
-        this.checkSettingAndChangePowerSaveBlock();
+        await this.refreshPowerSaveBlock();
         this.emitUpdate();
 
         if (this.desktop.window.main.window) {
@@ -315,7 +317,7 @@ export class TransferService {
             (t) => t.status === "progress" || t.status === "preparing",
         );
         if (running && running.pid !== pid) {
-            this.pauseTransfer(running.pid);
+            await this.pauseTransfer(running.pid);
         }
 
         const index = this.transfers.indexOf(transfer);
@@ -335,7 +337,7 @@ export class TransferService {
         this.processQueue();
     }
 
-    public updateTransfer(
+    public async updateTransfer(
         pid: string,
         updates: Partial<
             Omit<LocalTransfer, "pid" | "type" | "data" | "startTime" | "createdOrder">
@@ -387,7 +389,7 @@ export class TransferService {
         }
 
         if (updates.status) {
-            this.checkSettingAndChangePowerSaveBlock();
+            await this.refreshPowerSaveBlock();
             this.emitUpdate();
         } else {
             const throttledEmit = this.throttledEmits.get(pid);
@@ -399,7 +401,7 @@ export class TransferService {
         }
     }
 
-    public cancelTransfer(pid: string) {
+    public async cancelTransfer(pid: string) {
         const transfer = this.transfers.find((t) => t.pid === pid);
         if (!transfer) return;
         if (
@@ -407,7 +409,7 @@ export class TransferService {
             transfer.status === "error" ||
             transfer.status === "completed"
         ) {
-            this.removeTransfer(pid);
+            await this.removeTransfer(pid);
             return;
         }
 
@@ -419,12 +421,12 @@ export class TransferService {
         ) {
             transfer.abortController.abort();
             transfer.status = "canceled";
-            this.checkSettingAndChangePowerSaveBlock();
+            await this.refreshPowerSaveBlock();
             this.emitUpdate();
         }
     }
 
-    public pauseTransfer(pid: string) {
+    public async pauseTransfer(pid: string) {
         const transfer = this.transfers.find((t) => t.pid === pid);
         if (!transfer) return;
 
@@ -435,12 +437,12 @@ export class TransferService {
         ) {
             transfer.abortController.abort();
             transfer.status = "paused";
-            this.checkSettingAndChangePowerSaveBlock();
+            await this.refreshPowerSaveBlock();
             this.emitUpdate();
         }
     }
 
-    public removeTransfer(pid: string) {
+    public async removeTransfer(pid: string) {
         const index = this.transfers.findIndex((t) => t.pid === pid);
         if (index !== -1) {
             const transfer = this.transfers[index];
@@ -450,7 +452,7 @@ export class TransferService {
             this.transfers.splice(index, 1);
             this.throttledEmits.delete(pid);
             this.runners.delete(pid);
-            this.checkSettingAndChangePowerSaveBlock();
+            await this.refreshPowerSaveBlock();
             this.emitUpdate();
         }
     }

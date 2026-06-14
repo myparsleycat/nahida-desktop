@@ -11,7 +11,7 @@ export function registerTransferHandlers(d: NahidaDesktop) {
     });
 
     rh("transfer:pause", async (pid) => {
-        d.service.transfer.pauseTransfer(pid);
+        await d.service.transfer.pauseTransfer(pid);
     });
 
     rh("transfer:resume", async (pid) => {
@@ -24,11 +24,11 @@ export function registerTransferHandlers(d: NahidaDesktop) {
 
     rh("transfer:pause-all", async () => {
         const transfers = d.service.transfer.getAllTransfer();
-        transfers.forEach((t) => {
-            if (t.status === "progress") {
-                d.service.transfer.pauseTransfer(t.pid);
-            }
-        });
+        await Promise.all(
+            transfers
+                .filter((t) => t.status === "progress")
+                .map((t) => d.service.transfer.pauseTransfer(t.pid)),
+        );
     });
 
     rh("transfer:resume-all", async () => {
@@ -42,10 +42,15 @@ export function registerTransferHandlers(d: NahidaDesktop) {
 
     rh("transfer:clear", async () => {
         const transfers = d.service.transfer.getAllTransfer();
-        transfers.forEach((t) => {
-            if (t.status === "completed" || t.status === "canceled" || t.status === "error") {
-                d.service.transfer.removeTransfer(t.pid);
-            }
-        });
+        await Promise.all(
+            transfers
+                .filter(
+                    (t) =>
+                        t.status === "completed" ||
+                        t.status === "canceled" ||
+                        t.status === "error",
+                )
+                .map((t) => d.service.transfer.removeTransfer(t.pid)),
+        );
     });
 }

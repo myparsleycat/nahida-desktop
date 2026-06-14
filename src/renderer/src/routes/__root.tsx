@@ -104,7 +104,7 @@ function RootComponent() {
 
   useGlobalEvents(handlePathSelectorModeSelect);
 
-  const noSidebarPath = ["/auth", "/report"];
+  const noSidebarPath = ["/auth"];
   const isNoSidebar = noSidebarPath.some((path) => location.pathname.startsWith(path));
   const shouldShowUpdateDialog = !isNoSidebar;
 

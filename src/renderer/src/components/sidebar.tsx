@@ -322,7 +322,7 @@ export function Sidebar({ className }: { className?: string }) {
                 size="icon-lg"
                 onPointerDown={handlePointerDown}
                 onClick={() => {
-                  window.api.invoke("util:openReportWindow");
+                  void window.api.invoke("util:openExternal", "https://github.com/myparsleycat/nahida-desktop/issues");
                 }}
               >
                 <BugIcon className={cn(iconSize)} />
