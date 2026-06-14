@@ -255,6 +255,9 @@ export class Setting {
                 getDefault: () => false,
                 fromStored: (value) => parseBooleanSetting(value, false),
                 toStored: (value) => String(value),
+                afterSet: async () => {
+                    await this.desktop.service.transfer.refreshPowerSaveBlock();
+                },
             },
             "mod.archiveExtractPathMode": {
                 definition: APP_SETTINGS["mod.archiveExtractPathMode"],
