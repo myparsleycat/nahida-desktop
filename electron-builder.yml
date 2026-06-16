@@ -32,7 +32,7 @@ win:
           filter:
               - dll-injector.exe
 nsis:
-    artifactName: Nahida Desktop Setup ${version}.${ext}
+    artifactName: Nahida-Desktop-Setup-${version}.${ext}
     shortcutName: ${productName}
     uninstallDisplayName: ${productName}
     createDesktopShortcut: true
