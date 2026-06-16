@@ -14,6 +14,7 @@ export interface CharacterSidebarContentProps {
   searchTerm: string;
   onCreateFolder: (group: FolderGroup) => void;
   onDeleteFolder: (group: FolderGroup) => void;
+  onManualSubGroupChange: (group: FolderGroup, enabled: boolean) => void;
   showSkeleton: boolean;
   previewCacheKey: number;
   showWuwaFixer?: boolean;
@@ -41,6 +42,17 @@ function useSubGroups(group: FolderGroup, shouldFetch: boolean) {
   return subGroups;
 }
 
+function useManualSubGroups(group: FolderGroup, shouldFetch: boolean) {
+  const { data: manualSubGroups = [] } = useQuery<FolderGroup[]>({
+    queryKey: ["manualSubGroups", group.path],
+    queryFn: () => window.api.invoke("mod:getManualSubGroups", group.path),
+    enabled: shouldFetch,
+    placeholderData: keepPreviousData,
+  });
+
+  return manualSubGroups;
+}
+
 interface CharacterSidebarItemWithChildrenProps {
   group: FolderGroup;
   itemRefs: React.MutableRefObject<Map<string, { element: HTMLElement; group: FolderGroup }>>;
@@ -51,6 +63,7 @@ interface CharacterSidebarItemWithChildrenProps {
   searchTerm: string;
   onCreateFolder: (group: FolderGroup) => void;
   onDeleteFolder: (group: FolderGroup) => void;
+  onManualSubGroupChange: (group: FolderGroup, enabled: boolean) => void;
   layout: SidebarLayoutMode;
   listClassName: string;
   listStyle?: React.CSSProperties;
@@ -75,6 +88,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   searchTerm,
   onCreateFolder,
   onDeleteFolder,
+  onManualSubGroupChange,
   previewCacheKey,
   layout,
   listClassName: _listClassName,
@@ -92,21 +106,36 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   const isPersistent = useModStore((s) => s.persistentGroups.has(group.path));
   const toggleExpandedGroup = useModStore((s) => s.toggleExpandedGroup);
   const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
-  const shouldFetchSubGroups = isExpanded || (!!searchTerm && isPersistent);
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const isSearching = normalizedSearch.length > 0;
+  const shouldFetchSubGroups = isExpanded || (isSearching && isPersistent);
   const subGroups = useSubGroups(group, shouldFetchSubGroups);
-  const isSelfMatch = group.name.toLowerCase().includes(searchTerm.toLowerCase());
-  const shouldShowParent = !searchTerm || isSelfMatch;
-  const showSubGroups = isExpanded || (!!searchTerm && isPersistent);
+  const manualSubGroups = useManualSubGroups(
+    group,
+    !!group.hasManualSubGroups && !shouldFetchSubGroups,
+  );
+  const isSelfMatch = !isSearching || group.name.toLowerCase().includes(normalizedSearch);
+  const shouldShowParent = isSelfMatch;
+  const showSubGroups = isExpanded || (isSearching && isPersistent);
+  const childGroups = showSubGroups ? subGroups : manualSubGroups;
+  const visibleChildGroups =
+    isSearching && !showSubGroups
+      ? childGroups.filter((sub) => sub.name.toLowerCase().includes(normalizedSearch))
+      : childGroups;
+  const showChildGroups = showSubGroups
+    ? childGroups.length > 0
+    : manualSubGroups.length > 0 && (!isSearching || visibleChildGroups.length > 0);
+  const groupsToRender = showSubGroups ? childGroups : visibleChildGroups;
   const resolvedItemStyle = useMemo(() => itemStyle?.(depth), [depth, itemStyle]);
 
   const handleChildItemClick = useCallback(
     (clickedGroup: FolderGroup, e: React.MouseEvent) => {
-      if (!isExpanded) {
+      if (showSubGroups && !isExpanded) {
         setExpandedGroup(group.path, true);
       }
       onItemClick(clickedGroup, e);
     },
-    [group.path, isExpanded, onItemClick, setExpandedGroup],
+    [group.path, isExpanded, onItemClick, setExpandedGroup, showSubGroups],
   );
 
   const handleItemClickInternal = useCallback(
@@ -121,7 +150,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
     [collapseGroupPath, onItemClick, toggleExpandedGroup],
   );
 
-  if (!shouldShowParent && !showSubGroups) {
+  if (!shouldShowParent && !showChildGroups) {
     return null;
   }
 
@@ -136,6 +165,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
           canAcceptDrop={canAcceptDrop}
           onCreateFolder={onCreateFolder}
           onDeleteFolder={onDeleteFolder}
+          onManualSubGroupChange={onManualSubGroupChange}
           depth={depth}
           previewCacheKey={previewCacheKey}
           layout={layout}
@@ -148,8 +178,8 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
           onOpenWuwaFixer={onOpenWuwaFixer}
         />
       )}
-      {showSubGroups &&
-        subGroups.map((sub) => (
+      {showChildGroups &&
+        groupsToRender.map((sub) => (
           <CharacterSidebarItemWithChildren
             key={sub.path}
             group={sub}
@@ -162,6 +192,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
             searchTerm={searchTerm}
             onCreateFolder={onCreateFolder}
             onDeleteFolder={onDeleteFolder}
+            onManualSubGroupChange={onManualSubGroupChange}
             previewCacheKey={previewCacheKey}
             layout={layout}
             listClassName={_listClassName}
@@ -188,6 +219,7 @@ export function CharacterSidebarContent({
   searchTerm,
   onCreateFolder,
   onDeleteFolder,
+  onManualSubGroupChange,
   showSkeleton,
   previewCacheKey,
   layout,
@@ -218,6 +250,7 @@ export function CharacterSidebarContent({
               searchTerm={searchTerm}
               onCreateFolder={onCreateFolder}
               onDeleteFolder={onDeleteFolder}
+              onManualSubGroupChange={onManualSubGroupChange}
               layout={layout}
               previewCacheKey={previewCacheKey}
               listClassName={listClassName}

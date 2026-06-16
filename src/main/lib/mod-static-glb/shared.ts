@@ -1,11 +1,12 @@
 import crypto from "node:crypto";
 import os from "node:os";
 import path from "node:path";
+import LRUCache from "mnemonist/lru-cache";
 import type { Logger } from "../../internal/logger";
 import type { VariableStateMap, VariableStateValue } from "./types";
 
-const normalizeKeyCache = new Map<string, string>();
 const MAX_NORMALIZE_KEY_CACHE = 4096;
+const normalizeKeyCache = new LRUCache<string, string>(MAX_NORMALIZE_KEY_CACHE);
 
 export function createWarningCollector(onWarning?: (message: string) => void) {
     let count = 0;
@@ -90,13 +91,10 @@ export function createTextureCacheBaseName(texturePath: string): string {
 
 export function normalizeKey(value: string): string {
     const cached = normalizeKeyCache.get(value);
-    if (cached) {
+    if (cached !== undefined) {
         return cached;
     }
     const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (normalizeKeyCache.size >= MAX_NORMALIZE_KEY_CACHE) {
-        normalizeKeyCache.clear();
-    }
     normalizeKeyCache.set(value, normalized);
     return normalized;
 }

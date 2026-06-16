@@ -16,6 +16,7 @@ import {
   BoxIcon,
   ClipboardIcon,
   FolderIcon,
+  FolderTreeIcon,
   ImageIcon,
   Loader2Icon,
   PencilIcon,
@@ -39,7 +40,7 @@ export function ModContextMenu({ mod, actions, children }: ModContextMenuProps) 
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <ContextMenuContent className="w-48">
+      <ContextMenuContent className="w-56">
         {(mod.preview?.match(/\.(jpeg|jpg|gif|png|webp|bmp|mp4|webm|ogg)$/i) ?? false) && (
           <>
             <ContextMenuGroup>
@@ -141,6 +142,10 @@ export function ModContextMenu({ mod, actions, children }: ModContextMenuProps) 
         >
           <FolderIcon className="mr-2 size-4" />
           {t("page.mod.context-menu.open-folder")}
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => void actions.markAsManualSubGroup(mod)}>
+          <FolderTreeIcon className="mr-2 size-4" />
+          {t("page.mod.context-menu.mark-manual-subgroup")}
         </ContextMenuItem>
         <ContextMenuItem
           disabled={isConvertingModel}

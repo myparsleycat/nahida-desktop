@@ -196,6 +196,7 @@
         "expand-subgroups": "探索子文件夹",
         "unpersist-subgroups": "取消子文件夹指定",
         "persist-subgroups": "指定为子文件夹",
+        "unmark-manual-subgroup": "取消手动子分组指定",
         "tools": "工具",
         "wuwa-mod-fixer": "Wuwa Mod Fixer"
       },
@@ -412,6 +413,7 @@
         "delete-preview": "删除预览",
         "open-cmd": "打开 CMD",
         "open-folder": "打开文件夹",
+        "mark-manual-subgroup": "指定为子分组",
         "rename": "重命名"
       },
       "toast": {
@@ -420,6 +422,8 @@
         "trash-error": "删除失败",
         "value-required": "请输入数值。",
         "rename-success": "模组重命名成功",
+        "manual-subgroup-success": "已指定为子分组",
+        "manual-subgroup-remove-success": "已取消子分组指定",
         "paste-preview": {
           "copying": "正在复制预览...",
           "success": "预览已更新",

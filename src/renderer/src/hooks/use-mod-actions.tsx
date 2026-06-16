@@ -25,6 +25,7 @@ import { Input } from "@renderer/components/ui/input";
 import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
 import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
+import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
 import type { QueryClient } from "@tanstack/react-query";
 import { useRouteContext } from "@tanstack/react-router";
@@ -78,14 +79,12 @@ export interface ModActionApi {
   openRenameDialog: (mod: ModInfo) => void;
   openTextureResizeDialog: (mod: ModInfo) => void;
   openWuwaFixer: (mod: ModInfo) => Promise<void>;
+  markAsManualSubGroup: (mod: ModInfo) => Promise<void>;
   runPreset: (mod: ModInfo, presetId: string) => Promise<void>;
   runTool: (mod: ModInfo, toolId: string) => Promise<void>;
 }
 
-function invalidateModGroup(
-  queryClient: QueryClient,
-  groupPath?: string,
-) {
+function invalidateModGroup(queryClient: QueryClient, groupPath?: string) {
   return queryClient.invalidateQueries({ queryKey: ["modGroup", groupPath] });
 }
 
@@ -95,6 +94,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
   const { renameModMutation } = useModMutations();
   const { confirmTrash, confirmTrashDialog } = useConfirmTrash();
   const runner = useModFixRunner();
+  const selectedGame = useModStore((s) => s.selectedGame);
 
   const [textureResizeMod, setTextureResizeMod] = useState<ModInfo | null>(null);
   const [renameDialogState, setRenameDialogState] = useState<{
@@ -349,6 +349,26 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
     openTextureResizeDialog: (mod) => setTextureResizeMod(mod),
     openWuwaFixer: async (mod) => {
       await runner.handleOpenWuwaFixer(mod.path);
+    },
+    markAsManualSubGroup: async (mod) => {
+      await window.api
+        .invoke("mod:setManualSubGroup", mod.path, true)
+        .then(() =>
+          Promise.all([
+            invalidateModGroup(queryClient, selectedGroupPath),
+            selectedGame
+              ? queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] })
+              : Promise.resolve(),
+            queryClient.invalidateQueries({ queryKey: ["subGroups"] }),
+            queryClient.invalidateQueries({ queryKey: ["manualSubGroups"] }),
+          ]),
+        )
+        .then(() => {
+          toast.success(t("page.mod.toast.manual-subgroup-success"));
+        })
+        .catch((error) => {
+          toast.error(error instanceof Error ? error.message : String(error));
+        });
     },
     runPreset: async (mod, presetId) => {
       await runner.handleRun("preset", presetId, mod.path);

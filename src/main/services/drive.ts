@@ -13,6 +13,7 @@ import type { LinkData } from "@main/server";
 import { dialog } from "electron";
 import { retry } from "es-toolkit";
 import fse from "fs-extra";
+import Heap from "mnemonist/heap";
 import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "..";
 import type { LocalTransfer } from "./transfer";
@@ -51,55 +52,33 @@ export class DriveService {
         const chunkCount = Math.ceil(sortedFiles.length / maxPerChunk);
 
         type Chunk = { currentSize: number; files: T[] };
-        const heap: Chunk[] = Array.from({ length: chunkCount }, () => ({
-            currentSize: 0,
-            files: [],
-        }));
-
-        const heapSwap = (i: number, j: number) => {
-            [heap[i], heap[j]] = [heap[j], heap[i]];
-        };
-
-        const heapifyDown = (start: number) => {
-            let i = start;
-            const len = heap.length;
-            while (true) {
-                const left = 2 * i + 1;
-                const right = 2 * i + 2;
-                let smallest = i;
-
-                if (left < len && heap[left].currentSize < heap[smallest].currentSize) {
-                    smallest = left;
-                }
-                if (right < len && heap[right].currentSize < heap[smallest].currentSize) {
-                    smallest = right;
-                }
-                if (smallest === i) break;
-
-                heapSwap(i, smallest);
-                i = smallest;
-            }
-        };
+        const chunks = Array.from(
+            { length: chunkCount },
+            (): Chunk => ({ currentSize: 0, files: [] }),
+        );
+        const heap = Heap.from(chunks, (a, b) => a.currentSize - b.currentSize);
 
         for (const file of sortedFiles) {
-            const targetChunk = heap[0];
+            const targetChunk = heap.peek();
+            if (!targetChunk) {
+                throw new Error("balanceAndInterleaveFiles: heap exhausted while assigning files");
+            }
             targetChunk.files.push(file);
             targetChunk.currentSize += file.size;
-            heapifyDown(0);
+            heap.replace(targetChunk);
         }
 
-        return heap
+        return chunks
             .filter((chunk) => chunk.files.length > 0)
             .flatMap((chunk) => {
-                const { files: chunkFiles } = chunk;
                 const interleaved: T[] = [];
                 let left = 0;
-                let right = chunkFiles.length - 1;
+                let right = chunk.files.length - 1;
 
                 while (left <= right) {
-                    interleaved.push(chunkFiles[left]);
+                    interleaved.push(chunk.files[left]);
                     if (left !== right) {
-                        interleaved.push(chunkFiles[right]);
+                        interleaved.push(chunk.files[right]);
                     }
                     left++;
                     right--;

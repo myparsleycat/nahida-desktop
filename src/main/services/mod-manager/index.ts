@@ -23,6 +23,7 @@ export class ModManager {
         gamePath: ModLibraryService["gamePath"];
         characters: ModLibraryService["characters"];
         subGroups: ModLibraryService["subGroups"];
+        manualSubGroups: ModLibraryService["manualSubGroups"];
         mods: ModLibraryService["mods"];
         presets: ModPresetsService["presets"];
         presetCreateConflicts: ModPresetsService["presetCreateConflicts"];
@@ -53,6 +54,7 @@ export class ModManager {
         removeGame: ModLibraryService["removeGame"];
         setLastGame: ModLibraryService["setLastGame"];
         setExpandedGroups: ModLibraryService["setExpandedGroups"];
+        setManualSubGroup: ModLibraryService["setManualSubGroup"];
         extractArchiveToGroup: (
             archivePath: string,
             groupPath: string,
@@ -77,6 +79,7 @@ export class ModManager {
             gamePath: this.library.gamePath.bind(this.library),
             characters: this.library.characters.bind(this.library),
             subGroups: this.library.subGroups.bind(this.library),
+            manualSubGroups: this.library.manualSubGroups.bind(this.library),
             mods: this.library.mods.bind(this.library),
             presets: this.presets.presets.bind(this.presets),
             presetCreateConflicts: this.presets.presetCreateConflicts.bind(this.presets),
@@ -107,6 +110,7 @@ export class ModManager {
             removeGame: this.library.removeGame.bind(this.library),
             setLastGame: this.library.setLastGame.bind(this.library),
             setExpandedGroups: this.library.setExpandedGroups.bind(this.library),
+            setManualSubGroup: this.library.setManualSubGroup.bind(this.library),
             extractArchiveToGroup: this.imports.extractArchiveToGroup.bind(this.imports),
             copyFolderToGroup: this.imports.copyFolderToGroup.bind(this.imports),
             pastePreview: this.imports.pastePreview.bind(this.imports),

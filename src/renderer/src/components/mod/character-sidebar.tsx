@@ -46,6 +46,32 @@ function getParentGroupPath(groupPath: string) {
   return groupPath.slice(0, separatorIndex);
 }
 
+function getGroupName(groupPath: string) {
+  const separatorIndex = Math.max(groupPath.lastIndexOf("\\"), groupPath.lastIndexOf("/"));
+  if (separatorIndex < 0) {
+    return groupPath;
+  }
+
+  return groupPath.slice(separatorIndex + 1);
+}
+
+function getParentGroup(
+  parentGroupPath: string | null,
+  itemRefs: React.MutableRefObject<Map<string, { element: HTMLElement; group: FolderGroup }>>,
+) {
+  if (!parentGroupPath) {
+    return null;
+  }
+
+  return (
+    itemRefs.current.get(parentGroupPath)?.group ?? {
+      name: getGroupName(parentGroupPath),
+      path: parentGroupPath,
+      mods: [],
+    }
+  );
+}
+
 interface CharacterSidebarProps {
   groups: FolderGroup[];
   isLoading?: boolean;
@@ -286,6 +312,44 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     [confirmTrash, queryClient, selectedGame, t],
   );
 
+  const handleManualSubGroupChange = useCallback(
+    async (group: FolderGroup, enabled: boolean) => {
+      const parentGroupPath = getParentGroupPath(group.path);
+      const parentGroup = getParentGroup(parentGroupPath, itemRefs);
+
+      await window.api
+        .invoke("mod:setManualSubGroup", group.path, enabled)
+        .then(async () => {
+          if (!enabled && selectedGroup?.path === group.path) {
+            setSelectedGroup(parentGroup);
+          }
+
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] }),
+            queryClient.invalidateQueries({ queryKey: ["manualSubGroups"] }),
+            queryClient.invalidateQueries({ queryKey: ["subGroups"] }),
+            queryClient.invalidateQueries({ queryKey: ["modGroup", group.path] }),
+            parentGroupPath
+              ? queryClient.invalidateQueries({ queryKey: ["modGroup", parentGroupPath] })
+              : Promise.resolve(),
+          ]);
+        })
+        .then(() => {
+          toast.success(
+            t(
+              enabled
+                ? "page.mod.toast.manual-subgroup-success"
+                : "page.mod.toast.manual-subgroup-remove-success",
+            ),
+          );
+        })
+        .catch((error) => {
+          toast.error(error instanceof Error ? error.message : String(error));
+        });
+    },
+    [queryClient, selectedGame, selectedGroup?.path, setSelectedGroup, t],
+  );
+
   const contentProps = {
     groups,
     itemRefs,
@@ -295,6 +359,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     searchTerm,
     onCreateFolder: handleCreateFolderOpen,
     onDeleteFolder: handleDeleteFolder,
+    onManualSubGroupChange: handleManualSubGroupChange,
     showSkeleton,
     previewCacheKey,
     showWuwaFixer,

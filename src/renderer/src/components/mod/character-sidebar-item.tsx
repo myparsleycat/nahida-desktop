@@ -37,6 +37,7 @@ interface CharacterSidebarItemProps {
   canAcceptDrop?: (files: File[]) => boolean;
   onCreateFolder?: (group: FolderGroup) => void;
   onDeleteFolder?: (group: FolderGroup) => void;
+  onManualSubGroupChange?: (group: FolderGroup, enabled: boolean) => void;
   itemRefs: React.MutableRefObject<Map<string, { element: HTMLElement; group: FolderGroup }>>;
   depth?: number;
   layout?: SidebarLayoutMode;
@@ -56,6 +57,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   onDrop,
   onCreateFolder,
   onDeleteFolder,
+  onManualSubGroupChange,
   itemRefs,
   depth = 0,
   layout = "row",
@@ -270,6 +272,13 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
             </>
           )}
         </ContextMenuItem>
+
+        {group.isManualSubGroup && (
+          <ContextMenuItem onClick={() => onManualSubGroupChange?.(group, false)}>
+            <FolderMinus className="h-4 w-4 text-destructive" />
+            {t("page.mod.character-sidebar.unmark-manual-subgroup")}
+          </ContextMenuItem>
+        )}
 
         {showWuwaFixer && onOpenWuwaFixer && (
           <>

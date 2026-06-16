@@ -388,9 +388,15 @@ fn build_stable_mod_id(group_path: &Path, mod_path: &Path) -> String {
     format!("{digest:x}")
 }
 
-fn get_preview_location_priority(relative: &Path) -> i32 {
+enum PreviewLocation {
+    Root,
+    EnabledFolder,
+    DisabledFolder,
+}
+
+fn get_preview_location(relative: &Path) -> PreviewLocation {
     if relative.components().count() == 1 {
-        return 2;
+        return PreviewLocation::Root;
     }
 
     let is_in_disabled_folder = relative
@@ -401,17 +407,31 @@ fn get_preview_location_priority(relative: &Path) -> i32 {
         .any(is_disabled_folder_name);
 
     if is_in_disabled_folder {
-        0
+        PreviewLocation::DisabledFolder
     } else {
-        1
+        PreviewLocation::EnabledFolder
     }
 }
 
-fn find_preview(mod_path: &Path, max_depth: usize) -> Option<String> {
-    const LOCATION_PRIORITY_MULTIPLIER: i32 = 10_000;
+fn update_preview_candidate(best: &mut Option<(i32, String)>, score: i32, path: &Path) {
+    let path_str = path.to_string_lossy();
 
-    let mut best_score = -1;
-    let mut best_path: Option<String> = None;
+    match best {
+        Some((best_score, best_path))
+            if score < *best_score
+                || (score == *best_score
+                    && compare_str(path_str.as_ref(), best_path.as_str())
+                        != std::cmp::Ordering::Less) => {}
+        _ => {
+            *best = Some((score, path_str.into_owned()));
+        }
+    }
+}
+
+fn find_preview_candidate(mod_path: &Path, max_depth: usize) -> Option<(i32, String)> {
+    let mut root_best = None;
+    let mut enabled_best = None;
+    let mut disabled_best = None;
 
     let walker = WalkDir::new(mod_path)
         .max_depth(max_depth)
@@ -438,18 +458,17 @@ fn find_preview(mod_path: &Path, max_depth: usize) -> Option<String> {
                     let is_root = relative.components().count() == 1;
                     let is_video =
                         ext.eq_ignore_ascii_case("mp4") || ext.eq_ignore_ascii_case("webm");
-                    let score = get_score(&lower_filename, is_root, is_video)
-                        + get_preview_location_priority(relative) * LOCATION_PRIORITY_MULTIPLIER;
+                    let score = get_score(&lower_filename, is_root, is_video);
 
-                    if score > best_score {
-                        best_score = score;
-                        best_path = Some(path.to_string_lossy().into_owned());
-                    } else if score == best_score {
-                        if let Some(ref best) = best_path {
-                            let path_str = path.to_string_lossy();
-                            if compare_str(path_str.as_ref(), best) == std::cmp::Ordering::Less {
-                                best_path = Some(path_str.into_owned());
-                            }
+                    match get_preview_location(relative) {
+                        PreviewLocation::Root => {
+                            update_preview_candidate(&mut root_best, score, path);
+                        }
+                        PreviewLocation::EnabledFolder => {
+                            update_preview_candidate(&mut enabled_best, score, path);
+                        }
+                        PreviewLocation::DisabledFolder => {
+                            update_preview_candidate(&mut disabled_best, score, path);
                         }
                     }
                 }
@@ -457,7 +476,63 @@ fn find_preview(mod_path: &Path, max_depth: usize) -> Option<String> {
         }
     }
 
-    best_path
+    root_best.or(enabled_best).or(disabled_best)
+}
+
+fn find_preview(mod_path: &Path, max_depth: usize) -> Option<String> {
+    find_preview_candidate(mod_path, max_depth).map(|(_, path)| path)
+}
+
+fn is_disabled_folder_path(folder_path: &Path) -> bool {
+    folder_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(is_disabled_folder_name)
+}
+
+fn list_child_folders(folder_path: &Path) -> Vec<PathBuf> {
+    let mut child_folders: Vec<PathBuf> = match fs::read_dir(folder_path) {
+        Ok(entries) => entries
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.is_dir())
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+
+    child_folders.sort_by(|a, b| compare_paths(a, b));
+    child_folders
+}
+
+fn find_child_folder_preview(
+    child_folders: &[PathBuf],
+    search_depth: usize,
+    disabled: bool,
+) -> Option<String> {
+    let mut best = None;
+
+    child_folders
+        .iter()
+        .filter(|folder_path| is_disabled_folder_path(folder_path) == disabled)
+        .filter_map(|folder_path| find_preview_candidate(folder_path, search_depth))
+        .for_each(|(score, path)| update_preview_candidate(&mut best, score, Path::new(&path)));
+
+    best.map(|(_, path)| path)
+}
+
+fn find_group_preview(group_path: &Path, search_depth: usize) -> Option<String> {
+    if let Some(root_preview) = find_preview(group_path, 1) {
+        return Some(root_preview);
+    }
+
+    if search_depth <= 1 {
+        return None;
+    }
+
+    let child_folders = list_child_folders(group_path);
+
+    find_child_folder_preview(&child_folders, search_depth, false)
+        .or_else(|| find_child_folder_preview(&child_folders, search_depth, true))
 }
 
 fn has_any_file(dir: &Path) -> bool {
@@ -526,7 +601,7 @@ pub fn get_characters_folder_sync(
                 Err(_) => 0,
             };
 
-            let preview = find_preview(group_path, search_depth);
+            let preview = find_group_preview(group_path, search_depth);
 
             FolderGroup {
                 name,
@@ -551,8 +626,9 @@ fn scan_mod_folder(group_path: &Path, mod_path: &Path) -> Option<ModInfo> {
     let mut ini_paths = Vec::new();
     let mut found_any_file = false;
 
-    let mut best_preview_score = -1;
-    let mut best_preview_path: Option<String> = None;
+    let mut root_preview = None;
+    let mut enabled_preview = None;
+    let mut disabled_preview = None;
 
     for entry in WalkDir::new(mod_path)
         .follow_links(true)
@@ -588,20 +664,17 @@ fn scan_mod_folder(group_path: &Path, mod_path: &Path) -> Option<ModInfo> {
                             let is_root = relative.components().count() == 1;
                             let is_video =
                                 ext.eq_ignore_ascii_case("mp4") || ext.eq_ignore_ascii_case("webm");
-
                             let score = get_score(&lower_filename, is_root, is_video);
 
-                            if score > best_preview_score {
-                                best_preview_score = score;
-                                best_preview_path = Some(path.to_string_lossy().into_owned());
-                            } else if score == best_preview_score {
-                                if let Some(ref best_path) = best_preview_path {
-                                    let path_str = path.to_string_lossy();
-                                    if compare_str(path_str.as_ref(), best_path)
-                                        == std::cmp::Ordering::Less
-                                    {
-                                        best_preview_path = Some(path_str.into_owned());
-                                    }
+                            match get_preview_location(relative) {
+                                PreviewLocation::Root => {
+                                    update_preview_candidate(&mut root_preview, score, path);
+                                }
+                                PreviewLocation::EnabledFolder => {
+                                    update_preview_candidate(&mut enabled_preview, score, path);
+                                }
+                                PreviewLocation::DisabledFolder => {
+                                    update_preview_candidate(&mut disabled_preview, score, path);
                                 }
                             }
                         }
@@ -641,7 +714,10 @@ fn scan_mod_folder(group_path: &Path, mod_path: &Path) -> Option<ModInfo> {
         name: folder_name,
         path: mod_path.to_string_lossy().into_owned(),
         is_enabled,
-        preview: best_preview_path,
+        preview: root_preview
+            .or(enabled_preview)
+            .or(disabled_preview)
+            .map(|(_, path)| path),
         mtime: max_mtime,
         size: total_size,
         inis,
@@ -681,7 +757,7 @@ pub fn get_mods_sync(group_path: String) -> FolderGroup {
                 .filter_map(|p| scan_mod_folder(&group_path_buf, p))
                 .collect::<Vec<ModInfo>>()
         },
-        || find_preview(&group_path_buf, 3),
+        || find_group_preview(&group_path_buf, 3),
     );
 
     mods.sort_by(|a, b| compare_str(&a.name, &b.name));
@@ -699,7 +775,48 @@ pub fn get_mods_sync(group_path: String) -> FolderGroup {
 
 #[cfg(test)]
 mod tests {
-    use super::strip_disabled_prefix;
+    use super::{find_group_preview, scan_mod_folder, strip_disabled_prefix};
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    struct TestDir {
+        path: PathBuf,
+    }
+
+    impl TestDir {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "nhd-mod-manager-{name}-{}-{}",
+                std::process::id(),
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos()
+            ));
+            fs::create_dir_all(&path).unwrap();
+            Self { path }
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+
+        fn write_file(&self, relative_path: &str) -> PathBuf {
+            let file_path = relative_path
+                .split('/')
+                .fold(self.path.clone(), |path, segment| path.join(segment));
+            fs::create_dir_all(file_path.parent().unwrap()).unwrap();
+            fs::write(&file_path, b"preview").unwrap();
+            file_path
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
 
     #[test]
     fn strip_disabled_prefix_handles_ascii_prefix() {
@@ -711,6 +828,62 @@ mod tests {
         assert_eq!(
             strip_disabled_prefix("仪玄-黑珍珠（1、2、3、4切换）"),
             "仪玄-黑珍珠（1、2、3、4切换）"
+        );
+    }
+
+    #[test]
+    fn find_group_preview_prefers_group_root_preview() {
+        let dir = TestDir::new("root-preview");
+        let root_preview = dir.write_file("preview.png");
+        dir.write_file("Enabled Mod/preview.png");
+
+        assert_eq!(
+            find_group_preview(dir.path(), 3),
+            Some(root_preview.to_string_lossy().into_owned())
+        );
+    }
+
+    #[test]
+    fn find_group_preview_does_not_search_child_folders_at_depth_one() {
+        let dir = TestDir::new("depth-one");
+        dir.write_file("Enabled Mod/preview.png");
+
+        assert_eq!(find_group_preview(dir.path(), 1), None);
+    }
+
+    #[test]
+    fn find_group_preview_prefers_enabled_folder_before_disabled_folder() {
+        let dir = TestDir::new("enabled-before-disabled");
+        let enabled_preview = dir.write_file("Enabled Mod/nested/deeper/preview.png");
+        dir.write_file("DISABLED Other Mod/preview.png");
+
+        assert_eq!(
+            find_group_preview(dir.path(), 3),
+            Some(enabled_preview.to_string_lossy().into_owned())
+        );
+    }
+
+    #[test]
+    fn find_group_preview_falls_back_to_disabled_folder() {
+        let dir = TestDir::new("disabled-fallback");
+        let disabled_preview = dir.write_file("DISABLED Other Mod/preview.png");
+
+        assert_eq!(
+            find_group_preview(dir.path(), 3),
+            Some(disabled_preview.to_string_lossy().into_owned())
+        );
+    }
+
+    #[test]
+    fn scan_mod_folder_prefers_root_preview_before_disabled_subfolder() {
+        let dir = TestDir::new("mod-root-before-disabled-subfolder");
+        let root_preview = dir.write_file("Enabled Mod/screenshot.png");
+        dir.write_file("Enabled Mod/DISABLED Nested/preview.png");
+        let mod_info = scan_mod_folder(dir.path(), &dir.path().join("Enabled Mod")).unwrap();
+
+        assert_eq!(
+            mod_info.preview,
+            Some(root_preview.to_string_lossy().into_owned())
         );
     }
 }

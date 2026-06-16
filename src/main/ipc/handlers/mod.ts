@@ -72,6 +72,10 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return await desktop.service.mod.get.subGroups(folderPath, searchModPreview);
     });
 
+    rh("mod:getManualSubGroups", async (folderPath: string, searchModPreview?: boolean) => {
+        return await desktop.service.mod.get.manualSubGroups(folderPath, searchModPreview);
+    });
+
     rh("mod:getMods", async (groupPath: string) => {
         return await desktop.service.mod.get.mods(groupPath);
     });
@@ -183,6 +187,10 @@ export function registerModHandlers(desktop: NahidaDesktop) {
 
     rh("mod:setExpandedGroups", async (paths: string[]) => {
         return await desktop.service.mod.fn.setExpandedGroups(paths);
+    });
+
+    rh("mod:setManualSubGroup", async (modPath: string, enabled: boolean) => {
+        return await desktop.service.mod.fn.setManualSubGroup(modPath, enabled);
     });
 
     rh("mod:extractArchive", async (archivePath: string, groupPath: string, mode) => {
