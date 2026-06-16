@@ -196,6 +196,7 @@
         "expand-subgroups": "서브폴더로 탐색",
         "unpersist-subgroups": "서브폴더 지정 해제",
         "persist-subgroups": "서브폴더로 지정",
+        "unmark-manual-subgroup": "수동 서브그룹 지정 해제",
         "tools": "도구",
         "wuwa-mod-fixer": "Wuwa Mod Fixer"
       },
@@ -419,6 +420,7 @@
         "delete-preview": "프리뷰 삭제",
         "open-cmd": "CMD 열기",
         "open-folder": "폴더 열기",
+        "mark-manual-subgroup": "서브그룹으로 지정",
         "rename": "이름 변경"
       },
       "toast": {
@@ -427,6 +429,8 @@
         "trash-error": "삭제 실패",
         "value-required": "값을 입력해주세요.",
         "rename-success": "모드 이름이 변경되었습니다",
+        "manual-subgroup-success": "서브그룹으로 지정했습니다",
+        "manual-subgroup-remove-success": "서브그룹 지정을 해제했습니다",
         "paste-preview": {
           "copying": "프리뷰 복사 중...",
           "success": "프리뷰가 업데이트되었습니다",

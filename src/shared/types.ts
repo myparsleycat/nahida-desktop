@@ -162,6 +162,8 @@ export interface FolderGroup {
     mods: ModInfo[];
     preview?: string;
     modCount?: number;
+    isManualSubGroup?: boolean;
+    hasManualSubGroups?: boolean;
 }
 
 export interface Preset {

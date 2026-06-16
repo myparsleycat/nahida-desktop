@@ -1,9 +1,14 @@
+import path from "node:path";
 import { getCharactersFolder, getMods } from "@native/mod-manager";
 import type { FolderGroup, Preset } from "@shared/types";
 import { GAME_MATCH_CASES } from "@shared/xxmi-match";
 import type { NahidaDesktop } from "../..";
+import { normalizeRelativePath } from "./path-utils";
 
 const MOD_PRESET_VERSION = 2;
+const MANUAL_SUBGROUPS_SETTING_KEY = "manual_subgroups";
+
+type ManualSubGroups = Record<string, string[]>;
 
 export class ModLibraryService {
     constructor(private readonly desktop: NahidaDesktop) {}
@@ -23,7 +28,11 @@ export class ModLibraryService {
             searchModPreview ?? (await this.desktop.setting.mod.getSearchModPreview());
 
         try {
-            return await getCharactersFolder(modFolderPath, shouldFallback);
+            return await this.addManualSubGroupFlags(
+                game,
+                "",
+                await getCharactersFolder(modFolderPath, shouldFallback),
+            );
         } catch (error) {
             this.desktop.logger.error(error, `Mod:characters:${game}`);
             throw error;
@@ -34,16 +43,68 @@ export class ModLibraryService {
         const shouldFallback =
             searchModPreview ?? (await this.desktop.setting.mod.getSearchModPreview());
         try {
-            return await getCharactersFolder(folderPath, shouldFallback);
+            const game = await this.getGameByPath(folderPath);
+            const relativePath = game
+                ? normalizeRelativePath(path.relative(game.modFolderPath, folderPath))
+                : "";
+
+            return await this.addManualSubGroupFlags(
+                game?.game ?? "",
+                relativePath,
+                await getCharactersFolder(folderPath, shouldFallback),
+            );
         } catch (error) {
             this.desktop.logger.error(error, `Mod:subGroups:${folderPath}`);
             throw error;
         }
     }
 
+    public async manualSubGroups(
+        folderPath: string,
+        searchModPreview?: boolean,
+    ): Promise<FolderGroup[]> {
+        const shouldFallback =
+            searchModPreview ?? (await this.desktop.setting.mod.getSearchModPreview());
+        try {
+            const game = await this.getGameByPath(folderPath);
+            if (!game) return [];
+
+            const relativePath = normalizeRelativePath(
+                path.relative(game.modFolderPath, folderPath),
+            );
+            const manualChildPaths = await this.getManualChildPaths(game.game, relativePath);
+            if (manualChildPaths.size === 0) return [];
+
+            return (await this.subGroups(folderPath, shouldFallback))
+                .filter((group) =>
+                    manualChildPaths.has(
+                        normalizeRelativePath(path.join(relativePath, path.basename(group.path))),
+                    ),
+                )
+                .map((group) => ({
+                    ...group,
+                    isManualSubGroup: true,
+                }));
+        } catch (error) {
+            this.desktop.logger.error(error, `Mod:manualSubGroups:${folderPath}`);
+            throw error;
+        }
+    }
+
     public async mods(groupPath: string): Promise<FolderGroup> {
         try {
-            return await getMods(groupPath);
+            const group = await getMods(groupPath);
+            const game = await this.getGameByPath(groupPath);
+            if (!game) return group;
+
+            const relativePath = normalizeRelativePath(
+                path.relative(game.modFolderPath, groupPath),
+            );
+            return {
+                ...group,
+                hasManualSubGroups: await this.hasManualChildren(game.game, relativePath),
+                mods: await this.filterManualSubGroupMods(game.game, relativePath, group.mods),
+            };
         } catch (error) {
             this.desktop.logger.error(error, `Mod:mods:${groupPath}`);
             throw error;
@@ -246,5 +307,133 @@ export class ModLibraryService {
 
     public async setExpandedGroups(paths: string[]) {
         await this.desktop.lib.db.settings.upsert("expanded_groups", JSON.stringify(paths));
+    }
+
+    public async setManualSubGroup(modPath: string, enabled: boolean) {
+        const game = await this.getGameByPath(modPath);
+        if (!game) {
+            throw new Error("INVALID_MANUAL_SUBGROUP_PATH");
+        }
+
+        const relativePath = normalizeRelativePath(path.relative(game.modFolderPath, modPath));
+        if (!relativePath) {
+            throw new Error("INVALID_MANUAL_SUBGROUP_PATH");
+        }
+
+        const manualSubGroups = await this.getManualSubGroupsSetting();
+        const current = new Set(manualSubGroups[game.game] ?? []);
+
+        if (enabled) {
+            current.add(relativePath);
+        } else {
+            current.delete(relativePath);
+        }
+
+        const next = {
+            ...manualSubGroups,
+            [game.game]: [...current].sort((a, b) => a.localeCompare(b)),
+        };
+
+        if (next[game.game].length === 0) {
+            delete next[game.game];
+        }
+
+        await this.desktop.lib.db.settings.upsert(
+            MANUAL_SUBGROUPS_SETTING_KEY,
+            JSON.stringify(next),
+        );
+    }
+
+    private async getGameByPath(targetPath: string) {
+        const resolvedTargetPath = path.resolve(targetPath);
+        return (await this.games()).find((game) => {
+            const relativePath = path.relative(
+                path.resolve(game.modFolderPath),
+                resolvedTargetPath,
+            );
+            return (
+                relativePath === "" ||
+                (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
+            );
+        });
+    }
+
+    private async getManualSubGroupsSetting(): Promise<ManualSubGroups> {
+        const value = await this.desktop.lib.db.settings.getValue(MANUAL_SUBGROUPS_SETTING_KEY);
+        if (!value) return {};
+
+        try {
+            const parsed = JSON.parse(value) as ManualSubGroups;
+            return Object.fromEntries(
+                Object.entries(parsed)
+                    .filter((entry): entry is [string, string[]] => Array.isArray(entry[1]))
+                    .map(([game, paths]) => [
+                        game,
+                        paths.map(normalizeRelativePath).filter(Boolean),
+                    ]),
+            );
+        } catch {
+            return {};
+        }
+    }
+
+    private async getManualChildPaths(game: string, groupRelativePath: string) {
+        const normalizedGroupPath = normalizeRelativePath(groupRelativePath);
+        const groupPrefix = normalizedGroupPath ? `${normalizedGroupPath}/` : "";
+        const manualSubGroups = await this.getManualSubGroupsSetting();
+
+        return new Set(
+            (manualSubGroups[game] ?? []).filter((manualPath) => {
+                if (!manualPath.startsWith(groupPrefix)) return false;
+                return !manualPath.slice(groupPrefix.length).includes("/");
+            }),
+        );
+    }
+
+    private async hasManualChildren(game: string, groupRelativePath: string) {
+        return (await this.getManualChildPaths(game, groupRelativePath)).size > 0;
+    }
+
+    private async addManualSubGroupFlags(
+        game: string,
+        parentRelativePath: string,
+        groups: FolderGroup[],
+    ) {
+        if (!game) return groups;
+
+        const manualChildPaths = await this.getManualChildPaths(game, parentRelativePath);
+
+        return await Promise.all(
+            groups.map(async (group) => {
+                const groupRelativePath = normalizeRelativePath(
+                    path.join(parentRelativePath, path.basename(group.path)),
+                );
+
+                return {
+                    ...group,
+                    isManualSubGroup: manualChildPaths.has(groupRelativePath),
+                    hasManualSubGroups: await this.hasManualChildren(game, groupRelativePath),
+                };
+            }),
+        );
+    }
+
+    private async filterManualSubGroupMods(
+        game: string,
+        groupRelativePath: string,
+        mods: FolderGroup["mods"],
+    ) {
+        const manualChildPaths = await this.getManualChildPaths(game, groupRelativePath);
+        if (manualChildPaths.size === 0) return mods;
+
+        const normalizedGroupPath = normalizeRelativePath(groupRelativePath);
+        return mods.filter((mod) => {
+            const fullRelativePath = normalizeRelativePath(
+                normalizedGroupPath
+                    ? path.join(normalizedGroupPath, path.basename(mod.path))
+                    : path.basename(mod.path),
+            );
+            return !manualChildPaths.has(fullRelativePath);
+        });
     }
 }
