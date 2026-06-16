@@ -348,7 +348,7 @@ export class ModLibraryService {
 
     private async getGameByPath(targetPath: string) {
         const resolvedTargetPath = path.resolve(targetPath);
-        return (await this.games()).find((game) => {
+        const matches = (await this.games()).filter((game) => {
             const relativePath = path.relative(
                 path.resolve(game.modFolderPath),
                 resolvedTargetPath,
@@ -358,6 +358,9 @@ export class ModLibraryService {
                 (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
             );
         });
+        return matches.sort(
+            (a, b) => path.resolve(b.modFolderPath).length - path.resolve(a.modFolderPath).length,
+        )[0];
     }
 
     private async getManualSubGroupsSetting(): Promise<ManualSubGroups> {
