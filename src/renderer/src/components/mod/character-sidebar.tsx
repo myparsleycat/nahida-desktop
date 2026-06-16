@@ -288,34 +288,40 @@ export const CharacterSidebar = memo(function CharacterSidebar({
 
   const handleManualSubGroupChange = useCallback(
     async (group: FolderGroup, enabled: boolean) => {
-      await window.api.invoke("mod:setManualSubGroup", group.path, enabled);
-
       const parentGroupPath = getParentGroupPath(group.path);
       const parentGroup = parentGroupPath
         ? (itemRefs.current.get(parentGroupPath)?.group ?? null)
         : null;
 
-      if (!enabled && selectedGroup?.path === group.path) {
-        setSelectedGroup(parentGroup);
-      }
+      await window.api
+        .invoke("mod:setManualSubGroup", group.path, enabled)
+        .then(async () => {
+          if (!enabled && selectedGroup?.path === group.path) {
+            setSelectedGroup(parentGroup);
+          }
 
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] }),
-        queryClient.invalidateQueries({ queryKey: ["manualSubGroups"] }),
-        queryClient.invalidateQueries({ queryKey: ["subGroups"] }),
-        queryClient.invalidateQueries({ queryKey: ["modGroup", group.path] }),
-        parentGroupPath
-          ? queryClient.invalidateQueries({ queryKey: ["modGroup", parentGroupPath] })
-          : Promise.resolve(),
-      ]);
-
-      toast.success(
-        t(
-          enabled
-            ? "page.mod.toast.manual-subgroup-success"
-            : "page.mod.toast.manual-subgroup-remove-success",
-        ),
-      );
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] }),
+            queryClient.invalidateQueries({ queryKey: ["manualSubGroups"] }),
+            queryClient.invalidateQueries({ queryKey: ["subGroups"] }),
+            queryClient.invalidateQueries({ queryKey: ["modGroup", group.path] }),
+            parentGroupPath
+              ? queryClient.invalidateQueries({ queryKey: ["modGroup", parentGroupPath] })
+              : Promise.resolve(),
+          ]);
+        })
+        .then(() => {
+          toast.success(
+            t(
+              enabled
+                ? "page.mod.toast.manual-subgroup-success"
+                : "page.mod.toast.manual-subgroup-remove-success",
+            ),
+          );
+        })
+        .catch((error) => {
+          toast.error(error instanceof Error ? error.message : String(error));
+        });
     },
     [queryClient, selectedGame, selectedGroup?.path, setSelectedGroup, t],
   );
