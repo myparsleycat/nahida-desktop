@@ -2,6 +2,7 @@ import path from "node:path";
 import { getCharactersFolder, getMods } from "@native/mod-manager";
 import type { FolderGroup, Preset } from "@shared/types";
 import { GAME_MATCH_CASES } from "@shared/xxmi-match";
+import fse from "fs-extra";
 import type { NahidaDesktop } from "../..";
 import { normalizeRelativePath } from "./path-utils";
 
@@ -388,12 +389,26 @@ export class ModLibraryService {
         const normalizedGroupPath = normalizeRelativePath(groupRelativePath);
         const groupPrefix = normalizedGroupPath ? `${normalizedGroupPath}/` : "";
         const manualSubGroups = await this.getManualSubGroupsSetting();
+        const modFolderPath = await this.gamePath(game);
+
+        const candidatePaths = (manualSubGroups[game] ?? []).filter((manualPath) => {
+            if (!manualPath.startsWith(groupPrefix)) return false;
+            return !manualPath.slice(groupPrefix.length).includes("/");
+        });
+
+        if (!modFolderPath) return new Set<string>();
+
+        const existingPaths = await Promise.all(
+            candidatePaths.map(async (manualPath) => {
+                if (await fse.pathExists(path.join(modFolderPath, manualPath))) {
+                    return manualPath;
+                }
+                return null;
+            }),
+        );
 
         return new Set(
-            (manualSubGroups[game] ?? []).filter((manualPath) => {
-                if (!manualPath.startsWith(groupPrefix)) return false;
-                return !manualPath.slice(groupPrefix.length).includes("/");
-            }),
+            existingPaths.filter((manualPath): manualPath is string => manualPath !== null),
         );
     }
 

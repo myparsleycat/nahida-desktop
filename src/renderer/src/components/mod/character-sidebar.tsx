@@ -46,6 +46,32 @@ function getParentGroupPath(groupPath: string) {
   return groupPath.slice(0, separatorIndex);
 }
 
+function getGroupName(groupPath: string) {
+  const separatorIndex = Math.max(groupPath.lastIndexOf("\\"), groupPath.lastIndexOf("/"));
+  if (separatorIndex < 0) {
+    return groupPath;
+  }
+
+  return groupPath.slice(separatorIndex + 1);
+}
+
+function getParentGroup(
+  parentGroupPath: string | null,
+  itemRefs: React.MutableRefObject<Map<string, { element: HTMLElement; group: FolderGroup }>>,
+) {
+  if (!parentGroupPath) {
+    return null;
+  }
+
+  return (
+    itemRefs.current.get(parentGroupPath)?.group ?? {
+      name: getGroupName(parentGroupPath),
+      path: parentGroupPath,
+      mods: [],
+    }
+  );
+}
+
 interface CharacterSidebarProps {
   groups: FolderGroup[];
   isLoading?: boolean;
@@ -289,9 +315,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
   const handleManualSubGroupChange = useCallback(
     async (group: FolderGroup, enabled: boolean) => {
       const parentGroupPath = getParentGroupPath(group.path);
-      const parentGroup = parentGroupPath
-        ? (itemRefs.current.get(parentGroupPath)?.group ?? null)
-        : null;
+      const parentGroup = getParentGroup(parentGroupPath, itemRefs);
 
       await window.api
         .invoke("mod:setManualSubGroup", group.path, enabled)
