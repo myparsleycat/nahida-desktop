@@ -106,17 +106,26 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   const isPersistent = useModStore((s) => s.persistentGroups.has(group.path));
   const toggleExpandedGroup = useModStore((s) => s.toggleExpandedGroup);
   const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
-  const shouldFetchSubGroups = isExpanded || (!!searchTerm && isPersistent);
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const isSearching = normalizedSearch.length > 0;
+  const shouldFetchSubGroups = isExpanded || (isSearching && isPersistent);
   const subGroups = useSubGroups(group, shouldFetchSubGroups);
   const manualSubGroups = useManualSubGroups(
     group,
     !!group.hasManualSubGroups && !shouldFetchSubGroups,
   );
-  const isSelfMatch = group.name.toLowerCase().includes(searchTerm.toLowerCase());
-  const shouldShowParent = !searchTerm || isSelfMatch;
-  const showSubGroups = isExpanded || (!!searchTerm && isPersistent);
+  const isSelfMatch = !isSearching || group.name.toLowerCase().includes(normalizedSearch);
+  const shouldShowParent = isSelfMatch;
+  const showSubGroups = isExpanded || (isSearching && isPersistent);
   const childGroups = showSubGroups ? subGroups : manualSubGroups;
-  const showChildGroups = showSubGroups || manualSubGroups.length > 0;
+  const visibleChildGroups =
+    isSearching && !showSubGroups
+      ? childGroups.filter((sub) => sub.name.toLowerCase().includes(normalizedSearch))
+      : childGroups;
+  const showChildGroups = showSubGroups
+    ? childGroups.length > 0
+    : manualSubGroups.length > 0 && (!isSearching || visibleChildGroups.length > 0);
+  const groupsToRender = showSubGroups ? childGroups : visibleChildGroups;
   const resolvedItemStyle = useMemo(() => itemStyle?.(depth), [depth, itemStyle]);
 
   const handleChildItemClick = useCallback(
@@ -170,7 +179,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
         />
       )}
       {showChildGroups &&
-        childGroups.map((sub) => (
+        groupsToRender.map((sub) => (
           <CharacterSidebarItemWithChildren
             key={sub.path}
             group={sub}
