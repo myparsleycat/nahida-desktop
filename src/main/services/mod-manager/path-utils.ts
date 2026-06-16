@@ -53,6 +53,67 @@ export function manualSubGroupSegmentMatches(entryName: string, storedSegment: s
     return stripDisabledPrefix(entryName).toLowerCase() === storedSegment;
 }
 
+type ManualSubGroupFsAccessors = {
+    pathExists: (targetPath: string) => Promise<boolean>;
+    readDirectory: (targetPath: string) => Promise<string[]>;
+    statPath: (
+        targetPath: string,
+    ) => Promise<{ isDirectory: () => boolean; isFile: () => boolean } | null>;
+};
+
+async function walkManualSubGroupDiskPaths(
+    currentPath: string,
+    storedRelativePath: string,
+    fs: ManualSubGroupFsAccessors,
+    segmentIndex: number,
+): Promise<string[]> {
+    const segments = storedRelativePath.split("/").filter(Boolean);
+    if (segmentIndex >= segments.length) return [currentPath];
+    if (!(await fs.pathExists(currentPath))) return [];
+
+    const storedSegment = segments[segmentIndex];
+    const entries = await fs.readDirectory(currentPath);
+    return (
+        await Promise.all(
+            entries.map(async (entry) => {
+                const entryPath = path.join(currentPath, entry);
+                const stat = await fs.statPath(entryPath);
+                if (!stat?.isDirectory()) return [];
+                if (!manualSubGroupSegmentMatches(entry, storedSegment)) return [];
+                return walkManualSubGroupDiskPaths(
+                    entryPath,
+                    storedRelativePath,
+                    fs,
+                    segmentIndex + 1,
+                );
+            }),
+        )
+    ).flat();
+}
+
+export async function resolveManualSubGroupDiskPaths(
+    modFolderPath: string,
+    storedRelativePath: string,
+    fs: ManualSubGroupFsAccessors,
+) {
+    return walkManualSubGroupDiskPaths(modFolderPath, storedRelativePath, fs, 0);
+}
+
+export async function folderHasAnyFile(dirPath: string, fs: ManualSubGroupFsAccessors) {
+    if (!(await fs.pathExists(dirPath))) return false;
+
+    const entries = await fs.readDirectory(dirPath);
+    for (const entry of entries) {
+        const entryPath = path.join(dirPath, entry);
+        const stat = await fs.statPath(entryPath);
+        if (!stat) continue;
+        if (stat.isFile()) return true;
+        if (stat.isDirectory() && (await folderHasAnyFile(entryPath, fs))) return true;
+    }
+
+    return false;
+}
+
 export async function manualSubGroupPathExists(
     modFolderPath: string,
     storedRelativePath: string,
@@ -60,34 +121,20 @@ export async function manualSubGroupPathExists(
     readDirectory: (targetPath: string) => Promise<string[]>,
     statPath: (targetPath: string) => Promise<{ isDirectory: () => boolean } | null>,
 ) {
-    const segments = storedRelativePath.split("/").filter(Boolean);
-
-    const walk = async (currentPath: string, segmentIndex: number): Promise<boolean> => {
-        if (segmentIndex >= segments.length) return true;
-        if (!(await pathExists(currentPath))) return false;
-
-        const storedSegment = segments[segmentIndex];
-        const entries = await readDirectory(currentPath);
-        const matchingPaths = (
-            await Promise.all(
-                entries.map(async (entry) => {
-                    const entryPath = path.join(currentPath, entry);
-                    const stat = await statPath(entryPath);
-                    if (!stat?.isDirectory()) return null;
-                    if (!manualSubGroupSegmentMatches(entry, storedSegment)) return null;
-                    return entryPath;
-                }),
-            )
-        ).filter((entryPath): entryPath is string => entryPath !== null);
-
-        if (matchingPaths.length === 0) return false;
-
-        return (
-            await Promise.all(matchingPaths.map((entryPath) => walk(entryPath, segmentIndex + 1)))
-        ).some(Boolean);
+    const fs: ManualSubGroupFsAccessors = {
+        pathExists,
+        readDirectory,
+        statPath: async (targetPath) => {
+            const stat = await statPath(targetPath);
+            if (!stat) return null;
+            return {
+                isDirectory: () => stat.isDirectory(),
+                isFile: () => false,
+            };
+        },
     };
 
-    return walk(modFolderPath, 0);
+    return (await resolveManualSubGroupDiskPaths(modFolderPath, storedRelativePath, fs)).length > 0;
 }
 
 export function toGameRelativePath(rootPath: string, targetPath: string): string {

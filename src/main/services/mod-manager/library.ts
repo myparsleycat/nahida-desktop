@@ -4,7 +4,12 @@ import type { FolderGroup, Preset } from "@shared/types";
 import { GAME_MATCH_CASES } from "@shared/xxmi-match";
 import fse from "fs-extra";
 import type { NahidaDesktop } from "../..";
-import { manualSubGroupPathExists, manualSubGroupRelativePath } from "./path-utils";
+import {
+    folderHasAnyFile,
+    manualSubGroupPathExists,
+    manualSubGroupRelativePath,
+    resolveManualSubGroupDiskPaths,
+} from "./path-utils";
 
 const MOD_PRESET_VERSION = 2;
 const MANUAL_SUBGROUPS_SETTING_KEY = "manual_subgroups";
@@ -387,6 +392,40 @@ export class ModLibraryService {
         }
     }
 
+    private manualSubGroupFs() {
+        return {
+            pathExists: (targetPath: string) => fse.pathExists(targetPath),
+            readDirectory: (targetPath: string) => fse.readdir(targetPath),
+            statPath: (targetPath: string) => fse.stat(targetPath).catch(() => null),
+        };
+    }
+
+    private async countManualChildPathsInModCount(game: string, groupRelativePath: string) {
+        const manualChildPaths = await this.getManualChildPaths(game, groupRelativePath);
+        if (manualChildPaths.size === 0) return 0;
+
+        const modFolderPath = await this.gamePath(game);
+        if (!modFolderPath) return 0;
+
+        const fs = this.manualSubGroupFs();
+        const counts = await Promise.all(
+            [...manualChildPaths].map(async (manualPath) => {
+                const diskPaths = await resolveManualSubGroupDiskPaths(
+                    modFolderPath,
+                    manualPath,
+                    fs,
+                );
+                return (
+                    await Promise.all(diskPaths.map((diskPath) => folderHasAnyFile(diskPath, fs)))
+                ).some(Boolean)
+                    ? 1
+                    : 0;
+            }),
+        );
+
+        return counts.reduce((total, count) => total + count, 0);
+    }
+
     private async getManualChildPaths(game: string, groupRelativePath: string) {
         const normalizedGroupPath = manualSubGroupRelativePath(groupRelativePath);
         const groupPrefix = normalizedGroupPath ? `${normalizedGroupPath}/` : "";
@@ -443,13 +482,18 @@ export class ModLibraryService {
 
                 const ownManualChildPaths = await this.getManualChildPaths(game, groupRelativePath);
 
+                const manualChildPathsInModCount = await this.countManualChildPathsInModCount(
+                    game,
+                    groupRelativePath,
+                );
+
                 return {
                     ...group,
                     isManualSubGroup: manualChildPaths.has(groupRelativePath),
                     hasManualSubGroups: ownManualChildPaths.size > 0,
                     modCount: Math.max(
                         0,
-                        (group.modCount ?? group.mods.length) - ownManualChildPaths.size,
+                        (group.modCount ?? group.mods.length) - manualChildPathsInModCount,
                     ),
                 };
             }),
