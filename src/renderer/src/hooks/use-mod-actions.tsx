@@ -351,16 +351,24 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
       await runner.handleOpenWuwaFixer(mod.path);
     },
     markAsManualSubGroup: async (mod) => {
-      await window.api.invoke("mod:setManualSubGroup", mod.path, true);
-      await Promise.all([
-        invalidateModGroup(queryClient, selectedGroupPath),
-        selectedGame
-          ? queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] })
-          : Promise.resolve(),
-        queryClient.invalidateQueries({ queryKey: ["subGroups"] }),
-        queryClient.invalidateQueries({ queryKey: ["manualSubGroups"] }),
-      ]);
-      toast.success(t("page.mod.toast.manual-subgroup-success"));
+      await window.api
+        .invoke("mod:setManualSubGroup", mod.path, true)
+        .then(() =>
+          Promise.all([
+            invalidateModGroup(queryClient, selectedGroupPath),
+            selectedGame
+              ? queryClient.invalidateQueries({ queryKey: ["characters", selectedGame] })
+              : Promise.resolve(),
+            queryClient.invalidateQueries({ queryKey: ["subGroups"] }),
+            queryClient.invalidateQueries({ queryKey: ["manualSubGroups"] }),
+          ]),
+        )
+        .then(() => {
+          toast.success(t("page.mod.toast.manual-subgroup-success"));
+        })
+        .catch((error) => {
+          toast.error(error instanceof Error ? error.message : String(error));
+        });
     },
     runPreset: async (mod, presetId) => {
       await runner.handleRun("preset", presetId, mod.path);
