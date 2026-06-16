@@ -525,6 +525,10 @@ fn find_group_preview(group_path: &Path, search_depth: usize) -> Option<String> 
         return Some(root_preview);
     }
 
+    if search_depth <= 1 {
+        return None;
+    }
+
     let child_folders = list_child_folders(group_path);
 
     find_child_folder_preview(&child_folders, search_depth, false)
@@ -837,6 +841,14 @@ mod tests {
             find_group_preview(dir.path(), 3),
             Some(root_preview.to_string_lossy().into_owned())
         );
+    }
+
+    #[test]
+    fn find_group_preview_does_not_search_child_folders_at_depth_one() {
+        let dir = TestDir::new("depth-one");
+        dir.write_file("Enabled Mod/preview.png");
+
+        assert_eq!(find_group_preview(dir.path(), 1), None);
     }
 
     #[test]
