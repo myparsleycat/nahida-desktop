@@ -11,6 +11,8 @@ const MANUAL_SUBGROUPS_SETTING_KEY = "manual_subgroups";
 type ManualSubGroups = Record<string, string[]>;
 
 export class ModLibraryService {
+    private manualSubGroupWriteLock = Promise.resolve();
+
     constructor(private readonly desktop: NahidaDesktop) {}
 
     public async gamePath(game: string): Promise<string | null> {
@@ -320,28 +322,28 @@ export class ModLibraryService {
             throw new Error("INVALID_MANUAL_SUBGROUP_PATH");
         }
 
-        const manualSubGroups = await this.getManualSubGroupsSetting();
-        const current = new Set(manualSubGroups[game.game] ?? []);
+        const task = this.manualSubGroupWriteLock.then(async () => {
+            const manualSubGroups = await this.getManualSubGroupsSetting();
+            const current = new Set(manualSubGroups[game.game] ?? []);
 
-        if (enabled) {
-            current.add(relativePath);
-        } else {
-            current.delete(relativePath);
-        }
+            if (enabled) current.add(relativePath);
+            else current.delete(relativePath);
 
-        const next = {
-            ...manualSubGroups,
-            [game.game]: [...current].sort((a, b) => a.localeCompare(b)),
-        };
+            const next = {
+                ...manualSubGroups,
+                [game.game]: [...current].sort((a, b) => a.localeCompare(b)),
+            };
 
-        if (next[game.game].length === 0) {
-            delete next[game.game];
-        }
+            if (next[game.game].length === 0) delete next[game.game];
 
-        await this.desktop.lib.db.settings.upsert(
-            MANUAL_SUBGROUPS_SETTING_KEY,
-            JSON.stringify(next),
-        );
+            await this.desktop.lib.db.settings.upsert(
+                MANUAL_SUBGROUPS_SETTING_KEY,
+                JSON.stringify(next),
+            );
+        });
+
+        this.manualSubGroupWriteLock = task.catch(() => undefined);
+        await task;
     }
 
     private async getGameByPath(targetPath: string) {
