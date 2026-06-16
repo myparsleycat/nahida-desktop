@@ -102,10 +102,12 @@ export class ModLibraryService {
             const relativePath = normalizeRelativePath(
                 path.relative(game.modFolderPath, groupPath),
             );
+            const mods = await this.filterManualSubGroupMods(game.game, relativePath, group.mods);
             return {
                 ...group,
                 hasManualSubGroups: await this.hasManualChildren(game.game, relativePath),
-                mods: await this.filterManualSubGroupMods(game.game, relativePath, group.mods),
+                mods,
+                modCount: mods.length,
             };
         } catch (error) {
             this.desktop.logger.error(error, `Mod:mods:${groupPath}`);
@@ -414,10 +416,16 @@ export class ModLibraryService {
                     path.join(parentRelativePath, path.basename(group.path)),
                 );
 
+                const ownManualChildPaths = await this.getManualChildPaths(game, groupRelativePath);
+
                 return {
                     ...group,
                     isManualSubGroup: manualChildPaths.has(groupRelativePath),
-                    hasManualSubGroups: await this.hasManualChildren(game, groupRelativePath),
+                    hasManualSubGroups: ownManualChildPaths.size > 0,
+                    modCount: Math.max(
+                        0,
+                        (group.modCount ?? group.mods.length) - ownManualChildPaths.size,
+                    ),
                 };
             }),
         );
