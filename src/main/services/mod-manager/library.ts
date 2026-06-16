@@ -4,7 +4,7 @@ import type { FolderGroup, Preset } from "@shared/types";
 import { GAME_MATCH_CASES } from "@shared/xxmi-match";
 import fse from "fs-extra";
 import type { NahidaDesktop } from "../..";
-import { normalizeRelativePath } from "./path-utils";
+import { manualSubGroupPathExists, manualSubGroupRelativePath } from "./path-utils";
 
 const MOD_PRESET_VERSION = 2;
 const MANUAL_SUBGROUPS_SETTING_KEY = "manual_subgroups";
@@ -48,7 +48,7 @@ export class ModLibraryService {
         try {
             const game = await this.getGameByPath(folderPath);
             const relativePath = game
-                ? normalizeRelativePath(path.relative(game.modFolderPath, folderPath))
+                ? manualSubGroupRelativePath(path.relative(game.modFolderPath, folderPath))
                 : "";
 
             return await this.addManualSubGroupFlags(
@@ -72,7 +72,7 @@ export class ModLibraryService {
             const game = await this.getGameByPath(folderPath);
             if (!game) return [];
 
-            const relativePath = normalizeRelativePath(
+            const relativePath = manualSubGroupRelativePath(
                 path.relative(game.modFolderPath, folderPath),
             );
             const manualChildPaths = await this.getManualChildPaths(game.game, relativePath);
@@ -81,7 +81,9 @@ export class ModLibraryService {
             return (await this.subGroups(folderPath, shouldFallback))
                 .filter((group) =>
                     manualChildPaths.has(
-                        normalizeRelativePath(path.join(relativePath, path.basename(group.path))),
+                        manualSubGroupRelativePath(
+                            path.join(relativePath, path.basename(group.path)),
+                        ),
                     ),
                 )
                 .map((group) => ({
@@ -100,7 +102,7 @@ export class ModLibraryService {
             const game = await this.getGameByPath(groupPath);
             if (!game) return group;
 
-            const relativePath = normalizeRelativePath(
+            const relativePath = manualSubGroupRelativePath(
                 path.relative(game.modFolderPath, groupPath),
             );
             const mods = await this.filterManualSubGroupMods(game.game, relativePath, group.mods);
@@ -320,7 +322,7 @@ export class ModLibraryService {
             throw new Error("INVALID_MANUAL_SUBGROUP_PATH");
         }
 
-        const relativePath = normalizeRelativePath(path.relative(game.modFolderPath, modPath));
+        const relativePath = manualSubGroupRelativePath(path.relative(game.modFolderPath, modPath));
         if (!relativePath) {
             throw new Error("INVALID_MANUAL_SUBGROUP_PATH");
         }
@@ -377,7 +379,7 @@ export class ModLibraryService {
                     .filter((entry): entry is [string, string[]] => Array.isArray(entry[1]))
                     .map(([game, paths]) => [
                         game,
-                        paths.map(normalizeRelativePath).filter(Boolean),
+                        paths.map(manualSubGroupRelativePath).filter(Boolean),
                     ]),
             );
         } catch {
@@ -386,7 +388,7 @@ export class ModLibraryService {
     }
 
     private async getManualChildPaths(game: string, groupRelativePath: string) {
-        const normalizedGroupPath = normalizeRelativePath(groupRelativePath);
+        const normalizedGroupPath = manualSubGroupRelativePath(groupRelativePath);
         const groupPrefix = normalizedGroupPath ? `${normalizedGroupPath}/` : "";
         const manualSubGroups = await this.getManualSubGroupsSetting();
         const modFolderPath = await this.gamePath(game);
@@ -400,7 +402,15 @@ export class ModLibraryService {
 
         const existingPaths = await Promise.all(
             candidatePaths.map(async (manualPath) => {
-                if (await fse.pathExists(path.join(modFolderPath, manualPath))) {
+                if (
+                    await manualSubGroupPathExists(
+                        modFolderPath,
+                        manualPath,
+                        (targetPath) => fse.pathExists(targetPath),
+                        (targetPath) => fse.readdir(targetPath),
+                        (targetPath) => fse.stat(targetPath).catch(() => null),
+                    )
+                ) {
                     return manualPath;
                 }
                 return null;
@@ -427,7 +437,7 @@ export class ModLibraryService {
 
         return await Promise.all(
             groups.map(async (group) => {
-                const groupRelativePath = normalizeRelativePath(
+                const groupRelativePath = manualSubGroupRelativePath(
                     path.join(parentRelativePath, path.basename(group.path)),
                 );
 
@@ -454,9 +464,9 @@ export class ModLibraryService {
         const manualChildPaths = await this.getManualChildPaths(game, groupRelativePath);
         if (manualChildPaths.size === 0) return mods;
 
-        const normalizedGroupPath = normalizeRelativePath(groupRelativePath);
+        const normalizedGroupPath = manualSubGroupRelativePath(groupRelativePath);
         return mods.filter((mod) => {
-            const fullRelativePath = normalizeRelativePath(
+            const fullRelativePath = manualSubGroupRelativePath(
                 normalizedGroupPath
                     ? path.join(normalizedGroupPath, path.basename(mod.path))
                     : path.basename(mod.path),

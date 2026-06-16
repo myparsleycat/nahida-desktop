@@ -38,6 +38,58 @@ export function normalizeRelativePath(targetPath: string): string {
         .join("/");
 }
 
+export function manualSubGroupRelativePath(targetPath: string): string {
+    return targetPath
+        .split(/[\\/]+/)
+        .filter(Boolean)
+        .map((segment) => segment.toLowerCase())
+        .join("/");
+}
+
+export function manualSubGroupSegmentMatches(entryName: string, storedSegment: string) {
+    const lowerEntryName = entryName.toLowerCase();
+    if (lowerEntryName === storedSegment) return true;
+
+    return stripDisabledPrefix(entryName).toLowerCase() === storedSegment;
+}
+
+export async function manualSubGroupPathExists(
+    modFolderPath: string,
+    storedRelativePath: string,
+    pathExists: (targetPath: string) => Promise<boolean>,
+    readDirectory: (targetPath: string) => Promise<string[]>,
+    statPath: (targetPath: string) => Promise<{ isDirectory: () => boolean } | null>,
+) {
+    const segments = storedRelativePath.split("/").filter(Boolean);
+
+    const walk = async (currentPath: string, segmentIndex: number): Promise<boolean> => {
+        if (segmentIndex >= segments.length) return true;
+        if (!(await pathExists(currentPath))) return false;
+
+        const storedSegment = segments[segmentIndex];
+        const entries = await readDirectory(currentPath);
+        const matchingPaths = (
+            await Promise.all(
+                entries.map(async (entry) => {
+                    const entryPath = path.join(currentPath, entry);
+                    const stat = await statPath(entryPath);
+                    if (!stat?.isDirectory()) return null;
+                    if (!manualSubGroupSegmentMatches(entry, storedSegment)) return null;
+                    return entryPath;
+                }),
+            )
+        ).filter((entryPath): entryPath is string => entryPath !== null);
+
+        if (matchingPaths.length === 0) return false;
+
+        return (
+            await Promise.all(matchingPaths.map((entryPath) => walk(entryPath, segmentIndex + 1)))
+        ).some(Boolean);
+    };
+
+    return walk(modFolderPath, 0);
+}
+
 export function toGameRelativePath(rootPath: string, targetPath: string): string {
     return normalizeRelativePath(path.relative(rootPath, targetPath));
 }
