@@ -1,5 +1,6 @@
 import path from "node:path";
 import { getCharactersFolder, getMods } from "@native/mod-manager";
+import { findBestFuzzyMatch } from "@shared/fuzzy-match";
 import type { FolderGroup, Preset } from "@shared/types";
 import { GAME_MATCH_CASES } from "@shared/xxmi-match";
 import fse from "fs-extra";
@@ -13,6 +14,7 @@ import {
 
 const MOD_PRESET_VERSION = 2;
 const MANUAL_SUBGROUPS_SETTING_KEY = "manual_subgroups";
+const DOWNLOAD_TARGET_MATCH_THRESHOLD = 0.85;
 
 type ManualSubGroups = Record<string, string[]>;
 
@@ -142,6 +144,63 @@ export class ModLibraryService {
 
     public async games() {
         return await this.desktop.lib.db.gamePaths.list();
+    }
+
+    public async resolveDownloadTarget(input: string): Promise<{
+        game: string;
+        group: FolderGroup;
+        score: number;
+    } | null> {
+        const candidates = (
+            await Promise.all(
+                (
+                    await this.games()
+                ).map(async (game) =>
+                    (
+                        await Promise.all(
+                            (
+                                await this.characters(game.game).catch((error) => {
+                                    this.desktop.logger.error(
+                                        error,
+                                        `Mod:resolveDownloadTarget:characters:${game.game}`,
+                                    );
+                                    return [];
+                                })
+                            ).map(async (group) => [
+                                { game: game.game, group },
+                                ...(
+                                    await this.subGroups(group.path).catch((error) => {
+                                        this.desktop.logger.error(
+                                            error,
+                                            `Mod:resolveDownloadTarget:subGroups:${group.path}`,
+                                        );
+                                        return [];
+                                    })
+                                ).map((subGroup) => ({
+                                    game: game.game,
+                                    group: subGroup,
+                                })),
+                            ]),
+                        )
+                    ).flat(),
+                ),
+            )
+        ).flat();
+        const match = findBestFuzzyMatch(
+            candidates.map((candidate) => candidate.group.name),
+            input,
+            { threshold: DOWNLOAD_TARGET_MATCH_THRESHOLD },
+        );
+        if (!match) return null;
+
+        const candidate = candidates.find((candidate) => candidate.group.name === match.value);
+        if (!candidate) return null;
+
+        return {
+            game: candidate.game,
+            group: candidate.group,
+            score: match.score,
+        };
     }
 
     public async lastGame(): Promise<string | null> {
@@ -423,7 +482,7 @@ export class ModLibraryService {
             }),
         );
 
-        return counts.reduce((total, count) => total + count, 0);
+        return counts.reduce<number>((total, count) => total + count, 0);
     }
 
     private async getManualChildPaths(game: string, groupRelativePath: string) {

@@ -68,6 +68,10 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return await desktop.service.mod.get.characters(game, searchModPreview);
     });
 
+    rh("mod:resolveDownloadTarget", async (input: string) => {
+        return await desktop.service.mod.get.resolveDownloadTarget(input);
+    });
+
     rh("mod:getSubGroups", async (folderPath: string, searchModPreview?: boolean) => {
         return await desktop.service.mod.get.subGroups(folderPath, searchModPreview);
     });

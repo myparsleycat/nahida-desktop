@@ -363,8 +363,10 @@ export class CustomDownloader {
             resp.headers.get("Content-Disposition"),
         );
 
-        const result =
-            await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(suggestedFileName);
+        const result = await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(
+            suggestedFileName,
+            downloadFilePayload.categoryName,
+        );
         if (!result.path) return "canceled";
         const destinationPath = result.path;
 

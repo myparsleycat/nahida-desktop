@@ -29,8 +29,9 @@ import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { modStore, useModStore } from "@renderer/store/mod";
 import type { ResolvedArchiveExtractPathMode } from "@shared/mod";
+import type { FolderGroup } from "@shared/types";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/mod/")({
@@ -39,6 +40,12 @@ export const Route = createFileRoute("/mod/")({
 
 function RouteComponent() {
   return <ModRouteContent />;
+}
+
+function getParentGroupPath(groupPath: string) {
+  const separatorIndex = Math.max(groupPath.lastIndexOf("\\"), groupPath.lastIndexOf("/"));
+  if (separatorIndex < 0) return null;
+  return groupPath.slice(0, separatorIndex);
 }
 
 function ModRouteContent() {
@@ -51,6 +58,7 @@ function ModRouteContent() {
   const selectedGroupName = useModStore((s) => s.selectedGroup?.name);
   const selectedGroupPath = useModStore((s) => s.selectedGroup?.path);
   const setSelectedGroup = useModStore((s) => s.setSelectedGroup);
+  const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
   const isCustomDownloadDialogOpen = useModStore((s) => s.isCustomDownloadDialogOpen);
   const setIsCustomDownloadDialogOpen = useModStore((s) => s.setIsCustomDownloadDialogOpen);
   const downloadMode = useModStore((s) => s.downloadMode);
@@ -62,6 +70,12 @@ function ModRouteContent() {
 
   const { data: games = [] } = useGames();
   const { data: characters = [] } = useCharacters(selectedGame);
+  const [pendingDownloadTarget, setPendingDownloadTarget] = useState<{
+    downloadId: string;
+    game: string;
+    group: FolderGroup;
+  } | null>(null);
+  const resolvedDownloadIdsRef = useRef(new Set<string>());
 
   useModRefreshOnFocus(selectedGame, queryClient);
   useDownloadCompletionHandler(selectedGame, selectedGroupPath, queryClient);
@@ -101,9 +115,11 @@ function ModRouteContent() {
   useEffect(() => {
     const initGame = async () => {
       try {
-        initExpandedGroups();
+        void initExpandedGroups();
+        if (modStore.getState().downloadMode) return;
 
         const focusedGame = await window.api.invoke("mod:getPreviousFocusedGame");
+        if (modStore.getState().downloadMode) return;
         if (focusedGame && games.find((g) => g.game === focusedGame)) {
           setSelectedGame(focusedGame);
           return;
@@ -111,6 +127,7 @@ function ModRouteContent() {
 
         if (!selectedGame) {
           const lastGame = await window.api.invoke("mod:getLastGame");
+          if (modStore.getState().downloadMode) return;
           if (lastGame && games.find((g) => g.game === lastGame)) {
             setSelectedGame(lastGame);
           }
@@ -122,7 +139,7 @@ function ModRouteContent() {
 
     if (games.length > 0 && !isInitialized.current) {
       isInitialized.current = true;
-      initGame();
+      void initGame();
     }
   }, [games, selectedGame, setSelectedGame]);
 
@@ -131,15 +148,87 @@ function ModRouteContent() {
       if (games.length > 0 && !games.find((g) => g.game === selectedGame)) {
         const nextGame = games[0].game;
         setSelectedGame(nextGame);
-        window.api.invoke("mod:setLastGame", nextGame);
+        void window.api.invoke("mod:setLastGame", nextGame);
       } else if (games.length === 0 && selectedGame !== "") {
         setSelectedGame("");
-        window.api.invoke("mod:setLastGame", "");
+        void window.api.invoke("mod:setLastGame", "");
       }
     }
   }, [games, selectedGame, setSelectedGame]);
 
   useEffect(() => {
+    if (!downloadMode?.suggestedName && !downloadMode?.downloadTargetName) return;
+    if (resolvedDownloadIdsRef.current.has(downloadMode.downloadId)) return;
+
+    resolvedDownloadIdsRef.current.add(downloadMode.downloadId);
+
+    const resolveTarget = async () => {
+      const primary = downloadMode.downloadTargetName;
+      const fallback = downloadMode.suggestedName;
+
+      let result = primary ? await window.api.invoke("mod:resolveDownloadTarget", primary) : null;
+
+      if (!result && fallback) {
+        result = await window.api.invoke("mod:resolveDownloadTarget", fallback);
+      }
+
+      if (!result) return;
+      if (modStore.getState().downloadMode?.downloadId !== downloadMode.downloadId) return;
+
+      setSelectedGame(result.game);
+      void window.api.invoke("mod:setLastGame", result.game);
+      setPendingDownloadTarget({
+        downloadId: downloadMode.downloadId,
+        game: result.game,
+        group: result.group,
+      });
+    };
+
+    void resolveTarget().catch((error) => {
+      console.error("Failed to resolve download target", error);
+    });
+  }, [
+    downloadMode?.downloadId,
+    downloadMode?.suggestedName,
+    downloadMode?.downloadTargetName,
+    setSelectedGame,
+  ]);
+
+  useEffect(() => {
+    if (!pendingDownloadTarget) return;
+    if (downloadMode?.downloadId !== pendingDownloadTarget.downloadId) {
+      setPendingDownloadTarget(null);
+      return;
+    }
+    if (selectedGame !== pendingDownloadTarget.game) return;
+
+    const isTargetAvailable = characters.some(
+      (group) =>
+        group.path === pendingDownloadTarget.group.path ||
+        pendingDownloadTarget.group.path.startsWith(`${group.path}\\`) ||
+        pendingDownloadTarget.group.path.startsWith(`${group.path}/`),
+    );
+    if (!isTargetAvailable) return;
+
+    const parentGroupPath = getParentGroupPath(pendingDownloadTarget.group.path);
+    if (parentGroupPath && characters.some((group) => group.path === parentGroupPath)) {
+      setExpandedGroup(parentGroupPath, true);
+    }
+
+    setSelectedGroup(pendingDownloadTarget.group);
+    setPendingDownloadTarget(null);
+  }, [
+    characters,
+    downloadMode?.downloadId,
+    pendingDownloadTarget,
+    selectedGame,
+    setExpandedGroup,
+    setSelectedGroup,
+  ]);
+
+  useEffect(() => {
+    if (pendingDownloadTarget) return;
+
     if (characters.length > 0) {
       const isSelectedInTopLevel = selectedGroupPath
         ? characters.some((g) => g.path === selectedGroupPath)
@@ -158,17 +247,17 @@ function ModRouteContent() {
     } else {
       setSelectedGroup(null);
     }
-  }, [characters, selectedGroupPath, setSelectedGroup]);
+  }, [characters, pendingDownloadTarget, selectedGroupPath, setSelectedGroup]);
 
   useEffect(() => {
     if (selectedGame) {
-      window.api.invoke("mod:watchGame", selectedGame);
+      void window.api.invoke("mod:watchGame", selectedGame);
     }
   }, [selectedGame]);
 
   useEffect(() => {
     if (selectedGroupPath) {
-      window.api.invoke("mod:watchCharacter", selectedGroupPath);
+      void window.api.invoke("mod:watchCharacter", selectedGroupPath);
     }
   }, [selectedGroupPath]);
 

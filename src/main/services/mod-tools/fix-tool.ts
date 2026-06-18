@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
 import { ScriptExecutor } from "@main/lib/script-executor";
@@ -6,7 +7,7 @@ import { sortBy } from "es-toolkit";
 import fse from "fs-extra";
 import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "@/main";
-import type { ScriptRow } from "@/main/internal/db";
+import type { ScriptRow } from "@/main/internal/db/schema";
 
 export class FixTool {
     private currentAbortController: AbortController | null = null;
@@ -79,6 +80,32 @@ export class FixTool {
         return await this.desktop.lib.db.scriptPresets.listWithScripts();
     }
 
+    public async isPythonAvailable() {
+        return await new Promise<boolean>((resolve) => {
+            const child = spawn("cmd.exe", ["/d", "/s", "/c", "python --version"], {
+                windowsHide: true,
+                shell: false,
+            });
+
+            child.once("error", () => resolve(false));
+            child.once("close", (code) => resolve(code === 0));
+        });
+    }
+
+    private async requirePythonForScripts(scripts: Array<ScriptRow | null>) {
+        if (!scripts.some((script) => script?.type === "python")) {
+            return;
+        }
+
+        if (await this.isPythonAvailable()) {
+            return;
+        }
+
+        throw new Error(
+            "Python is required to run Python fix tools. Install Python and make sure the python command is available.",
+        );
+    }
+
     public async createPreset({ name, scriptIds }: { name: string; scriptIds: string[] }) {
         const trimmedName = name?.trim();
         if (!trimmedName) {
@@ -149,6 +176,7 @@ export class FixTool {
             const _script = await this.desktop.lib.db.scripts.findById(scriptId);
 
             if (!_script) throw new Error("Script not found");
+            await this.requirePythonForScripts([_script]);
             if (!(await fse.pathExists(destPath))) {
                 throw new Error("Destination path does not exist");
             }
@@ -192,12 +220,20 @@ export class FixTool {
             }
 
             const sortedItems = sortBy(preset.scripts, ["order"]);
+            const scripts = await Promise.all(
+                sortedItems.map(async (item) => ({
+                    item,
+                    script: await this.desktop.lib.db.scripts.findById(item.scriptId),
+                })),
+            );
+
+            await this.requirePythonForScripts(scripts.map((script) => script.script));
 
             this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", {
                 message: `Starting Preset: ${preset.name}`,
             });
 
-            for (const item of sortedItems) {
+            for (const script of scripts) {
                 if (signal.aborted) {
                     this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", {
                         message: `Preset execution aborted by user.`,
@@ -205,16 +241,14 @@ export class FixTool {
                     break;
                 }
 
-                const _script = await this.desktop.lib.db.scripts.findById(item.scriptId);
-
-                if (!_script) {
+                if (!script.script) {
                     this.desktop.ipc.postMessageToWindow(mainWindow, "ftm:log", {
-                        message: `Script not found (ID: ${item.scriptId}), skipping...`,
+                        message: `Script not found (ID: ${script.item.scriptId}), skipping...`,
                     });
                     continue;
                 }
 
-                await this._runScriptSafe(_script, destPath, mainWindow, signal, []);
+                await this._runScriptSafe(script.script, destPath, mainWindow, signal, []);
             }
 
             if (!signal.aborted) {

@@ -48,6 +48,7 @@ export function useModFixRunner() {
   const [inputCmd, setInputCmd] = useState("");
   const [prepareResult, setPrepareResult] = useState<WuwaFixerPrepareResult | null>(null);
   const [wuwaOptions, setWuwaOptions] = useState<WuwaFixerOptions>(defaultWuwaOptions);
+  const runInProgressRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -72,6 +73,11 @@ export function useModFixRunner() {
   }, [logs]);
 
   const handleRun = async (type: "tool" | "preset", id: string, modPath: string) => {
+    if (runInProgressRef.current) {
+      return;
+    }
+
+    runInProgressRef.current = true;
     setActiveModPath(modPath);
     setShowLogModal(true);
     setLogs([]);
@@ -86,6 +92,7 @@ export function useModFixRunner() {
       console.error(error);
     } finally {
       setIsRunning(false);
+      runInProgressRef.current = false;
     }
   };
 

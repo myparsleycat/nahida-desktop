@@ -6,6 +6,7 @@ export function registerFixToolsManagerHandlers(d: NahidaDesktop) {
     rh("ftm:saveScript", (path) => d.service.modTools.fixTool.saveScript(path));
     rh("ftm:deleteScript", (id) => d.service.modTools.fixTool.deleteScript(id));
     rh("ftm:getPresets", () => d.service.modTools.fixTool.getPresets());
+    rh("ftm:isPythonAvailable", () => d.service.modTools.fixTool.isPythonAvailable());
     rh("ftm:createPreset", ({ name, scriptIds }) =>
         d.service.modTools.fixTool.createPreset({ name, scriptIds }),
     );

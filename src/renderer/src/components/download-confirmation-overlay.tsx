@@ -63,7 +63,7 @@ export function DownloadConfirmationOverlay() {
       }}
     >
       <div
-        className="bg-background/75 backdrop-blur rounded-lg p-4 max-w-md w-full mx-4 shadow-lg"
+        className="bg-background/75 backdrop-blur-lg rounded-lg p-4 max-w-md w-full mx-4 shadow-lg outline"
         onClick={(e) => {
           e.stopPropagation();
         }}

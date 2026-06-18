@@ -472,7 +472,8 @@
       },
       "log-dialog": {
         "title": "Log",
-        "running": "Running..."
+        "running": "Running...",
+        "python-required": "Python is required to run Python fix tools. Install Python and make sure the python command is available."
       }
     },
     "gamebanana": {

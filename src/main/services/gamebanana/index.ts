@@ -1036,6 +1036,7 @@ export class GameBananaService {
         return {
             fileUrl: file._sDownloadUrl,
             title: file._sFile,
+            categoryName: profile._aCategory._sName,
             previewUrl: this.getModPreviewUrl(profile),
             modId: profile._idRow,
             modPageUrl: profile._sProfileUrl,

@@ -5,7 +5,11 @@ import { toast } from "sonner";
 import { useGlobalStore } from "../store/global";
 
 export function useGlobalEvents(
-    onPathSelectorModeSelect?: (data: { selectionId: string; suggestedName?: string }) => void,
+    onPathSelectorModeSelect?: (data: {
+        selectionId: string;
+        suggestedName?: string;
+        downloadTargetName?: string;
+    }) => void,
 ) {
     const navi = useNavigate();
     const setSession = useGlobalStore((state) => state.setSession);
