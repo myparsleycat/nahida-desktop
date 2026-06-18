@@ -3,7 +3,6 @@ import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -83,12 +82,9 @@ export function CustomDownloadDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent showCloseButton={false}>
+      <DialogContent showCloseButton={false} aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{t("page.mod.content-header.download_dialog.title")}</DialogTitle>
-          <DialogDescription>
-            {t("page.mod.content-header.download_dialog.description")}
-          </DialogDescription>
         </DialogHeader>
 
         <form

@@ -34,8 +34,17 @@ export function registerModHandlers(desktop: NahidaDesktop) {
             path: string,
             importer: string | null,
             linkedModFolderPath: string | null = null,
+            gameInstallPath: string | null = null,
+            gameExecutablePath: string | null = null,
         ) => {
-            return await desktop.service.mod.fn.addGame(game, path, importer, linkedModFolderPath);
+            return await desktop.service.mod.fn.addGame(
+                game,
+                path,
+                importer,
+                linkedModFolderPath,
+                gameInstallPath,
+                gameExecutablePath,
+            );
         },
     );
 
@@ -51,6 +60,7 @@ export function registerModHandlers(desktop: NahidaDesktop) {
                 modFolderPath: string;
                 importer: string | null;
                 linkedModFolderPath: string | null;
+                gameInstallPath: string | null;
             },
         ) => {
             return await desktop.service.mod.fn.updateGame(game, updates);
@@ -59,6 +69,27 @@ export function registerModHandlers(desktop: NahidaDesktop) {
 
     rh("mod:resolveNteInstallPath", async (installPath: string) => {
         return await desktop.service.mod.get.resolveNteInstallPath(installPath);
+    });
+
+    rh("mod:pickExecutable", async () => {
+        const result = await dialog.showOpenDialog({
+            properties: ["openFile"],
+            filters: [{ name: "Launcher", extensions: ["exe"] }],
+        });
+
+        if (result.canceled || result.filePaths.length === 0) {
+            return null;
+        }
+
+        return result.filePaths[0];
+    });
+
+    rh("mod:setGameExecutablePath", async (game: string, executablePath: string) => {
+        return await desktop.service.mod.fn.setGameExecutablePath(game, executablePath);
+    });
+
+    rh("mod:startNteGame", async (game: string) => {
+        return await desktop.service.mod.fn.startNteGame(game);
     });
 
     rh("mod:reorderGames", async (games: string[]) => {
@@ -81,8 +112,8 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return await desktop.service.mod.get.characters(game, searchModPreview);
     });
 
-    rh("mod:resolveDownloadTarget", async (input: string) => {
-        return await desktop.service.mod.get.resolveDownloadTarget(input);
+    rh("mod:resolveDownloadTarget", async (input: string, gameFilter?: string) => {
+        return await desktop.service.mod.get.resolveDownloadTarget(input, gameFilter);
     });
 
     rh("mod:getSubGroups", async (folderPath: string, searchModPreview?: boolean) => {

@@ -14,6 +14,7 @@ export interface PendingPathSelection {
     id: string;
     suggestedName?: string;
     downloadTargetName?: string;
+    downloadImporterKey?: string;
     resolve: (result: PathSelectorResult) => void;
     reject: (error: Error) => void;
 }
@@ -29,6 +30,7 @@ export class PathSelector {
     public async getSelectedPathWithModeModal(
         suggestedName?: string,
         downloadTargetName?: string,
+        downloadImporterKey?: string,
     ): Promise<PathSelectorResult> {
         return new Promise((resolve, reject) => {
             const selectionId = nanoid();
@@ -37,6 +39,7 @@ export class PathSelector {
                 id: selectionId,
                 suggestedName,
                 downloadTargetName,
+                downloadImporterKey,
                 resolve,
                 reject,
             });
@@ -52,17 +55,28 @@ export class PathSelector {
                                     selectionId,
                                     suggestedName,
                                     downloadTargetName,
+                                    downloadImporterKey,
                                 );
                             }, 500);
                         });
                     } else {
                         this.desktop.window.main.focus();
-                        this.showSelectionModal(selectionId, suggestedName, downloadTargetName);
+                        this.showSelectionModal(
+                            selectionId,
+                            suggestedName,
+                            downloadTargetName,
+                            downloadImporterKey,
+                        );
                     }
                 });
             } else {
                 this.desktop.window.main.focus();
-                this.showSelectionModal(selectionId, suggestedName, downloadTargetName);
+                this.showSelectionModal(
+                    selectionId,
+                    suggestedName,
+                    downloadTargetName,
+                    downloadImporterKey,
+                );
             }
         });
     }
@@ -71,6 +85,7 @@ export class PathSelector {
         selectionId: string,
         suggestedName?: string,
         downloadTargetName?: string,
+        downloadImporterKey?: string,
     ) {
         const mainWindow = this.desktop.window.main.window;
         if (!mainWindow) {
@@ -86,6 +101,7 @@ export class PathSelector {
             selectionId,
             suggestedName,
             downloadTargetName,
+            downloadImporterKey,
         });
     }
 

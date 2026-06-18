@@ -28,7 +28,7 @@ import {
 import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { modStore, useModStore } from "@renderer/store/mod";
-import type { ResolvedArchiveExtractPathMode } from "@shared/mod";
+import { findGameByImporter, type ResolvedArchiveExtractPathMode } from "@shared/mod";
 import type { FolderGroup } from "@shared/types";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
@@ -157,31 +157,64 @@ function ModRouteContent() {
   }, [games, selectedGame, setSelectedGame]);
 
   useEffect(() => {
-    if (!downloadMode?.suggestedName && !downloadMode?.downloadTargetName) return;
+    if (
+      !downloadMode?.suggestedName &&
+      !downloadMode?.downloadTargetName &&
+      !downloadMode?.downloadImporterKey
+    ) {
+      return;
+    }
     if (resolvedDownloadIdsRef.current.has(downloadMode.downloadId)) return;
+    if (downloadMode.downloadImporterKey && games.length === 0) return;
 
-    resolvedDownloadIdsRef.current.add(downloadMode.downloadId);
+    const downloadId = downloadMode.downloadId;
 
     const resolveTarget = async () => {
-      const primary = downloadMode.downloadTargetName;
-      const fallback = downloadMode.suggestedName;
+      if (modStore.getState().downloadMode?.downloadId !== downloadId) return;
 
-      let result = primary ? await window.api.invoke("mod:resolveDownloadTarget", primary) : null;
+      const currentDownloadMode = modStore.getState().downloadMode;
+      if (!currentDownloadMode) return;
+
+      const gameByImporter = currentDownloadMode.downloadImporterKey
+        ? (findGameByImporter(games, currentDownloadMode.downloadImporterKey)?.game ?? null)
+        : null;
+
+      const primary = currentDownloadMode.downloadTargetName;
+      const fallback = currentDownloadMode.suggestedName;
+
+      let result = primary
+        ? await window.api.invoke("mod:resolveDownloadTarget", primary, gameByImporter ?? undefined)
+        : null;
 
       if (!result && fallback) {
-        result = await window.api.invoke("mod:resolveDownloadTarget", fallback);
+        result = await window.api.invoke(
+          "mod:resolveDownloadTarget",
+          fallback,
+          gameByImporter ?? undefined,
+        );
       }
 
-      if (!result) return;
-      if (modStore.getState().downloadMode?.downloadId !== downloadMode.downloadId) return;
+      if (modStore.getState().downloadMode?.downloadId !== downloadId) return;
 
-      setSelectedGame(result.game);
-      void window.api.invoke("mod:setLastGame", result.game);
-      setPendingDownloadTarget({
-        downloadId: downloadMode.downloadId,
-        game: result.game,
-        group: result.group,
-      });
+      if (result) {
+        const targetGame = gameByImporter ?? result.game;
+        setSelectedGame(targetGame);
+        void window.api.invoke("mod:setLastGame", targetGame);
+        setPendingDownloadTarget({
+          downloadId,
+          game: targetGame,
+          group: result.group,
+        });
+        resolvedDownloadIdsRef.current.add(downloadId);
+        return;
+      }
+
+      if (gameByImporter) {
+        setSelectedGame(gameByImporter);
+        void window.api.invoke("mod:setLastGame", gameByImporter);
+      }
+
+      resolvedDownloadIdsRef.current.add(downloadId);
     };
 
     void resolveTarget().catch((error) => {
@@ -191,6 +224,8 @@ function ModRouteContent() {
     downloadMode?.downloadId,
     downloadMode?.suggestedName,
     downloadMode?.downloadTargetName,
+    downloadMode?.downloadImporterKey,
+    games,
     setSelectedGame,
   ]);
 

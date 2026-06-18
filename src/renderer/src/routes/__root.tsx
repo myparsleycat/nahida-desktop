@@ -94,10 +94,16 @@ function RootComponent() {
     selectionId: string;
     suggestedName?: string;
     downloadTargetName?: string;
+    downloadImporterKey?: string;
   } | null>(null);
 
   const handlePathSelectorModeSelect = useCallback(
-    (data: { selectionId: string; suggestedName?: string; downloadTargetName?: string }) => {
+    (data: {
+      selectionId: string;
+      suggestedName?: string;
+      downloadTargetName?: string;
+      downloadImporterKey?: string;
+    }) => {
       setPathSelectorData(data);
     },
     [],
@@ -124,6 +130,7 @@ function RootComponent() {
           selectionId={pathSelectorData.selectionId}
           suggestedName={pathSelectorData.suggestedName}
           downloadTargetName={pathSelectorData.downloadTargetName}
+          downloadImporterKey={pathSelectorData.downloadImporterKey}
         />
       )}
 

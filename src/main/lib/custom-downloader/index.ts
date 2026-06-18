@@ -366,6 +366,7 @@ export class CustomDownloader {
         const result = await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(
             suggestedFileName,
             downloadFilePayload.categoryName,
+            downloadFilePayload.importerKey ?? undefined,
         );
         if (!result.path) return "canceled";
         const destinationPath = result.path;

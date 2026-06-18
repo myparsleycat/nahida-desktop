@@ -1,5 +1,5 @@
 import { focus, getDefaultWebPreferences } from "@main/windows/utils";
-import { NTE_GAMEBANANA_ID } from "@shared/mod";
+import { getImporterForGameBananaId, NTE_GAMEBANANA_ID } from "@shared/mod";
 import { BrowserWindow } from "electron";
 import ky, { type Input, type Options } from "ky";
 import { z, ZodError, type ZodType } from "zod";
@@ -1039,6 +1039,7 @@ export class GameBananaService {
             fileUrl: file._sDownloadUrl,
             title: file._sFile,
             categoryName: profile._aCategory._sName,
+            importerKey: getImporterForGameBananaId(profile._aGame._idRow),
             previewUrl: this.getModPreviewUrl(profile),
             modId: profile._idRow,
             modPageUrl: profile._sProfileUrl,

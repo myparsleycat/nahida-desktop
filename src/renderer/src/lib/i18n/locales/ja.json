@@ -169,6 +169,7 @@
         "title": "{{name}}に追加",
         "description": "圧縮ファイルは自動的に解凍されます"
       },
+      "download_completed": "\"{{name}}\" のダウンロードが完了しました。",
       "all_enabled": "すべて有効化",
       "all_disabled": "すべて無効化",
       "content-header": {
@@ -221,6 +222,9 @@
           "error": "{{fileName}} の追加に失敗しました"
         }
       },
+      "play": {
+        "no_importer": "起動する前に、このゲームの Importer を設定してください。"
+      },
       "dialog": {
         "extract_archive_path": {
           "title": "解凍パスを選択",
@@ -235,6 +239,11 @@
           "title": "ゲーム追加",
           "name_input_placeholder": "ゲーム名 (例: 原神)",
           "path_input_placeholder": "MODフォルダーのパス",
+          "nte_game_name": "異環",
+          "nte_install_path": "NTE インストールフォルダー",
+          "nte_not_found": "NTE ゲームが見つかりません。",
+          "nte_custom_mod_folder": "カスタム MOD フォルダー",
+          "nte_custom_mod_folder_description": "任意です。ゲームの Mods フォルダーがこのフォルダーにリンクされます。",
           "xxmi_path_required": "Importer を読み込むには、先に XXMI パスを設定してください。",
           "open_xxmi_settings": "Importer 設定を開く",
           "#": {
@@ -247,6 +256,12 @@
           "path_label": "MODフォルダーのパス",
           "importer_label": "Importer",
           "no_importer": "なし"
+        },
+        "nte-launch": {
+          "title": "ランチャーパスを指定",
+          "path_label": "ランチャーのパス",
+          "path_required": "ランチャーのパスを選択してください。",
+          "launch": "保存してランチャーを起動"
         },
         "preset-management": {
           "description": "このプリセットには {{length}} 個のMODが保存されています。",
@@ -369,13 +384,25 @@
             "duplicate-game-name": "そのゲーム名は既に存在します",
             "duplicate-mod-folder-path": "そのMODフォルダーパスは既に使用されています",
             "invalid-params": "ゲーム名とMODフォルダーパスを入力してください",
-            "failed": "ゲームの追加に失敗しました"
+            "failed": "ゲームの追加に失敗しました",
+            "nte_mods_link_conflict": "ゲームの Mods フォルダーとカスタム MOD フォルダーの両方にファイルがあります。リンクする前にどちらかを空にしてください。",
+            "nte_mods_link_path_occupied": "ゲームの Mods フォルダーパスが使用中のためリンクできません。",
+            "nte_custom_mod_folder_inside_link_path": "カスタム MOD フォルダーはゲームの Mods フォルダーパス内、またはその逆の関係にはできません。"
           },
           "delete-game-mutation": {
             "success": "ゲームを削除しました"
           },
           "update-game-mutation": {
             "success": "ゲーム設定を保存しました"
+          },
+          "set-game-executable-path": {
+            "invalid-path": "選択したランチャーのパスが無効です。",
+            "failed": "ランチャーのパスを保存できませんでした。"
+          },
+          "start-nte-game": {
+            "not-set": "設定されたランチャーのパスがありません。",
+            "not-found": "保存されたランチャーのパスが存在しません。",
+            "failed": "ランチャーの起動に失敗しました。"
           },
           "toggle-mutation": {
             "0": "{{name}} フォルダはすでに存在します",
@@ -1039,7 +1066,8 @@
       "file_name": "ファイル名",
       "file_name_placeholder": "ファイル名を入力してください",
       "download_location": "ダウンロード先",
-      "need_select_character_folder": "左側でキャラクターフォルダーを選択してください"
+      "need_select_character_folder": "左側でキャラクターフォルダーを選択してください",
+      "select_path_failed": "パスの選択に失敗しました。"
     }
   },
   "updater": {

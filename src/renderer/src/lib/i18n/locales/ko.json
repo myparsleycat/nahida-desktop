@@ -168,6 +168,7 @@
         "title": "{{name}}에 추가",
         "description": "압축 파일은 자동으로 압축 해제됩니다"
       },
+      "download_completed": "\"{{name}}\" 다운로드가 완료되었습니다.",
       "all_enabled": "모두 활성화",
       "all_disabled": "모두 비활성화",
       "content-header": {
@@ -220,6 +221,9 @@
           "error": "{{fileName}} 추가 실패"
         }
       },
+      "play": {
+        "no_importer": "게임을 실행하려면 먼저 Importer를 설정해 주세요."
+      },
       "dialog": {
         "extract_archive_path": {
           "title": "압축 해제 경로 선택",
@@ -234,6 +238,11 @@
           "title": "게임 추가",
           "name_input_placeholder": "게임 이름 (예: 원공노)",
           "path_input_placeholder": "모드 폴더 경로",
+          "nte_game_name": "이환",
+          "nte_install_path": "NTE 설치 폴더",
+          "nte_not_found": "NTE 게임을 찾을 수 없습니다.",
+          "nte_custom_mod_folder": "사용자 지정 모드 폴더",
+          "nte_custom_mod_folder_description": "선택 사항입니다. 게임 Mods 폴더가 이 폴더에 연결됩니다.",
           "xxmi_path_required": "Importer를 가져오려면 먼저 XXMI 경로를 설정해야 합니다.",
           "open_xxmi_settings": "Importer 설정 열기",
           "#": {
@@ -249,6 +258,12 @@
           "order_label": "표시 순서",
           "order_value": "{{total}}개 중 {{current}}번째",
           "order_description": "위아래 버튼으로 드롭다운에 표시되는 게임 순서를 변경합니다."
+        },
+        "nte-launch": {
+          "title": "런처 경로 지정",
+          "path_label": "런처 경로",
+          "path_required": "런처 경로를 선택해 주세요.",
+          "launch": "저장 후 런처 실행"
         },
         "preset-management": {
           "description": "이 프리셋에는 {{length}}개의 모드가 저장되어 있습니다.",
@@ -371,7 +386,10 @@
             "duplicate-game-name": "이미 존재하는 게임 이름입니다.",
             "duplicate-mod-folder-path": "이미 사용 중인 모드 폴더 경로입니다.",
             "invalid-params": "게임 이름과 모드 폴더 경로를 입력해주세요.",
-            "failed": "게임 추가에 실패했습니다."
+            "failed": "게임 추가에 실패했습니다.",
+            "nte_mods_link_conflict": "게임 Mods 폴더와 사용자 지정 모드 폴더 모두에 파일이 있습니다. 연결하기 전에 한쪽을 비워주세요.",
+            "nte_mods_link_path_occupied": "게임 Mods 폴더 경로가 사용 중이어서 연결할 수 없습니다.",
+            "nte_custom_mod_folder_inside_link_path": "사용자 지정 모드 폴더는 게임 Mods 폴더 경로 안에 있거나, 그 반대일 수 없습니다."
           },
           "delete-game-mutation": {
             "success": "게임이 삭제되었습니다."
@@ -382,6 +400,15 @@
           "reorder-games-mutation": {
             "success": "게임 순서가 저장되었습니다.",
             "failed": "게임 순서를 저장하지 못했습니다."
+          },
+          "set-game-executable-path": {
+            "invalid-path": "선택한 런처 경로가 유효하지 않습니다.",
+            "failed": "런처 경로를 저장하지 못했습니다."
+          },
+          "start-nte-game": {
+            "not-set": "설정된 런처 경로가 없습니다.",
+            "not-found": "저장된 런처 경로가 더 이상 존재하지 않습니다.",
+            "failed": "런처 실행에 실패했습니다."
           },
           "toggle-mutation": {
             "0": "이미 {{name}} 폴더가 존재합니다",
@@ -1058,7 +1085,8 @@
       "file_name": "파일 이름",
       "file_name_placeholder": "파일 이름을 입력하세요",
       "download_location": "다운로드 위치",
-      "need_select_character_folder": "좌측에서 캐릭터 폴더를 선택하세요"
+      "need_select_character_folder": "좌측에서 캐릭터 폴더를 선택하세요",
+      "select_path_failed": "경로 선택에 실패했습니다."
     }
   },
   "updater": {

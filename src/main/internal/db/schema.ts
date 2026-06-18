@@ -14,6 +14,8 @@ export type GamePathRow = {
     modFolderPath: string;
     importer: string | null;
     linkedModFolderPath: string | null;
+    gameInstallPath: string | null;
+    gameExecutablePath: string | null;
     order: number;
 };
 
@@ -143,6 +145,8 @@ export const TABLE_SPECS: TableSpec[] = [
             { name: "modFolderPath", type: "TEXT", notNull: true },
             { name: "importer", type: "TEXT" },
             { name: "linkedModFolderPath", type: "TEXT" },
+            { name: "gameInstallPath", type: "TEXT" },
+            { name: "gameExecutablePath", type: "TEXT" },
             { name: "order", type: "INTEGER", notNull: true, defaultSql: "0" },
         ],
     },

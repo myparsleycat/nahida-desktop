@@ -22,7 +22,7 @@ import { useModStore } from "@renderer/store/mod";
 import { isNteImporter, NTE_IMPORTER_KEY } from "@shared/mod";
 import type { GameConfig } from "@shared/types";
 import { useForm } from "@tanstack/react-form";
-import { ArrowDownIcon, ArrowUpIcon, FolderOpen, SaveIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, FolderOpen, Trash2Icon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -39,6 +39,7 @@ interface EditGameDialogProps {
       modFolderPath: string;
       importer: string | null;
       linkedModFolderPath: string | null;
+      gameInstallPath: string | null;
     },
   ) => void;
   onDeleteGameClick: (game: string) => void;
@@ -86,7 +87,7 @@ export function EditGameDialog({
     : -1;
   const canMoveUp = currentGameIndex > 0;
   const canMoveDown = currentGameIndex >= 0 && currentGameIndex < games.length - 1;
-  const importers = [{ key: NTE_IMPORTER_KEY }, ...enabledImporters];
+  const importers = [...enabledImporters, { key: NTE_IMPORTER_KEY }];
 
   const form = useForm({
     defaultValues: {
@@ -109,7 +110,7 @@ export function EditGameDialog({
       }
 
       if (isNte && !nteResolution) {
-        toast.warning(t("page.mod.dialog.add-game.nte_not_found", "NTE game not found."));
+        toast.warning(t("page.mod.dialog.add-game.nte_not_found"));
         return;
       }
 
@@ -118,11 +119,12 @@ export function EditGameDialog({
         : "";
 
       onUpdateGame(editingGame.game, {
-        modFolderPath: isNte
-          ? customModFolderPath || linkedModFolderPath
-          : (nteResolution?.modFolderPath ?? path),
+        modFolderPath: isNte ? customModFolderPath || linkedModFolderPath : path,
         importer,
         linkedModFolderPath: isNte && customModFolderPath ? linkedModFolderPath : null,
+        gameInstallPath: isNte
+          ? (nteResolution?.gameRootPath ?? editingGame.gameInstallPath)
+          : null,
       });
     },
   });
@@ -140,7 +142,8 @@ export function EditGameDialog({
     }
 
     form.reset({
-      path: editingGame.linkedModFolderPath ?? editingGame.modFolderPath,
+      path:
+        editingGame.gameInstallPath ?? editingGame.linkedModFolderPath ?? editingGame.modFolderPath,
       customModFolderPath: editingGame.linkedModFolderPath ? editingGame.modFolderPath : "",
       importer: editingGame.importer ?? NO_IMPORTER_VALUE,
     });
@@ -148,7 +151,7 @@ export function EditGameDialog({
     setNteResolution(
       isNteImporter(editingGame.importer)
         ? {
-            gameRootPath: "",
+            gameRootPath: editingGame.gameInstallPath ?? "",
             executablePath: "",
             modFolderPath: editingGame.linkedModFolderPath ?? editingGame.modFolderPath,
             linkedModFolderPath: editingGame.linkedModFolderPath ?? editingGame.modFolderPath,
@@ -173,9 +176,13 @@ export function EditGameDialog({
 
   const handlePickFolder = async () => {
     const path = await onPickFolder();
-    if (path) {
-      form.setFieldValue("path", path);
-      setNteResolution(null);
+    if (!path) return;
+
+    form.setFieldValue("path", path);
+    setNteResolution(null);
+
+    if (isNteSelected) {
+      await resolveNtePath(path);
     }
   };
 
@@ -192,7 +199,7 @@ export function EditGameDialog({
       const resolution = await window.api.invoke("mod:resolveNteInstallPath", installPath);
       setNteResolution(resolution);
       if (!resolution) {
-        toast.warning(t("page.mod.dialog.add-game.nte_not_found", "NTE game not found."));
+        toast.warning(t("page.mod.dialog.add-game.nte_not_found"));
       }
     } finally {
       setIsResolvingNte(false);
@@ -243,7 +250,7 @@ export function EditGameDialog({
                   <Input
                     placeholder={
                       isNteSelected
-                        ? t("page.mod.dialog.add-game.nte_install_path", "NTE install folder")
+                        ? t("page.mod.dialog.add-game.nte_install_path")
                         : t("page.mod.dialog.add-game.path_input_placeholder")
                     }
                     value={field.state.value}
@@ -254,20 +261,15 @@ export function EditGameDialog({
                       setNteResolution(null);
                     }}
                   />
-                  <Button type="button" variant="outline" size="icon" onClick={handlePickFolder}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    disabled={isNteSelected && isResolvingNte}
+                    onClick={() => void handlePickFolder()}
+                  >
                     <FolderOpen className="size-4" />
                   </Button>
-                  {isNteSelected && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      disabled={isResolvingNte || !field.state.value.trim()}
-                      onClick={() => void resolveNtePath(field.state.value.trim())}
-                    >
-                      <SaveIcon className="size-4" />
-                    </Button>
-                  )}
                 </div>
                 {nteResolution && isNteSelected ? (
                   <p className="text-xs text-muted-foreground break-all">
@@ -289,9 +291,21 @@ export function EditGameDialog({
                 <Select
                   value={field.state.value}
                   onValueChange={(value) => {
+                    const wasNte = isNteImporter(field.state.value);
+                    const nextIsNte = isNteImporter(value);
                     field.handleChange(value);
                     setSelectedImporter(value);
                     setNteResolution(null);
+
+                    if (wasNte && !nextIsNte) {
+                      form.setFieldValue(
+                        "path",
+                        isNteImporter(editingGame?.importer)
+                          ? ""
+                          : (editingGame?.modFolderPath ?? ""),
+                      );
+                      form.setFieldValue("customModFolderPath", "");
+                    }
                   }}
                 >
                   <SelectTrigger className="w-full">
@@ -319,9 +333,7 @@ export function EditGameDialog({
               name="customModFolderPath"
               children={(field) => (
                 <Field>
-                  <FieldLabel>
-                    {t("page.mod.dialog.add-game.nte_custom_mod_folder", "Custom mod folder")}
-                  </FieldLabel>
+                  <FieldLabel>{t("page.mod.dialog.add-game.nte_custom_mod_folder")}</FieldLabel>
                   <div className="flex gap-2">
                     <Input
                       value={field.state.value}
@@ -348,10 +360,7 @@ export function EditGameDialog({
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {t(
-                      "page.mod.dialog.add-game.nte_custom_mod_folder_description",
-                      "Optional. The game Mods folder will be linked to this folder.",
-                    )}
+                    {t("page.mod.dialog.add-game.nte_custom_mod_folder_description")}
                   </p>
                 </Field>
               )}

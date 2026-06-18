@@ -1,6 +1,7 @@
 import { modStore } from "@renderer/store/mod";
 import type { QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 export function useModRefreshOnFocus(selectedGame: string | null, queryClient: QueryClient) {
@@ -23,6 +24,8 @@ export function useDownloadCompletionHandler(
     selectedGroupPath: string | undefined,
     queryClient: QueryClient,
 ) {
+    const { t } = useTranslation();
+
     useEffect(() => {
         const unsubscribe = window.api.on("download:completed", (data) => {
             const invalidations: Promise<unknown>[] = [];
@@ -47,14 +50,14 @@ export function useDownloadCompletionHandler(
             void Promise.all(invalidations);
 
             if (!data.disableToast) {
-                toast.success(`"${data.name}" 다운로드가 완료되었습니다.`);
+                toast.success(t("page.mod.download_completed", { name: data.name }));
             }
         });
 
         return () => {
             unsubscribe();
         };
-    }, [selectedGame, selectedGroupPath, queryClient]);
+    }, [selectedGame, selectedGroupPath, queryClient, t]);
 }
 
 export function useModWatcherEvents(

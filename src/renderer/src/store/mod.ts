@@ -22,18 +22,22 @@ interface ModState {
     setEditingGame: (game: GameConfig | null) => void;
     isEditGameDialogOpen: boolean;
     setIsEditGameDialogOpen: (open: boolean) => void;
+    isNteLaunchDialogOpen: boolean;
+    setIsNteLaunchDialogOpen: (open: boolean) => void;
     isCustomDownloadDialogOpen: boolean;
     setIsCustomDownloadDialogOpen: (open: boolean) => void;
     downloadMode: {
         downloadId: string;
         suggestedName?: string;
         downloadTargetName?: string;
+        downloadImporterKey?: string;
     } | null;
     setDownloadMode: (
         mode: {
             downloadId: string;
             suggestedName?: string;
             downloadTargetName?: string;
+            downloadImporterKey?: string;
         } | null,
     ) => void;
     archiveExtractPrompt: { requestId: string; fileName: string } | null;
@@ -79,6 +83,8 @@ export const modStore = createStore<ModState>((set) => ({
     setEditingGame: (editingGame) => set({ editingGame }),
     isEditGameDialogOpen: false,
     setIsEditGameDialogOpen: (isEditGameDialogOpen) => set({ isEditGameDialogOpen }),
+    isNteLaunchDialogOpen: false,
+    setIsNteLaunchDialogOpen: (isNteLaunchDialogOpen) => set({ isNteLaunchDialogOpen }),
     isCustomDownloadDialogOpen: false,
     setIsCustomDownloadDialogOpen: (isCustomDownloadDialogOpen) =>
         set({ isCustomDownloadDialogOpen }),

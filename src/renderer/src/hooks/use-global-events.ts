@@ -9,6 +9,7 @@ export function useGlobalEvents(
         selectionId: string;
         suggestedName?: string;
         downloadTargetName?: string;
+        downloadImporterKey?: string;
     }) => void,
 ) {
     const navi = useNavigate();

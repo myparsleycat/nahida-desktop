@@ -41,12 +41,25 @@ export function useGameMutations() {
             path,
             importer,
             linkedModFolderPath,
+            gameInstallPath,
+            gameExecutablePath,
         }: {
             name: string;
             path: string;
             importer: string | null;
             linkedModFolderPath?: string | null;
-        }) => window.api.invoke("mod:addGame", name, path, importer, linkedModFolderPath ?? null),
+            gameInstallPath?: string | null;
+            gameExecutablePath?: string | null;
+        }) =>
+            window.api.invoke(
+                "mod:addGame",
+                name,
+                path,
+                importer,
+                linkedModFolderPath ?? null,
+                gameInstallPath ?? null,
+                gameExecutablePath ?? null,
+            ),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ["games"] });
             setIsAddGameDialogOpen(false);
@@ -81,7 +94,12 @@ export function useGameMutations() {
                 errorMessage.includes("NTE_MODS_LINK_PATH_OCCUPIED") ||
                 errorMessage.includes("NTE_CUSTOM_MOD_FOLDER_INSIDE_LINK_PATH")
             ) {
-                toast.error(errorMessage);
+                const nteErrorKey = errorMessage.includes("NTE_MODS_LINK_CONFLICT")
+                    ? "page.mod.hooks.use-mod-mutations.add-game-mutation.nte_mods_link_conflict"
+                    : errorMessage.includes("NTE_MODS_LINK_PATH_OCCUPIED")
+                      ? "page.mod.hooks.use-mod-mutations.add-game-mutation.nte_mods_link_path_occupied"
+                      : "page.mod.hooks.use-mod-mutations.add-game-mutation.nte_custom_mod_folder_inside_link_path";
+                toast.error(t(nteErrorKey));
                 return;
             }
 
@@ -137,6 +155,7 @@ export function useGameMutations() {
                 modFolderPath: string;
                 importer: string | null;
                 linkedModFolderPath: string | null;
+                gameInstallPath: string | null;
             };
         }) => window.api.invoke("mod:updateGame", game, updates),
         onSuccess: async (_, variables) => {
@@ -175,7 +194,12 @@ export function useGameMutations() {
                 errorMessage.includes("NTE_MODS_LINK_PATH_OCCUPIED") ||
                 errorMessage.includes("NTE_CUSTOM_MOD_FOLDER_INSIDE_LINK_PATH")
             ) {
-                toast.error(errorMessage);
+                const nteErrorKey = errorMessage.includes("NTE_MODS_LINK_CONFLICT")
+                    ? "page.mod.hooks.use-mod-mutations.add-game-mutation.nte_mods_link_conflict"
+                    : errorMessage.includes("NTE_MODS_LINK_PATH_OCCUPIED")
+                      ? "page.mod.hooks.use-mod-mutations.add-game-mutation.nte_mods_link_path_occupied"
+                      : "page.mod.hooks.use-mod-mutations.add-game-mutation.nte_custom_mod_folder_inside_link_path";
+                toast.error(t(nteErrorKey));
                 return;
             }
 
@@ -211,7 +235,33 @@ export function useGameMutations() {
         },
     });
 
-    return { addGameMutation, deleteGameMutation, updateGameMutation, reorderGamesMutation };
+    const setGameExecutablePathMutation = useMutation({
+        mutationFn: ({ game, executablePath }: { game: string; executablePath: string }) =>
+            window.api.invoke("mod:setGameExecutablePath", game, executablePath),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: ["games"] });
+        },
+        onError: (error) => {
+            const errorMessage = getMutationErrorMessage(error);
+
+            if (errorMessage.includes("INVALID_EXECUTABLE_PATH")) {
+                toast.error(
+                    t("page.mod.hooks.use-mod-mutations.set-game-executable-path.invalid-path"),
+                );
+                return;
+            }
+
+            toast.error(t("page.mod.hooks.use-mod-mutations.set-game-executable-path.failed"));
+        },
+    });
+
+    return {
+        addGameMutation,
+        deleteGameMutation,
+        updateGameMutation,
+        reorderGamesMutation,
+        setGameExecutablePathMutation,
+    };
 }
 
 export function useModMutations() {

@@ -12,7 +12,8 @@ import { useEnabledImporters, usePresets } from "@renderer/hooks/use-mod-data";
 import { useModStore } from "@renderer/store/mod";
 import { isNteImporter } from "@shared/mod";
 import type { GameConfig } from "@shared/types";
-import { useLocation } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { PencilIcon, PlayIcon } from "lucide-react";
 import { memo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -20,6 +21,7 @@ import { toast } from "sonner";
 import { AddGameDialog } from "./add-game-dialog";
 import { CreatePresetDialog } from "./create-preset-dialog";
 import { EditGameDialog, openEditGameDialog } from "./edit-game-dialog";
+import { NteLaunchDialog } from "./nte-launch-dialog";
 
 interface GamePresetSelectorProps {
   games: GameConfig[];
@@ -30,6 +32,8 @@ interface GamePresetSelectorProps {
     path: string,
     importer: string | null,
     linkedModFolderPath?: string | null,
+    gameInstallPath?: string | null,
+    gameExecutablePath?: string | null,
   ) => void;
   onUpdateGame: (
     game: string,
@@ -37,6 +41,7 @@ interface GamePresetSelectorProps {
       modFolderPath: string;
       importer: string | null;
       linkedModFolderPath: string | null;
+      gameInstallPath: string | null;
     },
   ) => void;
   onReorderGames: (games: string[]) => void;
@@ -52,6 +57,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
 }: GamePresetSelectorProps) {
   const { t } = useTranslation();
   const location = useLocation();
+  const navi = useNavigate();
   const selectedGame = useModStore((s) => s.selectedGame);
   const setSelectedGame = useModStore((s) => s.setSelectedGame);
   const selectedPreset = useModStore((s) => s.selectedPreset);
@@ -60,9 +66,14 @@ export const GamePresetSelector = memo(function GamePresetSelector({
   const isSelectedPresetDialogOpen = useModStore((s) => s.isSelectedPresetDialogOpen);
   const setEditingGame = useModStore((s) => s.setEditingGame);
   const setIsEditGameDialogOpen = useModStore((s) => s.setIsEditGameDialogOpen);
+  const setIsNteLaunchDialogOpen = useModStore((s) => s.setIsNteLaunchDialogOpen);
 
   const { data: presets = [] } = usePresets(selectedGame);
   const { data: enabledImporters = [] } = useEnabledImporters();
+  const { data: xxmiData } = useQuery({
+    queryKey: ["xxmi:getXXMIData"],
+    queryFn: () => window.api.invoke("xxmi:getXXMIData"),
+  });
   const selectedGameConfig = games.find((game) => game.game === selectedGame);
   const selectedImporter = selectedGameConfig?.importer ?? null;
 
@@ -84,20 +95,49 @@ export const GamePresetSelector = memo(function GamePresetSelector({
     });
   };
 
+  const handlePlayClick = async () => {
+    if (isNteImporter(selectedImporter)) {
+      if (selectedGameConfig?.gameExecutablePath) {
+        await window.api.invoke("mod:startNteGame", selectedGame).catch((error) => {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+
+          if (errorMessage.includes("NTE_EXECUTABLE_PATH_NOT_FOUND")) {
+            toast.error(t("page.mod.hooks.use-mod-mutations.start-nte-game.not-found"));
+            setIsNteLaunchDialogOpen(true);
+            return;
+          }
+
+          toast.error(errorMessage || t("page.mod.hooks.use-mod-mutations.start-nte-game.failed"));
+        });
+        return;
+      }
+
+      setIsNteLaunchDialogOpen(true);
+      return;
+    }
+
+    if (!xxmiData?.xxmiPath) {
+      toast.info(t("page.mod.dialog.add-game.xxmi_path_required"));
+      void navi({ to: "/setting/xxmi" });
+      return;
+    }
+
+    if (!selectedImporter) {
+      toast.warning(t("page.mod.play.no_importer"));
+      return;
+    }
+
+    await window.api.invoke("xxmi:startGame", selectedImporter).catch((err) => {
+      toast.error(err.toString());
+    });
+  };
+
   return (
     <div className="flex flex-col items-center justify-center w-full p-2 border-t space-y-3">
       {location.pathname.startsWith("/mod") && (
         <div className="flex w-full space-x-1">
-          {selectedImporter && !isNteImporter(selectedImporter) && (
-            <Button
-              variant="outline"
-              size="icon"
-              onClickPromise={() =>
-                window.api.invoke("xxmi:startGame", selectedImporter).catch((err) => {
-                  toast.error(err.toString());
-                })
-              }
-            >
+          {games.length > 0 && (
+            <Button variant="outline" size="icon" onClickPromise={handlePlayClick}>
               <PlayIcon className="size-4" />
             </Button>
           )}
@@ -187,6 +227,8 @@ export const GamePresetSelector = memo(function GamePresetSelector({
         onDeleteGameClick={onDeleteGameClick}
         onReorderGames={onReorderGames}
       />
+
+      <NteLaunchDialog />
     </div>
   );
 });

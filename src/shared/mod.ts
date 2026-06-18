@@ -23,4 +23,31 @@ export type SidebarLayoutMode = (typeof SIDEBAR_LAYOUT_MODES)[number];
 export const NTE_IMPORTER_KEY = "NTE";
 export const NTE_GAMEBANANA_ID = 23012;
 
+export const GAMEBANANA_ID_TO_IMPORTER = {
+    8552: "GIMI",
+    18366: "SRMI",
+    10349: "HIMI",
+    19567: "ZZMI",
+    20357: "WWMI",
+    21842: "EFMI",
+    [NTE_GAMEBANANA_ID]: NTE_IMPORTER_KEY,
+} as const;
+
 export const isNteImporter = (importer: string | null | undefined) => importer === NTE_IMPORTER_KEY;
+
+export function getImporterForGameBananaId(gameId: number): string | null {
+    return GAMEBANANA_ID_TO_IMPORTER[gameId as keyof typeof GAMEBANANA_ID_TO_IMPORTER] ?? null;
+}
+
+export function findGameByImporter<T extends { game: string; importer: string | null }>(
+    games: T[],
+    importerKey: string,
+): T | null {
+    return (
+        games.find((game) =>
+            importerKey === NTE_IMPORTER_KEY
+                ? isNteImporter(game.importer)
+                : game.importer === importerKey,
+        ) ?? null
+    );
+}

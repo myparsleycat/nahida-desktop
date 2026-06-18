@@ -48,11 +48,16 @@ export async function resolveNteInstallPath(inputPath: string): Promise<NtePathR
     const modFolderPath = path.join(htRootPath, NTE_MODS_RELATIVE_PATH);
 
     return {
-        gameRootPath: path.resolve(htRootPath, "..", "..", ".."),
+        gameRootPath: path.resolve(htRootPath, "..", ".."),
         executablePath,
         modFolderPath,
         linkedModFolderPath: modFolderPath,
     };
+}
+
+export function deriveNteGameInstallPath(modOrLinkedPath: string) {
+    const htRootPath = path.resolve(modOrLinkedPath, "..", "..", "..");
+    return path.resolve(htRootPath, "..", "..");
 }
 
 export function getNteRoots(game: Pick<GameConfig, "modFolderPath">) {
@@ -163,8 +168,28 @@ export async function getNteMods(
     };
 }
 
+export async function cleanupNteModFolder(
+    modFolderPath: string,
+    linkedModFolderPath: string | null,
+) {
+    if (linkedModFolderPath && !isSameNtePath(linkedModFolderPath, modFolderPath)) {
+        await unlinkNteModsFolder(linkedModFolderPath);
+        return;
+    }
+
+    await unlinkNteModsFolder(modFolderPath);
+}
+
 export async function isNteModEnabled(modPath: string) {
-    return !DISABLED_PREFIX_REGEX.test(path.basename(modPath));
+    if (DISABLED_PREFIX_REGEX.test(path.basename(modPath))) return false;
+
+    const pakFiles = (await fse.readdir(modPath, { withFileTypes: true }))
+        .filter((entry) => entry.isFile())
+        .filter((entry) => isPakModFile(entry.name));
+
+    if (pakFiles.length === 0) return true;
+
+    return pakFiles.some((entry) => !isDisabledFile(entry.name));
 }
 
 export async function setNteModEnabled(

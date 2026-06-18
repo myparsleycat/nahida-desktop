@@ -214,6 +214,8 @@ export interface GameConfig {
     modFolderPath: string;
     importer: string | null;
     linkedModFolderPath: string | null;
+    gameInstallPath: string | null;
+    gameExecutablePath: string | null;
     order: number;
 }
 
@@ -231,6 +233,7 @@ export type IpcEvents = {
         selectionId: string;
         suggestedName?: string;
         downloadTargetName?: string;
+        downloadImporterKey?: string;
     }) => void;
     "language:update": (language: string) => void;
 

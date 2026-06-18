@@ -19,6 +19,7 @@ interface PathSelectorDialogProps {
   selectionId: string;
   suggestedName?: string;
   downloadTargetName?: string;
+  downloadImporterKey?: string;
 }
 
 export function PathSelectorDialog({
@@ -27,6 +28,7 @@ export function PathSelectorDialog({
   selectionId,
   suggestedName,
   downloadTargetName,
+  downloadImporterKey,
 }: PathSelectorDialogProps) {
   const { t } = useTranslation();
   const navi = useNavigate();
@@ -64,7 +66,12 @@ export function PathSelectorDialog({
 
   const handleModManagerSelect = () => {
     // Navigate to mod page with download mode set
-    setDownloadMode({ downloadId: selectionId, suggestedName, downloadTargetName });
+    setDownloadMode({
+      downloadId: selectionId,
+      suggestedName,
+      downloadTargetName,
+      downloadImporterKey,
+    });
     void navi({ to: "/mod" });
     closeWithoutCancel();
   };
