@@ -445,7 +445,8 @@
       },
       "log-dialog": {
         "title": "日志",
-        "running": "运行中..."
+        "running": "运行中...",
+        "python-required": "运行 Python fix tool 需要安装 Python。请安装 Python，并确保 python 命令可用。"
       }
     },
     "gamebanana": {

@@ -446,7 +446,8 @@
       },
       "log-dialog": {
         "title": "ログ",
-        "running": "実行中..."
+        "running": "実行中...",
+        "python-required": "Python fix tool を実行するには Python のインストールが必要です。Python をインストールし、python コマンドを使用できるようにしてください。"
       }
     },
     "gamebanana": {
