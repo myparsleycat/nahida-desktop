@@ -226,7 +226,11 @@ export type IpcEvents = {
     "fn:navi": (path: string) => void;
     "download:completed": (data: { path: string; name: string; disableToast?: boolean }) => void;
     "mod:archiveExtractPrompt": (data: { requestId: string; fileName: string }) => void;
-    "pathSelector:modeSelect": (data: { selectionId: string; suggestedName?: string }) => void;
+    "pathSelector:modeSelect": (data: {
+        selectionId: string;
+        suggestedName?: string;
+        downloadTargetName?: string;
+    }) => void;
     "language:update": (language: string) => void;
 
     "mod:update-game": () => void;

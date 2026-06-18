@@ -93,10 +93,11 @@ function RootComponent() {
   const [pathSelectorData, setPathSelectorData] = useState<{
     selectionId: string;
     suggestedName?: string;
+    downloadTargetName?: string;
   } | null>(null);
 
   const handlePathSelectorModeSelect = useCallback(
-    (data: { selectionId: string; suggestedName?: string }) => {
+    (data: { selectionId: string; suggestedName?: string; downloadTargetName?: string }) => {
       setPathSelectorData(data);
     },
     [],
@@ -122,6 +123,7 @@ function RootComponent() {
           onOpenChange={(open) => !open && setPathSelectorData(null)}
           selectionId={pathSelectorData.selectionId}
           suggestedName={pathSelectorData.suggestedName}
+          downloadTargetName={pathSelectorData.downloadTargetName}
         />
       )}
 

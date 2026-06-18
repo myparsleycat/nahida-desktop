@@ -13,6 +13,7 @@ export interface PathSelectorResult {
 export interface PendingPathSelection {
     id: string;
     suggestedName?: string;
+    downloadTargetName?: string;
     resolve: (result: PathSelectorResult) => void;
     reject: (error: Error) => void;
 }
@@ -25,13 +26,17 @@ export class PathSelector {
         this.desktop = desktop;
     }
 
-    public async getSelectedPathWithModeModal(suggestedName?: string): Promise<PathSelectorResult> {
+    public async getSelectedPathWithModeModal(
+        suggestedName?: string,
+        downloadTargetName?: string,
+    ): Promise<PathSelectorResult> {
         return new Promise((resolve, reject) => {
             const selectionId = nanoid();
 
             this.pendingSelections.set(selectionId, {
                 id: selectionId,
                 suggestedName,
+                downloadTargetName,
                 resolve,
                 reject,
             });
@@ -43,22 +48,30 @@ export class PathSelector {
                         window.webContents.once("did-finish-load", () => {
                             this.desktop.window.main.focus();
                             setTimeout(() => {
-                                this.showSelectionModal(selectionId, suggestedName);
+                                this.showSelectionModal(
+                                    selectionId,
+                                    suggestedName,
+                                    downloadTargetName,
+                                );
                             }, 500);
                         });
                     } else {
                         this.desktop.window.main.focus();
-                        this.showSelectionModal(selectionId, suggestedName);
+                        this.showSelectionModal(selectionId, suggestedName, downloadTargetName);
                     }
                 });
             } else {
                 this.desktop.window.main.focus();
-                this.showSelectionModal(selectionId, suggestedName);
+                this.showSelectionModal(selectionId, suggestedName, downloadTargetName);
             }
         });
     }
 
-    private showSelectionModal(selectionId: string, suggestedName?: string) {
+    private showSelectionModal(
+        selectionId: string,
+        suggestedName?: string,
+        downloadTargetName?: string,
+    ) {
         const mainWindow = this.desktop.window.main.window;
         if (!mainWindow) {
             const pending = this.pendingSelections.get(selectionId);
@@ -72,6 +85,7 @@ export class PathSelector {
         this.desktop.ipc.postMessageToWindow(mainWindow, "pathSelector:modeSelect", {
             selectionId,
             suggestedName,
+            downloadTargetName,
         });
     }
 

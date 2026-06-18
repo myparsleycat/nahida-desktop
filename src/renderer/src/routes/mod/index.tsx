@@ -157,29 +157,42 @@ function ModRouteContent() {
   }, [games, selectedGame, setSelectedGame]);
 
   useEffect(() => {
-    if (!downloadMode?.suggestedName) return;
+    if (!downloadMode?.suggestedName && !downloadMode?.downloadTargetName) return;
     if (resolvedDownloadIdsRef.current.has(downloadMode.downloadId)) return;
 
     resolvedDownloadIdsRef.current.add(downloadMode.downloadId);
 
-    window.api
-      .invoke("mod:resolveDownloadTarget", downloadMode.suggestedName)
-      .then((result) => {
-        if (!result) return;
-        if (modStore.getState().downloadMode?.downloadId !== downloadMode.downloadId) return;
+    const resolveTarget = async () => {
+      const primary = downloadMode.downloadTargetName;
+      const fallback = downloadMode.suggestedName;
 
-        setSelectedGame(result.game);
-        void window.api.invoke("mod:setLastGame", result.game);
-        setPendingDownloadTarget({
-          downloadId: downloadMode.downloadId,
-          game: result.game,
-          group: result.group,
-        });
-      })
-      .catch((error) => {
-        console.error("Failed to resolve download target", error);
+      let result = primary ? await window.api.invoke("mod:resolveDownloadTarget", primary) : null;
+
+      if (!result && fallback) {
+        result = await window.api.invoke("mod:resolveDownloadTarget", fallback);
+      }
+
+      if (!result) return;
+      if (modStore.getState().downloadMode?.downloadId !== downloadMode.downloadId) return;
+
+      setSelectedGame(result.game);
+      void window.api.invoke("mod:setLastGame", result.game);
+      setPendingDownloadTarget({
+        downloadId: downloadMode.downloadId,
+        game: result.game,
+        group: result.group,
       });
-  }, [downloadMode?.downloadId, downloadMode?.suggestedName, setSelectedGame]);
+    };
+
+    void resolveTarget().catch((error) => {
+      console.error("Failed to resolve download target", error);
+    });
+  }, [
+    downloadMode?.downloadId,
+    downloadMode?.suggestedName,
+    downloadMode?.downloadTargetName,
+    setSelectedGame,
+  ]);
 
   useEffect(() => {
     if (!pendingDownloadTarget) return;
