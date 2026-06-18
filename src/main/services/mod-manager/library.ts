@@ -402,6 +402,7 @@ export class ModLibraryService {
             importer: string | null;
             linkedModFolderPath: string | null;
             gameInstallPath: string | null;
+            gameExecutablePath: string | null;
         },
     ) {
         if (!game || !updates.modFolderPath) {
@@ -445,6 +446,7 @@ export class ModLibraryService {
                 ? updates.linkedModFolderPath
                 : null,
             gameInstallPath: isNteImporter(updates.importer) ? updates.gameInstallPath : null,
+            gameExecutablePath: isNteImporter(updates.importer) ? updates.gameExecutablePath : null,
         });
     }
 

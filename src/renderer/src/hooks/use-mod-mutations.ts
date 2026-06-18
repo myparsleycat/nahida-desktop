@@ -156,6 +156,7 @@ export function useGameMutations() {
                 importer: string | null;
                 linkedModFolderPath: string | null;
                 gameInstallPath: string | null;
+                gameExecutablePath: string | null;
             };
         }) => window.api.invoke("mod:updateGame", game, updates),
         onSuccess: async (_, variables) => {

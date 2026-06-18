@@ -128,6 +128,7 @@ export default function ModSidebar({
         importer: string | null;
         linkedModFolderPath: string | null;
         gameInstallPath: string | null;
+        gameExecutablePath: string | null;
       },
     ) => {
       updateGame({ game, updates });

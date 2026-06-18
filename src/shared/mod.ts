@@ -33,10 +33,29 @@ export const GAMEBANANA_ID_TO_IMPORTER = {
     [NTE_GAMEBANANA_ID]: NTE_IMPORTER_KEY,
 } as const;
 
+export const IMPORTER_TO_GAMEBANANA_GAME_KEY = {
+    GIMI: "gi",
+    SRMI: "sr",
+    HIMI: "hi",
+    ZZMI: "zz",
+    WWMI: "ww",
+    EFMI: "ef",
+    [NTE_IMPORTER_KEY]: "nte",
+} as const;
+
 export const isNteImporter = (importer: string | null | undefined) => importer === NTE_IMPORTER_KEY;
 
 export function getImporterForGameBananaId(gameId: number): string | null {
     return GAMEBANANA_ID_TO_IMPORTER[gameId as keyof typeof GAMEBANANA_ID_TO_IMPORTER] ?? null;
+}
+
+export function getGameBananaKeyForImporter(importer: string | null | undefined) {
+    if (!importer) return null;
+    if (isNteImporter(importer)) return IMPORTER_TO_GAMEBANANA_GAME_KEY[NTE_IMPORTER_KEY];
+    return (
+        IMPORTER_TO_GAMEBANANA_GAME_KEY[importer as keyof typeof IMPORTER_TO_GAMEBANANA_GAME_KEY] ??
+        null
+    );
 }
 
 export function findGameByImporter<T extends { game: string; importer: string | null }>(

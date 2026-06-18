@@ -42,6 +42,7 @@ interface GamePresetSelectorProps {
       importer: string | null;
       linkedModFolderPath: string | null;
       gameInstallPath: string | null;
+      gameExecutablePath: string | null;
     },
   ) => void;
   onReorderGames: (games: string[]) => void;

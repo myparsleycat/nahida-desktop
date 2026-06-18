@@ -16,6 +16,7 @@ interface GameBananaSelectedSubmission {
 
 interface GameBananaState {
     selectedGame: GameBananaGameKey | "";
+    pendingModGameSync: boolean;
     selectedCategoryId?: number;
     categoryBreadcrumbs: GameBananaBreadcrumb[];
     selectedMod?: GameBananaSelectedSubmission;
@@ -24,6 +25,8 @@ interface GameBananaState {
     modSearch: string;
     setSelectedGame: (game: GameBananaGameKey) => void;
     setInitialGame: (game: GameBananaGameKey) => void;
+    requestModGameSync: () => void;
+    consumeModGameSync: () => boolean;
     selectCategory: (categoryId: number, categoryName: string) => void;
     selectMod: (submission: GameBananaSelectedSubmission) => void;
     clearSelectedMod: () => void;
@@ -36,6 +39,7 @@ interface GameBananaState {
 
 export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
     selectedGame: "",
+    pendingModGameSync: false,
     selectedCategoryId: undefined,
     categoryBreadcrumbs: [],
     selectedMod: undefined,
@@ -56,6 +60,14 @@ export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
         if (!get().selectedGame) {
             set({ selectedGame });
         }
+    },
+    requestModGameSync: () => set({ pendingModGameSync: true }),
+    consumeModGameSync: () => {
+        const pendingModGameSync = get().pendingModGameSync;
+        if (pendingModGameSync) {
+            set({ pendingModGameSync: false });
+        }
+        return pendingModGameSync;
     },
     selectCategory: (categoryId, categoryName) =>
         set((state) => {

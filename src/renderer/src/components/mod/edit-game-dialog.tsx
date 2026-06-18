@@ -40,6 +40,7 @@ interface EditGameDialogProps {
       importer: string | null;
       linkedModFolderPath: string | null;
       gameInstallPath: string | null;
+      gameExecutablePath: string | null;
     },
   ) => void;
   onDeleteGameClick: (game: string) => void;
@@ -109,22 +110,32 @@ export function EditGameDialog({
         return;
       }
 
-      if (isNte && !nteResolution) {
-        toast.warning(t("page.mod.dialog.add-game.nte_not_found"));
+      if (isNte) {
+        const resolution = nteResolution ?? (await resolveNtePath(path).catch(() => null));
+        if (!resolution) {
+          toast.warning(t("page.mod.dialog.add-game.nte_not_found"));
+          return;
+        }
+
+        const linkedModFolderPath =
+          resolution.linkedModFolderPath ?? editingGame.linkedModFolderPath ?? path;
+
+        onUpdateGame(editingGame.game, {
+          modFolderPath: customModFolderPath || linkedModFolderPath,
+          importer,
+          linkedModFolderPath: customModFolderPath ? linkedModFolderPath : null,
+          gameInstallPath: resolution.gameRootPath,
+          gameExecutablePath: resolution.executablePath || editingGame.gameExecutablePath,
+        });
         return;
       }
 
-      const linkedModFolderPath = isNte
-        ? (nteResolution?.linkedModFolderPath ?? editingGame.linkedModFolderPath ?? path)
-        : "";
-
       onUpdateGame(editingGame.game, {
-        modFolderPath: isNte ? customModFolderPath || linkedModFolderPath : path,
+        modFolderPath: path,
         importer,
-        linkedModFolderPath: isNte && customModFolderPath ? linkedModFolderPath : null,
-        gameInstallPath: isNte
-          ? (nteResolution?.gameRootPath ?? editingGame.gameInstallPath)
-          : null,
+        linkedModFolderPath: null,
+        gameInstallPath: null,
+        gameExecutablePath: null,
       });
     },
   });
@@ -152,7 +163,7 @@ export function EditGameDialog({
       isNteImporter(editingGame.importer)
         ? {
             gameRootPath: editingGame.gameInstallPath ?? "",
-            executablePath: "",
+            executablePath: editingGame.gameExecutablePath ?? "",
             modFolderPath: editingGame.linkedModFolderPath ?? editingGame.modFolderPath,
             linkedModFolderPath: editingGame.linkedModFolderPath ?? editingGame.modFolderPath,
           }
@@ -201,6 +212,7 @@ export function EditGameDialog({
       if (!resolution) {
         toast.warning(t("page.mod.dialog.add-game.nte_not_found"));
       }
+      return resolution;
     } finally {
       setIsResolvingNte(false);
     }

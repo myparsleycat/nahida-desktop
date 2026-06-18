@@ -61,6 +61,7 @@ export function registerModHandlers(desktop: NahidaDesktop) {
                 importer: string | null;
                 linkedModFolderPath: string | null;
                 gameInstallPath: string | null;
+                gameExecutablePath: string | null;
             },
         ) => {
             return await desktop.service.mod.fn.updateGame(game, updates);

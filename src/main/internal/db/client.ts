@@ -389,18 +389,23 @@ export class DatabaseClient {
             game: string,
             updates: Pick<
                 GamePathRow,
-                "modFolderPath" | "importer" | "linkedModFolderPath" | "gameInstallPath"
+                | "modFolderPath"
+                | "importer"
+                | "linkedModFolderPath"
+                | "gameInstallPath"
+                | "gameExecutablePath"
             >,
         ) => {
             this.run(
                 `UPDATE "game_paths"
-                 SET "modFolderPath" = ?, "importer" = ?, "linkedModFolderPath" = ?, "gameInstallPath" = ?
+                 SET "modFolderPath" = ?, "importer" = ?, "linkedModFolderPath" = ?, "gameInstallPath" = ?, "gameExecutablePath" = ?
                  WHERE "game" = ?`,
                 [
                     updates.modFolderPath,
                     updates.importer,
                     updates.linkedModFolderPath,
                     updates.gameInstallPath,
+                    updates.gameExecutablePath,
                     game,
                 ],
             );

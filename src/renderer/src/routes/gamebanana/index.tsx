@@ -17,8 +17,11 @@ import {
   useGameBananaModCategoryOverview,
   useGameBananaModOverview,
 } from "@renderer/hooks/use-gamebanana-data";
+import { useGames } from "@renderer/hooks/use-mod-data";
 import { cn } from "@renderer/lib/utils";
-import { useGameBananaStore } from "@renderer/store/gamebanana";
+import { gameBananaStore, useGameBananaStore } from "@renderer/store/gamebanana";
+import { modStore } from "@renderer/store/mod";
+import { getGameBananaKeyForImporter } from "@shared/mod";
 import { createFileRoute } from "@tanstack/react-router";
 import { Loader2Icon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -82,6 +85,7 @@ function RouteComponent() {
     isLoading: isGamesLoading,
     error: gamesError,
   } = useGameBananaGames(isAuthReady);
+  const { data: modGames = [] } = useGames();
   const selectedGameKey = useGameBananaStore((state) => state.selectedGame);
   const selectedCategoryId = useGameBananaStore((state) => state.selectedCategoryId);
   const categoryBreadcrumbs = useGameBananaStore((state) => state.categoryBreadcrumbs);
@@ -165,6 +169,20 @@ function RouteComponent() {
       setSelectedGame(games[0].key);
     }
   }, [games, selectedGameKey, setInitialGame, setSelectedGame]);
+
+  useEffect(() => {
+    if (!games.length || !modGames.length) return;
+    if (!gameBananaStore.getState().consumeModGameSync()) return;
+
+    const modSelectedGame = modStore.getState().selectedGame;
+    if (!modSelectedGame) return;
+
+    const modGameConfig = modGames.find((game) => game.game === modSelectedGame);
+    const gameBananaKey = getGameBananaKeyForImporter(modGameConfig?.importer);
+    if (!gameBananaKey || !games.some((game) => game.key === gameBananaKey)) return;
+
+    setSelectedGame(gameBananaKey as GameBananaGameKey);
+  }, [games, modGames, setSelectedGame]);
 
   const rootCategories = gameOverviewQuery.data?.profile._aModRootCategories ?? [];
   const categoryChildren = categoryOverviewQuery.data?.categories ?? [];
