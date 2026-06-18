@@ -32,6 +32,7 @@ export class ModManager {
         expandedGroups: ModLibraryService["expandedGroups"];
         previousFocusedGame: ModLibraryService["previousFocusedGame"];
         gamePid: ModLibraryService["gamePid"];
+        resolveDownloadTarget: ModLibraryService["resolveDownloadTarget"];
     };
 
     public readonly fn: {
@@ -88,6 +89,7 @@ export class ModManager {
             expandedGroups: this.library.expandedGroups.bind(this.library),
             previousFocusedGame: this.library.previousFocusedGame.bind(this.library),
             gamePid: this.library.gamePid.bind(this.library),
+            resolveDownloadTarget: this.library.resolveDownloadTarget.bind(this.library),
         };
 
         this.fn = {
