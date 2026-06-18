@@ -391,14 +391,23 @@ export class ModLibraryService {
             await configureNteModFolder(modFolderPath, linkedModFolderPath);
         }
 
-        await this.desktop.lib.db.gamePaths.insert({
-            game,
-            modFolderPath,
-            importer,
-            linkedModFolderPath: isNteImporter(importer) ? linkedModFolderPath : null,
-            gameInstallPath: resolvedGameInstallPath,
-            gameExecutablePath: resolvedGameExecutablePath,
-        });
+        try {
+            await this.desktop.lib.db.gamePaths.insert({
+                game,
+                modFolderPath,
+                importer,
+                linkedModFolderPath: isNteImporter(importer) ? linkedModFolderPath : null,
+                gameInstallPath: resolvedGameInstallPath,
+                gameExecutablePath: resolvedGameExecutablePath,
+            });
+        } catch (err) {
+            if (isNteImporter(importer)) {
+                await cleanupNteModFolder(modFolderPath, linkedModFolderPath).catch((error) => {
+                    this.desktop.logger.error(error, `Mod:addGame:rollback:${game}`);
+                });
+            }
+            throw err;
+        }
     }
 
     public async updateGame(
@@ -437,28 +446,51 @@ export class ModLibraryService {
             throw new Error("DUPLICATE_MOD_FOLDER_PATH");
         }
 
-        if (
+        const shouldCleanupExisting =
             (isNteImporter(existingGame.importer) && !isNteImporter(updates.importer)) ||
             (isNteImporter(existingGame.importer) &&
                 isNteImporter(updates.importer) &&
-                hasNtePathChanges(existingGame, updates))
-        ) {
-            await cleanupNteModFolder(existingGame.modFolderPath, existingGame.linkedModFolderPath);
-        }
+                hasNtePathChanges(existingGame, updates));
+        const diskRollbacks: Array<() => Promise<void>> = [];
 
-        if (isNteImporter(updates.importer)) {
-            await configureNteModFolder(updates.modFolderPath, updates.linkedModFolderPath);
-        }
+        try {
+            if (shouldCleanupExisting) {
+                await cleanupNteModFolder(
+                    existingGame.modFolderPath,
+                    existingGame.linkedModFolderPath,
+                );
+                if (isNteImporter(existingGame.importer)) {
+                    diskRollbacks.push(() =>
+                        configureNteModFolder(
+                            existingGame.modFolderPath,
+                            existingGame.linkedModFolderPath,
+                        ),
+                    );
+                }
+            }
 
-        await this.desktop.lib.db.gamePaths.update(game, {
-            modFolderPath: updates.modFolderPath,
-            importer: updates.importer,
-            linkedModFolderPath: isNteImporter(updates.importer)
-                ? updates.linkedModFolderPath
-                : null,
-            gameInstallPath: isNteImporter(updates.importer) ? updates.gameInstallPath : null,
-            gameExecutablePath: isNteImporter(updates.importer) ? updates.gameExecutablePath : null,
-        });
+            if (isNteImporter(updates.importer)) {
+                await configureNteModFolder(updates.modFolderPath, updates.linkedModFolderPath);
+                diskRollbacks.push(() =>
+                    cleanupNteModFolder(updates.modFolderPath, updates.linkedModFolderPath),
+                );
+            }
+
+            await this.desktop.lib.db.gamePaths.update(game, {
+                modFolderPath: updates.modFolderPath,
+                importer: updates.importer,
+                linkedModFolderPath: isNteImporter(updates.importer)
+                    ? updates.linkedModFolderPath
+                    : null,
+                gameInstallPath: isNteImporter(updates.importer) ? updates.gameInstallPath : null,
+                gameExecutablePath: isNteImporter(updates.importer)
+                    ? updates.gameExecutablePath
+                    : null,
+            });
+        } catch (err) {
+            await this.rollbackNteDiskChanges(diskRollbacks);
+            throw err;
+        }
     }
 
     public async resolveNteInstallPath(installPath: string) {
@@ -735,5 +767,13 @@ export class ModLibraryService {
             );
             return !manualChildPaths.has(fullRelativePath);
         });
+    }
+
+    private async rollbackNteDiskChanges(rollbacks: Array<() => Promise<void>>) {
+        for (const rollback of rollbacks.toReversed()) {
+            await rollback().catch((error) => {
+                this.desktop.logger.error(error, "Mod:rollbackNteDiskChanges");
+            });
+        }
     }
 }
