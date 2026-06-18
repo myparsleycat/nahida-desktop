@@ -340,6 +340,11 @@ export class ModLibraryService {
 
     public async setGamePath(game: string, modFolderPath: string) {
         const existing = await this.desktop.lib.db.gamePaths.getByGame(game);
+
+        if (existing && isNteImporter(existing.importer)) {
+            await cleanupNteModFolder(existing.modFolderPath, existing.linkedModFolderPath);
+        }
+
         await this.desktop.lib.db.gamePaths.upsert({
             game,
             modFolderPath,
@@ -462,7 +467,8 @@ export class ModLibraryService {
 
     public async setGameExecutablePath(game: string, executablePath: string) {
         const trimmedPath = executablePath.trim();
-        if (!trimmedPath || !(await fse.pathExists(trimmedPath))) {
+        const executableStat = trimmedPath ? await fse.stat(trimmedPath).catch(() => null) : null;
+        if (!executableStat?.isFile()) {
             throw new Error("INVALID_EXECUTABLE_PATH");
         }
 
@@ -481,15 +487,20 @@ export class ModLibraryService {
         }
 
         const executablePath = existingGame.gameExecutablePath;
-        if (!(await fse.pathExists(executablePath))) {
+        const executableStat = await fse.stat(executablePath).catch(() => null);
+        if (!executableStat?.isFile()) {
             throw new Error("NTE_EXECUTABLE_PATH_NOT_FOUND");
         }
 
-        spawn(executablePath, [], {
+        const child = spawn(executablePath, [], {
             cwd: path.dirname(executablePath),
             detached: true,
             stdio: "ignore",
-        }).unref();
+        });
+        child.once("error", (error) => {
+            this.desktop.logger.error(error, `Mod:startNteGame:${game}`);
+        });
+        child.unref();
     }
 
     public async removeGame(game: string) {

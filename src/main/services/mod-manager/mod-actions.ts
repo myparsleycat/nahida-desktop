@@ -99,8 +99,11 @@ export class ModActionsService {
     }
 
     public async toggle(modPath: string): Promise<string> {
-        const folderName = path.basename(modPath);
-        const isEnabled = !DISABLED_PREFIX_REGEX.test(folderName);
+        const nteGame = findNteGameByPath(await this.desktop.service.mod.get.games(), modPath);
+        const isEnabled =
+            nteGame && isNteImporter(nteGame.importer)
+                ? await isNteModEnabled(modPath)
+                : !DISABLED_PREFIX_REGEX.test(path.basename(modPath));
 
         let result: string;
 
@@ -119,15 +122,18 @@ export class ModActionsService {
     }
 
     public async exclusiveToggle(modPath: string): Promise<string> {
-        const nteGame = findNteGameByPath(await this.desktop.service.mod.get.games(), modPath);
-        if (nteGame && isNteImporter(nteGame.importer)) {
-            return await this.exclusiveToggleNte(modPath, nteGame);
-        }
-
         const folderName = path.basename(modPath);
         const isEnabled = !DISABLED_PREFIX_REGEX.test(folderName);
 
         try {
+            const nteGame = findNteGameByPath(await this.desktop.service.mod.get.games(), modPath);
+            if (nteGame && isNteImporter(nteGame.importer)) {
+                return await this.retryExclusiveToggleOperation(
+                    () => this.exclusiveToggleNte(modPath, nteGame),
+                    modPath,
+                );
+            }
+
             if (!isEnabled) {
                 const groupPath = path.dirname(modPath);
                 const modFolders = await fg("*", {

@@ -30,14 +30,6 @@ export interface ModInfo {
     }[];
 }
 
-export interface GameConfig {
-    game: string;
-    modFolderPath: string;
-    importer: string | null;
-    linkedModFolderPath: string | null;
-    order: number;
-}
-
 export interface FolderGroup {
     name: string;
     path: string;

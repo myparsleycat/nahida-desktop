@@ -118,14 +118,18 @@ export function EditGameDialog({
         }
 
         const linkedModFolderPath =
-          resolution.linkedModFolderPath ?? editingGame.linkedModFolderPath ?? path;
+          resolution.linkedModFolderPath ??
+          resolution.modFolderPath ??
+          editingGame.linkedModFolderPath ??
+          editingGame.modFolderPath ??
+          path;
 
         onUpdateGame(editingGame.game, {
           modFolderPath: customModFolderPath || linkedModFolderPath,
           importer,
           linkedModFolderPath: customModFolderPath ? linkedModFolderPath : null,
           gameInstallPath: resolution.gameRootPath,
-          gameExecutablePath: resolution.executablePath || editingGame.gameExecutablePath,
+          gameExecutablePath: editingGame.gameExecutablePath ?? resolution.executablePath,
         });
         return;
       }

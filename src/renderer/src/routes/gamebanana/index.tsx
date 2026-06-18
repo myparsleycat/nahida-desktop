@@ -85,7 +85,7 @@ function RouteComponent() {
     isLoading: isGamesLoading,
     error: gamesError,
   } = useGameBananaGames(isAuthReady);
-  const { data: modGames = [] } = useGames();
+  const { data: modGames = [], isLoading: isModGamesLoading } = useGames();
   const selectedGameKey = useGameBananaStore((state) => state.selectedGame);
   const selectedCategoryId = useGameBananaStore((state) => state.selectedCategoryId);
   const categoryBreadcrumbs = useGameBananaStore((state) => state.categoryBreadcrumbs);
@@ -171,8 +171,9 @@ function RouteComponent() {
   }, [games, selectedGameKey, setInitialGame, setSelectedGame]);
 
   useEffect(() => {
-    if (!games.length || !modGames.length) return;
+    if (!games.length || isModGamesLoading) return;
     if (!gameBananaStore.getState().consumeModGameSync()) return;
+    if (!modGames.length) return;
 
     const modSelectedGame = modStore.getState().selectedGame;
     if (!modSelectedGame) return;
@@ -182,7 +183,7 @@ function RouteComponent() {
     if (!gameBananaKey || !games.some((game) => game.key === gameBananaKey)) return;
 
     setSelectedGame(gameBananaKey as GameBananaGameKey);
-  }, [games, modGames, setSelectedGame]);
+  }, [games, modGames, isModGamesLoading, setSelectedGame]);
 
   const rootCategories = gameOverviewQuery.data?.profile._aModRootCategories ?? [];
   const categoryChildren = categoryOverviewQuery.data?.categories ?? [];
