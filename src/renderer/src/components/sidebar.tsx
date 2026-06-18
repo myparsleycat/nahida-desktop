@@ -1,6 +1,7 @@
 import { useAuth } from "@renderer/hooks/use-auth";
 import { cn } from "@renderer/lib/utils";
 import { viewStore } from "@renderer/store/drive";
+import { gameBananaStore } from "@renderer/store/gamebanana";
 import { useGlobalStore } from "@renderer/store/global";
 import { getAggregateTransferProgress } from "@shared/transfer-progress";
 import { useLocation, useNavigate } from "@tanstack/react-router";
@@ -146,6 +147,9 @@ export function Sidebar({ className }: { className?: string }) {
                 aria-current={isGameBananaPage ? "page" : undefined}
                 onPointerDown={handlePointerDown}
                 onClick={() => {
+                  if (isModPage) {
+                    gameBananaStore.getState().requestModGameSync();
+                  }
                   navi({ to: "/gamebanana" });
                 }}
               >
@@ -322,7 +326,10 @@ export function Sidebar({ className }: { className?: string }) {
                 size="icon-lg"
                 onPointerDown={handlePointerDown}
                 onClick={() => {
-                  void window.api.invoke("util:openExternal", "https://github.com/myparsleycat/nahida-desktop/issues");
+                  void window.api.invoke(
+                    "util:openExternal",
+                    "https://github.com/myparsleycat/nahida-desktop/issues",
+                  );
                 }}
               >
                 <BugIcon className={cn(iconSize)} />

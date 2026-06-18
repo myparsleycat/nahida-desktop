@@ -1,10 +1,25 @@
+import { spawn } from "node:child_process";
 import path from "node:path";
+import type { GamePathRow } from "@main/internal/db/schema";
 import { getCharactersFolder, getMods } from "@native/mod-manager";
 import { findBestFuzzyMatch } from "@shared/fuzzy-match";
+import { isNteImporter } from "@shared/mod";
 import type { FolderGroup, Preset } from "@shared/types";
 import { GAME_MATCH_CASES } from "@shared/xxmi-match";
 import fse from "fs-extra";
 import type { NahidaDesktop } from "../..";
+import {
+    cleanupNteModFolder,
+    configureNteModFolder,
+    deriveNteGameInstallPath,
+    findNteGameByPath,
+    hasNtePathChanges,
+    getNteCharacters,
+    getNteMods,
+    getNteRoots,
+    getNteSubGroups,
+    resolveNteInstallPath,
+} from "./nte";
 import {
     folderHasAnyFile,
     manualSubGroupPathExists,
@@ -29,9 +44,13 @@ export class ModLibraryService {
     }
 
     public async characters(game: string, searchModPreview?: boolean): Promise<FolderGroup[]> {
-        const modFolderPath = await this.gamePath(game);
-        if (!modFolderPath) {
+        const gameConfig = await this.desktop.lib.db.gamePaths.getByGame(game);
+        if (!gameConfig?.modFolderPath) {
             throw new Error(`No mod folder path set for ${game}`);
+        }
+
+        if (isNteImporter(gameConfig.importer)) {
+            return await getNteCharacters(this.desktop, getNteRoots(gameConfig));
         }
 
         const shouldFallback =
@@ -41,7 +60,7 @@ export class ModLibraryService {
             return await this.addManualSubGroupFlags(
                 game,
                 "",
-                await getCharactersFolder(modFolderPath, shouldFallback),
+                await getCharactersFolder(gameConfig.modFolderPath, shouldFallback),
             );
         } catch (error) {
             this.desktop.logger.error(error, `Mod:characters:${game}`);
@@ -54,6 +73,10 @@ export class ModLibraryService {
             searchModPreview ?? (await this.desktop.setting.mod.getSearchModPreview());
         try {
             const game = await this.getGameByPath(folderPath);
+            if (game && isNteImporter(game.importer)) {
+                return await getNteSubGroups(this.desktop, getNteRoots(game), folderPath);
+            }
+
             const relativePath = game
                 ? manualSubGroupRelativePath(path.relative(game.modFolderPath, folderPath))
                 : "";
@@ -105,8 +128,12 @@ export class ModLibraryService {
 
     public async mods(groupPath: string): Promise<FolderGroup> {
         try {
-            const group = await getMods(groupPath);
             const game = await this.getGameByPath(groupPath);
+            if (game && isNteImporter(game.importer)) {
+                return await getNteMods(this.desktop, getNteRoots(game), groupPath);
+            }
+
+            const group = await getMods(groupPath);
             if (!game) return group;
 
             const relativePath = manualSubGroupRelativePath(
@@ -143,19 +170,37 @@ export class ModLibraryService {
     }
 
     public async games() {
-        return await this.desktop.lib.db.gamePaths.list();
+        const rows = await this.desktop.lib.db.gamePaths.list();
+        return rows.map((row) => this.enrichGameConfig(row));
     }
 
-    public async resolveDownloadTarget(input: string): Promise<{
+    private enrichGameConfig(row: GamePathRow) {
+        if (!isNteImporter(row.importer) || row.gameInstallPath) {
+            return row;
+        }
+
+        return {
+            ...row,
+            gameInstallPath: deriveNteGameInstallPath(row.linkedModFolderPath ?? row.modFolderPath),
+        };
+    }
+
+    public async resolveDownloadTarget(
+        input: string,
+        gameFilter?: string,
+    ): Promise<{
         game: string;
         group: FolderGroup;
         score: number;
     } | null> {
+        const allGames = await this.games();
+        const gamesToSearch = gameFilter
+            ? allGames.filter((game) => game.game === gameFilter)
+            : allGames;
+
         const candidates = (
             await Promise.all(
-                (
-                    await this.games()
-                ).map(async (game) =>
+                gamesToSearch.map(async (game) =>
                     (
                         await Promise.all(
                             (
@@ -295,33 +340,74 @@ export class ModLibraryService {
 
     public async setGamePath(game: string, modFolderPath: string) {
         const existing = await this.desktop.lib.db.gamePaths.getByGame(game);
+
+        if (existing && isNteImporter(existing.importer)) {
+            await cleanupNteModFolder(existing.modFolderPath, existing.linkedModFolderPath);
+        }
+
         await this.desktop.lib.db.gamePaths.upsert({
             game,
             modFolderPath,
             importer: null,
+            linkedModFolderPath: null,
+            gameInstallPath: null,
+            gameExecutablePath: null,
             order: existing?.order ?? 0,
         });
     }
 
-    public async addGame(game: string, modFolderPath: string, importer: string | null) {
+    public async addGame(
+        game: string,
+        modFolderPath: string,
+        importer: string | null,
+        linkedModFolderPath: string | null = null,
+        gameInstallPath: string | null = null,
+        gameExecutablePath: string | null = null,
+    ) {
         if (!game || !modFolderPath) {
             throw new Error("INVALID_PARAMS");
         }
 
-        const exists = await this.desktop.lib.db.gamePaths.findByGameOrModFolderPath(
-            game,
-            modFolderPath,
-        );
+        const resolvedGameInstallPath = isNteImporter(importer) ? gameInstallPath : null;
+        const resolvedGameExecutablePath = isNteImporter(importer) ? gameExecutablePath : null;
+
+        const exists =
+            (await this.desktop.lib.db.gamePaths.findByGameOrModFolderPath(game, modFolderPath)) ??
+            (linkedModFolderPath
+                ? await this.desktop.lib.db.gamePaths.findByGameOrModFolderPath(
+                      game,
+                      linkedModFolderPath,
+                  )
+                : null);
 
         if (exists) {
             if (exists.game === game) {
                 throw new Error("DUPLICATE_GAME_NAME");
-            } else if (exists.modFolderPath === modFolderPath) {
-                throw new Error("DUPLICATE_MOD_FOLDER_PATH");
             }
+            throw new Error("DUPLICATE_MOD_FOLDER_PATH");
         }
 
-        await this.desktop.lib.db.gamePaths.insert({ game, modFolderPath, importer });
+        if (isNteImporter(importer)) {
+            await configureNteModFolder(modFolderPath, linkedModFolderPath);
+        }
+
+        try {
+            await this.desktop.lib.db.gamePaths.insert({
+                game,
+                modFolderPath,
+                importer,
+                linkedModFolderPath: isNteImporter(importer) ? linkedModFolderPath : null,
+                gameInstallPath: resolvedGameInstallPath,
+                gameExecutablePath: resolvedGameExecutablePath,
+            });
+        } catch (err) {
+            if (isNteImporter(importer)) {
+                await cleanupNteModFolder(modFolderPath, linkedModFolderPath).catch((error) => {
+                    this.desktop.logger.error(error, `Mod:addGame:rollback:${game}`);
+                });
+            }
+            throw err;
+        }
     }
 
     public async updateGame(
@@ -329,6 +415,9 @@ export class ModLibraryService {
         updates: {
             modFolderPath: string;
             importer: string | null;
+            linkedModFolderPath: string | null;
+            gameInstallPath: string | null;
+            gameExecutablePath: string | null;
         },
     ) {
         if (!game || !updates.modFolderPath) {
@@ -341,19 +430,118 @@ export class ModLibraryService {
             throw new Error(`Game ${game} not found`);
         }
 
-        const duplicatePath = await this.desktop.lib.db.gamePaths.findByModFolderPathOtherGame(
-            game,
-            updates.modFolderPath,
-        );
+        const duplicatePath =
+            (await this.desktop.lib.db.gamePaths.findByModFolderPathOtherGame(
+                game,
+                updates.modFolderPath,
+            )) ??
+            (updates.linkedModFolderPath
+                ? await this.desktop.lib.db.gamePaths.findByModFolderPathOtherGame(
+                      game,
+                      updates.linkedModFolderPath,
+                  )
+                : null);
 
         if (duplicatePath) {
             throw new Error("DUPLICATE_MOD_FOLDER_PATH");
         }
 
-        await this.desktop.lib.db.gamePaths.update(game, updates);
+        const shouldCleanupExisting =
+            (isNteImporter(existingGame.importer) && !isNteImporter(updates.importer)) ||
+            (isNteImporter(existingGame.importer) &&
+                isNteImporter(updates.importer) &&
+                hasNtePathChanges(existingGame, updates));
+        const diskRollbacks: Array<() => Promise<void>> = [];
+
+        try {
+            if (shouldCleanupExisting) {
+                await cleanupNteModFolder(
+                    existingGame.modFolderPath,
+                    existingGame.linkedModFolderPath,
+                );
+                if (isNteImporter(existingGame.importer)) {
+                    diskRollbacks.push(() =>
+                        configureNteModFolder(
+                            existingGame.modFolderPath,
+                            existingGame.linkedModFolderPath,
+                        ),
+                    );
+                }
+            }
+
+            if (isNteImporter(updates.importer)) {
+                await configureNteModFolder(updates.modFolderPath, updates.linkedModFolderPath);
+                diskRollbacks.push(() =>
+                    cleanupNteModFolder(updates.modFolderPath, updates.linkedModFolderPath),
+                );
+            }
+
+            await this.desktop.lib.db.gamePaths.update(game, {
+                modFolderPath: updates.modFolderPath,
+                importer: updates.importer,
+                linkedModFolderPath: isNteImporter(updates.importer)
+                    ? updates.linkedModFolderPath
+                    : null,
+                gameInstallPath: isNteImporter(updates.importer) ? updates.gameInstallPath : null,
+                gameExecutablePath: isNteImporter(updates.importer)
+                    ? updates.gameExecutablePath
+                    : null,
+            });
+        } catch (err) {
+            await this.rollbackNteDiskChanges(diskRollbacks);
+            throw err;
+        }
+    }
+
+    public async resolveNteInstallPath(installPath: string) {
+        return await resolveNteInstallPath(installPath);
+    }
+
+    public async setGameExecutablePath(game: string, executablePath: string) {
+        const trimmedPath = executablePath.trim();
+        const executableStat = trimmedPath ? await fse.stat(trimmedPath).catch(() => null) : null;
+        if (!executableStat?.isFile()) {
+            throw new Error("INVALID_EXECUTABLE_PATH");
+        }
+
+        const existingGame = await this.desktop.lib.db.gamePaths.getByGame(game);
+        if (!existingGame) {
+            throw new Error(`Game ${game} not found`);
+        }
+
+        await this.desktop.lib.db.gamePaths.setGameExecutablePath(game, trimmedPath);
+    }
+
+    public async startNteGame(game: string) {
+        const existingGame = await this.desktop.lib.db.gamePaths.getByGame(game);
+        if (!existingGame?.gameExecutablePath) {
+            throw new Error("NTE_EXECUTABLE_PATH_NOT_SET");
+        }
+
+        const executablePath = existingGame.gameExecutablePath;
+        const executableStat = await fse.stat(executablePath).catch(() => null);
+        if (!executableStat?.isFile()) {
+            throw new Error("NTE_EXECUTABLE_PATH_NOT_FOUND");
+        }
+
+        const child = spawn(executablePath, [], {
+            cwd: path.dirname(executablePath),
+            detached: true,
+            stdio: "ignore",
+        });
+        child.once("error", (error) => {
+            this.desktop.logger.error(error, `Mod:startNteGame:${game}`);
+        });
+        child.unref();
     }
 
     public async removeGame(game: string) {
+        const existingGame = await this.desktop.lib.db.gamePaths.getByGame(game);
+
+        if (existingGame && isNteImporter(existingGame.importer)) {
+            await cleanupNteModFolder(existingGame.modFolderPath, existingGame.linkedModFolderPath);
+        }
+
         await this.desktop.lib.db.gamePaths.delete(game);
     }
 
@@ -417,6 +605,9 @@ export class ModLibraryService {
 
     private async getGameByPath(targetPath: string) {
         const resolvedTargetPath = path.resolve(targetPath);
+        const nteGame = findNteGameByPath(await this.games(), resolvedTargetPath);
+        if (nteGame) return nteGame;
+
         const matches = (await this.games()).filter((game) => {
             const relativePath = path.relative(
                 path.resolve(game.modFolderPath),
@@ -576,5 +767,13 @@ export class ModLibraryService {
             );
             return !manualChildPaths.has(fullRelativePath);
         });
+    }
+
+    private async rollbackNteDiskChanges(rollbacks: Array<() => Promise<void>>) {
+        for (const rollback of rollbacks.toReversed()) {
+            await rollback().catch((error) => {
+                this.desktop.logger.error(error, "Mod:rollbackNteDiskChanges");
+            });
+        }
     }
 }

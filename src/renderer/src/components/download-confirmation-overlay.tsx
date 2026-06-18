@@ -37,7 +37,7 @@ export function DownloadConfirmationOverlay() {
 
       setDownloadMode(null);
     } catch (error) {
-      toast.error("경로 선택에 실패했습니다.");
+      toast.error(t("components.download-confirmation-overlay.select_path_failed"));
       Logger.error(error, "DownloadConfirmationOverlay:handleConfirm");
     }
   };

@@ -189,6 +189,7 @@
         "title": "Add to {{name}}",
         "description": "Compressed files will be automatically extracted"
       },
+      "download_completed": "Downloaded \"{{name}}\".",
       "all_enabled": "Enable all",
       "all_disabled": "Disable all",
       "content-header": {
@@ -241,6 +242,9 @@
           "error": "Failed to add {{fileName}}."
         }
       },
+      "play": {
+        "no_importer": "Set an importer for this game before launching."
+      },
       "dialog": {
         "extract_archive_path": {
           "title": "Choose extraction path",
@@ -255,6 +259,11 @@
           "title": "Add Game",
           "name_input_placeholder": "Game Name (e.g. Genshin)",
           "path_input_placeholder": "Mod folder path",
+          "nte_game_name": "NTE",
+          "nte_install_path": "NTE install folder",
+          "nte_not_found": "NTE game not found.",
+          "nte_custom_mod_folder": "Custom mod folder",
+          "nte_custom_mod_folder_description": "Optional. The game Mods folder will be linked to this folder.",
           "xxmi_path_required": "Set the XXMI path first to load importers.",
           "open_xxmi_settings": "Open Importer settings",
           "#": {
@@ -270,6 +279,12 @@
           "order_label": "Display order",
           "order_value": "{{current}} of {{total}}",
           "order_description": "Use the arrow buttons to change this game's position in the dropdown."
+        },
+        "nte-launch": {
+          "title": "Set launcher path",
+          "path_label": "Launcher path",
+          "path_required": "Please select a launcher path.",
+          "launch": "Save and launch launcher"
         },
         "preset-management": {
           "legacy-badge": "Legacy",
@@ -391,7 +406,10 @@
             "duplicate-game-name": "A game with that name already exists",
             "duplicate-mod-folder-path": "That mod folder path is already in use",
             "invalid-params": "Game name and mod folder path are required",
-            "failed": "Failed to add game"
+            "failed": "Failed to add game",
+            "nte_mods_link_conflict": "Both the game Mods folder and the custom mod folder contain files. Clear one before linking.",
+            "nte_mods_link_path_occupied": "The game Mods folder path is occupied and cannot be linked.",
+            "nte_custom_mod_folder_inside_link_path": "The custom mod folder cannot be inside the game Mods folder path, or vice versa."
           },
           "delete-game-mutation": {
             "success": "Game deleted"
@@ -402,6 +420,15 @@
           "reorder-games-mutation": {
             "success": "Game order saved",
             "failed": "Failed to save game order"
+          },
+          "set-game-executable-path": {
+            "invalid-path": "The selected launcher path is invalid.",
+            "failed": "Failed to save the launcher path."
+          },
+          "start-nte-game": {
+            "not-set": "No launcher path is set for this game.",
+            "not-found": "The saved launcher path no longer exists.",
+            "failed": "Failed to launch the launcher."
           },
           "toggle-mutation": {
             "0": "The {{name}} folder already exists",
@@ -1076,7 +1103,8 @@
       "file_name": "File Name",
       "file_name_placeholder": "Enter file name",
       "download_location": "Download Location",
-      "need_select_character_folder": "Select a character folder on the left"
+      "need_select_character_folder": "Select a character folder on the left",
+      "select_path_failed": "Failed to select path."
     }
   },
   "updater": {

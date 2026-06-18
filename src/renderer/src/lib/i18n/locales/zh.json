@@ -168,6 +168,7 @@
         "title": "添加到 {{name}}",
         "description": "压缩文件将自动解压"
       },
+      "download_completed": "已下载 \"{{name}}\"。",
       "all_enabled": "全部启用",
       "all_disabled": "全部禁用",
       "content-header": {
@@ -220,6 +221,9 @@
           "error": "{{fileName}} 添加失败"
         }
       },
+      "play": {
+        "no_importer": "启动前请先为此游戏设置 Importer。"
+      },
       "dialog": {
         "extract_archive_path": {
           "title": "选择解压路径",
@@ -234,6 +238,11 @@
           "title": "添加游戏",
           "name_input_placeholder": "游戏名称 (例如：原神)",
           "path_input_placeholder": "模组文件夹路径",
+          "nte_game_name": "异环",
+          "nte_install_path": "NTE 安装文件夹",
+          "nte_not_found": "未找到 NTE 游戏。",
+          "nte_custom_mod_folder": "自定义模组文件夹",
+          "nte_custom_mod_folder_description": "可选。游戏的 Mods 文件夹将链接到此文件夹。",
           "xxmi_path_required": "要加载 Importer，请先设置 XXMI 路径。",
           "open_xxmi_settings": "打开 Importer 设置",
           "#": {
@@ -246,6 +255,12 @@
           "path_label": "模组文件夹路径",
           "importer_label": "Importer",
           "no_importer": "无"
+        },
+        "nte-launch": {
+          "title": "指定启动器路径",
+          "path_label": "启动器路径",
+          "path_required": "请选择启动器路径。",
+          "launch": "保存并启动启动器"
         },
         "preset-management": {
           "description": "此预设包含 {{length}} 个模组。",
@@ -368,13 +383,25 @@
             "duplicate-game-name": "该游戏名称已存在",
             "duplicate-mod-folder-path": "该模组文件夹路径已被使用",
             "invalid-params": "请输入游戏名称和模组文件夹路径",
-            "failed": "添加游戏失败"
+            "failed": "添加游戏失败",
+            "nte_mods_link_conflict": "游戏 Mods 文件夹和自定义模组文件夹都包含文件。链接前请先清空其中一个。",
+            "nte_mods_link_path_occupied": "游戏 Mods 文件夹路径已被占用，无法链接。",
+            "nte_custom_mod_folder_inside_link_path": "自定义模组文件夹不能位于游戏 Mods 文件夹路径内，反之亦然。"
           },
           "delete-game-mutation": {
             "success": "游戏已删除"
           },
           "update-game-mutation": {
             "success": "游戏设置已保存"
+          },
+          "set-game-executable-path": {
+            "invalid-path": "所选启动器路径无效。",
+            "failed": "保存启动器路径失败。"
+          },
+          "start-nte-game": {
+            "not-set": "尚未设置启动器路径。",
+            "not-found": "保存的启动器路径已不存在。",
+            "failed": "启动启动器失败。"
           },
           "toggle-mutation": {
             "0": "{{name}} 文件夹已存在",
@@ -1038,7 +1065,8 @@
       "file_name": "文件名",
       "file_name_placeholder": "输入文件名",
       "download_location": "下载位置",
-      "need_select_character_folder": "请在左侧选择角色文件夹"
+      "need_select_character_folder": "请在左侧选择角色文件夹",
+      "select_path_failed": "选择路径失败。"
     }
   },
   "updater": {

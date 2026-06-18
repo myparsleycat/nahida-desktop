@@ -5,6 +5,7 @@ export const GAME_MATCH_CASES: Record<string, string[]> = {
     WWMI: ["명조", "묑조", "wuwa", "wuthering", "wwmi", "ww"],
     EFMI: ["엔드필드", "엔필", "endfield", "efmi"],
     HIMI: ["붕괴", "붕괴3", "붕괴3rd", "himi", "honkai", "hi3rd"],
+    NTE: ["이환", "异环", "nte", "neverness", "everness", "htgame"],
 };
 
 export const getMatchingImporter = (

@@ -91,7 +91,7 @@ export const ModCard = memo(function ModCard({
               onPaste={() => actions.openPastePreview(mod)}
             />
 
-            {mod.inis.length > 0 && (
+            {!actions.isNteGame && mod.inis.length > 0 && (
               <>
                 <div className="relative flex items-stretch">
                   <Separator orientation="vertical" />

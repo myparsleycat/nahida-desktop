@@ -71,6 +71,7 @@ const BasicCategorySchema = z
 
 const GameSchema = z
     .object({
+        _idRow: NumericId,
         _sName: z.string(),
     })
     .catchall(z.unknown());
