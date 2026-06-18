@@ -179,6 +179,8 @@ function ModRouteContent() {
         ? (findGameByImporter(games, currentDownloadMode.downloadImporterKey)?.game ?? null)
         : null;
 
+      if (currentDownloadMode.downloadImporterKey && !gameByImporter) return;
+
       const primary = currentDownloadMode.downloadTargetName;
       const fallback = currentDownloadMode.suggestedName;
 

@@ -13,6 +13,7 @@ import {
     configureNteModFolder,
     deriveNteGameInstallPath,
     findNteGameByPath,
+    hasNtePathChanges,
     getNteCharacters,
     getNteMods,
     getNteRoots,
@@ -431,7 +432,12 @@ export class ModLibraryService {
             throw new Error("DUPLICATE_MOD_FOLDER_PATH");
         }
 
-        if (isNteImporter(existingGame.importer) && !isNteImporter(updates.importer)) {
+        if (
+            (isNteImporter(existingGame.importer) && !isNteImporter(updates.importer)) ||
+            (isNteImporter(existingGame.importer) &&
+                isNteImporter(updates.importer) &&
+                hasNtePathChanges(existingGame, updates))
+        ) {
             await cleanupNteModFolder(existingGame.modFolderPath, existingGame.linkedModFolderPath);
         }
 

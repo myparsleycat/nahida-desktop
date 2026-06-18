@@ -35,6 +35,7 @@ export interface NtePathResolution {
 
 type NteGameRoots = {
     modRoot: string;
+    linkedRoot: string | null;
 };
 
 export async function resolveNteInstallPath(inputPath: string): Promise<NtePathResolution | null> {
@@ -60,8 +61,8 @@ export function deriveNteGameInstallPath(modOrLinkedPath: string) {
     return path.resolve(htRootPath, "..", "..");
 }
 
-export function getNteRoots(game: Pick<GameConfig, "modFolderPath">) {
-    return { modRoot: game.modFolderPath };
+export function getNteRoots(game: Pick<GameConfig, "modFolderPath" | "linkedModFolderPath">) {
+    return { modRoot: game.modFolderPath, linkedRoot: game.linkedModFolderPath };
 }
 
 export async function ensureNteModFolders(modFolderPath: string) {
@@ -94,10 +95,15 @@ export async function configureNteModFolder(
 }
 
 export function findNteGameByPath(games: GameConfig[], targetPath: string) {
-    return games.find(
-        (game) =>
-            game.importer === "NTE" && isSameOrChildPath(getNteRoots(game).modRoot, targetPath),
-    );
+    return games.find((game) => {
+        if (game.importer !== "NTE") return false;
+
+        const roots = getNteRoots(game);
+        if (isSameOrChildPath(roots.modRoot, targetPath)) return true;
+        if (roots.linkedRoot && isSameOrChildPath(roots.linkedRoot, targetPath)) return true;
+
+        return false;
+    });
 }
 
 export async function getNteCharacters(
@@ -168,6 +174,20 @@ export async function getNteMods(
     };
 }
 
+export function hasNtePathChanges(
+    existing: Pick<GameConfig, "modFolderPath" | "linkedModFolderPath">,
+    updates: Pick<GameConfig, "modFolderPath" | "linkedModFolderPath">,
+) {
+    if (!isSameNtePath(existing.modFolderPath, updates.modFolderPath)) return true;
+
+    const existingLinked = existing.linkedModFolderPath;
+    const updatedLinked = updates.linkedModFolderPath;
+    if (existingLinked === updatedLinked) return false;
+    if (!existingLinked || !updatedLinked) return true;
+
+    return !isSameNtePath(existingLinked, updatedLinked);
+}
+
 export async function cleanupNteModFolder(
     modFolderPath: string,
     linkedModFolderPath: string | null,
@@ -207,7 +227,7 @@ export async function setNteModEnabled(
     if (enabled) {
         await Promise.all(
             entries
-                .filter((entry) => isDisabledFile(entry.name))
+                .filter((entry) => isDisabledFile(entry.name) && isPakModFile(entry.name))
                 .map((entry) =>
                     fse.rename(
                         path.join(modPath, entry.name),
@@ -220,7 +240,7 @@ export async function setNteModEnabled(
 
     await Promise.all(
         entries
-            .filter((entry) => !isDisabledFile(entry.name))
+            .filter((entry) => !isDisabledFile(entry.name) && isPakModFile(entry.name))
             .map((entry) =>
                 fse.rename(
                     path.join(modPath, entry.name),
@@ -356,9 +376,19 @@ function isSameNtePath(left: string, right: string) {
 }
 
 function getNteRelativePath(roots: NteGameRoots, targetPath: string) {
-    const relativePath = path.relative(roots.modRoot, targetPath);
+    const relativeFromModRoot = path.relative(roots.modRoot, targetPath);
+    if (!relativeFromModRoot.startsWith("..") && !path.isAbsolute(relativeFromModRoot)) {
+        return relativeFromModRoot;
+    }
 
-    return relativePath.startsWith("..") ? "" : relativePath;
+    if (!roots.linkedRoot) return "";
+
+    const relativeFromLinkedRoot = path.relative(roots.linkedRoot, targetPath);
+    if (relativeFromLinkedRoot.startsWith("..") || path.isAbsolute(relativeFromLinkedRoot)) {
+        return "";
+    }
+
+    return relativeFromLinkedRoot;
 }
 
 async function listDirectoryNames(dirPath: string) {
