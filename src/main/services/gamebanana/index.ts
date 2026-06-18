@@ -1,4 +1,5 @@
 import { focus, getDefaultWebPreferences } from "@main/windows/utils";
+import { NTE_GAMEBANANA_ID } from "@shared/mod";
 import { BrowserWindow } from "electron";
 import ky, { type Input, type Options } from "ky";
 import { z, ZodError, type ZodType } from "zod";
@@ -25,6 +26,7 @@ export const gameBananaGames = {
     zz: 19567,
     ww: 20357,
     ef: 21842,
+    nte: NTE_GAMEBANANA_ID,
 } as const;
 
 export type GameBananaGameKey = keyof typeof gameBananaGames;

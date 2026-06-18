@@ -19,3 +19,8 @@ export type ModGridLayoutMode = (typeof MOD_GRID_LAYOUT_MODES)[number];
 export const SIDEBAR_LAYOUT_MODES = ["row", "grid"] as const;
 
 export type SidebarLayoutMode = (typeof SIDEBAR_LAYOUT_MODES)[number];
+
+export const NTE_IMPORTER_KEY = "NTE";
+export const NTE_GAMEBANANA_ID = 23012;
+
+export const isNteImporter = (importer: string | null | undefined) => importer === NTE_IMPORTER_KEY;

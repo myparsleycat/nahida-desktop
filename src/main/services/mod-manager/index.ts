@@ -33,6 +33,7 @@ export class ModManager {
         previousFocusedGame: ModLibraryService["previousFocusedGame"];
         gamePid: ModLibraryService["gamePid"];
         resolveDownloadTarget: ModLibraryService["resolveDownloadTarget"];
+        resolveNteInstallPath: ModLibraryService["resolveNteInstallPath"];
     };
 
     public readonly fn: {
@@ -90,6 +91,7 @@ export class ModManager {
             previousFocusedGame: this.library.previousFocusedGame.bind(this.library),
             gamePid: this.library.gamePid.bind(this.library),
             resolveDownloadTarget: this.library.resolveDownloadTarget.bind(this.library),
+            resolveNteInstallPath: this.library.resolveNteInstallPath.bind(this.library),
         };
 
         this.fn = {

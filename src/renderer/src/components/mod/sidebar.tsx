@@ -107,14 +107,21 @@ export default function ModSidebar({
   );
 
   const handleAddGame = useCallback(
-    (name: string, path: string, importer: string | null) => {
-      addGame({ name, path, importer });
+    (name: string, path: string, importer: string | null, linkedModFolderPath?: string | null) => {
+      addGame({ name, path, importer, linkedModFolderPath });
     },
     [addGame],
   );
 
   const handleUpdateGame = useCallback(
-    (game: string, updates: { modFolderPath: string; importer: string | null }) => {
+    (
+      game: string,
+      updates: {
+        modFolderPath: string;
+        importer: string | null;
+        linkedModFolderPath: string | null;
+      },
+    ) => {
       updateGame({ game, updates });
     },
     [updateGame],

@@ -40,11 +40,13 @@ export function useGameMutations() {
             name,
             path,
             importer,
+            linkedModFolderPath,
         }: {
             name: string;
             path: string;
             importer: string | null;
-        }) => window.api.invoke("mod:addGame", name, path, importer),
+            linkedModFolderPath?: string | null;
+        }) => window.api.invoke("mod:addGame", name, path, importer, linkedModFolderPath ?? null),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ["games"] });
             setIsAddGameDialogOpen(false);
@@ -71,6 +73,15 @@ export function useGameMutations() {
 
             if (errorMessage.includes("INVALID_PARAMS")) {
                 toast.error(t("page.mod.hooks.use-mod-mutations.add-game-mutation.invalid-params"));
+                return;
+            }
+
+            if (
+                errorMessage.includes("NTE_MODS_LINK_CONFLICT") ||
+                errorMessage.includes("NTE_MODS_LINK_PATH_OCCUPIED") ||
+                errorMessage.includes("NTE_CUSTOM_MOD_FOLDER_INSIDE_LINK_PATH")
+            ) {
+                toast.error(errorMessage);
                 return;
             }
 
@@ -122,7 +133,11 @@ export function useGameMutations() {
             updates,
         }: {
             game: string;
-            updates: { modFolderPath: string; importer: string | null };
+            updates: {
+                modFolderPath: string;
+                importer: string | null;
+                linkedModFolderPath: string | null;
+            };
         }) => window.api.invoke("mod:updateGame", game, updates),
         onSuccess: async (_, variables) => {
             void queryClient.invalidateQueries({ queryKey: ["games"] });
@@ -152,6 +167,15 @@ export function useGameMutations() {
 
             if (errorMessage.includes("INVALID_PARAMS")) {
                 toast.error(t("page.mod.hooks.use-mod-mutations.add-game-mutation.invalid-params"));
+                return;
+            }
+
+            if (
+                errorMessage.includes("NTE_MODS_LINK_CONFLICT") ||
+                errorMessage.includes("NTE_MODS_LINK_PATH_OCCUPIED") ||
+                errorMessage.includes("NTE_CUSTOM_MOD_FOLDER_INSIDE_LINK_PATH")
+            ) {
+                toast.error(errorMessage);
                 return;
             }
 

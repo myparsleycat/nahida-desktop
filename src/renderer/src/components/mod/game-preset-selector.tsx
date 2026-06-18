@@ -10,6 +10,7 @@ import {
 } from "@renderer/components/ui/select";
 import { useEnabledImporters, usePresets } from "@renderer/hooks/use-mod-data";
 import { useModStore } from "@renderer/store/mod";
+import { isNteImporter } from "@shared/mod";
 import type { GameConfig } from "@shared/types";
 import { useLocation } from "@tanstack/react-router";
 import { PencilIcon, PlayIcon } from "lucide-react";
@@ -24,8 +25,20 @@ interface GamePresetSelectorProps {
   games: GameConfig[];
   onDeleteGameClick: (game: string) => void;
   onPickFolder: () => Promise<string | null>;
-  onAddGame: (name: string, path: string, importer: string | null) => void;
-  onUpdateGame: (game: string, updates: { modFolderPath: string; importer: string | null }) => void;
+  onAddGame: (
+    name: string,
+    path: string,
+    importer: string | null,
+    linkedModFolderPath?: string | null,
+  ) => void;
+  onUpdateGame: (
+    game: string,
+    updates: {
+      modFolderPath: string;
+      importer: string | null;
+      linkedModFolderPath: string | null;
+    },
+  ) => void;
   onReorderGames: (games: string[]) => void;
 }
 
@@ -75,7 +88,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
     <div className="flex flex-col items-center justify-center w-full p-2 border-t space-y-3">
       {location.pathname.startsWith("/mod") && (
         <div className="flex w-full space-x-1">
-          {selectedImporter && (
+          {selectedImporter && !isNteImporter(selectedImporter) && (
             <Button
               variant="outline"
               size="icon"

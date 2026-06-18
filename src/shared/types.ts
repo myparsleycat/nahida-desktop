@@ -213,6 +213,7 @@ export interface GameConfig {
     game: string;
     modFolderPath: string;
     importer: string | null;
+    linkedModFolderPath: string | null;
     order: number;
 }
 

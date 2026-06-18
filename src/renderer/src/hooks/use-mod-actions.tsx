@@ -23,10 +23,12 @@ import {
 } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
 import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
+import { useGames } from "@renderer/hooks/use-mod-data";
 import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
+import { isNteImporter } from "@shared/mod";
 import type { QueryClient } from "@tanstack/react-query";
 import { useRouteContext } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
@@ -71,6 +73,7 @@ function scheduleModelViewerCleanup(source: ModelViewerDialogSource | null) {
 export interface ModActionApi {
   overlays: ReactNode;
   runner: ReturnType<typeof useModFixRunner>;
+  isNteGame: boolean;
   convertingModelPath: string | null;
   openDeleteMod: (mod: ModInfo) => void;
   openDeletePreview: (mod: ModInfo) => void;
@@ -95,6 +98,8 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
   const { confirmTrash, confirmTrashDialog } = useConfirmTrash();
   const runner = useModFixRunner();
   const selectedGame = useModStore((s) => s.selectedGame);
+  const { data: games = [] } = useGames();
+  const isNteGame = isNteImporter(games.find((game) => game.game === selectedGame)?.importer);
 
   const [textureResizeMod, setTextureResizeMod] = useState<ModInfo | null>(null);
   const [renameDialogState, setRenameDialogState] = useState<{
@@ -340,6 +345,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
   return {
     overlays,
     runner,
+    isNteGame,
     convertingModelPath,
     openDeleteMod,
     openDeletePreview,

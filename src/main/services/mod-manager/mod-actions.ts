@@ -1,7 +1,17 @@
 import path from "node:path";
+import { isNteImporter } from "@shared/mod";
+import type { GameConfig } from "@shared/types";
 import { retry, trim } from "es-toolkit";
 import fg from "fast-glob";
 import type { NahidaDesktop } from "../..";
+import {
+    findNteGameByPath,
+    getNteGroupRelativePath,
+    getNteRoots,
+    hasNteDirectPak,
+    isNteModEnabled,
+    setNteModEnabled,
+} from "./nte";
 import {
     DISABLED_PREFIX_REGEX,
     normalizeModPath,
@@ -19,6 +29,13 @@ export class ModActionsService {
     ) {}
 
     public async enable(modPath: string): Promise<string> {
+        const nteGame = findNteGameByPath(await this.desktop.service.mod.get.games(), modPath);
+        if (nteGame) {
+            if (!(await isNteModEnabled(modPath)))
+                return await setNteModEnabled(this.desktop, modPath, true);
+            return modPath;
+        }
+
         const folderName = path.basename(modPath);
 
         if (DISABLED_PREFIX_REGEX.test(folderName)) {
@@ -52,6 +69,13 @@ export class ModActionsService {
     }
 
     public async disable(modPath: string): Promise<string> {
+        const nteGame = findNteGameByPath(await this.desktop.service.mod.get.games(), modPath);
+        if (nteGame) {
+            if (await isNteModEnabled(modPath))
+                return await setNteModEnabled(this.desktop, modPath, false);
+            return modPath;
+        }
+
         const folderName = path.basename(modPath);
 
         if (!DISABLED_PREFIX_REGEX.test(folderName)) {
@@ -95,6 +119,11 @@ export class ModActionsService {
     }
 
     public async exclusiveToggle(modPath: string): Promise<string> {
+        const nteGame = findNteGameByPath(await this.desktop.service.mod.get.games(), modPath);
+        if (nteGame && isNteImporter(nteGame.importer)) {
+            return await this.exclusiveToggleNte(modPath, nteGame);
+        }
+
         const folderName = path.basename(modPath);
         const isEnabled = !DISABLED_PREFIX_REGEX.test(folderName);
 
@@ -175,6 +204,12 @@ export class ModActionsService {
     }
 
     public async enableAll(groupPath: string): Promise<void> {
+        const nteGame = findNteGameByPath(await this.desktop.service.mod.get.games(), groupPath);
+        if (nteGame) {
+            await this.setAllNte(groupPath, nteGame, true);
+            return;
+        }
+
         try {
             const modFolders = await fg("*", {
                 cwd: groupPath,
@@ -198,6 +233,12 @@ export class ModActionsService {
     }
 
     public async disableAll(groupPath: string): Promise<void> {
+        const nteGame = findNteGameByPath(await this.desktop.service.mod.get.games(), groupPath);
+        if (nteGame) {
+            await this.setAllNte(groupPath, nteGame, false);
+            return;
+        }
+
         try {
             const modFolders = await fg("*", {
                 cwd: groupPath,
@@ -245,5 +286,43 @@ export class ModActionsService {
     private isRetryableExclusiveToggleError(error: unknown): boolean {
         const code = (error as NodeJS.ErrnoException | undefined)?.code;
         return code === "EBUSY" || code === "EPERM" || code === "EACCES";
+    }
+
+    private async exclusiveToggleNte(modPath: string, game: GameConfig) {
+        const roots = getNteRoots(game);
+
+        if (!(await isNteModEnabled(modPath))) {
+            await this.setAllNte(
+                path.dirname(path.join(roots.modRoot, getNteGroupRelativePath(roots, modPath))),
+                game,
+                false,
+            );
+            return await setNteModEnabled(this.desktop, modPath, true);
+        }
+
+        return await setNteModEnabled(this.desktop, modPath, false);
+    }
+
+    private async setAllNte(groupPath: string, game: GameConfig, enabled: boolean) {
+        const roots = getNteRoots(game);
+        const groupDir = path.join(roots.modRoot, getNteGroupRelativePath(roots, groupPath));
+
+        if (!(await this.desktop.lib.fs.pathExists(groupDir))) return;
+
+        await Promise.all(
+            (await this.desktop.lib.fs.listDirectories(groupDir)).map(async (folderName) => {
+                const modPath = path.join(groupDir, folderName);
+                try {
+                    if (!(await hasNteDirectPak(modPath))) return;
+
+                    const currentlyEnabled = await isNteModEnabled(modPath);
+                    if (currentlyEnabled === enabled) return;
+
+                    await setNteModEnabled(this.desktop, modPath, enabled);
+                } catch (error) {
+                    this.desktop.logger.error(error, `Mod:setAllNte:${modPath}`);
+                }
+            }),
+        );
     }
 }

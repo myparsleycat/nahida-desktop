@@ -27,9 +27,17 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return await desktop.service.mod.get.games();
     });
 
-    rh("mod:addGame", async (game: string, path: string, importer: string | null) => {
-        return await desktop.service.mod.fn.addGame(game, path, importer);
-    });
+    rh(
+        "mod:addGame",
+        async (
+            game: string,
+            path: string,
+            importer: string | null,
+            linkedModFolderPath: string | null = null,
+        ) => {
+            return await desktop.service.mod.fn.addGame(game, path, importer, linkedModFolderPath);
+        },
+    );
 
     rh("mod:removeGame", async (game: string) => {
         return await desktop.service.mod.fn.removeGame(game);
@@ -42,11 +50,16 @@ export function registerModHandlers(desktop: NahidaDesktop) {
             updates: {
                 modFolderPath: string;
                 importer: string | null;
+                linkedModFolderPath: string | null;
             },
         ) => {
             return await desktop.service.mod.fn.updateGame(game, updates);
         },
     );
+
+    rh("mod:resolveNteInstallPath", async (installPath: string) => {
+        return await desktop.service.mod.get.resolveNteInstallPath(installPath);
+    });
 
     rh("mod:reorderGames", async (games: string[]) => {
         return await desktop.service.mod.fn.reorderGames(games);
