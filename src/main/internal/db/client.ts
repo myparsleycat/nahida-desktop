@@ -292,7 +292,7 @@ export class DatabaseClient {
     public readonly gamePaths = {
         getByGame: async (game: string) => {
             const row = this.get<GamePathRow>(
-                `SELECT "game", "modFolderPath", "importer", "linkedModFolderPath", "gameInstallPath", "gameExecutablePath",
+                `SELECT "game", "modFolderPath", "importer", "linkedModFolderPath", "gameInstallPath", "gameExecutablePath", "nteLauncherPath",
                         CASE
                             WHEN "order" = 0 THEN rowid
                             ELSE "order"
@@ -304,7 +304,7 @@ export class DatabaseClient {
         },
         list: async () =>
             this.all<GamePathRow>(
-                `SELECT "game", "modFolderPath", "importer", "linkedModFolderPath", "gameInstallPath", "gameExecutablePath",
+                `SELECT "game", "modFolderPath", "importer", "linkedModFolderPath", "gameInstallPath", "gameExecutablePath", "nteLauncherPath",
                         CASE
                             WHEN "order" = 0 THEN rowid
                             ELSE "order"
@@ -319,7 +319,7 @@ export class DatabaseClient {
             ),
         findByGameOrModFolderPath: async (game: string, modFolderPath: string) => {
             const row = this.get<GamePathRow>(
-                `SELECT "game", "modFolderPath", "importer", "linkedModFolderPath", "gameInstallPath", "gameExecutablePath", "order"
+                `SELECT "game", "modFolderPath", "importer", "linkedModFolderPath", "gameInstallPath", "gameExecutablePath", "nteLauncherPath", "order"
                  FROM "game_paths"
                  WHERE "game" = ? OR "modFolderPath" = ? OR "linkedModFolderPath" = ?
                  LIMIT 1`,
@@ -329,7 +329,7 @@ export class DatabaseClient {
         },
         findByModFolderPathOtherGame: async (game: string, modFolderPath: string) => {
             const row = this.get<GamePathRow>(
-                `SELECT "game", "modFolderPath", "importer", "linkedModFolderPath", "gameInstallPath", "gameExecutablePath", "order"
+                `SELECT "game", "modFolderPath", "importer", "linkedModFolderPath", "gameInstallPath", "gameExecutablePath", "nteLauncherPath", "order"
                  FROM "game_paths"
                  WHERE ("modFolderPath" = ? OR "linkedModFolderPath" = ?) AND "game" <> ?
                  LIMIT 1`,
@@ -350,8 +350,8 @@ export class DatabaseClient {
                 )?.maxOrder ?? 0;
 
             this.run(
-                `INSERT INTO "game_paths" ("game", "modFolderPath", "importer", "linkedModFolderPath", "gameInstallPath", "gameExecutablePath", "order")
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                `INSERT INTO "game_paths" ("game", "modFolderPath", "importer", "linkedModFolderPath", "gameInstallPath", "gameExecutablePath", "nteLauncherPath", "order")
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     row.game,
                     row.modFolderPath,
@@ -359,20 +359,22 @@ export class DatabaseClient {
                     row.linkedModFolderPath,
                     row.gameInstallPath,
                     row.gameExecutablePath,
+                    row.nteLauncherPath,
                     maxOrder + 1,
                 ],
             );
         },
         upsert: async (row: GamePathRow) => {
             this.run(
-                `INSERT INTO "game_paths" ("game", "modFolderPath", "importer", "linkedModFolderPath", "gameInstallPath", "gameExecutablePath", "order")
-                 VALUES (?, ?, ?, ?, ?, ?, ?)
+                `INSERT INTO "game_paths" ("game", "modFolderPath", "importer", "linkedModFolderPath", "gameInstallPath", "gameExecutablePath", "nteLauncherPath", "order")
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT("game") DO UPDATE
                  SET "modFolderPath" = excluded."modFolderPath",
                      "importer" = excluded."importer",
                      "linkedModFolderPath" = excluded."linkedModFolderPath",
                      "gameInstallPath" = excluded."gameInstallPath",
                      "gameExecutablePath" = excluded."gameExecutablePath",
+                     "nteLauncherPath" = excluded."nteLauncherPath",
                      "order" = excluded."order"`,
                 [
                     row.game,
@@ -381,6 +383,7 @@ export class DatabaseClient {
                     row.linkedModFolderPath,
                     row.gameInstallPath,
                     row.gameExecutablePath,
+                    row.nteLauncherPath,
                     row.order,
                 ],
             );
@@ -410,9 +413,9 @@ export class DatabaseClient {
                 ],
             );
         },
-        setGameExecutablePath: async (game: string, gameExecutablePath: string) => {
-            this.run(`UPDATE "game_paths" SET "gameExecutablePath" = ? WHERE "game" = ?`, [
-                gameExecutablePath,
+        setNteLauncherPath: async (game: string, nteLauncherPath: string) => {
+            this.run(`UPDATE "game_paths" SET "nteLauncherPath" = ? WHERE "game" = ?`, [
+                nteLauncherPath,
                 game,
             ]);
         },
@@ -875,6 +878,7 @@ export class DatabaseClient {
                 String(APP_SCHEMA_VERSION),
                 new Date().toISOString(),
             );
+            await this.migrateGamePathsNteLauncherPath();
         } catch (error) {
             this.exec(`PRAGMA foreign_keys = ON`);
             throw error;
@@ -943,6 +947,27 @@ export class DatabaseClient {
         }
 
         return [...grouped.values()];
+    }
+
+    private async migrateGamePathsNteLauncherPath() {
+        const migrated = await this.schemaState.get("game_paths_nte_launcher_path");
+        if (migrated?.value === "1") return;
+
+        this.run(
+            `UPDATE "game_paths"
+             SET "nteLauncherPath" = "gameExecutablePath",
+                 "gameExecutablePath" = NULL
+             WHERE "importer" = ?
+               AND "gameExecutablePath" IS NOT NULL
+               AND lower("gameExecutablePath") NOT LIKE ?`,
+            ["NTE", "%htgame.exe"],
+        );
+
+        await this.schemaState.upsert(
+            "game_paths_nte_launcher_path",
+            "1",
+            new Date().toISOString(),
+        );
     }
 
     private reconcileTable(candidate: ReconcileCandidate) {

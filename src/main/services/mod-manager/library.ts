@@ -357,6 +357,7 @@ export class ModLibraryService {
             linkedModFolderPath: null,
             gameInstallPath: null,
             gameExecutablePath: null,
+            nteLauncherPath: null,
             order: existing?.order ?? 0,
         });
     }
@@ -419,6 +420,7 @@ export class ModLibraryService {
                 linkedModFolderPath: isNteImporter(importer) ? linkedModFolderPath : null,
                 gameInstallPath: resolvedGameInstallPath,
                 gameExecutablePath: resolvedGameExecutablePath,
+                nteLauncherPath: null,
             });
         } catch (err) {
             await this.rollbackNteDiskChanges(diskRollbacks);
@@ -490,14 +492,6 @@ export class ModLibraryService {
                 diskRollbacks.push(() =>
                     cleanupNteModFolder(updates.modFolderPath, updates.linkedModFolderPath),
                 );
-                const bootstrapRollback = await ensureNteBootstrapFiles(
-                    this.desktop,
-                    await this.resolveNteBootstrapExecutablePath(updates),
-                    this.broadcastNteBootstrapProgress.bind(this),
-                );
-                if (bootstrapRollback) {
-                    diskRollbacks.push(bootstrapRollback);
-                }
             }
 
             await this.desktop.lib.db.gamePaths.update(game, {
@@ -521,11 +515,11 @@ export class ModLibraryService {
         return await resolveNteInstallPath(installPath);
     }
 
-    public async setGameExecutablePath(game: string, executablePath: string) {
-        const trimmedPath = executablePath.trim();
-        const executableStat = trimmedPath ? await fse.stat(trimmedPath).catch(() => null) : null;
-        if (!executableStat?.isFile()) {
-            throw new Error("INVALID_EXECUTABLE_PATH");
+    public async setNteLauncherPath(game: string, launcherPath: string) {
+        const trimmedPath = launcherPath.trim();
+        const launcherStat = trimmedPath ? await fse.stat(trimmedPath).catch(() => null) : null;
+        if (!launcherStat?.isFile()) {
+            throw new Error("INVALID_LAUNCHER_PATH");
         }
 
         const existingGame = await this.desktop.lib.db.gamePaths.getByGame(game);
@@ -533,28 +527,28 @@ export class ModLibraryService {
             throw new Error(`Game ${game} not found`);
         }
 
-        await this.desktop.lib.db.gamePaths.setGameExecutablePath(game, trimmedPath);
+        await this.desktop.lib.db.gamePaths.setNteLauncherPath(game, trimmedPath);
     }
 
-    public async startNteGame(game: string) {
+    public async startNteLauncher(game: string) {
         const existingGame = await this.desktop.lib.db.gamePaths.getByGame(game);
-        if (!existingGame?.gameExecutablePath) {
-            throw new Error("NTE_EXECUTABLE_PATH_NOT_SET");
+        if (!existingGame?.nteLauncherPath) {
+            throw new Error("NTE_LAUNCHER_PATH_NOT_SET");
         }
 
-        const executablePath = existingGame.gameExecutablePath;
-        const executableStat = await fse.stat(executablePath).catch(() => null);
-        if (!executableStat?.isFile()) {
-            throw new Error("NTE_EXECUTABLE_PATH_NOT_FOUND");
+        const launcherPath = existingGame.nteLauncherPath;
+        const launcherStat = await fse.stat(launcherPath).catch(() => null);
+        if (!launcherStat?.isFile()) {
+            throw new Error("NTE_LAUNCHER_PATH_NOT_FOUND");
         }
 
-        const child = spawn(executablePath, [], {
-            cwd: path.dirname(executablePath),
+        const child = spawn(launcherPath, [], {
+            cwd: path.dirname(launcherPath),
             detached: true,
             stdio: "ignore",
         });
         child.once("error", (error) => {
-            this.desktop.logger.error(error, `Mod:startNteGame:${game}`);
+            this.desktop.logger.error(error, `Mod:startNteLauncher:${game}`);
         });
         child.unref();
     }

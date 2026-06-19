@@ -409,7 +409,7 @@
             "invalid-path": "所选启动器路径无效。",
             "failed": "保存启动器路径失败。"
           },
-          "start-nte-game": {
+          "start-nte-launcher": {
             "not-set": "尚未设置启动器路径。",
             "not-found": "保存的启动器路径已不存在。",
             "failed": "启动启动器失败。"

@@ -85,12 +85,12 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return result.filePaths[0];
     });
 
-    rh("mod:setGameExecutablePath", async (game: string, executablePath: string) => {
-        return await desktop.service.mod.fn.setGameExecutablePath(game, executablePath);
+    rh("mod:setNteLauncherPath", async (game: string, launcherPath: string) => {
+        return await desktop.service.mod.fn.setNteLauncherPath(game, launcherPath);
     });
 
-    rh("mod:startNteGame", async (game: string) => {
-        return await desktop.service.mod.fn.startNteGame(game);
+    rh("mod:startNteLauncher", async (game: string) => {
+        return await desktop.service.mod.fn.startNteLauncher(game);
     });
 
     rh("mod:reorderGames", async (games: string[]) => {

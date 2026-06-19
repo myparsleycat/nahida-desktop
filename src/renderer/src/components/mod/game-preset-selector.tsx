@@ -102,17 +102,19 @@ export const GamePresetSelector = memo(function GamePresetSelector({
 
   const handlePlayClick = async () => {
     if (isNteImporter(selectedImporter)) {
-      if (selectedGameConfig?.gameExecutablePath) {
-        await window.api.invoke("mod:startNteGame", selectedGame).catch((error) => {
+      if (selectedGameConfig?.nteLauncherPath) {
+        await window.api.invoke("mod:startNteLauncher", selectedGame).catch((error) => {
           const errorMessage = error instanceof Error ? error.message : String(error);
 
-          if (errorMessage.includes("NTE_EXECUTABLE_PATH_NOT_FOUND")) {
-            toast.error(t("page.mod.hooks.use-mod-mutations.start-nte-game.not-found"));
+          if (errorMessage.includes("NTE_LAUNCHER_PATH_NOT_FOUND")) {
+            toast.error(t("page.mod.hooks.use-mod-mutations.start-nte-launcher.not-found"));
             setIsNteLaunchDialogOpen(true);
             return;
           }
 
-          toast.error(errorMessage || t("page.mod.hooks.use-mod-mutations.start-nte-game.failed"));
+          toast.error(
+            errorMessage || t("page.mod.hooks.use-mod-mutations.start-nte-launcher.failed"),
+          );
         });
         return;
       }
@@ -242,4 +244,3 @@ export const GamePresetSelector = memo(function GamePresetSelector({
     </div>
   );
 });
-

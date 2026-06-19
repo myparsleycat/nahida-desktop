@@ -416,7 +416,7 @@
             "invalid-path": "선택한 런처 경로가 유효하지 않습니다.",
             "failed": "런처 경로를 저장하지 못했습니다."
           },
-          "start-nte-game": {
+          "start-nte-launcher": {
             "not-set": "설정된 런처 경로가 없습니다.",
             "not-found": "저장된 런처 경로가 더 이상 존재하지 않습니다.",
             "failed": "런처 실행에 실패했습니다."

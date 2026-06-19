@@ -216,6 +216,7 @@ export interface GameConfig {
     linkedModFolderPath: string | null;
     gameInstallPath: string | null;
     gameExecutablePath: string | null;
+    nteLauncherPath: string | null;
     order: number;
 }
 

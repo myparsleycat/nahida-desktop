@@ -23,7 +23,7 @@ export function NteLaunchDialog() {
   const setIsOpen = useModStore((s) => s.setIsNteLaunchDialogOpen);
   const [executablePath, setExecutablePath] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { setGameExecutablePathMutation } = useGameMutations();
+  const { setNteLauncherPathMutation } = useGameMutations();
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
@@ -49,26 +49,26 @@ export function NteLaunchDialog() {
 
     setIsSubmitting(true);
     try {
-      await setGameExecutablePathMutation.mutateAsync({
+      await setNteLauncherPathMutation.mutateAsync({
         game: selectedGame,
-        executablePath: path,
+        launcherPath: path,
       });
-      await window.api.invoke("mod:startNteGame", selectedGame);
+      await window.api.invoke("mod:startNteLauncher", selectedGame);
       handleOpenChange(false);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      if (errorMessage.includes("NTE_EXECUTABLE_PATH_NOT_FOUND")) {
-        toast.error(t("page.mod.hooks.use-mod-mutations.start-nte-game.not-found"));
+      if (errorMessage.includes("NTE_LAUNCHER_PATH_NOT_FOUND")) {
+        toast.error(t("page.mod.hooks.use-mod-mutations.start-nte-launcher.not-found"));
         return;
       }
 
-      if (errorMessage.includes("NTE_EXECUTABLE_PATH_NOT_SET")) {
-        toast.error(t("page.mod.hooks.use-mod-mutations.start-nte-game.not-set"));
+      if (errorMessage.includes("NTE_LAUNCHER_PATH_NOT_SET")) {
+        toast.error(t("page.mod.hooks.use-mod-mutations.start-nte-launcher.not-set"));
         return;
       }
 
-      toast.error(errorMessage || t("page.mod.hooks.use-mod-mutations.start-nte-game.failed"));
+      toast.error(errorMessage || t("page.mod.hooks.use-mod-mutations.start-nte-launcher.failed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -109,4 +109,3 @@ export function NteLaunchDialog() {
     </Dialog>
   );
 }
-

@@ -246,16 +246,16 @@ export function useGameMutations() {
         },
     });
 
-    const setGameExecutablePathMutation = useMutation({
-        mutationFn: ({ game, executablePath }: { game: string; executablePath: string }) =>
-            window.api.invoke("mod:setGameExecutablePath", game, executablePath),
+    const setNteLauncherPathMutation = useMutation({
+        mutationFn: ({ game, launcherPath }: { game: string; launcherPath: string }) =>
+            window.api.invoke("mod:setNteLauncherPath", game, launcherPath),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: ["games"] });
         },
         onError: (error) => {
             const errorMessage = getMutationErrorMessage(error);
 
-            if (errorMessage.includes("INVALID_EXECUTABLE_PATH")) {
+            if (errorMessage.includes("INVALID_LAUNCHER_PATH")) {
                 toast.error(
                     t("page.mod.hooks.use-mod-mutations.set-game-executable-path.invalid-path"),
                 );
@@ -271,7 +271,7 @@ export function useGameMutations() {
         deleteGameMutation,
         updateGameMutation,
         reorderGamesMutation,
-        setGameExecutablePathMutation,
+        setNteLauncherPathMutation,
     };
 }
 

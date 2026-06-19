@@ -436,7 +436,7 @@
             "invalid-path": "The selected launcher path is invalid.",
             "failed": "Failed to save the launcher path."
           },
-          "start-nte-game": {
+          "start-nte-launcher": {
             "not-set": "No launcher path is set for this game.",
             "not-found": "The saved launcher path no longer exists.",
             "failed": "Failed to launch the launcher."
