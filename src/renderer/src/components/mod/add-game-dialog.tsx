@@ -111,7 +111,7 @@ export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGame
           importer,
           customModFolderPath ? resolution.linkedModFolderPath : null,
           resolution.gameRootPath,
-          null,
+          resolution.executablePath,
         );
         return;
       }
