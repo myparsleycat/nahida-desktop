@@ -29,11 +29,13 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "../ui/alert";
+import { NteBootstrapProgressView } from "./nte-bootstrap-progress";
 
 const NO_IMPORTER_VALUE = "__none__";
 
 interface AddGameDialogProps {
   onPickFolder: () => Promise<string | null>;
+  isAddingGame: boolean;
   onAddGame: (
     name: string,
     path: string,
@@ -51,7 +53,7 @@ interface NteResolution {
   linkedModFolderPath: string;
 }
 
-export function AddGameDialog({ onPickFolder, onAddGame }: AddGameDialogProps) {
+export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGameDialogProps) {
   const formId = "add-game-dialog-form";
   const { t } = useTranslation();
   const navi = useNavigate();
@@ -322,6 +324,8 @@ export function AddGameDialog({ onPickFolder, onAddGame }: AddGameDialogProps) {
             />
           )}
 
+          <NteBootstrapProgressView active={isAddingGame && isNteSelected} />
+
           <form.Field
             name="importer"
             children={(field) => (
@@ -377,7 +381,11 @@ export function AddGameDialog({ onPickFolder, onAddGame }: AddGameDialogProps) {
           <form.Subscribe
             selector={(state) => [state.canSubmit, state.isSubmitting]}
             children={([canSubmit, isSubmitting]) => (
-              <Button form={formId} type="submit" disabled={!canSubmit || isSubmitting}>
+              <Button
+                form={formId}
+                type="submit"
+                disabled={!canSubmit || isSubmitting || isAddingGame}
+              >
                 {t("g.add")}
               </Button>
             )}

@@ -54,8 +54,8 @@ export class ModManager {
         updateGame: ModLibraryService["updateGame"];
         reorderGames: ModLibraryService["reorderGames"];
         removeGame: ModLibraryService["removeGame"];
-        setGameExecutablePath: ModLibraryService["setGameExecutablePath"];
-        startNteGame: ModLibraryService["startNteGame"];
+        setNteLauncherPath: ModLibraryService["setNteLauncherPath"];
+        startNteLauncher: ModLibraryService["startNteLauncher"];
         setLastGame: ModLibraryService["setLastGame"];
         setExpandedGroups: ModLibraryService["setExpandedGroups"];
         setManualSubGroup: ModLibraryService["setManualSubGroup"];
@@ -114,8 +114,8 @@ export class ModManager {
             updateGame: this.library.updateGame.bind(this.library),
             reorderGames: this.library.reorderGames.bind(this.library),
             removeGame: this.library.removeGame.bind(this.library),
-            setGameExecutablePath: this.library.setGameExecutablePath.bind(this.library),
-            startNteGame: this.library.startNteGame.bind(this.library),
+            setNteLauncherPath: this.library.setNteLauncherPath.bind(this.library),
+            startNteLauncher: this.library.startNteLauncher.bind(this.library),
             setLastGame: this.library.setLastGame.bind(this.library),
             setExpandedGroups: this.library.setExpandedGroups.bind(this.library),
             setManualSubGroup: this.library.setManualSubGroup.bind(this.library),

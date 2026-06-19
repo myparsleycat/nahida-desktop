@@ -245,6 +245,17 @@
           "nte_custom_mod_folder_description": "선택 사항입니다. 게임 Mods 폴더가 이 폴더에 연결됩니다.",
           "xxmi_path_required": "Importer를 가져오려면 먼저 XXMI 경로를 설정해야 합니다.",
           "open_xxmi_settings": "Importer 설정 열기",
+          "nte_bootstrap_progress": {
+            "checking": "NTE 부트스트랩 파일 준비 중...",
+            "fetching-release": "{{archiveName}} 릴리즈 확인 중...",
+            "downloading": "{{archiveName}} 다운로드 중...",
+            "extracting": "{{archiveName}} 압축 해제 중...",
+            "installing": "부트스트랩 파일 설치 중...",
+            "completed": "NTE 부트스트랩 파일 준비 완료",
+            "failed": "NTE 부트스트랩 파일 준비 실패",
+            "working": "진행 중...",
+            "percent": "{{value}}%"
+          },
           "#": {
             "0": "게임 이름을 입력해주세요",
             "1": "모드 폴더 경로를 선택해주세요"
@@ -405,7 +416,7 @@
             "invalid-path": "선택한 런처 경로가 유효하지 않습니다.",
             "failed": "런처 경로를 저장하지 못했습니다."
           },
-          "start-nte-game": {
+          "start-nte-launcher": {
             "not-set": "설정된 런처 경로가 없습니다.",
             "not-found": "저장된 런처 경로가 더 이상 존재하지 않습니다.",
             "failed": "런처 실행에 실패했습니다."

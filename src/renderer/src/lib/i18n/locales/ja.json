@@ -246,6 +246,17 @@
           "nte_custom_mod_folder_description": "任意です。ゲームの Mods フォルダーがこのフォルダーにリンクされます。",
           "xxmi_path_required": "Importer を読み込むには、先に XXMI パスを設定してください。",
           "open_xxmi_settings": "Importer 設定を開く",
+          "nte_bootstrap_progress": {
+            "checking": "NTE ブートストラップファイルを準備中...",
+            "fetching-release": "{{archiveName}} のリリースを確認中...",
+            "downloading": "{{archiveName}} をダウンロード中...",
+            "extracting": "{{archiveName}} を展開中...",
+            "installing": "ブートストラップファイルをインストール中...",
+            "completed": "NTE ブートストラップファイルの準備が完了しました。",
+            "failed": "NTE ブートストラップファイルの準備に失敗しました。",
+            "working": "処理中...",
+            "percent": "{{value}}%"
+          },
           "#": {
             "0": "ゲーム名を入力してください",
             "1": "MODフォルダーのパスを選択してください"
@@ -399,7 +410,7 @@
             "invalid-path": "選択したランチャーのパスが無効です。",
             "failed": "ランチャーのパスを保存できませんでした。"
           },
-          "start-nte-game": {
+          "start-nte-launcher": {
             "not-set": "設定されたランチャーのパスがありません。",
             "not-found": "保存されたランチャーのパスが存在しません。",
             "failed": "ランチャーの起動に失敗しました。"

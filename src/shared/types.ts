@@ -216,7 +216,24 @@ export interface GameConfig {
     linkedModFolderPath: string | null;
     gameInstallPath: string | null;
     gameExecutablePath: string | null;
+    nteLauncherPath: string | null;
     order: number;
+}
+
+export type NteBootstrapProgressPhase =
+    | "checking"
+    | "fetching-release"
+    | "downloading"
+    | "extracting"
+    | "installing"
+    | "completed"
+    | "failed";
+
+export interface NteBootstrapProgress {
+    phase: NteBootstrapProgressPhase;
+    archiveName?: string;
+    progress: number | null;
+    message?: string;
 }
 
 export type IpcEvents = {
@@ -240,6 +257,7 @@ export type IpcEvents = {
     "mod:update-game": () => void;
     "mod:update-mods": () => void;
     "mod:update-settings": () => void;
+    "mod:nte-bootstrap-progress": (payload: NteBootstrapProgress) => void;
     "drive:update-settings": () => void;
 
     "auth:update": (session: Session | null) => void;

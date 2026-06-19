@@ -266,6 +266,17 @@
           "nte_custom_mod_folder_description": "Optional. The game Mods folder will be linked to this folder.",
           "xxmi_path_required": "Set the XXMI path first to load importers.",
           "open_xxmi_settings": "Open Importer settings",
+          "nte_bootstrap_progress": {
+            "checking": "Preparing NTE bootstrap files...",
+            "fetching-release": "Checking {{archiveName}} release...",
+            "downloading": "Downloading {{archiveName}}...",
+            "extracting": "Extracting {{archiveName}}...",
+            "installing": "Installing bootstrap files...",
+            "completed": "NTE bootstrap files are ready.",
+            "failed": "Failed to prepare NTE bootstrap files.",
+            "working": "Working...",
+            "percent": "{{value}}%"
+          },
           "#": {
             "0": "Please enter a game name",
             "1": "Please select a mod folder path"
@@ -425,7 +436,7 @@
             "invalid-path": "The selected launcher path is invalid.",
             "failed": "Failed to save the launcher path."
           },
-          "start-nte-game": {
+          "start-nte-launcher": {
             "not-set": "No launcher path is set for this game.",
             "not-found": "The saved launcher path no longer exists.",
             "failed": "Failed to launch the launcher."

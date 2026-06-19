@@ -245,6 +245,17 @@
           "nte_custom_mod_folder_description": "可选。游戏的 Mods 文件夹将链接到此文件夹。",
           "xxmi_path_required": "要加载 Importer，请先设置 XXMI 路径。",
           "open_xxmi_settings": "打开 Importer 设置",
+          "nte_bootstrap_progress": {
+            "checking": "正在准备 NTE 引导文件...",
+            "fetching-release": "正在检查 {{archiveName}} 版本...",
+            "downloading": "正在下载 {{archiveName}}...",
+            "extracting": "正在解压 {{archiveName}}...",
+            "installing": "正在安装引导文件...",
+            "completed": "NTE 引导文件已准备就绪。",
+            "failed": "NTE 引导文件准备失败。",
+            "working": "正在处理...",
+            "percent": "{{value}}%"
+          },
           "#": {
             "0": "请输入游戏名称",
             "1": "请选择模组文件夹路径"
@@ -398,7 +409,7 @@
             "invalid-path": "所选启动器路径无效。",
             "failed": "保存启动器路径失败。"
           },
-          "start-nte-game": {
+          "start-nte-launcher": {
             "not-set": "尚未设置启动器路径。",
             "not-found": "保存的启动器路径已不存在。",
             "failed": "启动启动器失败。"
