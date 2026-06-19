@@ -26,6 +26,7 @@ import { ArrowDownIcon, ArrowUpIcon, FolderOpen, Trash2Icon, XIcon } from "lucid
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { NteBootstrapProgressView } from "./nte-bootstrap-progress";
 
 const NO_IMPORTER_VALUE = "__none__";
 
@@ -33,6 +34,7 @@ interface EditGameDialogProps {
   games: GameConfig[];
   enabledImporters: Array<{ key: string }>;
   onPickFolder: () => Promise<string | null>;
+  isUpdatingGame: boolean;
   onUpdateGame: (
     game: string,
     updates: {
@@ -69,6 +71,7 @@ export function EditGameDialog({
   games,
   enabledImporters,
   onPickFolder,
+  isUpdatingGame,
   onUpdateGame,
   onDeleteGameClick,
   onReorderGames,
@@ -123,17 +126,13 @@ export function EditGameDialog({
           editingGame.linkedModFolderPath ??
           editingGame.modFolderPath ??
           path;
-        const installPathChanged =
-          resolution.gameRootPath.trim() !== (editingGame.gameInstallPath ?? "").trim();
 
         onUpdateGame(editingGame.game, {
           modFolderPath: customModFolderPath || linkedModFolderPath,
           importer,
           linkedModFolderPath: customModFolderPath ? linkedModFolderPath : null,
           gameInstallPath: resolution.gameRootPath,
-          gameExecutablePath: installPathChanged
-            ? resolution.executablePath
-            : (editingGame.gameExecutablePath ?? resolution.executablePath),
+          gameExecutablePath: resolution.executablePath,
         });
         return;
       }
@@ -387,6 +386,8 @@ export function EditGameDialog({
             />
           )}
 
+          <NteBootstrapProgressView active={isUpdatingGame && isNteSelected} />
+
           <div className="space-y-2">
             <FieldLabel>{t("page.mod.dialog.edit-game.order_label")}</FieldLabel>
             <div className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2">
@@ -447,7 +448,11 @@ export function EditGameDialog({
           <form.Subscribe
             selector={(state) => [state.canSubmit, state.isSubmitting]}
             children={([canSubmit, isSubmitting]) => (
-              <Button form={formId} type="submit" disabled={!canSubmit || isSubmitting}>
+              <Button
+                form={formId}
+                type="submit"
+                disabled={!canSubmit || isSubmitting || isUpdatingGame}
+              >
                 {t("g.save")}
               </Button>
             )}

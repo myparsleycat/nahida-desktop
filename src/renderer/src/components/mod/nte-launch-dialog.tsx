@@ -1,4 +1,4 @@
-import { Button } from "@renderer/components/ui/button";
+﻿import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
   DialogClose,
@@ -109,3 +109,4 @@ export function NteLaunchDialog() {
     </Dialog>
   );
 }
+

@@ -103,6 +103,11 @@ export function useGameMutations() {
                 return;
             }
 
+            if (errorMessage.includes("NTE_BOOTSTRAP_")) {
+                toast.error(errorMessage);
+                return;
+            }
+
             toast.error(t("page.mod.hooks.use-mod-mutations.add-game-mutation.failed"));
         },
     });
@@ -201,6 +206,11 @@ export function useGameMutations() {
                       ? "page.mod.hooks.use-mod-mutations.add-game-mutation.nte_mods_link_path_occupied"
                       : "page.mod.hooks.use-mod-mutations.add-game-mutation.nte_custom_mod_folder_inside_link_path";
                 toast.error(t(nteErrorKey));
+                return;
+            }
+
+            if (errorMessage.includes("NTE_BOOTSTRAP_")) {
+                toast.error(errorMessage);
                 return;
             }
 

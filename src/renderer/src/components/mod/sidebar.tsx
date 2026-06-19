@@ -249,6 +249,8 @@ export default function ModSidebar({
         games={games}
         onDeleteGameClick={handleDeleteGameClick}
         onPickFolder={handlePickFolder}
+        isAddingGame={addGameMutation.isPending}
+        isUpdatingGame={updateGameMutation.isPending}
         onAddGame={handleAddGame}
         onUpdateGame={handleUpdateGame}
         onReorderGames={handleReorderGames}

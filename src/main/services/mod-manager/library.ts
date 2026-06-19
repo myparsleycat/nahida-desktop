@@ -1,10 +1,10 @@
-import { spawn } from "node:child_process";
+﻿import { spawn } from "node:child_process";
 import path from "node:path";
 import type { GamePathRow } from "@main/internal/db/schema";
 import { getCharactersFolder, getMods } from "@native/mod-manager";
 import { findBestFuzzyMatch } from "@shared/fuzzy-match";
 import { isNteImporter } from "@shared/mod";
-import type { FolderGroup, Preset } from "@shared/types";
+import type { FolderGroup, NteBootstrapProgress, Preset } from "@shared/types";
 import { GAME_MATCH_CASES } from "@shared/xxmi-match";
 import fse from "fs-extra";
 import type { NahidaDesktop } from "../..";
@@ -12,6 +12,7 @@ import {
     cleanupNteModFolder,
     configureNteModFolder,
     deriveNteGameInstallPath,
+    ensureNteBootstrapFiles,
     findNteGameByPath,
     hasNtePathChanges,
     getNteCharacters,
@@ -37,6 +38,10 @@ export class ModLibraryService {
     private manualSubGroupWriteLock = Promise.resolve();
 
     constructor(private readonly desktop: NahidaDesktop) {}
+
+    private broadcastNteBootstrapProgress(payload: NteBootstrapProgress) {
+        this.desktop.ipc.broadcast("mod:nte-bootstrap-progress", payload);
+    }
 
     public async gamePath(game: string): Promise<string | null> {
         const result = await this.desktop.lib.db.gamePaths.getByGame(game);
@@ -387,11 +392,23 @@ export class ModLibraryService {
             throw new Error("DUPLICATE_MOD_FOLDER_PATH");
         }
 
-        if (isNteImporter(importer)) {
-            await configureNteModFolder(modFolderPath, linkedModFolderPath);
-        }
+        const diskRollbacks: Array<() => Promise<void>> = [];
 
         try {
+            if (isNteImporter(importer)) {
+                await configureNteModFolder(modFolderPath, linkedModFolderPath);
+                diskRollbacks.push(() => cleanupNteModFolder(modFolderPath, linkedModFolderPath));
+                await ensureNteBootstrapFiles(
+                    this.desktop,
+                    await this.resolveNteBootstrapExecutablePath({
+                        modFolderPath,
+                        linkedModFolderPath,
+                        gameInstallPath: resolvedGameInstallPath,
+                    }),
+                    this.broadcastNteBootstrapProgress.bind(this),
+                );
+            }
+
             await this.desktop.lib.db.gamePaths.insert({
                 game,
                 modFolderPath,
@@ -401,11 +418,7 @@ export class ModLibraryService {
                 gameExecutablePath: resolvedGameExecutablePath,
             });
         } catch (err) {
-            if (isNteImporter(importer)) {
-                await cleanupNteModFolder(modFolderPath, linkedModFolderPath).catch((error) => {
-                    this.desktop.logger.error(error, `Mod:addGame:rollback:${game}`);
-                });
-            }
+            await this.rollbackNteDiskChanges(diskRollbacks);
             throw err;
         }
     }
@@ -473,6 +486,11 @@ export class ModLibraryService {
                 await configureNteModFolder(updates.modFolderPath, updates.linkedModFolderPath);
                 diskRollbacks.push(() =>
                     cleanupNteModFolder(updates.modFolderPath, updates.linkedModFolderPath),
+                );
+                await ensureNteBootstrapFiles(
+                    this.desktop,
+                    await this.resolveNteBootstrapExecutablePath(updates),
+                    this.broadcastNteBootstrapProgress.bind(this),
                 );
             }
 
@@ -769,6 +787,19 @@ export class ModLibraryService {
         });
     }
 
+    private async resolveNteBootstrapExecutablePath(
+        game: Pick<GamePathRow, "modFolderPath" | "linkedModFolderPath" | "gameInstallPath">,
+    ) {
+        const resolution = await resolveNteInstallPath(
+            game.gameInstallPath ??
+                deriveNteGameInstallPath(game.linkedModFolderPath ?? game.modFolderPath),
+        );
+        if (!resolution) {
+            throw new Error("NTE_EXECUTABLE_PATH_NOT_FOUND");
+        }
+        return resolution.executablePath;
+    }
+
     private async rollbackNteDiskChanges(rollbacks: Array<() => Promise<void>>) {
         for (const rollback of rollbacks.toReversed()) {
             await rollback().catch((error) => {
@@ -777,3 +808,4 @@ export class ModLibraryService {
         }
     }
 }
+

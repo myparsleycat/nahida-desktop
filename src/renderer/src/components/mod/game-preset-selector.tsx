@@ -1,4 +1,4 @@
-import { Button } from "@renderer/components/ui/button";
+﻿import { Button } from "@renderer/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -27,6 +27,8 @@ interface GamePresetSelectorProps {
   games: GameConfig[];
   onDeleteGameClick: (game: string) => void;
   onPickFolder: () => Promise<string | null>;
+  isAddingGame: boolean;
+  isUpdatingGame: boolean;
   onAddGame: (
     name: string,
     path: string,
@@ -52,6 +54,8 @@ export const GamePresetSelector = memo(function GamePresetSelector({
   games,
   onDeleteGameClick,
   onPickFolder,
+  isAddingGame,
+  isUpdatingGame,
   onAddGame,
   onUpdateGame,
   onReorderGames,
@@ -180,7 +184,11 @@ export const GamePresetSelector = memo(function GamePresetSelector({
             </SelectContent>
           </Select>
 
-          <AddGameDialog onPickFolder={onPickFolder} onAddGame={onAddGame} />
+          <AddGameDialog
+            isAddingGame={isAddingGame}
+            onPickFolder={onPickFolder}
+            onAddGame={onAddGame}
+          />
         </div>
       )}
 
@@ -223,6 +231,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
       <EditGameDialog
         games={games}
         enabledImporters={enabledImporters}
+        isUpdatingGame={isUpdatingGame}
         onPickFolder={onPickFolder}
         onUpdateGame={onUpdateGame}
         onDeleteGameClick={onDeleteGameClick}
@@ -233,3 +242,4 @@ export const GamePresetSelector = memo(function GamePresetSelector({
     </div>
   );
 });
+
