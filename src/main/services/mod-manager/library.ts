@@ -398,7 +398,7 @@ export class ModLibraryService {
             if (isNteImporter(importer)) {
                 await configureNteModFolder(modFolderPath, linkedModFolderPath);
                 diskRollbacks.push(() => cleanupNteModFolder(modFolderPath, linkedModFolderPath));
-                await ensureNteBootstrapFiles(
+                const bootstrapRollback = await ensureNteBootstrapFiles(
                     this.desktop,
                     await this.resolveNteBootstrapExecutablePath({
                         modFolderPath,
@@ -407,6 +407,9 @@ export class ModLibraryService {
                     }),
                     this.broadcastNteBootstrapProgress.bind(this),
                 );
+                if (bootstrapRollback) {
+                    diskRollbacks.push(bootstrapRollback);
+                }
             }
 
             await this.desktop.lib.db.gamePaths.insert({
@@ -487,11 +490,14 @@ export class ModLibraryService {
                 diskRollbacks.push(() =>
                     cleanupNteModFolder(updates.modFolderPath, updates.linkedModFolderPath),
                 );
-                await ensureNteBootstrapFiles(
+                const bootstrapRollback = await ensureNteBootstrapFiles(
                     this.desktop,
                     await this.resolveNteBootstrapExecutablePath(updates),
                     this.broadcastNteBootstrapProgress.bind(this),
                 );
+                if (bootstrapRollback) {
+                    diskRollbacks.push(bootstrapRollback);
+                }
             }
 
             await this.desktop.lib.db.gamePaths.update(game, {
@@ -808,4 +814,3 @@ export class ModLibraryService {
         }
     }
 }
-

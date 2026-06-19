@@ -278,7 +278,7 @@ export async function ensureNteBootstrapFiles(
     desktop: NahidaDesktop,
     executablePath: string,
     onProgress: (payload: NteBootstrapProgress) => void,
-): Promise<void> {
+): Promise<(() => Promise<void>) | undefined> {
     const targetDir = path.dirname(executablePath);
     if (!(await fse.pathExists(targetDir))) {
         throw new Error("NTE_BOOTSTRAP_INVALID_TARGET_DIR");
@@ -297,9 +297,10 @@ export async function ensureNteBootstrapFiles(
 
     if (await areBootstrapFilesInstalled(targetDir)) {
         onProgress({ phase: "completed", progress: 100 });
-        return;
+        return undefined;
     }
 
+    const installTracker = createBootstrapInstallTracker();
     const tempDir = path.join(os.tmpdir(), `nte-bootstrap-${process.pid}-${nanoid(8)}`);
     await fse.ensureDir(tempDir);
 
@@ -316,24 +317,78 @@ export async function ensureNteBootstrapFiles(
             tempDir,
             onProgress,
         );
-        await copyFilesFromExtracted(tempDir, targetDir, NTE_SIG_BYPASSER_FILES);
+        await copyFilesFromExtracted(tempDir, targetDir, NTE_SIG_BYPASSER_FILES, installTracker);
         onProgress({ phase: "installing", progress: 92 });
 
         const archLabel = arch === "x64" ? "winhttp-x64" : "winhttp-Win32";
         const loaderZipName = `${archLabel}.zip`;
         onProgress({ phase: "fetching-release", progress: 93, archiveName: loaderZipName });
         await downloadAndExtract(desktop, asiLoaderUrl, loaderZipName, tempDir, onProgress);
-        await copyFilesFromExtracted(tempDir, targetDir, [NTE_ASI_LOADER_FILE]);
-        await copySha512FilesFromExtracted(tempDir, targetDir);
+        await copyFilesFromExtracted(tempDir, targetDir, [NTE_ASI_LOADER_FILE], installTracker);
+        await copySha512FilesFromExtracted(tempDir, targetDir, installTracker);
 
         onProgress({ phase: "completed", progress: 100 });
+        return installTracker.hasWrittenFiles() ? installTracker.rollback : undefined;
     } catch (error) {
+        if (installTracker.hasWrittenFiles()) {
+            await installTracker.rollback();
+        }
         const message = error instanceof Error ? error.message : String(error);
         onProgress({ phase: "failed", progress: null, message });
         throw error;
     } finally {
         await fse.remove(tempDir).catch(() => {});
     }
+}
+
+function createBootstrapInstallTracker() {
+    const rollbackDir = path.join(
+        os.tmpdir(),
+        `nte-bootstrap-rollback-${process.pid}-${nanoid(8)}`,
+    );
+    const snapshots = new Map<string, { existed: boolean; backup?: string }>();
+    const writtenFiles: string[] = [];
+
+    const trackBeforeWrite = async (filePath: string) => {
+        if (snapshots.has(filePath)) return;
+
+        const existed = await fse.pathExists(filePath);
+        if (!existed) {
+            snapshots.set(filePath, { existed: false });
+            return;
+        }
+
+        const backupPath = path.join(rollbackDir, `${nanoid(6)}-${path.basename(filePath)}`);
+        await fse.ensureDir(rollbackDir);
+        await fse.copy(filePath, backupPath);
+        snapshots.set(filePath, { existed: true, backup: backupPath });
+    };
+
+    const copyFile = async (src: string, dest: string) => {
+        await trackBeforeWrite(dest);
+        await fse.copy(src, dest, { overwrite: true });
+        if (!writtenFiles.includes(dest)) {
+            writtenFiles.push(dest);
+        }
+    };
+
+    const rollback = async () => {
+        for (const filePath of writtenFiles.toReversed()) {
+            const snapshot = snapshots.get(filePath);
+            if (snapshot?.existed && snapshot.backup) {
+                await fse.copy(snapshot.backup, filePath);
+                continue;
+            }
+            await fse.remove(filePath).catch(() => {});
+        }
+        await fse.remove(rollbackDir).catch(() => {});
+    };
+
+    return {
+        copyFile,
+        rollback,
+        hasWrittenFiles: () => writtenFiles.length > 0,
+    };
 }
 
 async function areBootstrapFilesInstalled(targetDir: string): Promise<boolean> {
@@ -376,6 +431,7 @@ async function copyFilesFromExtracted(
     tempDir: string,
     targetDir: string,
     fileNames: readonly string[],
+    installTracker: ReturnType<typeof createBootstrapInstallTracker>,
 ): Promise<void> {
     const candidates = await collectFilesRecursively(tempDir);
     for (const fileName of fileNames) {
@@ -385,17 +441,21 @@ async function copyFilesFromExtracted(
         if (!match) {
             throw new Error(`NTE_BOOTSTRAP_FILE_MISSING:${fileName}`);
         }
-        await fse.copy(match, path.join(targetDir, fileName), { overwrite: true });
+        await installTracker.copyFile(match, path.join(targetDir, fileName));
     }
 }
 
-async function copySha512FilesFromExtracted(tempDir: string, targetDir: string): Promise<void> {
+async function copySha512FilesFromExtracted(
+    tempDir: string,
+    targetDir: string,
+    installTracker: ReturnType<typeof createBootstrapInstallTracker>,
+): Promise<void> {
     const candidates = await collectFilesRecursively(tempDir);
     const sha512Files = candidates.filter((candidate) =>
         /\.sha512$/i.test(path.basename(candidate)),
     );
     for (const file of sha512Files) {
-        await fse.copy(file, path.join(targetDir, path.basename(file)), { overwrite: true });
+        await installTracker.copyFile(file, path.join(targetDir, path.basename(file)));
     }
 }
 
