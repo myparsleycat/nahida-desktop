@@ -19,6 +19,15 @@
     "later": "稍后"
   },
   "page": {
+    "root": {
+      "error": {
+        "title": "出现问题",
+        "description": "加载页面时发生意外错误。",
+        "details": "错误详情",
+        "back": "返回",
+        "refresh": "刷新"
+      }
+    },
     "transfer": {
       "title": "传输",
       "stats_label": {

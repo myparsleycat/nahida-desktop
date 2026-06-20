@@ -1,6 +1,8 @@
 import { PathSelectorDialog } from "@renderer/components/path-selector-dialog";
 import { RootProvider } from "@renderer/components/root-provider";
 import { Sidebar } from "@renderer/components/sidebar";
+import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
+import { Button } from "@renderer/components/ui/button";
 import { Toaster } from "@renderer/components/ui/sonner";
 import { UpdateAlertDialog } from "@renderer/components/update-alert-dialog";
 import { useGlobalEvents } from "@renderer/hooks/use-global-events";
@@ -10,7 +12,14 @@ import { getSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
 import { useGlobalStore } from "@renderer/store/global";
 import type { QueryClient } from "@tanstack/react-query";
-import { createRootRouteWithContext, Outlet, useLocation } from "@tanstack/react-router";
+import {
+  createRootRouteWithContext,
+  ErrorComponentProps,
+  Outlet,
+  useLocation,
+  useRouter,
+} from "@tanstack/react-router";
+import { ArrowLeftIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -170,6 +179,50 @@ function PendingComponent() {
   );
 }
 
+function ErrorComponent({ error }: ErrorComponentProps) {
+  const { t } = useTranslation();
+  const { Titlebar, screenHeight, titlebarStyle } = useTitlebar();
+  const router = useRouter();
+
+  return (
+    <>
+      <Titlebar />
+      {titlebarStyle === "modern" && <div className="h-8 shrink-0" />}
+      <div className={cn("flex w-screen items-center justify-center p-6", screenHeight)}>
+        <div className="w-full max-w-md space-y-4">
+          <Alert variant="destructive">
+            <TriangleAlertIcon />
+            <AlertTitle>{t("page.root.error.title")}</AlertTitle>
+            <AlertDescription>{t("page.root.error.description")}</AlertDescription>
+          </Alert>
+
+          {error?.message ? (
+            <details className="rounded-lg border bg-muted/40 px-3 py-2 text-xs">
+              <summary className="cursor-pointer select-none font-medium text-muted-foreground">
+                {t("page.root.error.details")}
+              </summary>
+              <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap wrap-break-word font-mono text-destructive">
+                {error.message}
+              </pre>
+            </details>
+          ) : null}
+
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => router.history.back()}>
+              <ArrowLeftIcon />
+              {t("page.root.error.back")}
+            </Button>
+            <Button variant="outline" onClickPromise={() => router.invalidate()}>
+              <RefreshCwIcon />
+              {t("page.root.error.refresh")}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
 }>()({
@@ -182,4 +235,5 @@ export const Route = createRootRouteWithContext<{
   },
   notFoundComponent: NotFoundComponent,
   pendingComponent: PendingComponent,
+  errorComponent: ErrorComponent,
 });

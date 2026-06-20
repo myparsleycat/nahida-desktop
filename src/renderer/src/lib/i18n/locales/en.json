@@ -19,6 +19,15 @@
     "later": "Later"
   },
   "page": {
+    "root": {
+      "error": {
+        "title": "Something went wrong",
+        "description": "An unexpected error occurred while loading this page.",
+        "details": "Error details",
+        "back": "Go back",
+        "refresh": "Refresh"
+      }
+    },
     "transfer": {
       "title": "Transfer",
       "stats_label": {

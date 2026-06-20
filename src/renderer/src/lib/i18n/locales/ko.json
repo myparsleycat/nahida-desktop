@@ -19,6 +19,15 @@
     "later": "나중에"
   },
   "page": {
+    "root": {
+      "error": {
+        "title": "문제가 발생했습니다",
+        "description": "페이지를 불러오는 중 예기치 않은 오류가 발생했습니다.",
+        "details": "오류 상세",
+        "back": "이전으로",
+        "refresh": "새로고침"
+      }
+    },
     "transfer": {
       "title": "전송",
       "stats_label": {
