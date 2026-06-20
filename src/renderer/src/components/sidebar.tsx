@@ -10,7 +10,6 @@ import {
   BananaIcon,
   BookOpenIcon,
   BugIcon,
-  DatabaseBackupIcon,
   GamepadIcon,
   HardDriveIcon,
   SettingsIcon,
@@ -62,7 +61,6 @@ export function Sidebar({ className }: { className?: string }) {
   const isDrivePage = pathname.startsWith("/drive/drive");
   const isSharePage = pathname.startsWith("/drive/share");
   const isModPage = pathname.startsWith("/mod");
-  const isBackupPage = pathname.startsWith("/backup");
   const isToolsPage = pathname.startsWith("/tools");
   const isGameBananaPage = pathname.startsWith("/gamebanana");
   const isSettingPage = pathname.startsWith("/setting");
@@ -182,28 +180,6 @@ export function Sidebar({ className }: { className?: string }) {
               {t("page.mod.title")}
             </TooltipContent>
           </Tooltip>
-
-          {appStatus?.isDev && (
-            <Tooltip disableHoverableContent={true}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-lg"
-                  className={getNavButtonClassName(isBackupPage)}
-                  aria-current={isBackupPage ? "page" : undefined}
-                  onPointerDown={handlePointerDown}
-                  onClick={() => {
-                    navi({ to: "/backup" });
-                  }}
-                >
-                  <DatabaseBackupIcon className={cn(iconSize)} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right" hideWhenDetached={true}>
-                {t("page.backup.title")}
-              </TooltipContent>
-            </Tooltip>
-          )}
 
           <Tooltip disableHoverableContent={true}>
             <TooltipTrigger asChild>
