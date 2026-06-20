@@ -38,11 +38,15 @@ Nahida Desktop is a desktop application that provides a unified interface for ma
 - Launch games directly from Nahida Desktop via XXMI Launcher
 - Built-in d3d11.dll build functionality
 
-### ☁️ Cloud Drive & File Transfer
+### Cloud Drive & File Transfer
 
 - Upload and download files to/from your Nahida Drive
 - Multi-threaded uploads with configurable concurrency (up to 16 threads)gurable)
 - Download directly from GameBanana and nahida.live into character folders registered in the mod manager through Nahida Desktop
+
+### Wuwa Mod Fixer
+
+- One-click install, update, and mod fixing with Wuwa Mod Fixer directly from within the mod manager.
 
 ## Download
 
@@ -58,6 +62,10 @@ Yes. You can use the mod manager and tools, as well as download from the Nahida 
 ### Installation does not proceed
 
 Windows Defender and some antivirus programs may occasionally block the installer. Try adding the installer as an exception or temporarily disabling real-time protection, then try again.
+
+## Credits
+
+- [Wuwa Mod Fixer](https://github.com/Moonholder/Wuwa_Mod_Fixer) by [Moonholder](https://github.com/Moonholder) — used to fix Wuthering Waves mods
 
 ## License
 
