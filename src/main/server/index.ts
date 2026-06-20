@@ -102,7 +102,7 @@ app.get(
                         downloadStatus = await desktop.service.drive.fn.startDownload({
                             id,
                             link,
-                            suggestedName,
+                            suggestedName: suggestedName ?? data?.root.name,
                             data,
                         });
                     } else if (decoded.type === "hui") {
