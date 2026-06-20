@@ -14,3 +14,4 @@ native/extractor/*.node
 
 *.gen.ts
 plans
+release_note.md
