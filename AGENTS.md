@@ -116,3 +116,81 @@ function requireConfig(input: unknown) {
 ## Formatting
 
 - After modifying files, run pnpm fmt -- file/to/path file/to/path2 to apply formatting.
+
+## Git Revert
+
+When reverting multiple commits, revert them one at a time starting from the most recent (newest first) to avoid conflicts. Use `--no-commit` for all but the last, then commit once.
+
+## Commit
+
+Commit messages must follow the Conventional Commits format.
+
+```txt
+<type>[optional scope]: <description>
+```
+
+Do not use a `body` or `footer`.
+
+### Type
+
+The allowed `type` values are:
+
+```txt
+feat
+fix
+docs
+style
+refactor
+perf
+test
+build
+ci
+chore
+revert
+```
+
+The main `type` values are defined as follows:
+
+| Type       | Description                                 |
+| ---------- | ------------------------------------------- |
+| `feat`     | Adds a user-facing feature                  |
+| `fix`      | Fixes a user-facing bug                     |
+| `docs`     | Documentation-only changes                  |
+| `refactor` | Code restructuring without behavior changes |
+| `test`     | Adds or updates tests                       |
+| `chore`    | Other maintenance tasks                     |
+
+### Scope
+
+Add a `scope` when it helps clarify the affected area of the change.
+
+```txt
+feat(auth): add login form
+fix(api): handle empty response
+docs(readme): update setup guide
+```
+
+### Description
+
+The `description` should briefly and clearly describe the change.
+
+```txt
+feat: add user profile page
+fix(auth): prevent expired token login
+refactor(store): split user state module
+test(login): add invalid password case
+chore: update dependencies
+```
+
+### Examples
+
+```txt
+feat: add dark mode
+feat(auth): add OAuth login
+fix: handle null user
+fix(modal): prevent close button overlap
+docs: update README
+refactor(api): simplify user service
+test: add user service tests
+chore: update eslint config
+```
