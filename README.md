@@ -41,7 +41,7 @@ Nahida Desktop is a desktop application that provides a unified interface for ma
 ### Cloud Drive & File Transfer
 
 - Upload and download files to/from your Nahida Drive
-- Multi-threaded uploads with configurable concurrency (up to 16 threads)gurable)
+- Multi-threaded uploads with configurable concurrency (up to 16 threads)
 - Download directly from GameBanana and nahida.live into character folders registered in the mod manager through Nahida Desktop
 
 ### Wuwa Mod Fixer
