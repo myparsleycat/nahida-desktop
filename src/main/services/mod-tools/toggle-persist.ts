@@ -37,7 +37,9 @@ export class TogglePersist {
     private cachedD3dxUserIni: Map<string, Record<string, string>> = new Map();
     private persistLogs: string[] = [];
     private persistUpdateDebouncers: Map<string, () => void> = new Map();
-    private persistFileUpdateLocks: Map<string, Promise<void>> = new Map();
+    private persistFileUpdateLocks: Map<string, Promise<unknown>> = new Map();
+    private d3dxUserIniChangeLocks: Map<string, Promise<void>> = new Map();
+    private persistGeneration = 0;
     private pendingPersistUpdates: Map<
         string,
         { targetIniPath: string; updates: Map<string, string> }
@@ -46,16 +48,25 @@ export class TogglePersist {
     constructor(private readonly desktop: NahidaDesktop) {}
 
     public async startPersistWatcher() {
-        if (!this.desktop.service.xxmi) return;
+        if (!this.desktop.service.xxmi) {
+            await this.stopPersistWatcher();
+            return;
+        }
+
+        const enabled = await this.desktop.setting.xxmi.getPersistToggles();
+        if (!enabled) {
+            await this.stopPersistWatcher();
+            return;
+        }
+
         const xxmiPath = await this.desktop.service.xxmi.getXXMIPath();
         const xxmiConfig = this.desktop.service.xxmi.getXXMIConfig();
 
+        await this.stopPersistWatcher();
+
         if (!xxmiPath || !xxmiConfig) return;
 
-        const enabled = await this.desktop.setting.xxmi.getPersistToggles();
-        if (!enabled) return;
-
-        await this.stopPersistWatcher();
+        const generation = ++this.persistGeneration;
 
         const importers = this.desktop.service.xxmi.getEnabledImporters();
         for (const importer of importers) {
@@ -67,9 +78,9 @@ export class TogglePersist {
                 const watcherId = await this.desktop.lib.watcher.create(
                     d3dxPath,
                     { compareContents: true },
-                    async (eventName, changedPath) => {
+                    (eventName, changedPath) => {
                         if (eventName === "modify") {
-                            await this.handleD3dxUserIniChange(importer, changedPath);
+                            this.queueD3dxUserIniChange(importer, changedPath, generation);
                         }
                     },
                 );
@@ -80,6 +91,7 @@ export class TogglePersist {
     }
 
     public async stopPersistWatcher() {
+        this.persistGeneration++;
         const watcherCount = this.persistWatchers.length;
         for (const id of this.persistWatchers) {
             await this.desktop.lib.watcher.remove(id);
@@ -87,7 +99,7 @@ export class TogglePersist {
         this.persistWatchers = [];
         this.cachedD3dxUserIni.clear();
         this.persistUpdateDebouncers.clear();
-        this.persistFileUpdateLocks.clear();
+        this.d3dxUserIniChangeLocks.clear();
         this.pendingPersistUpdates.clear();
         if (watcherCount > 0) {
             this.logInfo(`Stopped persist watcher (${watcherCount})`);
@@ -112,7 +124,9 @@ export class TogglePersist {
             return { updatedVariables: [] };
         }
 
-        const updatedVariables = await this.applyPersistUpdates(targetIniPath, updates);
+        const updatedVariables = await this.withPersistFileLock(targetIniPath, () =>
+            this.applyPersistUpdates(targetIniPath, updates),
+        );
         return { updatedVariables };
     }
 
@@ -126,7 +140,7 @@ export class TogglePersist {
             if (!trimmed || trimmed.startsWith(";")) continue;
 
             if (trimmed.startsWith("[")) {
-                inConstants = trimmed === "[Constants]";
+                inConstants = /^\[Constants\]$/i.test(trimmed);
                 continue;
             }
 
@@ -142,9 +156,37 @@ export class TogglePersist {
         return result;
     }
 
+    private queueD3dxUserIniChange(
+        importer: { key: string; importerFolder: string },
+        iniPath: string,
+        generation: number,
+    ) {
+        const lockKey = `${importer.key}:${iniPath.toLowerCase()}`;
+        const previous = this.d3dxUserIniChangeLocks.get(lockKey) ?? Promise.resolve();
+        const next = previous
+            .catch(() => {})
+            .then(async () => {
+                if (!this.isActivePersistGeneration(generation)) return;
+                await this.handleD3dxUserIniChange(importer, iniPath, generation);
+            });
+
+        this.d3dxUserIniChangeLocks.set(lockKey, next);
+
+        void next
+            .catch((error) => {
+                this.logError(`Error handling queued d3dx_user.ini change: ${String(error)}`);
+            })
+            .finally(() => {
+                if (this.d3dxUserIniChangeLocks.get(lockKey) === next) {
+                    this.d3dxUserIniChangeLocks.delete(lockKey);
+                }
+            });
+    }
+
     private async handleD3dxUserIniChange(
         importer: { key: string; importerFolder: string },
         iniPath: string,
+        generation: number,
     ) {
         try {
             const content = await retry(
@@ -161,33 +203,65 @@ export class TogglePersist {
                 },
             );
 
+            if (!this.isActivePersistGeneration(generation)) return;
+
             const newParsed = this.parseD3dxUserIni(content);
             const oldParsed = this.cachedD3dxUserIni.get(importer.key) || {};
 
             for (const [key, newValue] of Object.entries(newParsed)) {
+                if (!this.isActivePersistGeneration(generation)) return;
+
                 const oldValue = oldParsed[key];
                 if (newValue !== oldValue) {
-                    const lastSlashIdx = key.lastIndexOf("\\");
-                    if (lastSlashIdx > 1) {
-                        // 1 because key starts with "$\"
-                        const relIniPath = key.substring(2, lastSlashIdx);
-                        const varName = key.substring(lastSlashIdx + 1);
-
-                        const targetIniPath = path.join(importer.importerFolder, relIniPath);
-                        if (await fse.pathExists(targetIniPath)) {
-                            this.queuePersistUpdate(targetIniPath, varName, newValue);
-                        }
+                    const target = await this.resolvePersistTarget(importer.importerFolder, key);
+                    if (target) {
+                        this.queuePersistUpdate(
+                            target.targetIniPath,
+                            target.varName,
+                            newValue,
+                            generation,
+                        );
                     }
                 }
             }
 
+            if (!this.isActivePersistGeneration(generation)) return;
             this.cachedD3dxUserIni.set(importer.key, newParsed);
         } catch (error) {
-            this.logError(`Error handling d3dx_user.ini change: ${error}`);
+            this.logError(`Error handling d3dx_user.ini change: ${String(error)}`);
         }
     }
 
-    private queuePersistUpdate(targetIniPath: string, varName: string, newValue: string) {
+    private async resolvePersistTarget(importerFolder: string, key: string) {
+        const match = key.match(/^\$\\(.+\.ini)\\([^\\]+)$/i);
+        if (!match) return null;
+
+        const importerRoot = path.resolve(importerFolder);
+        const targetIniPath = path.resolve(importerRoot, match[1]);
+        const relativeTargetPath = path.relative(importerRoot, targetIniPath);
+
+        if (
+            relativeTargetPath === ".." ||
+            relativeTargetPath.startsWith(`..${path.sep}`) ||
+            path.isAbsolute(relativeTargetPath)
+        ) {
+            return null;
+        }
+
+        const stat = await fse.stat(targetIniPath).catch(() => null);
+        if (!stat?.isFile()) return null;
+
+        return { targetIniPath, varName: match[2] };
+    }
+
+    private queuePersistUpdate(
+        targetIniPath: string,
+        varName: string,
+        newValue: string,
+        generation: number,
+    ) {
+        if (!this.isActivePersistGeneration(generation)) return;
+
         const fileKey = targetIniPath.toLowerCase();
         const varKey = varName.toLowerCase();
         let pending = this.pendingPersistUpdates.get(fileKey);
@@ -199,11 +273,18 @@ export class TogglePersist {
 
         let debounced = this.persistUpdateDebouncers.get(fileKey);
         if (!debounced) {
-            debounced = debounce(async () => {
+            debounced = debounce(() => {
+                if (!this.isActivePersistGeneration(generation)) return;
+
                 const pending = this.pendingPersistUpdates.get(fileKey);
                 if (!pending) return;
                 this.pendingPersistUpdates.delete(fileKey);
-                await this.enqueuePersistFileUpdate(pending.targetIniPath, pending.updates);
+
+                void this.enqueuePersistFileUpdate(
+                    pending.targetIniPath,
+                    pending.updates,
+                    generation,
+                );
             }, 200);
             this.persistUpdateDebouncers.set(fileKey, debounced);
         }
@@ -211,18 +292,25 @@ export class TogglePersist {
         debounced();
     }
 
-    private async enqueuePersistFileUpdate(targetIniPath: string, updates: Map<string, string>) {
+    private async enqueuePersistFileUpdate(
+        targetIniPath: string,
+        updates: Map<string, string>,
+        generation: number,
+    ) {
+        await this.withPersistFileLock(targetIniPath, async () => {
+            if (!this.isActivePersistGeneration(generation)) return [];
+            return await this.updateModIniPersist(targetIniPath, updates, generation);
+        });
+    }
+
+    private async withPersistFileLock<T>(targetIniPath: string, work: () => Promise<T>) {
         const lockKey = targetIniPath.toLowerCase();
         const previous = this.persistFileUpdateLocks.get(lockKey) ?? Promise.resolve();
-        const next = previous
-            .catch(() => {})
-            .then(async () => {
-                await this.updateModIniPersist(targetIniPath, updates);
-            });
+        const next = previous.catch(() => {}).then(work);
         this.persistFileUpdateLocks.set(lockKey, next);
 
         try {
-            await next;
+            return await next;
         } finally {
             if (this.persistFileUpdateLocks.get(lockKey) === next) {
                 this.persistFileUpdateLocks.delete(lockKey);
@@ -233,9 +321,10 @@ export class TogglePersist {
     private async updateModIniPersist(
         targetIniPath: string,
         updates: Map<string, string>,
+        generation: number,
     ): Promise<string[]> {
         try {
-            const updatedVars = await this.applyPersistUpdates(targetIniPath, updates);
+            const updatedVars = await this.applyPersistUpdates(targetIniPath, updates, generation);
 
             if (updatedVars.length > 0) {
                 const summary =
@@ -249,7 +338,7 @@ export class TogglePersist {
 
             return updatedVars;
         } catch (error) {
-            this.logError(`Error updating mod ini ${targetIniPath}: ${error}`);
+            this.logError(`Error updating mod ini ${targetIniPath}: ${String(error)}`);
             return [];
         }
     }
@@ -257,7 +346,10 @@ export class TogglePersist {
     private async applyPersistUpdates(
         targetIniPath: string,
         updates: Map<string, string>,
+        generation?: number,
     ): Promise<string[]> {
+        if (!this.isActivePersistGeneration(generation)) return [];
+
         const content = await fse.readFile(targetIniPath, "utf-8");
         const lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
         const lines = content.split(/\r?\n/);
@@ -272,7 +364,7 @@ export class TogglePersist {
         for (let i = 0; i < lines.length; i++) {
             const trimmed = lines[i].trim();
             if (trimmed.startsWith("[")) {
-                inConstants = trimmed === "[Constants]";
+                inConstants = /^\[Constants\]$/i.test(trimmed);
                 continue;
             }
 
@@ -285,19 +377,45 @@ export class TogglePersist {
                 if (nextValue === undefined) continue;
 
                 const currentValue = match[2].trim();
-                if (currentValue === nextValue.trim()) continue;
+                const trimmedNextValue = nextValue.trim();
+                if (currentValue === trimmedNextValue) continue;
 
-                lines[i] = `global persist $${existingVarName} = ${nextValue}`;
+                lines[i] = `global persist $${existingVarName} = ${trimmedNextValue}`;
                 updatedVars.push(existingVarName);
                 modified = true;
             }
         }
 
         if (modified) {
-            await fse.writeFile(targetIniPath, lines.join(lineEnding), "utf-8");
+            const written = await this.writeFileAtomic(
+                targetIniPath,
+                lines.join(lineEnding),
+                generation,
+            );
+            if (!written) return [];
         }
 
         return updatedVars;
+    }
+
+    private async writeFileAtomic(targetIniPath: string, content: string, generation?: number) {
+        const tempPath = path.join(
+            path.dirname(targetIniPath),
+            `.${path.basename(targetIniPath)}.${process.pid}.${Date.now()}.tmp`,
+        );
+
+        try {
+            await fse.writeFile(tempPath, content, "utf-8");
+            if (!this.isActivePersistGeneration(generation)) return false;
+            await fse.rename(tempPath, targetIniPath);
+            return true;
+        } finally {
+            await fse.remove(tempPath).catch(() => {});
+        }
+    }
+
+    private isActivePersistGeneration(generation?: number) {
+        return generation === undefined || this.persistGeneration === generation;
     }
 
     private isAnimationPersistVariable(lines: string[], varName: string): boolean {
