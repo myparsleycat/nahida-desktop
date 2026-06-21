@@ -79,16 +79,16 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   const isGridLayout = layout === "grid";
 
   const ref = useRef<HTMLButtonElement>(null);
-  const isInitialMount = useRef(true);
+  const lastScrolledPathRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (isSelected && ref.current && isInitialMount.current) {
+    if (isSelected && ref.current && lastScrolledPathRef.current !== group.path) {
+      lastScrolledPathRef.current = group.path;
       requestAnimationFrame(() => {
         ref.current?.scrollIntoView({ behavior: "auto", block: "center" });
       });
     }
-    isInitialMount.current = false;
-  }, [isSelected]);
+  }, [isSelected, group.path]);
 
   useEffect(() => {
     if (ref.current) {

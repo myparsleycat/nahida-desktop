@@ -19,6 +19,15 @@
     "later": "後で"
   },
   "page": {
+    "root": {
+      "error": {
+        "title": "問題が発生しました",
+        "description": "ページの読み込み中に予期しないエラーが発生しました。",
+        "details": "エラー詳細",
+        "back": "戻る",
+        "refresh": "更新"
+      }
+    },
     "transfer": {
       "title": "転送",
       "stats_label": {

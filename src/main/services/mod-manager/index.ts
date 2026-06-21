@@ -1,6 +1,5 @@
 import type { ResolvedArchiveExtractPathMode } from "@shared/mod";
 import type { NahidaDesktop } from "../..";
-import { ModF10Service } from "./f10";
 import { ModImportsService } from "./imports";
 import { ModIniService } from "./ini";
 import { ModLibraryService } from "./library";
@@ -17,7 +16,6 @@ export class ModManager {
     private readonly imports: ModImportsService;
     private readonly ini: ModIniService;
     private readonly watchers: ModWatchersService;
-    private readonly f10: ModF10Service;
 
     public readonly get: {
         gamePath: ModLibraryService["gamePath"];
@@ -66,7 +64,6 @@ export class ModManager {
         ) => Promise<void>;
         copyFolderToGroup: ModImportsService["copyFolderToGroup"];
         pastePreview: ModImportsService["pastePreview"];
-        triggerF10: ModF10Service["triggerF10"];
     };
 
     constructor(desktop: NahidaDesktop) {
@@ -77,7 +74,6 @@ export class ModManager {
         this.imports = new ModImportsService(desktop, this.shaderFixes);
         this.ini = new ModIniService(desktop);
         this.watchers = new ModWatchersService(desktop, this.library);
-        this.f10 = new ModF10Service(desktop, this.library);
 
         this.get = {
             gamePath: this.library.gamePath.bind(this.library),
@@ -122,7 +118,6 @@ export class ModManager {
             extractArchiveToGroup: this.imports.extractArchiveToGroup.bind(this.imports),
             copyFolderToGroup: this.imports.copyFolderToGroup.bind(this.imports),
             pastePreview: this.imports.pastePreview.bind(this.imports),
-            triggerF10: this.f10.triggerF10.bind(this.f10),
         };
     }
 

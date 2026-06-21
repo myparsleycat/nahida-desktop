@@ -10,7 +10,7 @@ import {
   BananaIcon,
   BookOpenIcon,
   BugIcon,
-  DatabaseBackupIcon,
+  BugPlayIcon,
   GamepadIcon,
   HardDriveIcon,
   SettingsIcon,
@@ -62,10 +62,10 @@ export function Sidebar({ className }: { className?: string }) {
   const isDrivePage = pathname.startsWith("/drive/drive");
   const isSharePage = pathname.startsWith("/drive/share");
   const isModPage = pathname.startsWith("/mod");
-  const isBackupPage = pathname.startsWith("/backup");
   const isToolsPage = pathname.startsWith("/tools");
   const isGameBananaPage = pathname.startsWith("/gamebanana");
   const isSettingPage = pathname.startsWith("/setting");
+  const isTestPage = pathname.startsWith("/test");
   const documentationUrl = getDocumentationUrl(i18n.language);
   const getNavButtonClassName = (isActive: boolean) =>
     cn("relative overflow-visible", isActive && "text-accent hover:text-accent");
@@ -182,28 +182,6 @@ export function Sidebar({ className }: { className?: string }) {
               {t("page.mod.title")}
             </TooltipContent>
           </Tooltip>
-
-          {appStatus?.isDev && (
-            <Tooltip disableHoverableContent={true}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-lg"
-                  className={getNavButtonClassName(isBackupPage)}
-                  aria-current={isBackupPage ? "page" : undefined}
-                  onPointerDown={handlePointerDown}
-                  onClick={() => {
-                    navi({ to: "/backup" });
-                  }}
-                >
-                  <DatabaseBackupIcon className={cn(iconSize)} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right" hideWhenDetached={true}>
-                {t("page.backup.title")}
-              </TooltipContent>
-            </Tooltip>
-          )}
 
           <Tooltip disableHoverableContent={true}>
             <TooltipTrigger asChild>
@@ -359,6 +337,28 @@ export function Sidebar({ className }: { className?: string }) {
               {t("page.setting.title")}
             </TooltipContent>
           </Tooltip>
+
+          {appStatus?.isDev && (
+            <Tooltip disableHoverableContent={true}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-lg"
+                  className={getNavButtonClassName(isTestPage)}
+                  aria-current={isTestPage ? "page" : undefined}
+                  onPointerDown={handlePointerDown}
+                  onClick={() => {
+                    navi({ to: "/test" });
+                  }}
+                >
+                  <BugPlayIcon className={cn(iconSize)} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right" hideWhenDetached={true}>
+                {t("page.setting.title")}
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </div>
     </div>
