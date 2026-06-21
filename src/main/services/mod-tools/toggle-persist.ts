@@ -407,7 +407,8 @@ export class TogglePersist {
         try {
             await fse.writeFile(tempPath, content, "utf-8");
             if (!this.isActivePersistGeneration(generation)) return false;
-            await fse.rename(tempPath, targetIniPath);
+            // Sync rename keeps the generation check and commit in one turn.
+            fse.renameSync(tempPath, targetIniPath);
             return true;
         } finally {
             await fse.remove(tempPath).catch(() => {});
