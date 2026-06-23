@@ -20,8 +20,8 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Separator } from "@renderer/components/ui/separator";
+import { useBulkModToggle } from "@renderer/hooks/use-bulk-mod-toggle";
 import { useModStore } from "@renderer/store/mod";
-import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown10,
   ArrowDownAZ,
@@ -36,11 +36,11 @@ import {
   FolderIcon,
   LayoutGridIcon,
   ListIcon,
+  Loader2Icon,
   Search,
   WrenchIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 import wuwaModFixerIcon from "@/renderer/assets/img/wuwa-mod-fixer-icon.png";
 
 interface ContentHeaderProps {
@@ -60,7 +60,7 @@ export function ContentHeader({
   const onSearchChange = useModStore((s) => s.setSearchQuery);
   const selectedGroup = useModStore((s) => s.selectedGroup);
   const setIsCustomDownloadDialogOpen = useModStore((s) => s.setIsCustomDownloadDialogOpen);
-  const queryClient = useQueryClient();
+  const bulkModToggle = useBulkModToggle();
 
   const sortType = useModStore((s) => s.sortType);
   const setSortType = useModStore((s) => s.setSortType);
@@ -73,32 +73,6 @@ export function ContentHeader({
   const groupName = selectedGroup?.name || "";
   const groupPath = selectedGroup?.path;
   const hasSelectedGroup = Boolean(groupPath);
-
-  const handleEnableAll = async () => {
-    if (!groupPath) return;
-
-    try {
-      await window.api.invoke("mod:enableAll", groupPath);
-      queryClient.invalidateQueries({ queryKey: ["modGroup", groupPath] });
-      toast.success(t("page.mod.content-header.all_enabled"));
-    } catch (error) {
-      toast.error((error as Error).message);
-      console.error(error);
-    }
-  };
-
-  const handleDisableAll = async () => {
-    if (!groupPath) return;
-
-    try {
-      await window.api.invoke("mod:disableAll", groupPath);
-      queryClient.invalidateQueries({ queryKey: ["modGroup", groupPath] });
-      toast.success(t("page.mod.content-header.all_disabled"));
-    } catch (error) {
-      toast.error((error as Error).message);
-      console.error(error);
-    }
-  };
 
   const toggleSortOrder = () => {
     setSortOrder(sortOrder === "asc" ? "desc" : "asc");
@@ -204,12 +178,26 @@ export function ContentHeader({
           </DropdownMenuTrigger>
           <DropdownMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
             <DropdownMenuGroup>
-              <DropdownMenuItem disabled={!hasSelectedGroup} onClick={handleEnableAll}>
-                <CircleIcon />
+              <DropdownMenuItem
+                disabled={!hasSelectedGroup || bulkModToggle.isPending}
+                onClick={() => bulkModToggle.enableAll(groupPath!)}
+              >
+                {bulkModToggle.isPending ? (
+                  <Loader2Icon className="animate-spin" />
+                ) : (
+                  <CircleIcon />
+                )}
                 {t("page.mod.all_enabled")}
               </DropdownMenuItem>
-              <DropdownMenuItem disabled={!hasSelectedGroup} onClick={handleDisableAll}>
-                <CircleOffIcon />
+              <DropdownMenuItem
+                disabled={!hasSelectedGroup || bulkModToggle.isPending}
+                onClick={() => bulkModToggle.disableAll(groupPath!)}
+              >
+                {bulkModToggle.isPending ? (
+                  <Loader2Icon className="animate-spin" />
+                ) : (
+                  <CircleOffIcon />
+                )}
                 {t("page.mod.all_disabled")}
               </DropdownMenuItem>
             </DropdownMenuGroup>
