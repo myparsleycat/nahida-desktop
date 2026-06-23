@@ -868,6 +868,41 @@
             }
           }
         }
+      },
+      "mod_bisect": {
+        "title": "이분 탐색",
+        "description": "모드를 절반씩 비활성화하며 문제의 원인이 되는 모드를 빠르게 찾습니다.",
+        "start": "시작",
+        "cancel": "취소",
+        "scanning": "모드 폴더를 스캔하는 중입니다...",
+        "bisect_inconclusive": "결정적인 원인을 찾지 못했습니다. 응답을 다시 확인해 주세요.",
+        "no_inis_found": "활성화된 ini 파일이 없습니다.",
+        "cancelled": "이분 탐색이 취소되었습니다.",
+        "reverting": "변경 사항을 되돌리는 중입니다...",
+        "no_games": "선택 가능한 게임이 없습니다",
+        "select_game": "게임을 선택하세요",
+        "nte_unsupported": "NTE 미지원",
+        "nte_tooltip": "이 게임의 Importer는 아직 지원되지 않습니다.",
+        "round_title": "라운드 {{round}} · 배치 {{batchSize}} · 남은 후보 {{remaining}}",
+        "round_description": "아래 모드들을 비활성화한 상태로 게임을 실행한 뒤, 문제가 해결되었는지 선택하세요.",
+        "disabled_count": "{{count}}개 비활성화됨",
+        "undo": "이전 라운드 되돌리기",
+        "still_broken": "여전히 문제 발생",
+        "problem_fixed": "문제 해결됨",
+        "done_title": "이분 탐색 완료",
+        "done_description": "{{path}} 모드가 문제의 원인으로 의심됩니다.",
+        "keep_disabled": "이 모드 비활성화 유지",
+        "keep_disabled_hint": "\"{{from}}\" 파일이 비활성화를 유지하기 위해 \"{{to}}\"(으)로 이름이 변경됩니다.",
+        "re_enable_all": "모든 모드 다시 활성화",
+        "new_bisect_hint": "새 bisect를 시작하면 임시로 비활성화된 모드가 모두 되돌려집니다.",
+        "status": {
+          "idle": "대기 중",
+          "scanning": "스캔 중",
+          "round": "라운드 진행 중",
+          "done": "완료",
+          "reverting": "되돌리는 중",
+          "cancelled": "취소됨"
+        }
       }
     },
     "setting": {

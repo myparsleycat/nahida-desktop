@@ -849,6 +849,41 @@
             }
           }
         }
+      },
+      "mod_bisect": {
+        "title": "二分探索",
+        "description": "MODを半分ずつ無効化しながら、問題の原因となっているMODを素早く特定します。",
+        "start": "開始",
+        "cancel": "キャンセル",
+        "scanning": "MODフォルダをスキャンしています...",
+        "bisect_inconclusive": "原因を特定できませんでした。回答を確認してください。",
+        "no_inis_found": "有効なiniファイルが見つかりません。",
+        "cancelled": "二分探索がキャンセルされました。",
+        "reverting": "変更を元に戻しています...",
+        "no_games": "選択可能なゲームがありません",
+        "select_game": "ゲームを選択",
+        "nte_unsupported": "NTE未対応",
+        "nte_tooltip": "このゲームのImporterはまだサポートされていません。",
+        "round_title": "ラウンド{{round}} · バッチ{{batchSize}} · 残り{{remaining}}",
+        "round_description": "以下のMODを無効化した状態でゲームを起動し、問題が解決したか選択してください。",
+        "disabled_count": "{{count}}件を無効化",
+        "undo": "前のラウンドを取り消す",
+        "still_broken": "まだ問題あり",
+        "problem_fixed": "問題なし",
+        "done_title": "二分探索完了",
+        "done_description": "{{path}}が原因の可能性があります。",
+        "keep_disabled": "このMODを無効のままにする",
+        "keep_disabled_hint": "\"{{from}}\" を \"{{to}}\" にリネームして無効状態を保持します。",
+        "re_enable_all": "すべてのMODを再度有効化",
+        "new_bisect_hint": "新しいバイセクトを開始すると、一時的に無効化したMODはすべて元に戻ります。",
+        "status": {
+          "idle": "待機中",
+          "scanning": "スキャン中",
+          "round": "ラウンド進行中",
+          "done": "完了",
+          "reverting": "復元中",
+          "cancelled": "キャンセル済み"
+        }
       }
     },
     "setting": {

@@ -1,6 +1,7 @@
 import type { NahidaDesktop } from "@/main";
 import { DllBuilder } from "./dll-builder";
 import { FixTool } from "./fix-tool";
+import { ModBisect } from "./mod-bisect";
 import { StaticGlb } from "./static-glb";
 import { TextureResizer } from "./texture-resizer";
 import { TogglePersist } from "./toggle-persist";
@@ -15,6 +16,7 @@ export class ModTools {
     public readonly staticGlb: StaticGlb;
     public readonly textureResizer: TextureResizer;
     public readonly wuwaModFixer: WuwaModFixer;
+    public readonly modBisect: ModBisect;
 
     constructor(private readonly desktop: NahidaDesktop) {
         this.fixTool = new FixTool(this.desktop);
@@ -24,6 +26,15 @@ export class ModTools {
         this.staticGlb = new StaticGlb(this.desktop);
         this.textureResizer = new TextureResizer(this.desktop);
         this.wuwaModFixer = new WuwaModFixer(this.desktop);
+        const modBisect = (this.modBisect = new ModBisect(this.desktop));
+        modBisect.recovering = (async () => {
+            try {
+                const games = await this.desktop.service.mod.get.games();
+                await modBisect.recover(games);
+            } catch (error) {
+                this.desktop.logger.error(error, "ModBisect");
+            }
+        })();
     }
 
     public async startPersistWatcher() {

@@ -9,6 +9,7 @@ import {
   ContextMenuTrigger,
 } from "@renderer/components/ui/context-menu";
 import { Skeleton } from "@renderer/components/ui/skeleton";
+import { useBulkModToggle } from "@renderer/hooks/use-bulk-mod-toggle";
 import { cn } from "@renderer/lib/utils";
 import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
@@ -16,10 +17,13 @@ import type { SidebarLayoutMode } from "@shared/mod";
 import {
   ChevronDown,
   ChevronRight,
+  CircleIcon,
+  CircleOffIcon,
   FolderIcon,
   FolderMinus,
   FolderPlus,
   FolderTree,
+  Loader2Icon,
   TrashIcon,
   WrenchIcon,
 } from "lucide-react";
@@ -76,6 +80,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   const isPersistent = useModStore((s) => s.persistentGroups.has(group.path));
   const toggleExpandedGroup = useModStore((s) => s.toggleExpandedGroup);
   const togglePersistentGroup = useModStore((s) => s.togglePersistentGroup);
+  const bulkModToggle = useBulkModToggle();
   const isGridLayout = layout === "grid";
 
   const ref = useRef<HTMLButtonElement>(null);
@@ -226,6 +231,30 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
       </ContextMenuTrigger>
 
       <ContextMenuContent className="w-56">
+        <ContextMenuItem
+          disabled={bulkModToggle.isPending}
+          onClick={() => bulkModToggle.enableAll(group.path)}
+        >
+          {bulkModToggle.isPending ? (
+            <Loader2Icon className="h-4 w-4 animate-spin" />
+          ) : (
+            <CircleIcon className="h-4 w-4" />
+          )}
+          {t("page.mod.all_enabled")}
+        </ContextMenuItem>
+        <ContextMenuItem
+          disabled={bulkModToggle.isPending}
+          onClick={() => bulkModToggle.disableAll(group.path)}
+        >
+          {bulkModToggle.isPending ? (
+            <Loader2Icon className="h-4 w-4 animate-spin" />
+          ) : (
+            <CircleOffIcon className="h-4 w-4" />
+          )}
+          {t("page.mod.all_disabled")}
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+
         <ContextMenuItem onClick={() => window.api.invoke("util:openPath", group.path)}>
           <FolderIcon className="h-4 w-4" />
           {t("page.mod.character-sidebar.open-in-explorer")}

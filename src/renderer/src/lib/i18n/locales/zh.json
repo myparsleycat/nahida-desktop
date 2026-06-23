@@ -848,6 +848,41 @@
             }
           }
         }
+      },
+      "mod_bisect": {
+        "title": "二分查找",
+        "description": "通过逐批禁用模组来快速定位引发问题的模组。",
+        "start": "开始",
+        "cancel": "取消",
+        "scanning": "正在扫描模组文件夹...",
+        "bisect_inconclusive": "无法确定原因,请检查您的回答。",
+        "no_inis_found": "未找到已启用的 ini 文件。",
+        "cancelled": "二分查找已取消。",
+        "reverting": "正在恢复更改...",
+        "no_games": "没有可选的游戏",
+        "select_game": "选择游戏",
+        "nte_unsupported": "不支持 NTE",
+        "nte_tooltip": "此游戏的导入器尚不受支持。",
+        "round_title": "第 {{round}} 轮 · 批次 {{batchSize}} · 剩余 {{remaining}}",
+        "round_description": "禁用下列模组后启动游戏,然后选择问题是否解决。",
+        "disabled_count": "已禁用 {{count}} 个",
+        "undo": "撤销上一轮",
+        "still_broken": "仍然异常",
+        "problem_fixed": "问题已解决",
+        "done_title": "二分查找完成",
+        "done_description": "怀疑 {{path}} 是问题来源。",
+        "keep_disabled": "保持此模组禁用",
+        "keep_disabled_hint": "将把 \"{{from}}\" 重命名为 \"{{to}}\" 以保持禁用。",
+        "re_enable_all": "重新启用所有模组",
+        "new_bisect_hint": "开始新的二分排查会恢复所有临时禁用的模组。",
+        "status": {
+          "idle": "空闲",
+          "scanning": "扫描中",
+          "round": "进行中",
+          "done": "完成",
+          "reverting": "恢复中",
+          "cancelled": "已取消"
+        }
       }
     },
     "setting": {
