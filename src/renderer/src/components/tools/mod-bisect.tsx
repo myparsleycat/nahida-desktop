@@ -116,7 +116,7 @@ export default function ModBisect() {
 
   const status = snapshot?.status ?? "idle";
   const isActive = status === "scanning" || status === "round";
-  const canStart = !!selectedGame && !isActive && status !== "reverting" && status !== "done";
+  const canStart = !!selectedGame && !isActive && status !== "reverting";
   const isBusy =
     startMutation.isPending ||
     respondMutation.isPending ||
@@ -137,7 +137,7 @@ export default function ModBisect() {
               games={games}
               value={selectedGame}
               onChange={setSelectedGame}
-              disabled={isActive || isBusy || status === "done"}
+              disabled={isActive || isBusy}
             />
             <Button
               onClick={() => selectedGame && startMutation.mutate(selectedGame)}
@@ -365,6 +365,9 @@ function DoneView({
             from: basename,
             to: `DISABLED ${basename}`,
           })}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {t("page.tools.mod_bisect.new_bisect_hint")}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button

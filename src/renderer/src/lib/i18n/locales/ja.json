@@ -875,6 +875,7 @@
         "keep_disabled": "このMODを無効のままにする",
         "keep_disabled_hint": "\"{{from}}\" を \"{{to}}\" にリネームして無効状態を保持します。",
         "re_enable_all": "すべてのMODを再度有効化",
+        "new_bisect_hint": "新しいバイセクトを開始すると、一時的に無効化したMODはすべて元に戻ります。",
         "status": {
           "idle": "待機中",
           "scanning": "スキャン中",

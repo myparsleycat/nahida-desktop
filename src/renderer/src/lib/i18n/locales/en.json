@@ -912,6 +912,7 @@
         "keep_disabled": "Keep this mod disabled",
         "keep_disabled_hint": "\"{{from}}\" will be renamed to \"{{to}}\" to keep it disabled.",
         "re_enable_all": "Re-enable all mods",
+        "new_bisect_hint": "Starting a new bisect reverts all temporarily disabled mods.",
         "status": {
           "idle": "Idle",
           "scanning": "Scanning",

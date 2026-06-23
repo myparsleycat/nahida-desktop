@@ -10,6 +10,7 @@ import {
     BISECT_KEEP_DISABLED_PREFIX,
     BisectJournal,
 } from "./mod-bisect-journal";
+import { disabledPathFor, renameIniDisable, renameIniEnable } from "./mod-bisect-rename";
 
 interface InternalSession {
     game: string;
@@ -58,8 +59,11 @@ export class ModBisect {
 
     public async start(game: string): Promise<BisectSnapshot> {
         await this.recovering;
-        if (this.session) {
+        if (this.session && !this.session.finalBadPath) {
             throw new Error("A bisect session is already running. Cancel it first.");
+        }
+        if (this.session?.finalBadPath) {
+            await this.cancel();
         }
 
         const games = await this.desktop.service.mod.get.games();
@@ -122,6 +126,7 @@ export class ModBisect {
         try {
             await this.disableInis(firstBatch);
         } catch (error) {
+            await this.enableInis(firstBatch);
             this.session = null;
             throw error;
         }
@@ -389,18 +394,7 @@ export class ModBisect {
         if (paths.length === 0) return;
         const limit = pLimit(RENAME_CONCURRENCY);
         await Promise.all(
-            paths.map((iniPath) =>
-                limit(async () => {
-                    const target = this.disabledPathFor(iniPath);
-                    try {
-                        await fse.rename(iniPath, target);
-                    } catch (err) {
-                        const code = (err as NodeJS.ErrnoException).code;
-                        if (code === "EEXIST" || code === "EPERM") return;
-                        throw err;
-                    }
-                }),
-            ),
+            paths.map((iniPath) => limit(() => renameIniDisable(iniPath, BISECT_DISABLED_SUFFIX))),
         );
     }
 
@@ -408,18 +402,7 @@ export class ModBisect {
         if (paths.length === 0) return;
         const limit = pLimit(RENAME_CONCURRENCY);
         await Promise.all(
-            paths.map((iniPath) =>
-                limit(async () => {
-                    const target = this.disabledPathFor(iniPath);
-                    try {
-                        await fse.rename(target, iniPath);
-                    } catch (err) {
-                        const code = (err as NodeJS.ErrnoException).code;
-                        if (code === "ENOENT" || code === "EPERM") return;
-                        throw err;
-                    }
-                }),
-            ),
+            paths.map((iniPath) => limit(() => renameIniEnable(iniPath, BISECT_DISABLED_SUFFIX))),
         );
     }
 
@@ -429,7 +412,7 @@ export class ModBisect {
         await Promise.all(
             paths.map((iniPath) =>
                 limit(async () => {
-                    const target = this.disabledPathFor(iniPath);
+                    const target = disabledPathFor(iniPath, BISECT_DISABLED_SUFFIX);
                     try {
                         await fse.rename(target, iniPath);
                     } catch (error) {
@@ -440,12 +423,8 @@ export class ModBisect {
         );
     }
 
-    private disabledPathFor(iniPath: string): string {
-        return `${iniPath}.${BISECT_DISABLED_SUFFIX}`;
-    }
-
     private async keepDisabled(originalPath: string): Promise<boolean> {
-        const disabledPath = this.disabledPathFor(originalPath);
+        const disabledPath = disabledPathFor(originalPath, BISECT_DISABLED_SUFFIX);
         const target = path.join(
             path.dirname(originalPath),
             `${BISECT_KEEP_DISABLED_PREFIX}${path.basename(originalPath)}`,

@@ -894,6 +894,7 @@
         "keep_disabled": "이 모드 비활성화 유지",
         "keep_disabled_hint": "\"{{from}}\" 파일이 비활성화를 유지하기 위해 \"{{to}}\"(으)로 이름이 변경됩니다.",
         "re_enable_all": "모든 모드 다시 활성화",
+        "new_bisect_hint": "새 bisect를 시작하면 임시로 비활성화된 모드가 모두 되돌려집니다.",
         "status": {
           "idle": "대기 중",
           "scanning": "스캔 중",

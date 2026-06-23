@@ -874,6 +874,7 @@
         "keep_disabled": "保持此模组禁用",
         "keep_disabled_hint": "将把 \"{{from}}\" 重命名为 \"{{to}}\" 以保持禁用。",
         "re_enable_all": "重新启用所有模组",
+        "new_bisect_hint": "开始新的二分排查会恢复所有临时禁用的模组。",
         "status": {
           "idle": "空闲",
           "scanning": "扫描中",
