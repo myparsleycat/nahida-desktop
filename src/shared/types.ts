@@ -236,6 +236,21 @@ export interface NteBootstrapProgress {
     message?: string;
 }
 
+export type BisectStatus = "idle" | "scanning" | "round" | "done" | "reverting" | "cancelled";
+
+export interface BisectSnapshot {
+    status: BisectStatus;
+    game: string;
+    modRootPath: string | null;
+    round: number;
+    batchSize: number;
+    candidates: string[];
+    currentBatch: string[];
+    undoStackDepth: number;
+    finalBadPath: string | null;
+    error: string | null;
+}
+
 export type IpcEvents = {
     "window:blur": () => void;
     "window:focus": () => void;
@@ -272,6 +287,7 @@ export type IpcEvents = {
     "setting:xxmi:persistLogs": (logs: string[]) => void;
     "setting:xxmi:toggleViewerLogs": (logs: string[]) => void;
     "tools:progress": (message: string) => void;
+    "tools:bisectState": (snapshot: BisectSnapshot) => void;
     "ftm:log": (event: FixToolLogEvent) => void;
     "updater:status-changed": (
         status: Awaited<

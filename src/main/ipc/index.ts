@@ -7,6 +7,7 @@ import { registerFixToolsManagerHandlers } from "./handlers/fix-tools-manager";
 import { registerGameBananaHandlers } from "./handlers/gamebanana";
 import { registerLoggerHandlers } from "./handlers/logger";
 import { registerModHandlers } from "./handlers/mod";
+import { registerModBisectHandlers } from "./handlers/mod-bisect";
 import { registerPathSelectorHandlers } from "./handlers/path-selector";
 import { registerSettingHandlers } from "./handlers/setting";
 import { registerToolsHandlers } from "./handlers/tools";
@@ -38,6 +39,7 @@ export class IPC {
         registerModHandlers(this.d);
         registerFixToolsManagerHandlers(this.d);
         registerToolsHandlers(this.d);
+        registerModBisectHandlers(this.d);
         registerWuwaModFixerHandlers(this.d);
         registerXXMIHandlers(this.d);
     }

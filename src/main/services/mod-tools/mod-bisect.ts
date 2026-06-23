@@ -1,0 +1,523 @@
+import path from "node:path";
+import { isNteImporter } from "@shared/mod";
+import type { BisectSnapshot, BisectStatus, GameConfig } from "@shared/types";
+import fg from "fast-glob";
+import fse from "fs-extra";
+import pLimit from "p-limit";
+import type { NahidaDesktop } from "@/main";
+import {
+    BISECT_DISABLED_SUFFIX,
+    BISECT_KEEP_DISABLED_PREFIX,
+    BisectJournal,
+} from "./mod-bisect-journal";
+
+interface InternalSession {
+    game: string;
+    modRootPath: string;
+    candidates: string[];
+    round: number;
+    batchSize: number;
+    currentBatch: string[];
+    undoStack: UndoEntry[];
+    finalBadPath: string | null;
+    phase: "scanning" | "active";
+}
+
+interface UndoEntry {
+    disabled: string[];
+    candidatesBefore: string[];
+    remainingAfter: string[];
+    round: number;
+    batchSize: number;
+}
+
+const FIRST_BATCH_SIZE = 100;
+const MEDIUM_BATCH_SIZE = 20;
+const NARROW_BATCH_SIZE = 5;
+const FINE_BATCH_SIZE = 1;
+const RENAME_CONCURRENCY = 8;
+const DISABLED_PATH_PATTERN = /^disabled/i;
+const BISECT_INCONCLUSIVE_ERROR = "Bisect inconclusive";
+
+export class ModBisect {
+    private session: InternalSession | null = null;
+    private readonly journal = new BisectJournal();
+    public recovering: Promise<void> = Promise.resolve();
+
+    constructor(private readonly desktop: NahidaDesktop) {}
+
+    public getState(): BisectSnapshot | null {
+        if (!this.session) return null;
+        const status = this.session.finalBadPath
+            ? "done"
+            : this.session.phase === "scanning"
+              ? "scanning"
+              : "round";
+        return this.toSnapshot(this.session, null, status);
+    }
+
+    public async start(game: string): Promise<BisectSnapshot> {
+        await this.recovering;
+        if (this.session) {
+            throw new Error("A bisect session is already running. Cancel it first.");
+        }
+
+        const games = await this.desktop.service.mod.get.games();
+        const gameConfig = games.find((g) => g.game === game);
+        if (!gameConfig) {
+            throw new Error(`Game not found: ${game}`);
+        }
+        if (isNteImporter(gameConfig.importer)) {
+            throw new Error("NTE modders are not supported yet.");
+        }
+        if (!gameConfig.modFolderPath) {
+            throw new Error(`Mod folder path is not configured for ${game}.`);
+        }
+
+        const scanningSnapshot: BisectSnapshot = {
+            status: "scanning",
+            game,
+            modRootPath: gameConfig.modFolderPath,
+            round: 0,
+            batchSize: FIRST_BATCH_SIZE,
+            candidates: [],
+            currentBatch: [],
+            undoStackDepth: 0,
+            finalBadPath: null,
+            error: null,
+        };
+        this.session = {
+            game,
+            modRootPath: gameConfig.modFolderPath,
+            candidates: [],
+            round: 0,
+            batchSize: FIRST_BATCH_SIZE,
+            currentBatch: [],
+            undoStack: [],
+            finalBadPath: null,
+            phase: "scanning",
+        };
+        this.broadcast(scanningSnapshot);
+
+        let iniPaths: string[];
+        try {
+            iniPaths = await this.scanEnabledInis(gameConfig.modFolderPath);
+        } catch (error) {
+            this.session = null;
+            throw error;
+        }
+
+        if (iniPaths.length === 0) {
+            this.session = null;
+            const doneSnapshot: BisectSnapshot = {
+                ...scanningSnapshot,
+                status: "done",
+                finalBadPath: null,
+            };
+            this.broadcast(doneSnapshot);
+            return doneSnapshot;
+        }
+
+        const firstBatch = iniPaths.slice(0, FIRST_BATCH_SIZE);
+        try {
+            await this.disableInis(firstBatch);
+        } catch (error) {
+            this.session = null;
+            throw error;
+        }
+
+        this.session = {
+            game,
+            modRootPath: gameConfig.modFolderPath,
+            candidates: iniPaths,
+            round: 1,
+            batchSize: FIRST_BATCH_SIZE,
+            currentBatch: firstBatch,
+            undoStack: [],
+            finalBadPath: null,
+            phase: "active",
+        };
+
+        await this.syncJournal(this.session);
+        const snapshot = this.toSnapshot(this.session, null);
+        this.broadcast(snapshot);
+        return snapshot;
+    }
+
+    public async respond(fixed: boolean): Promise<BisectSnapshot> {
+        this.assertSession();
+        const session = this.session!;
+        if (session.currentBatch.length === 0) {
+            throw new Error("No active batch to respond to.");
+        }
+
+        const currentRound = session.round;
+        const currentBatchSize = session.batchSize;
+        const currentBatch = [...session.currentBatch];
+        const candidatesBefore = [...session.candidates];
+
+        let remaining: string[];
+        if (fixed) {
+            remaining = currentBatch;
+        } else {
+            const batchSet = new Set(currentBatch.map((p) => p.toLowerCase()));
+            remaining = candidatesBefore.filter((p) => !batchSet.has(p.toLowerCase()));
+        }
+
+        if (remaining.length === 1) {
+            const culprit = remaining[0];
+            if (!fixed) {
+                await this.disableInis([culprit]);
+            }
+            session.candidates = remaining;
+            session.undoStack.push({
+                disabled: currentBatch,
+                candidatesBefore,
+                remainingAfter: remaining,
+                round: currentRound,
+                batchSize: currentBatchSize,
+            });
+            session.currentBatch = fixed ? [] : [culprit];
+            session.finalBadPath = culprit;
+
+            const finalSnapshot = this.toSnapshot(session, null, "done");
+            await this.syncJournal(session);
+            this.broadcast(finalSnapshot);
+            return finalSnapshot;
+        }
+
+        if (remaining.length === 0) {
+            this.session = null;
+            const toRestore = this.disabledSet(session);
+            await this.revertAll(session, toRestore);
+            await this.journal.clear(session.game);
+            const snapshot = this.toSnapshot(session, BISECT_INCONCLUSIVE_ERROR, "done");
+            this.broadcast(snapshot);
+            return snapshot;
+        }
+
+        const nextBatchSize = this.chooseNextBatchSize(remaining.length, currentBatchSize);
+        const nextBatch = remaining.slice(0, nextBatchSize);
+        await this.enableInis(currentBatch);
+        await this.disableInis(nextBatch);
+
+        session.undoStack.push({
+            disabled: currentBatch,
+            candidatesBefore,
+            remainingAfter: remaining,
+            round: currentRound,
+            batchSize: currentBatchSize,
+        });
+        session.candidates = remaining;
+        session.currentBatch = nextBatch;
+        session.batchSize = nextBatchSize;
+        session.round = currentRound + 1;
+
+        await this.syncJournal(session);
+        const snapshot = this.toSnapshot(session, null);
+        this.broadcast(snapshot);
+        return snapshot;
+    }
+
+    public async undoLastRound(): Promise<BisectSnapshot> {
+        this.assertSession();
+        const session = this.session!;
+        const lastRound = session.undoStack.pop();
+        if (!lastRound) {
+            throw new Error("Nothing to undo.");
+        }
+
+        await this.enableInis(session.currentBatch);
+
+        if (lastRound.disabled.length > 0) {
+            await this.disableInis(lastRound.disabled);
+        }
+
+        session.candidates = lastRound.candidatesBefore;
+        session.currentBatch = lastRound.disabled;
+        session.batchSize = lastRound.batchSize;
+        session.round = lastRound.round;
+        if (session.finalBadPath) {
+            session.finalBadPath = null;
+        }
+
+        await this.syncJournal(session);
+        const snapshot = this.toSnapshot(session, null);
+        this.broadcast(snapshot);
+        return snapshot;
+    }
+
+    public async finalize(keepDisabled: string[]): Promise<BisectSnapshot> {
+        this.assertSession();
+        const session = this.session!;
+        this.session = null;
+
+        const keepSet = new Set(keepDisabled.map((p) => p.toLowerCase()));
+        const disabledEntries = this.disabledSet(session);
+        const toReEnable = disabledEntries.filter((p) => !keepSet.has(p.toLowerCase()));
+        const toKeep = disabledEntries.filter((p) => keepSet.has(p.toLowerCase()));
+
+        if (toReEnable.length > 0) {
+            await this.revertAll(session, toReEnable);
+        }
+
+        const keptPaths: string[] = [];
+        for (const originalPath of toKeep) {
+            if (await this.keepDisabled(originalPath)) {
+                keptPaths.push(originalPath);
+            }
+        }
+
+        if (keptPaths.length > 0) {
+            await this.journal.write(session.game, keptPaths, "kept");
+        } else {
+            await this.journal.clear(session.game);
+        }
+
+        const finalSnapshot = this.toSnapshot(session, null);
+        this.broadcast({ ...finalSnapshot, status: "reverting" });
+        this.broadcast({ ...finalSnapshot, status: "idle" });
+        return { ...finalSnapshot, status: "idle" };
+    }
+
+    public async cancel(): Promise<BisectSnapshot> {
+        if (!this.session) {
+            const idleSnapshot = this.emptySnapshot("idle");
+            this.broadcast(idleSnapshot);
+            return idleSnapshot;
+        }
+        const session = this.session;
+        this.session = null;
+        this.broadcast({ ...this.toSnapshot(session, null), status: "cancelled" });
+        const toRestore = this.disabledSet(session);
+        await this.revertAll(session, toRestore);
+        await this.journal.clear(session.game);
+        this.broadcast({ ...this.toSnapshot(session, null), status: "reverting" });
+        const finalSnapshot = this.emptySnapshot("idle");
+        this.broadcast(finalSnapshot);
+        return finalSnapshot;
+    }
+
+    public async recover(games: GameConfig[]): Promise<void> {
+        for (const game of games) {
+            if (!game.modFolderPath || isNteImporter(game.importer)) continue;
+            const journal = await this.journal.load(game.game);
+            const orphans = await this.journal.listOrphans(game.modFolderPath);
+
+            if (journal?.purpose === "kept") {
+                const keptSet = new Set(journal.paths.map((p) => p.toLowerCase()));
+                const toRestore = orphans.filter((p) => !keptSet.has(p.toLowerCase()));
+                if (toRestore.length > 0) {
+                    await this.recoverInis(toRestore);
+                    for (const p of toRestore) {
+                        this.desktop.logger.info(`Restored orphan mod file: ${p}`, "ModBisect");
+                    }
+                }
+                continue;
+            }
+
+            const toRestore = [...new Set([...(journal?.paths ?? []), ...orphans])];
+            if (toRestore.length === 0) {
+                if (journal) await this.journal.clear(game.game);
+                continue;
+            }
+            try {
+                await this.recoverInis(toRestore);
+            } catch (error) {
+                this.desktop.logger.error(error, "ModBisect");
+            }
+            await this.journal.clear(game.game);
+            for (const p of toRestore) {
+                this.desktop.logger.info(`Restored orphan mod file: ${p}`, "ModBisect");
+            }
+        }
+    }
+
+    private assertSession() {
+        if (!this.session) {
+            throw new Error("No active bisect session.");
+        }
+    }
+
+    private disabledSet(session: InternalSession): string[] {
+        return [...session.undoStack.flatMap((e) => e.disabled), ...session.currentBatch];
+    }
+
+    private async syncJournal(session: InternalSession): Promise<void> {
+        await this.journal.write(session.game, this.disabledSet(session), "session");
+    }
+
+    private async scanEnabledInis(modRootPath: string): Promise<string[]> {
+        const enabledPaths = await fg(["**/*.ini"], {
+            cwd: modRootPath,
+            absolute: true,
+            onlyFiles: true,
+            dot: false,
+            ignore: [
+                "**/disabled*/**",
+                "**/DISABLED*/**",
+                "**/Disabled*/**",
+                "**/disabled *",
+                "**/DISABLED *",
+            ],
+        });
+
+        const limit = pLimit(8);
+        const filtered = await Promise.all(
+            enabledPaths.map((iniPath) =>
+                limit(async () =>
+                    (await this.isPathDisabled(iniPath, modRootPath)) ? null : iniPath,
+                ),
+            ),
+        );
+        return filtered.filter((p): p is string => p !== null).sort();
+    }
+
+    private async isPathDisabled(filePath: string, modRootPath: string): Promise<boolean> {
+        const relative = path.relative(modRootPath, filePath);
+        const segments = relative.split(/[\\/]+/);
+        const basename = path.basename(filePath);
+        for (const segment of [...segments, basename]) {
+            if (DISABLED_PATH_PATTERN.test(segment)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private async disableInis(paths: string[]): Promise<void> {
+        if (paths.length === 0) return;
+        const limit = pLimit(RENAME_CONCURRENCY);
+        await Promise.all(
+            paths.map((iniPath) =>
+                limit(async () => {
+                    const target = this.disabledPathFor(iniPath);
+                    try {
+                        await fse.rename(iniPath, target);
+                    } catch (err) {
+                        const code = (err as NodeJS.ErrnoException).code;
+                        if (code === "EEXIST" || code === "EPERM") return;
+                        throw err;
+                    }
+                }),
+            ),
+        );
+    }
+
+    private async enableInis(paths: string[]): Promise<void> {
+        if (paths.length === 0) return;
+        const limit = pLimit(RENAME_CONCURRENCY);
+        await Promise.all(
+            paths.map((iniPath) =>
+                limit(async () => {
+                    const target = this.disabledPathFor(iniPath);
+                    try {
+                        await fse.rename(target, iniPath);
+                    } catch (err) {
+                        const code = (err as NodeJS.ErrnoException).code;
+                        if (code === "ENOENT" || code === "EPERM") return;
+                        throw err;
+                    }
+                }),
+            ),
+        );
+    }
+
+    private async recoverInis(paths: string[]): Promise<void> {
+        if (paths.length === 0) return;
+        const limit = pLimit(RENAME_CONCURRENCY);
+        await Promise.all(
+            paths.map((iniPath) =>
+                limit(async () => {
+                    const target = this.disabledPathFor(iniPath);
+                    try {
+                        await fse.rename(target, iniPath);
+                    } catch (error) {
+                        this.desktop.logger.error(error, "ModBisect:recover");
+                    }
+                }),
+            ),
+        );
+    }
+
+    private disabledPathFor(iniPath: string): string {
+        return `${iniPath}.${BISECT_DISABLED_SUFFIX}`;
+    }
+
+    private async keepDisabled(originalPath: string): Promise<boolean> {
+        const disabledPath = this.disabledPathFor(originalPath);
+        const target = path.join(
+            path.dirname(originalPath),
+            `${BISECT_KEEP_DISABLED_PREFIX}${path.basename(originalPath)}`,
+        );
+        try {
+            await fse.rename(disabledPath, target);
+            return true;
+        } catch (err) {
+            const code = (err as NodeJS.ErrnoException).code;
+            if (code === "ENOENT") {
+                try {
+                    await fse.rename(originalPath, target);
+                    return true;
+                } catch (inner) {
+                    const innerCode = (inner as NodeJS.ErrnoException).code;
+                    if (innerCode === "ENOENT") return false;
+                    if (innerCode === "EEXIST" || innerCode === "EPERM") return true;
+                    throw inner;
+                }
+            }
+            if (code === "EEXIST" || code === "EPERM") return true;
+            throw err;
+        }
+    }
+
+    private async revertAll(session: InternalSession, paths: string[]): Promise<void> {
+        if (paths.length === 0) return;
+        await this.enableInis(paths);
+    }
+
+    private chooseNextBatchSize(candidateCount: number, currentBatchSize: number): number {
+        if (candidateCount <= FINE_BATCH_SIZE * 5) return FINE_BATCH_SIZE;
+        if (candidateCount <= MEDIUM_BATCH_SIZE) return NARROW_BATCH_SIZE;
+        if (candidateCount <= FIRST_BATCH_SIZE) return MEDIUM_BATCH_SIZE;
+        return Math.min(currentBatchSize, FIRST_BATCH_SIZE);
+    }
+
+    private toSnapshot(
+        session: InternalSession,
+        error: string | null = null,
+        status: BisectStatus = "round",
+    ): BisectSnapshot {
+        return {
+            status,
+            game: session.game,
+            modRootPath: session.modRootPath,
+            round: session.round,
+            batchSize: session.batchSize,
+            candidates: [...session.candidates],
+            currentBatch: [...session.currentBatch],
+            undoStackDepth: session.undoStack.length,
+            finalBadPath: session.finalBadPath,
+            error,
+        };
+    }
+
+    private emptySnapshot(status: BisectStatus): BisectSnapshot {
+        return {
+            status,
+            game: "",
+            modRootPath: null,
+            round: 0,
+            batchSize: 0,
+            candidates: [],
+            currentBatch: [],
+            undoStackDepth: 0,
+            finalBadPath: null,
+            error: null,
+        };
+    }
+
+    private broadcast(snapshot: BisectSnapshot) {
+        this.desktop.ipc.broadcast("tools:bisectState", snapshot);
+    }
+}

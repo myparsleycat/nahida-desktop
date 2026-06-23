@@ -886,6 +886,40 @@
             }
           }
         }
+      },
+      "mod_bisect": {
+        "title": "Mod Bisect",
+        "description": "Quickly find the problematic mod by disabling them in batches.",
+        "start": "Start",
+        "cancel": "Cancel",
+        "scanning": "Scanning the mod folder...",
+        "bisect_inconclusive": "Could not determine the cause. Please verify your responses.",
+        "no_inis_found": "No enabled ini files were found.",
+        "cancelled": "Bisect has been cancelled.",
+        "reverting": "Reverting changes...",
+        "no_games": "No games available",
+        "select_game": "Select a game",
+        "nte_unsupported": "NTE unsupported",
+        "nte_tooltip": "The Importer for this game is not yet supported.",
+        "round_title": "Round {{round}} · batch {{batchSize}} · {{remaining}} remaining",
+        "round_description": "Run the game with the mods below disabled, then choose whether the issue is fixed.",
+        "disabled_count": "{{count}} disabled",
+        "undo": "Undo last round",
+        "still_broken": "Still broken",
+        "problem_fixed": "Problem fixed",
+        "done_title": "Bisect complete",
+        "done_description": "{{path}} is suspected of causing the issue.",
+        "keep_disabled": "Keep this mod disabled",
+        "keep_disabled_hint": "\"{{from}}\" will be renamed to \"{{to}}\" to keep it disabled.",
+        "re_enable_all": "Re-enable all mods",
+        "status": {
+          "idle": "Idle",
+          "scanning": "Scanning",
+          "round": "Round in progress",
+          "done": "Done",
+          "reverting": "Reverting",
+          "cancelled": "Cancelled"
+        }
       }
     },
     "setting": {

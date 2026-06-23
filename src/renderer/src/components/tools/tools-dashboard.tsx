@@ -1,4 +1,5 @@
 import D3D11Builder from "@renderer/components/tools/d3d11-builder";
+import ModBisect from "@renderer/components/tools/mod-bisect";
 import StaticGlbConverter from "@renderer/components/tools/static-glb-converter";
 import TextureResizer from "@renderer/components/tools/texture-resizer";
 import TogglePersistence from "@renderer/components/tools/toggle-persistence";
@@ -55,6 +56,11 @@ const toolPages: ToolPage[] = [
     nameKey: "page.tools.fix-tool-manager.title",
     initials: "FT",
     component: () => <FixToolManager />,
+  },
+  {
+    nameKey: "page.tools.mod_bisect.title",
+    initials: "MB",
+    component: () => <ModBisect />,
   },
 ];
 
