@@ -148,7 +148,13 @@ export default function ModBisect() {
             <Button
               variant="destructive"
               onClick={() => cancelMutation.mutate()}
-              disabled={!snapshot || status === "idle" || isBusy}
+              disabled={
+                !snapshot ||
+                status === "idle" ||
+                status === "done" ||
+                status === "cancelled" ||
+                isBusy
+              }
             >
               {t("page.tools.mod_bisect.cancel")}
             </Button>

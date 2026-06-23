@@ -192,6 +192,7 @@ export class ModBisect {
         }
 
         if (remaining.length === 0) {
+            const session = this.session!;
             this.session = null;
             const toRestore = this.disabledSet(session);
             await this.revertAll(session, toRestore);
@@ -255,7 +256,6 @@ export class ModBisect {
     public async finalize(keepDisabled: string[]): Promise<BisectSnapshot> {
         this.assertSession();
         const session = this.session!;
-        this.session = null;
 
         const keepSet = new Set(keepDisabled.map((p) => p.toLowerCase()));
         const disabledEntries = this.disabledSet(session);
@@ -279,6 +279,7 @@ export class ModBisect {
             await this.journal.clear(session.game);
         }
 
+        this.session = null;
         const finalSnapshot = this.toSnapshot(session, null);
         this.broadcast({ ...finalSnapshot, status: "reverting" });
         this.broadcast({ ...finalSnapshot, status: "idle" });
@@ -292,11 +293,11 @@ export class ModBisect {
             return idleSnapshot;
         }
         const session = this.session;
-        this.session = null;
         this.broadcast({ ...this.toSnapshot(session, null), status: "cancelled" });
         const toRestore = this.disabledSet(session);
         await this.revertAll(session, toRestore);
         await this.journal.clear(session.game);
+        this.session = null;
         this.broadcast({ ...this.toSnapshot(session, null), status: "reverting" });
         const finalSnapshot = this.emptySnapshot("idle");
         this.broadcast(finalSnapshot);

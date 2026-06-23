@@ -52,6 +52,7 @@ export class BisectJournal {
         try {
             const data = await fse.readJson(file);
             if (!Array.isArray(data?.paths)) return null;
+            if (!data.paths.every((p: unknown) => typeof p === "string")) return null;
             const purpose: JournalPurpose = data.purpose === "kept" ? "kept" : "session";
             return { paths: data.paths, purpose };
         } catch {
