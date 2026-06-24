@@ -618,6 +618,20 @@ export function HandlerProvider(props: HandlerProviderProps) {
         ? sortedContents.findIndex((item) => item.id === selectedItems[0]?.id)
         : -1;
 
+      if (e.key === "Enter") {
+        e.preventDefault();
+
+        if (currentIndex !== -1 && sortedContents[currentIndex]?.isDir) {
+          navi({
+            to: location.pathname.startsWith("/drive/share")
+              ? "/drive/share/$id"
+              : "/drive/drive/$id",
+            params: { id: sortedContents[currentIndex].id },
+          });
+        }
+        return;
+      }
+
       if (e.key === "F2") {
         e.preventDefault();
 
