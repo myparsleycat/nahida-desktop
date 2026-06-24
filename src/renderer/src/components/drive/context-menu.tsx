@@ -13,6 +13,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useLocation, useNavigate, useParams, useRouteContext } from "@tanstack/react-router";
 import {
   ClipboardPaste,
+  Copy as CopyIcon,
   DownloadIcon,
   FolderIcon,
   MousePointer2Icon,
@@ -67,7 +68,7 @@ function ContextMenuContentSnippet() {
     from: isSharePath ? "/drive/share/$id" : "/drive/drive/$id",
   });
   const navi = useNavigate();
-  const { copyOrCuts, handleCut, handlePaste } = useDriveClipboardActions(itemId);
+  const { copyOrCuts, handleCut, handleCopy, handlePaste } = useDriveClipboardActions(itemId);
 
   const trashMutation = useMutation({
     mutationKey: ["akasha", "drive", "trash"],
@@ -162,6 +163,11 @@ function ContextMenuContentSnippet() {
 
         <ContextMenuSeparator />
 
+        <ContextMenuItem className="gap-x-2" onClick={handleCopy}>
+          <CopyIcon size={18} />
+          {t("page.drive.context_menu.copy")}
+        </ContextMenuItem>
+
         <ContextMenuItem className="gpa-x-2" onClick={handleCut}>
           <ScissorsIcon size={18} />
           {t("page.drive.context_menu.cut")}
@@ -188,6 +194,11 @@ function ContextMenuContentSnippet() {
 
   return (
     <>
+      <ContextMenuItem className="cursor-pointer gap-x-2" onClick={handleCopy}>
+        <CopyIcon size={18} />
+        {t("page.drive.context_menu.copy")}
+      </ContextMenuItem>
+
       <ContextMenuItem className="cursor-pointer gap-x-2" onClick={handleCut}>
         <ScissorsIcon size={18} />
         {t("page.drive.context_menu.cut")}

@@ -540,7 +540,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
   const setPendingDriveRevealId = useViewStore((s) => s.setPendingDriveRevealId);
   const pendingShareRevealId = useViewStore((s) => s.pendingShareRevealId);
   const setPendingShareRevealId = useViewStore((s) => s.setPendingShareRevealId);
-  const { handleCut, handlePaste } = useDriveClipboardActions(currentId);
+  const { handleCut, handleCopy, handlePaste } = useDriveClipboardActions(currentId);
 
   const searchBuffer = useRef("");
   const searchTimeout = useRef<number | undefined>(undefined);
@@ -746,9 +746,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
 
       if ((e.ctrlKey || e.metaKey) && e.key === "c") {
         e.preventDefault();
-        if (selectedItems.length >= 1) {
-          toast.warning("복사는 지원하지 않습니다");
-        }
+        handleCopy();
       }
 
       if ((e.ctrlKey || e.metaKey) && e.key === "x") {
@@ -773,6 +771,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
       setCopyOrCuts,
       currentId,
       handleCut,
+      handleCopy,
       handlePaste,
       location.pathname,
       scrollItemIntoCenter,

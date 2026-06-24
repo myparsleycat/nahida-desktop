@@ -33,4 +33,8 @@ export function registerDriveHandlers(d: NahidaDesktop) {
     rh("drive:fn:moveMany", async ({ ids, destId }) => {
         return d.service.drive.fn.moveMany({ ids, destId });
     });
+
+    rh("drive:fn:copyMany", async ({ ids, destId }) => {
+        return d.service.drive.fn.copyMany({ ids, destId });
+    });
 }

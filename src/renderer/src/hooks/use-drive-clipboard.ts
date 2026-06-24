@@ -24,36 +24,90 @@ export function useDriveClipboardActions(destinationId: string) {
         );
     }, [selectedItems, setCopyOrCuts]);
 
+    const handleCopy = useCallback(() => {
+        if (selectedItems.length === 0) return;
+
+        const itemsToCopy = [...selectedItems];
+        setCopyOrCuts("copy", itemsToCopy);
+
+        if (itemsToCopy.length === 1) {
+            toast.info(`"${itemsToCopy[0].name}"이(가) 복사 상태로 설정되었습니다`);
+            return;
+        }
+
+        toast.info(
+            `"${itemsToCopy[0].name}"외 ${itemsToCopy.length - 1}개가 복사 상태로 설정되었습니다.`,
+        );
+    }, [selectedItems, setCopyOrCuts]);
+
     const handlePaste = useCallback(() => {
-        if (copyOrCuts.action !== "cut" || copyOrCuts.items.length === 0) return;
+        if (copyOrCuts.action === null || copyOrCuts.items.length === 0) return;
 
-        const itemsToMove: Content[] = [...copyOrCuts.items];
+        if (copyOrCuts.action === "cut") {
+            const itemsToMove: Content[] = [...copyOrCuts.items];
 
-        const promise = window.api.invoke("drive:fn:moveMany", {
-            ids: itemsToMove.map((item) => item.id),
-            destId: destinationId,
-        });
+            const promise = window.api.invoke("drive:fn:moveMany", {
+                ids: itemsToMove.map((item) => item.id),
+                destId: destinationId,
+            });
 
-        toast.promise(promise, {
-            loading: "File moving...",
-            success: () => {
-                queryClient.invalidateQueries({
-                    queryKey: ["drive", "drive", destinationId],
+            toast.promise(promise, {
+                loading: "File moving...",
+                success: () => {
+                    queryClient.invalidateQueries({
+                        queryKey: ["drive", "drive", destinationId],
+                    });
+                    queryClient.invalidateQueries({
+                        queryKey: ["drive", "share", destinationId],
+                    });
+                    setCopyOrCuts(null, []);
+                    return "File moved successfully";
+                },
+                error: (err: unknown) =>
+                    `File moving failed: ${err instanceof Error ? err.message : String(err)}`,
+            });
+            return;
+        }
+
+        if (copyOrCuts.action === "copy") {
+            const itemsToCopy: Content[] = [...copyOrCuts.items];
+
+            const promise = window.api
+                .invoke("drive:fn:copyMany", {
+                    ids: itemsToCopy.map((item) => item.id),
+                    destId: destinationId,
+                })
+                .then(({ error }: { error: unknown }) => {
+                    if (error) {
+                        throw new Error(
+                            typeof error === "object" && error !== null && "value" in error
+                                ? String((error as { value: unknown }).value)
+                                : String(error),
+                        );
+                    }
                 });
-                queryClient.invalidateQueries({
-                    queryKey: ["drive", "share", destinationId],
-                });
-                setCopyOrCuts(null, []);
-                return "File moved successfully";
-            },
-            error: (err: unknown) =>
-                `File moving failed: ${err instanceof Error ? err.message : String(err)}`,
-        });
+
+            toast.promise(promise, {
+                loading: "File copying...",
+                success: () => {
+                    queryClient.invalidateQueries({
+                        queryKey: ["drive", "drive", destinationId],
+                    });
+                    queryClient.invalidateQueries({
+                        queryKey: ["drive", "share", destinationId],
+                    });
+                    return "File copied successfully";
+                },
+                error: (err: unknown) =>
+                    `File copying failed: ${err instanceof Error ? err.message : String(err)}`,
+            });
+        }
     }, [copyOrCuts, destinationId, queryClient, setCopyOrCuts]);
 
     return {
         copyOrCuts,
         handleCut,
+        handleCopy,
         handlePaste,
     };
 }

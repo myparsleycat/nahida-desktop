@@ -133,6 +133,7 @@
         "delete": "Delete",
         "trash": "Trash",
         "new_dir": "Create folder",
+        "copy": "Copy",
         "cut": "Cut",
         "paste": "Paste"
       },

@@ -337,6 +337,14 @@ export class DriveService {
             });
             return { data, error };
         },
+
+        copyMany: async ({ ids, destId }: { ids: string[]; destId: string }) => {
+            const { data, error } = await eden.akasha.content.copy_many.post({
+                uuids: ids,
+                target: destId,
+            });
+            return { data, error };
+        },
     };
 
     private async selectUploadPaths(paths?: string[]): Promise<string[] | null> {
