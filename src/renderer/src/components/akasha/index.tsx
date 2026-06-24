@@ -621,6 +621,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
       if (e.key === "Enter") {
         e.preventDefault();
 
+        if (selectedItems.length !== 1) return;
         if (currentIndex !== -1 && sortedContents[currentIndex]?.isDir) {
           navi({
             to: location.pathname.startsWith("/drive/share")
@@ -645,6 +646,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
         e.preventDefault();
 
         if (e.ctrlKey || e.metaKey) {
+          if (selectedItems.length !== 1) return;
           if (currentIndex !== -1 && sortedContents[currentIndex]?.isDir) {
             navi({
               to: location.pathname.startsWith("/drive/share")
