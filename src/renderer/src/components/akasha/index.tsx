@@ -11,6 +11,7 @@ import { Input } from "@renderer/components/ui/input";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { useAuth } from "@renderer/hooks/use-auth";
 import { useDriveClipboardActions } from "@renderer/hooks/use-drive-clipboard";
+import { downloadItems } from "@renderer/lib/download";
 import i18n from "@renderer/lib/i18n";
 import { cn } from "@renderer/lib/utils";
 import {
@@ -635,10 +636,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
           return;
         }
 
-        await window.api.invoke("drive:fn:startDownload", {
-          id: currentItem.id,
-          suggestedName: currentItem.name,
-        });
+        await downloadItems([currentItem]);
         return;
       }
 

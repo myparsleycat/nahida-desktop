@@ -2,6 +2,7 @@ import type { IpcEvents } from "@shared/types";
 import { BrowserWindow } from "electron";
 import type { NahidaDesktop } from "../index";
 import { registerAuthHandlers } from "./handlers/auth";
+import { registerDialogHandlers } from "./handlers/dialog";
 import { registerDriveHandlers } from "./handlers/drive";
 import { registerFixToolsManagerHandlers } from "./handlers/fix-tools-manager";
 import { registerGameBananaHandlers } from "./handlers/gamebanana";
@@ -27,6 +28,7 @@ export class IPC {
 
     private setupHandlers() {
         registerAuthHandlers(this.d);
+        registerDialogHandlers(this.d);
         registerDriveHandlers(this.d);
         registerGameBananaHandlers(this.d);
         registerSettingHandlers(this.d);

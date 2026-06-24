@@ -265,6 +265,8 @@ export class DriveService {
                     return "canceled";
                 }
                 savePath = this.desktop.lib.fs.sanitizePath(result.path);
+            } else {
+                savePath = this.desktop.lib.fs.sanitizePath(savePath);
             }
 
             const isWritable = await this.desktop.lib.fs.isPathWritable(savePath);

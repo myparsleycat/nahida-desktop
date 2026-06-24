@@ -18,8 +18,8 @@ export function registerDriveHandlers(d: NahidaDesktop) {
         return await d.service.drive.delete.items(ids, action);
     });
 
-    rh("drive:fn:startDownload", async ({ id, suggestedName }) => {
-        return await d.service.drive.fn.startDownload({ id, suggestedName });
+    rh("drive:fn:startDownload", async ({ id, suggestedName, targetPath }) => {
+        return await d.service.drive.fn.startDownload({ id, suggestedName, targetPath });
     });
 
     rh("drive:fn:startUpload", async ({ destId, paths, conflictStrategy }) => {

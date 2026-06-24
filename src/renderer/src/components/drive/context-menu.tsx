@@ -6,6 +6,7 @@ import {
   ContextMenuTrigger,
 } from "@renderer/components/ui/context-menu";
 import { useDriveClipboardActions } from "@renderer/hooks/use-drive-clipboard";
+import { downloadItems } from "@renderer/lib/download";
 import { useContentMenu, useDialogStore, useSelectionStore } from "@renderer/store/drive";
 import type { Content } from "@shared/types";
 import { useMutation } from "@tanstack/react-query";
@@ -154,15 +155,7 @@ function ContextMenuContentSnippet() {
           </>
         )}
 
-        <ContextMenuItem
-          className="gap-x-2"
-          onClick={() =>
-            window.api.invoke("drive:fn:startDownload", {
-              id: selectedItems[0].id,
-              suggestedName: selectedItems[0].name,
-            })
-          }
-        >
+        <ContextMenuItem className="gap-x-2" onClick={() => downloadItems(selectedItems)}>
           <DownloadIcon size={18} />
           {t("page.drive.context_menu.download")}
         </ContextMenuItem>
