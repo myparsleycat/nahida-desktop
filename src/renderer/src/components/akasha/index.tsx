@@ -622,14 +622,23 @@ export function HandlerProvider(props: HandlerProviderProps) {
         e.preventDefault();
 
         if (selectedItems.length !== 1) return;
-        if (currentIndex !== -1 && sortedContents[currentIndex]?.isDir) {
+        const currentItem = currentIndex !== -1 ? sortedContents[currentIndex] : undefined;
+        if (!currentItem) return;
+
+        if (currentItem.isDir) {
           navi({
             to: location.pathname.startsWith("/drive/share")
               ? "/drive/share/$id"
               : "/drive/drive/$id",
-            params: { id: sortedContents[currentIndex].id },
+            params: { id: currentItem.id },
           });
+          return;
         }
+
+        await window.api.invoke("drive:fn:startDownload", {
+          id: currentItem.id,
+          suggestedName: currentItem.name,
+        });
         return;
       }
 
