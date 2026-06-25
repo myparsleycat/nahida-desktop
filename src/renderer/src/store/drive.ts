@@ -1,3 +1,4 @@
+import { downloadItems } from "@renderer/lib/download";
 import type { Content } from "@shared/types";
 import { useNavigate } from "@tanstack/react-router";
 import { createStore, useStore } from "zustand";
@@ -328,10 +329,7 @@ export function useContentMenu(sortedContents?: Content[]) {
             if (item.mimeType?.startsWith("text")) {
                 // textViewerStore.openTextViewer(item);
             } else {
-                await window.api.invoke("drive:fn:startDownload", {
-                    id: item.id,
-                    suggestedName: item.name,
-                });
+                await downloadItems([item]);
             }
         }
     };
