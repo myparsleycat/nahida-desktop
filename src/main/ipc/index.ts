@@ -28,7 +28,7 @@ export class IPC {
 
     private setupHandlers() {
         registerAuthHandlers(this.d);
-        registerDialogHandlers(this.d);
+        registerDialogHandlers();
         registerDriveHandlers(this.d);
         registerGameBananaHandlers(this.d);
         registerSettingHandlers(this.d);
