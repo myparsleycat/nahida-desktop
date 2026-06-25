@@ -335,7 +335,8 @@ export class DriveService {
                 uuids: ids,
                 target: destId,
             });
-            return { data, error };
+            if (error) throw error.value;
+            return data;
         },
 
         copyMany: async ({ ids, destId }: { ids: string[]; destId: string }) => {
@@ -343,7 +344,8 @@ export class DriveService {
                 uuids: ids,
                 target: destId,
             });
-            return { data, error };
+            if (error) throw error.value;
+            return data;
         },
     };
 
