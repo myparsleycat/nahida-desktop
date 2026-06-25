@@ -888,6 +888,8 @@
         "keep_disabled_hint": "将把 \"{{from}}\" 重命名为 \"{{to}}\" 以保持禁用。",
         "re_enable_all": "重新启用所有模组",
         "new_bisect_hint": "开始新的二分排查会恢复所有临时禁用的模组。",
+        "preserve_d3dx": "保护 d3dx_user.ini",
+        "preserve_d3dx_description": "在二分查找期间保持 d3dx_user.ini 为原始状态，防止切换值丢失",
         "status": {
           "idle": "空闲",
           "scanning": "扫描中",

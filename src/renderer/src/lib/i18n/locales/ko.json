@@ -908,6 +908,8 @@
         "keep_disabled_hint": "\"{{from}}\" 파일이 비활성화를 유지하기 위해 \"{{to}}\"(으)로 이름이 변경됩니다.",
         "re_enable_all": "모든 모드 다시 활성화",
         "new_bisect_hint": "새 bisect를 시작하면 임시로 비활성화된 모드가 모두 되돌려집니다.",
+        "preserve_d3dx": "d3dx_user.ini 보호",
+        "preserve_d3dx_description": "이진 탐색 중 d3dx_user.ini를 원래 상태로 유지하여 토글 값 초기화를 방지합니다",
         "status": {
           "idle": "대기 중",
           "scanning": "스캔 중",

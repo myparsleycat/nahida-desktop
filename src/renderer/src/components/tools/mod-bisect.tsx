@@ -14,8 +14,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
+import { Switch } from "@renderer/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import { useGames } from "@renderer/hooks/use-mod-data";
+import { useSetting } from "@renderer/hooks/use-settings";
+import { setSetting } from "@renderer/lib/settings";
 import { isNteImporter } from "@shared/mod";
 import type { BisectSnapshot, GameConfig } from "@shared/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -55,6 +58,7 @@ export default function ModBisect() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [selectedGame, setSelectedGame] = useState<string>("");
+  const { data: preserveD3dx = true } = useSetting("general.bisectPreserveD3dx");
 
   const { data: games = [] } = useGames();
 
@@ -161,6 +165,22 @@ export default function ModBisect() {
             <span className={`text-xs font-mono ${statusColor(status)}`}>
               {t(`page.tools.mod_bisect.status.${status}`)}
             </span>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 rounded-md border p-2">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm font-medium">
+                {t("page.tools.mod_bisect.preserve_d3dx")}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {t("page.tools.mod_bisect.preserve_d3dx_description")}
+              </span>
+            </div>
+            <Switch
+              checked={preserveD3dx}
+              onCheckedChange={(checked) => void setSetting("general.bisectPreserveD3dx", checked)}
+              disabled={isActive || isBusy}
+            />
           </div>
 
           {snapshot?.error && status !== "done" ? (

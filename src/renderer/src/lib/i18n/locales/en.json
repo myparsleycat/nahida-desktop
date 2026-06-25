@@ -926,6 +926,8 @@
         "keep_disabled_hint": "\"{{from}}\" will be renamed to \"{{to}}\" to keep it disabled.",
         "re_enable_all": "Re-enable all mods",
         "new_bisect_hint": "Starting a new bisect reverts all temporarily disabled mods.",
+        "preserve_d3dx": "Preserve d3dx_user.ini",
+        "preserve_d3dx_description": "Keep d3dx_user.ini at its original state during bisect to prevent toggle value loss",
         "status": {
           "idle": "Idle",
           "scanning": "Scanning",
