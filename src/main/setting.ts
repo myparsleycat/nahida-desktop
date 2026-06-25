@@ -259,6 +259,12 @@ export class Setting {
                     await this.desktop.service.transfer.refreshPowerSaveBlock();
                 },
             },
+            "general.bisectPreserveD3dx": {
+                definition: APP_SETTINGS["general.bisectPreserveD3dx"],
+                getDefault: () => true,
+                fromStored: (value) => parseBooleanSetting(value, true),
+                toStored: (value) => String(value),
+            },
             "mod.archiveExtractPathMode": {
                 definition: APP_SETTINGS["mod.archiveExtractPathMode"],
                 getDefault: () => "flatten_single_root",

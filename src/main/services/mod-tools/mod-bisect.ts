@@ -1,6 +1,7 @@
 import path from "node:path";
 import { isNteImporter } from "@shared/mod";
 import type { BisectSnapshot, BisectStatus, GameConfig } from "@shared/types";
+import { delay, retry } from "es-toolkit";
 import fg from "fast-glob";
 import fse from "fs-extra";
 import pLimit from "p-limit";
@@ -44,6 +45,11 @@ export class ModBisect {
     private session: InternalSession | null = null;
     private readonly journal = new BisectJournal();
     public recovering: Promise<void> = Promise.resolve();
+
+    private d3dxWatcherId: string | null = null;
+    private d3dxUserIniPath: string | null = null;
+    private d3dxUserIniInitial: string | null = null;
+    private d3dxRestoreLock: Promise<void> = Promise.resolve();
 
     constructor(private readonly desktop: NahidaDesktop) {}
 
@@ -122,11 +128,16 @@ export class ModBisect {
             return doneSnapshot;
         }
 
+        if (await this.desktop.setting.get("general.bisectPreserveD3dx")) {
+            await this.startD3dxGuard(game, gameConfig);
+        }
+
         const firstBatch = iniPaths.slice(0, FIRST_BATCH_SIZE);
         try {
             await this.disableInis(firstBatch);
         } catch (error) {
             await this.enableInis(firstBatch);
+            await this.stopD3dxGuard(game);
             this.session = null;
             throw error;
         }
@@ -197,6 +208,7 @@ export class ModBisect {
             const toRestore = this.disabledSet(session);
             await this.revertAll(session, toRestore);
             await this.journal.clear(session.game);
+            await this.stopD3dxGuard(session.game);
             const snapshot = this.toSnapshot(session, BISECT_INCONCLUSIVE_ERROR, "done");
             this.broadcast(snapshot);
             return snapshot;
@@ -279,6 +291,8 @@ export class ModBisect {
             await this.journal.clear(session.game);
         }
 
+        await this.stopD3dxGuard(session.game);
+
         this.session = null;
         const finalSnapshot = this.toSnapshot(session, null);
         this.broadcast({ ...finalSnapshot, status: "reverting" });
@@ -297,6 +311,7 @@ export class ModBisect {
         const toRestore = this.disabledSet(session);
         await this.revertAll(session, toRestore);
         await this.journal.clear(session.game);
+        await this.stopD3dxGuard(session.game);
         this.session = null;
         this.broadcast({ ...this.toSnapshot(session, null), status: "reverting" });
         const finalSnapshot = this.emptySnapshot("idle");
@@ -307,6 +322,7 @@ export class ModBisect {
     public async recover(games: GameConfig[]): Promise<void> {
         for (const game of games) {
             if (!game.modFolderPath || isNteImporter(game.importer)) continue;
+            await this.recoverD3dxBackup(game);
             const journal = await this.journal.load(game.game);
             const orphans = await this.journal.listOrphans(game.modFolderPath);
 
@@ -454,6 +470,104 @@ export class ModBisect {
     private async revertAll(session: InternalSession, paths: string[]): Promise<void> {
         if (paths.length === 0) return;
         await this.enableInis(paths);
+    }
+
+    private async resolveD3dxUserIniPath(gameConfig: GameConfig): Promise<string | null> {
+        try {
+            await this.desktop.service.xxmi?.init();
+        } catch {
+            // xxmi not configured
+        }
+        const importers = this.desktop.service.xxmi?.getEnabledImporters() ?? [];
+        const importer = importers.find((i) => i.key === gameConfig.importer);
+        if (!importer) return null;
+        const d3dxPath = path.join(importer.importerFolder, "d3dx_user.ini");
+        return (await fse.pathExists(d3dxPath)) ? d3dxPath : null;
+    }
+
+    private async startD3dxGuard(game: string, gameConfig: GameConfig): Promise<void> {
+        const d3dxPath = await this.resolveD3dxUserIniPath(gameConfig);
+        if (!d3dxPath) return;
+        try {
+            this.d3dxUserIniPath = d3dxPath;
+            this.d3dxUserIniInitial = await fse.readFile(d3dxPath, "utf-8");
+            await fse.outputFile(this.journal.d3dxBackupPath(game), this.d3dxUserIniInitial);
+            this.d3dxWatcherId = await this.desktop.lib.watcher.create(
+                d3dxPath,
+                { compareContents: true },
+                (eventName) => {
+                    if (eventName === "modify" || eventName === "create") {
+                        this.enqueueD3dxRestore();
+                    }
+                },
+            );
+        } catch (error) {
+            this.desktop.logger.error(error, "ModBisect:d3dxGuard");
+            this.d3dxUserIniPath = null;
+            this.d3dxUserIniInitial = null;
+            await fse.remove(this.journal.d3dxBackupPath(game)).catch(() => {});
+        }
+    }
+
+    private enqueueD3dxRestore(): void {
+        this.d3dxRestoreLock = this.d3dxRestoreLock
+            .catch(() => {})
+            .then(() => this.restoreD3dxIfChanged());
+        void this.d3dxRestoreLock.catch((error) => {
+            this.desktop.logger.error(error, "ModBisect:d3dxRestore");
+        });
+    }
+
+    private async restoreD3dxIfChanged(): Promise<void> {
+        const d3dxPath = this.d3dxUserIniPath;
+        const initial = this.d3dxUserIniInitial;
+        if (!d3dxPath || initial === null) return;
+        try {
+            await delay(300);
+            await retry(
+                async () => {
+                    const current = await fse.readFile(d3dxPath, "utf-8");
+                    if (current === initial) return;
+                    await fse.writeFile(d3dxPath, initial, "utf-8");
+                },
+                { retries: 5, delay: 200 },
+            );
+        } catch (error) {
+            this.desktop.logger.error(error, "ModBisect:d3dxRestore");
+        }
+    }
+
+    private async stopD3dxGuard(game: string): Promise<void> {
+        await this.d3dxRestoreLock;
+        if (this.d3dxWatcherId) {
+            await this.desktop.lib.watcher.remove(this.d3dxWatcherId);
+            this.d3dxWatcherId = null;
+        }
+        const backupPath = this.journal.d3dxBackupPath(game);
+        if (this.d3dxUserIniPath && (await fse.pathExists(backupPath))) {
+            try {
+                await fse.copy(backupPath, this.d3dxUserIniPath, { overwrite: true });
+            } catch (error) {
+                this.desktop.logger.error(error, "ModBisect:d3dxFinalRestore");
+            }
+        }
+        await fse.remove(backupPath).catch(() => {});
+        this.d3dxUserIniPath = null;
+        this.d3dxUserIniInitial = null;
+    }
+
+    private async recoverD3dxBackup(game: GameConfig): Promise<void> {
+        const backupPath = this.journal.d3dxBackupPath(game.game);
+        if (!(await fse.pathExists(backupPath))) return;
+        try {
+            const d3dxPath = await this.resolveD3dxUserIniPath(game);
+            if (!d3dxPath) return;
+            await fse.copy(backupPath, d3dxPath, { overwrite: true });
+            await fse.remove(backupPath);
+            this.desktop.logger.info(`Restored d3dx_user.ini backup for ${game.game}`, "ModBisect");
+        } catch (error) {
+            this.desktop.logger.error(error, "ModBisect:d3dxRecover");
+        }
     }
 
     private chooseNextBatchSize(candidateCount: number, currentBatchSize: number): number {

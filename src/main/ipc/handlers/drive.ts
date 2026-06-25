@@ -18,8 +18,8 @@ export function registerDriveHandlers(d: NahidaDesktop) {
         return await d.service.drive.delete.items(ids, action);
     });
 
-    rh("drive:fn:startDownload", async ({ id, suggestedName }) => {
-        return await d.service.drive.fn.startDownload({ id, suggestedName });
+    rh("drive:fn:startDownload", async ({ items, targetPath }) => {
+        return await d.service.drive.fn.startDownload({ items, targetPath });
     });
 
     rh("drive:fn:startUpload", async ({ destId, paths, conflictStrategy }) => {
@@ -32,5 +32,9 @@ export function registerDriveHandlers(d: NahidaDesktop) {
 
     rh("drive:fn:moveMany", async ({ ids, destId }) => {
         return d.service.drive.fn.moveMany({ ids, destId });
+    });
+
+    rh("drive:fn:copyMany", async ({ ids, destId }) => {
+        return d.service.drive.fn.copyMany({ ids, destId });
     });
 }

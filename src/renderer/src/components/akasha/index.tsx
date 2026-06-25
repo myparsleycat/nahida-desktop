@@ -11,6 +11,7 @@ import { Input } from "@renderer/components/ui/input";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { useAuth } from "@renderer/hooks/use-auth";
 import { useDriveClipboardActions } from "@renderer/hooks/use-drive-clipboard";
+import { downloadItems } from "@renderer/lib/download";
 import i18n from "@renderer/lib/i18n";
 import { cn } from "@renderer/lib/utils";
 import {
@@ -180,6 +181,7 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
 export function AkashaHeadButtons() {
   const { t } = useTranslation();
   const dialog = useDialogStore();
+  const { selectedItems } = useSelectionStore();
 
   const layout = useViewStore((s) => s.layout);
   const setLayout = useViewStore((s) => s.setLayout);
@@ -187,7 +189,10 @@ export function AkashaHeadButtons() {
   const setSearchInDirQuery = useViewStore((s) => s.setSearchInDirQuery);
   const setFocusSearchInputState = useViewStore((s) => s.setFocusSearchInputState);
 
-  const handleDownload = () => {};
+  const handleDownload = () => {
+    if (selectedItems.length === 0) return;
+    void downloadItems(selectedItems);
+  };
 
   return (
     <div className="shrink-0 flex flex-row justify-end items-center gap-2">
@@ -539,7 +544,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
   const setPendingDriveRevealId = useViewStore((s) => s.setPendingDriveRevealId);
   const pendingShareRevealId = useViewStore((s) => s.pendingShareRevealId);
   const setPendingShareRevealId = useViewStore((s) => s.setPendingShareRevealId);
-  const { handleCut, handlePaste } = useDriveClipboardActions(currentId);
+  const { handleCut, handleCopy, handlePaste } = useDriveClipboardActions(currentId);
 
   const searchBuffer = useRef("");
   const searchTimeout = useRef<number | undefined>(undefined);
@@ -618,6 +623,27 @@ export function HandlerProvider(props: HandlerProviderProps) {
         ? sortedContents.findIndex((item) => item.id === selectedItems[0]?.id)
         : -1;
 
+      if (e.key === "Enter") {
+        e.preventDefault();
+
+        if (selectedItems.length !== 1) return;
+        const currentItem = currentIndex !== -1 ? sortedContents[currentIndex] : undefined;
+        if (!currentItem) return;
+
+        if (currentItem.isDir) {
+          navi({
+            to: location.pathname.startsWith("/drive/share")
+              ? "/drive/share/$id"
+              : "/drive/drive/$id",
+            params: { id: currentItem.id },
+          });
+          return;
+        }
+
+        await downloadItems([currentItem]);
+        return;
+      }
+
       if (e.key === "F2") {
         e.preventDefault();
 
@@ -631,6 +657,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
         e.preventDefault();
 
         if (e.ctrlKey || e.metaKey) {
+          if (selectedItems.length !== 1) return;
           if (currentIndex !== -1 && sortedContents[currentIndex]?.isDir) {
             navi({
               to: location.pathname.startsWith("/drive/share")
@@ -723,9 +750,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
 
       if ((e.ctrlKey || e.metaKey) && e.key === "c") {
         e.preventDefault();
-        if (selectedItems.length >= 1) {
-          toast.warning("복사는 지원하지 않습니다");
-        }
+        handleCopy();
       }
 
       if ((e.ctrlKey || e.metaKey) && e.key === "x") {
@@ -750,6 +775,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
       setCopyOrCuts,
       currentId,
       handleCut,
+      handleCopy,
       handlePaste,
       location.pathname,
       scrollItemIntoCenter,

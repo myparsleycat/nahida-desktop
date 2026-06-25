@@ -133,8 +133,21 @@
         "delete": "Delete",
         "trash": "Trash",
         "new_dir": "Create folder",
+        "copy": "Copy",
         "cut": "Cut",
         "paste": "Paste"
+      },
+      "clipboard": {
+        "cut_single": "\"{{name}}\" is ready to be cut",
+        "cut_multiple": "\"{{name}}\" and {{count}} more are ready to be cut",
+        "copy_single": "\"{{name}}\" is ready to be copied",
+        "copy_multiple": "\"{{name}}\" and {{count}} more are ready to be copied",
+        "move_loading": "Moving files...",
+        "move_success": "Files moved successfully",
+        "move_error": "Failed to move files: {{message}}",
+        "copy_loading": "Copying files...",
+        "copy_success": "Files copied successfully",
+        "copy_error": "Failed to copy files: {{message}}"
       },
       "dialog": {
         "common": {
@@ -913,6 +926,8 @@
         "keep_disabled_hint": "\"{{from}}\" will be renamed to \"{{to}}\" to keep it disabled.",
         "re_enable_all": "Re-enable all mods",
         "new_bisect_hint": "Starting a new bisect reverts all temporarily disabled mods.",
+        "preserve_d3dx": "Preserve d3dx_user.ini",
+        "preserve_d3dx_description": "Keep d3dx_user.ini at its original state during bisect to prevent toggle value loss",
         "status": {
           "idle": "Idle",
           "scanning": "Scanning",

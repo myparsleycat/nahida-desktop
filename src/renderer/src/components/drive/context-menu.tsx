@@ -6,12 +6,14 @@ import {
   ContextMenuTrigger,
 } from "@renderer/components/ui/context-menu";
 import { useDriveClipboardActions } from "@renderer/hooks/use-drive-clipboard";
+import { downloadItems } from "@renderer/lib/download";
 import { useContentMenu, useDialogStore, useSelectionStore } from "@renderer/store/drive";
 import type { Content } from "@shared/types";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation, useNavigate, useParams, useRouteContext } from "@tanstack/react-router";
 import {
   ClipboardPaste,
+  Copy as CopyIcon,
   DownloadIcon,
   FolderIcon,
   MousePointer2Icon,
@@ -66,7 +68,7 @@ function ContextMenuContentSnippet() {
     from: isSharePath ? "/drive/share/$id" : "/drive/drive/$id",
   });
   const navi = useNavigate();
-  const { copyOrCuts, handleCut, handlePaste } = useDriveClipboardActions(itemId);
+  const { copyOrCuts, handleCut, handleCopy, handlePaste } = useDriveClipboardActions(itemId);
 
   const trashMutation = useMutation({
     mutationKey: ["akasha", "drive", "trash"],
@@ -154,20 +156,17 @@ function ContextMenuContentSnippet() {
           </>
         )}
 
-        <ContextMenuItem
-          className="gap-x-2"
-          onClick={() =>
-            window.api.invoke("drive:fn:startDownload", {
-              id: selectedItems[0].id,
-              suggestedName: selectedItems[0].name,
-            })
-          }
-        >
+        <ContextMenuItem className="gap-x-2" onClick={() => void downloadItems(selectedItems)}>
           <DownloadIcon size={18} />
           {t("page.drive.context_menu.download")}
         </ContextMenuItem>
 
         <ContextMenuSeparator />
+
+        <ContextMenuItem className="gap-x-2" onClick={handleCopy}>
+          <CopyIcon size={18} />
+          {t("page.drive.context_menu.copy")}
+        </ContextMenuItem>
 
         <ContextMenuItem className="gpa-x-2" onClick={handleCut}>
           <ScissorsIcon size={18} />
@@ -195,6 +194,19 @@ function ContextMenuContentSnippet() {
 
   return (
     <>
+      <ContextMenuItem
+        className="cursor-pointer gap-x-2"
+        onClick={() => void downloadItems(selectedItems)}
+      >
+        <DownloadIcon size={18} />
+        {t("page.drive.context_menu.download")}
+      </ContextMenuItem>
+
+      <ContextMenuItem className="cursor-pointer gap-x-2" onClick={handleCopy}>
+        <CopyIcon size={18} />
+        {t("page.drive.context_menu.copy")}
+      </ContextMenuItem>
+
       <ContextMenuItem className="cursor-pointer gap-x-2" onClick={handleCut}>
         <ScissorsIcon size={18} />
         {t("page.drive.context_menu.cut")}

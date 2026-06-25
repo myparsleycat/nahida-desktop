@@ -74,4 +74,8 @@ export class BisectJournal {
     private fileFor(game: string): string {
         return path.join(this.dir, `${game}.json`);
     }
+
+    public d3dxBackupPath(game: string): string {
+        return path.join(this.dir, `${game}.d3dx_user.ini.bak`);
+    }
 }

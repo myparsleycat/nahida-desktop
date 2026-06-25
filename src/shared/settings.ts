@@ -12,6 +12,7 @@ export interface AppSettings {
     "general.logLevel": string;
     "general.moveTransferPageWhenStartTransfer": boolean;
     "general.powerSaveBlockInTransfer": boolean;
+    "general.bisectPreserveD3dx": boolean;
 
     "mod.archiveExtractPathMode": ArchiveExtractPathMode;
     "mod.deleteArchiveAfterExtract": boolean;
@@ -98,6 +99,11 @@ export const APP_SETTINGS = {
         publicKey: "general.powerSaveBlockInTransfer",
         scope: "general",
         storageKey: "powerSaveBlockInTransfer",
+    },
+    "general.bisectPreserveD3dx": {
+        publicKey: "general.bisectPreserveD3dx",
+        scope: "general",
+        storageKey: "bisect_preserve_d3dx",
     },
 
     "mod.archiveExtractPathMode": {

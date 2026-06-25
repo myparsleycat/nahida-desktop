@@ -113,8 +113,21 @@
         "trash": "ゴミ箱",
         "new_dir": "フォルダー作成",
         "delete": "削除",
+        "copy": "コピー",
         "cut": "切り取り",
         "paste": "貼り付け"
+      },
+      "clipboard": {
+        "cut_single": "「{{name}}」を切り取り状態に設定しました",
+        "cut_multiple": "「{{name}}」ほか{{count}}件を切り取り状態に設定しました",
+        "copy_single": "「{{name}}」をコピー状態に設定しました",
+        "copy_multiple": "「{{name}}」ほか{{count}}件をコピー状態に設定しました",
+        "move_loading": "ファイルを移動しています...",
+        "move_success": "ファイルを移動しました",
+        "move_error": "ファイルの移動に失敗しました: {{message}}",
+        "copy_loading": "ファイルをコピーしています...",
+        "copy_success": "ファイルをコピーしました",
+        "copy_error": "ファイルのコピーに失敗しました: {{message}}"
       },
       "dialog": {
         "common": {
@@ -876,6 +889,8 @@
         "keep_disabled_hint": "\"{{from}}\" を \"{{to}}\" にリネームして無効状態を保持します。",
         "re_enable_all": "すべてのMODを再度有効化",
         "new_bisect_hint": "新しいバイセクトを開始すると、一時的に無効化したMODはすべて元に戻ります。",
+        "preserve_d3dx": "d3dx_user.ini を保護",
+        "preserve_d3dx_description": "二分探索中に d3dx_user.ini を元の状態に保ち、トグル値のリセットを防ぎます",
         "status": {
           "idle": "待機中",
           "scanning": "スキャン中",
