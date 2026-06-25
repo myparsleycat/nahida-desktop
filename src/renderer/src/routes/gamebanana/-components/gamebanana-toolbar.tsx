@@ -16,6 +16,7 @@ import {
   MenubarRadioItem,
   MenubarTrigger,
 } from "@renderer/components/ui/menubar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import { ArrowLeftIcon, ExternalLinkIcon, LinkIcon, LogOutIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { GameBananaBreadcrumbItem, GameOption } from "../-types";
@@ -161,20 +162,35 @@ export function GameBananaToolbar({
         <ButtonGroupText className="h-8 text-xs text-muted-foreground">
           {stageLabel}
         </ButtonGroupText>
-        <Button variant="outline" onClick={onOpenModUrlDialog}>
-          <LinkIcon />
-          {/* {t("page.gamebanana.open_mod_url.button")} */}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="outline" onClick={onOpenModUrlDialog}>
+              <LinkIcon />
+              <span className="sr-only">{t("page.gamebanana.open_mod_url.button")}</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{t("page.gamebanana.open_mod_url.button")}</TooltipContent>
+        </Tooltip>
         {canOpenProfile && (
-          <Button variant="outline" onClick={onOpenGameProfile}>
-            <ExternalLinkIcon />
-            {/* {t("page.gamebanana.open_profile")} */}
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" onClick={onOpenGameProfile}>
+                <ExternalLinkIcon />
+                <span className="sr-only">{t("page.gamebanana.open_profile")}</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t("page.gamebanana.open_profile")}</TooltipContent>
+          </Tooltip>
         )}
-        <Button variant="outline" onClick={onLogout} disabled={isLoggingOut}>
-          <LogOutIcon />
-          {/* {t("page.gamebanana.logout")} */}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="outline" onClick={onLogout} disabled={isLoggingOut}>
+              <LogOutIcon />
+              <span className="sr-only">{t("page.gamebanana.logout")}</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{t("page.gamebanana.logout")}</TooltipContent>
+        </Tooltip>
       </ButtonGroup>
     </div>
   );
