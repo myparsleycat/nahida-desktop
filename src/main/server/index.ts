@@ -101,10 +101,14 @@ app.get(
                         }
 
                         downloadStatus = await desktop.service.drive.fn.startDownload({
-                            id,
-                            isDir,
+                            items: [
+                                {
+                                    id,
+                                    isDir,
+                                    name: suggestedName ?? data?.root.name ?? "item",
+                                },
+                            ],
                             link,
-                            suggestedName: suggestedName ?? data?.root.name,
                             data,
                         });
                     } else if (decoded.type === "hui") {

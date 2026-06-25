@@ -3,7 +3,11 @@ import { promisify } from "node:util";
 import { gunzip, gzip, zstdCompress, zstdDecompress } from "node:zlib";
 import type { Treaty } from "@elysiajs/eden";
 import { eden } from "@main/client";
-import Download, { type DownloadMetadata, type DownloadParams } from "@main/lib/download";
+import Download, {
+    BATCH_ROOT_ID,
+    type DownloadMetadata,
+    type DownloadParams,
+} from "@main/lib/download";
 import Upload, {
     type DirectoriesComponent,
     type FilesComponent,
@@ -17,7 +21,7 @@ import fse from "fs-extra";
 import Heap from "mnemonist/heap";
 import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "..";
-import { saveFileDialog } from "./dialog";
+import { saveFileDialog, selectDirectoryDialog } from "./dialog";
 import type { LocalTransfer } from "./transfer";
 import { processChunked } from "./util";
 
@@ -238,28 +242,31 @@ export class DriveService {
         },
 
         startDownload: async ({
-            id,
-            isDir,
-            data,
-            link,
-            suggestedName,
+            items,
             targetPath,
+            link,
+            data,
         }: {
-            id: string;
-            isDir: boolean;
-            data?: DownloadMetadata;
-            link?: LinkData;
-            suggestedName?: string;
+            items: Array<{ id: string; isDir: boolean; name: string }>;
             targetPath?: string;
+            link?: LinkData;
+            data?: DownloadMetadata;
         }): Promise<"started" | "canceled"> => {
-            if (suggestedName) {
-                suggestedName = this.desktop.lib.fs.sanitizeWindowsFilename(suggestedName);
+            if (items.length === 0) return "canceled";
+
+            for (const item of items) {
+                item.name = this.desktop.lib.fs.sanitizeWindowsFilename(item.name);
             }
 
+            const isSingle = items.length === 1;
+            const single = items[0];
+            const allDirs = items.every((item) => item.isDir);
+
             let savePath = targetPath;
+            let suggestedName = isSingle ? single.name : undefined;
 
             if (!savePath) {
-                if (!isDir) {
+                if (isSingle && !single.isDir) {
                     const result = await saveFileDialog({ suggestedName });
                     if (result.canceled) {
                         this.desktop.logger.info(
@@ -270,7 +277,7 @@ export class DriveService {
                     }
                     savePath = path.dirname(result.filePath);
                     suggestedName = path.basename(result.filePath);
-                } else {
+                } else if (allDirs) {
                     const result =
                         await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(
                             suggestedName,
@@ -283,6 +290,16 @@ export class DriveService {
                         return "canceled";
                     }
                     savePath = result.path;
+                } else {
+                    const result = await selectDirectoryDialog();
+                    if (result.canceled || !result.filePath) {
+                        this.desktop.logger.info(
+                            "Download cancelled by user selection",
+                            "Drive:Download",
+                        );
+                        return "canceled";
+                    }
+                    savePath = result.filePath;
                 }
             }
 
@@ -296,15 +313,15 @@ export class DriveService {
             try {
                 const { pid, restartParams, abortController } =
                     await this.createDownloadTransferEntry({
-                        id,
+                        id: isSingle ? single.id : items[0].id,
                         currentId: data?.root.id || "",
                         savePath,
-                        suggestedName,
+                        suggestedName: isSingle ? suggestedName : undefined,
                     });
 
                 this.processDownloadAsync({
-                    id,
-                    isDir,
+                    items,
+                    isSingle,
                     pid,
                     restartParams,
                     abortController,
@@ -313,6 +330,7 @@ export class DriveService {
                     suggestedName,
                     savePath,
                 }).catch((err) => {
+                    if (abortController.signal.aborted) return;
                     this.desktop.logger.error(err, "Drive:Download:Preprocessing");
                     this.desktop.service.transfer.updateTransfer(pid, {
                         status: "error",
@@ -578,8 +596,8 @@ export class DriveService {
     }
 
     private async processDownloadAsync({
-        id,
-        isDir,
+        items,
+        isSingle,
         pid,
         restartParams,
         abortController,
@@ -588,8 +606,8 @@ export class DriveService {
         suggestedName,
         savePath,
     }: {
-        id: string;
-        isDir: boolean;
+        items: Array<{ id: string; isDir: boolean; name: string }>;
+        isSingle: boolean;
         pid: string;
         restartParams: DownloadParams;
         abortController: AbortController;
@@ -598,17 +616,30 @@ export class DriveService {
         suggestedName?: string;
         savePath: string;
     }) {
+        const single = items[0];
+        const isDir = isSingle && single.isDir;
+
         if (!data) {
-            data = isDir
-                ? await this.download.getDownloadUrl({ id, link, signal: abortController.signal })
-                : await this.download.getFileDownloadMetadata({
-                      id,
+            data = isSingle
+                ? isDir
+                    ? await this.download.getDownloadUrl({
+                          id: single.id,
+                          link,
+                          signal: abortController.signal,
+                      })
+                    : await this.download.getFileDownloadMetadata({
+                          id: single.id,
+                          link,
+                      })
+                : await this.download.fetchMergedMetadata({
+                      items,
                       link,
+                      signal: abortController.signal,
                   });
         }
 
         if (data.root) {
-            if (suggestedName) {
+            if (suggestedName && isSingle) {
                 data.root.name = suggestedName;
 
                 if (!isDir && data.files?.length === 1) {
@@ -616,10 +647,22 @@ export class DriveService {
                 }
             }
 
-            if (isDir) {
+            if (isSingle && isDir) {
                 const sanitized = this.desktop.lib.fs.sanitizeWindowsFilename(data.root.name);
                 const entries = await fse.readdir(savePath);
                 data.root.name = this.desktop.lib.fs.getUniqueName(sanitized, entries);
+            } else if (!isSingle) {
+                const usedNames = new Set(await fse.readdir(savePath));
+                for (const dir of data.dirs) {
+                    if (dir.parentId === BATCH_ROOT_ID) {
+                        dir.name = this.claimUniqueName(dir.name, usedNames);
+                    }
+                }
+                for (const file of data.files) {
+                    if (file.parentId === BATCH_ROOT_ID) {
+                        file.name = this.claimUniqueName(file.name, usedNames);
+                    }
+                }
             }
         }
 
@@ -645,7 +688,7 @@ export class DriveService {
             );
         }
 
-        const name = data.root?.name || "Download";
+        const name = isSingle ? data.root?.name || "Download" : `${items.length} items`;
 
         const transfer = this.desktop.service.transfer.getTransferByPID(pid);
         if (transfer) {
@@ -664,6 +707,13 @@ export class DriveService {
             name,
         });
         this.desktop.service.transfer.processQueue();
+    }
+
+    private claimUniqueName(name: string, used: Set<string>) {
+        const sanitized = this.desktop.lib.fs.sanitizeWindowsFilename(name);
+        const unique = this.desktop.lib.fs.getUniqueName(sanitized, [...used]);
+        used.add(unique);
+        return unique;
     }
 
     private async executeDownloadRunner({

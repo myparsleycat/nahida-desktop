@@ -8,7 +8,7 @@ import { eden } from "@main/client";
 import type { LinkData } from "@main/server";
 import type { TransferData } from "@shared/types";
 import { decode } from "cbor-x";
-import { retry, throttle } from "es-toolkit";
+import { chunk, retry, throttle } from "es-toolkit";
 import fse from "fs-extra";
 import ky from "ky";
 import ms from "ms";
@@ -42,6 +42,9 @@ export type DownloadMetadata = {
         name: string;
     }>;
 };
+
+export const BATCH_ROOT_ID = "batch-root";
+const FILE_ID_BATCH_LIMIT = 100;
 
 class DownloadStreamer {
     constructor(private readonly desktop: NahidaDesktop) {}
@@ -137,8 +140,25 @@ class DownloadStreamer {
         id: string;
         link?: LinkData;
     }): Promise<DownloadMetadata> {
+        const [file] = await this.fetchFileDownloadsBatch({ ids: [id], link });
+
+        return {
+            root: { id: file.id, parentId: null, name: file.name },
+            totalBytes: file.size,
+            files: [file],
+            dirs: [],
+        };
+    }
+
+    public async fetchFileDownloadsBatch({
+        ids,
+        link,
+    }: {
+        ids: string[];
+        link?: LinkData;
+    }): Promise<DownloadMetadata["files"]> {
         const { data, error } = await eden.akasha.file.downloads.post(
-            { ids: [id] },
+            { ids },
             {
                 ...(link && {
                     query: { linkId: link.linkId },
@@ -151,23 +171,15 @@ class DownloadStreamer {
             throw new Error("File download URL not received.");
         }
 
-        const file = data[0];
-        return {
-            root: { id: file.id, parentId: null, name: file.name },
-            totalBytes: file.size,
-            files: [
-                {
-                    id: file.id,
-                    fileId: file.id,
-                    parentId: null,
-                    name: file.name,
-                    size: file.size,
-                    compAlg: (file.compAlg as DownloadMetadata["files"][0]["compAlg"]) ?? null,
-                    url: file.url,
-                },
-            ],
-            dirs: [],
-        };
+        return data.map((file) => ({
+            id: file.id,
+            fileId: file.id,
+            parentId: null,
+            name: file.name,
+            size: file.size,
+            compAlg: (file.compAlg as DownloadMetadata["files"][0]["compAlg"]) ?? null,
+            url: file.url,
+        }));
     }
 }
 
@@ -620,6 +632,66 @@ export class DownloadLib {
         return this.streamer.fetchFileDownloads({ id, link });
     }
 
+    public async fetchMergedMetadata({
+        items,
+        link,
+        signal,
+    }: {
+        items: Array<{ id: string; isDir: boolean }>;
+        link?: LinkData;
+        signal: AbortSignal;
+    }): Promise<DownloadMetadata> {
+        const folders = items.filter((item) => item.isDir);
+        const files = items.filter((item) => !item.isDir);
+
+        const mergedDirs: DownloadMetadata["dirs"] = [];
+        const mergedFiles: DownloadMetadata["files"] = [];
+        let totalBytes = 0;
+
+        for (const fileChunk of chunk(files, FILE_ID_BATCH_LIMIT)) {
+            const fileEntries = await this.streamer.fetchFileDownloadsBatch({
+                ids: fileChunk.map((file) => file.id),
+                link,
+            });
+            if (signal.aborted) throw new Error("Download cancelled");
+
+            const returnedIds = new Set(fileEntries.map((file) => file.id));
+            if (fileChunk.some((file) => !returnedIds.has(file.id))) {
+                throw new Error("Some selected files could not be fetched");
+            }
+
+            for (const file of fileEntries) {
+                mergedFiles.push({ ...file, parentId: BATCH_ROOT_ID });
+                totalBytes += file.size;
+            }
+        }
+
+        const folderQueue = new PQueue({ concurrency: 4 });
+        await folderQueue.addAll(
+            folders.map((folder) => async () => {
+                if (signal.aborted) throw new Error("Download cancelled");
+
+                const meta = await this.streamer.fetchMetadata({
+                    id: folder.id,
+                    link,
+                    signal,
+                });
+
+                mergedDirs.push({ ...meta.root, parentId: BATCH_ROOT_ID });
+                mergedDirs.push(...meta.dirs);
+                mergedFiles.push(...meta.files);
+                totalBytes += meta.totalBytes;
+            }),
+        );
+
+        return {
+            root: { id: BATCH_ROOT_ID, parentId: null, name: "" },
+            totalBytes,
+            files: mergedFiles,
+            dirs: mergedDirs,
+        };
+    }
+
     public async executeDownload({
         pid,
         params,
@@ -720,7 +792,7 @@ export class DownloadLib {
 
             if (abort.signal.aborted) return;
 
-            await this.finalizeDownload(pid, params.savePath, data.root.name);
+            await this.finalizeDownload(pid, params.savePath);
         } catch (err) {
             if (abort.signal.aborted) return;
             this.desktop.service.transfer.updateTransfer(pid, {
@@ -794,17 +866,20 @@ export class DownloadLib {
         }
     }
 
-    private async finalizeDownload(pid: string, savePath: string, rootName: string) {
+    private async finalizeDownload(pid: string, savePath: string) {
         this.desktop.service.transfer.updateTransfer(pid, {
             status: "completed",
             progress: 100,
         });
 
+        const transfer = this.desktop.service.transfer.getTransferByPID(pid);
+        const name = transfer?.name ?? "Download";
+
         const mainWindow = this.desktop.window.main.window;
         if (mainWindow) {
             this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
                 path: savePath,
-                name: rootName,
+                name,
             });
         }
     }

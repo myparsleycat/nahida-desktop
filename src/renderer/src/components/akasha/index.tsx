@@ -181,6 +181,7 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
 export function AkashaHeadButtons() {
   const { t } = useTranslation();
   const dialog = useDialogStore();
+  const { selectedItems } = useSelectionStore();
 
   const layout = useViewStore((s) => s.layout);
   const setLayout = useViewStore((s) => s.setLayout);
@@ -188,7 +189,10 @@ export function AkashaHeadButtons() {
   const setSearchInDirQuery = useViewStore((s) => s.setSearchInDirQuery);
   const setFocusSearchInputState = useViewStore((s) => s.setFocusSearchInputState);
 
-  const handleDownload = () => {};
+  const handleDownload = () => {
+    if (selectedItems.length === 0) return;
+    void downloadItems(selectedItems);
+  };
 
   return (
     <div className="shrink-0 flex flex-row justify-end items-center gap-2">

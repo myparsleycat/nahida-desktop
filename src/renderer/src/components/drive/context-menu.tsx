@@ -156,7 +156,7 @@ function ContextMenuContentSnippet() {
           </>
         )}
 
-        <ContextMenuItem className="gap-x-2" onClick={() => downloadItems(selectedItems)}>
+        <ContextMenuItem className="gap-x-2" onClick={() => void downloadItems(selectedItems)}>
           <DownloadIcon size={18} />
           {t("page.drive.context_menu.download")}
         </ContextMenuItem>
@@ -194,6 +194,14 @@ function ContextMenuContentSnippet() {
 
   return (
     <>
+      <ContextMenuItem
+        className="cursor-pointer gap-x-2"
+        onClick={() => void downloadItems(selectedItems)}
+      >
+        <DownloadIcon size={18} />
+        {t("page.drive.context_menu.download")}
+      </ContextMenuItem>
+
       <ContextMenuItem className="cursor-pointer gap-x-2" onClick={handleCopy}>
         <CopyIcon size={18} />
         {t("page.drive.context_menu.copy")}
