@@ -137,6 +137,18 @@
         "cut": "Cut",
         "paste": "Paste"
       },
+      "clipboard": {
+        "cut_single": "\"{{name}}\" is ready to be cut",
+        "cut_multiple": "\"{{name}}\" and {{count}} more are ready to be cut",
+        "copy_single": "\"{{name}}\" is ready to be copied",
+        "copy_multiple": "\"{{name}}\" and {{count}} more are ready to be copied",
+        "move_loading": "Moving files...",
+        "move_success": "Files moved successfully",
+        "move_error": "Failed to move files: {{message}}",
+        "copy_loading": "Copying files...",
+        "copy_success": "Files copied successfully",
+        "copy_error": "Failed to copy files: {{message}}"
+      },
       "dialog": {
         "common": {
           "invalid_dir_name": "Invalid directory name.",

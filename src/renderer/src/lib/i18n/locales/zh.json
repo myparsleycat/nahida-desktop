@@ -116,6 +116,18 @@
         "cut": "剪切",
         "paste": "粘贴"
       },
+      "clipboard": {
+        "cut_single": "\u201c{{name}}\u201d 已设置为剪切状态",
+        "cut_multiple": "\u201c{{name}}\u201d 及其他 {{count}} 项已设置为剪切状态",
+        "copy_single": "\u201c{{name}}\u201d 已设置为复制状态",
+        "copy_multiple": "\u201c{{name}}\u201d 及其他 {{count}} 项已设置为复制状态",
+        "move_loading": "正在移动文件...",
+        "move_success": "文件移动成功",
+        "move_error": "文件移动失败：{{message}}",
+        "copy_loading": "正在复制文件...",
+        "copy_success": "文件复制成功",
+        "copy_error": "文件复制失败：{{message}}"
+      },
       "dialog": {
         "common": {
           "invalid_dir_name": "无效的目录名称。",

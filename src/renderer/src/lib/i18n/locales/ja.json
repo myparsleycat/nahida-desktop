@@ -117,6 +117,18 @@
         "cut": "切り取り",
         "paste": "貼り付け"
       },
+      "clipboard": {
+        "cut_single": "「{{name}}」を切り取り状態に設定しました",
+        "cut_multiple": "「{{name}}」ほか{{count}}件を切り取り状態に設定しました",
+        "copy_single": "「{{name}}」をコピー状態に設定しました",
+        "copy_multiple": "「{{name}}」ほか{{count}}件をコピー状態に設定しました",
+        "move_loading": "ファイルを移動しています...",
+        "move_success": "ファイルを移動しました",
+        "move_error": "ファイルの移動に失敗しました: {{message}}",
+        "copy_loading": "ファイルをコピーしています...",
+        "copy_success": "ファイルをコピーしました",
+        "copy_error": "ファイルのコピーに失敗しました: {{message}}"
+      },
       "dialog": {
         "common": {
           "invalid_dir_name": "無効なディレクトリ名です。",

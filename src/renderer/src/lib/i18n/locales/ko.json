@@ -116,6 +116,18 @@
         "cut": "잘라내기",
         "paste": "붙여넣기"
       },
+      "clipboard": {
+        "cut_single": "\"{{name}}\"이(가) 잘라내기 상태로 설정되었습니다",
+        "cut_multiple": "\"{{name}}\"외 {{count}}개가 잘라내기 상태로 설정되었습니다",
+        "copy_single": "\"{{name}}\"이(가) 복사 상태로 설정되었습니다",
+        "copy_multiple": "\"{{name}}\"외 {{count}}개가 복사 상태로 설정되었습니다",
+        "move_loading": "파일 이동 중...",
+        "move_success": "파일을 이동했습니다",
+        "move_error": "파일 이동 실패: {{message}}",
+        "copy_loading": "파일 복사 중...",
+        "copy_success": "파일을 복사했습니다",
+        "copy_error": "파일 복사 실패: {{message}}"
+      },
       "dialog": {
         "common": {
           "invalid_dir_name": "유효하지 않은 디렉토리 이름입니다.",

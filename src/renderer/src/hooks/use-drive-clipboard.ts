@@ -2,9 +2,11 @@ import { useSelectionStore } from "@renderer/store/drive";
 import type { Content } from "@shared/types";
 import { useRouteContext } from "@tanstack/react-router";
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 export function useDriveClipboardActions(destinationId: string) {
+    const { t } = useTranslation();
     const { queryClient } = useRouteContext({ from: "__root__" });
     const { selectedItems, copyOrCuts, setCopyOrCuts } = useSelectionStore();
 
@@ -15,14 +17,17 @@ export function useDriveClipboardActions(destinationId: string) {
         setCopyOrCuts("cut", itemsToCut);
 
         if (itemsToCut.length === 1) {
-            toast.info(`"${itemsToCut[0].name}"이(가) 잘라내기 상태로 설정되었습니다`);
+            toast.info(t("page.drive.clipboard.cut_single", { name: itemsToCut[0].name }));
             return;
         }
 
         toast.info(
-            `"${itemsToCut[0].name}"외 ${itemsToCut.length - 1}개가 잘라내기 상태로 설정되었습니다.`,
+            t("page.drive.clipboard.cut_multiple", {
+                name: itemsToCut[0].name,
+                count: itemsToCut.length - 1,
+            }),
         );
-    }, [selectedItems, setCopyOrCuts]);
+    }, [selectedItems, setCopyOrCuts, t]);
 
     const handleCopy = useCallback(() => {
         if (selectedItems.length === 0) return;
@@ -31,14 +36,17 @@ export function useDriveClipboardActions(destinationId: string) {
         setCopyOrCuts("copy", itemsToCopy);
 
         if (itemsToCopy.length === 1) {
-            toast.info(`"${itemsToCopy[0].name}"이(가) 복사 상태로 설정되었습니다`);
+            toast.info(t("page.drive.clipboard.copy_single", { name: itemsToCopy[0].name }));
             return;
         }
 
         toast.info(
-            `"${itemsToCopy[0].name}"외 ${itemsToCopy.length - 1}개가 복사 상태로 설정되었습니다.`,
+            t("page.drive.clipboard.copy_multiple", {
+                name: itemsToCopy[0].name,
+                count: itemsToCopy.length - 1,
+            }),
         );
-    }, [selectedItems, setCopyOrCuts]);
+    }, [selectedItems, setCopyOrCuts, t]);
 
     const handlePaste = useCallback(() => {
         if (copyOrCuts.action === null || copyOrCuts.items.length === 0) return;
@@ -52,7 +60,7 @@ export function useDriveClipboardActions(destinationId: string) {
             });
 
             toast.promise(promise, {
-                loading: "File moving...",
+                loading: t("page.drive.clipboard.move_loading"),
                 success: () => {
                     queryClient.invalidateQueries({
                         queryKey: ["drive", "drive", destinationId],
@@ -61,10 +69,12 @@ export function useDriveClipboardActions(destinationId: string) {
                         queryKey: ["drive", "share", destinationId],
                     });
                     setCopyOrCuts(null, []);
-                    return "File moved successfully";
+                    return t("page.drive.clipboard.move_success");
                 },
                 error: (err: unknown) =>
-                    `File moving failed: ${err instanceof Error ? err.message : String(err)}`,
+                    t("page.drive.clipboard.move_error", {
+                        message: err instanceof Error ? err.message : String(err),
+                    }),
             });
             return;
         }
@@ -72,23 +82,13 @@ export function useDriveClipboardActions(destinationId: string) {
         if (copyOrCuts.action === "copy") {
             const itemsToCopy: Content[] = [...copyOrCuts.items];
 
-            const promise = window.api
-                .invoke("drive:fn:copyMany", {
-                    ids: itemsToCopy.map((item) => item.id),
-                    destId: destinationId,
-                })
-                .then(({ error }: { error: unknown }) => {
-                    if (error) {
-                        throw new Error(
-                            typeof error === "object" && error !== null && "value" in error
-                                ? String((error as { value: unknown }).value)
-                                : String(error),
-                        );
-                    }
-                });
+            const promise = window.api.invoke("drive:fn:copyMany", {
+                ids: itemsToCopy.map((item) => item.id),
+                destId: destinationId,
+            });
 
             toast.promise(promise, {
-                loading: "File copying...",
+                loading: t("page.drive.clipboard.copy_loading"),
                 success: () => {
                     queryClient.invalidateQueries({
                         queryKey: ["drive", "drive", destinationId],
@@ -96,13 +96,15 @@ export function useDriveClipboardActions(destinationId: string) {
                     queryClient.invalidateQueries({
                         queryKey: ["drive", "share", destinationId],
                     });
-                    return "File copied successfully";
+                    return t("page.drive.clipboard.copy_success");
                 },
                 error: (err: unknown) =>
-                    `File copying failed: ${err instanceof Error ? err.message : String(err)}`,
+                    t("page.drive.clipboard.copy_error", {
+                        message: err instanceof Error ? err.message : String(err),
+                    }),
             });
         }
-    }, [copyOrCuts, destinationId, queryClient, setCopyOrCuts]);
+    }, [copyOrCuts, destinationId, queryClient, setCopyOrCuts, t]);
 
     return {
         copyOrCuts,
