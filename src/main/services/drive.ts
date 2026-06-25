@@ -1,3 +1,4 @@
+import path from "node:path";
 import { promisify } from "node:util";
 import { gunzip, gzip, zstdCompress, zstdDecompress } from "node:zlib";
 import type { Treaty } from "@elysiajs/eden";
@@ -16,6 +17,7 @@ import fse from "fs-extra";
 import Heap from "mnemonist/heap";
 import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "..";
+import { saveFileDialog } from "./dialog";
 import type { LocalTransfer } from "./transfer";
 import { processChunked } from "./util";
 
@@ -237,12 +239,14 @@ export class DriveService {
 
         startDownload: async ({
             id,
+            isDir,
             data,
             link,
             suggestedName,
             targetPath,
         }: {
             id: string;
+            isDir: boolean;
             data?: DownloadMetadata;
             link?: LinkData;
             suggestedName?: string;
@@ -255,19 +259,34 @@ export class DriveService {
             let savePath = targetPath;
 
             if (!savePath) {
-                const result =
-                    await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(suggestedName);
-                if (!result.path) {
-                    this.desktop.logger.info(
-                        "Download cancelled by user selection",
-                        "Drive:Download",
-                    );
-                    return "canceled";
+                if (!isDir) {
+                    const result = await saveFileDialog({ suggestedName });
+                    if (result.canceled) {
+                        this.desktop.logger.info(
+                            "Download cancelled by user selection",
+                            "Drive:Download",
+                        );
+                        return "canceled";
+                    }
+                    savePath = path.dirname(result.filePath);
+                    suggestedName = path.basename(result.filePath);
+                } else {
+                    const result =
+                        await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(
+                            suggestedName,
+                        );
+                    if (!result.path) {
+                        this.desktop.logger.info(
+                            "Download cancelled by user selection",
+                            "Drive:Download",
+                        );
+                        return "canceled";
+                    }
+                    savePath = result.path;
                 }
-                savePath = this.desktop.lib.fs.sanitizePath(result.path);
-            } else {
-                savePath = this.desktop.lib.fs.sanitizePath(savePath);
             }
+
+            savePath = this.desktop.lib.fs.sanitizePath(savePath);
 
             const isWritable = await this.desktop.lib.fs.isPathWritable(savePath);
             if (!isWritable) {
@@ -285,6 +304,7 @@ export class DriveService {
 
                 this.processDownloadAsync({
                     id,
+                    isDir,
                     pid,
                     restartParams,
                     abortController,
@@ -559,6 +579,7 @@ export class DriveService {
 
     private async processDownloadAsync({
         id,
+        isDir,
         pid,
         restartParams,
         abortController,
@@ -568,6 +589,7 @@ export class DriveService {
         savePath,
     }: {
         id: string;
+        isDir: boolean;
         pid: string;
         restartParams: DownloadParams;
         abortController: AbortController;
@@ -577,18 +599,28 @@ export class DriveService {
         savePath: string;
     }) {
         if (!data) {
-            data = await this.download.getDownloadUrl({ id, link, signal: abortController.signal });
+            data = isDir
+                ? await this.download.getDownloadUrl({ id, link, signal: abortController.signal })
+                : await this.download.getFileDownloadMetadata({
+                      id,
+                      link,
+                  });
         }
 
         if (data.root) {
             if (suggestedName) {
                 data.root.name = suggestedName;
+
+                if (!isDir && data.files?.length === 1) {
+                    data.files[0].name = suggestedName;
+                }
             }
 
-            const sanitized = this.desktop.lib.fs.sanitizeWindowsFilename(data.root.name);
-
-            const entries = await fse.readdir(savePath);
-            data.root.name = this.desktop.lib.fs.getUniqueName(sanitized, entries);
+            if (isDir) {
+                const sanitized = this.desktop.lib.fs.sanitizeWindowsFilename(data.root.name);
+                const entries = await fse.readdir(savePath);
+                data.root.name = this.desktop.lib.fs.getUniqueName(sanitized, entries);
+            }
         }
 
         if (data.files) {

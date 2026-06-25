@@ -1,5 +1,4 @@
 import type { Content } from "@shared/types";
-import path from "path-browserify";
 import { invoke } from "./ipc";
 
 export async function downloadItems(items: Content[]) {
@@ -10,19 +9,17 @@ export async function downloadItems(items: Content[]) {
     if (onlyItem && onlyItem.isDir) {
         await invoke("drive:fn:startDownload", {
             id: onlyItem.id,
+            isDir: true,
             suggestedName: onlyItem.name,
         });
         return;
     }
 
     if (items.length === 1 && !items[0].isDir) {
-        const result = await invoke("dialog:saveFile", { suggestedName: items[0].name });
-        if (result.canceled || !result.filePath) return;
-
         await invoke("drive:fn:startDownload", {
             id: items[0].id,
-            suggestedName: path.basename(result.filePath),
-            targetPath: path.dirname(result.filePath),
+            isDir: false,
+            suggestedName: items[0].name,
         });
         return;
     }
@@ -34,6 +31,7 @@ export async function downloadItems(items: Content[]) {
         items.map((item) =>
             invoke("drive:fn:startDownload", {
                 id: item.id,
+                isDir: item.isDir,
                 suggestedName: item.name,
                 targetPath: result.filePath,
             }),

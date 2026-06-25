@@ -129,6 +129,46 @@ class DownloadStreamer {
             ...downloadData,
         };
     }
+
+    public async fetchFileDownloads({
+        id,
+        link,
+    }: {
+        id: string;
+        link?: LinkData;
+    }): Promise<DownloadMetadata> {
+        const { data, error } = await eden.akasha.file.downloads.post(
+            { ids: [id] },
+            {
+                ...(link && {
+                    query: { linkId: link.linkId },
+                    headers: { "nhd-link-token": link.token },
+                }),
+            },
+        );
+        if (error) throw error;
+        if (!data || data.length === 0) {
+            throw new Error("File download URL not received.");
+        }
+
+        const file = data[0];
+        return {
+            root: { id: file.id, parentId: null, name: file.name },
+            totalBytes: file.size,
+            files: [
+                {
+                    id: file.id,
+                    fileId: file.id,
+                    parentId: null,
+                    name: file.name,
+                    size: file.size,
+                    compAlg: (file.compAlg as DownloadMetadata["files"][0]["compAlg"]) ?? null,
+                    url: file.url,
+                },
+            ],
+            dirs: [],
+        };
+    }
 }
 
 class DownloadFileSystem {
@@ -570,6 +610,16 @@ export class DownloadLib {
         };
     }
 
+    public async getFileDownloadMetadata({
+        id,
+        link,
+    }: {
+        id: string;
+        link?: LinkData;
+    }): Promise<DownloadMetadata> {
+        return this.streamer.fetchFileDownloads({ id, link });
+    }
+
     public async executeDownload({
         pid,
         params,
@@ -598,7 +648,11 @@ export class DownloadLib {
 
             this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
 
-            const pathMap = this.fs.resolveDirectoryPaths(data.root, data.dirs, params.savePath);
+            const isSingleFile = data.dirs.length === 0 && data.files.length === 1;
+            const pathMap = isSingleFile
+                ? new Map<string, string>([[data.root.id, params.savePath]])
+                : this.fs.resolveDirectoryPaths(data.root, data.dirs, params.savePath);
+            const singleFileParentKey = isSingleFile ? data.root.id : null;
             const ensuredDirs = new Set<string>();
 
             let downloadedBytes = initialTransferedSize ?? 0;
@@ -619,14 +673,14 @@ export class DownloadLib {
                 await this.waitForQueueBackpressure();
                 if (abort.signal.aborted) break;
 
-                const parentPath = pathMap.get(file.parentId ?? "");
+                const parentPath = pathMap.get(singleFileParentKey ?? file.parentId ?? "");
                 if (!parentPath) continue;
 
                 const filePath = path.join(parentPath, file.name);
 
                 void this.fileQueue.add(async () => {
                     if (abort.signal.aborted) return;
-                    if (parentPath && !ensuredDirs.has(parentPath)) {
+                    if (!isSingleFile && parentPath && !ensuredDirs.has(parentPath)) {
                         await this.desktop.lib.fs.ensureDir(parentPath);
                         ensuredDirs.add(parentPath);
                     }
@@ -648,14 +702,16 @@ export class DownloadLib {
                 });
             }
 
-            for (const dirPath of pathMap.values()) {
-                if (abort.signal.aborted) break;
-                if (!ensuredDirs.has(dirPath)) {
-                    void this.fileQueue.add(async () => {
-                        if (abort.signal.aborted) return;
-                        await this.desktop.lib.fs.ensureDir(dirPath);
-                        ensuredDirs.add(dirPath);
-                    });
+            if (!isSingleFile) {
+                for (const dirPath of pathMap.values()) {
+                    if (abort.signal.aborted) break;
+                    if (!ensuredDirs.has(dirPath)) {
+                        void this.fileQueue.add(async () => {
+                            if (abort.signal.aborted) return;
+                            await this.desktop.lib.fs.ensureDir(dirPath);
+                            ensuredDirs.add(dirPath);
+                        });
+                    }
                 }
             }
 

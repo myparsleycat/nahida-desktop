@@ -20,6 +20,7 @@ const linkData = z
 const liveData = z.object({
     type: uploadTypes,
     id: z.string(),
+    isDir: z.boolean().default(true),
     link: linkData,
     suggestedName: z.string().optional(),
     data: z
@@ -91,7 +92,7 @@ app.get(
 
                 try {
                     if (decoded.type === "live") {
-                        const { id, link, suggestedName, data } = liveData.parse(decoded);
+                        const { id, isDir, link, suggestedName, data } = liveData.parse(decoded);
 
                         const isLoggedIn = await desktop.service.auth.isLoggedIn();
                         if (!link && !isLoggedIn) {
@@ -101,6 +102,7 @@ app.get(
 
                         downloadStatus = await desktop.service.drive.fn.startDownload({
                             id,
+                            isDir,
                             link,
                             suggestedName: suggestedName ?? data?.root.name,
                             data,
