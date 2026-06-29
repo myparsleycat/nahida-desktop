@@ -1,16 +1,12 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
-import sha256PiscinaWorker from "@main/worker/drive/sha256-piscina.worker?modulePath";
 import { getMatchingImporter } from "@shared/xxmi-match";
 import fg from "fast-glob";
 import fse from "fs-extra";
 import { nanoid } from "nanoid";
-import Piscina from "piscina";
 import type { NahidaDesktop } from "../..";
 import type { ModLibraryService } from "./library";
 import { isSameOrChildPath, normalizeModPath } from "./path-utils";
-
-const hashPool = new Piscina({ filename: sha256PiscinaWorker });
 
 interface ShaderFixesModManifestFile {
     file: string;
@@ -160,7 +156,7 @@ export class ModShaderFixesService {
     }
 
     private async hashFile(filePath: string): Promise<string> {
-        return await hashPool.run({ path: filePath });
+        return await this.desktop.lib.utils.getFileHash(filePath);
     }
 
     private getShaderFixesModManifestPath(modPath: string): string {
