@@ -22,7 +22,7 @@ if (isDev) {
     autoUpdater.forceDevUpdateConfig = true;
 }
 
-const RELEASE_NOTES_TRANSLATION_URL = "https://translate.nahida.live";
+const RELEASE_NOTES_TRANSLATION_URL = "https://api.nahida.live/translate";
 
 export class Updater {
     private readonly desktop: NahidaDesktop;
@@ -409,8 +409,8 @@ export class Updater {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                source: "English",
-                target: this.getLanguageName(language),
+                source: "en",
+                target: language,
                 text: originalText,
             }),
         });
@@ -449,17 +449,6 @@ export class Updater {
             return parsed.response.choices[0]?.message.content?.trim() ?? "";
         } catch {
             return trimmedResponseText;
-        }
-    }
-
-    private getLanguageName(language: ReleaseNoteTranslationLanguage): string {
-        switch (language) {
-            case "ko":
-                return "Korean";
-            case "ja":
-                return "Japanese";
-            case "zh":
-                return "Simplified Chinese";
         }
     }
 

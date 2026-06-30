@@ -57,6 +57,12 @@ export interface WuwaFixerStatus {
     nextCheckAt: string | null;
 }
 
+export interface FourThousandOneFixerProgressEvent {
+    task: "build-dll" | "diversify-dll" | "restore-dll" | null;
+    code: string;
+    errorMessage?: string;
+}
+
 export interface WuwaFixerPrepareResult extends WuwaFixerStatus {
     needsInstall: boolean;
     checkedRemotely: boolean;
@@ -286,7 +292,7 @@ export type IpcEvents = {
     }) => void;
     "setting:xxmi:persistLogs": (logs: string[]) => void;
     "setting:xxmi:toggleViewerLogs": (logs: string[]) => void;
-    "tools:progress": (message: string) => void;
+    "tools:4001FixerProgress": (event: FourThousandOneFixerProgressEvent) => void;
     "tools:bisectState": (snapshot: BisectSnapshot) => void;
     "ftm:log": (event: FixToolLogEvent) => void;
     "updater:status-changed": (

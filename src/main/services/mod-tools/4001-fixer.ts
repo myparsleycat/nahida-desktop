@@ -1,9 +1,11 @@
 import { exec } from "node:child_process";
 import crypto from "node:crypto";
+import { createReadStream } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
+import { diversifyDllPadding } from "@native/pe-padding-diversifier";
 import fse from "fs-extra";
 import ky from "ky";
 import ms from "ms";
@@ -22,6 +24,12 @@ type ExecBuildError = Error & {
 type BuildD3DResult = {
     success: boolean;
     errorMessage?: string;
+    backupPath?: string;
+};
+
+type DiversificationState = {
+    hasBackup: boolean;
+    backupPath: string | null;
 };
 
 type GitHubRelease = {
@@ -33,18 +41,24 @@ const NON_RELEASE_VERSION_NAMES = new Set(["main", "master"]);
 const D3D_BUILD_STATE_KEY_PREFIX = "mod_tools:d3d_build:";
 const D3D_BUILD_TEMP_DIR_NAME = "nahida-tools-d3d-build";
 const D3D_BUILD_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+const DIVERSIFY_TEMP_SUFFIX = ".nahida-diversified.tmp";
+const DIVERSIFIER_BACKUP_PREFIX = `${TARGET_DLL_NAME}.pepd-backup-`;
+const DIVERSIFIER_BACKUP_HASH_PREFIX_LENGTH = 7;
+const BACKUP_HASH_PATTERN = /^d3d11\.dll\.pepd-backup-([a-f0-9]{7})-\d+\.bak$/;
+
+type FourThousandOneFixerTask = "build-dll" | "diversify-dll" | "restore-dll";
 
 type D3DBuildState = {
     id: string;
     tempDir: string;
 };
 
-export class DllBuilder {
+export class FourThousandOneFixer {
     private readonly VS_EDITIONS = ["Community", "Professional", "Enterprise", "Insiders"];
     private readonly VS_VERSIONS = ["2025", "2022", "18", "17"];
     private readonly RELEASES_FETCH_COOLDOWN_MS = ms("1m");
 
-    private isBuilding = false;
+    private activeTask: FourThousandOneFixerTask | null = null;
     private currentProgress = "";
     private currentErrorMessage = "";
 
@@ -60,9 +74,10 @@ export class DllBuilder {
         void this.updateReleases();
     }
 
-    public getBuilderState() {
+    public getState() {
         return {
-            isBuilding: this.isBuilding,
+            isBuilding: this.activeTask !== null,
+            activeTask: this.activeTask,
             progress: this.currentProgress,
             errorMessage: this.currentErrorMessage,
         };
@@ -114,7 +129,7 @@ export class DllBuilder {
             if (!resp.ok) {
                 this.desktop.logger.warn(
                     `Failed to fetch releases for ${provider}: ${resp.status} ${resp.statusText}`,
-                    "DllBuilder:fetchProviderReleases",
+                    "4001Fixer:fetchProviderReleases",
                 );
                 return false;
             }
@@ -129,7 +144,7 @@ export class DllBuilder {
                 );
             return true;
         } catch (error) {
-            this.desktop.logger.error(error, "DllBuilder:fetchProviderReleases");
+            this.desktop.logger.error(error, "4001Fixer:fetchProviderReleases");
             return false;
         }
     }
@@ -142,13 +157,33 @@ export class DllBuilder {
         return this.releasesCache[provider] ?? [];
     }
 
+    public async getDiversificationState({
+        importerPath,
+    }: {
+        importerPath?: string;
+    }): Promise<DiversificationState> {
+        if (!importerPath || !(await fse.pathExists(importerPath))) {
+            return { hasBackup: false, backupPath: null };
+        }
+
+        const backupPath = await this.findDiversifierBackup(importerPath);
+        return {
+            hasBackup: !!backupPath,
+            backupPath,
+        };
+    }
+
     private updateProgress(code: string, errorMessage = "") {
         this.currentProgress = code;
         this.currentErrorMessage = errorMessage;
-        this.desktop.ipc.broadcast("tools:progress", code);
+        this.desktop.ipc.broadcast("tools:4001FixerProgress", {
+            task: this.activeTask,
+            code,
+            errorMessage,
+        });
     }
 
-    public async buildNewD3DDLL({
+    public async buildD3D11Dll({
         provider,
         version,
         importerKey,
@@ -159,15 +194,15 @@ export class DllBuilder {
         importerKey: string;
         importerPath?: string;
     }): Promise<BuildD3DResult> {
-        if (this.isBuilding) {
+        if (this.activeTask) {
             return { success: false };
         }
 
-        this.isBuilding = true;
+        this.activeTask = "build-dll";
         this.updateProgress("XXMI_INIT");
         if (!importerPath || !(await fse.pathExists(importerPath))) {
             this.updateProgress("XXMI_ERR_GIMI_NOT_FOUND");
-            this.isBuilding = false;
+            this.activeTask = null;
             return { success: false };
         }
 
@@ -182,7 +217,7 @@ export class DllBuilder {
                 : "XXMI_ERR_DLL_NOT_WRITABLE";
             const errorMessage = this.desktop.lib.fs.formatProcessList(destinationCheck.processes);
             this.updateProgress(errorCode, errorMessage);
-            this.isBuilding = false;
+            this.activeTask = null;
             return { success: false, errorMessage };
         }
 
@@ -190,7 +225,7 @@ export class DllBuilder {
         const vcvarsPath = await this.findVsDevCmd();
         if (!vcvarsPath) {
             this.updateProgress("XXMI_ERR_VS_NOT_FOUND");
-            this.isBuilding = false;
+            this.activeTask = null;
             return { success: false };
         }
 
@@ -204,18 +239,18 @@ export class DllBuilder {
             const projectPath = await this.prepareSourceCode(tempDir, provider, version);
 
             this.updateProgress("XXMI_BUILDING");
-            this.desktop.logger.info("Building D3D11 DLL...", "DllBuilder:buildNewD3DDLL");
+            this.desktop.logger.info("Building D3D11 DLL...", "4001Fixer:buildD3D11Dll");
 
             const buildSuccess = await this.executeMsBuild(vcvarsPath, projectPath);
             if (!buildSuccess) {
-                this.isBuilding = false;
+                this.activeTask = null;
                 return { success: false };
             }
 
             const builtDllPath = path.join(projectPath, "x64", "Release", TARGET_DLL_NAME);
             if (!(await fse.pathExists(builtDllPath))) {
                 this.updateProgress("XXMI_ERR_DLL_NOT_FOUND");
-                this.isBuilding = false;
+                this.activeTask = null;
                 return { success: false };
             }
 
@@ -229,7 +264,7 @@ export class DllBuilder {
                 if (lockInfo.isLocked) {
                     const errorMessage = this.desktop.lib.fs.formatProcessList(lockInfo.processes);
                     this.updateProgress("XXMI_ERR_DLL_IN_USE", errorMessage);
-                    this.isBuilding = false;
+                    this.activeTask = null;
                     return { success: false, errorMessage };
                 }
                 throw error;
@@ -240,26 +275,299 @@ export class DllBuilder {
                 await this.enableUnsafeMode(xxmiPath, importerKey);
             }
 
+            await this.removeDiversifierBackups(importerPath);
+
             this.updateProgress("XXMI_BUILD_SUCCESS");
             this.desktop.logger.info(
                 `Successfully built and installed d3d11.dll to ${finalDestination}`,
-                "DllBuilder:buildNewD3DDLL",
+                "4001Fixer:buildD3D11Dll",
             );
 
-            this.isBuilding = false;
+            this.activeTask = null;
             return { success: true };
         } catch (error) {
-            this.desktop.logger.error(error, "DllBuilder:buildNewD3DDLL");
+            this.desktop.logger.error(error, "4001Fixer:buildD3D11Dll");
             const errorMessage = this.extractBuildErrorMessage(error);
             this.updateProgress("XXMI_ERR_BUILD_FAILED", errorMessage);
-            this.isBuilding = false;
+            this.activeTask = null;
             return { success: false, errorMessage };
         } finally {
             await fse.remove(tempDir).catch(() => {});
             await this.untrackBuildTempDir(buildId).catch((error) => {
-                this.desktop.logger.error(error, "DllBuilder:untrackBuildTempDir");
+                this.desktop.logger.error(error, "4001Fixer:untrackBuildTempDir");
             });
         }
+    }
+
+    public async diversifyD3D11DllPadding({
+        importerKey,
+        importerPath,
+    }: {
+        importerKey: string;
+        importerPath?: string;
+    }): Promise<BuildD3DResult> {
+        if (this.activeTask) {
+            return { success: false };
+        }
+
+        this.activeTask = "diversify-dll";
+        this.updateProgress("XXMI_OBFUSCATE_INIT");
+
+        if (!importerPath || !(await fse.pathExists(importerPath))) {
+            this.updateProgress("XXMI_ERR_GIMI_NOT_FOUND");
+            this.activeTask = null;
+            return { success: false };
+        }
+
+        const backupPath = await this.findDiversifierBackup(importerPath);
+        if (backupPath) {
+            this.updateProgress("XXMI_OBFUSCATE_BACKUP_EXISTS");
+            this.activeTask = null;
+            return { success: false, backupPath };
+        }
+
+        const targetDllPath = path.join(importerPath, TARGET_DLL_NAME);
+        if (!(await fse.pathExists(targetDllPath))) {
+            this.updateProgress("XXMI_ERR_DLL_NOT_FOUND");
+            this.activeTask = null;
+            return { success: false };
+        }
+
+        const destinationCheck = await this.desktop.lib.fs.isPathWritable(targetDllPath, {
+            detailed: true,
+            parentPath: importerPath,
+        });
+        if (!destinationCheck.writable) {
+            const errorCode = destinationCheck.locked
+                ? "XXMI_ERR_DLL_IN_USE"
+                : "XXMI_ERR_DLL_NOT_WRITABLE";
+            const errorMessage = this.desktop.lib.fs.formatProcessList(destinationCheck.processes);
+            this.updateProgress(errorCode, errorMessage);
+            this.activeTask = null;
+            return { success: false, errorMessage };
+        }
+
+        const tempPath = path.join(
+            importerPath,
+            `${TARGET_DLL_NAME}.${nanoid()}${DIVERSIFY_TEMP_SUFFIX}`,
+        );
+
+        try {
+            this.updateProgress("XXMI_OBFUSCATING");
+            const result = await diversifyDllPadding(targetDllPath, tempPath);
+
+            if (result.candidates === 0) {
+                this.updateProgress("XXMI_ERR_OBFUSCATE_NO_CANDIDATES");
+                this.activeTask = null;
+                return { success: false };
+            }
+            if (result.patchedCandidates === 0) {
+                const errorMessage = `Found ${result.candidates} JMP-rel8 candidate(s), but none were safe to patch.`;
+                this.updateProgress("XXMI_ERR_OBFUSCATE_NO_CANDIDATES", errorMessage);
+                this.activeTask = null;
+                return { success: false, errorMessage };
+            }
+            if (result.mutations === 0 || result.hashBefore === result.hashAfter) {
+                this.updateProgress("XXMI_OBFUSCATE_ALREADY_APPLIED");
+                this.activeTask = null;
+                return { success: false };
+            }
+
+            const diversifiedHash = await this.hashDllFile(tempPath);
+            const hashPrefix = diversifiedHash.slice(0, DIVERSIFIER_BACKUP_HASH_PREFIX_LENGTH);
+            const newBackupPath = this.getBackupPath(importerPath, hashPrefix);
+            await fse.copy(targetDllPath, newBackupPath, { overwrite: false });
+
+            try {
+                await fse.move(tempPath, targetDllPath, { overwrite: true });
+            } catch (error) {
+                const lockInfo = await this.desktop.lib.fs.isLockedPathError(error, targetDllPath);
+                if (lockInfo.isLocked) {
+                    const errorMessage = this.desktop.lib.fs.formatProcessList(lockInfo.processes);
+                    this.updateProgress("XXMI_ERR_DLL_IN_USE", errorMessage);
+                    this.activeTask = null;
+                    return { success: false, errorMessage };
+                }
+                throw error;
+            }
+
+            const xxmiPath = await this.desktop.service.xxmi.getXXMIPath();
+            if (xxmiPath) {
+                await this.enableUnsafeMode(xxmiPath, importerKey);
+            }
+
+            this.updateProgress("XXMI_OBFUSCATE_SUCCESS");
+            this.desktop.logger.info(
+                `Successfully diversified padding in ${targetDllPath}; backup=${newBackupPath}; candidates=${result.candidates}; mutations=${result.mutations}; hashBefore=${result.hashBefore}; hashAfter=${result.hashAfter}`,
+                "4001Fixer:diversifyD3D11DllPadding",
+            );
+
+            this.activeTask = null;
+            return { success: true, backupPath: newBackupPath };
+        } catch (error) {
+            this.desktop.logger.error(error, "4001Fixer:diversifyD3D11DllPadding");
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.updateProgress("XXMI_ERR_OBFUSCATE_FAILED", errorMessage);
+            this.activeTask = null;
+            return { success: false, errorMessage };
+        } finally {
+            await fse.remove(tempPath).catch(() => {});
+        }
+    }
+
+    public async restoreDiversifiedD3D11Dll({
+        importerPath,
+    }: {
+        importerPath?: string;
+    }): Promise<BuildD3DResult> {
+        if (this.activeTask) {
+            return { success: false };
+        }
+
+        this.activeTask = "restore-dll";
+        this.updateProgress("XXMI_RESTORE_INIT");
+
+        if (!importerPath || !(await fse.pathExists(importerPath))) {
+            this.updateProgress("XXMI_ERR_GIMI_NOT_FOUND");
+            this.activeTask = null;
+            return { success: false };
+        }
+
+        const backupPath = await this.findDiversifierBackup(importerPath);
+        if (!backupPath) {
+            this.updateProgress("XXMI_ERR_RESTORE_BACKUP_NOT_FOUND");
+            this.activeTask = null;
+            return { success: false };
+        }
+
+        const targetDllPath = path.join(importerPath, TARGET_DLL_NAME);
+        const destinationCheck = await this.desktop.lib.fs.isPathWritable(targetDllPath, {
+            detailed: true,
+            parentPath: importerPath,
+        });
+        if (!destinationCheck.writable) {
+            const errorCode = destinationCheck.locked
+                ? "XXMI_ERR_DLL_IN_USE"
+                : "XXMI_ERR_DLL_NOT_WRITABLE";
+            const errorMessage = this.desktop.lib.fs.formatProcessList(destinationCheck.processes);
+            this.updateProgress(errorCode, errorMessage);
+            this.activeTask = null;
+            return { success: false, errorMessage };
+        }
+
+        try {
+            this.updateProgress("XXMI_RESTORING");
+            await fse.copy(backupPath, targetDllPath, { overwrite: true });
+            await this.removeDiversifierBackups(importerPath);
+
+            this.updateProgress("XXMI_RESTORE_SUCCESS");
+            this.desktop.logger.info(
+                `Successfully restored ${targetDllPath} from ${backupPath}`,
+                "4001Fixer:restoreDiversifiedD3D11Dll",
+            );
+
+            this.activeTask = null;
+            return { success: true, backupPath };
+        } catch (error) {
+            this.desktop.logger.error(error, "4001Fixer:restoreDiversifiedD3D11Dll");
+            const lockInfo = await this.desktop.lib.fs.isLockedPathError(error, targetDllPath);
+            const errorMessage = lockInfo.isLocked
+                ? this.desktop.lib.fs.formatProcessList(lockInfo.processes)
+                : error instanceof Error
+                  ? error.message
+                  : String(error);
+            this.updateProgress(
+                lockInfo.isLocked ? "XXMI_ERR_DLL_IN_USE" : "XXMI_ERR_RESTORE_FAILED",
+                errorMessage,
+            );
+            this.activeTask = null;
+            return { success: false, errorMessage };
+        }
+    }
+
+    private getBackupPath(importerPath: string, hashPrefix: string) {
+        return path.join(
+            importerPath,
+            `${DIVERSIFIER_BACKUP_PREFIX}${hashPrefix}-${Math.floor(Date.now() / 1000)}.bak`,
+        );
+    }
+
+    private async hashDllFile(filePath: string): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const hash = crypto.createHash("sha256");
+            const stream = createReadStream(filePath);
+            stream.on("data", (chunk) => hash.update(chunk));
+            stream.on("end", () => resolve(hash.digest("hex")));
+            stream.on("error", reject);
+        });
+    }
+
+    private async findDiversifierBackup(importerPath: string): Promise<string | null> {
+        const entries = await fse.readdir(importerPath).catch(() => []);
+        const candidates = entries
+            .filter((entry) => entry.startsWith(DIVERSIFIER_BACKUP_PREFIX))
+            .filter((entry) => entry.endsWith(".bak"))
+            .sort()
+            .reverse()
+            .map((entry) => path.join(importerPath, entry));
+
+        if (candidates.length === 0) {
+            return null;
+        }
+
+        const targetDllPath = path.join(importerPath, TARGET_DLL_NAME);
+        const currentHash = await fse.pathExists(targetDllPath).then(async (exists) => {
+            if (!exists) return null;
+            try {
+                return await this.hashDllFile(targetDllPath);
+            } catch (error) {
+                this.desktop.logger.warn(
+                    `Failed to hash d3d11.dll for backup validation, accepting backup as-is: ${String(error)}`,
+                    "4001Fixer:findDiversifierBackup",
+                );
+                return null;
+            }
+        });
+
+        for (const candidate of candidates) {
+            const match = path.basename(candidate).match(BACKUP_HASH_PATTERN);
+            if (!match) {
+                this.desktop.logger.warn(
+                    `Removing invalid PE padding diversifier backup: ${candidate}`,
+                    "4001Fixer:findDiversifierBackup",
+                );
+                await fse.remove(candidate).catch((error) => {
+                    this.desktop.logger.error(error, "4001Fixer:findDiversifierBackup");
+                });
+                continue;
+            }
+            if (currentHash === null) {
+                return candidate;
+            }
+            const backedUpHashPrefix = match[1];
+            if (currentHash.startsWith(backedUpHashPrefix)) {
+                return candidate;
+            }
+            this.desktop.logger.warn(
+                `Removing stale PE padding diversifier backup (hash mismatch): ${candidate} (expected=${backedUpHashPrefix} actual=${currentHash.slice(0, DIVERSIFIER_BACKUP_HASH_PREFIX_LENGTH)})`,
+                "4001Fixer:findDiversifierBackup",
+            );
+            await fse.remove(candidate).catch((error) => {
+                this.desktop.logger.error(error, "4001Fixer:findDiversifierBackup");
+            });
+        }
+
+        return null;
+    }
+
+    private async removeDiversifierBackups(importerPath: string) {
+        const entries = await fse.readdir(importerPath).catch(() => []);
+        await Promise.all(
+            entries
+                .filter((entry) => entry.startsWith(DIVERSIFIER_BACKUP_PREFIX))
+                .filter((entry) => entry.endsWith(".bak"))
+                .map((entry) => fse.remove(path.join(importerPath, entry))),
+        );
     }
 
     private getBuildStateKey(buildId: string) {
@@ -295,7 +603,7 @@ export class DllBuilder {
             if (!D3D_BUILD_ID_PATTERN.test(buildId)) {
                 this.desktop.logger.warn(
                     `Skipping invalid D3D build state key: ${state.key}`,
-                    "DllBuilder:cleanupStaleBuildDirs",
+                    "4001Fixer:cleanupStaleBuildDirs",
                 );
                 await this.desktop.lib.db.appState.delete(state.key);
                 continue;
@@ -304,7 +612,7 @@ export class DllBuilder {
             await fse.remove(this.getBuildTempDir(buildId)).catch((error) => {
                 this.desktop.logger.warn(
                     `Failed to remove stale D3D build temp dir for ${buildId}: ${error}`,
-                    "DllBuilder:cleanupStaleBuildDirs",
+                    "4001Fixer:cleanupStaleBuildDirs",
                 );
             });
             await this.desktop.lib.db.appState.delete(state.key);
@@ -339,12 +647,12 @@ export class DllBuilder {
         version: string,
     ): Promise<string> {
         this.updateProgress("XXMI_DOWNLOAD_REPO");
-        this.desktop.logger.info("Downloading XXMI Repo...", "DllBuilder:prepareSourceCode");
+        this.desktop.logger.info("Downloading XXMI Repo...", "4001Fixer:prepareSourceCode");
 
         const zipPath = await this.downloadXXMIRepo(workDir, provider, version);
 
         this.updateProgress("XXMI_EXTRACT_REPO");
-        this.desktop.logger.info("Extracting Repo...", "DllBuilder:prepareSourceCode");
+        this.desktop.logger.info("Extracting Repo...", "4001Fixer:prepareSourceCode");
 
         const extractDir = await this.desktop.service.archive.extract(zipPath, workDir);
 
@@ -480,14 +788,14 @@ export class DllBuilder {
             if (!(await fse.pathExists(configPath))) {
                 this.desktop.logger.warn(
                     `Config file not found at ${configPath}`,
-                    "DllBuilder:enableUnsafeMode",
+                    "4001Fixer:enableUnsafeMode",
                 );
                 return;
             }
 
             this.desktop.logger.info(
                 `configPath found: ${configPath}`,
-                "DllBuilder:enableUnsafeMode",
+                "4001Fixer:enableUnsafeMode",
             );
 
             const config = await fse.readJson(configPath);
@@ -505,14 +813,14 @@ export class DllBuilder {
 
                     this.desktop.logger.info(
                         `Enabled unsafe_mode for ${importerKey}`,
-                        "DllBuilder:enableUnsafeMode",
+                        "4001Fixer:enableUnsafeMode",
                     );
                 }
             }
         } catch (error) {
             this.desktop.logger.error(
                 `Failed to update config for ${importerKey}: ${String(error)}`,
-                "DllBuilder:enableUnsafeMode",
+                "4001Fixer:enableUnsafeMode",
             );
         }
     }

@@ -1,0 +1,18 @@
+{
+  "name": "pe-padding-diversifier",
+  "version": "1.0.0",
+  "description": "Conservative PE64 DLL padding diversifier",
+  "main": "index.js",
+  "napi": {
+    "binaryName": "pe-padding-diversifier",
+    "targets": [
+      "x86_64-pc-windows-msvc"
+    ]
+  },
+  "scripts": {
+    "build": "pnpm --dir ../.. exec napi build --cwd native/pe-padding-diversifier --platform --release"
+  },
+  "engines": {
+    "node": ">= 12.22.0 < 13 || >= 14.17.0 < 15 || >= 15.12.0 < 16 || >= 16.0.0"
+  }
+}

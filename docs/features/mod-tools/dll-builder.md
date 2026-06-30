@@ -1,11 +1,11 @@
-# d3d11.dll Builder
+# 4001 Fixer
 
 In Genshin Impact, the illegal program detection error `4001` continues to be reported.
 Previously, this could often be handled by applying cloud provider flags and similar workarounds, but recently more cases have appeared where older methods no longer solve the issue.
 
 In Korean communities, many users have confirmed that the `4001` issue can often be resolved by cloning the `XXMI-Libs-Package` repository directly and using a self-built DLL instead of the default DLL provided by XXMI.
 
-The `d3d11.dll Builder` automates this process to make it easier.
+The `4001 Fixer` brings the available GIMI `4001` workarounds into one tool. It can build a replacement `d3d11.dll` or apply native PE padding diversification to the DLL.
 
 ## Install Required Build Tools
 
@@ -44,13 +44,19 @@ On the build screen, you can configure the following options:
 
 After selecting all options, click **Start Build** to begin building the DLL.
 
+## Diversify DLL Padding
+
+The **Diversify DLL Padding** tab backs up the selected GIMI importer's existing `d3d11.dll`, then diversifies safe PE padding bytes without changing the DLL layout.
+
+Before replacing the DLL, Nahida Desktop creates a `pepd` backup file in the same folder. The backup filename embeds a short SHA-256 hash of the diversified DLL, so the tool can detect when the DLL has been replaced after diversification (for example, by the **Start Build** action or by manual edits). If the backup is present and its embedded hash matches the current `d3d11.dll`, the tool treats the DLL padding as already diversified and shows a restore action. Otherwise, the stale backup is removed automatically and the DLL is treated as not yet diversified.
+
 ## Unsafe Mode
 
 ![Image](/features/mod-tools/dll-builder/unsafe.png)
 
 The XXMI Launcher shows a warning when you use an unverified DLL instead of an officially provided one.
 
-When you build a DLL through the DLL Builder, **Unsafe Mode** is enabled automatically. However, if automatic activation does not apply correctly, you may still see a warning that the DLL signature is invalid.
+When you apply a DLL fix through the 4001 Fixer, **Unsafe Mode** is enabled automatically. However, if automatic activation does not apply correctly, you may still see a warning that the DLL signature is invalid.
 
 If you see a warning that the `d3d11.dll` signature is invalid, enable **Unsafe Mode** manually in the XXMI Launcher settings.
 
