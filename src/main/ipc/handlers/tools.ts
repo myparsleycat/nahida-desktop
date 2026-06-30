@@ -24,7 +24,7 @@ export function registerToolsHandlers(d: NahidaDesktop) {
         d.service.modTools.textureResizer.resizeMod(modPath, input),
     );
     rh(
-        "tools:buildNewD3DDLL",
+        "tools:4001FixerBuildDll",
         ({
             provider,
             version,
@@ -36,18 +36,36 @@ export function registerToolsHandlers(d: NahidaDesktop) {
             importerKey: string;
             importerPath?: string;
         }) =>
-            d.service.modTools.dllBuilder.buildNewD3DDLL({
+            d.service.modTools.fourThousandOneFixer.buildD3D11Dll({
                 provider,
                 version,
                 importerKey,
                 importerPath,
             }),
     );
-    rh("tools:getBuilderState", () => d.service.modTools.dllBuilder.getBuilderState());
-    rh("tools:getProviderReleases", (provider: string) =>
-        d.service.modTools.dllBuilder.getProviderReleases(provider),
+    rh(
+        "tools:4001FixerDiversifyDllPadding",
+        ({ importerKey, importerPath }: { importerKey: string; importerPath?: string }) =>
+            d.service.modTools.fourThousandOneFixer.diversifyD3D11DllPadding({
+                importerKey,
+                importerPath,
+            }),
     );
-    rh("tools:updateReleases", () => d.service.modTools.dllBuilder.updateReleases());
+    rh("tools:4001FixerRestoreDiversifiedDll", ({ importerPath }: { importerPath?: string }) =>
+        d.service.modTools.fourThousandOneFixer.restoreDiversifiedD3D11Dll({
+            importerPath,
+        }),
+    );
+    rh("tools:4001FixerGetState", () => d.service.modTools.fourThousandOneFixer.getState());
+    rh("tools:4001FixerGetDiversificationState", ({ importerPath }: { importerPath?: string }) =>
+        d.service.modTools.fourThousandOneFixer.getDiversificationState({ importerPath }),
+    );
+    rh("tools:4001FixerGetProviderReleases", (provider: string) =>
+        d.service.modTools.fourThousandOneFixer.getProviderReleases(provider),
+    );
+    rh("tools:4001FixerUpdateReleases", () =>
+        d.service.modTools.fourThousandOneFixer.updateReleases(),
+    );
     rh("tools:getStaticGlbAssetPath", () => d.service.modTools.staticGlb.getAssetPath());
     rh("tools:setStaticGlbAssetPath", (assetPath: string) =>
         d.service.modTools.staticGlb.setAssetPath(assetPath),

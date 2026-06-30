@@ -1,4 +1,4 @@
-import D3D11Builder from "@renderer/components/tools/d3d11-builder";
+import FourThousandOneFixer from "@renderer/components/tools/4001-fixer";
 import ModBisect from "@renderer/components/tools/mod-bisect";
 import StaticGlbConverter from "@renderer/components/tools/static-glb-converter";
 import TextureResizer from "@renderer/components/tools/texture-resizer";
@@ -28,9 +28,9 @@ type ToolPage =
 
 const toolPages: ToolPage[] = [
   {
-    nameKey: "page.tools.d3d11_builder.title",
-    initials: "D3",
-    component: () => <D3D11Builder />,
+    nameKey: "page.tools.4001_fixer.title",
+    initials: "41",
+    component: () => <FourThousandOneFixer />,
   },
   {
     nameKey: "page.setting.xxmi.persistToggles",

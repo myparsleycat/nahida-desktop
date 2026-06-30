@@ -1,5 +1,5 @@
 import type { NahidaDesktop } from "@/main";
-import { DllBuilder } from "./dll-builder";
+import { FourThousandOneFixer } from "./4001-fixer";
 import { FixTool } from "./fix-tool";
 import { ModBisect } from "./mod-bisect";
 import { StaticGlb } from "./static-glb";
@@ -10,7 +10,7 @@ import { WuwaModFixer } from "./wuwa-mod-fixer";
 
 export class ModTools {
     public readonly fixTool: FixTool;
-    public readonly dllBuilder: DllBuilder;
+    public readonly fourThousandOneFixer: FourThousandOneFixer;
     public readonly togglePersist: TogglePersist;
     public readonly toggleViewer: ToggleViewer;
     public readonly staticGlb: StaticGlb;
@@ -20,7 +20,7 @@ export class ModTools {
 
     constructor(private readonly desktop: NahidaDesktop) {
         this.fixTool = new FixTool(this.desktop);
-        this.dllBuilder = new DllBuilder(this.desktop);
+        this.fourThousandOneFixer = new FourThousandOneFixer(this.desktop);
         this.togglePersist = new TogglePersist(this.desktop);
         this.toggleViewer = new ToggleViewer(this.desktop);
         this.staticGlb = new StaticGlb(this.desktop);
