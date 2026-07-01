@@ -20,6 +20,22 @@ export function getDefaultWebPreferences() {
     } as Electron.WebPreferences;
 }
 
+export function getTransparencyOptions(
+    enabled: boolean,
+): Partial<Electron.BrowserWindowConstructorOptions> {
+    if (!enabled) return {};
+
+    if (process.platform === "darwin") {
+        return { vibrancy: "sidebar" };
+    }
+
+    if (process.platform === "win32") {
+        return { backgroundMaterial: "acrylic" };
+    }
+
+    return {};
+}
+
 export function focus(window: BrowserWindow) {
     if (window.isDestroyed()) return;
 

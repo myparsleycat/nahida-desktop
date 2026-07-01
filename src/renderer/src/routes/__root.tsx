@@ -144,13 +144,14 @@ function RootComponent() {
         />
       )}
 
-      <main className={cn("flex w-screen overflow-hidden", DEFAULT_BG, screenHeight)}>
+      <main className={cn("flex w-screen overflow-hidden", screenHeight)}>
         <div className="flex flex-row w-full">
           {!isNoSidebar && <Sidebar />}
 
           <div
             className={cn(
               "flex-1 min-w-0 h-full relative overflow-hidden",
+              DEFAULT_BG,
               titlebarStyle === "modern" ? "border-t border-l rounded-tl-lg" : "border-l",
             )}
           >
