@@ -263,6 +263,8 @@
           "nte_game_name": "异环",
           "nte_install_path": "NTE 安装文件夹",
           "nte_not_found": "未找到 NTE 游戏。",
+          "nte_system_folder_warning_title": "已选择系统文件夹",
+          "nte_system_folder_warning_description": "Windows 可能会请求管理员权限。",
           "nte_custom_mod_folder": "自定义模组文件夹",
           "nte_custom_mod_folder_description": "可选。游戏的 Mods 文件夹将链接到此文件夹。",
           "xxmi_path_required": "要加载 Importer，请先设置 XXMI 路径。",

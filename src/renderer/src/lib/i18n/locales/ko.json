@@ -263,6 +263,8 @@
           "nte_game_name": "이환",
           "nte_install_path": "NTE 설치 폴더",
           "nte_not_found": "NTE 게임을 찾을 수 없습니다.",
+          "nte_system_folder_warning_title": "시스템 폴더가 선택되었습니다",
+          "nte_system_folder_warning_description": "Windows 관리자 권한 확인이 표시될 수 있습니다.",
           "nte_custom_mod_folder": "사용자 지정 모드 폴더",
           "nte_custom_mod_folder_description": "선택 사항입니다. 게임 Mods 폴더가 이 폴더에 연결됩니다.",
           "xxmi_path_required": "Importer를 가져오려면 먼저 XXMI 경로를 설정해야 합니다.",

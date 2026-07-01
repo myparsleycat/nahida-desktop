@@ -167,11 +167,11 @@ export class NahidaDesktop {
     public async init() {
         if (this.initialized) return;
 
+        // Reconcile before services because some constructors may read persisted app state.
+        await this.lib.db.reconcile();
+
         await this.initializePlatformServices();
         this.lib.native.startTracking();
-
-        // init db
-        await this.lib.db.reconcile();
 
         await this.service.startupCleanup.runAll();
 

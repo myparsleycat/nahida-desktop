@@ -24,11 +24,11 @@ import { isNteImporter, NTE_IMPORTER_KEY } from "@shared/mod";
 import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { FolderOpen, Plus, XIcon } from "lucide-react";
+import { FolderOpen, Plus, ShieldAlert, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Alert, AlertDescription } from "../ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { NteBootstrapProgressView } from "./nte-bootstrap-progress";
 
 const NO_IMPORTER_VALUE = "__none__";
@@ -51,6 +51,7 @@ interface NteResolution {
   executablePath: string;
   modFolderPath: string;
   linkedModFolderPath: string;
+  requiresElevation: boolean;
 }
 
 export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGameDialogProps) {
@@ -105,11 +106,16 @@ export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGame
           return;
         }
 
+        const resolvedLinkedModFolderPath = resolveNteLinkedModFolderPath(
+          resolution,
+          customModFolderPath,
+        );
+
         onAddGame(
           name,
           customModFolderPath || resolution.modFolderPath,
           importer,
-          customModFolderPath ? resolution.linkedModFolderPath : null,
+          resolvedLinkedModFolderPath,
           resolution.gameRootPath,
           resolution.executablePath,
         );
@@ -324,6 +330,18 @@ export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGame
             />
           )}
 
+          {isNteSelected && nteResolution?.requiresElevation ? (
+            <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200">
+              <ShieldAlert className="size-4" />
+              <AlertTitle>
+                {t("page.mod.dialog.add-game.nte_system_folder_warning_title")}
+              </AlertTitle>
+              <AlertDescription className="text-current/80">
+                {t("page.mod.dialog.add-game.nte_system_folder_warning_description")}
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
           <NteBootstrapProgressView active={isAddingGame && isNteSelected} />
 
           <form.Field
@@ -393,5 +411,19 @@ export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGame
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function resolveNteLinkedModFolderPath(resolution: NteResolution, customModFolderPath: string) {
+  if (customModFolderPath) return resolution.linkedModFolderPath;
+  return isSameNteResolutionPath(resolution.modFolderPath, resolution.linkedModFolderPath)
+    ? null
+    : resolution.linkedModFolderPath;
+}
+
+function isSameNteResolutionPath(left: string, right: string) {
+  return (
+    left.trim().replaceAll("/", "\\").toLowerCase() ===
+    right.trim().replaceAll("/", "\\").toLowerCase()
   );
 }
