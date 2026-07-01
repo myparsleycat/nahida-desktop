@@ -1,3 +1,4 @@
+import { DEFAULT_BG } from "@renderer/const";
 import { useAuth } from "@renderer/hooks/use-auth";
 import { cn } from "@renderer/lib/utils";
 import { viewStore } from "@renderer/store/drive";
@@ -71,9 +72,12 @@ export function Sidebar({ className }: { className?: string }) {
     cn("relative overflow-visible", isActive && "text-accent hover:text-accent");
 
   return (
-    <div className={`flex w-13 flex-col border-r ${className}`}>
-      <div className="w-full flex flex-col h-full select-none">
-        <div className="flex flex-col overflow-y-auto overflow-x-hidden dragselect-start-allowed p-2 space-y-2">
+    <div className={`w-13 flex flex-col ${DEFAULT_BG} ${className}`}>
+      <div className="w-full flex flex-col select-none h-full">
+        <div
+          className="fixed left-2 flex flex-col overflow-y-auto overflow-x-hidden dragselect-start-allowed py-2 space-y-2 max-h-screen"
+          style={{ top: "50%", transform: "translateY(-50%)" }}
+        >
           <Tooltip disableHoverableContent={true}>
             <TooltipTrigger asChild>
               <Button
