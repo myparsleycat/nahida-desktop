@@ -284,6 +284,8 @@
           "nte_game_name": "NTE",
           "nte_install_path": "NTE install folder",
           "nte_not_found": "NTE game not found.",
+          "nte_system_folder_warning_title": "System folder selected",
+          "nte_system_folder_warning_description": "Windows may ask for administrator permission.",
           "nte_custom_mod_folder": "Custom mod folder",
           "nte_custom_mod_folder_description": "Optional. The game Mods folder will be linked to this folder.",
           "xxmi_path_required": "Set the XXMI path first to load importers.",

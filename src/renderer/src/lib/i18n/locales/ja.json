@@ -264,6 +264,8 @@
           "nte_game_name": "異環",
           "nte_install_path": "NTE インストールフォルダー",
           "nte_not_found": "NTE ゲームが見つかりません。",
+          "nte_system_folder_warning_title": "システムフォルダーが選択されています",
+          "nte_system_folder_warning_description": "Windows の管理者権限確認が表示される場合があります。",
           "nte_custom_mod_folder": "カスタム MOD フォルダー",
           "nte_custom_mod_folder_description": "任意です。ゲームの Mods フォルダーがこのフォルダーにリンクされます。",
           "xxmi_path_required": "Importer を読み込むには、先に XXMI パスを設定してください。",

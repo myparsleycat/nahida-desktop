@@ -35,6 +35,7 @@ export interface NtePathResolution {
     executablePath: string;
     modFolderPath: string;
     linkedModFolderPath: string;
+    requiresElevation: boolean;
 }
 
 type NteGameRoots = {
@@ -52,17 +53,19 @@ export async function resolveNteInstallPath(inputPath: string): Promise<NtePathR
     const htRootPath = path.resolve(path.dirname(executablePath), "..", "..");
     const gameModFolderPath = path.join(htRootPath, NTE_MODS_RELATIVE_PATH);
     const existingLinkedModFolderPath = await getExistingNteModsLinkTarget(gameModFolderPath);
+    const canWriteGameModFolderPath = existingLinkedModFolderPath
+        ? true
+        : await canWriteNteModsPath(gameModFolderPath);
     const modFolderPath =
         existingLinkedModFolderPath ??
-        ((await canWriteNteModsPath(gameModFolderPath))
-            ? gameModFolderPath
-            : getDefaultNteModFolderPath());
+        (canWriteGameModFolderPath ? gameModFolderPath : getDefaultNteModFolderPath());
 
     return {
         gameRootPath: path.resolve(htRootPath, "..", ".."),
         executablePath,
         modFolderPath,
         linkedModFolderPath: gameModFolderPath,
+        requiresElevation: !canWriteGameModFolderPath,
     };
 }
 
