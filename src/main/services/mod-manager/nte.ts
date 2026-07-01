@@ -43,6 +43,22 @@ type NteGameRoots = {
     linkedRoot: string | null;
 };
 
+type BootstrapFileCopy = {
+    sourcePath: string;
+    targetPath: string;
+};
+
+type PreparedBootstrapFileCopy = BootstrapFileCopy & {
+    backupPath: string;
+    existed: boolean;
+};
+
+type BootstrapRollbackFile = {
+    targetPath: string;
+    backupPath: string;
+    existed: boolean;
+};
+
 export async function resolveNteInstallPath(inputPath: string): Promise<NtePathResolution | null> {
     const trimmedPath = inputPath.trim();
     if (!trimmedPath || !(await fse.pathExists(trimmedPath))) return null;
@@ -55,7 +71,7 @@ export async function resolveNteInstallPath(inputPath: string): Promise<NtePathR
     const existingLinkedModFolderPath = await getExistingNteModsLinkTarget(gameModFolderPath);
     const canWriteGameModFolderPath = existingLinkedModFolderPath
         ? true
-        : await canWriteNteModsPath(gameModFolderPath);
+        : await canWriteNteDirectoryPath(gameModFolderPath);
     const modFolderPath =
         existingLinkedModFolderPath ??
         (canWriteGameModFolderPath ? gameModFolderPath : getDefaultNteModFolderPath());
@@ -319,6 +335,8 @@ export async function ensureNteBootstrapFiles(
         return undefined;
     }
 
+    const useElevatedBootstrapCopy = !(await canWriteNteDirectoryPath(targetDir));
+
     const installTracker = createBootstrapInstallTracker();
     const tempDir = path.join(os.tmpdir(), `nte-bootstrap-${process.pid}-${nanoid(8)}`);
     await fse.ensureDir(tempDir);
@@ -336,15 +354,27 @@ export async function ensureNteBootstrapFiles(
             tempDir,
             onProgress,
         );
-        await copyFilesFromExtracted(tempDir, targetDir, NTE_SIG_BYPASSER_FILES, installTracker);
-        onProgress({ phase: "installing", progress: 92 });
+        const sigBypasserCopies = await resolveFileCopiesFromExtracted(
+            tempDir,
+            targetDir,
+            NTE_SIG_BYPASSER_FILES,
+        );
 
         const archLabel = arch === "x64" ? "winhttp-x64" : "winhttp-Win32";
         const loaderZipName = `${archLabel}.zip`;
         onProgress({ phase: "fetching-release", progress: 93, archiveName: loaderZipName });
         await downloadAndExtract(desktop, asiLoaderUrl, loaderZipName, tempDir, onProgress);
-        await copyFilesFromExtracted(tempDir, targetDir, [NTE_ASI_LOADER_FILE], installTracker);
-        await copySha512FilesFromExtracted(tempDir, targetDir, installTracker);
+        onProgress({ phase: "installing", progress: 96 });
+        await installTracker.copyFiles(
+            [
+                ...sigBypasserCopies,
+                ...(await resolveFileCopiesFromExtracted(tempDir, targetDir, [
+                    NTE_ASI_LOADER_FILE,
+                ])),
+                ...(await resolveSha512FileCopiesFromExtracted(tempDir, targetDir)),
+            ],
+            useElevatedBootstrapCopy,
+        );
 
         onProgress({ phase: "completed", progress: 100 });
         return installTracker.hasWrittenFiles() ? installTracker.rollback : undefined;
@@ -365,46 +395,100 @@ function createBootstrapInstallTracker() {
         os.tmpdir(),
         `nte-bootstrap-rollback-${process.pid}-${nanoid(8)}`,
     );
-    const snapshots = new Map<string, { existed: boolean; backup?: string }>();
+    const snapshots = new Map<string, { existed: boolean; backupPath: string }>();
     const writtenFiles: string[] = [];
 
-    const trackBeforeWrite = async (filePath: string) => {
-        if (snapshots.has(filePath)) return;
+    const prepareCopy = async (fileCopy: BootstrapFileCopy, backupExisting: boolean) => {
+        const snapshot = snapshots.get(fileCopy.targetPath);
+        if (snapshot) return { ...fileCopy, ...snapshot };
 
-        const existed = await fse.pathExists(filePath);
-        if (!existed) {
-            snapshots.set(filePath, { existed: false });
+        const backupPath = path.join(
+            rollbackDir,
+            `${nanoid(6)}-${path.basename(fileCopy.targetPath)}`,
+        );
+        const existed = await fse.pathExists(fileCopy.targetPath);
+        snapshots.set(fileCopy.targetPath, { existed, backupPath });
+
+        if (existed && backupExisting) {
+            await fse.ensureDir(rollbackDir);
+            await fse.copy(fileCopy.targetPath, backupPath);
+        }
+
+        return { ...fileCopy, existed, backupPath };
+    };
+
+    const markWritten = (filePath: string) => {
+        if (!writtenFiles.includes(filePath)) {
+            writtenFiles.push(filePath);
+        }
+    };
+
+    const markAllWritten = (fileCopies: readonly BootstrapFileCopy[]) => {
+        fileCopies.forEach((fileCopy) => markWritten(fileCopy.targetPath));
+    };
+
+    const copyFilesDirect = async (preparedCopies: readonly PreparedBootstrapFileCopy[]) => {
+        for (const fileCopy of preparedCopies) {
+            await fse.copy(fileCopy.sourcePath, fileCopy.targetPath, { overwrite: true });
+            markWritten(fileCopy.targetPath);
+        }
+    };
+
+    const copyFiles = async (fileCopies: readonly BootstrapFileCopy[], useElevated: boolean) => {
+        if (useElevated) {
+            const preparedCopies = await Promise.all(
+                fileCopies.map((fileCopy) => prepareCopy(fileCopy, false)),
+            );
+            markAllWritten(fileCopies);
+            await copyBootstrapFilesElevated(preparedCopies);
             return;
         }
 
-        const backupPath = path.join(rollbackDir, `${nanoid(6)}-${path.basename(filePath)}`);
-        await fse.ensureDir(rollbackDir);
-        await fse.copy(filePath, backupPath);
-        snapshots.set(filePath, { existed: true, backup: backupPath });
+        try {
+            await copyFilesDirect(
+                await Promise.all(fileCopies.map((fileCopy) => prepareCopy(fileCopy, true))),
+            );
+        } catch (error) {
+            if (!isFsPermissionError(error)) throw error;
+            const preparedCopies = await Promise.all(
+                fileCopies.map((fileCopy) => prepareCopy(fileCopy, false)),
+            );
+            markAllWritten(fileCopies);
+            await copyBootstrapFilesElevated(preparedCopies);
+        }
     };
 
-    const copyFile = async (src: string, dest: string) => {
-        await trackBeforeWrite(dest);
-        await fse.copy(src, dest, { overwrite: true });
-        if (!writtenFiles.includes(dest)) {
-            writtenFiles.push(dest);
+    const rollbackDirect = async () => {
+        for (const filePath of writtenFiles.toReversed()) {
+            const snapshot = snapshots.get(filePath);
+            if (snapshot?.existed) {
+                if (await fse.pathExists(snapshot.backupPath)) {
+                    await fse.copy(snapshot.backupPath, filePath, { overwrite: true });
+                }
+                continue;
+            }
+
+            await fse.remove(filePath).catch(() => {});
         }
     };
 
     const rollback = async () => {
-        for (const filePath of writtenFiles.toReversed()) {
-            const snapshot = snapshots.get(filePath);
-            if (snapshot?.existed && snapshot.backup) {
-                await fse.copy(snapshot.backup, filePath);
-                continue;
-            }
-            await fse.remove(filePath).catch(() => {});
+        try {
+            await rollbackDirect();
+        } catch (error) {
+            if (!isFsPermissionError(error)) throw error;
+            await rollbackBootstrapFilesElevated(
+                writtenFiles.toReversed().flatMap((filePath) => {
+                    const snapshot = snapshots.get(filePath);
+                    return snapshot ? [{ targetPath: filePath, ...snapshot }] : [];
+                }),
+            );
         }
         await fse.remove(rollbackDir).catch(() => {});
     };
 
     return {
-        copyFile,
+        copyFiles,
         rollback,
         hasWrittenFiles: () => writtenFiles.length > 0,
     };
@@ -446,36 +530,34 @@ async function downloadAndExtract(
     }
 }
 
-async function copyFilesFromExtracted(
+async function resolveFileCopiesFromExtracted(
     tempDir: string,
     targetDir: string,
     fileNames: readonly string[],
-    installTracker: ReturnType<typeof createBootstrapInstallTracker>,
-): Promise<void> {
+): Promise<BootstrapFileCopy[]> {
     const candidates = await collectFilesRecursively(tempDir);
-    for (const fileName of fileNames) {
+    return fileNames.map((fileName) => {
         const match = candidates.find(
             (candidate) => path.basename(candidate).toLowerCase() === fileName.toLowerCase(),
         );
         if (!match) {
             throw new Error(`NTE_BOOTSTRAP_FILE_MISSING:${fileName}`);
         }
-        await installTracker.copyFile(match, path.join(targetDir, fileName));
-    }
+        return { sourcePath: match, targetPath: path.join(targetDir, fileName) };
+    });
 }
 
-async function copySha512FilesFromExtracted(
+async function resolveSha512FileCopiesFromExtracted(
     tempDir: string,
     targetDir: string,
-    installTracker: ReturnType<typeof createBootstrapInstallTracker>,
-): Promise<void> {
+): Promise<BootstrapFileCopy[]> {
     const candidates = await collectFilesRecursively(tempDir);
-    const sha512Files = candidates.filter((candidate) =>
-        /\.sha512$/i.test(path.basename(candidate)),
-    );
-    for (const file of sha512Files) {
-        await installTracker.copyFile(file, path.join(targetDir, path.basename(file)));
-    }
+    return candidates
+        .filter((candidate) => /\.sha512$/i.test(path.basename(candidate)))
+        .map((file) => ({
+            sourcePath: file,
+            targetPath: path.join(targetDir, path.basename(file)),
+        }));
 }
 
 async function collectFilesRecursively(dirPath: string): Promise<string[]> {
@@ -666,11 +748,50 @@ if ($ShouldMoveTargetEntries) {
     throw new Error(`NTE_MODS_UNLINK_ELEVATED_FAILED:${exitCode}`);
 }
 
+async function copyBootstrapFilesElevated(fileCopies: readonly PreparedBootstrapFileCopy[]) {
+    const exitCode = await runElevatedPowerShell(`
+$ErrorActionPreference = 'Stop'
+$Copies = ${toPowerShellCopyArray(fileCopies)}
+
+foreach ($Copy in $Copies) {
+    [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($Copy.TargetPath)) | Out-Null
+    if ($Copy.Existed -and -not (Test-Path -LiteralPath $Copy.BackupPath)) {
+        [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($Copy.BackupPath)) | Out-Null
+        Copy-Item -LiteralPath $Copy.TargetPath -Destination $Copy.BackupPath -Force
+    }
+    Copy-Item -LiteralPath $Copy.SourcePath -Destination $Copy.TargetPath -Force
+}
+`);
+    if (exitCode === 0) return;
+    throw new Error(`NTE_BOOTSTRAP_ELEVATED_COPY_FAILED:${exitCode}`);
+}
+
+async function rollbackBootstrapFilesElevated(fileCopies: readonly BootstrapRollbackFile[]) {
+    const exitCode = await runElevatedPowerShell(`
+$ErrorActionPreference = 'Stop'
+$Copies = ${toPowerShellRollbackArray(fileCopies)}
+
+foreach ($Copy in $Copies) {
+    if ($Copy.Existed) {
+        if (Test-Path -LiteralPath $Copy.BackupPath) {
+            [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($Copy.TargetPath)) | Out-Null
+            Copy-Item -LiteralPath $Copy.BackupPath -Destination $Copy.TargetPath -Force
+        }
+    } elseif (Test-Path -LiteralPath $Copy.TargetPath) {
+        Remove-Item -LiteralPath $Copy.TargetPath -Force
+    }
+}
+`);
+    if (exitCode === 0) return;
+    throw new Error(`NTE_BOOTSTRAP_ELEVATED_ROLLBACK_FAILED:${exitCode}`);
+}
+
 async function runElevatedPowerShell(command: string) {
     return await runPowerShell(`
 $ErrorActionPreference = 'Stop'
 try {
 $Process = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', '${encodePowerShellCommand(command)}')
+if ($null -eq $Process -or $null -eq $Process.ExitCode) { exit 1 }
 exit $Process.ExitCode
 } catch {
     exit 1
@@ -680,6 +801,28 @@ exit $Process.ExitCode
 
 function toPowerShellString(value: string) {
     return `'${value.replaceAll("'", "''")}'`;
+}
+
+function toPowerShellBoolean(value: boolean) {
+    return value ? "$true" : "$false";
+}
+
+function toPowerShellCopyArray(fileCopies: readonly PreparedBootstrapFileCopy[]) {
+    return `@(\n${fileCopies
+        .map(
+            (fileCopy) =>
+                `[pscustomobject]@{ SourcePath = ${toPowerShellString(fileCopy.sourcePath)}; TargetPath = ${toPowerShellString(fileCopy.targetPath)}; BackupPath = ${toPowerShellString(fileCopy.backupPath)}; Existed = ${toPowerShellBoolean(fileCopy.existed)} }`,
+        )
+        .join("\n")}\n)`;
+}
+
+function toPowerShellRollbackArray(fileCopies: readonly BootstrapRollbackFile[]) {
+    return `@(\n${fileCopies
+        .map(
+            (fileCopy) =>
+                `[pscustomobject]@{ TargetPath = ${toPowerShellString(fileCopy.targetPath)}; BackupPath = ${toPowerShellString(fileCopy.backupPath)}; Existed = ${toPowerShellBoolean(fileCopy.existed)} }`,
+        )
+        .join("\n")}\n)`;
 }
 
 function encodePowerShellCommand(command: string) {
@@ -713,10 +856,8 @@ async function getExistingNteModsLinkTarget(modFolderPath: string) {
     return stat.isSymbolicLink() ? await resolveLinkTarget(modFolderPath) : null;
 }
 
-async function canWriteNteModsPath(modFolderPath: string) {
-    const testRoot = (await fse.pathExists(modFolderPath))
-        ? modFolderPath
-        : path.dirname(modFolderPath);
+async function canWriteNteDirectoryPath(dirPath: string) {
+    const testRoot = (await fse.pathExists(dirPath)) ? dirPath : path.dirname(dirPath);
     const stat = await fse.stat(testRoot).catch(() => null);
     if (!stat?.isDirectory()) return false;
 
