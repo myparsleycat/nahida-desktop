@@ -598,7 +598,9 @@ if (Test-Path -LiteralPath $LinkPath) {
     if (($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
         $ExistingTarget = if ($Item.Target -is [array]) { [string]$Item.Target[0] } else { [string]$Item.Target }
         if ((Same-Path $ExistingTarget $TargetPath)) { exit 0 }
-        Remove-Item -LiteralPath $LinkPath -Force
+        $RmdirCommand = 'rmdir "' + $LinkPath + '"'
+        cmd.exe /d /c $RmdirCommand | Out-Null
+        if ($LASTEXITCODE -ne 0) { exit 35 }
     } elseif (-not $Item.PSIsContainer) {
         exit 33
     } elseif (-not (Has-Any-FileSystemContent $LinkPath)) {
@@ -620,6 +622,7 @@ if ($LASTEXITCODE -ne 0) { exit 34 }
     if (exitCode === 32) throw new Error("NTE_MODS_LINK_CONFLICT");
     if (exitCode === 33) throw new Error("NTE_MODS_LINK_PATH_OCCUPIED");
     if (exitCode === 34) throw new Error("NTE_MODS_LINK_JUNCTION_FAILED");
+    if (exitCode === 35) throw new Error("NTE_MODS_UNLINK_JUNCTION_FAILED");
     throw new Error(`NTE_MODS_LINK_ELEVATED_FAILED:${exitCode}`);
 }
 
@@ -645,7 +648,10 @@ if (($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) { e
 $TargetPath = if ($Item.Target -is [array]) { [string]$Item.Target[0] } else { [string]$Item.Target }
 $ShouldMoveTargetEntries = (Test-Path -LiteralPath $TargetPath) -and (Has-Any-FileSystemContent $TargetPath)
 
-Remove-Item -LiteralPath $ModFolderPath -Force
+$RmdirCommand = 'rmdir "' + $ModFolderPath + '"'
+cmd.exe /d /c $RmdirCommand | Out-Null
+if ($LASTEXITCODE -ne 0) { exit 35 }
+
 [System.IO.Directory]::CreateDirectory($ModFolderPath) | Out-Null
 
 if ($ShouldMoveTargetEntries) {
@@ -653,6 +659,7 @@ if ($ShouldMoveTargetEntries) {
 }
 `);
     if (exitCode === 0) return;
+    if (exitCode === 35) throw new Error("NTE_MODS_UNLINK_JUNCTION_FAILED");
     throw new Error(`NTE_MODS_UNLINK_ELEVATED_FAILED:${exitCode}`);
 }
 
