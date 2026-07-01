@@ -394,18 +394,24 @@ export class ModLibraryService {
         }
 
         const diskRollbacks: Array<() => Promise<void>> = [];
+        let addGameStep = "insert-game-path";
+        let nteBootstrapExecutablePath: string | null = null;
 
         try {
             if (isNteImporter(importer)) {
+                addGameStep = "configure-nte-mod-folder";
                 await configureNteModFolder(modFolderPath, linkedModFolderPath);
                 diskRollbacks.push(() => cleanupNteModFolder(modFolderPath, linkedModFolderPath));
+                addGameStep = "resolve-nte-bootstrap-executable-path";
+                nteBootstrapExecutablePath = await this.resolveNteBootstrapExecutablePath({
+                    modFolderPath,
+                    linkedModFolderPath,
+                    gameInstallPath: resolvedGameInstallPath,
+                });
+                addGameStep = "ensure-nte-bootstrap-files";
                 const bootstrapRollback = await ensureNteBootstrapFiles(
                     this.desktop,
-                    await this.resolveNteBootstrapExecutablePath({
-                        modFolderPath,
-                        linkedModFolderPath,
-                        gameInstallPath: resolvedGameInstallPath,
-                    }),
+                    nteBootstrapExecutablePath,
                     this.broadcastNteBootstrapProgress.bind(this),
                 );
                 if (bootstrapRollback) {
@@ -413,6 +419,7 @@ export class ModLibraryService {
                 }
             }
 
+            addGameStep = "insert-game-path";
             await this.desktop.lib.db.gamePaths.insert({
                 game,
                 modFolderPath,
@@ -423,6 +430,17 @@ export class ModLibraryService {
                 nteLauncherPath: null,
             });
         } catch (err) {
+            this.logAddGameFailure(err, {
+                game,
+                modFolderPath,
+                importer,
+                linkedModFolderPath,
+                gameInstallPath: resolvedGameInstallPath,
+                gameExecutablePath: resolvedGameExecutablePath,
+                nteBootstrapExecutablePath,
+                step: addGameStep,
+                rollbackCount: diskRollbacks.length,
+            });
             await this.rollbackNteDiskChanges(diskRollbacks);
             throw err;
         }
@@ -806,5 +824,38 @@ export class ModLibraryService {
                 this.desktop.logger.error(error, "Mod:rollbackNteDiskChanges");
             });
         }
+    }
+
+    private logAddGameFailure(
+        error: unknown,
+        context: {
+            game: string;
+            modFolderPath: string;
+            importer: string | null;
+            linkedModFolderPath: string | null;
+            gameInstallPath: string | null;
+            gameExecutablePath: string | null;
+            nteBootstrapExecutablePath: string | null;
+            step: string;
+            rollbackCount: number;
+        },
+    ) {
+        this.desktop.logger.error(error, `Mod:addGame:${context.game}`);
+        this.desktop.logger.error(
+            {
+                ...context,
+                isNte: isNteImporter(context.importer),
+                error:
+                    error instanceof Error
+                        ? {
+                              name: error.name,
+                              message: error.message,
+                              stack: error.stack,
+                              code: "code" in error ? error.code : undefined,
+                          }
+                        : { message: String(error) },
+            },
+            `Mod:addGame:${context.game}:context`,
+        );
     }
 }

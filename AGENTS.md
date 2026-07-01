@@ -18,6 +18,13 @@ Three auto-generated files are gitignored (`*.gen.ts`). On a fresh clone, run `p
 - Channel whitelisting is enforced at runtime via the generated `IPC_HANDLER_CHANNELS` / `IPC_SEND_CHANNELS` / `IPC_EVENT_CHANNELS` constant arrays
 - To add a new IPC channel: add a handler file in `src/main/ipc/handlers/` using `rh()`, then restart dev server to regenerate types
 
+## Error Logging
+
+- For IPC-backed user actions, log the original error in the main process before rethrowing when the renderer will show a generic fallback message.
+- Include enough structured context to diagnose the failure without reproduction: channel/action name, user-facing entity name, relevant domain identifiers, current operation/stage, input paths, resolved paths, external URLs or executable paths when relevant, and rollback/cleanup state.
+- For multi-step operations, track and log the current operation/stage and any registered rollback or cleanup state.
+- Preserve the original error message/code so renderer error handling can still match known sentinel and domain-specific error codes.
+
 ## Style Guide
 
 ### General Principles
