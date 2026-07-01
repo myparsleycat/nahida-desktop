@@ -590,8 +590,8 @@ function Has-Any-FileSystemContent([string]$PathValue) {
     return $false
 }
 
-New-Item -ItemType Directory -Force -LiteralPath $TargetPath | Out-Null
-New-Item -ItemType Directory -Force -LiteralPath ([System.IO.Path]::GetDirectoryName($LinkPath)) | Out-Null
+[System.IO.Directory]::CreateDirectory($TargetPath) | Out-Null
+[System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($LinkPath)) | Out-Null
 
 if (Test-Path -LiteralPath $LinkPath) {
     $Item = Get-Item -LiteralPath $LinkPath -Force
@@ -612,11 +612,14 @@ if (Test-Path -LiteralPath $LinkPath) {
     }
 }
 
-New-Item -ItemType Junction -Path $LinkPath -Target $TargetPath | Out-Null
+$MklinkCommand = 'mklink /J "' + $LinkPath + '" "' + $TargetPath + '"'
+cmd.exe /d /c $MklinkCommand | Out-Null
+if ($LASTEXITCODE -ne 0) { exit 34 }
 `);
     if (exitCode === 0) return;
     if (exitCode === 32) throw new Error("NTE_MODS_LINK_CONFLICT");
     if (exitCode === 33) throw new Error("NTE_MODS_LINK_PATH_OCCUPIED");
+    if (exitCode === 34) throw new Error("NTE_MODS_LINK_JUNCTION_FAILED");
     throw new Error(`NTE_MODS_LINK_ELEVATED_FAILED:${exitCode}`);
 }
 
@@ -643,7 +646,7 @@ $TargetPath = if ($Item.Target -is [array]) { [string]$Item.Target[0] } else { [
 $ShouldMoveTargetEntries = (Test-Path -LiteralPath $TargetPath) -and (Has-Any-FileSystemContent $TargetPath)
 
 Remove-Item -LiteralPath $ModFolderPath -Force
-New-Item -ItemType Directory -Force -LiteralPath $ModFolderPath | Out-Null
+[System.IO.Directory]::CreateDirectory($ModFolderPath) | Out-Null
 
 if ($ShouldMoveTargetEntries) {
     Get-ChildItem -LiteralPath $TargetPath -Force | Move-Item -Destination $ModFolderPath -Force
