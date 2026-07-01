@@ -120,17 +120,12 @@ export function EditGameDialog({
           return;
         }
 
-        const linkedModFolderPath =
-          resolution.linkedModFolderPath ??
-          resolution.modFolderPath ??
-          editingGame.linkedModFolderPath ??
-          editingGame.modFolderPath ??
-          path;
+        const linkedModFolderPath = resolveNteLinkedModFolderPath(resolution, customModFolderPath);
 
         onUpdateGame(editingGame.game, {
-          modFolderPath: customModFolderPath || linkedModFolderPath,
+          modFolderPath: customModFolderPath || resolution.modFolderPath,
           importer,
-          linkedModFolderPath: customModFolderPath ? linkedModFolderPath : null,
+          linkedModFolderPath,
           gameInstallPath: resolution.gameRootPath,
           gameExecutablePath: resolution.executablePath,
         });
@@ -171,7 +166,7 @@ export function EditGameDialog({
         ? {
             gameRootPath: editingGame.gameInstallPath ?? "",
             executablePath: editingGame.gameExecutablePath ?? "",
-            modFolderPath: editingGame.linkedModFolderPath ?? editingGame.modFolderPath,
+            modFolderPath: editingGame.modFolderPath,
             linkedModFolderPath: editingGame.linkedModFolderPath ?? editingGame.modFolderPath,
           }
         : null,
@@ -460,5 +455,19 @@ export function EditGameDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function resolveNteLinkedModFolderPath(resolution: NteResolution, customModFolderPath: string) {
+  if (customModFolderPath) return resolution.linkedModFolderPath;
+  return isSameNteResolutionPath(resolution.modFolderPath, resolution.linkedModFolderPath)
+    ? null
+    : resolution.linkedModFolderPath;
+}
+
+function isSameNteResolutionPath(left: string, right: string) {
+  return (
+    left.trim().replaceAll("/", "\\").toLowerCase() ===
+    right.trim().replaceAll("/", "\\").toLowerCase()
   );
 }

@@ -105,11 +105,16 @@ export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGame
           return;
         }
 
+        const resolvedLinkedModFolderPath = resolveNteLinkedModFolderPath(
+          resolution,
+          customModFolderPath,
+        );
+
         onAddGame(
           name,
           customModFolderPath || resolution.modFolderPath,
           importer,
-          customModFolderPath ? resolution.linkedModFolderPath : null,
+          resolvedLinkedModFolderPath,
           resolution.gameRootPath,
           resolution.executablePath,
         );
@@ -393,5 +398,19 @@ export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGame
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function resolveNteLinkedModFolderPath(resolution: NteResolution, customModFolderPath: string) {
+  if (customModFolderPath) return resolution.linkedModFolderPath;
+  return isSameNteResolutionPath(resolution.modFolderPath, resolution.linkedModFolderPath)
+    ? null
+    : resolution.linkedModFolderPath;
+}
+
+function isSameNteResolutionPath(left: string, right: string) {
+  return (
+    left.trim().replaceAll("/", "\\").toLowerCase() ===
+    right.trim().replaceAll("/", "\\").toLowerCase()
   );
 }

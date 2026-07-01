@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import type { FolderGroup, GameConfig, ModInfo, NteBootstrapProgress } from "@shared/types";
@@ -25,6 +26,7 @@ const NTE_COMMON_EXE_RELATIVE_PATH = path.join(
 );
 const NTE_MODS_RELATIVE_PATH = path.join("Content", "Paks", "Mods");
 const NTE_DEFAULT_MOD_SUBFOLDERS = ["Character", "UI", "Enemy", "NPC"] as const;
+const NTE_USER_MODS_FOLDER_NAME = "NTE-Mods";
 const DISABLED_FILE_SUFFIX = ".disabled";
 const PREVIEW_FILE_REGEX = /^preview\.(jpeg|jpg|gif|png|webp|bmp|mp4|webm|ogg)$/i;
 
@@ -48,14 +50,28 @@ export async function resolveNteInstallPath(inputPath: string): Promise<NtePathR
     if (!executablePath) return null;
 
     const htRootPath = path.resolve(path.dirname(executablePath), "..", "..");
-    const modFolderPath = path.join(htRootPath, NTE_MODS_RELATIVE_PATH);
+    const gameModFolderPath = path.join(htRootPath, NTE_MODS_RELATIVE_PATH);
+    const existingLinkedModFolderPath = await getExistingNteModsLinkTarget(gameModFolderPath);
+    const modFolderPath =
+        existingLinkedModFolderPath ??
+        ((await canWriteNteModsPath(gameModFolderPath))
+            ? gameModFolderPath
+            : getDefaultNteModFolderPath());
 
     return {
         gameRootPath: path.resolve(htRootPath, "..", ".."),
         executablePath,
         modFolderPath,
-        linkedModFolderPath: modFolderPath,
+        linkedModFolderPath: gameModFolderPath,
     };
+}
+
+export function getDefaultNteModFolderPath() {
+    return path.join(
+        process.env.USERPROFILE || os.homedir(),
+        ".nahida-desktop",
+        NTE_USER_MODS_FOLDER_NAME,
+    );
 }
 
 export function deriveNteGameInstallPath(modOrLinkedPath: string) {
@@ -494,6 +510,15 @@ async function findNteExecutable(inputPath: string) {
 }
 
 async function linkNteModsFolder(targetPath: string, linkPath: string) {
+    try {
+        await linkNteModsFolderDirect(targetPath, linkPath);
+    } catch (error) {
+        if (!isFsPermissionError(error)) throw error;
+        await linkNteModsFolderElevated(targetPath, linkPath);
+    }
+}
+
+async function linkNteModsFolderDirect(targetPath: string, linkPath: string) {
     await fse.ensureDir(path.dirname(linkPath));
 
     if (await fse.pathExists(linkPath)) {
@@ -510,6 +535,15 @@ async function linkNteModsFolder(targetPath: string, linkPath: string) {
 }
 
 async function unlinkNteModsFolder(modFolderPath: string) {
+    try {
+        await unlinkNteModsFolderDirect(modFolderPath);
+    } catch (error) {
+        if (!isFsPermissionError(error)) throw error;
+        await unlinkNteModsFolderElevated(modFolderPath);
+    }
+}
+
+async function unlinkNteModsFolderDirect(modFolderPath: string) {
     if (!(await fse.pathExists(modFolderPath))) return;
 
     const stat = await fse.lstat(modFolderPath);
@@ -531,6 +565,162 @@ async function unlinkNteModsFolder(modFolderPath: string) {
             }),
         ),
     );
+}
+
+async function linkNteModsFolderElevated(targetPath: string, linkPath: string) {
+    const exitCode = await runElevatedPowerShell(`
+$ErrorActionPreference = 'Stop'
+$TargetPath = ${toPowerShellString(targetPath)}
+$LinkPath = ${toPowerShellString(linkPath)}
+
+function Normalize-PathValue([string]$PathValue) {
+    return [System.IO.Path]::GetFullPath($PathValue).TrimEnd([char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar))
+}
+
+function Same-Path([string]$Left, [string]$Right) {
+    return (Normalize-PathValue $Left).Equals((Normalize-PathValue $Right), [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Has-Any-FileSystemContent([string]$PathValue) {
+    foreach ($Child in Get-ChildItem -LiteralPath $PathValue -Force -ErrorAction SilentlyContinue) {
+        if (-not $Child.PSIsContainer) { return $true }
+        if (($Child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { return $true }
+        if (Has-Any-FileSystemContent $Child.FullName) { return $true }
+    }
+    return $false
+}
+
+New-Item -ItemType Directory -Force -LiteralPath $TargetPath | Out-Null
+New-Item -ItemType Directory -Force -LiteralPath ([System.IO.Path]::GetDirectoryName($LinkPath)) | Out-Null
+
+if (Test-Path -LiteralPath $LinkPath) {
+    $Item = Get-Item -LiteralPath $LinkPath -Force
+    if (($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        $ExistingTarget = if ($Item.Target -is [array]) { [string]$Item.Target[0] } else { [string]$Item.Target }
+        if ((Same-Path $ExistingTarget $TargetPath)) { exit 0 }
+        Remove-Item -LiteralPath $LinkPath -Force
+    } elseif (-not $Item.PSIsContainer) {
+        exit 33
+    } elseif (-not (Has-Any-FileSystemContent $LinkPath)) {
+        Remove-Item -LiteralPath $LinkPath -Force
+    } elseif (Has-Any-FileSystemContent $TargetPath) {
+        exit 32
+    } else {
+        Get-ChildItem -LiteralPath $TargetPath -Force | Remove-Item -Recurse -Force
+        Get-ChildItem -LiteralPath $LinkPath -Force | Move-Item -Destination $TargetPath -Force
+        Remove-Item -LiteralPath $LinkPath -Force
+    }
+}
+
+New-Item -ItemType Junction -Path $LinkPath -Target $TargetPath | Out-Null
+`);
+    if (exitCode === 0) return;
+    if (exitCode === 32) throw new Error("NTE_MODS_LINK_CONFLICT");
+    if (exitCode === 33) throw new Error("NTE_MODS_LINK_PATH_OCCUPIED");
+    throw new Error(`NTE_MODS_LINK_ELEVATED_FAILED:${exitCode}`);
+}
+
+async function unlinkNteModsFolderElevated(modFolderPath: string) {
+    const exitCode = await runElevatedPowerShell(`
+$ErrorActionPreference = 'Stop'
+$ModFolderPath = ${toPowerShellString(modFolderPath)}
+
+function Has-Any-FileSystemContent([string]$PathValue) {
+    foreach ($Child in Get-ChildItem -LiteralPath $PathValue -Force -ErrorAction SilentlyContinue) {
+        if (-not $Child.PSIsContainer) { return $true }
+        if (($Child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { return $true }
+        if (Has-Any-FileSystemContent $Child.FullName) { return $true }
+    }
+    return $false
+}
+
+if (-not (Test-Path -LiteralPath $ModFolderPath)) { exit 0 }
+
+$Item = Get-Item -LiteralPath $ModFolderPath -Force
+if (($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) { exit 0 }
+
+$TargetPath = if ($Item.Target -is [array]) { [string]$Item.Target[0] } else { [string]$Item.Target }
+$ShouldMoveTargetEntries = (Test-Path -LiteralPath $TargetPath) -and (Has-Any-FileSystemContent $TargetPath)
+
+Remove-Item -LiteralPath $ModFolderPath -Force
+New-Item -ItemType Directory -Force -LiteralPath $ModFolderPath | Out-Null
+
+if ($ShouldMoveTargetEntries) {
+    Get-ChildItem -LiteralPath $TargetPath -Force | Move-Item -Destination $ModFolderPath -Force
+}
+`);
+    if (exitCode === 0) return;
+    throw new Error(`NTE_MODS_UNLINK_ELEVATED_FAILED:${exitCode}`);
+}
+
+async function runElevatedPowerShell(command: string) {
+    return await runPowerShell(`
+$ErrorActionPreference = 'Stop'
+try {
+$Process = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', '${encodePowerShellCommand(command)}')
+exit $Process.ExitCode
+} catch {
+    exit 1
+}
+`);
+}
+
+function toPowerShellString(value: string) {
+    return `'${value.replaceAll("'", "''")}'`;
+}
+
+function encodePowerShellCommand(command: string) {
+    return Buffer.from(command, "utf16le").toString("base64");
+}
+
+async function runPowerShell(command: string) {
+    return await new Promise<number>((resolve, reject) => {
+        const child = spawn(
+            "powershell.exe",
+            [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-EncodedCommand",
+                encodePowerShellCommand(command),
+            ],
+            { windowsHide: true },
+        );
+        child.on("error", (error) =>
+            reject(new Error(`NTE_MODS_LINK_ELEVATION_FAILED:${String(error)}`)),
+        );
+        child.on("close", (code) => resolve(code ?? 1));
+    });
+}
+
+async function getExistingNteModsLinkTarget(modFolderPath: string) {
+    if (!(await fse.pathExists(modFolderPath))) return null;
+
+    const stat = await fse.lstat(modFolderPath);
+    return stat.isSymbolicLink() ? await resolveLinkTarget(modFolderPath) : null;
+}
+
+async function canWriteNteModsPath(modFolderPath: string) {
+    const testRoot = (await fse.pathExists(modFolderPath))
+        ? modFolderPath
+        : path.dirname(modFolderPath);
+    const stat = await fse.stat(testRoot).catch(() => null);
+    if (!stat?.isDirectory()) return false;
+
+    const testPath = path.join(testRoot, `.nahida-write-test-${process.pid}-${nanoid(8)}`);
+    try {
+        await fse.mkdir(testPath);
+        await fse.remove(testPath);
+        return true;
+    } catch {
+        await fse.remove(testPath).catch(() => {});
+        return false;
+    }
+}
+
+function isFsPermissionError(error: unknown) {
+    const code = (error as NodeJS.ErrnoException | undefined)?.code;
+    return code === "EPERM" || code === "EACCES";
 }
 
 async function moveExistingNteModsFolder(sourcePath: string, targetPath: string) {
