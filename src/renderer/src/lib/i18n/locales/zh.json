@@ -915,6 +915,7 @@
         "preserve_d3dx_description": "在二分查找期间保持 d3dx_user.ini 为原始状态，防止切换值丢失",
         "status": {
           "idle": "空闲",
+          "recovering": "正在恢复上一次的排查状态...",
           "scanning": "扫描中",
           "round": "进行中",
           "done": "完成",

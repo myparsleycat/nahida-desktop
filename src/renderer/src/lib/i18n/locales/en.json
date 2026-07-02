@@ -953,6 +953,7 @@
         "preserve_d3dx_description": "Keep d3dx_user.ini at its original state during bisect to prevent toggle value loss",
         "status": {
           "idle": "Idle",
+          "recovering": "Recovering previous session...",
           "scanning": "Scanning",
           "round": "Round in progress",
           "done": "Done",

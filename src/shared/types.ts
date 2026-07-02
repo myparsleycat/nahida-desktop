@@ -242,7 +242,14 @@ export interface NteBootstrapProgress {
     message?: string;
 }
 
-export type BisectStatus = "idle" | "scanning" | "round" | "done" | "reverting" | "cancelled";
+export type BisectStatus =
+    | "idle"
+    | "recovering"
+    | "scanning"
+    | "round"
+    | "done"
+    | "reverting"
+    | "cancelled";
 
 export interface BisectSnapshot {
     status: BisectStatus;
