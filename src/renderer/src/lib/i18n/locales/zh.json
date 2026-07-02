@@ -913,6 +913,10 @@
         "new_bisect_hint": "开始新的二分排查会恢复所有临时禁用的模组。",
         "preserve_d3dx": "保护 d3dx_user.ini",
         "preserve_d3dx_description": "在二分查找期间保持 d3dx_user.ini 为原始状态，防止切换值丢失",
+        "recover_disabled": "恢复已禁用模组",
+        "recover_disabled_hint": "恢复所选游戏模组文件夹中残留的 .mod-bisect-disabled 文件。",
+        "recover_disabled_success": "已恢复 {{count}} 个已禁用模组文件。",
+        "recover_disabled_none": "未发现残留的已禁用文件。",
         "status": {
           "idle": "空闲",
           "scanning": "扫描中",

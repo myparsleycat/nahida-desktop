@@ -933,6 +933,10 @@
         "new_bisect_hint": "새 bisect를 시작하면 임시로 비활성화된 모드가 모두 되돌려집니다.",
         "preserve_d3dx": "d3dx_user.ini 보호",
         "preserve_d3dx_description": "이진 탐색 중 d3dx_user.ini를 원래 상태로 유지하여 토글 값 초기화를 방지합니다",
+        "recover_disabled": "비활성화된 모드 복구",
+        "recover_disabled_hint": "선택한 게임의 모드 폴더에 남은 .mod-bisect-disabled 파일을 복구합니다.",
+        "recover_disabled_success": "비활성화된 모드 파일 {{count}}개를 복구했습니다.",
+        "recover_disabled_none": "남아있는 비활성화 파일이 없습니다.",
         "status": {
           "idle": "대기 중",
           "scanning": "스캔 중",

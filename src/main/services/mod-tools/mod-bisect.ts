@@ -154,7 +154,6 @@ export class ModBisect {
             phase: "active",
         };
 
-        await this.syncJournal(this.session);
         const snapshot = this.toSnapshot(this.session, null);
         this.broadcast(snapshot);
         return snapshot;
@@ -197,7 +196,6 @@ export class ModBisect {
             session.finalBadPath = culprit;
 
             const finalSnapshot = this.toSnapshot(session, null, "done");
-            await this.syncJournal(session);
             this.broadcast(finalSnapshot);
             return finalSnapshot;
         }
@@ -207,7 +205,6 @@ export class ModBisect {
             this.session = null;
             const toRestore = this.disabledSet(session);
             await this.revertAll(session, toRestore);
-            await this.journal.clear(session.game);
             await this.stopD3dxGuard(session.game);
             const snapshot = this.toSnapshot(session, BISECT_INCONCLUSIVE_ERROR, "done");
             this.broadcast(snapshot);
@@ -231,7 +228,6 @@ export class ModBisect {
         session.batchSize = nextBatchSize;
         session.round = currentRound + 1;
 
-        await this.syncJournal(session);
         const snapshot = this.toSnapshot(session, null);
         this.broadcast(snapshot);
         return snapshot;
@@ -259,7 +255,6 @@ export class ModBisect {
             session.finalBadPath = null;
         }
 
-        await this.syncJournal(session);
         const snapshot = this.toSnapshot(session, null);
         this.broadcast(snapshot);
         return snapshot;
@@ -278,17 +273,8 @@ export class ModBisect {
             await this.revertAll(session, toReEnable);
         }
 
-        const keptPaths: string[] = [];
         for (const originalPath of toKeep) {
-            if (await this.keepDisabled(originalPath)) {
-                keptPaths.push(originalPath);
-            }
-        }
-
-        if (keptPaths.length > 0) {
-            await this.journal.write(session.game, keptPaths, "kept");
-        } else {
-            await this.journal.clear(session.game);
+            await this.keepDisabled(originalPath);
         }
 
         await this.stopD3dxGuard(session.game);
@@ -310,7 +296,6 @@ export class ModBisect {
         this.broadcast({ ...this.toSnapshot(session, null), status: "cancelled" });
         const toRestore = this.disabledSet(session);
         await this.revertAll(session, toRestore);
-        await this.journal.clear(session.game);
         await this.stopD3dxGuard(session.game);
         this.session = null;
         this.broadcast({ ...this.toSnapshot(session, null), status: "reverting" });
@@ -323,36 +308,41 @@ export class ModBisect {
         for (const game of games) {
             if (!game.modFolderPath || isNteImporter(game.importer)) continue;
             await this.recoverD3dxBackup(game);
-            const journal = await this.journal.load(game.game);
             const orphans = await this.journal.listOrphans(game.modFolderPath);
-
-            if (journal?.purpose === "kept") {
-                const keptSet = new Set(journal.paths.map((p) => p.toLowerCase()));
-                const toRestore = orphans.filter((p) => !keptSet.has(p.toLowerCase()));
-                if (toRestore.length > 0) {
-                    await this.recoverInis(toRestore);
-                    for (const p of toRestore) {
-                        this.desktop.logger.info(`Restored orphan mod file: ${p}`, "ModBisect");
-                    }
-                }
-                continue;
-            }
-
-            const toRestore = [...new Set([...(journal?.paths ?? []), ...orphans])];
-            if (toRestore.length === 0) {
-                if (journal) await this.journal.clear(game.game);
-                continue;
-            }
-            try {
-                await this.recoverInis(toRestore);
-            } catch (error) {
-                this.desktop.logger.error(error, "ModBisect");
-            }
-            await this.journal.clear(game.game);
-            for (const p of toRestore) {
+            if (orphans.length === 0) continue;
+            const restored = await this.recoverInis(orphans);
+            for (const p of restored) {
                 this.desktop.logger.info(`Restored orphan mod file: ${p}`, "ModBisect");
             }
         }
+    }
+
+    public recoverOrphans(game: string): Promise<number> {
+        if (this.session) {
+            return Promise.reject(new Error("Cannot recover while a bisect session is active."));
+        }
+        const result = this.recovering.then(() => this.performRecoverOrphans(game));
+        this.recovering = result.then(
+            () => undefined,
+            () => undefined,
+        );
+        return result;
+    }
+
+    private async performRecoverOrphans(game: string): Promise<number> {
+        const games = await this.desktop.service.mod.get.games();
+        const gameConfig = games.find((g) => g.game === game);
+        if (!gameConfig) {
+            throw new Error(`Game not found: ${game}`);
+        }
+        if (isNteImporter(gameConfig.importer)) {
+            throw new Error("NTE modders are not supported yet.");
+        }
+        if (!gameConfig.modFolderPath) {
+            throw new Error(`Mod folder path is not configured for ${game}.`);
+        }
+        const orphans = await this.journal.listOrphans(gameConfig.modFolderPath);
+        return (await this.recoverInis(orphans)).length;
     }
 
     private assertSession() {
@@ -363,10 +353,6 @@ export class ModBisect {
 
     private disabledSet(session: InternalSession): string[] {
         return [...session.undoStack.flatMap((e) => e.disabled), ...session.currentBatch];
-    }
-
-    private async syncJournal(session: InternalSession): Promise<void> {
-        await this.journal.write(session.game, this.disabledSet(session), "session");
     }
 
     private async scanEnabledInis(modRootPath: string): Promise<string[]> {
@@ -423,21 +409,31 @@ export class ModBisect {
         );
     }
 
-    private async recoverInis(paths: string[]): Promise<void> {
-        if (paths.length === 0) return;
+    private async recoverInis(paths: string[]): Promise<string[]> {
+        if (paths.length === 0) return [];
         const limit = pLimit(RENAME_CONCURRENCY);
-        await Promise.all(
+        const results = await Promise.all(
             paths.map((iniPath) =>
                 limit(async () => {
                     const target = disabledPathFor(iniPath, BISECT_DISABLED_SUFFIX);
                     try {
-                        await fse.rename(target, iniPath);
+                        // The original was re-enabled by other means (re-import, backup restore, etc.),
+                        // so the leftover disabled copy is a stale duplicate — remove it instead of
+                        // trying to rename over the existing original (which fails on Windows).
+                        if (await fse.pathExists(iniPath)) {
+                            await fse.remove(target);
+                        } else {
+                            await fse.rename(target, iniPath);
+                        }
+                        return iniPath;
                     } catch (error) {
                         this.desktop.logger.error(error, "ModBisect:recover");
+                        return null;
                     }
                 }),
             ),
         );
+        return results.filter((p): p is string => p !== null);
     }
 
     private async keepDisabled(originalPath: string): Promise<boolean> {

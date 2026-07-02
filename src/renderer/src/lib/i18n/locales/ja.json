@@ -914,6 +914,10 @@
         "new_bisect_hint": "新しいバイセクトを開始すると、一時的に無効化したMODはすべて元に戻ります。",
         "preserve_d3dx": "d3dx_user.ini を保護",
         "preserve_d3dx_description": "二分探索中に d3dx_user.ini を元の状態に保ち、トグル値のリセットを防ぎます",
+        "recover_disabled": "無効化MODを復元",
+        "recover_disabled_hint": "選択したゲームのMODフォルダに残った .mod-bisect-disabled ファイルを復元します。",
+        "recover_disabled_success": "無効化されたMODファイル {{count}} 件を復元しました。",
+        "recover_disabled_none": "残留した無効化ファイルは見つかりませんでした。",
         "status": {
           "idle": "待機中",
           "scanning": "スキャン中",

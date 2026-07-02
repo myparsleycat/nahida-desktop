@@ -118,15 +118,30 @@ export default function ModBisect() {
     onError: (err) => toast.error(err.message),
   });
 
+  const recoverMutation = useMutation({
+    mutationFn: (game: string) => window.api.invoke("tools:bisectRecover", game),
+    onSuccess: (count) => {
+      if (count > 0) {
+        toast.success(t("page.tools.mod_bisect.recover_disabled_success", { count }));
+      } else {
+        toast.info(t("page.tools.mod_bisect.recover_disabled_none"));
+      }
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const status = snapshot?.status ?? "idle";
   const isActive = status === "scanning" || status === "round";
   const canStart = !!selectedGame && !isActive && status !== "reverting";
+  const canRecover =
+    !!selectedGame && (status === "idle" || status === "cancelled") && !recoverMutation.isPending;
   const isBusy =
     startMutation.isPending ||
     respondMutation.isPending ||
     undoMutation.isPending ||
     cancelMutation.isPending ||
-    finalizeMutation.isPending;
+    finalizeMutation.isPending ||
+    recoverMutation.isPending;
 
   return (
     <div className="flex flex-col h-full min-h-0 gap-4 p-4 overflow-y-auto">
@@ -162,6 +177,18 @@ export default function ModBisect() {
             >
               {t("page.tools.mod_bisect.cancel")}
             </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="secondary"
+                  onClick={() => selectedGame && recoverMutation.mutate(selectedGame)}
+                  disabled={!canRecover || isBusy}
+                >
+                  {t("page.tools.mod_bisect.recover_disabled")}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t("page.tools.mod_bisect.recover_disabled_hint")}</TooltipContent>
+            </Tooltip>
             <span className={`text-xs font-mono ${statusColor(status)}`}>
               {t(`page.tools.mod_bisect.status.${status}`)}
             </span>

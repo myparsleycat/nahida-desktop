@@ -10,4 +10,5 @@ export function registerModBisectHandlers(d: NahidaDesktop) {
     );
     rh("tools:bisectCancel", () => d.service.modTools.modBisect.cancel());
     rh("tools:bisectGetState", () => d.service.modTools.modBisect.getState());
+    rh("tools:bisectRecover", (game: string) => d.service.modTools.modBisect.recoverOrphans(game));
 }
