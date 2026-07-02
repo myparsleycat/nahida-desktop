@@ -916,7 +916,6 @@
         "preserve_d3dx_description": "二分探索中に d3dx_user.ini を元の状態に保ち、トグル値のリセットを防ぎます",
         "status": {
           "idle": "待機中",
-          "recovering": "前回のセッションを復元しています...",
           "scanning": "スキャン中",
           "round": "ラウンド進行中",
           "done": "完了",

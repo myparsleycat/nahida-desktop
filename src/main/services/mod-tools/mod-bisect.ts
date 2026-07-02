@@ -51,12 +51,9 @@ export class ModBisect {
     private d3dxUserIniInitial: string | null = null;
     private d3dxRestoreLock: Promise<void> = Promise.resolve();
 
-    private recoveringSnapshot: BisectSnapshot | null = null;
-
     constructor(private readonly desktop: NahidaDesktop) {}
 
     public getState(): BisectSnapshot | null {
-        if (this.recoveringSnapshot) return this.recoveringSnapshot;
         if (!this.session) return null;
         const status = this.session.finalBadPath
             ? "done"
@@ -323,47 +320,38 @@ export class ModBisect {
     }
 
     public async recover(games: GameConfig[]): Promise<void> {
-        this.recoveringSnapshot = this.emptySnapshot("recovering");
-        this.broadcast(this.recoveringSnapshot);
-        try {
-            for (const game of games) {
-                if (!game.modFolderPath || isNteImporter(game.importer)) continue;
-                await this.recoverD3dxBackup(game);
-                const journal = await this.journal.load(game.game);
-                const orphans = await this.journal.listOrphans(game.modFolderPath);
+        for (const game of games) {
+            if (!game.modFolderPath || isNteImporter(game.importer)) continue;
+            await this.recoverD3dxBackup(game);
+            const journal = await this.journal.load(game.game);
+            const orphans = await this.journal.listOrphans(game.modFolderPath);
 
-                if (journal?.purpose === "kept") {
-                    const keptSet = new Set(journal.paths.map((p) => p.toLowerCase()));
-                    const toRestore = orphans.filter((p) => !keptSet.has(p.toLowerCase()));
-                    if (toRestore.length > 0) {
-                        await this.recoverInis(toRestore);
-                        for (const p of toRestore) {
-                            this.desktop.logger.info(`Restored orphan mod file: ${p}`, "ModBisect");
-                        }
-                    }
-                    continue;
-                }
-
-                const toRestore = [...new Set([...(journal?.paths ?? []), ...orphans])];
-                if (toRestore.length === 0) {
-                    if (journal) await this.journal.clear(game.game);
-                    continue;
-                }
-                try {
+            if (journal?.purpose === "kept") {
+                const keptSet = new Set(journal.paths.map((p) => p.toLowerCase()));
+                const toRestore = orphans.filter((p) => !keptSet.has(p.toLowerCase()));
+                if (toRestore.length > 0) {
                     await this.recoverInis(toRestore);
-                } catch (error) {
-                    this.desktop.logger.error(error, "ModBisect");
+                    for (const p of toRestore) {
+                        this.desktop.logger.info(`Restored orphan mod file: ${p}`, "ModBisect");
+                    }
                 }
-                await this.journal.clear(game.game);
-                for (const p of toRestore) {
-                    this.desktop.logger.info(`Restored orphan mod file: ${p}`, "ModBisect");
-                }
+                continue;
             }
-        } catch (error) {
-            this.desktop.logger.error(error, "ModBisect");
-        } finally {
-            this.recoveringSnapshot = null;
-            this.broadcast(this.emptySnapshot("idle"));
+
+            const toRestore = [...new Set([...(journal?.paths ?? []), ...orphans])];
+            if (toRestore.length === 0) {
+                if (journal) await this.journal.clear(game.game);
+                continue;
+            }
+            try {
+                await this.recoverInis(toRestore);
+            } catch (error) {
+                this.desktop.logger.error(error, "ModBisect");
+            }
+            await this.journal.clear(game.game);
+            for (const p of toRestore) {
+                this.desktop.logger.info(`Restored orphan mod file: ${p}`, "ModBisect");
+            }
         }
     }
 

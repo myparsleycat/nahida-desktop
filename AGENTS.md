@@ -119,7 +119,6 @@ function requireConfig(input: unknown) {
 ## Type Checking
 
 - Do not run tsc directly; instead, execute pnpm lint -- file/to/path file/to/path2.
-- Do not attempt to build Windows-only native bindings on macOS/arm64. The `@native/*` Rust/NAPI modules target `win32` and will fail to compile on Apple Silicon (e.g., `std::os::windows`, `IMarshal`, `encode_wide` errors). Treat these failures as expected environment limitations rather than code defects, and do not waste time rebuilding them. Use `pnpm lint` / `pnpm fmt` for TypeScript-only verification instead.
 
 ## Formatting
 

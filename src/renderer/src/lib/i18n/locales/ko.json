@@ -935,7 +935,6 @@
         "preserve_d3dx_description": "이진 탐색 중 d3dx_user.ini를 원래 상태로 유지하여 토글 값 초기화를 방지합니다",
         "status": {
           "idle": "대기 중",
-          "recovering": "이전 세션을 복구하는 중입니다...",
           "scanning": "스캔 중",
           "round": "라운드 진행 중",
           "done": "완료",

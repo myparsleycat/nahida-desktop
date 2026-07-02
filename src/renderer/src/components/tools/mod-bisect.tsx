@@ -49,8 +49,6 @@ function statusColor(status: BisectSnapshot["status"]) {
       return "text-blue-600 dark:text-blue-400";
     case "scanning":
       return "text-blue-600 dark:text-blue-400";
-    case "recovering":
-      return "text-blue-600 dark:text-blue-400";
     default:
       return "text-muted-foreground";
   }
@@ -70,12 +68,7 @@ export default function ModBisect() {
     refetchInterval: (query) => {
       const value = query.state.data;
       if (!value) return false;
-      if (
-        value.status === "scanning" ||
-        value.status === "reverting" ||
-        value.status === "recovering"
-      )
-        return 500;
+      if (value.status === "scanning" || value.status === "reverting") return 500;
       return false;
     },
   });
@@ -127,7 +120,7 @@ export default function ModBisect() {
 
   const status = snapshot?.status ?? "idle";
   const isActive = status === "scanning" || status === "round";
-  const canStart = !!selectedGame && !isActive && status !== "reverting" && status !== "recovering";
+  const canStart = !!selectedGame && !isActive && status !== "reverting";
   const isBusy =
     startMutation.isPending ||
     respondMutation.isPending ||

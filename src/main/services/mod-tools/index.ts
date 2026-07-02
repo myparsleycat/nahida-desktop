@@ -27,15 +27,14 @@ export class ModTools {
         this.textureResizer = new TextureResizer(this.desktop);
         this.wuwaModFixer = new WuwaModFixer(this.desktop);
         const modBisect = (this.modBisect = new ModBisect(this.desktop));
-        this.desktop.service.startupCleanup.register({
-            name: "mod-tools:bisect-recover",
-            run: async () => {
+        modBisect.recovering = (async () => {
+            try {
                 const games = await this.desktop.service.mod.get.games();
-                // Fire-and-forget: don't await so window creation isn't blocked. The recovering
-                // state reaches the UI via getState() and the idle broadcast once a window exists.
-                modBisect.recovering = modBisect.recover(games);
-            },
-        });
+                await modBisect.recover(games);
+            } catch (error) {
+                this.desktop.logger.error(error, "ModBisect");
+            }
+        })();
     }
 
     public async startPersistWatcher() {
