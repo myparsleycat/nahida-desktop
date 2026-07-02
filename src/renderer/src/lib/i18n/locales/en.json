@@ -951,6 +951,10 @@
         "new_bisect_hint": "Starting a new bisect reverts all temporarily disabled mods.",
         "preserve_d3dx": "Preserve d3dx_user.ini",
         "preserve_d3dx_description": "Keep d3dx_user.ini at its original state during bisect to prevent toggle value loss",
+        "recover_disabled": "Recover disabled mods",
+        "recover_disabled_hint": "Restore .mod-bisect-disabled files left in the selected game's mod folder.",
+        "recover_disabled_success": "Recovered {{count}} disabled mod file(s).",
+        "recover_disabled_none": "No leftover disabled files found.",
         "status": {
           "idle": "Idle",
           "scanning": "Scanning",

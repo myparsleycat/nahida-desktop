@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/ale
 import { Button } from "@renderer/components/ui/button";
 import { Toaster } from "@renderer/components/ui/sonner";
 import { UpdateAlertDialog } from "@renderer/components/update-alert-dialog";
+import { DEFAULT_BG } from "@renderer/const";
 import { useGlobalEvents } from "@renderer/hooks/use-global-events";
 import { useDownloadArchiveExtractPromptHandler } from "@renderer/hooks/use-mod-events";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
@@ -52,7 +53,7 @@ function RootComponent() {
     });
 
     const syncUpdaterStatus = () => {
-      window.api.invoke("updater:getStatus").then((status) => {
+      void window.api.invoke("updater:getStatus").then((status) => {
         setUpdaterStatus(status);
       });
     };
@@ -65,11 +66,11 @@ function RootComponent() {
       setTransfers(updatedTransfers);
     });
 
-    window.api.invoke("util:getAppStatus").then((appStatus) => {
+    void window.api.invoke("util:getAppStatus").then((appStatus) => {
       setAppStatus(appStatus);
     });
     syncUpdaterStatus();
-    window.api.invoke("transfer:list").then(setTransfers);
+    void window.api.invoke("transfer:list").then(setTransfers);
     getSetting("general.language")
       .then((language) => {
         if (language) {
@@ -145,9 +146,15 @@ function RootComponent() {
 
       <main className={cn("flex w-screen overflow-hidden", screenHeight)}>
         <div className="flex flex-row w-full">
-          {!isNoSidebar && <Sidebar className="border-b" />}
+          {!isNoSidebar && <Sidebar />}
 
-          <div className="flex-1 min-w-0 h-full relative">
+          <div
+            className={cn(
+              "flex-1 min-w-0 h-full relative overflow-hidden",
+              DEFAULT_BG,
+              titlebarStyle === "modern" ? "border-t border-l rounded-tl-lg" : "border-l",
+            )}
+          >
             <Outlet />
           </div>
         </div>

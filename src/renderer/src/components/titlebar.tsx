@@ -1,4 +1,5 @@
 import { Button } from "@renderer/components/ui/button";
+import { DEFAULT_BG } from "@renderer/const";
 import { useSetting } from "@renderer/hooks/use-settings";
 import { cn } from "@renderer/lib/utils";
 import { useGlobalStore } from "@renderer/store/global";
@@ -44,7 +45,7 @@ export function Titlebar({ title }: TitlebarProps) {
 
   return (
     <div
-      className="titlebar fixed top-0 left-0 right-0 h-8 bg-background flex items-center select-none z-9999 border-b"
+      className={`titlebar fixed top-0 left-0 right-0 h-8 ${DEFAULT_BG} flex items-center select-none z-9999`}
       onPointerDownCapture={(e) => {
         e.stopPropagation();
       }}
