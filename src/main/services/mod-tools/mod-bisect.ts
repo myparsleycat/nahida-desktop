@@ -33,10 +33,6 @@ interface UndoEntry {
     batchSize: number;
 }
 
-const FIRST_BATCH_SIZE = 100;
-const MEDIUM_BATCH_SIZE = 20;
-const NARROW_BATCH_SIZE = 5;
-const FINE_BATCH_SIZE = 1;
 const RENAME_CONCURRENCY = 8;
 const DISABLED_PATH_PATTERN = /^disabled/i;
 const BISECT_INCONCLUSIVE_ERROR = "Bisect inconclusive";
@@ -89,7 +85,7 @@ export class ModBisect {
             game,
             modRootPath: gameConfig.modFolderPath,
             round: 0,
-            batchSize: FIRST_BATCH_SIZE,
+            batchSize: 0,
             candidates: [],
             currentBatch: [],
             undoStackDepth: 0,
@@ -101,7 +97,7 @@ export class ModBisect {
             modRootPath: gameConfig.modFolderPath,
             candidates: [],
             round: 0,
-            batchSize: FIRST_BATCH_SIZE,
+            batchSize: 0,
             currentBatch: [],
             undoStack: [],
             finalBadPath: null,
@@ -132,7 +128,8 @@ export class ModBisect {
             await this.startD3dxGuard(game, gameConfig);
         }
 
-        const firstBatch = iniPaths.slice(0, FIRST_BATCH_SIZE);
+        const firstBatchSize = this.chooseNextBatchSize(iniPaths.length);
+        const firstBatch = iniPaths.slice(0, firstBatchSize);
         try {
             await this.disableInis(firstBatch);
         } catch (error) {
@@ -147,7 +144,7 @@ export class ModBisect {
             modRootPath: gameConfig.modFolderPath,
             candidates: iniPaths,
             round: 1,
-            batchSize: FIRST_BATCH_SIZE,
+            batchSize: firstBatchSize,
             currentBatch: firstBatch,
             undoStack: [],
             finalBadPath: null,
@@ -211,7 +208,7 @@ export class ModBisect {
             return snapshot;
         }
 
-        const nextBatchSize = this.chooseNextBatchSize(remaining.length, currentBatchSize);
+        const nextBatchSize = this.chooseNextBatchSize(remaining.length);
         const nextBatch = remaining.slice(0, nextBatchSize);
         await this.enableInis(currentBatch);
         await this.disableInis(nextBatch);
@@ -566,11 +563,8 @@ export class ModBisect {
         }
     }
 
-    private chooseNextBatchSize(candidateCount: number, currentBatchSize: number): number {
-        if (candidateCount <= FINE_BATCH_SIZE * 5) return FINE_BATCH_SIZE;
-        if (candidateCount <= MEDIUM_BATCH_SIZE) return NARROW_BATCH_SIZE;
-        if (candidateCount <= FIRST_BATCH_SIZE) return MEDIUM_BATCH_SIZE;
-        return Math.min(currentBatchSize, FIRST_BATCH_SIZE);
+    private chooseNextBatchSize(candidateCount: number): number {
+        return Math.ceil(candidateCount / 2);
     }
 
     private toSnapshot(
