@@ -1,6 +1,7 @@
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@renderer/components/ui/popover";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { InfoIcon, Pencil, Save, X } from "lucide-react";
@@ -104,7 +105,24 @@ function SettingRow({
             autoFocus
           />
         ) : (
-          <span className="break-all">{setting.value}</span>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="truncate min-w-0 w-full cursor-pointer text-left hover:text-primary disabled:cursor-default"
+                disabled={setting.value == null}
+                title={setting.value ?? ""}
+              >
+                {setting.value}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              className="max-h-[60vh] w-80 overflow-auto whitespace-pre-wrap break-all"
+            >
+              {setting.value}
+            </PopoverContent>
+          </Popover>
         )}
       </div>
       <div className="p-3 border-b flex items-center justify-center">
