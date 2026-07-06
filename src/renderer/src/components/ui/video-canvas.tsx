@@ -14,7 +14,6 @@ export const VideoCanvas = forwardRef<HTMLCanvasElement, VideoCanvasProps>(
   ({ src, className, objectFit = "cover", playing = false, muted = true, loop = true }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const videoRef = useRef<HTMLVideoElement>(document.createElement("video"));
-    const requestRef = useRef<number | null>(null);
 
     useImperativeHandle(ref, () => canvasRef.current!);
 
@@ -117,7 +116,7 @@ export const VideoCanvas = forwardRef<HTMLCanvasElement, VideoCanvasProps>(
       };
     }, []);
 
-    return <canvas ref={canvasRef} className={cn("block w-full h-full", className)} />;
+    return <canvas ref={canvasRef} className={cn("block h-full w-full", className)} />;
   },
 );
 

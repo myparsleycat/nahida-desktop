@@ -1,21 +1,25 @@
 import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
+
 import { prepareTextureForMaterial } from "@native/static-glb";
+import { toErrorMessage } from "@shared/utils";
 import { decodeImage, parseDDSHeader } from "dds-ktx-parser";
 import fse from "fs-extra";
 import pLimit from "p-limit";
 import { PNG } from "pngjs";
+
 import type { GlbBuilder } from "./builder";
-import { createTextureCacheBaseName, normalizeKey } from "./shared";
 import type { PreparedTexture, StaticGlbTextureFormat } from "./texture-utils";
-import { textureNamePriority } from "./texture-utils";
 import type {
     ConvertModToGlbBufferOptions,
     MaterialBinding,
     Resource,
     TextureBinding,
 } from "./types";
+
+import { createTextureCacheBaseName, normalizeKey } from "./shared";
+import { textureNamePriority } from "./texture-utils";
 
 const DEFAULT_TEXTURE_FORMAT: StaticGlbTextureFormat = "jpeg-safe";
 const DEFAULT_JPEG_QUALITY = 85;
@@ -301,11 +305,7 @@ export async function prepareTextureImage(
             srgbConfidence: normalizeSrgbConfidence(prepared.srgbConfidence),
         };
     } catch (error) {
-        warn(
-            `Failed to prepare texture ${texturePath}: ${
-                error instanceof Error ? error.message : String(error)
-            }`,
-        );
+        warn(`Failed to prepare texture ${texturePath}: ${toErrorMessage(error)}`);
         options.logger?.debug(
             `Prepared texture pipeline failed for ${resourceName} after ${Date.now() - startedAt}ms`,
             "StaticGLB",

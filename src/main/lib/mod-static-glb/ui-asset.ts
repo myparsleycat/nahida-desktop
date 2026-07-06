@@ -1,9 +1,13 @@
 import path from "node:path";
+
+import { toErrorMessage } from "@shared/utils";
 import fse from "fs-extra";
+
 import type { Logger } from "../../internal/logger";
+import type { IniSection, StaticGlbArtifactBufferWriter, StaticGlbViewerUiAssets } from "./types";
+
 import { convertDdsToPng, convertDdsToPngBuffer, convertDdsToPngFallback } from "./material";
 import { normalizeKey } from "./shared";
-import type { IniSection, StaticGlbArtifactBufferWriter, StaticGlbViewerUiAssets } from "./types";
 
 export function collectViewerUiAssetPaths(sections: IniSection[]): StaticGlbViewerUiAssets {
     const resourceMap = new Map(
@@ -139,11 +143,7 @@ export async function materializeUiAsset(
                     },
                 );
             } catch (error) {
-                warn?.(
-                    `Failed to convert UI DDS ${sourcePath}: ${
-                        error instanceof Error ? error.message : String(error)
-                    }`,
-                );
+                warn?.(`Failed to convert UI DDS ${sourcePath}: ${toErrorMessage(error)}`);
                 return undefined;
             }
         }
@@ -156,11 +156,7 @@ export async function materializeUiAsset(
                 await convertDdsToPngFallback(sourcePath, outputPath);
                 return outputPath;
             } catch (error) {
-                warn?.(
-                    `Failed to convert UI DDS ${sourcePath}: ${
-                        error instanceof Error ? error.message : String(error)
-                    }`,
-                );
+                warn?.(`Failed to convert UI DDS ${sourcePath}: ${toErrorMessage(error)}`);
                 return undefined;
             }
         }

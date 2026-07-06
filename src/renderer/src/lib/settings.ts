@@ -9,7 +9,7 @@ export function getSetting<K extends SettingKey>(key: K): Promise<AppSettings[K]
 export function getSetting<K extends readonly SettingKey[]>(keys: K): Promise<SettingsSubset<K>>;
 export function getSetting<K extends SettingKey | readonly SettingKey[]>(keyOrKeys: K) {
     if (Array.isArray(keyOrKeys)) {
-        return window.api.invoke("setting:getMany", [...keyOrKeys]) as Promise<
+        return window.api.invoke("setting:getMany", keyOrKeys) as Promise<
             SettingsSubset<Extract<K, readonly SettingKey[]>>
         >;
     }

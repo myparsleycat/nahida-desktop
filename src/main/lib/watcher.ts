@@ -50,7 +50,7 @@ export class Watcher {
             this.watchers.set(id, watcher);
             return id;
         } catch (error) {
-            this.desktop.logger.error(error, `Watcher:subscribe:${paths}`);
+            this.desktop.logger.error(error, `Watcher:subscribe:${id}`);
             throw error;
         }
     }

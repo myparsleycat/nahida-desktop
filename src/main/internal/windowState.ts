@@ -1,7 +1,9 @@
 import pathModule from "node:path";
+
 import { app, type BrowserWindow, type Rectangle, screen } from "electron";
 import fs from "fs-extra";
 import writeFileAtomic from "write-file-atomic";
+
 import { desktop } from "../index";
 
 export const WINDOW_STATE_VERSION = 1;
@@ -38,8 +40,7 @@ export class WindowState {
         );
     }
 
-    // biome-ignore lint/suspicious/noExplicitAny: <>
-    private validateState(state: any): boolean {
+    private validateState(state: WindowStateType): boolean {
         return (
             state &&
             Number.isInteger(state.height) &&

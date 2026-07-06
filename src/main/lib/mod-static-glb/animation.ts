@@ -1,21 +1,10 @@
 import crypto from "node:crypto";
 import path from "node:path";
+
+import { toErrorMessage } from "@shared/utils";
 import fse from "fs-extra";
 import pLimit from "p-limit";
-import { collectIbResources } from "./build";
-import { float32ArrayToBuffer, uint32ArrayToBuffer } from "./dxgi-utils";
-import { loadFmtForIbCached, loadIndicesForIbCached } from "./fmt-loader";
-import { extractPrimitiveGeometry } from "./geometry";
-import { evaluateIniCondition, evaluateIniNumericExpression } from "./ini-expression";
-import { keyMatchesIb, strictKeyMatchesIb } from "./mesh-key";
-import * as overrideAnalysis from "./override-analysis";
-import {
-    createTimedStageLogger,
-    getStaticGlbWorkConcurrency,
-    humanizeVariableLabel,
-    normalizeKey,
-    sanitizeArtifactName,
-} from "./shared";
+
 import type {
     BufferGroup,
     ConvertModToGlbBufferOptions,
@@ -35,6 +24,21 @@ import type {
     TextureOverrideBinding,
     VariableStateMap,
 } from "./types";
+
+import { collectIbResources } from "./build";
+import { float32ArrayToBuffer, uint32ArrayToBuffer } from "./dxgi-utils";
+import { loadFmtForIbCached, loadIndicesForIbCached } from "./fmt-loader";
+import { extractPrimitiveGeometry } from "./geometry";
+import { evaluateIniCondition, evaluateIniNumericExpression } from "./ini-expression";
+import { keyMatchesIb, strictKeyMatchesIb } from "./mesh-key";
+import * as overrideAnalysis from "./override-analysis";
+import {
+    createTimedStageLogger,
+    getStaticGlbWorkConcurrency,
+    humanizeVariableLabel,
+    normalizeKey,
+    sanitizeArtifactName,
+} from "./shared";
 
 export function detectPresentAnimations(
     sections: IniSection[],
@@ -695,8 +699,7 @@ async function planClipGeometry(
             try {
                 fmt = await loadFmtForIbCached(context, options.assetPath, ib, group.stride);
             } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                warn(`Skipping ${ib.filename}: ${message}`);
+                warn(`Skipping ${ib.filename}: ${toErrorMessage(error)}`);
                 continue;
             }
 

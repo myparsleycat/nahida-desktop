@@ -1,7 +1,9 @@
 import ky from "ky";
 import { Agent, Pool } from "undici";
-import { appVersion } from "../const";
+
 import type { NahidaDesktop } from "../index";
+
+import { appVersion } from "../const";
 
 const NHD_PREFIXES = ["http://localhost", "https://api.nahida.live"];
 
@@ -22,12 +24,11 @@ export class DesktopHttpService {
         }
 
         this.cachedAgent = new Agent({
-            factory(origin, options) {
-                return new Pool(origin, {
+            factory: (origin, options: Pool.Options) =>
+                new Pool(origin, {
                     ...options,
                     allowH2: true,
-                });
-            },
+                }),
         });
 
         return this.cachedAgent;
@@ -47,7 +48,9 @@ export class DesktopHttpService {
         const resp = await ky(url, {
             ...options,
             headers: {
-                ...options?.headers,
+                ...(options?.headers instanceof Headers
+                    ? Object.fromEntries(options.headers.entries())
+                    : (options?.headers as Record<string, string> | undefined)),
                 ...(await this.getHeaders(url)),
             },
             timeout: 100000,

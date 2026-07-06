@@ -9,6 +9,7 @@ import {
 } from "@renderer/components/ui/dialog";
 import { Field, FieldError } from "@renderer/components/ui/field";
 import { Input } from "@renderer/components/ui/input";
+import { toErrorMessage } from "@shared/utils";
 import { useForm } from "@tanstack/react-form";
 import { DownloadIcon, LoaderIcon, XIcon } from "lucide-react";
 import { useEffect } from "react";
@@ -69,7 +70,7 @@ export function CustomDownloadDialog({
   }, [form, open]);
 
   const getErrorCode = (error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = toErrorMessage(error);
     const matched = message.match(
       /\b(DOWNLOAD_URL_REQUIRED|INVALID_DOWNLOAD_URL|UNSUPPORTED_DOWNLOAD_URL_PROTOCOL|DOWNLOAD_URL_HTML_PAGE)\b/,
     );

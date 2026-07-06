@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Switch } from "@renderer/components/ui/switch";
+import { toErrorMessage } from "@shared/utils";
 import { useForm } from "@tanstack/react-form";
 import { useNavigate } from "@tanstack/react-router";
 import { BoxIcon, CircleCheckIcon, CircleXIcon, FolderOpenIcon, Loader2Icon } from "lucide-react";
@@ -87,7 +88,7 @@ export default function StaticGlbConverter() {
         });
       } catch (error) {
         toast.error(t("page.tools.static_glb_converter.toast.failed"), {
-          description: error instanceof Error ? error.message : String(error),
+          description: toErrorMessage(error),
         });
       } finally {
         setIsRunning(false);
@@ -159,7 +160,7 @@ export default function StaticGlbConverter() {
     } catch (error) {
       form.setFieldValue("textureFormat", previous);
       toast.error(t("page.tools.static_glb_converter.toast.save_texture_settings_failed"), {
-        description: error instanceof Error ? error.message : String(error),
+        description: toErrorMessage(error),
       });
     }
   };
@@ -180,7 +181,7 @@ export default function StaticGlbConverter() {
     } catch (error) {
       form.setFieldValue("jpegQuality", previous);
       toast.error(t("page.tools.static_glb_converter.toast.save_texture_settings_failed"), {
-        description: error instanceof Error ? error.message : String(error),
+        description: toErrorMessage(error),
       });
     }
   };

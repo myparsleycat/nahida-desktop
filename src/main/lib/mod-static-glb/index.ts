@@ -1,15 +1,10 @@
 import path from "node:path";
+
+import { toErrorMessage } from "@shared/utils";
 import fse from "fs-extra";
 import { nanoid } from "nanoid";
 import writeFileAtomic from "write-file-atomic";
-import { materializeAnimationClips } from "./animation";
-import { buildModGlb, getDrawBindingsForIb, prepareStaticGlbBuildContext } from "./build";
-import {
-    createStateArtifactFileName,
-    createStateKey,
-    createTimedStageLogger,
-    createWarningCollector,
-} from "./shared";
+
 import type {
     ConvertModToGlbBufferOptions,
     ConvertModToGlbBufferResult,
@@ -21,6 +16,15 @@ import type {
     StaticGlbVariantManifest,
     VariableStateMap,
 } from "./types";
+
+import { materializeAnimationClips } from "./animation";
+import { buildModGlb, getDrawBindingsForIb, prepareStaticGlbBuildContext } from "./build";
+import {
+    createStateArtifactFileName,
+    createStateKey,
+    createTimedStageLogger,
+    createWarningCollector,
+} from "./shared";
 import { materializeUiAsset, materializeViewerUiAssets } from "./ui-asset";
 import { analyzeModVariants } from "./variant";
 
@@ -350,9 +354,8 @@ export async function resolveVariantStateArtifact(
                 try {
                     manifest = (await fse.readJson(manifestPath)) as StaticGlbVariantManifest;
                 } catch (error) {
-                    const message = error instanceof Error ? error.message : String(error);
                     throw new Error(
-                        `Failed to read variant manifest at ${manifestPath}: ${message}`,
+                        `Failed to read variant manifest at ${manifestPath}: ${toErrorMessage(error)}`,
                     );
                 }
             }

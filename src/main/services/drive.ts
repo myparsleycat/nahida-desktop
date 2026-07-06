@@ -16,6 +16,7 @@ import Upload, {
     type UploadParams,
 } from "@main/lib/upload";
 import type { LinkData } from "@main/server";
+import { toErrorMessage } from "@shared/utils";
 import { dialog } from "electron";
 import { retry } from "es-toolkit";
 import fse from "fs-extra";
@@ -23,7 +24,7 @@ import Heap from "mnemonist/heap";
 import { nanoid } from "nanoid";
 
 import type { NahidaDesktop } from "..";
-import type { LocalTransfer } from "./transfer";
+import type { LocalTransfer, TransferParams } from "./transfer";
 
 import { saveFileDialog, selectDirectoryDialog } from "./dialog";
 import { processChunked } from "./util";
@@ -35,8 +36,6 @@ export const gzipAsync = promisify(gzip);
 export const gunzipAsync = promisify(gunzip);
 export const zstdCompressAsync = promisify(zstdCompress);
 export const zstdDecompressAsync = promisify(zstdDecompress);
-
-export type TransferParams = UploadParams | DownloadParams;
 
 export class DriveService {
     private readonly desktop: NahidaDesktop;
@@ -136,7 +135,7 @@ export class DriveService {
                         dirs,
                     });
                     if (error) {
-                        throw new Error(error.value.toString());
+                        throw new Error(toErrorMessage(error.value));
                     }
                     return data;
                 },
@@ -221,7 +220,7 @@ export class DriveService {
                 this.desktop.logger.error(err, "Drive:Upload:Preprocessing");
                 void this.desktop.service.transfer.updateTransfer(pid, {
                     status: "error",
-                    error: err instanceof Error ? err.message : String(err),
+                    error: toErrorMessage(err),
                 });
             });
         },
@@ -337,7 +336,7 @@ export class DriveService {
                     this.desktop.logger.error(err, "Drive:Download:Preprocessing");
                     void this.desktop.service.transfer.updateTransfer(pid, {
                         status: "error",
-                        error: err instanceof Error ? err.message : String(err),
+                        error: toErrorMessage(err),
                     });
                 });
 
@@ -353,7 +352,7 @@ export class DriveService {
             const transfer = this.desktop.service.transfer.getTransferByPID(pid);
             if (!transfer || !transfer.restartParams) return;
 
-            const params = transfer.restartParams as TransferParams;
+            const params = transfer.restartParams;
 
             this.desktop.service.transfer.registerRunner(pid, async () => {
                 await this.executeResumeRunner({

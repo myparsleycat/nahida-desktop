@@ -8,6 +8,7 @@ import { createGunzip, createZstdDecompress } from "node:zlib";
 import { eden } from "@main/client";
 import type { LinkData } from "@main/server";
 import type { TransferData } from "@shared/types";
+import { toErrorMessage } from "@shared/utils";
 import { decode } from "cbor-x";
 import { chunk, retry, throttle } from "es-toolkit";
 import fse from "fs-extra";
@@ -800,7 +801,7 @@ export class DownloadLib {
             if (abort.signal.aborted) return;
             void this.desktop.service.transfer.updateTransfer(pid, {
                 status: "error",
-                error: err instanceof Error ? err.message : String(err),
+                error: toErrorMessage(err),
             });
             throw err;
         } finally {
@@ -864,7 +865,7 @@ export class DownloadLib {
             if (abort.signal.aborted || (err as Error).name === "AbortError") {
                 return;
             }
-            this.desktop.service.transfer.markFileFailed(pid, file.id);
+            this.desktop.service.transfer.markFileFailed(pid);
             this.desktop.logger.error(err, `DownloadLib:executeDownload:${file.name}`);
         }
     }

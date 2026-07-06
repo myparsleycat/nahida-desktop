@@ -1,5 +1,6 @@
 import { useSelectionStore } from "@renderer/store/drive";
 import type { Content } from "@shared/types";
+import { toErrorMessage } from "@shared/utils";
 import { useRouteContext } from "@tanstack/react-router";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
@@ -73,7 +74,7 @@ export function useDriveClipboardActions(destinationId: string) {
                 },
                 error: (err: unknown) =>
                     t("page.drive.clipboard.move_error", {
-                        message: err instanceof Error ? err.message : String(err),
+                        message: toErrorMessage(err),
                     }),
             });
             return;
@@ -100,7 +101,7 @@ export function useDriveClipboardActions(destinationId: string) {
                 },
                 error: (err: unknown) =>
                     t("page.drive.clipboard.copy_error", {
-                        message: err instanceof Error ? err.message : String(err),
+                        message: toErrorMessage(err),
                     }),
             });
         }

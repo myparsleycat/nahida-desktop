@@ -25,6 +25,7 @@ import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { getSearchScore } from "@renderer/lib/sejong";
 import { commonSort } from "@renderer/lib/utils";
 import { useViewStore, viewStore } from "@renderer/store/drive";
+import { toErrorMessage } from "@shared/utils";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useLocation } from "@tanstack/react-router";
 import { disassemble, getChoseong } from "es-hangul";
@@ -121,10 +122,13 @@ function RouteComponent() {
     try {
       await onDrop(e, effectiveId);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error ?? "");
+      const message = toErrorMessage(error);
       const code =
-        typeof error === "object" && error !== null && "code" in error
-          ? String((error as { code?: unknown }).code ?? "")
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        typeof (error as { code?: unknown }).code === "string"
+          ? ((error as { code?: string }).code ?? "")
           : "";
 
       if (code === "NO_UPLOADABLE_FILES" || message.includes("NO_UPLOADABLE_FILES")) {
@@ -161,8 +165,8 @@ function RouteComponent() {
       <>
         <Titlebar title={{ text: t("page.drive.title"), position: "center" }} />
 
-        <div className="w-full h-full flex flex-col select-none">
-          <div className="w-full h-12 flex flex-row items-center p-2 border-b select-none">
+        <div className="flex h-full w-full flex-col select-none">
+          <div className="flex h-12 w-full flex-row items-center border-b p-2 select-none">
             {location.pathname !== "/drive/share" ? (
               <AkashaBreadcrumb itemId={effectiveId} ancestors={query.data.ancestors} />
             ) : (
@@ -173,7 +177,7 @@ function RouteComponent() {
           </div>
 
           <div
-            className="flex flex-col flex-1 overflow-auto"
+            className="flex flex-1 flex-col overflow-auto"
             onDragEnter={onDragEnter}
             onDragLeave={onDragLeave}
             onDragOver={onDragOver}
@@ -186,7 +190,7 @@ function RouteComponent() {
                 currentId={effectiveId}
               >
                 {sortedContents.length > 0 ? (
-                  <ScrollArea className="flex-1 flex flex-col h-full">
+                  <ScrollArea className="flex h-full flex-1 flex-col">
                     <>
                       {layout === "list" ? (
                         <ContentMenuList
@@ -208,10 +212,10 @@ function RouteComponent() {
                     <div>
                       <FolderIcon size="80" />
                     </div>
-                    <p className="text-lg text-center mt-4">
+                    <p className="mt-4 text-center text-lg">
                       {t("page.drive.no_contents_section_message.0")}
                     </p>
-                    <p className="text-muted-foreground text-center">
+                    <p className="text-center text-muted-foreground">
                       {t("page.drive.no_contents_section_message.1")}
                     </p>
                   </Center>

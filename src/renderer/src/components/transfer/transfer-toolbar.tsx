@@ -13,6 +13,7 @@ import { Tabs, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
 import { cn } from "@renderer/lib/utils";
 import { ArrowDownToLine, ArrowUpFromLine, BrushCleaningIcon, Filter, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
+
 import { TransferStatus, TransferTabType } from "./types";
 
 interface TransferToolbarProps {
@@ -43,35 +44,35 @@ export function TransferToolbar({
   onSearchChange,
   statusFilter,
   onToggleStatusFilter,
-  onPauseAll,
-  onResumeAll,
+  onPauseAll: _onPauseAll,
+  onResumeAll: _onResumeAll,
   onClearCompleted,
 }: TransferToolbarProps) {
   const { t } = useTranslation();
 
   return (
-    <div className="flex flex-col gap-4 w-full max-w-full min-w-0">
-      <div className="flex flex-col gap-4 w-full max-w-full min-w-0 sm:flex-row sm:items-center sm:justify-between sm:flex-wrap">
+    <div className="flex w-full max-w-full min-w-0 flex-col gap-4">
+      <div className="flex w-full max-w-full min-w-0 flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <Tabs
           value={activeTab}
           onValueChange={(v) => onTabChange(v as TransferTabType)}
-          className="w-full sm:w-auto min-w-0 max-w-full"
+          className="w-full max-w-full min-w-0 sm:w-auto"
         >
-          <TabsList className="bg-secondary w-full sm:w-auto h-auto flex-wrap justify-start">
-            <TabsTrigger value="all" className="gap-2 flex-1 sm:flex-none">
+          <TabsList className="h-auto w-full flex-wrap justify-start bg-secondary sm:w-auto">
+            <TabsTrigger value="all" className="flex-1 gap-2 sm:flex-none">
               {t("page.transfer.toolbar.all")}
               <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
                 {counts.total}
               </Badge>
             </TabsTrigger>
-            <TabsTrigger value="uploads" className="gap-2 flex-1 sm:flex-none">
+            <TabsTrigger value="uploads" className="flex-1 gap-2 sm:flex-none">
               <ArrowUpFromLine className="h-4 w-4" />
               {t("page.transfer.toolbar.upload")}
               <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
                 {counts.uploads}
               </Badge>
             </TabsTrigger>
-            <TabsTrigger value="downloads" className="gap-2 flex-1 sm:flex-none">
+            <TabsTrigger value="downloads" className="flex-1 gap-2 sm:flex-none">
               <ArrowDownToLine className="h-4 w-4" />
               {t("page.transfer.toolbar.download")}
               <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
@@ -81,7 +82,7 @@ export function TransferToolbar({
           </TabsList>
         </Tabs>
 
-        <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto flex-wrap justify-end">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 self-end sm:self-auto">
           {/* <Button
             variant="outline"
             size="sm"
@@ -112,14 +113,14 @@ export function TransferToolbar({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 w-full max-w-full min-w-0">
-        <div className="relative flex-1 min-w-0">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <div className="flex w-full max-w-full min-w-0 items-center gap-2">
+        <div className="relative min-w-0 flex-1">
+          <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={t("g.search")}
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-9 w-full min-w-0"
+            className="w-full min-w-0 pl-9"
           />
         </div>
         <DropdownMenu>

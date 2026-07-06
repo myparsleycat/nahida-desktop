@@ -23,6 +23,7 @@ import {
 } from "@renderer/store/drive";
 import type { Content } from "@shared/types";
 import { formatDate, formatSize, getRandInt } from "@shared/utils";
+import type { UseQueryResult } from "@tanstack/react-query";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import {
   ArrowDownIcon,
@@ -58,7 +59,7 @@ interface AkashaBreadcrumbProps {
 }
 
 export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
-  const { itemId, ancestors } = props;
+  const { itemId: _itemId, ancestors } = props;
   const { session } = useAuth();
   const navi = useNavigate();
   const { t } = useTranslation();
@@ -529,15 +530,18 @@ export function ContentMenuGrid(props: ContentMenuProps) {
   );
 }
 
-interface HandlerProviderProps {
-  queryData: any;
+interface HandlerProviderProps<T> {
+  queryData: UseQueryResult<T>;
   children: React.ReactNode;
   sortedContents: Content[];
   currentId: string;
 }
 
-export function HandlerProvider(props: HandlerProviderProps) {
+type DriveContent = { children?: Content[]; parent?: { id: string; parentId: string | null } };
+
+export function HandlerProvider<T>(props: HandlerProviderProps<T>) {
   const { children, sortedContents, queryData, currentId } = props;
+  const data = queryData.data as DriveContent | undefined;
   const navi = useNavigate();
   const location = useLocation();
   const dialog = useDialogStore();
@@ -683,12 +687,10 @@ export function HandlerProvider(props: HandlerProviderProps) {
         e.preventDefault();
 
         if (e.ctrlKey || e.metaKey) {
-          if (queryData.data?.parent) {
+          if (data?.parent) {
             const isSharePath = location.pathname.startsWith("/drive/share");
             const parentId =
-              isSharePath && queryData.data.parent.parentId === null
-                ? "share"
-                : queryData.data.parent.id;
+              isSharePath && data.parent.parentId === null ? "share" : data.parent.id;
 
             if (isSharePath) {
               setPendingShareRevealId(currentId);
@@ -748,8 +750,8 @@ export function HandlerProvider(props: HandlerProviderProps) {
 
       if ((e.ctrlKey || e.metaKey) && e.key === "a") {
         e.preventDefault();
-        if (queryData.data?.children) {
-          setSelectedItems(queryData.data.children);
+        if (data?.children) {
+          setSelectedItems(data.children);
         }
       }
 
@@ -772,7 +774,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
       sortedContents,
       selectedItems,
       isfocusSearchInput,
-      queryData.data,
+      data,
       navi,
       dialog,
       setSelectedItems,

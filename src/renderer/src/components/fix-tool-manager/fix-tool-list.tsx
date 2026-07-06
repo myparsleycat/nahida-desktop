@@ -178,7 +178,7 @@ export function FixToolList({ insertedPresetTools, onAddScript }: FixToolListPro
                       <img src={execIcon} alt="python" className="h-6 w-6 dark:invert" />
                     )}
 
-                    <Tooltip disableHoverableContent={true}>
+                    <Tooltip disableHoverablePopup>
                       <TooltipTrigger className="min-w-0 truncate text-sm font-medium text-foreground">
                         {script.name}
                       </TooltipTrigger>

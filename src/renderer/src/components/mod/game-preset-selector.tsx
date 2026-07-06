@@ -12,6 +12,7 @@ import { useEnabledImporters, usePresets } from "@renderer/hooks/use-mod-data";
 import { useModStore } from "@renderer/store/mod";
 import { isNteImporter } from "@shared/mod";
 import type { GameConfig } from "@shared/types";
+import { toErrorMessage } from "@shared/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { PencilIcon, PlayIcon } from "lucide-react";
@@ -105,7 +106,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
     if (isNteImporter(selectedImporter)) {
       if (selectedGameConfig?.nteLauncherPath) {
         await window.api.invoke("mod:startNteLauncher", selectedGame).catch((error) => {
-          const errorMessage = error instanceof Error ? error.message : String(error);
+          const errorMessage = toErrorMessage(error);
 
           if (errorMessage.includes("NTE_LAUNCHER_PATH_NOT_FOUND")) {
             toast.error(t("page.mod.hooks.use-mod-mutations.start-nte-launcher.not-found"));

@@ -10,7 +10,7 @@ type GameBananaModCategoryOverview = Awaited<
 type GameBananaModOverview = Awaited<ReturnType<IpcHandlers["gamebanana:getModOverview"]>>;
 type GameBananaModPosts = Awaited<ReturnType<IpcHandlers["gamebanana:getModPosts"]>>;
 
-export type GameBananaGameKey = keyof GameBananaGames & string;
+export type GameBananaGameKey = keyof GameBananaGames;
 export type GameBananaModPostsSort = "popular" | "newest";
 export interface GameBananaSubmissionSelection {
     id: number;
@@ -87,7 +87,7 @@ export function useGameBananaModPosts(
             window.api.invoke("gamebanana:getModPosts", {
                 modId: modId as number,
                 modelName,
-                page: pageParam,
+                page: pageParam as number,
                 perPage: 15,
                 sort,
             }),

@@ -103,10 +103,20 @@ export function openCmd(path: string) {
     }).unref();
 }
 
+export function trimTrailingNul(value: string) {
+    let end = value.length;
+
+    while (end > 0 && value.charCodeAt(end - 1) === 0) {
+        end--;
+    }
+
+    return value.slice(0, end);
+}
+
 export function getClipboardFiles(): string[] {
     const buffer = clipboard.readBuffer("FileNameW");
     if (buffer && buffer.length > 0) {
-        const path = buffer.toString("ucs2").replace(/\0+$/, "");
+        const path = trimTrailingNul(buffer.toString("ucs2"));
         if (path) return [path];
     }
 

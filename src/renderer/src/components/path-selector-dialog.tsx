@@ -83,7 +83,7 @@ export function PathSelectorDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent onOpenAutoFocus={(e) => e.preventDefault()} showCloseButton={false}>
+      <DialogContent finalFocus={false} showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>{t("components.path-selector-dialog.title")}</DialogTitle>
           <DialogDescription>
@@ -94,7 +94,7 @@ export function PathSelectorDialog({
         <div className="grid grid-cols-2 gap-3 py-4">
           <Button
             variant="outline"
-            className="h-auto p-3 flex flex-col items-center gap-2 whitespace-normal"
+            className="flex h-auto flex-col items-center gap-2 p-3 whitespace-normal"
             onClick={handleModManagerSelect}
           >
             <Grid3x3 className="size-8" />
@@ -111,7 +111,7 @@ export function PathSelectorDialog({
 
           <Button
             variant="outline"
-            className="h-auto p-3 flex flex-col items-center gap-2 whitespace-normal"
+            className="flex h-auto flex-col items-center gap-2 p-3 whitespace-normal"
             onClick={handleFolderSelect}
           >
             <FolderOpen className="size-8" />

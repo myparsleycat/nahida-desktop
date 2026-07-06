@@ -1,9 +1,10 @@
 import path from "node:path";
 
 import { eden, eden2url } from "@main/client";
-import sha256PiscinaWorker from "@main/worker/drive/sha256-piscina.worker?modulePath";
+import sha256PiscinaWorker from "@main/worker/drive/sha256-piscia.worker?modulePath";
 import { collectFiles } from "@native/fs";
 import type { Content } from "@shared/types";
+import { toErrorMessage } from "@shared/utils";
 import { chunk, groupBy, orderBy, retry, sumBy } from "es-toolkit";
 import { fileTypeFromBuffer } from "file-type";
 import fse from "fs-extra";
@@ -766,7 +767,7 @@ export class UploadLib {
 
                     if (result.error) {
                         throw new Error(
-                            `[create_files chunk failed] ${result.error.value.toString()}`,
+                            `[create_files chunk failed] ${toErrorMessage(result.error.value)}`,
                         );
                     }
 
@@ -969,7 +970,7 @@ export class UploadLib {
             this.desktop.logger.error(err, "UploadLib:executeUpload");
             void this.desktop.service.transfer.updateTransfer(pid, {
                 status: "error",
-                error: err instanceof Error ? err.message : String(err),
+                error: toErrorMessage(err),
             });
             throw err;
         } finally {

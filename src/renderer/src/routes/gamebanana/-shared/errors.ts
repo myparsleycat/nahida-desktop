@@ -1,3 +1,4 @@
+import { toErrorMessage } from "@shared/utils";
 import type { TFunction } from "i18next";
 
 type ErrorPresentation = {
@@ -5,16 +6,8 @@ type ErrorPresentation = {
     details?: string;
 };
 
-function getErrorMessage(error: unknown) {
-    if (error instanceof Error) {
-        return error.message;
-    }
-
-    return typeof error === "string" ? error : "";
-}
-
 export function getGameBananaErrorPresentation(error: unknown, t: TFunction): ErrorPresentation {
-    const message = getErrorMessage(error);
+    const message = toErrorMessage(error);
 
     if (!message) {
         return {

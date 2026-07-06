@@ -13,10 +13,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@renderer/comp
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { getSetting, setSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
+import { toErrorMessage } from "@shared/utils";
 import { Loader2Icon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
+import type {
+  ModelViewerDialogSource,
+  ModelViewerVariantManifest,
+  VariableStateValue,
+} from "./model-viewer-dialog-types";
+
 import {
   formatOrientation,
   type ModelViewerCameraState,
@@ -25,11 +33,6 @@ import {
   type ModelViewerThreeToneMapping,
   parseOrientation,
 } from "./model-viewer-contract";
-import type {
-  ModelViewerDialogSource,
-  ModelViewerVariantManifest,
-  VariableStateValue,
-} from "./model-viewer-dialog-types";
 import { DEFAULT_MODEL_ORIENTATION, DEFAULT_THREE_EXPOSURE } from "./model-viewer-dialog-types";
 import {
   clampThreeExposure,
@@ -364,7 +367,7 @@ export function ModelViewerDialog({
       loadingViewerIndexRef.current = null;
       setLoadingViewerIndex(null);
       toast.error("Failed to reset model variant", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toErrorMessage(error),
       });
     } finally {
       if (
@@ -404,7 +407,7 @@ export function ModelViewerDialog({
       toast.warning(t("page.tools.model_viewer.toast.save_to_ini_no_changes"));
     } catch (error) {
       toast.error(t("page.tools.model_viewer.toast.save_to_ini_error"), {
-        description: error instanceof Error ? error.message : String(error),
+        description: toErrorMessage(error),
       });
     }
   };
@@ -483,7 +486,7 @@ export function ModelViewerDialog({
       loadingViewerIndexRef.current = null;
       setLoadingViewerIndex(null);
       toast.error("Failed to update model variant", {
-        description: error instanceof Error ? error.message : String(error),
+        description: toErrorMessage(error),
       });
     } finally {
       if (
@@ -665,7 +668,7 @@ export function ModelViewerDialog({
       toast.success(t("page.tools.model_viewer.toast.capture_preview_success"));
     } catch (error) {
       toast.error(t("page.tools.model_viewer.toast.capture_preview_error"), {
-        description: error instanceof Error ? error.message : String(error),
+        description: toErrorMessage(error),
       });
     } finally {
       setIsSavingPreview(false);
@@ -676,7 +679,7 @@ export function ModelViewerDialog({
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          className="flex min-w-[95vw] max-h-[92vh] h-full flex-col gap-3 p-3 focus:outline-none focus-visible:outline-none"
+          className="flex h-full max-h-[92vh] min-w-[95vw] flex-col gap-3 p-3 focus:outline-none focus-visible:outline-none"
           onClick={(e) => e.stopPropagation()}
         >
           <DialogHeader className="pr-10">
@@ -857,9 +860,9 @@ export function ModelViewerDialog({
 
           {activeAnimation ? (
             <div className="flex items-center gap-2 px-2">
-              <div className="min-w-0 w-36">
+              <div className="w-36 min-w-0">
                 <div className="text-sm font-medium">{activeAnimation.label}</div>
-                <div className="whitespace-nowrap text-xs text-muted-foreground">
+                <div className="text-xs whitespace-nowrap text-muted-foreground">
                   {activeAnimation.fps} FPS · Frame{" "}
                   {activeAnimationFrame?.index ?? activeAnimation.frameStart} /{" "}
                   {activeAnimation.frameEnd}
@@ -867,7 +870,7 @@ export function ModelViewerDialog({
               </div>
 
               <div className="flex min-w-0 flex-1 items-center gap-3">
-                <span className="text-xs tabular-nums text-muted-foreground">
+                <span className="text-xs text-muted-foreground tabular-nums">
                   {activeAnimation.frameStart}
                 </span>
                 <input
@@ -882,7 +885,7 @@ export function ModelViewerDialog({
                     setAnimationFrameIndex(Number(event.currentTarget.value));
                   }}
                 />
-                <span className="text-right text-xs tabular-nums text-muted-foreground">
+                <span className="text-right text-xs text-muted-foreground tabular-nums">
                   {activeAnimation.frameEnd}
                 </span>
               </div>

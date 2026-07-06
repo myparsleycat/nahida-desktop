@@ -24,9 +24,7 @@ export interface GameBananaBreadcrumbItem {
     name: string;
 }
 
-export type SubmissionListItem =
-    | GameSubfeedData["_aRecords"][number]
-    | CategoryOverviewData["index"]["_aRecords"][number];
+export type SubmissionListItem = GameSubfeedData["_aRecords"][number];
 export type PreviewMedia = NonNullable<SubmissionListItem["_aPreviewMedia"]>;
 export type PreviewImage = NonNullable<PreviewMedia["_aImages"]>[number];
 export type RootCategoryItem = GameOverviewData["profile"]["_aModRootCategories"][number];

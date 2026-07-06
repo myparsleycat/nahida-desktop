@@ -15,7 +15,7 @@ interface GameBananaSelectedSubmission {
 }
 
 interface GameBananaState {
-    selectedGame: GameBananaGameKey | "";
+    selectedGame: GameBananaGameKey;
     pendingModGameSync: boolean;
     selectedCategoryId?: number;
     categoryBreadcrumbs: GameBananaBreadcrumb[];

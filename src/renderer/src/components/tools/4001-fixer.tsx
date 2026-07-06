@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
+import { toErrorMessage } from "@shared/utils";
 import {
   CircleCheckIcon,
   CircleXIcon,
@@ -176,7 +177,7 @@ export default function FourThousandOneFixer() {
     } catch (error) {
       console.error(error);
       setProgress(`Error: ${String(error)}`);
-      setErrorMessage(error instanceof Error ? error.message : String(error));
+      setErrorMessage(toErrorMessage(error));
       setActiveTask(null);
     }
   };
@@ -204,7 +205,7 @@ export default function FourThousandOneFixer() {
     } catch (error) {
       console.error(error);
       setProgress(`Error: ${String(error)}`);
-      setErrorMessage(error instanceof Error ? error.message : String(error));
+      setErrorMessage(toErrorMessage(error));
       setActiveTask(null);
     }
   };
@@ -231,7 +232,7 @@ export default function FourThousandOneFixer() {
     } catch (error) {
       console.error(error);
       setProgress(`Error: ${String(error)}`);
-      setErrorMessage(error instanceof Error ? error.message : String(error));
+      setErrorMessage(toErrorMessage(error));
       setActiveTask(null);
     }
   };

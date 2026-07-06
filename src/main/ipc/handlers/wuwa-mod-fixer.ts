@@ -3,10 +3,10 @@ import { rh } from "@main/ipc/helper";
 
 export function registerWuwaModFixerHandlers(d: NahidaDesktop) {
     rh("wuwaFixer:getRateStatus", () => d.service.modTools.wuwaModFixer.getRateStatus());
-    rh("wuwaFixer:getStatus", (importer: string | null) =>
+    rh("wuwaFixer:getStatus", (importer = null) =>
         d.service.modTools.wuwaModFixer.getStatus(importer),
     );
-    rh("wuwaFixer:prepareRun", (importer: string | null) =>
+    rh("wuwaFixer:prepareRun", (importer = null) =>
         d.service.modTools.wuwaModFixer.prepareRun(importer),
     );
     rh("wuwaFixer:installOrUpdate", () => d.service.modTools.wuwaModFixer.installOrUpdate());

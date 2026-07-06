@@ -1,3 +1,4 @@
+import { toErrorMessage } from "@shared/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -21,7 +22,7 @@ export function useBulkModToggle() {
             ]);
             toast.success(t(successKey));
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : String(error));
+            toast.error(toErrorMessage(error));
         } finally {
             setIsPending(false);
         }
