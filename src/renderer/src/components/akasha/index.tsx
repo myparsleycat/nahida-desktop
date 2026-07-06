@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
 import { Input } from "@renderer/components/ui/input";
+import { PreviewLightbox } from "@renderer/components/ui/preview-lightbox";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { useAuth } from "@renderer/hooks/use-auth";
 import { useDriveClipboardActions } from "@renderer/hooks/use-drive-clipboard";
@@ -43,7 +44,6 @@ import type React from "react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { PreviewModal } from "./preview-modal";
 
 export interface Ancestor {
   id: string;
@@ -104,7 +104,7 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
   );
 
   return (
-    <div className="flex-1 flex flex-row items-center h-full min-w-0 overflow-hidden mr-2">
+    <div className="mr-2 flex h-full min-w-0 flex-1 flex-row items-center overflow-hidden">
       {(location.pathname.startsWith("/drive/drive") ||
         current?.parentId ||
         (location.pathname.startsWith("/drive/share") && !current?.parentId)) &&
@@ -112,7 +112,7 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
           <Button
             size="icon"
             variant="ghost"
-            className="shrink-0 mr-1"
+            className="mr-1 shrink-0"
             onClick={(e) => {
               e.currentTarget.blur();
 
@@ -140,7 +140,7 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
           render={
             <Button
               variant="ghost"
-              className="min-w-0 max-w-fit flex flex-row items-center px-2 overflow-hidden"
+              className="flex max-w-fit min-w-0 flex-row items-center overflow-hidden px-2"
               onClick={(e) => {
                 e.currentTarget.blur();
               }}
@@ -148,7 +148,7 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
           }
         >
           <FolderIcon className="mr-2 h-4 w-4 shrink-0" />
-          <span className="truncate text-left min-w-0">{current?.name}</span>
+          <span className="min-w-0 truncate text-left">{current?.name}</span>
           <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="max-w-[400px]" finalFocus={false}>
@@ -164,9 +164,9 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
                   params: { id: ancestor.id },
                 });
               }}
-              className="flex justify-between items-center"
+              className="flex items-center justify-between"
             >
-              <span className="truncate flex-1 mr-4">{ancestor.name}</span>
+              <span className="mr-4 flex-1 truncate">{ancestor.name}</span>
               {ancestor.id === current?.id && <CheckIcon className="h-4 w-4 shrink-0" />}
             </DropdownMenuItem>
           ))}
@@ -193,12 +193,12 @@ export function AkashaHeadButtons() {
   };
 
   return (
-    <div className="shrink-0 flex flex-row justify-end items-center gap-2">
-      <div className="relative flex items-center shrink-0">
-        <SearchIcon className="size-4 absolute left-2 text-muted-foreground" />
+    <div className="flex shrink-0 flex-row items-center justify-end gap-2">
+      <div className="relative flex shrink-0 items-center">
+        <SearchIcon className="absolute left-2 size-4 text-muted-foreground" />
         <Input
           id="drive-search-input"
-          className="pl-7 w-50 h-9 dark:bg-transparent"
+          className="h-9 w-50 pl-7 dark:bg-transparent"
           placeholder={t("page.drive.head_buttons.search_in_dir_placeholder")}
           value={searchInDirQuery}
           onChange={(e) => setSearchInDirQuery(e.target.value)}
@@ -207,7 +207,7 @@ export function AkashaHeadButtons() {
         />
       </div>
 
-      <div className="flex flex-row items-center gap-1 shrink-0">
+      <div className="flex shrink-0 flex-row items-center gap-1">
         <Button
           variant="ghost"
           size="icon"
@@ -245,7 +245,7 @@ export function AkashaHeadButtons() {
           </DropdownMenuTrigger>
           <DropdownMenuContent finalFocus={false}>
             <DropdownMenuItem
-              className="gap-3 cursor-pointer"
+              className="cursor-pointer gap-3"
               onClick={() => dialog.setOpen("createDirDialog", true)}
             >
               <FolderIcon size={20} />
@@ -253,11 +253,11 @@ export function AkashaHeadButtons() {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem className="gap-3 cursor-pointer">
+              <DropdownMenuItem className="cursor-pointer gap-3">
                 <UploadIcon size={20} />
                 {t("page.drive.head_buttons.dropdown_menu.make_new.upload_dir")}
               </DropdownMenuItem>
-              <DropdownMenuItem className="gap-3 cursor-pointer">
+              <DropdownMenuItem className="cursor-pointer gap-3">
                 <UploadIcon size={20} />
                 {t("page.drive.head_buttons.dropdown_menu.make_new.upload_file")}
               </DropdownMenuItem>
@@ -296,14 +296,14 @@ function ListHead() {
   return (
     <thead className="sticky top-0 bg-background text-sm">
       <tr className="h-8">
-        <th className="pl-3 font-normal text-left align-middle w-full">
+        <th className="w-full pl-3 text-left align-middle font-normal">
           <button
-            className="flex flex-row items-center w-full justify-start"
+            className="flex w-full flex-row items-center justify-start"
             onClick={(e) => handleSortButtonClick(e, "NAME")}
           >
             <div
               className={cn(
-                "flex flex-row gap-2 items-center",
+                "flex flex-row items-center gap-2",
                 sortType.startsWith("NAME") ? "text-primary" : "text-muted-foreground",
               )}
             >
@@ -316,14 +316,14 @@ function ListHead() {
           </button>
         </th>
 
-        <th className="px-2 font-normal align-middle whitespace-nowrap w-[1%]">
+        <th className="w-[1%] px-2 align-middle font-normal whitespace-nowrap">
           <button
-            className="flex flex-row items-center w-full justify-end"
+            className="flex w-full flex-row items-center justify-end"
             onClick={(e) => handleSortButtonClick(e, "SIZE")}
           >
             <div
               className={cn(
-                "flex flex-row gap-2 items-center justify-end",
+                "flex flex-row items-center justify-end gap-2",
                 sortType.startsWith("SIZE") ? "text-primary" : "text-muted-foreground",
               )}
             >
@@ -336,14 +336,14 @@ function ListHead() {
           </button>
         </th>
 
-        <th className="pr-3 font-normal align-middle whitespace-nowrap w-[1%]">
+        <th className="w-[1%] pr-3 align-middle font-normal whitespace-nowrap">
           <button
-            className="flex flex-row items-center w-full justify-end"
+            className="flex w-full flex-row items-center justify-end"
             onClick={(e) => handleSortButtonClick(e, "DATE")}
           >
             <div
               className={cn(
-                "flex flex-row gap-2 items-center justify-end",
+                "flex flex-row items-center justify-end gap-2",
                 sortType.startsWith("DATE") ? "text-primary" : "text-muted-foreground",
               )}
             >
@@ -378,10 +378,11 @@ export function ContentMenuList(props: ContentMenuProps) {
   } = useContentMenu(sortedContents);
   const location = useLocation();
   const navi = useNavigate();
+  const dialog = useDialogStore();
 
   return (
     <>
-      <table className="w-full border-collapse table-auto">
+      <table className="w-full table-auto border-collapse">
         <ListHead />
         <tbody>
           {sortedContents.map((item, idx) => (
@@ -389,7 +390,7 @@ export function ContentMenuList(props: ContentMenuProps) {
               key={item.id}
               data-uuid={item.id}
               className={cn(
-                "sorted-contents hover:bg-black/10 hover:dark:bg-white/10 cursor-pointer border-b border-transparent",
+                "sorted-contents cursor-pointer border-b border-transparent hover:bg-black/10 hover:dark:bg-white/10",
                 selection.selectedItems.some((selected) => selected.id === item.id) &&
                   "bg-black/10 dark:bg-white/10",
                 currentDragOver?.id === item.id && "bg-black/10 dark:bg-white/10",
@@ -406,34 +407,40 @@ export function ContentMenuList(props: ContentMenuProps) {
               )}
               onContextMenu={(e) => handleItemRightClick(e, item)}
             >
-              <td className="p-2 pl-3 align-middle text-left  w-full max-w-0">
+              <td className="w-full max-w-0 p-2 pl-3  text-left align-middle">
                 <div className="flex flex-row items-center gap-3">
-                  <div className="size-11 flex items-center justify-center text-muted-foreground shrink-0">
+                  <div className="flex size-11 shrink-0 items-center justify-center text-muted-foreground">
                     {isFetching && itemId === item.id ? (
                       <LoaderIcon className="animate-spin" size="20" />
                     ) : item.isDir && !item.preview ? (
-                      <FolderIcon className="text-yellow-400 w-full h-full" />
+                      <FolderIcon className="h-full w-full text-yellow-400" />
                     ) : item.preview ? (
-                      <PreviewModal
-                        className="w-12"
-                        preview={item.preview}
+                      <PreviewLightbox
+                        className="size-12 cursor-zoom-in overflow-hidden rounded-md"
+                        thumbnailSrc={
+                          item.preview.video?.default ||
+                          item.preview.img?.thumbnail ||
+                          item.preview.img!.default
+                        }
+                        fullSrc={item.preview.video?.default || item.preview.img!.default}
+                        isVideo={!!item.preview.video?.default}
                         alt={item.name}
-                        type="list"
+                        onOpenChange={(v) => dialog.setOpen("previewDialog", v)}
                       />
                     ) : item.mimeType?.startsWith("text") ? (
-                      <FileTextIcon className="text-blue-400 w-full h-full" />
+                      <FileTextIcon className="h-full w-full text-blue-400" />
                     ) : (
-                      <FileIcon className="w-full h-full" />
+                      <FileIcon className="h-full w-full" />
                     )}
                   </div>
-                  <span className="truncate block w-full text-left">{item.name}</span>
+                  <span className="block w-full truncate text-left">{item.name}</span>
                 </div>
               </td>
 
-              <td className="p-2 align-middle text-sm text-muted-foreground whitespace-nowrap text-right w-[1%]">
+              <td className="w-[1%] p-2 text-right align-middle text-sm whitespace-nowrap text-muted-foreground">
                 {formatSize(Number(item.size))}
               </td>
-              <td className="p-2 pr-3 align-middle text-sm text-muted-foreground whitespace-nowrap text-right w-[1%]">
+              <td className="w-[1%] p-2 pr-3 text-right align-middle text-sm whitespace-nowrap text-muted-foreground">
                 {formatDate(item.updatedAt, i18n.language)}
               </td>
             </tr>
@@ -442,7 +449,7 @@ export function ContentMenuList(props: ContentMenuProps) {
       </table>
 
       <div
-        className="grow min-h-full"
+        className="min-h-full grow"
         onClick={handleClickOutside}
         onContextMenu={handleClickOutside}
       ></div>
@@ -461,13 +468,13 @@ export function ContentMenuGrid(props: ContentMenuProps) {
   const navi = useNavigate();
 
   return (
-    <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 pr-4">
+    <div className="grid grid-cols-2 gap-4 p-4 pr-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
       {sortedContents.map((item, idx) => (
         <div
           key={item.id}
           data-uuid={item.id}
           className={cn(
-            "sorted-contents border rounded-sm p-2 hover:bg-secondary cursor-pointer",
+            "sorted-contents cursor-pointer rounded-sm border p-2 hover:bg-secondary",
             selection.selectedItems.some((selected) => selected.id === item.id) && "bg-secondary",
           )}
           draggable="true"
@@ -482,15 +489,15 @@ export function ContentMenuGrid(props: ContentMenuProps) {
           )}
           onContextMenu={(e) => handleItemRightClick(e, item)}
         >
-          <div className="relative flex justify-center items-center aspect-square">
+          <div className="relative flex aspect-square items-center justify-center">
             {isFetching && id === item.id ? (
               <LoaderIcon className="animate-spin" size="32" />
             ) : item.isDir && !item.preview ? (
-              <FolderIcon className="text-yellow-400 p-4" size="100" />
+              <FolderIcon className="p-4 text-yellow-400" size="100" />
             ) : item.preview?.video ? (
               <video
                 src={item.preview.video.default}
-                className="relative object-contain w-full h-full"
+                className="relative h-full w-full object-contain"
                 draggable="false"
                 muted
                 autoPlay
@@ -499,7 +506,7 @@ export function ContentMenuGrid(props: ContentMenuProps) {
               />
             ) : item.preview?.img ? (
               <img
-                className="relative object-contain w-full h-full"
+                className="relative h-full w-full object-contain"
                 src={item.preview.img.cover || item.preview.img.default}
                 alt={item.name}
                 loading="lazy"
@@ -508,9 +515,9 @@ export function ContentMenuGrid(props: ContentMenuProps) {
               <FileIcon className="text-blue-400" size="32" />
             )}
 
-            <div className="absolute flex flex-row justify-center items-center bottom-0 left-1/2 -translate-x-1/2 w-full">
-              <div className="flex flex-row h-full items-center rounded-full px-2 py-0.75 justify-center gap-2 bg-zinc-100 dark:bg-zinc-900">
-                <p className="dragselect-start-disallowed line-clamp-1 text-ellipsis break-all text-sm text-primary">
+            <div className="absolute bottom-0 left-1/2 flex w-full -translate-x-1/2 flex-row items-center justify-center">
+              <div className="flex h-full flex-row items-center justify-center gap-2 rounded-full bg-zinc-100 px-2 py-0.75 dark:bg-zinc-900">
+                <p className="dragselect-start-disallowed line-clamp-1 text-sm break-all text-ellipsis text-primary">
                   {item.name}
                 </p>
               </div>
@@ -832,17 +839,17 @@ export function AkashaSkeleton() {
 
   if (layout === "list") {
     return Array.from({ length: getRandInt(3, 12) }, (_, idx) => (
-      <div key={idx} className={cn("flex flex-row items-center px-3 py-2 gap-4")}>
+      <div key={idx} className={cn("flex flex-row items-center gap-4 px-3 py-2")}>
         <div className="flex flex-row items-center gap-2">
-          <div className="size-12 flex text-muted-foreground p-0.5">
-            <div className="w-full h-full flex items-center justify-center">
+          <div className="flex size-12 p-0.5 text-muted-foreground">
+            <div className="flex h-full w-full items-center justify-center">
               <Skeleton className="size-full rounded-lg" />
             </div>
           </div>
         </div>
 
-        <div className="flex flex-row items-center gap-2 w-full min-w-0">
-          <div className="grow min-w-0">
+        <div className="flex w-full min-w-0 flex-row items-center gap-2">
+          <div className="min-w-0 grow">
             <Skeleton className="h-5" style={{ width: getRandInt(80, 250) }} />
           </div>
         </div>
@@ -853,7 +860,7 @@ export function AkashaSkeleton() {
           </div>
         </div>
 
-        <div className="text-right text-sm text-muted-foreground text-nowrap">
+        <div className="text-right text-sm text-nowrap text-muted-foreground">
           <Skeleton className="h-5" style={{ width: getRandInt(145, 155) }} />
         </div>
       </div>
