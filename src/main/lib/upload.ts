@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import { eden, eden2url } from "@main/client";
-import sha256PiscinaWorker from "@main/worker/drive/sha256-piscia.worker?modulePath";
+import sha256PiscinaWorker from "@main/worker/drive/sha256-piscina.worker?modulePath";
 import { collectFiles } from "@native/fs";
 import type { Content } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
