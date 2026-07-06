@@ -30,9 +30,11 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+
+import type { ModOverviewQuery } from "../-types";
+
 import { ErrorState } from "../-shared/common";
 import { getGameBananaErrorPresentation } from "../-shared/errors";
-import type { ModOverviewQuery } from "../-types";
 import { formatEpoch, formatNumber, getSubmissionPreviewImages } from "../-utils";
 
 function SubmissionPreviewLightbox({
@@ -284,7 +286,7 @@ export function ModDetailPanel({
         className="h-full min-h-0 min-w-0"
         viewportClassName="overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!w-full [&>div]:max-w-full"
       >
-        <div className="min-w-0 max-w-full space-y-4 p-4">
+        <div className="max-w-full min-w-0 space-y-4 p-4">
           <Card>
             <CardContent>
               {modOverviewQuery.isLoading ? (
@@ -323,7 +325,7 @@ export function ModDetailPanel({
           <Card>
             <CardContent>
               {modOverviewQuery.isLoading ? (
-                <div className="grid grid-cols-2 auto-rows-[140px] gap-2 sm:grid-cols-5 sm:auto-rows-[110px]">
+                <div className="grid auto-rows-[140px] grid-cols-2 gap-2 sm:auto-rows-[110px] sm:grid-cols-5">
                   <Skeleton className="col-span-2 row-span-2 h-full rounded-2xl sm:col-span-3 sm:row-span-4" />
                   <Skeleton className="h-full rounded-2xl sm:col-span-2 sm:row-span-2" />
                   <Skeleton className="h-full rounded-2xl sm:col-span-2 sm:row-span-2" />
@@ -337,16 +339,16 @@ export function ModDetailPanel({
                   details={modErrorPresentation.details}
                 />
               ) : previews.length > 0 ? (
-                <div className="grid grid-cols-2 auto-rows-[140px] gap-2 sm:grid-cols-5 sm:auto-rows-[110px]">
+                <div className="grid auto-rows-[140px] grid-cols-2 gap-2 sm:auto-rows-[110px] sm:grid-cols-5">
                   {visiblePreviews.map((preview, index) => (
                     <button
                       key={preview.id}
                       type="button"
                       className={cn(
-                        "group relative h-full overflow-hidden rounded-2xl border bg-muted/20 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        "group relative h-full overflow-hidden rounded-2xl border bg-muted/20 text-left transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                         index === 0 && "col-span-2 row-span-2 sm:col-span-3 sm:row-span-4",
                         index === 1 && "sm:col-span-2 sm:row-span-2",
-                        index === 2 && "sm:col-span-2 sm:row-span-2 sm:col-start-4 sm:row-start-3",
+                        index === 2 && "sm:col-span-2 sm:col-start-4 sm:row-span-2 sm:row-start-3",
                         index === 3 && "sm:col-start-1 sm:row-start-5",
                         index === 4 && "sm:col-start-2 sm:row-start-5",
                         index === 5 && "sm:col-start-3 sm:row-start-5",
@@ -371,7 +373,7 @@ export function ModDetailPanel({
                   {hasOverflowPreviews && (
                     <button
                       type="button"
-                      className="group relative h-full overflow-hidden rounded-2xl border bg-muted/20 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:col-start-5 sm:row-start-5"
+                      className="group relative h-full overflow-hidden rounded-2xl border bg-muted/20 text-left transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:col-start-5 sm:row-start-5"
                       onClick={() => setLightboxPreviewIndex(maxVisiblePreviews - 1)}
                     >
                       <img
@@ -416,7 +418,7 @@ export function ModDetailPanel({
               ) : modOverviewQuery.data ? (
                 descriptionHtml.trim() ? (
                   <div
-                    className="[&_a]:text-primary [&_a]:underline-offset-4 hover:[&_a]:underline [&_br]:leading-6 [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:leading-tight [&_h3]:text-lg [&_h3]:font-semibold [&_img]:max-w-full [&_img]:rounded-xl [&_li]:ml-5 [&_li]:list-disc [&_ol]:space-y-2 [&_p]:leading-7 [&_p]:not-last:mb-4 [&_span]:wrap-break-word [&_strong]:font-semibold [&_ul]:space-y-2"
+                    className="[&_a]:text-primary [&_a]:underline-offset-4 hover:[&_a]:underline [&_br]:leading-6 [&_h1]:text-2xl [&_h1]:leading-tight [&_h1]:font-semibold [&_h2]:text-xl [&_h2]:leading-tight [&_h2]:font-semibold [&_h3]:text-lg [&_h3]:font-semibold [&_img]:max-w-full [&_img]:rounded-xl [&_li]:ml-5 [&_li]:list-disc [&_ol]:space-y-2 [&_p]:leading-7 [&_p]:not-last:mb-4 [&_span]:wrap-break-word [&_strong]:font-semibold [&_ul]:space-y-2"
                     dangerouslySetInnerHTML={{ __html: descriptionHtml }}
                   />
                 ) : (
@@ -438,9 +440,11 @@ export function ModDetailPanel({
                     onValueChange={(value) => setCommentSort(value as GameBananaModPostsSort)}
                   >
                     <SelectTrigger className="h-7">
-                      <SelectValue />
+                      <SelectValue>
+                        {(value) => t(`page.gamebanana.comment_sort.${value}`)}
+                      </SelectValue>
                     </SelectTrigger>
-                    <SelectContent position="popper">
+                    <SelectContent>
                       <SelectGroup>
                         {(["popular", "newest"] as const).map((sort) => (
                           <SelectItem key={sort} value={sort}>
@@ -503,7 +507,7 @@ export function ModDetailPanel({
                               })}
                             </span>
                           </div>
-                          <p className="mt-3 whitespace-pre-wrap wrap-break-word text-sm leading-6">
+                          <p className="mt-3 text-sm leading-6 wrap-break-word whitespace-pre-wrap">
                             {body || comment._sText}
                           </p>
                         </div>

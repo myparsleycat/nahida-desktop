@@ -39,7 +39,7 @@ export function ModContextMenu({ mod, actions, children }: ModContextMenuProps) 
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuTrigger>{children}</ContextMenuTrigger>
       <ContextMenuContent className="w-56">
         {(mod.preview?.match(/\.(jpeg|jpg|gif|png|webp|bmp|mp4|webm|ogg)$/i) ?? false) && (
           <>
@@ -124,7 +124,7 @@ export function ModContextMenu({ mod, actions, children }: ModContextMenuProps) 
               {actions.runner.showWuwaFixer && (
                 <ContextMenuItem
                   disabled={actions.runner.isPreparing}
-                  onClick={() => void actions.openWuwaFixer(mod)}
+                  onClick={() => actions.openWuwaFixer(mod)}
                 >
                   <img src={wuwaModFixerIcon} className="size-4" />
                   Wuwa Mod Fixer

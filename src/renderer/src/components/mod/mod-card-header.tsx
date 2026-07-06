@@ -51,8 +51,8 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
           </DropdownMenuTrigger>
           <DropdownMenuContent
             onClick={(event) => event.stopPropagation()}
-            onCloseAutoFocus={(event) => event.preventDefault()}
-            className="max-w-52"
+            finalFocus={false}
+            className="max-w-52 w-full"
           >
             <DropdownMenuGroup>
               <DropdownMenuLabel>Mod Tools</DropdownMenuLabel>
@@ -93,7 +93,7 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                   }}
                   className="p-0"
                 >
-                  <Tooltip disableHoverableContent={true}>
+                  <Tooltip disableHoverablePopup>
                     <TooltipTrigger className="w-full h-full text-start truncate p-1">
                       {preset.name}
                     </TooltipTrigger>
@@ -116,7 +116,7 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                   }}
                   className="p-0"
                 >
-                  <Tooltip disableHoverableContent={true}>
+                  <Tooltip disableHoverablePopup>
                     <TooltipTrigger className="w-full h-full text-start truncate p-1">
                       {tool.name}
                     </TooltipTrigger>

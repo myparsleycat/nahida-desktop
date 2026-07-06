@@ -1,11 +1,4 @@
-import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@renderer/components/ui/dialog";
+import { Dialog, DialogContent, DialogTrigger } from "@renderer/components/ui/dialog";
 import { useDialogStore } from "@renderer/store/drive";
 import { ContentPreview, LayoutType } from "@renderer/types";
 import { useState } from "react";
@@ -50,7 +43,7 @@ export function PreviewModal(props: Props) {
         {hasVideo ? (
           <video
             src={props.preview.video?.default}
-            className="object-cover rounded-md aspect-square"
+            className="aspect-square rounded-md object-cover"
             draggable="false"
             muted
             autoPlay
@@ -65,7 +58,7 @@ export function PreviewModal(props: Props) {
                 : props.preview!.img!.cover || props.preview!.img!.default
             }
             alt={props.alt}
-            className="object-cover rounded-md aspect-square"
+            className="aspect-square rounded-md object-cover"
             draggable="false"
             loading="lazy"
             onError={imgErrorHandle}
@@ -75,17 +68,11 @@ export function PreviewModal(props: Props) {
       <DialogContent
         aria-describedby={undefined}
         showCloseButton={false}
-        className="size-fit p-0 overflow-hidden sm:max-w-none"
+        className="size-fit overflow-hidden p-0 sm:max-w-none"
         onClick={onMouseEvent}
         onContextMenu={onMouseEvent}
         overlayOnContextMenu={onMouseEvent}
       >
-        <VisuallyHidden>
-          <DialogHeader>
-            <DialogTitle></DialogTitle>
-          </DialogHeader>
-        </VisuallyHidden>
-
         {hasVideo ? (
           <video
             src={props.preview.video?.default}
@@ -94,7 +81,7 @@ export function PreviewModal(props: Props) {
             autoPlay
             loop
             controls={false}
-            className="max-w-[85vw] max-h-[85vh] cursor-pointer"
+            className="max-h-[85vh] max-w-[85vw] cursor-pointer"
             onClick={() => setOpen(false)}
           />
         ) : (
@@ -103,7 +90,7 @@ export function PreviewModal(props: Props) {
               src={props.preview.img?.default}
               alt={props.alt}
               draggable="false"
-              className="max-w-[85vw] max-h-[85vh]"
+              className="max-h-[85vh] max-w-[85vw]"
             />
           </button>
         )}

@@ -103,6 +103,12 @@ export function ContentHeader({
     }
   };
 
+  const sortItems = [
+    { value: "name", label: t("g.name") },
+    { value: "date", label: t("g.date") },
+    { value: "size", label: t("g.size") },
+  ] as const;
+
   return (
     <div className="flex items-center justify-between h-12 px-3 border-b z-20">
       <div className="flex items-center gap-3">
@@ -124,15 +130,24 @@ export function ContentHeader({
         <Separator orientation="vertical" />
 
         <div className="flex items-center gap-1">
-          <Select value={sortType} onValueChange={handleSortTypeChange}>
+          <Select
+            value={sortType}
+            items={sortItems}
+            onValueChange={(v) => {
+              if (v === null) return;
+              handleSortTypeChange(v);
+            }}
+          >
             <SelectTrigger className="w-20">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
+            <SelectContent finalFocus={false}>
               <SelectGroup>
-                <SelectItem value="name">{t("g.name")}</SelectItem>
-                <SelectItem value="date">{t("g.date")}</SelectItem>
-                <SelectItem value="size">{t("g.size")}</SelectItem>
+                {sortItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
               </SelectGroup>
             </SelectContent>
           </Select>
@@ -171,12 +186,10 @@ export function ContentHeader({
         )}
 
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon">
-              <EllipsisIcon />
-            </Button>
+          <DropdownMenuTrigger render={<Button variant="outline" size="icon" />}>
+            <EllipsisIcon />
           </DropdownMenuTrigger>
-          <DropdownMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
+          <DropdownMenuContent finalFocus={false}>
             <DropdownMenuGroup>
               <DropdownMenuItem
                 disabled={!hasSelectedGroup || bulkModToggle.isPending}

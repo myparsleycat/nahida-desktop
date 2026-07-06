@@ -2,26 +2,18 @@ import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
 import {
   DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuCheckboxItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
+  DropdownMenuContent,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
 import { Input } from "@renderer/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
 import { cn } from "@renderer/lib/utils";
-import {
-  Search,
-  Filter,
-  ArrowUpFromLine,
-  ArrowDownToLine,
-  Pause,
-  Play,
-  BrushCleaningIcon,
-} from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, BrushCleaningIcon, Filter, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { TransferTabType, TransferStatus } from "./types";
+import { TransferStatus, TransferTabType } from "./types";
 
 interface TransferToolbarProps {
   activeTab: TransferTabType;
@@ -131,14 +123,16 @@ export function TransferToolbar({
           />
         </div>
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon"
-              className={cn("shrink-0", statusFilter.length > 0 && "border-primary")}
-            >
-              <Filter className="h-4 w-4" />
-            </Button>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="outline"
+                size="icon"
+                className={cn("shrink-0", statusFilter.length > 0 && "border-primary")}
+              />
+            }
+          >
+            <Filter className="h-4 w-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuLabel>{t("page.transfer.toolbar.status_filter.title")}</DropdownMenuLabel>

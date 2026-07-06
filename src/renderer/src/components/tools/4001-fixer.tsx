@@ -258,7 +258,7 @@ export default function FourThousandOneFixer() {
       </div>
 
       <div className="space-y-2 rounded-lg border bg-card p-4 transition-shadow duration-200 hover:shadow">
-        <label className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+        <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
           {t("page.tools.4001_fixer.target_importer")}
         </label>
         <div className="flex flex-wrap gap-2">
@@ -303,7 +303,7 @@ export default function FourThousandOneFixer() {
         <TabsContent value="build" className="space-y-4">
           <div className="grid grid-cols-1 gap-4 rounded-lg border bg-card p-4 transition-shadow duration-200 hover:shadow md:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+              <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
                 {t("page.tools.4001_fixer.provider")}
               </label>
               <div className="flex flex-wrap gap-2">
@@ -325,7 +325,7 @@ export default function FourThousandOneFixer() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+              <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
                 {t("page.tools.4001_fixer.version")}
               </label>
               <div className="flex flex-wrap gap-2">
@@ -343,11 +343,18 @@ export default function FourThousandOneFixer() {
                     {t("page.tools.4001_fixer.no_versions")}
                   </div>
                 ) : (
-                  <Select value={version} onValueChange={setVersion}>
+                  <Select
+                    items={versions.map((v) => ({ label: v, value: v }))}
+                    value={version}
+                    onValueChange={(value) => {
+                      if (value === null) return;
+                      setVersion(value);
+                    }}
+                  >
                     <SelectTrigger className="w-full max-w-36">
                       <SelectValue placeholder={t("page.tools.4001_fixer.version")} />
                     </SelectTrigger>
-                    <SelectContent position="popper">
+                    <SelectContent className="h-64">
                       <SelectGroup>
                         {versions.map((v) => (
                           <SelectItem key={v} value={v}>
@@ -418,7 +425,7 @@ export default function FourThousandOneFixer() {
       {progress && (
         <div className="rounded-lg border bg-card p-3 transition-shadow duration-200 hover:shadow">
           <div
-            className={`flex items-center gap-2 text-sm font-medium animate-in fade-in ${
+            className={`flex animate-in items-center gap-2 text-sm font-medium fade-in ${
               progress.includes("ERR") || progress.includes("Error")
                 ? "text-destructive"
                 : "text-muted-foreground"
@@ -435,12 +442,12 @@ export default function FourThousandOneFixer() {
             <div className="min-w-0">
               <p>{progressText}</p>
               {backupPath && (
-                <p className="mt-1 break-all text-xs text-muted-foreground">
+                <p className="mt-1 text-xs break-all text-muted-foreground">
                   {t("page.tools.4001_fixer.backup_path", { path: backupPath })}
                 </p>
               )}
               {errorMessage && (
-                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap wrap-break-word rounded border bg-muted/40 p-2 font-mono text-xs text-destructive">
+                <pre className="mt-2 max-h-40 overflow-auto rounded border bg-muted/40 p-2 font-mono text-xs wrap-break-word whitespace-pre-wrap text-destructive">
                   {errorMessage}
                 </pre>
               )}

@@ -136,24 +136,22 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
         )}
 
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            className="min-w-0 max-w-fit flex flex-row items-center px-2 overflow-hidden"
-            onClick={(e) => {
-              e.currentTarget.blur();
-            }}
-          >
-            <FolderIcon className="mr-2 h-4 w-4 shrink-0" />
-            <span className="truncate text-left min-w-0">{current?.name}</span>
-            <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="start"
-          className="max-w-[400px]"
-          onCloseAutoFocus={(e) => e.preventDefault()}
+        <DropdownMenuTrigger
+          render={
+            <Button
+              variant="ghost"
+              className="min-w-0 max-w-fit flex flex-row items-center px-2 overflow-hidden"
+              onClick={(e) => {
+                e.currentTarget.blur();
+              }}
+            />
+          }
         >
+          <FolderIcon className="mr-2 h-4 w-4 shrink-0" />
+          <span className="truncate text-left min-w-0">{current?.name}</span>
+          <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="max-w-[400px]" finalFocus={false}>
           {[...breadcrumbItems].reverse().map((ancestor) => (
             <DropdownMenuItem
               key={ancestor.id}
@@ -233,7 +231,7 @@ export function AkashaHeadButtons() {
           <DropdownMenuTrigger className={buttonVariants({ variant: "ghost", size: "icon" })}>
             <DownloadIcon size={20} />
           </DropdownMenuTrigger>
-          <DropdownMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
+          <DropdownMenuContent finalFocus={false}>
             <DropdownMenuItem onClick={handleDownload}>
               <DownloadIcon className="mr-2 h-4 w-4" />
               {t("page.drive.head_buttons.dropdown_menu.download")}
@@ -245,7 +243,7 @@ export function AkashaHeadButtons() {
           <DropdownMenuTrigger className={buttonVariants({ variant: "ghost" })}>
             {t("page.drive.head_buttons.dropdown_menu.make_new.title")}
           </DropdownMenuTrigger>
-          <DropdownMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
+          <DropdownMenuContent finalFocus={false}>
             <DropdownMenuItem
               className="gap-3 cursor-pointer"
               onClick={() => dialog.setOpen("createDirDialog", true)}

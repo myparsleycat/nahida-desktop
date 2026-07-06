@@ -304,7 +304,18 @@ export function EditGameDialog({
                 <FieldLabel>{t("page.mod.dialog.edit-game.importer_label")}</FieldLabel>
                 <Select
                   value={field.state.value}
+                  items={[
+                    {
+                      value: NO_IMPORTER_VALUE,
+                      label: t("page.mod.dialog.edit-game.no_importer"),
+                    },
+                    ...importers.map((importer) => ({
+                      value: importer.key,
+                      label: importer.key,
+                    })),
+                  ]}
                   onValueChange={(value) => {
+                    if (value === null) return;
                     const wasNte = isNteImporter(field.state.value);
                     const nextIsNte = isNteImporter(value);
                     field.handleChange(value);
@@ -325,7 +336,7 @@ export function EditGameDialog({
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder={t("g.select")} />
                   </SelectTrigger>
-                  <SelectContent aria-describedby={undefined} position="popper">
+                  <SelectContent aria-describedby={undefined}>
                     <SelectGroup>
                       <SelectItem value={NO_IMPORTER_VALUE}>
                         {t("page.mod.dialog.edit-game.no_importer")}
@@ -435,10 +446,8 @@ export function EditGameDialog({
           </div>
         </form>
         <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="outline">
-              {t("g.cancel")}
-            </Button>
+          <DialogClose render={<Button type="button" variant="outline" />}>
+            {t("g.cancel")}
           </DialogClose>
           <form.Subscribe
             selector={(state) => [state.canSubmit, state.isSubmitting]}

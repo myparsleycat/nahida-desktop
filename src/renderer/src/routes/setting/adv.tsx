@@ -106,15 +106,17 @@ function SettingRow({
           />
         ) : (
           <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className="truncate min-w-0 w-full cursor-pointer text-left hover:text-primary disabled:cursor-default"
-                disabled={setting.value == null}
-                title={setting.value ?? ""}
-              >
-                {setting.value}
-              </button>
+            <PopoverTrigger
+              render={
+                <button
+                  type="button"
+                  className="truncate min-w-0 w-full cursor-pointer text-left hover:text-primary disabled:cursor-default"
+                  disabled={setting.value == null}
+                  title={setting.value ?? ""}
+                />
+              }
+            >
+              {setting.value}
             </PopoverTrigger>
             <PopoverContent
               align="start"

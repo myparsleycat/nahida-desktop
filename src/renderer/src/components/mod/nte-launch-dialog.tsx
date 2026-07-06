@@ -92,10 +92,8 @@ export function NteLaunchDialog() {
         </Field>
 
         <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="outline" disabled={isSubmitting}>
-              {t("g.cancel")}
-            </Button>
+          <DialogClose render={<Button type="button" variant="outline" disabled={isSubmitting} />}>
+            {t("g.cancel")}
           </DialogClose>
           <Button
             type="button"

@@ -115,8 +115,12 @@ export function GameBananaToolbar({
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbLink asChild className="cursor-pointer" onClick={onResetToGameHome}>
-                <button type="button">{selectedGameLabel}</button>
+              <BreadcrumbLink
+                render={<button type="button" />}
+                className="cursor-pointer"
+                onClick={onResetToGameHome}
+              >
+                {selectedGameLabel}
               </BreadcrumbLink>
             </BreadcrumbItem>
             {breadcrumbCategories.map((category, index) => {
@@ -129,7 +133,7 @@ export function GameBananaToolbar({
                   <BreadcrumbItem>
                     {isClickable ? (
                       <BreadcrumbLink
-                        asChild
+                        render={<button type="button" />}
                         className="cursor-pointer"
                         onClick={
                           breadcrumbMod && isLastCategory
@@ -137,7 +141,7 @@ export function GameBananaToolbar({
                             : () => onSelectBreadcrumbCategory(index)
                         }
                       >
-                        <button type="button">{category.name}</button>
+                        {category.name}
                       </BreadcrumbLink>
                     ) : (
                       <BreadcrumbPage>{category.name}</BreadcrumbPage>
@@ -163,31 +167,27 @@ export function GameBananaToolbar({
           {stageLabel}
         </ButtonGroupText>
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="outline" onClick={onOpenModUrlDialog}>
-              <LinkIcon />
-              <span className="sr-only">{t("page.gamebanana.open_mod_url.button")}</span>
-            </Button>
+          <TooltipTrigger render={<Button variant="outline" onClick={onOpenModUrlDialog} />}>
+            <LinkIcon />
+            <span className="sr-only">{t("page.gamebanana.open_mod_url.button")}</span>
           </TooltipTrigger>
           <TooltipContent side="bottom">{t("page.gamebanana.open_mod_url.button")}</TooltipContent>
         </Tooltip>
         {canOpenProfile && (
           <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" onClick={onOpenGameProfile}>
-                <ExternalLinkIcon />
-                <span className="sr-only">{t("page.gamebanana.open_profile")}</span>
-              </Button>
+            <TooltipTrigger render={<Button variant="outline" onClick={onOpenGameProfile} />}>
+              <ExternalLinkIcon />
+              <span className="sr-only">{t("page.gamebanana.open_profile")}</span>
             </TooltipTrigger>
             <TooltipContent side="bottom">{t("page.gamebanana.open_profile")}</TooltipContent>
           </Tooltip>
         )}
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="outline" onClick={onLogout} disabled={isLoggingOut}>
-              <LogOutIcon />
-              <span className="sr-only">{t("page.gamebanana.logout")}</span>
-            </Button>
+          <TooltipTrigger
+            render={<Button variant="outline" onClick={onLogout} disabled={isLoggingOut} />}
+          >
+            <LogOutIcon />
+            <span className="sr-only">{t("page.gamebanana.logout")}</span>
           </TooltipTrigger>
           <TooltipContent side="bottom">{t("page.gamebanana.logout")}</TooltipContent>
         </Tooltip>

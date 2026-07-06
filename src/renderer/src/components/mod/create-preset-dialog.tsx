@@ -134,10 +134,8 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
   return (
     <>
       <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-        <DialogTrigger asChild>
-          <Button variant="outline" size="icon" disabled={disabled}>
-            <Plus className="size-4" />
-          </Button>
+        <DialogTrigger render={<Button variant="outline" size="icon" disabled={disabled} />}>
+          <Plus className="size-4" />
         </DialogTrigger>
         <DialogContent className="w-100" aria-describedby={undefined}>
           <DialogHeader>
@@ -193,10 +191,8 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
             />
           </form>
           <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="outline">
-                {t("g.cancel")}
-              </Button>
+            <DialogClose render={<Button type="button" variant="outline" />}>
+              {t("g.cancel")}
             </DialogClose>
             <form.Subscribe
               selector={(state) => [state.canSubmit, state.isSubmitting]}

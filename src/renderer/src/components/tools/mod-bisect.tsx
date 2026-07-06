@@ -25,6 +25,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
 import { ScrollArea } from "../ui/scroll-area";
 
 function relativeDisplay(rootPath: string | null, iniPath: string): string {
@@ -144,7 +145,7 @@ export default function ModBisect() {
     recoverMutation.isPending;
 
   return (
-    <div className="flex flex-col h-full min-h-0 gap-4 p-4 overflow-y-auto">
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-4">
       <Card>
         <CardHeader>
           <CardTitle>{t("page.tools.mod_bisect.title")}</CardTitle>
@@ -178,18 +179,20 @@ export default function ModBisect() {
               {t("page.tools.mod_bisect.cancel")}
             </Button>
             <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="secondary"
-                  onClick={() => selectedGame && recoverMutation.mutate(selectedGame)}
-                  disabled={!canRecover || isBusy}
-                >
-                  {t("page.tools.mod_bisect.recover_disabled")}
-                </Button>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="secondary"
+                    onClick={() => selectedGame && recoverMutation.mutate(selectedGame)}
+                    disabled={!canRecover || isBusy}
+                  />
+                }
+              >
+                {t("page.tools.mod_bisect.recover_disabled")}
               </TooltipTrigger>
               <TooltipContent>{t("page.tools.mod_bisect.recover_disabled_hint")}</TooltipContent>
             </Tooltip>
-            <span className={`text-xs font-mono ${statusColor(status)}`}>
+            <span className={`font-mono text-xs ${statusColor(status)}`}>
               {t(`page.tools.mod_bisect.status.${status}`)}
             </span>
           </div>
@@ -211,7 +214,7 @@ export default function ModBisect() {
           </div>
 
           {snapshot?.error && status !== "done" ? (
-            <div className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-2">
+            <div className="rounded-md border border-destructive/20 bg-destructive/10 p-2 text-xs text-destructive">
               {snapshot.error}
             </div>
           ) : null}
@@ -297,18 +300,25 @@ function GameSelect({
           <SelectValue placeholder={t("page.tools.mod_bisect.no_games")} />
         </SelectTrigger>
         <SelectGroup>
-          <SelectContent position="popper" />
+          <SelectContent />
         </SelectGroup>
       </Select>
     );
   }
 
   return (
-    <Select value={value} onValueChange={onChange} disabled={disabled}>
+    <Select
+      value={value}
+      onValueChange={(v) => {
+        if (v === null) return;
+        onChange(v);
+      }}
+      disabled={disabled}
+    >
       <SelectTrigger className="min-w-56">
         <SelectValue placeholder={t("page.tools.mod_bisect.select_game")} />
       </SelectTrigger>
-      <SelectContent position="popper">
+      <SelectContent>
         <SelectGroup>
           {games.map((game) => {
             const nte = isNteImporter(game.importer);
@@ -321,7 +331,7 @@ function GameSelect({
             if (!nte) return item;
             return (
               <Tooltip key={game.game}>
-                <TooltipTrigger asChild>{item}</TooltipTrigger>
+                <TooltipTrigger>{item}</TooltipTrigger>
                 <TooltipContent>{t("page.tools.mod_bisect.nte_tooltip")}</TooltipContent>
               </Tooltip>
             );
@@ -363,7 +373,7 @@ function RoundView({
           })}
         </div>
         <ScrollArea className="h-56 rounded border bg-muted/30 p-2">
-          <ul className="text-xs font-mono space-y-0.5 break-all">
+          <ul className="space-y-0.5 font-mono text-xs break-all">
             {snapshot.currentBatch.map((iniPath) => (
               <li key={iniPath}>{relativeDisplay(snapshot.modRootPath, iniPath)}</li>
             ))}

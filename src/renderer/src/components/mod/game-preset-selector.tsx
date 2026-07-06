@@ -148,15 +148,17 @@ export const GamePresetSelector = memo(function GamePresetSelector({
               <PlayIcon className="size-4" />
             </Button>
           )}
-          <Select value={selectedGame || ""} onValueChange={handleGameSelect}>
+          <Select
+            value={selectedGame || ""}
+            onValueChange={(v) => {
+              if (v === null) return;
+              handleGameSelect(v);
+            }}
+          >
             <SelectTrigger className="w-full" disabled={games.length < 1}>
               <SelectValue placeholder={games.length > 0 ? "Select a Game" : "No games"} />
             </SelectTrigger>
-            <SelectContent
-              position="popper"
-              onCloseAutoFocus={(e) => e.preventDefault()}
-              aria-describedby={undefined}
-            >
+            <SelectContent finalFocus={false} aria-describedby={undefined}>
               <SelectGroup>
                 <SelectLabel>{games.length > 0 ? "Games" : "No games"}</SelectLabel>
                 {games.map((game, idx) => (
@@ -197,6 +199,12 @@ export const GamePresetSelector = memo(function GamePresetSelector({
       <div className="flex w-full space-x-1">
         <Select
           value={selectedPreset?.id || ""}
+          items={presets.map((preset) => ({
+            value: preset.id,
+            label: preset.isLegacy
+              ? `${preset.name} (${t("page.mod.dialog.preset-management.legacy-badge")})`
+              : preset.name,
+          }))}
           onValueChange={(id) => {
             if (!id) return;
             const preset = presets.find((p) => p.id === id);
@@ -209,11 +217,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
           <SelectTrigger className="w-full" disabled={presets.length < 1}>
             <SelectValue placeholder={presets.length > 0 ? "Select a preset" : "No presets"} />
           </SelectTrigger>
-          <SelectContent
-            position="popper"
-            onCloseAutoFocus={(e) => e.preventDefault()}
-            aria-describedby={undefined}
-          >
+          <SelectContent finalFocus={false} aria-describedby={undefined}>
             <SelectGroup>
               <SelectLabel>{presets.length > 0 ? "Presets" : "No presets"}</SelectLabel>
               {presets.map((preset) => (

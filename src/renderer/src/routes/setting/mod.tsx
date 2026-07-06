@@ -17,9 +17,8 @@ import { useSettings } from "@renderer/hooks/use-settings";
 import { Logger } from "@renderer/lib/logger";
 import {
   MOD_GRID_LAYOUT_MODES,
-  type ArchiveExtractPathMode,
-  type ModGridLayoutMode,
   SIDEBAR_LAYOUT_MODES,
+  type ModGridLayoutMode,
   type SidebarLayoutMode,
 } from "@shared/mod";
 import { useQueryClient } from "@tanstack/react-query";
@@ -56,6 +55,38 @@ function ModSettingsRouteContent() {
   const [anim1] = useAutoAnimate({ duration: 150 });
 
   const { settings, update, setSettings, isLoading } = useSettings(settingsConfig);
+
+  const archiveExtractPathModeOptions = [
+    {
+      value: "flatten_single_root",
+      label: t("page.setting.mod.mod_management.archiveExtractPathModes.flatten_single_root"),
+    },
+    {
+      value: "keep_archive_root",
+      label: t("page.setting.mod.mod_management.archiveExtractPathModes.keep_archive_root"),
+    },
+    {
+      value: "ask_every_time",
+      label: t("page.setting.mod.mod_management.archiveExtractPathModes.ask_every_time"),
+    },
+  ] as const;
+
+  const sidebarLayoutOptions = [
+    { value: "row", label: t("page.setting.mod.layout.sidebar.modes.row") },
+    { value: "grid", label: t("page.setting.mod.layout.sidebar.modes.grid") },
+  ] as const;
+
+  const gridLayoutModeOptions = [
+    { value: "responsive", label: t("page.setting.mod.layout.grid.modes.responsive") },
+    {
+      value: "fixed_card_width",
+      label: t("page.setting.mod.layout.grid.modes.fixed_card_width"),
+    },
+    {
+      value: "fixed_column_count",
+      label: t("page.setting.mod.layout.grid.modes.fixed_column_count"),
+    },
+  ] as const;
 
   if (isLoading) {
     return null;
@@ -170,28 +201,22 @@ function ModSettingsRouteContent() {
               </div>
               <Select
                 value={settings.archiveExtractPathMode}
-                onValueChange={(value: ArchiveExtractPathMode) =>
-                  update("archiveExtractPathMode", value)
-                }
+                items={archiveExtractPathModeOptions}
+                onValueChange={(value) => {
+                  if (value === null) return;
+                  update("archiveExtractPathMode", value);
+                }}
               >
                 <SelectTrigger className="w-55">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent position="popper">
+                <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="flatten_single_root">
-                      {t(
-                        "page.setting.mod.mod_management.archiveExtractPathModes.flatten_single_root",
-                      )}
-                    </SelectItem>
-                    <SelectItem value="keep_archive_root">
-                      {t(
-                        "page.setting.mod.mod_management.archiveExtractPathModes.keep_archive_root",
-                      )}
-                    </SelectItem>
-                    <SelectItem value="ask_every_time">
-                      {t("page.setting.mod.mod_management.archiveExtractPathModes.ask_every_time")}
-                    </SelectItem>
+                    {archiveExtractPathModeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -233,8 +258,8 @@ function ModSettingsRouteContent() {
 
             <Separator />
 
-            <div className="flex items-center justify-between space-x-4">
-              <div className="space-y-0.5">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5 pr-4">
                 <span className="text-sm font-medium">
                   {t("page.setting.mod.mod_management.copyShaderFixesOnEnable")}
                 </span>
@@ -251,7 +276,7 @@ function ModSettingsRouteContent() {
             <Separator />
 
             <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
+              <div className="space-y-0.5 pr-4">
                 <span className="text-sm font-medium">
                   {t("page.setting.mod.mod_management.searchModPreview")}
                 </span>
@@ -285,19 +310,22 @@ function ModSettingsRouteContent() {
               </div>
               <Select
                 value={settings.sidebarLayout}
-                onValueChange={(value: SidebarLayoutMode) => handleSidebarLayoutChange(value)}
+                items={sidebarLayoutOptions}
+                onValueChange={(value) => {
+                  if (value === null) return;
+                  handleSidebarLayoutChange(value);
+                }}
               >
                 <SelectTrigger className="w-55">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent position="popper">
+                <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="row">
-                      {t("page.setting.mod.layout.sidebar.modes.row")}
-                    </SelectItem>
-                    <SelectItem value="grid">
-                      {t("page.setting.mod.layout.sidebar.modes.grid")}
-                    </SelectItem>
+                    {sidebarLayoutOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -315,22 +343,22 @@ function ModSettingsRouteContent() {
             <FieldGroup>
               <Select
                 value={settings.gridLayoutMode}
-                onValueChange={(value: ModGridLayoutMode) => handleGridLayoutModeChange(value)}
+                items={gridLayoutModeOptions}
+                onValueChange={(value) => {
+                  if (value === null) return;
+                  handleGridLayoutModeChange(value);
+                }}
               >
                 <SelectTrigger className="w-55 ml-auto">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent position="popper">
+                <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="responsive">
-                      {t("page.setting.mod.layout.grid.modes.responsive")}
-                    </SelectItem>
-                    <SelectItem value="fixed_card_width">
-                      {t("page.setting.mod.layout.grid.modes.fixed_card_width")}
-                    </SelectItem>
-                    <SelectItem value="fixed_column_count">
-                      {t("page.setting.mod.layout.grid.modes.fixed_column_count")}
-                    </SelectItem>
+                    {gridLayoutModeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>
