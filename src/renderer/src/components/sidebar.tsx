@@ -19,6 +19,7 @@ import {
   WrenchIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
@@ -72,10 +73,10 @@ export function Sidebar({ className }: { className?: string }) {
     cn("relative overflow-visible", isActive && "text-accent hover:text-accent");
 
   return (
-    <div className={`w-13 flex flex-col ${DEFAULT_BG} ${className}`}>
-      <div className="w-full flex flex-col select-none h-full">
+    <div className={`flex w-13 flex-col ${DEFAULT_BG} ${className}`}>
+      <div className="flex h-full w-full flex-col select-none">
         <div
-          className="fixed left-2 flex flex-col overflow-y-auto overflow-x-hidden dragselect-start-allowed py-2 space-y-2 max-h-screen"
+          className="dragselect-start-allowed fixed left-2 flex max-h-screen flex-col space-y-2 overflow-x-hidden overflow-y-auto py-2"
           style={{ top: "50%", transform: "translateY(-50%)" }}
         >
           <Tooltip disableHoverablePopup>
@@ -88,7 +89,7 @@ export function Sidebar({ className }: { className?: string }) {
                   aria-current={isTransferPage ? "page" : undefined}
                   onPointerDown={handlePointerDown}
                   onClick={() => {
-                    navi({ to: "/transfer" });
+                    void navi({ to: "/transfer" });
                   }}
                 />
               }
@@ -157,7 +158,7 @@ export function Sidebar({ className }: { className?: string }) {
                     if (isModPage) {
                       gameBananaStore.getState().requestModGameSync();
                     }
-                    navi({ to: "/gamebanana" });
+                    void navi({ to: "/gamebanana" });
                   }}
                 />
               }
@@ -179,7 +180,7 @@ export function Sidebar({ className }: { className?: string }) {
                   aria-current={isModPage ? "page" : undefined}
                   onPointerDown={handlePointerDown}
                   onClick={() => {
-                    navi({ to: "/mod" });
+                    void navi({ to: "/mod" });
                   }}
                 />
               }
@@ -199,7 +200,7 @@ export function Sidebar({ className }: { className?: string }) {
                   aria-current={isToolsPage ? "page" : undefined}
                   onPointerDown={handlePointerDown}
                   onClick={() => {
-                    navi({ to: "/tools" });
+                    void navi({ to: "/tools" });
                   }}
                 />
               }
@@ -224,7 +225,7 @@ export function Sidebar({ className }: { className?: string }) {
                       onPointerDown={handlePointerDown}
                       onClick={() => {
                         const lastDriveId = viewStore.getState().lastDriveId;
-                        navi({
+                        void navi({
                           to: "/drive/drive/$id",
                           params: {
                             id: lastDriveId ? lastDriveId : session.drive.rootId,
@@ -232,7 +233,7 @@ export function Sidebar({ className }: { className?: string }) {
                         });
                       }}
                       onDoubleClick={() => {
-                        navi({
+                        void navi({
                           to: "/drive/drive/$id",
                           params: {
                             id: session.drive.rootId,
@@ -258,7 +259,7 @@ export function Sidebar({ className }: { className?: string }) {
                       onPointerDown={handlePointerDown}
                       onClick={() => {
                         const lastShareId = viewStore.getState().lastShareId;
-                        navi({
+                        void navi({
                           to: "/drive/share/$id",
                           params: {
                             id: lastShareId,
@@ -266,7 +267,7 @@ export function Sidebar({ className }: { className?: string }) {
                         });
                       }}
                       onDoubleClick={() => {
-                        navi({
+                        void navi({
                           to: "/drive/share/$id",
                           params: {
                             id: "share",
@@ -334,7 +335,7 @@ export function Sidebar({ className }: { className?: string }) {
                   aria-current={isSettingPage ? "page" : undefined}
                   onPointerDown={handlePointerDown}
                   onClick={() => {
-                    navi({ to: "/setting/gen" });
+                    void navi({ to: "/setting/gen" });
                   }}
                 />
               }
@@ -355,7 +356,7 @@ export function Sidebar({ className }: { className?: string }) {
                     aria-current={isTestPage ? "page" : undefined}
                     onPointerDown={handlePointerDown}
                     onClick={() => {
-                      navi({ to: "/test" });
+                      void navi({ to: "/test" });
                     }}
                   />
                 }

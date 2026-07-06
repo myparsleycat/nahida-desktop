@@ -14,6 +14,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
 import { KeyRecorder } from "../mod/key-recorder";
 import { ScrollArea } from "../ui/scroll-area";
 
@@ -46,7 +47,7 @@ function HotkeySettingDialog({
   return (
     <Dialog>
       <DialogTrigger
-        className="flex flex-row items-center w-full transition-colors border border-white/20 space-x-1 bg-foreground/5 hover:bg-background/10 p-2 rounded-lg justify-start disabled:pointer-events-none disabled:opacity-60"
+        className="flex w-full flex-row items-center justify-start space-x-1 rounded-lg border border-white/20 bg-foreground/5 p-2 transition-colors hover:bg-background/10 disabled:pointer-events-none disabled:opacity-60"
         onClick={(e) => e.stopPropagation()}
         disabled={disabled}
       >
@@ -108,7 +109,7 @@ export default function ToggleViewerGenerator() {
       window.api.invoke("setting:xxmi:setToggleViewerAutoGenerate", newEnabled),
     onSuccess: (_, newEnabled) => {
       queryClient.setQueryData(["setting:xxmi:getToggleViewerAutoGenerate"], newEnabled);
-      queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerState"] });
+      void queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerState"] });
     },
     onError: (err) => {
       toast.error(err.message);
@@ -121,8 +122,8 @@ export default function ToggleViewerGenerator() {
       toast.error(err.message);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerState"] });
-      queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerLogs"] });
+      void queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerState"] });
+      void queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerLogs"] });
     },
   });
 
@@ -135,9 +136,11 @@ export default function ToggleViewerGenerator() {
       toast.error(err.message);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerAutoGenerate"] });
-      queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerState"] });
-      queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerLogs"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["setting:xxmi:getToggleViewerAutoGenerate"],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerState"] });
+      void queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerLogs"] });
     },
   });
 
@@ -147,8 +150,8 @@ export default function ToggleViewerGenerator() {
       toast.error(err.message);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerState"] });
-      queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerLogs"] });
+      void queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerState"] });
+      void queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerLogs"] });
     },
   });
 
@@ -156,9 +159,9 @@ export default function ToggleViewerGenerator() {
     mutationFn: (newHotkey: string) =>
       window.api.invoke("setting:xxmi:setToggleViewerHotkey", newHotkey),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerHotkey"] });
-      queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerLogs"] });
-      queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerState"] });
+      void queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerHotkey"] });
+      void queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerLogs"] });
+      void queryClient.invalidateQueries({ queryKey: ["setting:xxmi:getToggleViewerState"] });
     },
     onError: (err) => {
       toast.error(err.message);
@@ -181,7 +184,7 @@ export default function ToggleViewerGenerator() {
 
   if (!xxmiData?.xxmiPath) {
     return (
-      <div className="flex flex-col items-center justify-center w-full p-2 text-center">
+      <div className="flex w-full flex-col items-center justify-center p-2 text-center">
         <h3 className="text-lg font-semibold text-muted-foreground">
           {t("page.tools.toggle_viewer_generator.title")}
         </h3>
@@ -194,7 +197,7 @@ export default function ToggleViewerGenerator() {
 
   return (
     <div className="flex flex-col space-y-4 p-4">
-      <div className="flex flex-row items-center justify-between w-full p-3 rounded-lg border hover:shadow transition-shadow duration-200">
+      <div className="flex w-full flex-row items-center justify-between rounded-lg border p-3 transition-shadow duration-200 hover:shadow">
         <div className="flex flex-col space-y-1">
           <h3 className="text font-semibold">
             {t("page.tools.toggle_viewer_generator.auto_generate")}
@@ -210,8 +213,8 @@ export default function ToggleViewerGenerator() {
         />
       </div>
 
-      <div className="flex flex-row items-center justify-between w-full p-3 rounded-lg border hover:shadow transition-shadow duration-200 gap-2">
-        <div className="flex flex-col space-y-1 shrink-0">
+      <div className="flex w-full flex-row items-center justify-between gap-2 rounded-lg border p-3 transition-shadow duration-200 hover:shadow">
+        <div className="flex shrink-0 flex-col space-y-1">
           <h3 className="text font-semibold">{t("page.tools.toggle_viewer_generator.hotkey")}</h3>
         </div>
         <div className="w-full max-w-md">
@@ -245,7 +248,7 @@ export default function ToggleViewerGenerator() {
         >
           {t("page.tools.toggle_viewer_generator.stop")}
         </Button>
-        <div className="text-xs text-muted-foreground self-center">
+        <div className="self-center text-xs text-muted-foreground">
           {isRunning
             ? t("page.tools.toggle_viewer_generator.running", {
                 mode: state?.mode || t("page.tools.toggle_viewer_generator.unknown"),
@@ -254,8 +257,8 @@ export default function ToggleViewerGenerator() {
         </div>
       </div>
 
-      <div className="flex flex-col w-full p-3 rounded-lg border hover:shadow transition-shadow duration-200 h-80">
-        <div className="text-sm font-medium text-muted-foreground mb-2">
+      <div className="flex h-80 w-full flex-col rounded-lg border p-3 transition-shadow duration-200 hover:shadow">
+        <div className="mb-2 text-sm font-medium text-muted-foreground">
           {t("page.tools.toggle_viewer_generator.logs")}
         </div>
         <ScrollArea className="flex-1 overflow-auto rounded border bg-muted/30 p-2">
@@ -266,7 +269,7 @@ export default function ToggleViewerGenerator() {
           ) : (
             <div className="flex flex-col gap-1">
               {[...logs].reverse().map((log, index) => (
-                <div key={`${log}-${index}`} className="text-xs font-mono break-all">
+                <div key={`${log}-${index}`} className="font-mono text-xs break-all">
                   {log}
                 </div>
               ))}

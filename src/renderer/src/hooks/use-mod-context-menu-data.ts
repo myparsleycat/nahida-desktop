@@ -17,8 +17,8 @@ export function useModContextMenuData() {
     const [presets, setPresets] = useState<Preset[]>([]);
 
     useEffect(() => {
-        window.api.invoke("ftm:getScripts").then((res) => setFixTools(res || []));
-        window.api.invoke("ftm:getPresets").then((res) => setPresets(res || []));
+        void window.api.invoke("ftm:getScripts").then((res) => setFixTools(res || []));
+        void window.api.invoke("ftm:getPresets").then((res) => setPresets(res || []));
     }, []);
 
     return { fixTools, presets };

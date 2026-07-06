@@ -221,10 +221,10 @@ export function useModDragDrop(
                                 fileName: file.name,
                             }),
                             success: () => {
-                                queryClient.invalidateQueries({
+                                void queryClient.invalidateQueries({
                                     queryKey: ["characters", game],
                                 });
-                                queryClient.invalidateQueries({
+                                void queryClient.invalidateQueries({
                                     queryKey: ["modGroup", currentSelectedGroup?.path],
                                 });
                                 return t("page.mod.drag_drop.extract.success", {
@@ -251,10 +251,10 @@ export function useModDragDrop(
                             fileName: file.name,
                         }),
                         success: () => {
-                            queryClient.invalidateQueries({
+                            void queryClient.invalidateQueries({
                                 queryKey: ["characters", game],
                             });
-                            queryClient.invalidateQueries({
+                            void queryClient.invalidateQueries({
                                 queryKey: ["modGroup", currentSelectedGroup?.path],
                             });
                             return t("page.mod.drag_drop.copy.success", {

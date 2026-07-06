@@ -18,6 +18,7 @@ import { PencilIcon, PlayIcon } from "lucide-react";
 import { memo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
 import { AddGameDialog } from "./add-game-dialog";
 import { CreatePresetDialog } from "./create-preset-dialog";
 import { EditGameDialog, openEditGameDialog } from "./edit-game-dialog";
@@ -140,7 +141,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
   };
 
   return (
-    <div className="flex flex-col items-center justify-center w-full p-2 border-t space-y-3">
+    <div className="flex w-full flex-col items-center justify-center space-y-3 border-t p-2">
       {location.pathname.startsWith("/mod") && (
         <div className="flex w-full space-x-1">
           {games.length > 0 && (
@@ -152,7 +153,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
             value={selectedGame || ""}
             onValueChange={(v) => {
               if (v === null) return;
-              handleGameSelect(v);
+              void handleGameSelect(v);
             }}
           >
             <SelectTrigger className="w-full" disabled={games.length < 1}>

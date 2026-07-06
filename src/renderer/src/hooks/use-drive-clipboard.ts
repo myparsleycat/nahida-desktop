@@ -62,10 +62,10 @@ export function useDriveClipboardActions(destinationId: string) {
             toast.promise(promise, {
                 loading: t("page.drive.clipboard.move_loading"),
                 success: () => {
-                    queryClient.invalidateQueries({
+                    void queryClient.invalidateQueries({
                         queryKey: ["drive", "drive", destinationId],
                     });
-                    queryClient.invalidateQueries({
+                    void queryClient.invalidateQueries({
                         queryKey: ["drive", "share", destinationId],
                     });
                     setCopyOrCuts(null, []);
@@ -90,10 +90,10 @@ export function useDriveClipboardActions(destinationId: string) {
             toast.promise(promise, {
                 loading: t("page.drive.clipboard.copy_loading"),
                 success: () => {
-                    queryClient.invalidateQueries({
+                    void queryClient.invalidateQueries({
                         queryKey: ["drive", "drive", destinationId],
                     });
-                    queryClient.invalidateQueries({
+                    void queryClient.invalidateQueries({
                         queryKey: ["drive", "share", destinationId],
                     });
                     return t("page.drive.clipboard.copy_success");

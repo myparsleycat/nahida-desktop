@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import fsp from "node:fs/promises";
 import path from "node:path";
+
 import isDev from "@main/internal/isDev";
 import type { AppStatus, PathMetadata } from "@shared/types";
 import {
@@ -15,6 +16,7 @@ import {
 import { app } from "electron/main";
 import { trim } from "es-toolkit";
 import fse from "fs-extra";
+
 import { desktop } from "..";
 
 export function getAppStatus(): AppStatus {
@@ -62,7 +64,7 @@ export function copyStr(str: string) {
 }
 
 export function openPath(path: string) {
-    shell.openPath(path);
+    void shell.openPath(path);
 }
 
 export async function trash(path: string) {
@@ -160,5 +162,3 @@ export async function processChunked<T>(
         }
     }
 }
-
-

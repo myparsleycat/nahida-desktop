@@ -1,9 +1,11 @@
 import { fileURLToPath } from "node:url";
+
 import { is } from "@electron-toolkit/utils";
 import type { NahidaDesktop } from "@main/index";
 import { openExternal } from "@main/services/util";
 import { BrowserWindow, screen } from "electron";
 import { debounce } from "es-toolkit";
+
 import icon from "../../../resources/nahida.png?asset";
 import { focus, getDefaultWebPreferences } from "./utils";
 
@@ -123,7 +125,7 @@ export class SettingWindow {
 
         window.webContents.setWindowOpenHandler(({ url }) => {
             if (url.startsWith("http")) {
-                openExternal(url);
+                void openExternal(url);
                 return { action: "deny" };
             }
             return { action: "allow" };
@@ -151,7 +153,7 @@ export class SettingWindow {
         });
 
         if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-            window.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/#/setting`);
+            void window.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/#/setting`);
         } else {
             // cjs
             // desktop.window.setting.loadFile(path.join(__dirname, "../renderer/index.html"), {
@@ -159,9 +161,12 @@ export class SettingWindow {
             // });
 
             // esm
-            window.loadFile(fileURLToPath(new URL("../renderer/index.html", import.meta.url)), {
-                hash: "setting",
-            });
+            void window.loadFile(
+                fileURLToPath(new URL("../renderer/index.html", import.meta.url)),
+                {
+                    hash: "setting",
+                },
+            );
         }
 
         return window;

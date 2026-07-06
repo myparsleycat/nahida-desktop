@@ -1,9 +1,11 @@
 import { fileURLToPath } from "node:url";
+
 import { is } from "@electron-toolkit/utils";
 import type { NahidaDesktop } from "@main/index";
 import { openExternal } from "@main/services/util";
 import { BrowserWindow, screen } from "electron";
 import { debounce } from "es-toolkit";
+
 import icon from "../../../resources/nahida.png?asset";
 import { focus, getDefaultWebPreferences } from "./utils";
 
@@ -19,7 +21,7 @@ export class MainWindow {
     public focus() {
         if (!this.window || this.window.isDestroyed()) {
             this.window = null;
-            this.createMainWindow();
+            void this.createMainWindow();
         } else {
             focus(this.window);
         }
@@ -146,20 +148,20 @@ export class MainWindow {
         });
 
         this.window.webContents.setWindowOpenHandler((details) => {
-            openExternal(details.url);
+            void openExternal(details.url);
             return { action: "deny" };
         });
 
         if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
             const baseUrl = process.env["ELECTRON_RENDERER_URL"];
             const routeUrl = initialRoute ? `${baseUrl}/#${initialRoute}` : baseUrl;
-            this.window.loadURL(routeUrl);
+            void this.window.loadURL(routeUrl);
         } else {
             // cjs
             // this.window.loadFile(path.join(__dirname, "../renderer/index.html"));
 
             // esm
-            this.window.loadFile(
+            void this.window.loadFile(
                 fileURLToPath(new URL("../renderer/index.html", import.meta.url)),
                 {
                     hash: initialRoute ? initialRoute.slice(1) : undefined,

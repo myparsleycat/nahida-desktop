@@ -1,7 +1,9 @@
 import { fileURLToPath } from "node:url";
+
 import { is } from "@electron-toolkit/utils";
 import type { NahidaDesktop } from "@main/index";
 import { BrowserWindow } from "electron";
+
 import icon from "../../../resources/nahida.png?asset";
 import { getDefaultWebPreferences } from "./utils";
 
@@ -48,7 +50,7 @@ export class LoginWindow {
         });
 
         if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-            this.window.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/#/auth`);
+            void this.window.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/#/auth`);
         } else {
             // cjs
             // desktop.window.auth.loadFile(path.join(__dirname, "../renderer/index.html"), {
@@ -56,7 +58,7 @@ export class LoginWindow {
             // });
 
             // esm
-            this.window.loadFile(
+            void this.window.loadFile(
                 fileURLToPath(new URL("../renderer/index.html", import.meta.url)),
                 {
                     hash: "auth",

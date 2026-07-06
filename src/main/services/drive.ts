@@ -1,6 +1,7 @@
 import path from "node:path";
 import { promisify } from "node:util";
 import { gunzip, gzip, zstdCompress, zstdDecompress } from "node:zlib";
+
 import type { Treaty } from "@elysiajs/eden";
 import { eden } from "@main/client";
 import Download, {
@@ -20,9 +21,11 @@ import { retry } from "es-toolkit";
 import fse from "fs-extra";
 import Heap from "mnemonist/heap";
 import { nanoid } from "nanoid";
+
 import type { NahidaDesktop } from "..";
-import { saveFileDialog, selectDirectoryDialog } from "./dialog";
 import type { LocalTransfer } from "./transfer";
+
+import { saveFileDialog, selectDirectoryDialog } from "./dialog";
 import { processChunked } from "./util";
 
 const Fn = eden.akasha.content({ id: "" }).get;
@@ -216,7 +219,7 @@ export class DriveService {
                 abortController,
             }).catch((err) => {
                 this.desktop.logger.error(err, "Drive:Upload:Preprocessing");
-                this.desktop.service.transfer.updateTransfer(pid, {
+                void this.desktop.service.transfer.updateTransfer(pid, {
                     status: "error",
                     error: err instanceof Error ? err.message : String(err),
                 });
@@ -332,7 +335,7 @@ export class DriveService {
                 }).catch((err) => {
                     if (abortController.signal.aborted) return;
                     this.desktop.logger.error(err, "Drive:Download:Preprocessing");
-                    this.desktop.service.transfer.updateTransfer(pid, {
+                    void this.desktop.service.transfer.updateTransfer(pid, {
                         status: "error",
                         error: err instanceof Error ? err.message : String(err),
                     });
@@ -361,7 +364,7 @@ export class DriveService {
                 });
             });
 
-            this.desktop.service.transfer.manualStart(pid);
+            void this.desktop.service.transfer.manualStart(pid);
         },
 
         retryTransfer: async (pid: string) => {
@@ -494,7 +497,7 @@ export class DriveService {
         );
 
         const hashedFiles = await this.upload.calculateHashes(dummyFiles, (count) => {
-            this.desktop.service.transfer.updateTransfer(pid, {
+            void this.desktop.service.transfer.updateTransfer(pid, {
                 transferedFiles: count,
             });
         });
@@ -522,8 +525,8 @@ export class DriveService {
             });
         });
 
-        this.desktop.service.transfer.updateTransfer(pid, { status: "pending" });
-        this.desktop.service.transfer.processQueue();
+        void this.desktop.service.transfer.updateTransfer(pid, { status: "pending" });
+        void this.desktop.service.transfer.processQueue();
     }
 
     private async executeUploadRunner({
@@ -702,11 +705,11 @@ export class DriveService {
             await this.executeDownloadRunner({ pid, restartParams, data });
         });
 
-        this.desktop.service.transfer.updateTransfer(pid, {
+        void this.desktop.service.transfer.updateTransfer(pid, {
             status: "pending",
             name,
         });
-        this.desktop.service.transfer.processQueue();
+        void this.desktop.service.transfer.processQueue();
     }
 
     private claimUniqueName(name: string, used: Set<string>) {

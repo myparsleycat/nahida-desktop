@@ -34,7 +34,7 @@ function RouteComponent() {
     },
     onSuccess: () => {
       toast.success("설정이 저장되었습니다.");
-      queryClient.invalidateQueries({ queryKey: ["settings", "advanced"] });
+      void queryClient.invalidateQueries({ queryKey: ["settings", "advanced"] });
     },
     onError: () => {
       toast.error("설정 저장에 실패했습니다.");
@@ -53,11 +53,11 @@ function RouteComponent() {
         <AlertDescription>{t("page.setting.adv.warning_description")}</AlertDescription>
       </Alert>
 
-      <div className="border rounded-md overflow-hidden text-[13px]">
-        <div className="grid grid-cols-[minmax(150px,1fr)_minmax(200px,3fr)_80px] bg-muted/50 border-b font-medium text-muted-foreground">
-          <div className="p-3 uppercase tracking-wider">Key</div>
-          <div className="p-3 uppercase tracking-wider">Value</div>
-          <div className="p-3 uppercase tracking-wider text-center">Action</div>
+      <div className="overflow-hidden rounded-md border text-[13px]">
+        <div className="grid grid-cols-[minmax(150px,1fr)_minmax(200px,3fr)_80px] border-b bg-muted/50 font-medium text-muted-foreground">
+          <div className="p-3 tracking-wider uppercase">Key</div>
+          <div className="p-3 tracking-wider uppercase">Value</div>
+          <div className="p-3 text-center tracking-wider uppercase">Action</div>
         </div>
         <div className="grid grid-cols-[minmax(150px,1fr)_minmax(200px,3fr)_80px]">
           {settings?.map((setting) => (
@@ -95,8 +95,8 @@ function SettingRow({
 
   return (
     <>
-      <div className="p-3 border-b font-medium break-all flex items-center">{setting.key}</div>
-      <div className="p-3 border-b min-w-0 flex items-center">
+      <div className="flex items-center border-b p-3 font-medium break-all">{setting.key}</div>
+      <div className="flex min-w-0 items-center border-b p-3">
         {isEditing ? (
           <Input
             className="text-[13px]"
@@ -110,7 +110,7 @@ function SettingRow({
               render={
                 <button
                   type="button"
-                  className="truncate min-w-0 w-full cursor-pointer text-left hover:text-primary disabled:cursor-default"
+                  className="w-full min-w-0 cursor-pointer truncate text-left hover:text-primary disabled:cursor-default"
                   disabled={setting.value == null}
                   title={setting.value ?? ""}
                 />
@@ -120,14 +120,14 @@ function SettingRow({
             </PopoverTrigger>
             <PopoverContent
               align="start"
-              className="max-h-[60vh] w-80 overflow-auto whitespace-pre-wrap break-all"
+              className="max-h-[60vh] w-80 overflow-auto break-all whitespace-pre-wrap"
             >
               {setting.value}
             </PopoverContent>
           </Popover>
         )}
       </div>
-      <div className="p-3 border-b flex items-center justify-center">
+      <div className="flex items-center justify-center border-b p-3">
         {isEditing ? (
           <div className="flex items-center gap-1">
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleSave}>

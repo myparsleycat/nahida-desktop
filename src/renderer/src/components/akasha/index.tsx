@@ -125,7 +125,7 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
 
               queueRevealForDestination(parentId);
 
-              navi({
+              void navi({
                 to: isSharePath ? "/drive/share/$id" : "/drive/drive/$id",
                 params: { id: parentId },
               });
@@ -157,7 +157,7 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
               key={ancestor.id}
               onClick={() => {
                 queueRevealForDestination(ancestor.id);
-                navi({
+                void navi({
                   to: location.pathname.startsWith("/drive/share")
                     ? "/drive/share/$id"
                     : "/drive/drive/$id",
@@ -636,7 +636,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
         if (!currentItem) return;
 
         if (currentItem.isDir) {
-          navi({
+          void navi({
             to: location.pathname.startsWith("/drive/share")
               ? "/drive/share/$id"
               : "/drive/drive/$id",
@@ -664,7 +664,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
         if (e.ctrlKey || e.metaKey) {
           if (selectedItems.length !== 1) return;
           if (currentIndex !== -1 && sortedContents[currentIndex]?.isDir) {
-            navi({
+            void navi({
               to: location.pathname.startsWith("/drive/share")
                 ? "/drive/share/$id"
                 : "/drive/drive/$id",
@@ -696,7 +696,7 @@ export function HandlerProvider(props: HandlerProviderProps) {
               setPendingDriveRevealId(currentId);
             }
 
-            navi({
+            void navi({
               to: isSharePath ? "/drive/share/$id" : "/drive/drive/$id",
               params: {
                 id: parentId,

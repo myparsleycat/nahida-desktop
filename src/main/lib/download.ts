@@ -4,6 +4,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream } from "node:stream/web";
 import { createGunzip, createZstdDecompress } from "node:zlib";
+
 import { eden } from "@main/client";
 import type { LinkData } from "@main/server";
 import type { TransferData } from "@shared/types";
@@ -13,7 +14,9 @@ import fse from "fs-extra";
 import ky from "ky";
 import ms from "ms";
 import PQueue from "p-queue";
+
 import type { NahidaDesktop } from "..";
+
 import { zstdDecompressAsync } from "./compressor";
 import { ParallelDownloader } from "./parallel-downloader";
 
@@ -718,7 +721,7 @@ export class DownloadLib {
 
             if (!data.root) throw new Error("Root directory information was not received.");
 
-            this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
+            void this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
 
             const isSingleFile = data.dirs.length === 0 && data.files.length === 1;
             const pathMap = isSingleFile
@@ -731,7 +734,7 @@ export class DownloadLib {
             let downloadedCount = initialTransferedFiles ?? 0;
 
             const throttledUpdate = throttle((bytes: number, count: number) => {
-                this.desktop.service.transfer.updateTransfer(pid, {
+                void this.desktop.service.transfer.updateTransfer(pid, {
                     transferedSize: bytes,
                     transferedFiles: count,
                 });
@@ -795,7 +798,7 @@ export class DownloadLib {
             await this.finalizeDownload(pid, params.savePath);
         } catch (err) {
             if (abort.signal.aborted) return;
-            this.desktop.service.transfer.updateTransfer(pid, {
+            void this.desktop.service.transfer.updateTransfer(pid, {
                 status: "error",
                 error: err instanceof Error ? err.message : String(err),
             });
@@ -867,7 +870,7 @@ export class DownloadLib {
     }
 
     private async finalizeDownload(pid: string, savePath: string) {
-        this.desktop.service.transfer.updateTransfer(pid, {
+        void this.desktop.service.transfer.updateTransfer(pid, {
             status: "completed",
             progress: 100,
         });

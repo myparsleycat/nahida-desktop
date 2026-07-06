@@ -62,9 +62,9 @@ function KeySettingTrigger({
     <button
       type="button"
       className={cn(
-        "flex flex-row items-center w-full transition-colors",
-        "border border-white/20 space-x-1 bg-foreground/5 hover:bg-background/10 p-2 rounded-lg",
-        "justify-start flex-row size-full p-1",
+        "flex w-full flex-row items-center transition-colors",
+        "space-x-1 rounded-lg border border-white/20 bg-foreground/5 p-2 hover:bg-background/10",
+        "size-full flex-row justify-start p-1",
       )}
       onClick={(e) => {
         e.stopPropagation();
@@ -98,9 +98,9 @@ const ModToggleKeyItem = memo(function ModToggleKeyItem({
   onOpenKeySetting,
 }: ModToggleKeyItemProps) {
   return (
-    <div className="space-y-1 rounded-lg shadow-sm p-1 bg-foreground/5">
-      <div className="p-0 h-4.5 grid grid-cols-[1.5rem_1fr]">
-        <p className="h-5 w-5 rounded flex items-center justify-center border border-black/15 dark:border-white/15">
+    <div className="space-y-1 rounded-lg bg-foreground/5 p-1 shadow-sm">
+      <div className="grid h-4.5 grid-cols-[1.5rem_1fr] p-0">
+        <p className="flex h-5 w-5 items-center justify-center rounded border border-black/15 dark:border-white/15">
           {toggleKey.values.length}
         </p>
         <p className="truncate">{toggleKey.sectionName}</p>
@@ -139,7 +139,7 @@ const ModToggleKeyItem = memo(function ModToggleKeyItem({
             size="sm"
             className="w-full justify-start text-xs text-muted-foreground"
           >
-            <PlusIcon className="size-3 mr-1.5" />
+            <PlusIcon className="mr-1.5 size-3" />
             Add key
           </Button>
         </KeySettingTrigger>
@@ -177,12 +177,12 @@ const ModToggleKeyItem = memo(function ModToggleKeyItem({
             variant="outline"
             size="sm"
             className={cn(
-              "flex flex-row items-center w-full transition-colors dark:text-muted-foreground",
-              "border border-white/20 space-x-1 bg-foreground/5 hover:bg-background/10 p-2 rounded-lg",
-              "justify-start flex-row size-full p-1",
+              "flex w-full flex-row items-center transition-colors dark:text-muted-foreground",
+              "space-x-1 rounded-lg border border-white/20 bg-foreground/5 p-2 hover:bg-background/10",
+              "size-full flex-row justify-start p-1",
             )}
           >
-            <PlusIcon className="size-3 mr-1.5" />
+            <PlusIcon className="mr-1.5 size-3" />
             Add back
           </Button>
         </KeySettingTrigger>
@@ -199,7 +199,7 @@ export const ModIniItem = memo(function ModIniItem({
   return (
     <div className="space-y-1 text-[13px]">
       <div className="flex items-center justify-between gap-1">
-        <p className="truncate opacity-80 whitespace-normal" title={ini.name}>
+        <p className="truncate whitespace-normal opacity-80" title={ini.name}>
           {ini.name}
         </p>
         <Button
@@ -208,7 +208,7 @@ export const ModIniItem = memo(function ModIniItem({
           className="size-7 shrink-0"
           onClick={(e) => {
             e.stopPropagation();
-            window.api.invoke("util:openPath", ini.path);
+            void window.api.invoke("util:openPath", ini.path);
           }}
         >
           <FileCogIcon />

@@ -95,7 +95,7 @@ function ModSettingsRouteContent() {
   const handleVirtualizationEnabledChange = async (checked: boolean) => {
     try {
       await update("virtualizationEnabled", checked);
-      queryClient.invalidateQueries({ queryKey: ["settings", "mod", "virtualization"] });
+      void queryClient.invalidateQueries({ queryKey: ["settings", "mod", "virtualization"] });
     } catch (error) {
       Logger.error(error, "ModSettings:handleVirtualizationEnabledChange");
       toast.error("설정 저장에 실패했습니다.");
@@ -111,7 +111,7 @@ function ModSettingsRouteContent() {
     try {
       await update("virtualizationThreshold", value);
       toast.success("설정이 저장되었습니다.");
-      queryClient.invalidateQueries({ queryKey: ["settings", "mod", "virtualization"] });
+      void queryClient.invalidateQueries({ queryKey: ["settings", "mod", "virtualization"] });
     } catch (error) {
       Logger.error(error, "ModSettings:handleVirtualizationThresholdChange");
       toast.error("설정 저장에 실패했습니다.");
@@ -204,7 +204,7 @@ function ModSettingsRouteContent() {
                 items={archiveExtractPathModeOptions}
                 onValueChange={(value) => {
                   if (value === null) return;
-                  update("archiveExtractPathMode", value);
+                  void update("archiveExtractPathMode", value);
                 }}
               >
                 <SelectTrigger className="w-55">
@@ -313,7 +313,7 @@ function ModSettingsRouteContent() {
                 items={sidebarLayoutOptions}
                 onValueChange={(value) => {
                   if (value === null) return;
-                  handleSidebarLayoutChange(value);
+                  void handleSidebarLayoutChange(value);
                 }}
               >
                 <SelectTrigger className="w-55">
@@ -346,10 +346,10 @@ function ModSettingsRouteContent() {
                 items={gridLayoutModeOptions}
                 onValueChange={(value) => {
                   if (value === null) return;
-                  handleGridLayoutModeChange(value);
+                  void handleGridLayoutModeChange(value);
                 }}
               >
-                <SelectTrigger className="w-55 ml-auto">
+                <SelectTrigger className="ml-auto w-55">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

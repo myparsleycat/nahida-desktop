@@ -1,11 +1,14 @@
 import path from "node:path";
+
 import type { ResolvedArchiveExtractPathMode } from "@shared/mod";
 import type { TransferData } from "@shared/types";
 import { throttle } from "es-toolkit";
 import fse from "fs-extra";
 import ky from "ky";
 import { nanoid } from "nanoid";
+
 import type { NahidaDesktop } from "../..";
+
 import {
     type ModDownloadMetadataInput,
     writeModDownloadMetadataToDirectories,
@@ -234,11 +237,11 @@ export class CustomDownloader {
 
         this.desktop.service.transfer.registerRunner(pid, async () => {
             try {
-                this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
+                void this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
 
                 let downloadedBytes = 0;
                 const throttledUpdate = throttle((bytes: number) => {
-                    this.desktop.service.transfer.updateTransfer(pid, {
+                    void this.desktop.service.transfer.updateTransfer(pid, {
                         transferedSize: bytes,
                     });
                 }, 100);
@@ -295,7 +298,7 @@ export class CustomDownloader {
                 });
 
                 this.desktop.service.transfer.markFileCompleted(pid, pid);
-                this.desktop.service.transfer.updateTransfer(pid, {
+                void this.desktop.service.transfer.updateTransfer(pid, {
                     status: "completed",
                     progress: 100,
                     transferedSize: fileSize ?? downloadedBytes,
@@ -315,10 +318,10 @@ export class CustomDownloader {
                     (err as Error).name === "AbortError" ||
                     (err as Error).message === "Aborted"
                 ) {
-                    this.desktop.service.transfer.updateTransfer(pid, { status: "canceled" });
+                    void this.desktop.service.transfer.updateTransfer(pid, { status: "canceled" });
                 } else {
                     this.desktop.logger.error(err, "CustomDownloader:downloadToGroup");
-                    this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
+                    void this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
                 }
             } finally {
                 await fse.remove(savePath).catch(() => {});
@@ -412,12 +415,12 @@ export class CustomDownloader {
 
         this.desktop.service.transfer.registerRunner(pid, async () => {
             try {
-                this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
+                void this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
                 await fse.ensureDir(stagingPath);
 
                 let downloadedBytes = 0;
                 const throttledUpdate = throttle((bytes: number) => {
-                    this.desktop.service.transfer.updateTransfer(pid, {
+                    void this.desktop.service.transfer.updateTransfer(pid, {
                         transferedSize: bytes,
                     });
                 }, 100);
@@ -492,7 +495,7 @@ export class CustomDownloader {
 
                 this.desktop.service.transfer.markFileCompleted(pid, pid);
 
-                this.desktop.service.transfer.updateTransfer(pid, {
+                void this.desktop.service.transfer.updateTransfer(pid, {
                     status: "completed",
                     progress: 100,
                     transferedSize: fileSize ?? downloadedBytes,
@@ -512,10 +515,10 @@ export class CustomDownloader {
                     (err as Error).name === "AbortError" ||
                     (err as Error).message === "Aborted"
                 ) {
-                    this.desktop.service.transfer.updateTransfer(pid, { status: "canceled" });
+                    void this.desktop.service.transfer.updateTransfer(pid, { status: "canceled" });
                 } else {
                     this.desktop.logger.error(err, "GameBanana:downloadFromGB");
-                    this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
+                    void this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
                 }
             } finally {
                 await fse.remove(stagingPath).catch(() => {});
@@ -591,12 +594,12 @@ export class CustomDownloader {
 
         this.desktop.service.transfer.registerRunner(pid, async () => {
             try {
-                this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
+                void this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
                 await fse.ensureDir(stagingPath);
 
                 let downloadedBytes = 0;
                 const throttledUpdate = throttle((bytes: number) => {
-                    this.desktop.service.transfer.updateTransfer(pid, {
+                    void this.desktop.service.transfer.updateTransfer(pid, {
                         transferedSize: bytes,
                     });
                 }, 100);
@@ -647,7 +650,7 @@ export class CustomDownloader {
 
                 this.desktop.service.transfer.markFileCompleted(pid, pid);
 
-                this.desktop.service.transfer.updateTransfer(pid, {
+                void this.desktop.service.transfer.updateTransfer(pid, {
                     status: "completed",
                     progress: 100,
                     transferedSize: fileSize ?? downloadedBytes,
@@ -667,10 +670,10 @@ export class CustomDownloader {
                     (err as Error).name === "AbortError" ||
                     (err as Error).message === "Aborted"
                 ) {
-                    this.desktop.service.transfer.updateTransfer(pid, { status: "canceled" });
+                    void this.desktop.service.transfer.updateTransfer(pid, { status: "canceled" });
                 } else {
                     this.desktop.logger.error(err, "GameBanana:downloadFromGB");
-                    this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
+                    void this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
                 }
             } finally {
                 await fse.remove(stagingPath).catch(() => {});

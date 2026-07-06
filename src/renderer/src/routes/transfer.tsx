@@ -47,31 +47,31 @@ function RouteComponent() {
   const transfers = useGlobalStore((state) => state.transfers);
 
   const handleCancel = useCallback((id: string) => {
-    window.api.invoke("transfer:cancel", id);
+    void window.api.invoke("transfer:cancel", id);
   }, []);
 
   const handlePause = useCallback((id: string) => {
-    window.api.invoke("transfer:pause", id);
+    void window.api.invoke("transfer:pause", id);
   }, []);
 
   const handleResume = useCallback((id: string) => {
-    window.api.invoke("transfer:resume", id);
+    void window.api.invoke("transfer:resume", id);
   }, []);
 
   const handleRetry = useCallback((id: string) => {
-    window.api.invoke("transfer:retry", id);
+    void window.api.invoke("transfer:retry", id);
   }, []);
 
   const handlePauseAll = useCallback(() => {
-    window.api.invoke("transfer:pause-all");
+    void window.api.invoke("transfer:pause-all");
   }, []);
 
   const handleResumeAll = useCallback(() => {
-    window.api.invoke("transfer:resume-all");
+    void window.api.invoke("transfer:resume-all");
   }, []);
 
   const handleClearCompleted = useCallback(() => {
-    window.api.invoke("transfer:clear");
+    void window.api.invoke("transfer:clear");
   }, []);
 
   const transferItems: TransferItemProps[] = transfers.map((t) => {
@@ -130,7 +130,7 @@ function RouteComponent() {
     <div className="flex h-full flex-col overflow-hidden bg-background">
       <Titlebar title={{ text: t("page.transfer.title"), position: "center" }} />
 
-      <div className="flex-none px-4 pt-4 pb-4 border-b">
+      <div className="flex-none border-b px-4 pt-4 pb-4">
         <div className="flex flex-col gap-6">
           <TransferStats
             totalUploads={activeUploads}
@@ -155,10 +155,10 @@ function RouteComponent() {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0">
+      <div className="min-h-0 flex-1">
         <ScrollArea className="h-full w-full">
-          <main className="mx-auto px-4 py-4 w-full min-w-0 max-w-full">
-            <div className="flex flex-col gap-2 w-full max-w-full min-w-0">
+          <main className="mx-auto w-full max-w-full min-w-0 px-4 py-4">
+            <div className="flex w-full max-w-full min-w-0 flex-col gap-2">
               {filteredTransfers.length === 0 ? (
                 <TransferEmptyState activeTab={activeTab} hasSearchQuery={!!searchQuery} />
               ) : (

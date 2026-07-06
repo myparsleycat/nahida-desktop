@@ -1,6 +1,7 @@
 import { getAggregateTransferProgress, isOpenTransferQueueStatus } from "@shared/transfer-progress";
 import type { Transfer, TransferData, TransferStatus, TransferWithoutData } from "@shared/types";
 import { throttle } from "es-toolkit";
+
 import type { NahidaDesktop } from "..";
 
 export interface LocalTransfer extends Transfer {
@@ -283,7 +284,7 @@ export class TransferService {
 
         const transfer = this.getTransferByPID(pid);
         if (transfer && transfer.status === "pending") {
-            this.processQueue();
+            void this.processQueue();
         }
     }
 
@@ -304,7 +305,7 @@ export class TransferService {
             // runner에서 처리함
         } finally {
             this.isQueueRunning = false;
-            this.processQueue();
+            void this.processQueue();
         }
     }
 
@@ -334,7 +335,7 @@ export class TransferService {
         transfer.failedFiles = 0;
         transfer.error = undefined;
         this.emitUpdate();
-        this.processQueue();
+        void this.processQueue();
     }
 
     public async updateTransfer(

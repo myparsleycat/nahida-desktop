@@ -41,6 +41,7 @@ import {
   WrenchIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+
 import wuwaModFixerIcon from "@/renderer/assets/img/wuwa-mod-fixer-icon.png";
 
 interface ContentHeaderProps {
@@ -110,7 +111,7 @@ export function ContentHeader({
   ] as const;
 
   return (
-    <div className="flex items-center justify-between h-12 px-3 border-b z-20">
+    <div className="z-20 flex h-12 items-center justify-between border-b px-3">
       <div className="flex items-center gap-3">
         {groupName && <h1 className="text-2xl font-semibold text-foreground">{groupName}</h1>}
       </div>
@@ -124,7 +125,7 @@ export function ContentHeader({
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
           />
-          <Search className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Search className="absolute top-1/2 right-2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         </div>
 
         <Separator orientation="vertical" />
@@ -161,7 +162,7 @@ export function ContentHeader({
           <Button
             variant="outline"
             size="icon"
-            className="h-8 w-8 ml-1"
+            className="ml-1 h-8 w-8"
             onClick={() => {
               setViewMode(viewMode === "grid" ? "list" : "grid");
             }}
@@ -176,9 +177,9 @@ export function ContentHeader({
           <Button
             variant="outline"
             size="icon"
-            className="h-8 w-8 ml-1"
+            className="ml-1 h-8 w-8"
             onClick={() => {
-              window.api.invoke("util:openPath", groupPath);
+              void window.api.invoke("util:openPath", groupPath);
             }}
           >
             <FolderIcon />

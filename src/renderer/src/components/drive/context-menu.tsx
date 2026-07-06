@@ -43,7 +43,7 @@ export function ContextMenuProvider(props: ContextMenuProviderProps) {
   return (
     <ContextMenu>
       <ContextMenuTrigger
-        className="overflow-y-auto overflow-x-hidden flex-1"
+        className="flex-1 overflow-x-hidden overflow-y-auto"
         onClick={handleEmptyAreaClick}
         onContextMenu={handleEmptyAreaClick}
       >
@@ -141,7 +141,7 @@ function ContextMenuContentSnippet() {
             <ContextMenuItem
               className="gap-x-2"
               onClick={() => {
-                navi({
+                void navi({
                   to: location.pathname.startsWith("/drive/share")
                     ? "/drive/share/$id"
                     : "/drive/drive/$id",

@@ -66,7 +66,7 @@ function RouteComponent() {
   const [isUpdaterActionPending, setIsUpdaterActionPending] = useState(false);
 
   useEffect(() => {
-    window.api.invoke("setting:general:getImageCacheSize").then((size) => {
+    void window.api.invoke("setting:general:getImageCacheSize").then((size) => {
       setImageCacheSize(size);
     });
   }, []);
@@ -210,7 +210,7 @@ function RouteComponent() {
   }
 
   return (
-    <main className="flex-1 flex flex-col mx-auto p-4 space-y-6 w-full select-none">
+    <main className="mx-auto flex w-full flex-1 flex-col space-y-6 p-4 select-none">
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium">
@@ -236,7 +236,7 @@ function RouteComponent() {
           <Separator />
 
           <div className="flex items-center justify-between space-x-3">
-            <div className="space-y-0.5 flex-1">
+            <div className="flex-1 space-y-0.5">
               <span className="text-sm font-medium">
                 {t("page.setting.gen.application.autoUpdate")}
               </span>
@@ -248,7 +248,7 @@ function RouteComponent() {
                 items={autoUpdateModeOptions}
                 onValueChange={(val) => {
                   if (val === null) return;
-                  update("autoUpdateMode", val);
+                  void update("autoUpdateMode", val);
                 }}
               >
                 <SelectTrigger className="w-42">
@@ -270,7 +270,7 @@ function RouteComponent() {
           <Separator />
 
           <div className="flex items-center justify-between gap-4">
-            <div className="space-y-0.5 flex-1">
+            <div className="flex-1 space-y-0.5">
               <span className="text-sm font-medium">
                 {t("page.setting.gen.application.updateStatus")}
               </span>
@@ -328,7 +328,7 @@ function RouteComponent() {
               {t("page.setting.gen.application.runInBackgroundDisableConfirmTitle")}
             </AlertDialogTitle>
           </AlertDialogHeader>
-          <p className="text-muted-foreground *:[a]:hover:text-foreground text-sm text-pretty *:[a]:underline *:[a]:underline-offset-3">
+          <p className="text-sm text-pretty text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground">
             {t("page.setting.gen.application.runInBackgroundDisableConfirmDescription")}
           </p>
           <AlertDialogFooter className="flex flex-row justify-end">
@@ -353,7 +353,7 @@ function RouteComponent() {
                 items={languageOptions}
                 onValueChange={(val) => {
                   if (val === null) return;
-                  update("language", val);
+                  void update("language", val);
                 }}
               >
                 <SelectTrigger className="w-full">
@@ -404,7 +404,7 @@ function RouteComponent() {
                 items={startPageOptions}
                 onValueChange={(val) => {
                   if (val === null) return;
-                  update("defaultStartPage", val);
+                  void update("defaultStartPage", val);
                 }}
               >
                 <SelectTrigger className="w-full">
@@ -435,7 +435,7 @@ function RouteComponent() {
                 items={titlebarStyleOptions}
                 onValueChange={(val) => {
                   if (val === null) return;
-                  update("titlebarStyle", val);
+                  void update("titlebarStyle", val);
                 }}
               >
                 <SelectTrigger className="w-full">
@@ -462,7 +462,7 @@ function RouteComponent() {
                 items={logLevelOptions}
                 onValueChange={(val) => {
                   if (val === null) return;
-                  update("logLevel", val);
+                  void update("logLevel", val);
                 }}
               >
                 <SelectTrigger className="w-full">
@@ -510,8 +510,8 @@ function RouteComponent() {
                 disabled={imageCacheSize === null}
                 onClick={() => {
                   setImageCacheSize(null);
-                  window.api.invoke("setting:general:clearImageCache").then(() => {
-                    window.api.invoke("setting:general:getImageCacheSize").then((size) => {
+                  void window.api.invoke("setting:general:clearImageCache").then(() => {
+                    void window.api.invoke("setting:general:getImageCacheSize").then((size) => {
                       setImageCacheSize(size);
                     });
                   });
