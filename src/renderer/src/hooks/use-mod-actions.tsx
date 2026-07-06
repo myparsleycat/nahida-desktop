@@ -29,11 +29,13 @@ import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
 import { isNteImporter } from "@shared/mod";
+import { toErrorMessage } from "@shared/utils";
 import type { QueryClient } from "@tanstack/react-query";
 import { useRouteContext } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
 import { ModFixRunnerDialogs } from "../components/mod/mod-fix-runner-dialogs";
 import { pasteModPreview } from "../components/mod/paste-preview";
 import { TextureResizeDialog } from "../components/mod/texture-resize-dialog";
@@ -205,7 +207,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
       });
       setShowModelViewer(true);
     } catch (error) {
-      const rawMessage = error instanceof Error ? error.message : String(error);
+      const rawMessage = toErrorMessage(error);
       const lastErrorIndex = rawMessage.lastIndexOf("Error");
       const message =
         lastErrorIndex !== -1
@@ -373,7 +375,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
           toast.success(t("page.mod.toast.manual-subgroup-success"));
         })
         .catch((error) => {
-          toast.error(error instanceof Error ? error.message : String(error));
+          toast.error(toErrorMessage(error));
         });
     },
     runPreset: async (mod, presetId) => {

@@ -1,12 +1,17 @@
+import type { DownloadParams } from "@main/lib/download";
+import type { UploadParams } from "@main/lib/upload";
 import { getAggregateTransferProgress, isOpenTransferQueueStatus } from "@shared/transfer-progress";
 import type { Transfer, TransferData, TransferStatus, TransferWithoutData } from "@shared/types";
 import { throttle } from "es-toolkit";
+
 import type { NahidaDesktop } from "..";
+
+export type TransferParams = UploadParams | DownloadParams;
 
 export interface LocalTransfer extends Transfer {
     currentId?: string;
     abortController: AbortController;
-    restartParams?: any;
+    restartParams?: TransferParams;
     completedFileUuids?: Set<string>;
     createdOrder: number;
     sessionStartBytes: number;
@@ -188,7 +193,7 @@ export class TransferService {
         return transfer.completedFileUuids.size;
     }
 
-    public markFileFailed(pid: string, fileUuid: string) {
+    public markFileFailed(pid: string) {
         const transfer = this.transfers.find((t) => t.pid === pid);
         if (!transfer) return;
 
@@ -213,7 +218,7 @@ export class TransferService {
         data: TransferData;
         abortController: AbortController;
         name: string;
-        restartParams?: any;
+        restartParams?: TransferParams;
         initialStatus: TransferStatus;
         path?: string;
     }) {
@@ -283,7 +288,7 @@ export class TransferService {
 
         const transfer = this.getTransferByPID(pid);
         if (transfer && transfer.status === "pending") {
-            this.processQueue();
+            void this.processQueue();
         }
     }
 
@@ -300,11 +305,9 @@ export class TransferService {
 
         try {
             await runner();
-        } catch (error) {
-            // runner에서 처리함
         } finally {
             this.isQueueRunning = false;
-            this.processQueue();
+            void this.processQueue();
         }
     }
 
@@ -334,7 +337,7 @@ export class TransferService {
         transfer.failedFiles = 0;
         transfer.error = undefined;
         this.emitUpdate();
-        this.processQueue();
+        void this.processQueue();
     }
 
     public async updateTransfer(

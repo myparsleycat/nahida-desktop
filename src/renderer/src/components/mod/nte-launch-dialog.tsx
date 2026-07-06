@@ -11,6 +11,7 @@ import { Field, FieldLabel } from "@renderer/components/ui/field";
 import { Input } from "@renderer/components/ui/input";
 import { useGameMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModStore } from "@renderer/store/mod";
+import { toErrorMessage } from "@shared/utils";
 import { FolderOpen } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -56,7 +57,7 @@ export function NteLaunchDialog() {
       await window.api.invoke("mod:startNteLauncher", selectedGame);
       handleOpenChange(false);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = toErrorMessage(error);
 
       if (errorMessage.includes("NTE_LAUNCHER_PATH_NOT_FOUND")) {
         toast.error(t("page.mod.hooks.use-mod-mutations.start-nte-launcher.not-found"));
@@ -92,10 +93,8 @@ export function NteLaunchDialog() {
         </Field>
 
         <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="outline" disabled={isSubmitting}>
-              {t("g.cancel")}
-            </Button>
+          <DialogClose render={<Button type="button" variant="outline" disabled={isSubmitting} />}>
+            {t("g.cancel")}
           </DialogClose>
           <Button
             type="button"

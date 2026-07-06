@@ -938,7 +938,7 @@
         "nte_unsupported": "NTE unsupported",
         "nte_tooltip": "The Importer for this game is not yet supported.",
         "round_title": "Round {{round}} · batch {{batchSize}} · {{remaining}} remaining",
-        "round_description": "Run the game with the mods below disabled, then choose whether the issue is fixed.",
+        "round_description": "The mods below have been disabled. Press F10 to reload and check if the issue is resolved.",
         "disabled_count": "{{count}} disabled",
         "undo": "Undo last round",
         "still_broken": "Still broken",

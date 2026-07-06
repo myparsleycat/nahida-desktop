@@ -1,5 +1,6 @@
 import { motion, type Variants } from "framer-motion";
 import { Loader2Icon } from "lucide-react";
+
 import Alice1619 from "@/renderer/assets/img/1619/1619-alice.gif";
 
 export function LoaderSpinner() {
@@ -44,12 +45,4 @@ export const BarLoader = () => {
 
 export function AliceLoader() {
   return <img src={Alice1619} height={250} width={250} />;
-}
-
-export function RandomLoader() {
-  const components = [<AliceLoader />];
-
-  const randomIndex = Math.floor(Math.random() * components.length);
-
-  return components[randomIndex];
 }

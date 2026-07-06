@@ -1,11 +1,15 @@
 import { spawn } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
+
 import type { FolderGroup, GameConfig, ModInfo, NteBootstrapProgress } from "@shared/types";
+import { toErrorMessage } from "@shared/utils";
 import fg from "fast-glob";
 import fse from "fs-extra";
 import { nanoid } from "nanoid";
+
 import type { NahidaDesktop } from "../..";
+
 import {
     DISABLED_PREFIX_REGEX,
     isSameOrChildPath,
@@ -382,8 +386,7 @@ export async function ensureNteBootstrapFiles(
         if (installTracker.hasWrittenFiles()) {
             await installTracker.rollback();
         }
-        const message = error instanceof Error ? error.message : String(error);
-        onProgress({ phase: "failed", progress: null, message });
+        onProgress({ phase: "failed", progress: null, message: toErrorMessage(error) });
         throw error;
     } finally {
         await fse.remove(tempDir).catch(() => {});
@@ -525,8 +528,7 @@ async function downloadAndExtract(
     try {
         await desktop.service.archive.extract(zipPath, extractDir);
     } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        throw new Error(`NTE_BOOTSTRAP_EXTRACT_FAILED:${archiveName}: ${detail}`);
+        throw new Error(`NTE_BOOTSTRAP_EXTRACT_FAILED:${archiveName}: ${toErrorMessage(error)}`);
     }
 }
 

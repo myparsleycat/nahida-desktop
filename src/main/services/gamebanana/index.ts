@@ -1,9 +1,12 @@
 import { focus, getDefaultWebPreferences } from "@main/windows/utils";
 import { getImporterForGameBananaId, NTE_GAMEBANANA_ID } from "@shared/mod";
+import { toErrorMessage } from "@shared/utils";
 import { BrowserWindow } from "electron";
 import ky, { type Input, type Options } from "ky";
 import { z, ZodError, type ZodType } from "zod";
+
 import type { NahidaDesktop } from "@/main";
+
 import {
     GameBananaLoginRequiredSchema,
     GameProfileSchema,
@@ -443,7 +446,7 @@ export class GameBananaService {
                     });
                 } catch (error) {
                     this.desktop.logger.warn(
-                        `Unexpected GameBanana logout response: ${error instanceof Error ? error.message : String(error)}`,
+                        `Unexpected GameBanana logout response: ${toErrorMessage(error)}`,
                         "GameBananaService",
                     );
                 }

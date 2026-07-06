@@ -1,4 +1,5 @@
 import { isArrayBuffer } from "node:util/types";
+
 import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
 import { appVersion } from "@main/const";
@@ -6,6 +7,7 @@ import { decode } from "cbor-x";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
+
 import { desktop } from "..";
 
 const uploadTypes = z.enum(["live", "hui"]);
@@ -72,11 +74,11 @@ export const app = new Hono()
     })
     .get("/ping", (ctx) => ctx.text("pong"));
 
-const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
+const nodeWs = createNodeWebSocket({ app });
 
 app.get(
     "/ws",
-    upgradeWebSocket(async (_ctx) => {
+    nodeWs.upgradeWebSocket(async (_ctx) => {
         return {
             onMessage: async (event, ws) => {
                 if (!event.data) {
@@ -136,5 +138,5 @@ export async function startServer() {
         port: 1027,
     });
 
-    injectWebSocket(server);
+    nodeWs.injectWebSocket(server);
 }

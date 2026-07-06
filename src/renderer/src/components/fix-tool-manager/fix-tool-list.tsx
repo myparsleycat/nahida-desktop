@@ -11,8 +11,10 @@ import path from "path-browserify";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
 import execIcon from "@/renderer/assets/img/document-executable-svgrepo-com.svg";
 import pythonIcon from "@/renderer/assets/img/python-svgrepo-com.svg";
+
 import { Script } from "../tools/fix-tool-manger";
 
 type FixToolListProps = {
@@ -96,7 +98,7 @@ export function FixToolList({ insertedPresetTools, onAddScript }: FixToolListPro
         });
 
         await Promise.allSettled(savePromises);
-        queryClient.invalidateQueries({ queryKey: ["scripts"] });
+        void queryClient.invalidateQueries({ queryKey: ["scripts"] });
       }
     }
   };
@@ -107,11 +109,11 @@ export function FixToolList({ insertedPresetTools, onAddScript }: FixToolListPro
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`border rounded-lg bg-card transition-all overflow-hidden duration-200 flex flex-col h-full min-h-0 ${
+      className={`flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-card transition-all duration-200 ${
         isDragOver ? "border-primary bg-primary/5 ring-2 ring-primary/20" : ""
       }`}
     >
-      <div className="flex flex-col gap-2 p-3 border-b">
+      <div className="flex flex-col gap-2 border-b p-3">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-base font-semibold">
@@ -123,14 +125,14 @@ export function FixToolList({ insertedPresetTools, onAddScript }: FixToolListPro
           </div>
           {isDragOver && (
             <Badge className="animate-pulse">
-              <Upload className="h-3 w-3 mr-1" />
+              <Upload className="mr-1 h-3 w-3" />
               {t("page.tools.fix-tool-manager.builder.left.dropToAdd")}
             </Badge>
           )}
         </div>
 
         <div className="relative shrink-0">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="text"
             placeholder="Search scripts..."
@@ -145,14 +147,14 @@ export function FixToolList({ insertedPresetTools, onAddScript }: FixToolListPro
         <div className="flex flex-col space-y-2 p-3">
           {!filteredScripts || filteredScripts.length === 0 ? (
             <div
-              className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
+              className={`rounded-lg border-2 border-dashed p-12 text-center transition-colors ${
                 isDragOver ? "border-primary bg-primary/10" : "border-border"
               }`}
             >
-              <p className="text-sm text-muted-foreground font-medium">
+              <p className="text-sm font-medium text-muted-foreground">
                 {t("page.tools.fix-tool-manager.builder.left.noScripts.title")}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {t("page.tools.fix-tool-manager.builder.left.noScripts.description")}
               </p>
             </div>
@@ -167,17 +169,17 @@ export function FixToolList({ insertedPresetTools, onAddScript }: FixToolListPro
                 <Reorder.Item
                   key={script.id}
                   value={script}
-                  className="group grid grid-cols-[1fr_auto_auto] items-center gap-2 p-3 rounded-lg border border-border bg-card hover:border-accent/40 hover:bg-card/80 transition-colors"
+                  className="group grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-lg border border-border bg-card p-3 transition-colors hover:border-accent/40 hover:bg-card/80"
                 >
-                  <div className="flex flex-row space-x-2 items-center min-w-0">
+                  <div className="flex min-w-0 flex-row items-center space-x-2">
                     {script.type === "python" ? (
-                      <img src={pythonIcon} alt="python" className="w-6 h-6" />
+                      <img src={pythonIcon} alt="python" className="h-6 w-6" />
                     ) : (
-                      <img src={execIcon} alt="python" className="w-6 h-6 dark:invert" />
+                      <img src={execIcon} alt="python" className="h-6 w-6 dark:invert" />
                     )}
 
-                    <Tooltip disableHoverableContent={true}>
-                      <TooltipTrigger className="font-medium text-sm text-foreground truncate min-w-0">
+                    <Tooltip disableHoverablePopup>
+                      <TooltipTrigger className="min-w-0 truncate text-sm font-medium text-foreground">
                         {script.name}
                       </TooltipTrigger>
                       <TooltipContent>

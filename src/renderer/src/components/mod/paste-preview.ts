@@ -92,7 +92,7 @@ export async function pasteModPreview({
                 });
                 promise
                     .then(() => {
-                        queryClient.invalidateQueries({
+                        void queryClient.invalidateQueries({
                             queryKey: ["modGroup", selectedGroupPath],
                         });
                     })
@@ -113,7 +113,9 @@ export async function pasteModPreview({
             });
             promise
                 .then(() => {
-                    queryClient.invalidateQueries({ queryKey: ["modGroup", selectedGroupPath] });
+                    void queryClient.invalidateQueries({
+                        queryKey: ["modGroup", selectedGroupPath],
+                    });
                 })
                 .catch((error) => {
                     console.error(error);
@@ -156,7 +158,7 @@ export async function pasteModPreview({
                     });
                     promise
                         .then(() => {
-                            queryClient.invalidateQueries({
+                            void queryClient.invalidateQueries({
                                 queryKey: ["modGroup", selectedGroupPath],
                             });
                         })

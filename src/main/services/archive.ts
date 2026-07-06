@@ -1,5 +1,7 @@
 import { extractArchive, hasSingleTopLevelDirectory } from "@native/extractor";
+import { toErrorMessage } from "@shared/utils";
 import fse from "fs-extra";
+
 import type { NahidaDesktop } from "..";
 
 interface ExtractOptions {
@@ -7,7 +9,7 @@ interface ExtractOptions {
 }
 
 export class ArchiveService {
-    constructor(desktop: NahidaDesktop) {}
+    constructor(_desktop: NahidaDesktop) {}
 
     async hasSingleTopLevelDirectory(archivePath: string) {
         return await hasSingleTopLevelDirectory(archivePath);
@@ -38,8 +40,8 @@ export class ArchiveService {
             );
 
             return extractedPath;
-        } catch (error: any) {
-            throw new Error(`Failed to extract archive: ${error.message}`);
+        } catch (error) {
+            throw new Error(`Failed to extract archive: ${toErrorMessage(error)}`);
         }
     }
 }

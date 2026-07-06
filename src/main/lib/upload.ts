@@ -1,8 +1,10 @@
 import path from "node:path";
+
 import { eden, eden2url } from "@main/client";
 import sha256PiscinaWorker from "@main/worker/drive/sha256-piscina.worker?modulePath";
 import { collectFiles } from "@native/fs";
 import type { Content } from "@shared/types";
+import { toErrorMessage } from "@shared/utils";
 import { chunk, groupBy, orderBy, retry, sumBy } from "es-toolkit";
 import { fileTypeFromBuffer } from "file-type";
 import fse from "fs-extra";
@@ -10,6 +12,7 @@ import ky from "ky";
 import { nanoid } from "nanoid";
 import PQueue from "p-queue";
 import Piscina from "piscina";
+
 import type { NahidaDesktop } from "..";
 
 const CHUNK_SIZE = 100;
@@ -717,7 +720,7 @@ export class UploadLib {
 
                 if (signal?.aborted) break;
 
-                this.fileQueue.add(async () => {
+                void this.fileQueue.add(async () => {
                     if (signal?.aborted) return;
                     try {
                         await this.uploadFile(file, signal, (bytes) => {
@@ -764,7 +767,7 @@ export class UploadLib {
 
                     if (result.error) {
                         throw new Error(
-                            `[create_files chunk failed] ${result.error.value.toString()}`,
+                            `[create_files chunk failed] ${toErrorMessage(result.error.value)}`,
                         );
                     }
 
@@ -863,7 +866,7 @@ export class UploadLib {
         try {
             await this.syncQueueConcurrency();
 
-            this.desktop.service.transfer.updateTransfer(pid, {
+            void this.desktop.service.transfer.updateTransfer(pid, {
                 status: "preparing",
                 transferedFiles: 0,
             });
@@ -897,7 +900,7 @@ export class UploadLib {
                 finalFiles = await this.calculateHashes(
                     parentIdProcessedFiles,
                     (count) => {
-                        this.desktop.service.transfer.updateTransfer(pid, {
+                        void this.desktop.service.transfer.updateTransfer(pid, {
                             transferedFiles: count,
                         });
                     },
@@ -925,7 +928,7 @@ export class UploadLib {
             let currentUploadedCount = alreadyUploadedCount;
 
             const updateUI = () => {
-                this.desktop.service.transfer.updateTransfer(pid, {
+                void this.desktop.service.transfer.updateTransfer(pid, {
                     status: "progress",
                     transferedSize: currentUploadedBytes,
                     transferedFiles: currentUploadedCount,
@@ -957,7 +960,7 @@ export class UploadLib {
 
             if (abortController.signal.aborted) return;
 
-            this.desktop.service.transfer.updateTransfer(pid, {
+            void this.desktop.service.transfer.updateTransfer(pid, {
                 status: "completed",
                 transferedSize: totalSize,
                 progress: 100,
@@ -965,9 +968,9 @@ export class UploadLib {
         } catch (err) {
             if (abortController.signal.aborted) return;
             this.desktop.logger.error(err, "UploadLib:executeUpload");
-            this.desktop.service.transfer.updateTransfer(pid, {
+            void this.desktop.service.transfer.updateTransfer(pid, {
                 status: "error",
-                error: err instanceof Error ? err.message : String(err),
+                error: toErrorMessage(err),
             });
             throw err;
         } finally {

@@ -101,7 +101,7 @@ function renderReleaseNoteLine(line: string, lineIndex: number) {
 
 function ReleaseNotesContent({ text }: { text: string }) {
   return (
-    <div className="px-4 py-3 text-sm whitespace-pre-wrap break-words">
+    <div className="px-4 py-3 text-sm break-words whitespace-pre-wrap">
       {text.split("\n").map((line, index) => {
         const bulletMatch = line.match(RELEASE_NOTE_BULLET_PATTERN);
         if (bulletMatch) {
@@ -164,7 +164,7 @@ export function UpdateAlertDialog() {
     }
 
     isDismissingRef.current = true;
-    window.api.invoke("updater:dismissUpdateDialog").finally(() => {
+    void window.api.invoke("updater:dismissUpdateDialog").finally(() => {
       isDismissingRef.current = false;
     });
   };
@@ -210,7 +210,7 @@ export function UpdateAlertDialog() {
             onClick={() => {
               skipNextDismissRef.current = true;
               setShouldPromptForUpdate(false);
-              window.api.invoke("updater:installUpdate");
+              void window.api.invoke("updater:installUpdate");
             }}
           >
             {t("updater.toast.available.action")}

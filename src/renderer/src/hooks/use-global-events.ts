@@ -2,6 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
 import { useGlobalStore } from "../store/global";
 
 export function useGlobalEvents(
@@ -34,7 +35,7 @@ export function useGlobalEvents(
         setListeners(new Map(listeners.set("fn:toast", removeToastListener)));
 
         const removeNaviListener = window.api.on("fn:navi", (path) => {
-            navi({ to: path });
+            void navi({ to: path });
         });
         setListeners(new Map(listeners.set("fn:navi", removeNaviListener)));
 
@@ -51,7 +52,7 @@ export function useGlobalEvents(
         setListeners(new Map(listeners.set("auth:update", removeAuthListener)));
 
         const removeLanguageListener = window.api.on("language:update", (language) => {
-            i18n.changeLanguage(language);
+            void i18n.changeLanguage(language);
         });
         setListeners(new Map(listeners.set("language:update", removeLanguageListener)));
 

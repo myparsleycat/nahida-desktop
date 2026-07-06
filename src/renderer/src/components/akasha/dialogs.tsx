@@ -383,15 +383,16 @@ export function DeleteItemsDialog() {
   return (
     <AlertDialog
       open={deleteItemsDialog.open}
-      onOpenChange={(v) => setOpen("deleteItemsDialog", v)}
+      onOpenChange={(nextOpen, eventDetails) => {
+        if (deleteMutation.isPending && !nextOpen) {
+          eventDetails.cancel();
+          return;
+        }
+
+        setOpen("deleteItemsDialog", nextOpen);
+      }}
     >
-      <AlertDialogContent
-        onEscapeKeyDown={(e) => {
-          if (deleteMutation.isPending) {
-            e.preventDefault();
-          }
-        }}
-      >
+      <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{t("page.drive.dialog.delete_items.title")}</AlertDialogTitle>
           <AlertDialogDescription>
@@ -437,13 +438,13 @@ export function ConflictNameDialog() {
           <AlertDialogDescription>
             {t("page.drive.dialog.conflict_name.description", { count: conflicts.length })}
           </AlertDialogDescription>
-          <div className="text-sm mt-2">
+          <div className="mt-2 text-sm">
             {t("page.drive.dialog.conflict_name.option_suffix")}
             <br />
             {t("page.drive.dialog.conflict_name.option_skip")}
 
             {preview.length > 0 && (
-              <div className="w-full text-left mt-2 text-xs text-muted-foreground">
+              <div className="mt-2 w-full text-left text-xs text-muted-foreground">
                 <p>{t("page.drive.dialog.conflict_name.preview_label")}</p>
                 <p>{preview.join(", ")}</p>
                 {hiddenCount > 0 && (

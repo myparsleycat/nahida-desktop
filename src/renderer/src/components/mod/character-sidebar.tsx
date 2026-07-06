@@ -26,12 +26,14 @@ import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
 import { useSidebarLayoutSetting } from "@renderer/hooks/use-settings";
 import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
+import { toErrorMessage } from "@shared/utils";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2Icon, Search } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
 import { ScrollArea } from "../ui/scroll-area";
 import { CharacterSidebarGrid } from "./character-sidebar-grid";
 import { CharacterSidebarRow } from "./character-sidebar-row";
@@ -147,7 +149,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
       ]);
     },
     onError: (error) => {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = toErrorMessage(error);
       if (message.includes("INVALID_WINDOWS_FILENAME")) {
         toast.error(t("page.mod.dialog.create-folder.#.invalid-name"));
         return;
@@ -344,7 +346,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
           );
         })
         .catch((error) => {
-          toast.error(error instanceof Error ? error.message : String(error));
+          toast.error(toErrorMessage(error));
         });
     },
     [queryClient, selectedGame, selectedGroup?.path, setSelectedGroup, t],
@@ -371,7 +373,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
       <div className="flex h-full flex-col">
         <div className="h-12 p-2">
           <div className="relative">
-            <Search className="absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="absolute top-1/2 right-2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               id="character-search-input"
               className="h-8 pr-8 text-sm"

@@ -66,7 +66,7 @@ function RouteComponent() {
   const [isUpdaterActionPending, setIsUpdaterActionPending] = useState(false);
 
   useEffect(() => {
-    window.api.invoke("setting:general:getImageCacheSize").then((size) => {
+    void window.api.invoke("setting:general:getImageCacheSize").then((size) => {
       setImageCacheSize(size);
     });
   }, []);
@@ -117,6 +117,33 @@ function RouteComponent() {
     setIsRunInBackgroundConfirmOpen(false);
     await update("runInBackground", false);
   };
+
+  const languageOptions = [
+    { value: "ko", label: "한국어" },
+    { value: "en", label: "English" },
+    { value: "ja", label: "日本語" },
+    { value: "zh", label: "中文" },
+  ] as const;
+
+  const themeOptions = [
+    { value: "system", label: t("page.setting.gen.theme.system") },
+    { value: "light", label: t("page.setting.gen.theme.light") },
+    { value: "dark", label: t("page.setting.gen.theme.dark") },
+  ] as const;
+
+  const titlebarStyleOptions = [
+    { value: "modern", label: t("page.setting.gen.titlebarStyle.modern") },
+    { value: "native", label: t("page.setting.gen.titlebarStyle.native") },
+  ] as const;
+
+  const logLevelOptions = [
+    { value: "trace", label: "Trace" },
+    { value: "debug", label: "Debug" },
+    { value: "info", label: "Info" },
+    { value: "warn", label: "Warn" },
+    { value: "error", label: "Error" },
+    { value: "fatal", label: "Fatal" },
+  ] as const;
 
   const autoUpdateModeOptions: Array<{
     value: AutoUpdateMode;
@@ -183,7 +210,7 @@ function RouteComponent() {
   }
 
   return (
-    <main className="flex-1 flex flex-col mx-auto p-4 space-y-6 w-full select-none">
+    <main className="mx-auto flex w-full flex-1 flex-col space-y-6 p-4 select-none">
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium">
@@ -209,7 +236,7 @@ function RouteComponent() {
           <Separator />
 
           <div className="flex items-center justify-between space-x-3">
-            <div className="space-y-0.5 flex-1">
+            <div className="flex-1 space-y-0.5">
               <span className="text-sm font-medium">
                 {t("page.setting.gen.application.autoUpdate")}
               </span>
@@ -218,12 +245,16 @@ function RouteComponent() {
             <div className="flex items-center gap-4">
               <Select
                 value={settings.autoUpdateMode}
-                onValueChange={(val: AutoUpdateMode) => update("autoUpdateMode", val)}
+                items={autoUpdateModeOptions}
+                onValueChange={(val) => {
+                  if (val === null) return;
+                  void update("autoUpdateMode", val);
+                }}
               >
                 <SelectTrigger className="w-42">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
+                <SelectContent finalFocus={false}>
                   <SelectGroup>
                     {autoUpdateModeOptions.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
@@ -239,7 +270,7 @@ function RouteComponent() {
           <Separator />
 
           <div className="flex items-center justify-between gap-4">
-            <div className="space-y-0.5 flex-1">
+            <div className="flex-1 space-y-0.5">
               <span className="text-sm font-medium">
                 {t("page.setting.gen.application.updateStatus")}
               </span>
@@ -297,7 +328,7 @@ function RouteComponent() {
               {t("page.setting.gen.application.runInBackgroundDisableConfirmTitle")}
             </AlertDialogTitle>
           </AlertDialogHeader>
-          <p className="text-muted-foreground *:[a]:hover:text-foreground text-sm text-pretty *:[a]:underline *:[a]:underline-offset-3">
+          <p className="text-sm text-pretty text-muted-foreground *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-foreground">
             {t("page.setting.gen.application.runInBackgroundDisableConfirmDescription")}
           </p>
           <AlertDialogFooter className="flex flex-row justify-end">
@@ -319,17 +350,22 @@ function RouteComponent() {
               <Select
                 name="language"
                 value={settings.language}
-                onValueChange={(val) => update("language", val)}
+                items={languageOptions}
+                onValueChange={(val) => {
+                  if (val === null) return;
+                  void update("language", val);
+                }}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder={t("page.setting.gen.language.select")} />
                 </SelectTrigger>
-                <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
+                <SelectContent finalFocus={false}>
                   <SelectGroup>
-                    <SelectItem value="ko">한국어</SelectItem>
-                    <SelectItem value="en">English</SelectItem>
-                    <SelectItem value="ja">日本語</SelectItem>
-                    <SelectItem value="zh">中文</SelectItem>
+                    {languageOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -338,15 +374,22 @@ function RouteComponent() {
               <label className="text-sm font-medium" htmlFor="theme">
                 {t("page.setting.gen.theme.title")}
               </label>
-              <Select name="theme" value={theme} onValueChange={(v) => setTheme(v as Theme)}>
+              <Select
+                name="theme"
+                value={theme}
+                items={themeOptions}
+                onValueChange={(v) => setTheme(v as Theme)}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder={t("page.setting.gen.theme.select")} />
                 </SelectTrigger>
-                <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
+                <SelectContent finalFocus={false}>
                   <SelectGroup>
-                    <SelectItem value="system">{t("page.setting.gen.theme.system")}</SelectItem>
-                    <SelectItem value="light">{t("page.setting.gen.theme.light")}</SelectItem>
-                    <SelectItem value="dark">{t("page.setting.gen.theme.dark")}</SelectItem>
+                    {themeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -358,12 +401,16 @@ function RouteComponent() {
               <Select
                 name="startPage"
                 value={selectedStartPage}
-                onValueChange={(val) => update("defaultStartPage", val)}
+                items={startPageOptions}
+                onValueChange={(val) => {
+                  if (val === null) return;
+                  void update("defaultStartPage", val);
+                }}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder={t("page.setting.gen.startPage.select")} />
                 </SelectTrigger>
-                <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
+                <SelectContent finalFocus={false}>
                   <SelectGroup>
                     {startPageOptions.map((option) => (
                       <SelectItem
@@ -385,19 +432,22 @@ function RouteComponent() {
               <Select
                 name="titlebarStyle"
                 value={settings.titlebarStyle}
-                onValueChange={(val) => update("titlebarStyle", val)}
+                items={titlebarStyleOptions}
+                onValueChange={(val) => {
+                  if (val === null) return;
+                  void update("titlebarStyle", val);
+                }}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder={t("page.setting.gen.titlebarStyle.select")} />
                 </SelectTrigger>
-                <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
+                <SelectContent finalFocus={false}>
                   <SelectGroup>
-                    <SelectItem value="modern">
-                      {t("page.setting.gen.titlebarStyle.modern")}
-                    </SelectItem>
-                    <SelectItem value="native">
-                      {t("page.setting.gen.titlebarStyle.native")}
-                    </SelectItem>
+                    {titlebarStyleOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -409,19 +459,22 @@ function RouteComponent() {
               <Select
                 name="logLevel"
                 value={settings.logLevel}
-                onValueChange={(val) => update("logLevel", val)}
+                items={logLevelOptions}
+                onValueChange={(val) => {
+                  if (val === null) return;
+                  void update("logLevel", val);
+                }}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder={t("page.setting.gen.logLevel.select")} />
                 </SelectTrigger>
-                <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
+                <SelectContent finalFocus={false}>
                   <SelectGroup>
-                    <SelectItem value="trace">Trace</SelectItem>
-                    <SelectItem value="debug">Debug</SelectItem>
-                    <SelectItem value="info">Info</SelectItem>
-                    <SelectItem value="warn">Warn</SelectItem>
-                    <SelectItem value="error">Error</SelectItem>
-                    <SelectItem value="fatal">Fatal</SelectItem>
+                    {logLevelOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -457,8 +510,8 @@ function RouteComponent() {
                 disabled={imageCacheSize === null}
                 onClick={() => {
                   setImageCacheSize(null);
-                  window.api.invoke("setting:general:clearImageCache").then(() => {
-                    window.api.invoke("setting:general:getImageCacheSize").then((size) => {
+                  void window.api.invoke("setting:general:clearImageCache").then(() => {
+                    void window.api.invoke("setting:general:getImageCacheSize").then((size) => {
                       setImageCacheSize(size);
                     });
                   });

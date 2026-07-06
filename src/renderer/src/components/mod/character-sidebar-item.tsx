@@ -166,68 +166,66 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <div
-          onDragEnter={handleDragEnter}
-          onDragLeave={handleDragLeave}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-          className={cn(
-            "relative",
-            isGridLayout ? "min-w-0 overflow-visible" : "w-full overflow-hidden",
-          )}
-        >
-          {isDragOver && (
-            <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center border-2 border-dashed border-primary bg-background/80 backdrop-blur-sm">
-              <span className="text-sm font-bold">
-                {t("page.mod.character-sidebar.add-to-character", { name: group.name })}
-              </span>
-            </div>
-          )}
-
-          <button
-            ref={ref}
-            type="button"
-            onClick={handlePrimaryClick}
+      <ContextMenuTrigger
+        render={
+          <div
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
             className={cn(
-              "w-full text-left",
-              itemClassName,
-              depth > 0 && nestedItemClassName,
-              isSelected && selectedItemClassName,
+              "relative",
+              isGridLayout ? "min-w-0 overflow-visible" : "w-full overflow-hidden",
             )}
-            style={itemStyle}
-          >
-            {isGridLayout ? (
-              <CharacterSidebarItemGrid
-                group={group}
-                depth={depth}
-                parentGroupName={parentGroupName}
-                previewCacheKey={previewCacheKey}
-              />
-            ) : (
-              <CharacterSidebarItemRow
-                group={group}
-                depth={depth}
-                previewCacheKey={previewCacheKey}
-              />
-            )}
-          </button>
-
-          {isGridLayout && (
-            <span
-              className={cn(
-                "absolute right-1 top-1 z-10 h-7 w-7 rounded-full pointer-events-none",
-                buttonVariants({ variant: "ghost", size: "icon" }),
-              )}
-            >
-              {isExpanded ? (
-                <ChevronDown className="size-4" />
-              ) : (
-                <ChevronRight className="size-4" />
-              )}
+          />
+        }
+      >
+        {isDragOver && (
+          <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center border-2 border-dashed border-primary bg-background/80 backdrop-blur-sm">
+            <span className="text-sm font-bold">
+              {t("page.mod.character-sidebar.add-to-character", { name: group.name })}
             </span>
+          </div>
+        )}
+
+        <button
+          ref={ref}
+          type="button"
+          onClick={handlePrimaryClick}
+          className={cn(
+            "w-full text-left",
+            itemClassName,
+            depth > 0 && nestedItemClassName,
+            isSelected && selectedItemClassName,
           )}
-        </div>
+          style={itemStyle}
+        >
+          {isGridLayout ? (
+            <CharacterSidebarItemGrid
+              group={group}
+              depth={depth}
+              parentGroupName={parentGroupName}
+              previewCacheKey={previewCacheKey}
+            />
+          ) : (
+            <CharacterSidebarItemRow
+              group={group}
+              depth={depth}
+              previewCacheKey={previewCacheKey}
+            />
+          )}
+        </button>
+
+        {isGridLayout && (
+          <span
+            className={cn(
+              "absolute right-1 top-1 z-10 h-7 w-7 rounded-full pointer-events-none",
+              buttonVariants({ variant: "ghost", size: "icon" }),
+            )}
+          >
+            {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+          </span>
+        )}
       </ContextMenuTrigger>
 
       <ContextMenuContent className="w-56">

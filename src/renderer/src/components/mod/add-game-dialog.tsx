@@ -73,6 +73,10 @@ export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGame
   const enabledImporters = xxmiData?.enabledImporters ?? [];
   const importers = [...enabledImporters, { key: NTE_IMPORTER_KEY }];
   const isXXMIConfigured = !!xxmiData?.xxmiPath;
+  const importerLabels: Record<string, string> = {
+    [NO_IMPORTER_VALUE]: t("page.mod.dialog.edit-game.no_importer"),
+    ...Object.fromEntries(importers.map((importer) => [importer.key, importer.key])),
+  };
 
   const form = useForm({
     defaultValues: {
@@ -200,10 +204,8 @@ export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGame
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="icon">
-          <Plus className="size-4" />
-        </Button>
+      <DialogTrigger render={<Button variant="outline" size="icon" />}>
+        <Plus className="size-4" />
       </DialogTrigger>
       <DialogContent className="w-100">
         <DialogHeader>
@@ -351,12 +353,17 @@ export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGame
                 <FieldLabel>{t("page.mod.dialog.edit-game.importer_label")}</FieldLabel>
                 <Select
                   value={field.state.value}
-                  onValueChange={(value) => handleImporterChange(value, field.handleChange)}
+                  onValueChange={(value) => {
+                    if (value === null) return;
+                    handleImporterChange(value, field.handleChange);
+                  }}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder={t("g.select")} />
+                    <SelectValue placeholder={t("g.select")}>
+                      {(value) => importerLabels[value] ?? value}
+                    </SelectValue>
                   </SelectTrigger>
-                  <SelectContent aria-describedby={undefined} position="popper">
+                  <SelectContent aria-describedby={undefined}>
                     <SelectGroup>
                       <SelectItem value={NO_IMPORTER_VALUE}>
                         {t("page.mod.dialog.edit-game.no_importer")}
@@ -391,10 +398,8 @@ export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGame
           />
         </form>
         <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="outline">
-              {t("g.cancel")}
-            </Button>
+          <DialogClose render={<Button type="button" variant="outline" />}>
+            {t("g.cancel")}
           </DialogClose>
           <form.Subscribe
             selector={(state) => [state.canSubmit, state.isSubmitting]}

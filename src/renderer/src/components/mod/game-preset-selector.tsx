@@ -12,12 +12,14 @@ import { useEnabledImporters, usePresets } from "@renderer/hooks/use-mod-data";
 import { useModStore } from "@renderer/store/mod";
 import { isNteImporter } from "@shared/mod";
 import type { GameConfig } from "@shared/types";
+import { toErrorMessage } from "@shared/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { PencilIcon, PlayIcon } from "lucide-react";
 import { memo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
 import { AddGameDialog } from "./add-game-dialog";
 import { CreatePresetDialog } from "./create-preset-dialog";
 import { EditGameDialog, openEditGameDialog } from "./edit-game-dialog";
@@ -104,7 +106,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
     if (isNteImporter(selectedImporter)) {
       if (selectedGameConfig?.nteLauncherPath) {
         await window.api.invoke("mod:startNteLauncher", selectedGame).catch((error) => {
-          const errorMessage = error instanceof Error ? error.message : String(error);
+          const errorMessage = toErrorMessage(error);
 
           if (errorMessage.includes("NTE_LAUNCHER_PATH_NOT_FOUND")) {
             toast.error(t("page.mod.hooks.use-mod-mutations.start-nte-launcher.not-found"));
@@ -140,7 +142,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
   };
 
   return (
-    <div className="flex flex-col items-center justify-center w-full p-2 border-t space-y-3">
+    <div className="flex w-full flex-col items-center justify-center space-y-3 border-t p-2">
       {location.pathname.startsWith("/mod") && (
         <div className="flex w-full space-x-1">
           {games.length > 0 && (
@@ -148,15 +150,17 @@ export const GamePresetSelector = memo(function GamePresetSelector({
               <PlayIcon className="size-4" />
             </Button>
           )}
-          <Select value={selectedGame || ""} onValueChange={handleGameSelect}>
+          <Select
+            value={selectedGame || ""}
+            onValueChange={(v) => {
+              if (v === null) return;
+              void handleGameSelect(v);
+            }}
+          >
             <SelectTrigger className="w-full" disabled={games.length < 1}>
               <SelectValue placeholder={games.length > 0 ? "Select a Game" : "No games"} />
             </SelectTrigger>
-            <SelectContent
-              position="popper"
-              onCloseAutoFocus={(e) => e.preventDefault()}
-              aria-describedby={undefined}
-            >
+            <SelectContent finalFocus={false} aria-describedby={undefined}>
               <SelectGroup>
                 <SelectLabel>{games.length > 0 ? "Games" : "No games"}</SelectLabel>
                 {games.map((game, idx) => (
@@ -197,6 +201,12 @@ export const GamePresetSelector = memo(function GamePresetSelector({
       <div className="flex w-full space-x-1">
         <Select
           value={selectedPreset?.id || ""}
+          items={presets.map((preset) => ({
+            value: preset.id,
+            label: preset.isLegacy
+              ? `${preset.name} (${t("page.mod.dialog.preset-management.legacy-badge")})`
+              : preset.name,
+          }))}
           onValueChange={(id) => {
             if (!id) return;
             const preset = presets.find((p) => p.id === id);
@@ -209,11 +219,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
           <SelectTrigger className="w-full" disabled={presets.length < 1}>
             <SelectValue placeholder={presets.length > 0 ? "Select a preset" : "No presets"} />
           </SelectTrigger>
-          <SelectContent
-            position="popper"
-            onCloseAutoFocus={(e) => e.preventDefault()}
-            aria-describedby={undefined}
-          >
+          <SelectContent finalFocus={false} aria-describedby={undefined}>
             <SelectGroup>
               <SelectLabel>{presets.length > 0 ? "Presets" : "No presets"}</SelectLabel>
               {presets.map((preset) => (

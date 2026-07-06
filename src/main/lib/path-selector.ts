@@ -1,5 +1,6 @@
 import { dialog } from "electron";
 import { nanoid } from "nanoid";
+
 import type { NahidaDesktop } from "..";
 
 export type PathSelectorMode = "folder" | "modManager";
@@ -46,7 +47,7 @@ export class PathSelector {
 
             const mainWindow = this.desktop.window.main.window;
             if (!mainWindow) {
-                this.desktop.window.main.createMainWindow().then((window) => {
+                void this.desktop.window.main.createMainWindow().then((window) => {
                     if (window?.webContents.isLoading()) {
                         window.webContents.once("did-finish-load", () => {
                             this.desktop.window.main.focus();

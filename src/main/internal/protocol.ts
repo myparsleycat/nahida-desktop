@@ -1,7 +1,10 @@
 import path from "node:path";
 import type { Readable } from "node:stream";
+
+import { toErrorMessage } from "@shared/utils";
 import { fileTypeFromBuffer } from "file-type";
 import fse from "fs-extra";
+
 import type { NahidaDesktop } from "..";
 
 export const NahidaProtocolHandler = (desktop: NahidaDesktop, req: Request) => {
@@ -46,9 +49,9 @@ async function handleVideoLocal(params: URLSearchParams, req: Request) {
     const range = req.headers.get("range");
 
     if (!range) {
-    const arrbuf = await fse.readFile(videoPath);
-    return new Response(arrbuf as BodyInit, {
-      headers: {
+        const arrbuf = await fse.readFile(videoPath);
+        return new Response(arrbuf as BodyInit, {
+            headers: {
                 "Content-Type": videoMime,
                 "Content-Length": arrbuf.byteLength.toString(),
                 "Accept-Ranges": "bytes",
@@ -64,8 +67,8 @@ async function handleVideoLocal(params: URLSearchParams, req: Request) {
     const stream = fse.createReadStream(videoPath, { start, end });
     const buffer = await streamToBuffer(stream);
 
-  return new Response(buffer as BodyInit, {
-    status: 206,
+    return new Response(buffer as BodyInit, {
+        status: 206,
         headers: {
             "Content-Range": `bytes ${start}-${end}/${fileSize}`,
             "Accept-Ranges": "bytes",
@@ -96,9 +99,9 @@ async function handleImageLocal(params: URLSearchParams) {
     }
 
     const mimeType = getImageMime(path.extname(imgPath).toLowerCase());
-  const arrbuf = await fse.readFile(imgPath);
-  return new Response(arrbuf as BodyInit, {
-    headers: {
+    const arrbuf = await fse.readFile(imgPath);
+    return new Response(arrbuf as BodyInit, {
+        headers: {
             "Content-Type": mimeType,
             "Content-Length": arrbuf.byteLength.toString(),
         },
@@ -135,8 +138,7 @@ async function fetchWithRetries(
         });
     } catch (err) {
         if (attempt >= maxRetries) {
-            const message = err instanceof Error ? err.message : String(err);
-            return new Response(`Error: ${message}`, { status: 500 });
+            return new Response(`Error: ${toErrorMessage(err)}`, { status: 500 });
         }
 
         const delay = Math.pow(2, attempt - 1) * 100;

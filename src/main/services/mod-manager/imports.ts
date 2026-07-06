@@ -1,7 +1,9 @@
 import path from "node:path";
+
 import type { ArchiveExtractPathMode, ResolvedArchiveExtractPathMode } from "@shared/mod";
 import fse from "fs-extra";
 import writeFileAtomic from "write-file-atomic";
+
 import type { NahidaDesktop } from "../..";
 import type { ModShaderFixesService } from "./shader-fixes";
 
@@ -117,7 +119,7 @@ export class ModImportsService {
                 extension = path.extname(data);
                 buffer = await fse.readFile(data);
             } else {
-                throw new Error(`Invalid paste type: ${type}`);
+                throw new Error(`Invalid paste type`);
             }
 
             const normalizedModPath = path.resolve(modPath);

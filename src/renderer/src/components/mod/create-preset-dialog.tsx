@@ -26,6 +26,7 @@ import { Textarea } from "@renderer/components/ui/textarea";
 import { usePresetMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModStore } from "@renderer/store/mod";
 import type { PresetCreateConflict } from "@shared/types";
+import { toErrorMessage } from "@shared/utils";
 import { useForm } from "@tanstack/react-form";
 import { LoaderIcon, Plus } from "lucide-react";
 import { type MouseEvent, useEffect, useState } from "react";
@@ -71,7 +72,7 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
           description: value.description,
         });
       } catch (error) {
-        if (!getErrorMessage(error).includes("PRESET_CONFLICTS_EXIST")) {
+        if (!toErrorMessage(error).includes("PRESET_CONFLICTS_EXIST")) {
           throw error;
         }
 
@@ -82,9 +83,8 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
     },
   });
 
-  const getErrorMessage = (error: unknown) => (error instanceof Error ? error.message : "");
   const isPresetConflictError = (error: unknown) => {
-    const errorMessage = getErrorMessage(error);
+    const errorMessage = toErrorMessage(error);
     return (
       errorMessage.includes("PRESET_CONFLICTS_EXIST") ||
       errorMessage.includes("PRESET_CONFLICT_RESOLUTION_FAILED")
@@ -134,10 +134,8 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
   return (
     <>
       <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-        <DialogTrigger asChild>
-          <Button variant="outline" size="icon" disabled={disabled}>
-            <Plus className="size-4" />
-          </Button>
+        <DialogTrigger render={<Button variant="outline" size="icon" disabled={disabled} />}>
+          <Plus className="size-4" />
         </DialogTrigger>
         <DialogContent className="w-100" aria-describedby={undefined}>
           <DialogHeader>
@@ -193,16 +191,14 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
             />
           </form>
           <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="outline">
-                {t("g.cancel")}
-              </Button>
+            <DialogClose render={<Button type="button" variant="outline" />}>
+              {t("g.cancel")}
             </DialogClose>
             <form.Subscribe
               selector={(state) => [state.canSubmit, state.isSubmitting]}
               children={([canSubmit, isSubmitting]) => (
                 <Button form={formId} type="submit" disabled={!canSubmit || isBusy || isSubmitting}>
-                  {isBusy && <LoaderIcon className="animate-spin size-4" />}
+                  {isBusy && <LoaderIcon className="size-4 animate-spin" />}
                   {t("g.create")}
                 </Button>
               )}
@@ -226,7 +222,7 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
                   <div className="font-medium">
                     {t("page.mod.dialog.add-preset.conflict.mod-key-label")}
                   </div>
-                  <div className="text-muted-foreground break-all">{conflict.modKey}</div>
+                  <div className="break-all text-muted-foreground">{conflict.modKey}</div>
                   <div className="mt-2 space-y-1">
                     {conflict.candidates.map((candidate) => (
                       <div
@@ -234,7 +230,7 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
                         className="flex items-start justify-between gap-3"
                       >
                         <span className="break-all">{candidate.relativePath}</span>
-                        <span className="text-muted-foreground shrink-0">
+                        <span className="shrink-0 text-muted-foreground">
                           {candidate.isEnabled
                             ? t("page.mod.dialog.add-preset.conflict.enabled")
                             : t("page.mod.dialog.add-preset.conflict.disabled")}
@@ -252,7 +248,7 @@ export function CreatePresetDialog({ disabled = false }: CreatePresetDialogProps
               onClick={(event) => void handleResolveAndCreate(event)}
               disabled={isBusy}
             >
-              {isBusy && <LoaderIcon className="animate-spin size-4" />}
+              {isBusy && <LoaderIcon className="size-4 animate-spin" />}
               {t("page.mod.dialog.add-preset.conflict.action")}
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -11,12 +11,14 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Switch } from "@renderer/components/ui/switch";
+import { toErrorMessage } from "@shared/utils";
 import { useForm } from "@tanstack/react-form";
 import { useNavigate } from "@tanstack/react-router";
 import { BoxIcon, CircleCheckIcon, CircleXIcon, FolderOpenIcon, Loader2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
 import { ScrollArea } from "../ui/scroll-area";
 
 type TextureFormat = "png" | "jpeg-safe" | "jpeg-force";
@@ -43,6 +45,11 @@ function joinPath(dir: string, name: string) {
 export default function StaticGlbConverter() {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const textureFormatLabels: Record<string, string> = {
+    png: t("page.tools.static_glb_converter.texture_format_options.png"),
+    "jpeg-safe": t("page.tools.static_glb_converter.texture_format_options.jpeg_safe"),
+    "jpeg-force": t("page.tools.static_glb_converter.texture_format_options.jpeg_force"),
+  };
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<{
     mode: "single" | "variant-set";
@@ -81,7 +88,7 @@ export default function StaticGlbConverter() {
         });
       } catch (error) {
         toast.error(t("page.tools.static_glb_converter.toast.failed"), {
-          description: error instanceof Error ? error.message : String(error),
+          description: toErrorMessage(error),
         });
       } finally {
         setIsRunning(false);
@@ -153,7 +160,7 @@ export default function StaticGlbConverter() {
     } catch (error) {
       form.setFieldValue("textureFormat", previous);
       toast.error(t("page.tools.static_glb_converter.toast.save_texture_settings_failed"), {
-        description: error instanceof Error ? error.message : String(error),
+        description: toErrorMessage(error),
       });
     }
   };
@@ -174,7 +181,7 @@ export default function StaticGlbConverter() {
     } catch (error) {
       form.setFieldValue("jpegQuality", previous);
       toast.error(t("page.tools.static_glb_converter.toast.save_texture_settings_failed"), {
-        description: error instanceof Error ? error.message : String(error),
+        description: toErrorMessage(error),
       });
     }
   };
@@ -215,7 +222,7 @@ export default function StaticGlbConverter() {
                     name="assetPath"
                     children={(field) => (
                       <Field>
-                        <FieldLabel className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                        <FieldLabel className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
                           {t("page.tools.static_glb_converter.asset_layout_path")}
                         </FieldLabel>
                         <div className="flex gap-2">
@@ -247,7 +254,7 @@ export default function StaticGlbConverter() {
                     name="modPath"
                     children={(field) => (
                       <Field>
-                        <FieldLabel className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                        <FieldLabel className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
                           {t("page.tools.static_glb_converter.target_mod_path")}
                         </FieldLabel>
                         <div className="flex gap-2">
@@ -279,7 +286,7 @@ export default function StaticGlbConverter() {
                     name="outputPath"
                     children={(field) => (
                       <Field>
-                        <FieldLabel className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                        <FieldLabel className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
                           {t("page.tools.static_glb_converter.output_glb_path")}
                         </FieldLabel>
                         <div className="flex gap-2">
@@ -312,7 +319,7 @@ export default function StaticGlbConverter() {
                       name="textureFormat"
                       children={(field) => (
                         <Field>
-                          <FieldLabel className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                          <FieldLabel className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
                             {t("page.tools.static_glb_converter.texture_format")}
                           </FieldLabel>
                           <Select
@@ -322,9 +329,11 @@ export default function StaticGlbConverter() {
                             }
                           >
                             <SelectTrigger disabled={isRunning}>
-                              <SelectValue />
+                              <SelectValue>
+                                {(value) => textureFormatLabels[value] ?? value}
+                              </SelectValue>
                             </SelectTrigger>
-                            <SelectContent position="popper">
+                            <SelectContent>
                               <SelectGroup>
                                 <SelectItem value="png">
                                   {t("page.tools.static_glb_converter.texture_format_options.png")}
@@ -355,7 +364,7 @@ export default function StaticGlbConverter() {
                       name="jpegQuality"
                       children={(field) => (
                         <Field>
-                          <FieldLabel className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                          <FieldLabel className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
                             {t("page.tools.static_glb_converter.jpeg_quality")}
                           </FieldLabel>
                           <Input

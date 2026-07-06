@@ -19,7 +19,7 @@ function RouteComponent() {
       window.api.invoke("util:getAppStatus"),
     ])
       .then(([page, session, appStatus]) => {
-        navi({
+        void navi({
           to: resolveStartPage(page, {
             isLoggedIn: !!session,
             platform: appStatus?.platform,
@@ -29,7 +29,7 @@ function RouteComponent() {
       })
       .catch((error) => {
         console.error("Failed to resolve startup navigation", error);
-        navi({
+        void navi({
           to: resolveStartPage(undefined, {
             isLoggedIn: false,
           }),
@@ -38,7 +38,7 @@ function RouteComponent() {
   }, [navi]);
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex min-h-screen flex-col">
       <Titlebar />
     </div>
   );

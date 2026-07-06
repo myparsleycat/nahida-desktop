@@ -32,6 +32,7 @@ export function resolveStartPage(
     page: string | null | undefined,
     options: {
         isLoggedIn: boolean;
+        platform?: NodeJS.Platform;
         sessionRootId?: string | null;
     },
 ): string {

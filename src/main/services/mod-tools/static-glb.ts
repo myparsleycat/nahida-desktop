@@ -1,4 +1,5 @@
 import path from "node:path";
+
 import type { NahidaDesktop } from "@main/index";
 import {
     convertModToGlb,
@@ -17,6 +18,7 @@ import {
     createModelViewerMemorySession,
     writeModelViewerMemoryBuffer,
 } from "@main/services/protocol/model-viewer-memory";
+import { toErrorMessage } from "@shared/utils";
 import { app } from "electron";
 import fse from "fs-extra";
 
@@ -490,9 +492,7 @@ export class StaticGlb {
 
         await fse.remove(viewerTempDir).catch((error) => {
             this.desktop.logger.warn(
-                `Failed to remove model viewer temp directory: ${
-                    error instanceof Error ? error.message : String(error)
-                }`,
+                `Failed to remove model viewer temp directory: ${toErrorMessage(error)}`,
                 "StaticGlb.cleanupViewerFile",
             );
         });
@@ -502,9 +502,7 @@ export class StaticGlb {
         const tempRoot = path.resolve(app.getPath("temp"));
         const tempEntries = await fse.readdir(tempRoot, { withFileTypes: true }).catch((error) => {
             this.desktop.logger.warn(
-                `Failed to read temp directory for model viewer cleanup: ${
-                    error instanceof Error ? error.message : String(error)
-                }`,
+                `Failed to read temp directory for model viewer cleanup: ${toErrorMessage(error)}`,
                 "StaticGlb.cleanupStaleViewerTempDirs",
             );
             return [];

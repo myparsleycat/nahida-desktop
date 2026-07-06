@@ -17,9 +17,11 @@ import {
   Play,
   X,
 } from "lucide-react";
-import { memo, useState } from "react";
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
+
 import type { TransferItemProps } from "./types";
+
 import { getStatusColor } from "./utils";
 
 const TransferItemActions = memo(
@@ -60,7 +62,7 @@ const TransferItemActions = memo(
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
             onClick={() => (isPaused || isQueued ? onResume?.(id) : onPause?.(id))}
           >
             {isPaused || isQueued ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
@@ -71,7 +73,7 @@ const TransferItemActions = memo(
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
             onClick={() => onRetry?.(id)}
           >
             <Play className="h-4 w-4" />
@@ -82,9 +84,9 @@ const TransferItemActions = memo(
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
             onClick={() => {
-              window.api.invoke("util:openPath", path);
+              void window.api.invoke("util:openPath", path);
             }}
           >
             <FolderIcon className="h-4 w-4" />
@@ -92,14 +94,16 @@ const TransferItemActions = memo(
         )}
 
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+              />
+            }
+          >
+            <MoreHorizontal className="h-4 w-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             {!isCompleted && !isFailed && (
@@ -126,7 +130,7 @@ const TransferItemActions = memo(
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
+          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
           onClick={() => onCancel?.(id)}
         >
           <X className="h-4 w-4" />
@@ -165,7 +169,7 @@ export const TransferItem = memo((props: TransferItemProps) => {
   const isFailed = status === "failed";
 
   return (
-    <div className="group grid grid-cols-[auto_minmax(0,1fr)_auto] w-full max-w-full items-center gap-4 rounded-lg border bg-card p-4 transition-all overflow-hidden hover:border-accent">
+    <div className="group grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 overflow-hidden rounded-lg border bg-card p-4 transition-all hover:border-accent">
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary">
         {type === "upload" ? (
           <ArrowUpFromLine className="size-5 shrink-0" />
@@ -175,9 +179,9 @@ export const TransferItem = memo((props: TransferItemProps) => {
       </div>
 
       <div className="flex flex-col gap-2 overflow-hidden">
-        <div className="flex items-center justify-between gap-2 w-full">
-          <div className="flex-1 min-w-0">
-            <span className="block truncate font-medium text-foreground w-full" title={fileName}>
+        <div className="flex w-full items-center justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <span className="block w-full truncate font-medium text-foreground" title={fileName}>
               {fileName}
             </span>
           </div>
@@ -213,15 +217,15 @@ export const TransferItem = memo((props: TransferItemProps) => {
 
         <Progress value={progress} className="w-full" />
 
-        <div className="flex items-center justify-between text-xs text-muted-foreground w-full">
+        <div className="flex w-full items-center justify-between text-xs text-muted-foreground">
           <span className="shrink-0">{fileSize}</span>
-          <div className="flex min-w-0 items-center gap-3 overflow-hidden ml-2">
-            <div className="flex items-center gap-2 truncate min-w-0">
+          <div className="ml-2 flex min-w-0 items-center gap-3 overflow-hidden">
+            <div className="flex min-w-0 items-center gap-2 truncate">
               {(isActive || isPaused) && speed && (
                 <span className="shrink-0 whitespace-nowrap">{speed}</span>
               )}
               {(isActive || isPaused) && timeRemaining && (
-                <span className="truncate whitespace-nowrap hidden sm:inline">
+                <span className="hidden truncate whitespace-nowrap sm:inline">
                   {t("page.transfer.item.time_remaining", { time: timeRemaining })}
                 </span>
               )}
@@ -231,12 +235,12 @@ export const TransferItem = memo((props: TransferItemProps) => {
                 </span>
               )}
               {failedFiles && failedFiles > 0 ? (
-                <span className="text-destructive shrink-0 whitespace-nowrap">
+                <span className="shrink-0 whitespace-nowrap text-destructive">
                   {t("page.transfer.item.failed_files", { count: failedFiles })}
                 </span>
               ) : (
                 isFailed && (
-                  <span className="text-destructive shrink-0 whitespace-nowrap">
+                  <span className="shrink-0 whitespace-nowrap text-destructive">
                     {t("page.transfer.item.failed")}
                   </span>
                 )

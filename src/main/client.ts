@@ -3,11 +3,13 @@ import type { App } from "@backend/index";
 import { treaty } from "@elysiajs/eden";
 import { BACKEND_URL } from "@shared/const";
 import { isEmpty } from "es-toolkit/compat";
+
 import { desktop } from "./index";
 
 export const eden = treaty<App>(BACKEND_URL, {
     fetcher: (async (input: URL | RequestInfo, init: RequestInit | undefined) => {
-        const response = await desktop.httpService.fetcher(input.toString(), init);
+        const url = input instanceof Request ? input.url : input.toString();
+        const response = await desktop.httpService.fetcher(url, init);
 
         if (response.status === 401) {
             await desktop.service.auth.startLogout();

@@ -129,7 +129,7 @@ function RootComponent() {
     <>
       {titlebarStyle === "modern" && <div className="h-8 shrink-0" />}
 
-      <Toaster position="bottom-right" richColors />
+      <Toaster position="bottom-right" richColors closeButton />
 
       {shouldShowUpdateDialog && <UpdateAlertDialog />}
 

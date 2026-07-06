@@ -8,7 +8,7 @@ export function useModRefreshOnFocus(selectedGame: string | null, queryClient: Q
     useEffect(() => {
         const handleFocus = () => {
             if (selectedGame) {
-                queryClient.invalidateQueries({ queryKey: ["mods", selectedGame] });
+                void queryClient.invalidateQueries({ queryKey: ["mods", selectedGame] });
             }
         };
 

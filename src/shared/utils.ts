@@ -8,17 +8,17 @@ export interface TextureResizeCandidate {
     height: number;
 }
 
+export function toErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
 export function formatSize(size?: number | null, options?: FilesizeOptions) {
     if (isNil(size)) return "0 B";
     if (!Number.isFinite(size)) return "--";
     return filesize(size, { standard: "jedec", ...options });
 }
 
-export const formatDate = (
-    date: Date | string,
-    lang?: string | undefined | null,
-    formatStr?: string,
-) => {
+export const formatDate = (date: Date | string, lang?: string | null, formatStr?: string) => {
     return format(date, formatStr || "PPpp", {
         locale: (() => {
             if (lang?.startsWith("ko")) return ko;

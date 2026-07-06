@@ -20,7 +20,7 @@ function useInvalidateOnSettingUpdate(keys: readonly SettingKey[], queryKey: rea
                     return;
                 }
 
-                queryClient.invalidateQueries({ queryKey: [...queryKey] });
+                void queryClient.invalidateQueries({ queryKey: [...queryKey] });
             }
         });
 

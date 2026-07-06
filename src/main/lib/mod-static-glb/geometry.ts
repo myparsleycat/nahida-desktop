@@ -1,5 +1,9 @@
 import { readFloatAttribute as readFloatAttributeNative } from "@native/static-glb";
+import { toErrorMessage } from "@shared/utils";
+
 import type { GlbBuilder } from "./builder";
+import type { FmtElement, FmtLayout } from "./types";
+
 import {
     bufferToFloat32Array,
     ensureVec4,
@@ -9,7 +13,6 @@ import {
     readDxgiValues,
     removeDegenerateTriangles,
 } from "./dxgi-utils";
-import type { FmtElement, FmtLayout } from "./types";
 
 export function buildPrimitive(
     builder: GlbBuilder,
@@ -393,9 +396,7 @@ export function readRequiredFloatAttribute(
         return readFloatAttribute(bytes, stride, vertexCount, element, width);
     } catch (error) {
         warn(
-            `Skipping primitive: failed to read ${label} (${element.format} @ ${element.alignedByteOffset}): ${
-                error instanceof Error ? error.message : String(error)
-            }`,
+            `Skipping primitive: failed to read ${label} (${element.format} @ ${element.alignedByteOffset}): ${toErrorMessage(error)}`,
         );
         return null;
     }
@@ -418,9 +419,7 @@ export function readOptionalFloatAttribute(
         return readFloatAttribute(bytes, stride, vertexCount, element, width);
     } catch (error) {
         warn(
-            `Skipping ${label}: failed to read ${element.format} @ ${element.alignedByteOffset}: ${
-                error instanceof Error ? error.message : String(error)
-            }`,
+            `Skipping ${label}: failed to read ${element.format} @ ${element.alignedByteOffset}: ${toErrorMessage(error)}`,
         );
         return undefined;
     }
@@ -444,9 +443,7 @@ export function readIndexedRequiredFloatAttribute(
         return readIndexedFloatAttribute(bytes, stride, sourceIndices, element, width);
     } catch (error) {
         warn(
-            `Skipping primitive: failed to read compacted ${label} (${element.format} @ ${element.alignedByteOffset}): ${
-                error instanceof Error ? error.message : String(error)
-            }`,
+            `Skipping primitive: failed to read compacted ${label} (${element.format} @ ${element.alignedByteOffset}): ${toErrorMessage(error)}`,
         );
         return null;
     }
@@ -470,9 +467,7 @@ export function readIndexedOptionalFloatAttribute(
         return readIndexedFloatAttribute(bytes, stride, sourceIndices, element, width);
     } catch (error) {
         warn(
-            `Skipping compacted ${label}: failed to read ${element.format} @ ${element.alignedByteOffset}: ${
-                error instanceof Error ? error.message : String(error)
-            }`,
+            `Skipping compacted ${label}: failed to read ${element.format} @ ${element.alignedByteOffset}: ${toErrorMessage(error)}`,
         );
         return undefined;
     }

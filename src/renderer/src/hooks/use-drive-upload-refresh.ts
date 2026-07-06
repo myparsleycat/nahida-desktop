@@ -29,6 +29,6 @@ export function useDriveUploadRefresh(currentId: string, queryKey: QueryKey) {
 
         if (!shouldRefresh) return;
 
-        queryClient.invalidateQueries({ queryKey, exact: true });
+        void queryClient.invalidateQueries({ queryKey, exact: true });
     }, [currentId, queryClient, queryKey, transfers]);
 }

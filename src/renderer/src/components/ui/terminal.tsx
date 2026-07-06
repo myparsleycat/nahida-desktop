@@ -36,7 +36,7 @@ export function TerminalRoot({
 }: TerminalRootProps) {
   const [active, setActive] = useState(false);
   const [registeredDelays, setRegisteredDelays] = useState<number[]>([]);
-  const [completedDelays, setCompletedDelays] = useState<number[]>([]);
+  const [_completedDelays, setCompletedDelays] = useState<number[]>([]);
   const loop = useContext(LoopContext);
 
   const registerAnimation = (d: number) => {
@@ -65,7 +65,7 @@ export function TerminalRoot({
     <TerminalContext.Provider value={{ speed, active, registerAnimation, completeAnimation }}>
       <div
         className={cn(
-          "font-mono text-sm font-light rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden",
+          "overflow-hidden rounded-lg border bg-card font-mono text-sm font-light text-card-foreground shadow-sm",
           className,
         )}
       >
@@ -103,13 +103,12 @@ export function TerminalAnimation({ children, delay = 0, className }: TerminalAn
   }, [context, delay]);
 
   useEffect(() => {
-    if (active && context) {
-      const timer = setTimeout(() => {
-        setShouldPlay(true);
-        setTimeout(() => context.completeAnimation(delay), duration * 1000);
-      }, delay / speed);
-      return () => clearTimeout(timer);
-    }
+    if (!active || !context) return;
+    const timer = setTimeout(() => {
+      setShouldPlay(true);
+      setTimeout(() => context.completeAnimation(delay), duration * 1000);
+    }, delay / speed);
+    return () => clearTimeout(timer);
   }, [active, speed, delay, context, duration]);
 
   if (!context) return null;
@@ -163,21 +162,20 @@ export function TerminalLoading({
   }, [context, delay]);
 
   useEffect(() => {
-    if (active && context) {
-      const timer = setTimeout(() => {
-        setShouldPlay(true);
-        const interval = setInterval(() => {
-          setFrameIndex((prev) => (prev >= frames.length - 1 ? 0 : prev + 1));
-        }, 75 / speed);
+    if (!active || !context) return;
+    const timer = setTimeout(() => {
+      setShouldPlay(true);
+      const interval = setInterval(() => {
+        setFrameIndex((prev) => (prev >= frames.length - 1 ? 0 : prev + 1));
+      }, 75 / speed);
 
-        setTimeout(() => {
-          clearInterval(interval);
-          setComplete(true);
-          context.completeAnimation(delay);
-        }, duration / speed);
-      }, delay / speed);
-      return () => clearTimeout(timer);
-    }
+      setTimeout(() => {
+        clearInterval(interval);
+        setComplete(true);
+        context.completeAnimation(delay);
+      }, duration / speed);
+    }, delay / speed);
+    return () => clearTimeout(timer);
   }, [active, speed, delay, duration, context]);
 
   if (!context) return null;
@@ -193,7 +191,7 @@ export function TerminalLoading({
         >
           {!complete ? (
             <>
-              <span className="text-cyan-400 mr-2">{frames[frameIndex]}</span>
+              <span className="mr-2 text-cyan-400">{frames[frameIndex]}</span>
               {loadingMessage}
             </>
           ) : (
@@ -219,12 +217,11 @@ export function TerminalTypewriter({ children, delay = 0, className }: TerminalA
   }, [context, delay]);
 
   useEffect(() => {
-    if (active && context) {
-      const timer = setTimeout(() => {
-        setShouldPlay(true);
-      }, delay / speed);
-      return () => clearTimeout(timer);
-    }
+    if (!active || !context) return;
+    const timer = setTimeout(() => {
+      setShouldPlay(true);
+    }, delay / speed);
+    return () => clearTimeout(timer);
   }, [active, speed, delay, context]);
 
   if (!context) return null;

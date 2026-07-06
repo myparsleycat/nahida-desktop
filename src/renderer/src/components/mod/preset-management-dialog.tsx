@@ -45,9 +45,7 @@ export function PresetManagementDialog() {
             {t("g.delete")}
           </Button>
           <div className="flex gap-2">
-            <DialogClose asChild>
-              <Button variant="outline">{t("g.cancel")}</Button>
-            </DialogClose>
+            <DialogClose render={<Button variant="outline" />}>{t("g.cancel")}</DialogClose>
             <Button
               disabled={selectedPreset?.isLegacy}
               onClick={() => selectedPreset && applyPresetMutation.mutate(selectedPreset.id)}

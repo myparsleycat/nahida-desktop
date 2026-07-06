@@ -19,6 +19,7 @@ import {
   WrenchIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
@@ -72,64 +73,66 @@ export function Sidebar({ className }: { className?: string }) {
     cn("relative overflow-visible", isActive && "text-accent hover:text-accent");
 
   return (
-    <div className={`w-13 flex flex-col ${DEFAULT_BG} ${className}`}>
-      <div className="w-full flex flex-col select-none h-full">
+    <div className={`flex w-13 flex-col ${DEFAULT_BG} ${className}`}>
+      <div className="flex h-full w-full flex-col select-none">
         <div
-          className="fixed left-2 flex flex-col overflow-y-auto overflow-x-hidden dragselect-start-allowed py-2 space-y-2 max-h-screen"
+          className="dragselect-start-allowed fixed left-2 flex max-h-screen flex-col space-y-2 overflow-x-hidden overflow-y-auto py-2"
           style={{ top: "50%", transform: "translateY(-50%)" }}
         >
-          <Tooltip disableHoverableContent={true}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-lg"
-                className={getNavButtonClassName(isTransferPage)}
-                aria-current={isTransferPage ? "page" : undefined}
-                onPointerDown={handlePointerDown}
-                onClick={() => {
-                  navi({ to: "/transfer" });
-                }}
-              >
-                {activeTransferProgress !== null && (
-                  <>
-                    <svg
-                      className="pointer-events-none absolute inset-0 size-full -rotate-90"
-                      viewBox="0 0 32 32"
-                      aria-hidden="true"
-                    >
-                      <circle
-                        cx="16"
-                        cy="16"
-                        r={transferProgressRadius}
-                        className="fill-none stroke-border/70"
-                        strokeWidth="2"
-                      />
-                      <circle
-                        cx="16"
-                        cy="16"
-                        r={transferProgressRadius}
-                        className="fill-none stroke-primary transition-all duration-300"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeDasharray={transferProgressCircumference}
-                        strokeDashoffset={transferProgressOffset}
-                      />
-                    </svg>
-                    {/* <span className="pointer-events-none absolute -right-1 -bottom-1 rounded-full bg-primary px-1.5 py-0.5 text-[9px] leading-none font-semibold text-primary-foreground shadow-sm">
+          <Tooltip disableHoverablePopup>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-lg"
+                  className={getNavButtonClassName(isTransferPage)}
+                  aria-current={isTransferPage ? "page" : undefined}
+                  onPointerDown={handlePointerDown}
+                  onClick={() => {
+                    void navi({ to: "/transfer" });
+                  }}
+                />
+              }
+            >
+              {activeTransferProgress !== null && (
+                <>
+                  <svg
+                    className="pointer-events-none absolute inset-0 size-full -rotate-90"
+                    viewBox="0 0 32 32"
+                    aria-hidden="true"
+                  >
+                    <circle
+                      cx="16"
+                      cy="16"
+                      r={transferProgressRadius}
+                      className="fill-none stroke-border/70"
+                      strokeWidth="2"
+                    />
+                    <circle
+                      cx="16"
+                      cy="16"
+                      r={transferProgressRadius}
+                      className="fill-none stroke-primary transition-all duration-300"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeDasharray={transferProgressCircumference}
+                      strokeDashoffset={transferProgressOffset}
+                    />
+                  </svg>
+                  {/* <span className="pointer-events-none absolute -right-1 -bottom-1 rounded-full bg-primary px-1.5 py-0.5 text-[9px] leading-none font-semibold text-primary-foreground shadow-sm">
                       {transferProgressLabel}
                     </span> */}
-                  </>
+                </>
+              )}
+              <ArrowUpDownIcon
+                className={cn(
+                  iconSize,
+                  "transition-all duration-300",
+                  activeTransferProgress !== null && "scale-90",
                 )}
-                <ArrowUpDownIcon
-                  className={cn(
-                    iconSize,
-                    "transition-all duration-300",
-                    activeTransferProgress !== null && "scale-90",
-                  )}
-                />
-              </Button>
+              />
             </TooltipTrigger>
-            <TooltipContent side="right" hideWhenDetached={true}>
+            <TooltipContent side="right">
               <div className="flex flex-col gap-0.5">
                 <span>{t("page.transfer.title")}</span>
                 {activeTransferProgress !== null && (
@@ -139,228 +142,228 @@ export function Sidebar({ className }: { className?: string }) {
             </TooltipContent>
           </Tooltip>
 
-          <Tooltip disableHoverableContent={true}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-lg"
-                className={cn(
-                  getNavButtonClassName(isGameBananaPage),
-                  isGameBananaPage && "text-yellow-500 hover:text-yellow-500",
-                )}
-                aria-current={isGameBananaPage ? "page" : undefined}
-                onPointerDown={handlePointerDown}
-                onClick={() => {
-                  if (isModPage) {
-                    gameBananaStore.getState().requestModGameSync();
-                  }
-                  navi({ to: "/gamebanana" });
-                }}
-              >
-                <BananaIcon className={cn(iconSize)} />
-              </Button>
+          <Tooltip disableHoverablePopup>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-lg"
+                  className={cn(
+                    getNavButtonClassName(isGameBananaPage),
+                    isGameBananaPage && "text-yellow-500 hover:text-yellow-500",
+                  )}
+                  aria-current={isGameBananaPage ? "page" : undefined}
+                  onPointerDown={handlePointerDown}
+                  onClick={() => {
+                    if (isModPage) {
+                      gameBananaStore.getState().requestModGameSync();
+                    }
+                    void navi({ to: "/gamebanana" });
+                  }}
+                />
+              }
+            >
+              <BananaIcon className={cn(iconSize)} />
             </TooltipTrigger>
-            <TooltipContent side="right" hideWhenDetached={true}>
-              GameBanana
-            </TooltipContent>
+            <TooltipContent side="right">GameBanana</TooltipContent>
           </Tooltip>
 
           <Separator />
 
-          <Tooltip disableHoverableContent={true}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-lg"
-                className={getNavButtonClassName(isModPage)}
-                aria-current={isModPage ? "page" : undefined}
-                onPointerDown={handlePointerDown}
-                onClick={() => {
-                  navi({ to: "/mod" });
-                }}
-              >
-                <GamepadIcon className={cn(iconSize)} />
-              </Button>
+          <Tooltip disableHoverablePopup>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-lg"
+                  className={getNavButtonClassName(isModPage)}
+                  aria-current={isModPage ? "page" : undefined}
+                  onPointerDown={handlePointerDown}
+                  onClick={() => {
+                    void navi({ to: "/mod" });
+                  }}
+                />
+              }
+            >
+              <GamepadIcon className={cn(iconSize)} />
             </TooltipTrigger>
-            <TooltipContent side="right" hideWhenDetached={true}>
-              {t("page.mod.title")}
-            </TooltipContent>
+            <TooltipContent side="right">{t("page.mod.title")}</TooltipContent>
           </Tooltip>
 
-          <Tooltip disableHoverableContent={true}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-lg"
-                className={getNavButtonClassName(isToolsPage)}
-                aria-current={isToolsPage ? "page" : undefined}
-                onPointerDown={handlePointerDown}
-                onClick={() => {
-                  navi({ to: "/tools" });
-                }}
-              >
-                <WrenchIcon className={cn(iconSize)} />
-              </Button>
+          <Tooltip disableHoverablePopup>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-lg"
+                  className={getNavButtonClassName(isToolsPage)}
+                  aria-current={isToolsPage ? "page" : undefined}
+                  onPointerDown={handlePointerDown}
+                  onClick={() => {
+                    void navi({ to: "/tools" });
+                  }}
+                />
+              }
+            >
+              <WrenchIcon className={cn(iconSize)} />
             </TooltipTrigger>
-            <TooltipContent side="right" hideWhenDetached={true}>
-              Tools
-            </TooltipContent>
+            <TooltipContent side="right">Tools</TooltipContent>
           </Tooltip>
 
           <Separator orientation="horizontal" />
 
           {session && (
             <>
-              <Tooltip disableHoverableContent={true}>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon-lg"
-                    className={getNavButtonClassName(isDrivePage)}
-                    aria-current={isDrivePage ? "page" : undefined}
-                    onPointerDown={handlePointerDown}
-                    onClick={() => {
-                      const lastDriveId = viewStore.getState().lastDriveId;
-                      navi({
-                        to: "/drive/drive/$id",
-                        params: {
-                          id: lastDriveId ? lastDriveId : session.drive.rootId,
-                        },
-                      });
-                    }}
-                    onDoubleClick={() => {
-                      navi({
-                        to: "/drive/drive/$id",
-                        params: {
-                          id: session.drive.rootId,
-                        },
-                      });
-                    }}
-                  >
-                    <HardDriveIcon className={cn(iconSize)} />
-                  </Button>
+              <Tooltip disableHoverablePopup>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-lg"
+                      className={getNavButtonClassName(isDrivePage)}
+                      aria-current={isDrivePage ? "page" : undefined}
+                      onPointerDown={handlePointerDown}
+                      onClick={() => {
+                        const lastDriveId = viewStore.getState().lastDriveId;
+                        void navi({
+                          to: "/drive/drive/$id",
+                          params: {
+                            id: lastDriveId ? lastDriveId : session.drive.rootId,
+                          },
+                        });
+                      }}
+                      onDoubleClick={() => {
+                        void navi({
+                          to: "/drive/drive/$id",
+                          params: {
+                            id: session.drive.rootId,
+                          },
+                        });
+                      }}
+                    />
+                  }
+                >
+                  <HardDriveIcon className={cn(iconSize)} />
                 </TooltipTrigger>
-                <TooltipContent side="right" hideWhenDetached={true}>
-                  {t("page.drive.title")}
-                </TooltipContent>
+                <TooltipContent side="right">{t("page.drive.title")}</TooltipContent>
               </Tooltip>
 
-              <Tooltip disableHoverableContent={true}>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon-lg"
-                    className={getNavButtonClassName(isSharePage)}
-                    aria-current={isSharePage ? "page" : undefined}
-                    onPointerDown={handlePointerDown}
-                    onClick={() => {
-                      const lastShareId = viewStore.getState().lastShareId;
-                      navi({
-                        to: "/drive/share/$id",
-                        params: {
-                          id: lastShareId,
-                        },
-                      });
-                    }}
-                    onDoubleClick={() => {
-                      navi({
-                        to: "/drive/share/$id",
-                        params: {
-                          id: "share",
-                        },
-                      });
-                    }}
-                  >
-                    <Share2Icon className={cn(iconSize)} />
-                  </Button>
+              <Tooltip disableHoverablePopup>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-lg"
+                      className={getNavButtonClassName(isSharePage)}
+                      aria-current={isSharePage ? "page" : undefined}
+                      onPointerDown={handlePointerDown}
+                      onClick={() => {
+                        const lastShareId = viewStore.getState().lastShareId;
+                        void navi({
+                          to: "/drive/share/$id",
+                          params: {
+                            id: lastShareId,
+                          },
+                        });
+                      }}
+                      onDoubleClick={() => {
+                        void navi({
+                          to: "/drive/share/$id",
+                          params: {
+                            id: "share",
+                          },
+                        });
+                      }}
+                    />
+                  }
+                >
+                  <Share2Icon className={cn(iconSize)} />
                 </TooltipTrigger>
-                <TooltipContent side="right" hideWhenDetached={true}>
-                  {t("page.share_drive.title")}
-                </TooltipContent>
+                <TooltipContent side="right">{t("page.share_drive.title")}</TooltipContent>
               </Tooltip>
 
               <Separator orientation="horizontal" />
             </>
           )}
 
-          <Tooltip disableHoverableContent={true}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-lg"
-                onPointerDown={handlePointerDown}
-                onClick={() => {
-                  void window.api.invoke("util:openExternal", documentationUrl);
-                }}
-              >
-                <BookOpenIcon className={cn(iconSize)} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right" hideWhenDetached={true}>
-              {t("page.docs.title")}
-            </TooltipContent>
-          </Tooltip>
-
-          <Tooltip disableHoverableContent={true}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-lg"
-                onPointerDown={handlePointerDown}
-                onClick={() => {
-                  void window.api.invoke(
-                    "util:openExternal",
-                    "https://github.com/myparsleycat/nahida-desktop/issues",
-                  );
-                }}
-              >
-                <BugIcon className={cn(iconSize)} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right" hideWhenDetached={true}>
-              Report
-            </TooltipContent>
-          </Tooltip>
-
-          <Tooltip disableHoverableContent={true}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-lg"
-                className={getNavButtonClassName(isSettingPage)}
-                aria-current={isSettingPage ? "page" : undefined}
-                onPointerDown={handlePointerDown}
-                onClick={() => {
-                  navi({ to: "/setting/gen" });
-                }}
-              >
-                <SettingsIcon className={cn(iconSize)} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right" hideWhenDetached={true}>
-              {t("page.setting.title")}
-            </TooltipContent>
-          </Tooltip>
-
-          {appStatus?.isDev && (
-            <Tooltip disableHoverableContent={true}>
-              <TooltipTrigger asChild>
+          <Tooltip disableHoverablePopup>
+            <TooltipTrigger
+              render={
                 <Button
                   variant="ghost"
                   size="icon-lg"
-                  className={getNavButtonClassName(isTestPage)}
-                  aria-current={isTestPage ? "page" : undefined}
                   onPointerDown={handlePointerDown}
                   onClick={() => {
-                    navi({ to: "/test" });
+                    void window.api.invoke("util:openExternal", documentationUrl);
                   }}
-                >
-                  <BugPlayIcon className={cn(iconSize)} />
-                </Button>
+                />
+              }
+            >
+              <BookOpenIcon className={cn(iconSize)} />
+            </TooltipTrigger>
+            <TooltipContent side="right">{t("page.docs.title")}</TooltipContent>
+          </Tooltip>
+
+          <Tooltip disableHoverablePopup>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-lg"
+                  onPointerDown={handlePointerDown}
+                  onClick={() => {
+                    void window.api.invoke(
+                      "util:openExternal",
+                      "https://github.com/myparsleycat/nahida-desktop/issues",
+                    );
+                  }}
+                />
+              }
+            >
+              <BugIcon className={cn(iconSize)} />
+            </TooltipTrigger>
+            <TooltipContent side="right">Report</TooltipContent>
+          </Tooltip>
+
+          <Tooltip disableHoverablePopup>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-lg"
+                  className={getNavButtonClassName(isSettingPage)}
+                  aria-current={isSettingPage ? "page" : undefined}
+                  onPointerDown={handlePointerDown}
+                  onClick={() => {
+                    void navi({ to: "/setting/gen" });
+                  }}
+                />
+              }
+            >
+              <SettingsIcon className={cn(iconSize)} />
+            </TooltipTrigger>
+            <TooltipContent side="right">{t("page.setting.title")}</TooltipContent>
+          </Tooltip>
+
+          {appStatus?.isDev && (
+            <Tooltip disableHoverablePopup>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-lg"
+                    className={getNavButtonClassName(isTestPage)}
+                    aria-current={isTestPage ? "page" : undefined}
+                    onPointerDown={handlePointerDown}
+                    onClick={() => {
+                      void navi({ to: "/test" });
+                    }}
+                  />
+                }
+              >
+                <BugPlayIcon className={cn(iconSize)} />
               </TooltipTrigger>
-              <TooltipContent side="right" hideWhenDetached={true}>
-                {t("page.setting.title")}
-              </TooltipContent>
+              <TooltipContent side="right">{t("page.setting.title")}</TooltipContent>
             </Tooltip>
           )}
         </div>

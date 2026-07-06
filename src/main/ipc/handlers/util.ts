@@ -13,8 +13,10 @@ import {
     trash,
 } from "@main/services/util";
 import type { MessageBoxOptions, OpenExternalOptions } from "electron";
+
 import { rh } from "../helper";
 
+// oxlint-disable-next-line no-unused-vars
 export function registerUtilHandlers(desktop: NahidaDesktop) {
     rh("util:getAppStatus", getAppStatus);
     rh("util:showModal", async (options: MessageBoxOptions) => await showModal(options));

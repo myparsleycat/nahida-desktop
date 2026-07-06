@@ -1,9 +1,11 @@
 import path from "node:path";
+
 import {
     generateToggleViewerArtifact,
     type GeneratedToggleViewerArtifact,
 } from "@main/lib/toggle-viewer-core";
 import { findFiles } from "@native/fs";
+import { toErrorMessage } from "@shared/utils";
 import fse from "fs-extra";
 
 interface WorkerRequestBase {
@@ -68,7 +70,7 @@ process.parentPort?.on("message", async (event) => {
         postMessage({
             type: "error",
             reqId: request.reqId,
-            error: error instanceof Error ? error.message : String(error),
+            error: toErrorMessage(error),
         } satisfies WorkerErrorResponse);
     } finally {
         abortedJobs.delete(request.reqId);
@@ -151,7 +153,7 @@ async function processIniPaths(
                 invalidIniPaths.push(iniPath);
             }
         } catch (error) {
-            logs.push(`Failed to read ini ${iniPath}: ${error}`);
+            logs.push(`Failed to read ini ${iniPath}: ${toErrorMessage(error)}`);
             invalidIniPaths.push(iniPath);
         }
     }

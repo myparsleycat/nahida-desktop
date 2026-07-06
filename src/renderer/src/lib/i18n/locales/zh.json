@@ -900,7 +900,7 @@
         "nte_unsupported": "不支持 NTE",
         "nte_tooltip": "此游戏的导入器尚不受支持。",
         "round_title": "第 {{round}} 轮 · 批次 {{batchSize}} · 剩余 {{remaining}}",
-        "round_description": "禁用下列模组后启动游戏,然后选择问题是否解决。",
+        "round_description": "下列模组已被禁用。按 F10 重新加载后检查问题是否解决。",
         "disabled_count": "已禁用 {{count}} 个",
         "undo": "撤销上一轮",
         "still_broken": "仍然异常",

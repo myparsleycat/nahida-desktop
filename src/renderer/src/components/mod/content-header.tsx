@@ -41,6 +41,7 @@ import {
   WrenchIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+
 import wuwaModFixerIcon from "@/renderer/assets/img/wuwa-mod-fixer-icon.png";
 
 interface ContentHeaderProps {
@@ -103,8 +104,14 @@ export function ContentHeader({
     }
   };
 
+  const sortItems = [
+    { value: "name", label: t("g.name") },
+    { value: "date", label: t("g.date") },
+    { value: "size", label: t("g.size") },
+  ] as const;
+
   return (
-    <div className="flex items-center justify-between h-12 px-3 border-b z-20">
+    <div className="z-20 flex h-12 items-center justify-between border-b px-3">
       <div className="flex items-center gap-3">
         {groupName && <h1 className="text-2xl font-semibold text-foreground">{groupName}</h1>}
       </div>
@@ -118,21 +125,30 @@ export function ContentHeader({
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
           />
-          <Search className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Search className="absolute top-1/2 right-2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         </div>
 
         <Separator orientation="vertical" />
 
         <div className="flex items-center gap-1">
-          <Select value={sortType} onValueChange={handleSortTypeChange}>
+          <Select
+            value={sortType}
+            items={sortItems}
+            onValueChange={(v) => {
+              if (v === null) return;
+              handleSortTypeChange(v);
+            }}
+          >
             <SelectTrigger className="w-20">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent position="popper" onCloseAutoFocus={(e) => e.preventDefault()}>
+            <SelectContent finalFocus={false}>
               <SelectGroup>
-                <SelectItem value="name">{t("g.name")}</SelectItem>
-                <SelectItem value="date">{t("g.date")}</SelectItem>
-                <SelectItem value="size">{t("g.size")}</SelectItem>
+                {sortItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
               </SelectGroup>
             </SelectContent>
           </Select>
@@ -146,7 +162,7 @@ export function ContentHeader({
           <Button
             variant="outline"
             size="icon"
-            className="h-8 w-8 ml-1"
+            className="ml-1 h-8 w-8"
             onClick={() => {
               setViewMode(viewMode === "grid" ? "list" : "grid");
             }}
@@ -161,9 +177,9 @@ export function ContentHeader({
           <Button
             variant="outline"
             size="icon"
-            className="h-8 w-8 ml-1"
+            className="ml-1 h-8 w-8"
             onClick={() => {
-              window.api.invoke("util:openPath", groupPath);
+              void window.api.invoke("util:openPath", groupPath);
             }}
           >
             <FolderIcon />
@@ -171,12 +187,10 @@ export function ContentHeader({
         )}
 
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon">
-              <EllipsisIcon />
-            </Button>
+          <DropdownMenuTrigger render={<Button variant="outline" size="icon" />}>
+            <EllipsisIcon />
           </DropdownMenuTrigger>
-          <DropdownMenuContent onCloseAutoFocus={(e) => e.preventDefault()}>
+          <DropdownMenuContent finalFocus={false}>
             <DropdownMenuGroup>
               <DropdownMenuItem
                 disabled={!hasSelectedGroup || bulkModToggle.isPending}

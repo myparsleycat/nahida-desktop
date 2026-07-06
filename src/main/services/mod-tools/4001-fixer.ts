@@ -5,11 +5,14 @@ import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
+
 import { diversifyDllPadding } from "@native/pe-padding-diversifier";
+import { toErrorMessage } from "@shared/utils";
 import fse from "fs-extra";
 import ky from "ky";
 import ms from "ms";
 import { nanoid } from "nanoid";
+
 import type { NahidaDesktop } from "@/main";
 
 const execAsync = promisify(exec);
@@ -406,7 +409,7 @@ export class FourThousandOneFixer {
             return { success: true, backupPath: newBackupPath };
         } catch (error) {
             this.desktop.logger.error(error, "4001Fixer:diversifyD3D11DllPadding");
-            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorMessage = toErrorMessage(error);
             this.updateProgress("XXMI_ERR_OBFUSCATE_FAILED", errorMessage);
             this.activeTask = null;
             return { success: false, errorMessage };
@@ -745,8 +748,7 @@ export class FourThousandOneFixer {
     }
 
     private extractBuildErrorMessage(error: unknown): string {
-        const message = error instanceof Error ? error.message : String(error);
-        const lines = message
+        const lines = toErrorMessage(error)
             .split(/\r?\n/)
             .map((line) => line.trim())
             .filter(Boolean);

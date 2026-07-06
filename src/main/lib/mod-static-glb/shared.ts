@@ -1,7 +1,9 @@
 import crypto from "node:crypto";
 import os from "node:os";
 import path from "node:path";
+
 import LRUCache from "mnemonist/lru-cache";
+
 import type { Logger } from "../../internal/logger";
 import type { VariableStateMap, VariableStateValue } from "./types";
 
@@ -10,14 +12,15 @@ const normalizeKeyCache = new LRUCache<string, string>(MAX_NORMALIZE_KEY_CACHE);
 
 export function createWarningCollector(onWarning?: (message: string) => void) {
     let count = 0;
+    const warn = (message: string) => {
+        count += 1;
+        onWarning?.(message);
+    };
     return {
         get count() {
             return count;
         },
-        warn(message: string) {
-            count += 1;
-            onWarning?.(message);
-        },
+        warn,
     };
 }
 

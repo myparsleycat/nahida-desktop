@@ -1,5 +1,21 @@
 import path from "node:path";
+
+import { toErrorMessage } from "@shared/utils";
 import fse from "fs-extra";
+
+import type {
+    BufferGroup,
+    ConvertModToGlbBufferOptions,
+    ConvertModToGlbBufferResult,
+    FmtLayout,
+    IbResource,
+    IniSection,
+    Resource,
+    StaticGlbBuildContext,
+    TextureBinding,
+    TextureOverrideBinding,
+} from "./types";
+
 import { GlbBuilder } from "./builder";
 import { loadFmtForIbCached, loadIndicesForIbCached } from "./fmt-loader";
 import { buildPrimitive } from "./geometry";
@@ -14,18 +30,6 @@ import {
     detectStaticGlbModLayout,
 } from "./resource-loader";
 import { createWarningCollector, normalizeKey } from "./shared";
-import type {
-    BufferGroup,
-    ConvertModToGlbBufferOptions,
-    ConvertModToGlbBufferResult,
-    FmtLayout,
-    IbResource,
-    IniSection,
-    Resource,
-    StaticGlbBuildContext,
-    TextureBinding,
-    TextureOverrideBinding,
-} from "./types";
 
 export async function prepareStaticGlbBuildContext(
     options: Pick<ConvertModToGlbBufferOptions, "modPath" | "assetPath">,
@@ -122,8 +126,7 @@ export async function buildModGlb(
         try {
             fmt = await loadFmtForIbCached(context, options.assetPath, ib, group.stride);
         } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            warning.warn(`Skipping ${ib.filename}: ${message}`);
+            warning.warn(`Skipping ${ib.filename}: ${toErrorMessage(error)}`);
             continue;
         }
         const ibPath = path.resolve(context.modDir, ib.filename);

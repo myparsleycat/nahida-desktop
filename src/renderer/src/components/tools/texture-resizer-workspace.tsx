@@ -19,7 +19,12 @@ import type {
   TextureResizeListItem,
   TextureResizeSettings,
 } from "@shared/types";
-import { formatSize, getTextureResizeCandidates, pickTextureResizeCandidate } from "@shared/utils";
+import {
+  formatSize,
+  getTextureResizeCandidates,
+  pickTextureResizeCandidate,
+  toErrorMessage,
+} from "@shared/utils";
 import { useForm } from "@tanstack/react-form";
 import { FolderOpenIcon, ImageIcon, Loader2Icon, RefreshCwIcon } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
@@ -78,7 +83,7 @@ export function TextureResizerWorkspace({
       })
       .catch((error) => {
         toast.error(t("page.tools.texture_resizer.toast.load_failed"), {
-          description: error instanceof Error ? error.message : String(error),
+          description: toErrorMessage(error),
         });
       });
   }, [fixedTargetPath, mode, settingsForm, t]);
@@ -113,7 +118,7 @@ export function TextureResizerWorkspace({
       setLoadedTargetPath(normalizedTargetPath);
     } catch (error) {
       toast.error(t("page.tools.texture_resizer.toast.load_failed"), {
-        description: error instanceof Error ? error.message : String(error),
+        description: toErrorMessage(error),
       });
     } finally {
       setIsListing(false);
@@ -142,7 +147,7 @@ export function TextureResizerWorkspace({
       }
     } catch (error) {
       toast.error(t("page.tools.texture_resizer.toast.failed"), {
-        description: error instanceof Error ? error.message : String(error),
+        description: toErrorMessage(error),
       });
     } finally {
       setRunningFilePath(null);
@@ -270,7 +275,7 @@ export function TextureResizerWorkspace({
           }
         }}
       >
-        <DialogContent className="grid min-w-xl max-h-[80vh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+        <DialogContent className="grid max-h-[80vh] min-w-xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
           <DialogHeader>
             <DialogTitle>{t("page.tools.texture_resizer.dialog.title")}</DialogTitle>
             <DialogDescription>
@@ -419,13 +424,13 @@ function TextureItemRow({
           {texture.fileName}
         </div>
       </td>
-      <td className="w-[1%] p-2 text-right align-middle whitespace-nowrap text-xs text-muted-foreground">
+      <td className="w-[1%] p-2 text-right align-middle text-xs whitespace-nowrap text-muted-foreground">
         {formatValue}
       </td>
-      <td className="w-[1%] p-2 text-right align-middle whitespace-nowrap text-xs text-muted-foreground">
+      <td className="w-[1%] p-2 text-right align-middle text-xs whitespace-nowrap text-muted-foreground">
         {formatSize(texture.fileSize)}
       </td>
-      <td className="w-[1%] p-2 text-right align-middle whitespace-nowrap text-xs text-muted-foreground">
+      <td className="w-[1%] p-2 text-right align-middle text-xs whitespace-nowrap text-muted-foreground">
         {texture.originalWidth}x{texture.originalHeight}
       </td>
       <td className="w-[1%] p-2 pr-6 text-right align-middle whitespace-nowrap">

@@ -302,14 +302,14 @@ function ModRouteContent() {
     <>
       <Titlebar title={{ text: t("page.mod.title"), position: "center" }} />
 
-      <div className="flex-1 flex overflow-hidden h-full">
+      <div className="flex h-full flex-1 overflow-hidden">
         <ModSidebar
           showWuwaFixer={runner.showWuwaFixer}
           onOpenWuwaFixer={runner.handleOpenWuwaFixer}
         />
 
         <div
-          className="flex-1 flex flex-col overflow-hidden relative"
+          className="relative flex flex-1 flex-col overflow-hidden"
           onDragEnter={handleDragEnter}
           onDragLeave={handleDragLeave}
           onDragOver={handleDragOver}
@@ -323,7 +323,7 @@ function ModRouteContent() {
             />
           )}
 
-          <div className="relative flex flex-1 min-h-0 flex-col overflow-hidden">
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
             {viewMode === "grid" ? (
               <ModGrid isDragging={isDragging} />
             ) : (
@@ -331,12 +331,12 @@ function ModRouteContent() {
             )}
 
             {isDragging && (
-              <div className="absolute flex-1 h-full inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm border-2 border-dashed border-primary">
+              <div className="absolute inset-0 z-50 flex h-full flex-1 items-center justify-center border-2 border-dashed border-primary bg-background/80 backdrop-blur-sm">
                 <div className="text-center">
                   <p className="text-2xl font-bold">
                     {t("page.mod.dad_section.title", { name: selectedGroupName })}
                   </p>
-                  <p className="text-sm text-muted-foreground mt-2">
+                  <p className="mt-2 text-sm text-muted-foreground">
                     {t("page.mod.dad_section.description")}
                   </p>
                 </div>
@@ -361,27 +361,20 @@ function ModRouteContent() {
 
       <AlertDialog
         open={fileNameForArchiveExtractDialog !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            if (!archiveExtractPrompt) {
-              closeArchiveExtractDialog();
-            }
+        onOpenChange={(nextOpen, eventDetails) => {
+          if (nextOpen) return;
+          if (archiveExtractPrompt) {
+            const { requestId } = archiveExtractPrompt;
+            eventDetails.cancel();
+            void resolveDownloadArchiveExtractPrompt(requestId, null).finally(() => {
+              clearArchiveExtractPromptIfCurrent(requestId);
+            });
+            return;
           }
+          closeArchiveExtractDialog();
         }}
       >
-        <AlertDialogContent
-          onEscapeKeyDown={(event) => {
-            if (archiveExtractPrompt) {
-              const { requestId } = archiveExtractPrompt;
-              event.preventDefault();
-              void resolveDownloadArchiveExtractPrompt(requestId, null).finally(() => {
-                clearArchiveExtractPromptIfCurrent(requestId);
-              });
-              return;
-            }
-            closeArchiveExtractDialog();
-          }}
-        >
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t("page.mod.dialog.extract_archive_path.title")}</AlertDialogTitle>
             <AlertDialogDescription>
@@ -389,7 +382,7 @@ function ModRouteContent() {
                 fileName: fileNameForArchiveExtractDialog ?? "",
               })}
             </AlertDialogDescription>
-            <div className="mt-2 text-left text-sm w-full space-y-2">
+            <div className="mt-2 w-full space-y-2 text-left text-sm">
               <div className="space-y-1 rounded-md border bg-muted/30 p-3">
                 <Label>{t("page.mod.dialog.extract_archive_path.flatten_single_root")}</Label>
                 <p>{t("page.mod.dialog.extract_archive_path.flatten_single_root_example")}</p>

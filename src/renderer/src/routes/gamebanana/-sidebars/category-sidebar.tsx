@@ -5,9 +5,11 @@ import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { cn } from "@renderer/lib/utils";
 import type { TFunction } from "i18next";
+
+import type { CategoryChildItem, RootCategoryItem } from "../-types";
+
 import { ErrorState } from "../-shared/common";
 import { getGameBananaErrorPresentation } from "../-shared/errors";
-import type { CategoryChildItem, RootCategoryItem } from "../-types";
 import { formatNumber } from "../-utils";
 
 export function CategorySidebar({
@@ -41,9 +43,7 @@ export function CategorySidebar({
   onSelectCategory: (categoryId: number, categoryName: string) => void;
   onResetToGameHome: () => void;
 }) {
-  const categories: Array<RootCategoryItem | CategoryChildItem> = hasCategoryContext
-    ? categoryChildren
-    : rootCategories;
+  const categories = hasCategoryContext ? categoryChildren : rootCategories;
   const isLoading = hasCategoryContext ? isCategoryOverviewLoading : isGameOverviewLoading;
   const hasError = hasCategoryContext ? categoryOverviewError : gameOverviewError;
   const errorPresentation = getGameBananaErrorPresentation(

@@ -39,6 +39,11 @@ export function ModFixRunnerDialogs({ runner }: { runner: ModFixRunner }) {
   const { t } = useTranslation();
   const rollbackEnabled = runner.wuwaOptions.rollback;
   const translationKey = "page.mod.dialog.wuwa-fix-runner";
+  const aeroFixLabels: Record<string, string> = {
+    none: t(`${translationKey}.options.aero_fix.options.none`),
+    "1": t(`${translationKey}.options.aero_fix.options.texcoord_override`),
+    "2": t(`${translationKey}.options.aero_fix.options.texture_mirror_flip`),
+  };
 
   return (
     <>
@@ -210,9 +215,9 @@ export function ModFixRunnerDialogs({ runner }: { runner: ModFixRunner }) {
                     disabled={rollbackEnabled}
                   >
                     <SelectTrigger className="w-44">
-                      <SelectValue />
+                      <SelectValue>{(value) => aeroFixLabels[value] ?? value}</SelectValue>
                     </SelectTrigger>
-                    <SelectContent position="popper">
+                    <SelectContent>
                       <SelectGroup>
                         <SelectItem value="none">
                           {t(`${translationKey}.options.aero_fix.options.none`)}
@@ -247,21 +252,24 @@ export function ModFixRunnerDialogs({ runner }: { runner: ModFixRunner }) {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={runner.showLogModal} onOpenChange={runner.setShowLogModal}>
-        <AlertDialogContent
-          onEscapeKeyDown={(event) => {
-            if (runner.isRunning) {
-              event.preventDefault();
-              runner.handleCancel();
-            }
-          }}
-          onClick={(event) => event.stopPropagation()}
-          onOpenAutoFocus={(event) => {
-            event.preventDefault();
-            runner.inputRef.current?.focus();
-          }}
-          className="min-w-xl"
-        >
+      <AlertDialog
+        open={runner.showLogModal}
+        onOpenChange={(nextOpen, eventDetails) => {
+          if (nextOpen) {
+            runner.setShowLogModal(true);
+            queueMicrotask(() => runner.inputRef.current?.focus());
+            return;
+          }
+
+          if (eventDetails.reason === "escape-key" && runner.isRunning) {
+            eventDetails.cancel();
+            runner.handleCancel();
+            return;
+          }
+          runner.setShowLogModal(false);
+        }}
+      >
+        <AlertDialogContent onClick={(event) => event.stopPropagation()} className="min-w-xl">
           <AlertDialogHeader>
             <AlertDialogTitle>{runner.labels.logTitle}</AlertDialogTitle>
           </AlertDialogHeader>

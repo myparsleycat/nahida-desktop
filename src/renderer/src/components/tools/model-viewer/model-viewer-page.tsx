@@ -103,11 +103,9 @@ export function ModelViewerPage({
       <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
         <header className="flex h-11 shrink-0 items-center justify-between gap-3 border-b px-3">
           <div className="flex min-w-0 items-center gap-2">
-            <Button asChild variant="ghost" size="sm" className="h-8 gap-1">
-              <Link to="/tools">
-                <ArrowLeftIcon className="size-4" />
-                {t("page.tools.dashboard.tools_label")}
-              </Link>
+            <Button render={<Link to="/tools" />} variant="ghost" size="sm" className="h-8 gap-1">
+              <ArrowLeftIcon className="size-4" />
+              {t("page.tools.dashboard.tools_label")}
             </Button>
             <div className="min-w-0 text-sm">
               <div className="truncate font-medium">{modelName}</div>
