@@ -920,7 +920,7 @@
         "nte_unsupported": "NTE 미지원",
         "nte_tooltip": "이 게임의 Importer는 아직 지원되지 않습니다.",
         "round_title": "라운드 {{round}} · 배치 {{batchSize}} · 남은 후보 {{remaining}}",
-        "round_description": "아래 모드들을 비활성화한 상태로 게임을 실행한 뒤, 문제가 해결되었는지 선택하세요.",
+        "round_description": "아래 모드들이 비활성화 되었습니다. F10으로 리로드 후 문제가 해결되었는지 확인하세요.",
         "disabled_count": "{{count}}개 비활성화됨",
         "undo": "이전 라운드 되돌리기",
         "still_broken": "여전히 문제 발생",

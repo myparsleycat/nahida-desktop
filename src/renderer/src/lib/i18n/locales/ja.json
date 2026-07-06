@@ -901,7 +901,7 @@
         "nte_unsupported": "NTE未対応",
         "nte_tooltip": "このゲームのImporterはまだサポートされていません。",
         "round_title": "ラウンド{{round}} · バッチ{{batchSize}} · 残り{{remaining}}",
-        "round_description": "以下のMODを無効化した状態でゲームを起動し、問題が解決したか選択してください。",
+        "round_description": "以下のMODが無効化されました。F10でリロードし、問題が解決したか確認してください。",
         "disabled_count": "{{count}}件を無効化",
         "undo": "前のラウンドを取り消す",
         "still_broken": "まだ問題あり",
