@@ -92,6 +92,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
   const queryClient = useQueryClient();
 
   const setSelectedGroup = useModStore((s) => s.setSelectedGroup);
+  const markUserSelectedDuringDownload = useModStore((s) => s.markUserSelectedDuringDownload);
   const selectedGame = useModStore((s) => s.selectedGame);
   const selectedGroup = useModStore((s) => s.selectedGroup);
   const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
@@ -167,6 +168,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
   const handleSelect = useCallback(
     (group: FolderGroup, resetSearch: boolean) => {
       setSelectedGroup(group);
+      markUserSelectedDuringDownload();
 
       if (searchTerm) {
         if (resetSearch) {
@@ -184,7 +186,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
         }, 100);
       }
     },
-    [searchTerm, setSelectedGroup],
+    [searchTerm, setSelectedGroup, markUserSelectedDuringDownload],
   );
 
   useEffect(() => {

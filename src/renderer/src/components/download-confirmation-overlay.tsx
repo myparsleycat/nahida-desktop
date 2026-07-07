@@ -12,6 +12,7 @@ export function DownloadConfirmationOverlay() {
 
   const downloadMode = useModStore((s) => s.downloadMode);
   const setDownloadMode = useModStore((s) => s.setDownloadMode);
+  const resetUserSelectedDuringDownload = useModStore((s) => s.resetUserSelectedDuringDownload);
   const selectedGroup = useModStore((s) => s.selectedGroup);
 
   const selectedPath = selectedGroup?.path || null;
@@ -36,6 +37,7 @@ export function DownloadConfirmationOverlay() {
       );
 
       setDownloadMode(null);
+      resetUserSelectedDuringDownload();
     } catch (error) {
       toast.error(t("components.download-confirmation-overlay.select_path_failed"));
       Logger.error(error, "DownloadConfirmationOverlay:handleConfirm");
@@ -48,6 +50,7 @@ export function DownloadConfirmationOverlay() {
     try {
       await window.api.invoke("pathSelector:cancel", downloadMode.downloadId);
       setDownloadMode(null);
+      resetUserSelectedDuringDownload();
     } catch (error) {
       Logger.error(error, "DownloadConfirmationOverlay:handleCancel");
     }
@@ -63,7 +66,7 @@ export function DownloadConfirmationOverlay() {
       }}
     >
       <div
-        className="bg-background/75 backdrop-blur-lg rounded-lg p-4 max-w-md w-full mx-4 shadow-lg outline"
+        className="mx-4 w-full max-w-md rounded-lg bg-background/75 p-4 shadow-lg outline backdrop-blur-lg"
         onClick={(e) => {
           e.stopPropagation();
         }}
@@ -74,7 +77,7 @@ export function DownloadConfirmationOverlay() {
               <h3 className="text-lg font-semibold">
                 {t("components.download-confirmation-overlay.title")}
               </h3>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="mt-1 text-sm text-muted-foreground">
                 {t("components.download-confirmation-overlay.description")}
               </p>
             </div>
@@ -121,7 +124,7 @@ export function DownloadConfirmationOverlay() {
               disabled={!selectedPath || (suggestedName ? !fileName.trim() : false)}
               className="flex-1"
             >
-              <Download className="size-4 mr-2" />
+              <Download className="mr-2 size-4" />
               {t("g.select")}
             </Button>
           </div>

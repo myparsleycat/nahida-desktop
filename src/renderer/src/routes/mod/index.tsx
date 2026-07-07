@@ -62,6 +62,7 @@ function ModRouteContent() {
   const isCustomDownloadDialogOpen = useModStore((s) => s.isCustomDownloadDialogOpen);
   const setIsCustomDownloadDialogOpen = useModStore((s) => s.setIsCustomDownloadDialogOpen);
   const downloadMode = useModStore((s) => s.downloadMode);
+  const userSelectedDuringDownload = useModStore((s) => s.userSelectedDuringDownload);
   const archiveExtractPrompt = useModStore((s) => s.archiveExtractPrompt);
   const setArchiveExtractPrompt = useModStore((s) => s.setArchiveExtractPrompt);
   const viewMode = useModStore((s) => s.viewMode);
@@ -238,6 +239,10 @@ function ModRouteContent() {
       return;
     }
     if (selectedGame !== pendingDownloadTarget.game) return;
+    if (userSelectedDuringDownload) {
+      setPendingDownloadTarget(null);
+      return;
+    }
 
     const isTargetAvailable = characters.some(
       (group) =>
@@ -261,10 +266,12 @@ function ModRouteContent() {
     selectedGame,
     setExpandedGroup,
     setSelectedGroup,
+    userSelectedDuringDownload,
   ]);
 
   useEffect(() => {
     if (pendingDownloadTarget) return;
+    if (downloadMode) return;
 
     if (characters.length > 0) {
       const isSelectedInTopLevel = selectedGroupPath
@@ -284,7 +291,7 @@ function ModRouteContent() {
     } else {
       setSelectedGroup(null);
     }
-  }, [characters, pendingDownloadTarget, selectedGroupPath, setSelectedGroup]);
+  }, [characters, pendingDownloadTarget, selectedGroupPath, setSelectedGroup, downloadMode]);
 
   useEffect(() => {
     if (selectedGame) {

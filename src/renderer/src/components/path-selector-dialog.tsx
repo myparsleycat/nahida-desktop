@@ -33,6 +33,7 @@ export function PathSelectorDialog({
   const { t } = useTranslation();
   const navi = useNavigate();
   const setDownloadMode = useModStore((s) => s.setDownloadMode);
+  const resetUserSelectedDuringDownload = useModStore((s) => s.resetUserSelectedDuringDownload);
   const skipCancelOnCloseRef = useRef(false);
 
   const closeWithoutCancel = () => {
@@ -65,7 +66,7 @@ export function PathSelectorDialog({
   };
 
   const handleModManagerSelect = () => {
-    // Navigate to mod page with download mode set
+    resetUserSelectedDuringDownload();
     setDownloadMode({
       downloadId: selectionId,
       suggestedName,
