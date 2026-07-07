@@ -40,6 +40,9 @@ interface ModState {
             downloadImporterKey?: string;
         } | null,
     ) => void;
+    userSelectedDuringDownload: boolean;
+    markUserSelectedDuringDownload: () => void;
+    resetUserSelectedDuringDownload: () => void;
     archiveExtractPrompt: { requestId: string; fileName: string } | null;
     setArchiveExtractPrompt: (prompt: { requestId: string; fileName: string } | null) => void;
     searchQuery: string;
@@ -90,6 +93,10 @@ export const modStore = createStore<ModState>((set) => ({
         set({ isCustomDownloadDialogOpen }),
     downloadMode: null,
     setDownloadMode: (downloadMode) => set({ downloadMode }),
+    userSelectedDuringDownload: false,
+    markUserSelectedDuringDownload: () =>
+        set((state) => (state.downloadMode ? { userSelectedDuringDownload: true } : state)),
+    resetUserSelectedDuringDownload: () => set({ userSelectedDuringDownload: false }),
     archiveExtractPrompt: null,
     setArchiveExtractPrompt: (archiveExtractPrompt) => set({ archiveExtractPrompt }),
     searchQuery: "",
