@@ -29,7 +29,9 @@ import {
 } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+
 import wuwaModFixerIcon from "@/renderer/assets/img/wuwa-mod-fixer-icon.png";
+
 import { buttonVariants } from "../ui/button";
 import { CharacterSidebarItemGrid } from "./character-sidebar-item-grid";
 import { CharacterSidebarItemRow } from "./character-sidebar-item-row";
@@ -85,10 +87,15 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
 
   const ref = useRef<HTMLButtonElement>(null);
   const lastScrolledPathRef = useRef<string | null>(null);
+  const userClickedRef = useRef(false);
 
   useEffect(() => {
     if (isSelected && ref.current && lastScrolledPathRef.current !== group.path) {
       lastScrolledPathRef.current = group.path;
+      if (userClickedRef.current) {
+        userClickedRef.current = false;
+        return;
+      }
       requestAnimationFrame(() => {
         ref.current?.scrollIntoView({ behavior: "auto", block: "center" });
       });
@@ -161,6 +168,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
       return;
     }
 
+    userClickedRef.current = true;
     onClick(group, e);
   };
 
@@ -219,7 +227,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
         {isGridLayout && (
           <span
             className={cn(
-              "absolute right-1 top-1 z-10 h-7 w-7 rounded-full pointer-events-none",
+              "pointer-events-none absolute top-1 right-1 z-10 h-7 w-7 rounded-full",
               buttonVariants({ variant: "ghost", size: "icon" }),
             )}
           >
@@ -346,7 +354,7 @@ export function CharacterSidebarItemSkeleton({ layout = "row" }: { layout?: Side
 
   return (
     <div
-      className="grid h-14 w-full items-center gap-3 py-2 pl-2 pr-4"
+      className="grid h-14 w-full items-center gap-3 py-2 pr-4 pl-2"
       style={{ gridTemplateColumns: "auto 1fr auto" }}
     >
       <Skeleton className="h-10 w-10 rounded-full" />
