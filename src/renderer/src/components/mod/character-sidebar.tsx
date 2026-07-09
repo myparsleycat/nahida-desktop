@@ -189,12 +189,26 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     [searchTerm, setSelectedGroup, markUserSelectedDuringDownload],
   );
 
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchTerm(value);
+      if (value.trim()) {
+        markUserSelectedDuringDownload();
+      }
+    },
+    [markUserSelectedDuringDownload],
+  );
+
   useEffect(() => {
     let timer: NodeJS.Timeout;
-    if (searchTerm) {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    if (normalizedSearch) {
       timer = setTimeout(() => {
-        if (itemRefs.current.size === 1) {
-          const match = Array.from(itemRefs.current.values())[0];
+        const matches = Array.from(itemRefs.current.values()).filter((item) =>
+          item.group.name.toLowerCase().includes(normalizedSearch),
+        );
+        if (matches.length === 1) {
+          const match = matches[0];
           handleSelect(match.group, false);
         }
       }, 300);
@@ -381,7 +395,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
               className="h-8 pr-8 text-sm"
               placeholder={t("g.search")}
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
             />
           </div>
         </div>

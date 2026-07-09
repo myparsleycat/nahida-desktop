@@ -1,5 +1,6 @@
 ﻿import { spawn } from "node:child_process";
 import path from "node:path";
+
 import type { GamePathRow } from "@main/internal/db/schema";
 import { getCharactersFolder, getMods } from "@native/mod-manager";
 import { findBestFuzzyMatch } from "@shared/fuzzy-match";
@@ -7,7 +8,9 @@ import { isNteImporter } from "@shared/mod";
 import type { FolderGroup, NteBootstrapProgress, Preset } from "@shared/types";
 import { GAME_MATCH_CASES } from "@shared/xxmi-match";
 import fse from "fs-extra";
+
 import type { NahidaDesktop } from "../..";
+
 import {
     cleanupNteModFolder,
     configureNteModFolder,
@@ -207,32 +210,14 @@ export class ModLibraryService {
             await Promise.all(
                 gamesToSearch.map(async (game) =>
                     (
-                        await Promise.all(
-                            (
-                                await this.characters(game.game).catch((error) => {
-                                    this.desktop.logger.error(
-                                        error,
-                                        `Mod:resolveDownloadTarget:characters:${game.game}`,
-                                    );
-                                    return [];
-                                })
-                            ).map(async (group) => [
-                                { game: game.game, group },
-                                ...(
-                                    await this.subGroups(group.path).catch((error) => {
-                                        this.desktop.logger.error(
-                                            error,
-                                            `Mod:resolveDownloadTarget:subGroups:${group.path}`,
-                                        );
-                                        return [];
-                                    })
-                                ).map((subGroup) => ({
-                                    game: game.game,
-                                    group: subGroup,
-                                })),
-                            ]),
-                        )
-                    ).flat(),
+                        await this.characters(game.game).catch((error) => {
+                            this.desktop.logger.error(
+                                error,
+                                `Mod:resolveDownloadTarget:characters:${game.game}`,
+                            );
+                            return [];
+                        })
+                    ).map((group) => ({ game: game.game, group })),
                 ),
             )
         ).flat();
