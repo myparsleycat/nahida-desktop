@@ -55,6 +55,7 @@ interface CharacterSidebarItemProps {
   previewCacheKey?: number;
   showWuwaFixer?: boolean;
   onOpenWuwaFixer?: (path: string) => Promise<void>;
+  forceSelectOnClick?: boolean;
 }
 
 export const CharacterSidebarItem = memo(function CharacterSidebarItem({
@@ -75,6 +76,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   previewCacheKey,
   showWuwaFixer,
   onOpenWuwaFixer,
+  forceSelectOnClick,
 }: CharacterSidebarItemProps) {
   const { t } = useTranslation();
   const isSelected = useModStore((s) => s.selectedGroup?.path === group.path);
@@ -163,7 +165,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   };
 
   const handlePrimaryClick = (e: React.MouseEvent) => {
-    if (isPersistent || isExpanded) {
+    if (!forceSelectOnClick && (isPersistent || isExpanded)) {
       toggleExpandedGroup(group.path);
       return;
     }

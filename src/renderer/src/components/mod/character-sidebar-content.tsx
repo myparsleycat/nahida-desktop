@@ -3,6 +3,7 @@ import type { FolderGroup } from "@renderer/types/mod";
 import type { SidebarLayoutMode } from "@shared/mod";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { memo, useCallback, useMemo } from "react";
+
 import { CharacterSidebarItem, CharacterSidebarItemSkeleton } from "./character-sidebar-item";
 
 export interface CharacterSidebarContentProps {
@@ -176,6 +177,7 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
           itemStyle={resolvedItemStyle}
           showWuwaFixer={showWuwaFixer}
           onOpenWuwaFixer={onOpenWuwaFixer}
+          forceSelectOnClick={isSearching}
         />
       )}
       {showChildGroups &&

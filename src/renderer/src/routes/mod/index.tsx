@@ -189,6 +189,14 @@ function ModRouteContent() {
         ? await window.api.invoke("mod:resolveDownloadTarget", primary, gameByImporter ?? undefined)
         : null;
 
+      const stateAfterPrimary = modStore.getState();
+      if (
+        stateAfterPrimary.downloadMode?.downloadId !== downloadId ||
+        stateAfterPrimary.userSelectedDuringDownload
+      ) {
+        return;
+      }
+
       if (!result && fallback) {
         result = await window.api.invoke(
           "mod:resolveDownloadTarget",
@@ -197,7 +205,13 @@ function ModRouteContent() {
         );
       }
 
-      if (modStore.getState().downloadMode?.downloadId !== downloadId) return;
+      const stateAfterResolve = modStore.getState();
+      if (
+        stateAfterResolve.downloadMode?.downloadId !== downloadId ||
+        stateAfterResolve.userSelectedDuringDownload
+      ) {
+        return;
+      }
 
       if (result) {
         const targetGame = gameByImporter ?? result.game;
