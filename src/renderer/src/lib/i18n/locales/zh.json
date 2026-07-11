@@ -1019,7 +1019,14 @@
           "copyShaderFixesOnEnable": "启用时复制 ShaderFixes",
           "copyShaderFixesOnEnableDescription": "启用模组时，将模组中的 ShaderFixes 文件复制到已激活导入器的 ShaderFixes 文件夹。",
           "searchModPreview": "在子文件夹中搜索模组预览",
-          "searchModPreviewDescription": "如果角色文件夹中没有预览图像，则在模组文件夹内部搜索预览图像。"
+          "searchModPreviewDescription": "如果角色文件夹中没有预览图像，则在模组文件夹内部搜索预览图像。",
+          "autoResolveDownloadTarget": "自动选择下载目标文件夹",
+          "autoResolveDownloadTargetDescription": "自动选择名称与下载内容相似的模组文件夹。",
+          "downloadSources": {
+            "gamebanana": "GameBanana",
+            "nahidaLive": "Nahida Live",
+            "hui": "Hui"
+          }
         },
         "layout": {
           "title": "布局",

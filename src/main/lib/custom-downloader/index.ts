@@ -370,6 +370,7 @@ export class CustomDownloader {
             suggestedFileName,
             downloadFilePayload.categoryName,
             downloadFilePayload.importerKey ?? undefined,
+            "gamebanana",
         );
         if (!result.path) return "canceled";
         const destinationPath = result.path;
@@ -534,7 +535,12 @@ export class CustomDownloader {
     }): Promise<"started" | "canceled"> {
         const { title: _title, fileUrl } = props;
         const title = this.sanitize(_title);
-        const result = await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(title);
+        const result = await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(
+            title,
+            undefined,
+            undefined,
+            "hui",
+        );
 
         if (!result.path) {
             return "canceled";

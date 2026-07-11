@@ -1020,7 +1020,14 @@
           "copyShaderFixesOnEnable": "有効化時にShaderFixesをコピー",
           "copyShaderFixesOnEnableDescription": "MODを有効化するとき、MOD内のShaderFixesファイルを有効なImporterのShaderFixesフォルダーへコピーします。",
           "searchModPreview": "サブフォルダからモッドプレビューを検索",
-          "searchModPreviewDescription": "キャラクター フォルダにプレビュー画像がない場合、モッド フォルダ内からプレビュー画像を検索します。"
+          "searchModPreviewDescription": "キャラクター フォルダにプレビュー画像がない場合、モッド フォルダ内からプレビュー画像を検索します。",
+          "autoResolveDownloadTarget": "ダウンロード先フォルダーを自動選択",
+          "autoResolveDownloadTargetDescription": "ダウンロード名に似たMODフォルダーを自動的に選択します。",
+          "downloadSources": {
+            "gamebanana": "GameBanana",
+            "nahidaLive": "Nahida Live",
+            "hui": "Hui"
+          }
         },
         "layout": {
           "title": "レイアウト",

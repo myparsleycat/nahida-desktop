@@ -12,6 +12,7 @@ import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { getSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
 import { useGlobalStore } from "@renderer/store/global";
+import type { DownloadSource } from "@shared/mod";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   createRootRouteWithContext,
@@ -105,6 +106,7 @@ function RootComponent() {
     suggestedName?: string;
     downloadTargetName?: string;
     downloadImporterKey?: string;
+    downloadSource: DownloadSource;
   } | null>(null);
 
   const handlePathSelectorModeSelect = useCallback(
@@ -113,6 +115,7 @@ function RootComponent() {
       suggestedName?: string;
       downloadTargetName?: string;
       downloadImporterKey?: string;
+      downloadSource: DownloadSource;
     }) => {
       setPathSelectorData(data);
     },
@@ -141,6 +144,7 @@ function RootComponent() {
           suggestedName={pathSelectorData.suggestedName}
           downloadTargetName={pathSelectorData.downloadTargetName}
           downloadImporterKey={pathSelectorData.downloadImporterKey}
+          downloadSource={pathSelectorData.downloadSource}
         />
       )}
 

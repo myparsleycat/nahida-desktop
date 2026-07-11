@@ -2,9 +2,11 @@ import type { NahidaDesktop } from "@main/index";
 import { normalizeDriveNameSortPolicy, type DriveNameSortPolicy } from "@shared/drive";
 import {
     ARCHIVE_EXTRACT_PATH_MODES,
+    DOWNLOAD_SOURCES,
     MOD_GRID_LAYOUT_MODES,
     SIDEBAR_LAYOUT_MODES,
     type ArchiveExtractPathMode,
+    type DownloadSource,
     type ModGridLayoutMode,
     type SidebarLayoutMode,
 } from "@shared/mod";
@@ -17,6 +19,7 @@ import {
 import type { AutoUpdateMode } from "@shared/updater";
 import AutoLaunch from "auto-launch";
 import { app, BrowserWindow } from "electron";
+
 import { LogLevel } from "./internal/logger";
 
 interface Bounds {
@@ -150,6 +153,22 @@ function parseBooleanSetting(value: string | null | undefined, fallback: boolean
     }
 
     return value === "true";
+}
+
+function normalizeDownloadSources(value: unknown): DownloadSource[] {
+    if (!Array.isArray(value)) return ["gamebanana"];
+    return value.filter((source): source is DownloadSource =>
+        DOWNLOAD_SOURCES.includes(source as DownloadSource),
+    );
+}
+
+function parseDownloadSources(value: string | null | undefined): DownloadSource[] {
+    if (!value) return ["gamebanana"] satisfies DownloadSource[];
+    try {
+        return normalizeDownloadSources(JSON.parse(value));
+    } catch {
+        return ["gamebanana"];
+    }
 }
 
 export class Setting {
@@ -309,6 +328,19 @@ export class Setting {
                 getDefault: () => false,
                 fromStored: (value) => parseBooleanSetting(value, false),
                 toStored: (value) => String(value),
+            },
+            "mod.autoResolveDownloadTarget": {
+                definition: APP_SETTINGS["mod.autoResolveDownloadTarget"],
+                getDefault: () => false,
+                fromStored: (value) => parseBooleanSetting(value, false),
+                toStored: (value) => String(value),
+            },
+            "mod.autoResolveDownloadTargetSources": {
+                definition: APP_SETTINGS["mod.autoResolveDownloadTargetSources"],
+                getDefault: () => ["gamebanana"],
+                fromStored: (value) => parseDownloadSources(value),
+                normalize: (value) => normalizeDownloadSources(value),
+                toStored: (value) => JSON.stringify(value),
             },
             "mod.copyShaderFixesOnEnable": {
                 definition: APP_SETTINGS["mod.copyShaderFixesOnEnable"],

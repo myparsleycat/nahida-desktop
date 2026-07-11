@@ -272,6 +272,7 @@ export type IpcEvents = {
         suggestedName?: string;
         downloadTargetName?: string;
         downloadImporterKey?: string;
+        downloadSource: import("./mod").DownloadSource;
     }) => void;
     "language:update": (language: string) => void;
 

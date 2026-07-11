@@ -1039,7 +1039,14 @@
           "copyShaderFixesOnEnable": "활성화 시 ShaderFixes 복사",
           "copyShaderFixesOnEnableDescription": "모드를 활성화할 때 모드 안의 ShaderFixes 파일을 활성 Importer의 ShaderFixes 폴더로 복사합니다.",
           "searchModPreview": "하위 폴더에서 미리보기 검색",
-          "searchModPreviewDescription": "캐릭터 폴더에 프리뷰 이미지가 없는 경우, 모드 폴더 내부에서 프리뷰 이미지를 검색합니다."
+          "searchModPreviewDescription": "캐릭터 폴더에 프리뷰 이미지가 없는 경우, 모드 폴더 내부에서 프리뷰 이미지를 검색합니다.",
+          "autoResolveDownloadTarget": "다운로드 대상 폴더 자동 선택",
+          "autoResolveDownloadTargetDescription": "다운로드 이름과 비슷한 모드 폴더를 자동으로 선택합니다.",
+          "downloadSources": {
+            "gamebanana": "GameBanana",
+            "nahidaLive": "나히다 라이브",
+            "hui": "Hui"
+          }
         },
         "layout": {
           "title": "레이아웃",

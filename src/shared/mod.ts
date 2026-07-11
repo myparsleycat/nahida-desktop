@@ -20,6 +20,10 @@ export const SIDEBAR_LAYOUT_MODES = ["row", "grid"] as const;
 
 export type SidebarLayoutMode = (typeof SIDEBAR_LAYOUT_MODES)[number];
 
+export const DOWNLOAD_SOURCES = ["gamebanana", "nahidaLive", "hui"] as const;
+
+export type DownloadSource = (typeof DOWNLOAD_SOURCES)[number];
+
 export const NTE_IMPORTER_KEY = "NTE";
 export const NTE_GAMEBANANA_ID = 23012;
 

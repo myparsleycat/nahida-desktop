@@ -76,6 +76,7 @@ function scoreCandidate(candidate: string, input: string, inputTokens: string[])
     if (!candidate || !input) return 0;
     if (candidate === input) return EXACT_FULL_MATCH_SCORE;
     if (inputTokens.some((token) => token === candidate)) return EXACT_TOKEN_MATCH_SCORE;
+    if (candidate.length < 4) return 0;
     if (input.startsWith(candidate)) return INPUT_STARTS_WITH_CANDIDATE_SCORE;
     if (input.includes(candidate)) return INPUT_INCLUDES_CANDIDATE_SCORE;
 
@@ -100,14 +101,14 @@ function scoreToken(candidate: string, token: string) {
         commonPrefixLength >= Math.max(2, Math.ceil(shorterLength * 0.6))
             ? 0.85 + 0.1 * (commonPrefixLength / longerLength)
             : 0;
-    const shortTokenTypoScore =
-        shorterLength >= 4 && tokenDistance === 1 && Math.abs(candidate.length - token.length) <= 1
-            ? 0.88
-            : 0;
+    const transpositionScore = hasSingleAdjacentTransposition(candidate, token) ? 0.88 : 0;
+    const singleEditScore =
+        shorterLength >= 4 && commonPrefixLength >= 2 && tokenDistance === 1 ? 0.88 : 0;
 
     return Math.max(
         strongPrefixScore,
-        shortTokenTypoScore,
+        transpositionScore,
+        singleEditScore,
         (1 - tokenDistance / longerLength) * TOKEN_LEVENSHTEIN_MAX_SCORE,
     );
 }
