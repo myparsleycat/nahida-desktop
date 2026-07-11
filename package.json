@@ -135,12 +135,5 @@
     "vitepress": "2.0.0-alpha.17",
     "wrangler": "^4.107.0",
     "zustand": "^5.0.14"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "electron",
-      "esbuild",
-      "sharp"
-    ]
   }
 }
