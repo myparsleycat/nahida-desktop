@@ -228,8 +228,11 @@ export class ModLibraryService {
         );
         if (!match) return null;
 
-        const candidate = candidates.find((candidate) => candidate.group.name === match.value);
-        if (!candidate) return null;
+        const matchingCandidates = candidates.filter(
+            (candidate) => candidate.group.name === match.value,
+        );
+        if (matchingCandidates.length !== 1) return null;
+        const candidate = matchingCandidates[0];
 
         return {
             game: candidate.game,

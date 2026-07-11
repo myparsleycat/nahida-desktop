@@ -20,7 +20,7 @@ export const SIDEBAR_LAYOUT_MODES = ["row", "grid"] as const;
 
 export type SidebarLayoutMode = (typeof SIDEBAR_LAYOUT_MODES)[number];
 
-export const DOWNLOAD_SOURCES = ["gamebanana", "nahidaLive", "hui"] as const;
+export const DOWNLOAD_SOURCES = ["gamebanana", "nahidaLive", "hui", "drive"] as const;
 
 export type DownloadSource = (typeof DOWNLOAD_SOURCES)[number];
 

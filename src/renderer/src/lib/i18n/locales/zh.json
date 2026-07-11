@@ -1025,7 +1025,8 @@
           "downloadSources": {
             "gamebanana": "GameBanana",
             "nahidaLive": "Nahida Live",
-            "hui": "Hui"
+            "hui": "Hui",
+            "drive": "云端硬盘"
           }
         },
         "layout": {
@@ -1148,6 +1149,7 @@
     "path-selector-dialog": {
       "title": "选择路径",
       "description": "选择下载 {{name}} 的方式",
+      "multiple_description": "选择下载 {{count}} 个项目的方式",
       "mod_manager": {
         "title": "模组管理器",
         "description": {

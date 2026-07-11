@@ -30,6 +30,7 @@ interface ModState {
     downloadMode: {
         downloadId: string;
         suggestedName?: string;
+        suggestedNames?: string[];
         downloadTargetName?: string;
         downloadImporterKey?: string;
         downloadSource: DownloadSource;
@@ -38,6 +39,7 @@ interface ModState {
         mode: {
             downloadId: string;
             suggestedName?: string;
+            suggestedNames?: string[];
             downloadTargetName?: string;
             downloadImporterKey?: string;
             downloadSource: DownloadSource;

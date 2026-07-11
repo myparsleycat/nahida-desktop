@@ -270,6 +270,7 @@ export type IpcEvents = {
     "pathSelector:modeSelect": (data: {
         selectionId: string;
         suggestedName?: string;
+        suggestedNames?: string[];
         downloadTargetName?: string;
         downloadImporterKey?: string;
         downloadSource: import("./mod").DownloadSource;
