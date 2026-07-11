@@ -26,6 +26,7 @@ import {
   useModWatcherEvents,
 } from "@renderer/hooks/use-mod-events";
 import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
+import { useSettings } from "@renderer/hooks/use-settings";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { modStore, useModStore } from "@renderer/store/mod";
 import { findGameByImporter, type ResolvedArchiveExtractPathMode } from "@shared/mod";
@@ -37,6 +38,11 @@ import { useTranslation } from "react-i18next";
 export const Route = createFileRoute("/mod/")({
   component: RouteComponent,
 });
+
+const downloadTargetSettingsConfig = {
+  enabled: "mod.autoResolveDownloadTarget",
+  sources: "mod.autoResolveDownloadTargetSources",
+} as const;
 
 function RouteComponent() {
   return <ModRouteContent />;
@@ -71,6 +77,7 @@ function ModRouteContent() {
 
   const { data: games = [] } = useGames();
   const { data: characters = [] } = useCharacters(selectedGame);
+  const { settings: downloadTargetSettings } = useSettings(downloadTargetSettingsConfig);
   const [pendingDownloadTarget, setPendingDownloadTarget] = useState<{
     downloadId: string;
     game: string;
@@ -158,10 +165,14 @@ function ModRouteContent() {
   }, [games, selectedGame, setSelectedGame]);
 
   useEffect(() => {
+    const shouldAutoResolve =
+      downloadTargetSettings.enabled === true &&
+      downloadTargetSettings.sources?.includes(downloadMode?.downloadSource ?? "gamebanana");
     if (
-      !downloadMode?.suggestedName &&
-      !downloadMode?.downloadTargetName &&
-      !downloadMode?.downloadImporterKey
+      !shouldAutoResolve ||
+      (!downloadMode?.suggestedName &&
+        !downloadMode?.downloadTargetName &&
+        !downloadMode?.downloadImporterKey)
     ) {
       return;
     }
@@ -169,9 +180,10 @@ function ModRouteContent() {
     if (downloadMode.downloadImporterKey && games.length === 0) return;
 
     const downloadId = downloadMode.downloadId;
+    let active = true;
 
     const resolveTarget = async () => {
-      if (modStore.getState().downloadMode?.downloadId !== downloadId) return;
+      if (!active || modStore.getState().downloadMode?.downloadId !== downloadId) return;
 
       const currentDownloadMode = modStore.getState().downloadMode;
       if (!currentDownloadMode) return;
@@ -191,6 +203,7 @@ function ModRouteContent() {
 
       const stateAfterPrimary = modStore.getState();
       if (
+        !active ||
         stateAfterPrimary.downloadMode?.downloadId !== downloadId ||
         stateAfterPrimary.userSelectedDuringDownload
       ) {
@@ -207,6 +220,7 @@ function ModRouteContent() {
 
       const stateAfterResolve = modStore.getState();
       if (
+        !active ||
         stateAfterResolve.downloadMode?.downloadId !== downloadId ||
         stateAfterResolve.userSelectedDuringDownload
       ) {
@@ -237,11 +251,18 @@ function ModRouteContent() {
     void resolveTarget().catch((error) => {
       console.error("Failed to resolve download target", error);
     });
+
+    return () => {
+      active = false;
+    };
   }, [
     downloadMode?.downloadId,
     downloadMode?.suggestedName,
     downloadMode?.downloadTargetName,
     downloadMode?.downloadImporterKey,
+    downloadMode?.downloadSource,
+    downloadTargetSettings.enabled,
+    downloadTargetSettings.sources,
     games,
     setSelectedGame,
   ]);

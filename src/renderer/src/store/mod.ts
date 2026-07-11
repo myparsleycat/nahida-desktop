@@ -1,3 +1,4 @@
+import type { DownloadSource } from "@shared/mod";
 import type { FolderGroup, GameConfig, Preset } from "@shared/types";
 import { createStore, useStore } from "zustand";
 
@@ -31,6 +32,7 @@ interface ModState {
         suggestedName?: string;
         downloadTargetName?: string;
         downloadImporterKey?: string;
+        downloadSource: DownloadSource;
     } | null;
     setDownloadMode: (
         mode: {
@@ -38,6 +40,7 @@ interface ModState {
             suggestedName?: string;
             downloadTargetName?: string;
             downloadImporterKey?: string;
+            downloadSource: DownloadSource;
         } | null,
     ) => void;
     userSelectedDuringDownload: boolean;

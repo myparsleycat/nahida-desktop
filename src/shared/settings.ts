@@ -1,5 +1,10 @@
 import type { DriveNameSortPolicy } from "./drive";
-import type { ArchiveExtractPathMode, ModGridLayoutMode, SidebarLayoutMode } from "./mod";
+import type {
+    ArchiveExtractPathMode,
+    DownloadSource,
+    ModGridLayoutMode,
+    SidebarLayoutMode,
+} from "./mod";
 import type { AutoUpdateMode } from "./updater";
 
 export interface AppSettings {
@@ -20,6 +25,8 @@ export interface AppSettings {
     "mod.virtualizationEnabled": boolean;
     "mod.virtualizationThreshold": number;
     "mod.searchModPreview": boolean;
+    "mod.autoResolveDownloadTarget": boolean;
+    "mod.autoResolveDownloadTargetSources": DownloadSource[];
     "mod.copyShaderFixesOnEnable": boolean;
     "mod.sidebarLayout": SidebarLayoutMode;
     "mod.characterSidebarWidth": number;
@@ -135,6 +142,16 @@ export const APP_SETTINGS = {
         publicKey: "mod.searchModPreview",
         scope: "mod",
         storageKey: "mod_search_mod_preview",
+    },
+    "mod.autoResolveDownloadTarget": {
+        publicKey: "mod.autoResolveDownloadTarget",
+        scope: "mod",
+        storageKey: "mod_auto_resolve_download_target",
+    },
+    "mod.autoResolveDownloadTargetSources": {
+        publicKey: "mod.autoResolveDownloadTargetSources",
+        scope: "mod",
+        storageKey: "mod_auto_resolve_download_target_sources",
     },
     "mod.copyShaderFixesOnEnable": {
         publicKey: "mod.copyShaderFixesOnEnable",

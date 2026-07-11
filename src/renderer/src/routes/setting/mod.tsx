@@ -1,6 +1,7 @@
 import { useAutoAnimate } from "@formkit/auto-animate/react";
 import { clampModGridColumnCount, clampModGridWidth } from "@renderer/components/mod/grid-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
+import { Checkbox } from "@renderer/components/ui/checkbox";
 import { FieldDescription, FieldGroup, FieldTitle } from "@renderer/components/ui/field";
 import { Input } from "@renderer/components/ui/input";
 import {
@@ -17,6 +18,7 @@ import { useSettings } from "@renderer/hooks/use-settings";
 import { Logger } from "@renderer/lib/logger";
 import {
   MOD_GRID_LAYOUT_MODES,
+  DOWNLOAD_SOURCES,
   SIDEBAR_LAYOUT_MODES,
   type ModGridLayoutMode,
   type SidebarLayoutMode,
@@ -37,6 +39,8 @@ const settingsConfig = {
   virtualizationEnabled: "mod.virtualizationEnabled",
   virtualizationThreshold: "mod.virtualizationThreshold",
   searchModPreview: "mod.searchModPreview",
+  autoResolveDownloadTarget: "mod.autoResolveDownloadTarget",
+  autoResolveDownloadTargetSources: "mod.autoResolveDownloadTargetSources",
   copyShaderFixesOnEnable: "mod.copyShaderFixesOnEnable",
   sidebarLayout: "mod.sidebarLayout",
   gridLayoutMode: "mod.gridLayoutMode",
@@ -288,6 +292,49 @@ function ModSettingsRouteContent() {
                 checked={settings.searchModPreview}
                 onCheckedChange={(val) => update("searchModPreview", val)}
               />
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5 pr-4">
+                  <span className="text-sm font-medium">
+                    {t("page.setting.mod.mod_management.autoResolveDownloadTarget")}
+                  </span>
+                  <p className="text-xs text-muted-foreground">
+                    {t("page.setting.mod.mod_management.autoResolveDownloadTargetDescription")}
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.autoResolveDownloadTarget}
+                  onCheckedChange={(val) => update("autoResolveDownloadTarget", val)}
+                />
+              </div>
+
+              <div className="grid gap-2 rounded-lg border bg-muted/20 p-3 sm:grid-cols-3">
+                {DOWNLOAD_SOURCES.map((source) => (
+                  <label
+                    key={source}
+                    className="flex cursor-pointer items-center gap-2 text-sm has-disabled:cursor-not-allowed has-disabled:opacity-50"
+                  >
+                    <Checkbox
+                      checked={settings.autoResolveDownloadTargetSources.includes(source)}
+                      disabled={!settings.autoResolveDownloadTarget}
+                      onCheckedChange={(checked) =>
+                        update("autoResolveDownloadTargetSources", (currentSources) =>
+                          checked
+                            ? currentSources.includes(source)
+                              ? currentSources
+                              : [...currentSources, source]
+                            : currentSources.filter((selectedSource) => selectedSource !== source),
+                        )
+                      }
+                    />
+                    {t(`page.setting.mod.mod_management.downloadSources.${source}`)}
+                  </label>
+                ))}
+              </div>
             </div>
           </CardContent>
         </Card>

@@ -1057,7 +1057,14 @@
           "copyShaderFixesOnEnable": "Copy ShaderFixes on enable",
           "copyShaderFixesOnEnableDescription": "Copy ShaderFixes files from the mod into the active Importer's ShaderFixes folder when enabling a mod.",
           "searchModPreview": "Search Preview in Subfolders",
-          "searchModPreviewDescription": "If no preview image exists in the character folder, search for preview images inside mod folders."
+          "searchModPreviewDescription": "If no preview image exists in the character folder, search for preview images inside mod folders.",
+          "autoResolveDownloadTarget": "Automatically select download target folder",
+          "autoResolveDownloadTargetDescription": "Automatically select a mod folder with a name similar to the download.",
+          "downloadSources": {
+            "gamebanana": "GameBanana",
+            "nahidaLive": "Nahida Live",
+            "hui": "Hui"
+          }
         },
         "layout": {
           "title": "Layout",

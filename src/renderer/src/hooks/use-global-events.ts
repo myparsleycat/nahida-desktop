@@ -1,3 +1,4 @@
+import type { DownloadSource } from "@shared/mod";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -11,6 +12,7 @@ export function useGlobalEvents(
         suggestedName?: string;
         downloadTargetName?: string;
         downloadImporterKey?: string;
+        downloadSource: DownloadSource;
     }) => void,
 ) {
     const navi = useNavigate();

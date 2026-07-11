@@ -67,6 +67,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
   const navi = useNavigate();
   const selectedGame = useModStore((s) => s.selectedGame);
   const setSelectedGame = useModStore((s) => s.setSelectedGame);
+  const markUserSelectedDuringDownload = useModStore((s) => s.markUserSelectedDuringDownload);
   const selectedPreset = useModStore((s) => s.selectedPreset);
   const setSelectedPreset = useModStore((s) => s.setSelectedPreset);
   const setIsSelectedPresetDialogOpen = useModStore((s) => s.setIsSelectedPresetDialogOpen);
@@ -91,6 +92,7 @@ export const GamePresetSelector = memo(function GamePresetSelector({
   }, [isSelectedPresetDialogOpen, setSelectedPreset]);
 
   const handleGameSelect = async (game: string) => {
+    markUserSelectedDuringDownload();
     setSelectedGame(game);
     await window.api.invoke("mod:setLastGame", game);
   };

@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@renderer/components/ui/dialog";
 import { useModStore } from "@renderer/store/mod";
+import type { DownloadSource } from "@shared/mod";
 import { useNavigate } from "@tanstack/react-router";
 import { FolderOpen, Grid3x3 } from "lucide-react";
 import { useRef } from "react";
@@ -20,6 +21,7 @@ interface PathSelectorDialogProps {
   suggestedName?: string;
   downloadTargetName?: string;
   downloadImporterKey?: string;
+  downloadSource: DownloadSource;
 }
 
 export function PathSelectorDialog({
@@ -29,6 +31,7 @@ export function PathSelectorDialog({
   suggestedName,
   downloadTargetName,
   downloadImporterKey,
+  downloadSource,
 }: PathSelectorDialogProps) {
   const { t } = useTranslation();
   const navi = useNavigate();
@@ -72,6 +75,7 @@ export function PathSelectorDialog({
       suggestedName,
       downloadTargetName,
       downloadImporterKey,
+      downloadSource,
     });
     void navi({ to: "/mod" });
     closeWithoutCancel();

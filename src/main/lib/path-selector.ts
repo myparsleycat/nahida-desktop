@@ -1,3 +1,4 @@
+import type { DownloadSource } from "@shared/mod";
 import { dialog } from "electron";
 import { nanoid } from "nanoid";
 
@@ -16,6 +17,7 @@ export interface PendingPathSelection {
     suggestedName?: string;
     downloadTargetName?: string;
     downloadImporterKey?: string;
+    downloadSource: DownloadSource;
     resolve: (result: PathSelectorResult) => void;
     reject: (error: Error) => void;
 }
@@ -32,6 +34,7 @@ export class PathSelector {
         suggestedName?: string,
         downloadTargetName?: string,
         downloadImporterKey?: string,
+        downloadSource: DownloadSource = "nahidaLive",
     ): Promise<PathSelectorResult> {
         return new Promise((resolve, reject) => {
             const selectionId = nanoid();
@@ -41,6 +44,7 @@ export class PathSelector {
                 suggestedName,
                 downloadTargetName,
                 downloadImporterKey,
+                downloadSource,
                 resolve,
                 reject,
             });
@@ -57,6 +61,7 @@ export class PathSelector {
                                     suggestedName,
                                     downloadTargetName,
                                     downloadImporterKey,
+                                    downloadSource,
                                 );
                             }, 500);
                         });
@@ -67,6 +72,7 @@ export class PathSelector {
                             suggestedName,
                             downloadTargetName,
                             downloadImporterKey,
+                            downloadSource,
                         );
                     }
                 });
@@ -77,6 +83,7 @@ export class PathSelector {
                     suggestedName,
                     downloadTargetName,
                     downloadImporterKey,
+                    downloadSource,
                 );
             }
         });
@@ -87,6 +94,7 @@ export class PathSelector {
         suggestedName?: string,
         downloadTargetName?: string,
         downloadImporterKey?: string,
+        downloadSource: DownloadSource = "nahidaLive",
     ) {
         const mainWindow = this.desktop.window.main.window;
         if (!mainWindow) {
@@ -103,6 +111,7 @@ export class PathSelector {
             suggestedName,
             downloadTargetName,
             downloadImporterKey,
+            downloadSource,
         });
     }
 
