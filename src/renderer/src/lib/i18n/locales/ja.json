@@ -1026,7 +1026,8 @@
           "downloadSources": {
             "gamebanana": "GameBanana",
             "nahidaLive": "Nahida Live",
-            "hui": "Hui"
+            "hui": "Hui",
+            "drive": "ドライブ"
           }
         },
         "layout": {
@@ -1149,6 +1150,7 @@
     "path-selector-dialog": {
       "title": "パス選択",
       "description": "{{name}} をダウンロードする方法を選択してください",
+      "multiple_description": "{{count}}個の項目をダウンロードする方法を選択してください",
       "mod_manager": {
         "title": "MODマネージャー",
         "description": {

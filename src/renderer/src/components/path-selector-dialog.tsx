@@ -19,6 +19,7 @@ interface PathSelectorDialogProps {
   onOpenChange: (open: boolean) => void;
   selectionId: string;
   suggestedName?: string;
+  suggestedNames?: string[];
   downloadTargetName?: string;
   downloadImporterKey?: string;
   downloadSource: DownloadSource;
@@ -29,6 +30,7 @@ export function PathSelectorDialog({
   onOpenChange,
   selectionId,
   suggestedName,
+  suggestedNames,
   downloadTargetName,
   downloadImporterKey,
   downloadSource,
@@ -73,6 +75,7 @@ export function PathSelectorDialog({
     setDownloadMode({
       downloadId: selectionId,
       suggestedName,
+      suggestedNames,
       downloadTargetName,
       downloadImporterKey,
       downloadSource,
@@ -92,7 +95,11 @@ export function PathSelectorDialog({
         <DialogHeader>
           <DialogTitle>{t("components.path-selector-dialog.title")}</DialogTitle>
           <DialogDescription>
-            {t("components.path-selector-dialog.description", { name: suggestedName })}
+            {suggestedNames && suggestedNames.length > 1
+              ? t("components.path-selector-dialog.multiple_description", {
+                  count: suggestedNames.length,
+                })
+              : t("components.path-selector-dialog.description", { name: suggestedName })}
           </DialogDescription>
         </DialogHeader>
 

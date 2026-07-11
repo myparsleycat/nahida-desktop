@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import type { DownloadSource } from "@shared/mod";
 import { dialog } from "electron";
 import { nanoid } from "nanoid";
@@ -15,9 +17,11 @@ export interface PathSelectorResult {
 export interface PendingPathSelection {
     id: string;
     suggestedName?: string;
+    suggestedNames?: string[];
     downloadTargetName?: string;
     downloadImporterKey?: string;
     downloadSource: DownloadSource;
+    selectFile: boolean;
     resolve: (result: PathSelectorResult) => void;
     reject: (error: Error) => void;
 }
@@ -35,6 +39,8 @@ export class PathSelector {
         downloadTargetName?: string,
         downloadImporterKey?: string,
         downloadSource: DownloadSource = "nahidaLive",
+        suggestedNames?: string[],
+        selectFile = false,
     ): Promise<PathSelectorResult> {
         return new Promise((resolve, reject) => {
             const selectionId = nanoid();
@@ -42,9 +48,11 @@ export class PathSelector {
             this.pendingSelections.set(selectionId, {
                 id: selectionId,
                 suggestedName,
+                suggestedNames,
                 downloadTargetName,
                 downloadImporterKey,
                 downloadSource,
+                selectFile,
                 resolve,
                 reject,
             });
@@ -62,6 +70,7 @@ export class PathSelector {
                                     downloadTargetName,
                                     downloadImporterKey,
                                     downloadSource,
+                                    suggestedNames,
                                 );
                             }, 500);
                         });
@@ -73,6 +82,7 @@ export class PathSelector {
                             downloadTargetName,
                             downloadImporterKey,
                             downloadSource,
+                            suggestedNames,
                         );
                     }
                 });
@@ -84,6 +94,7 @@ export class PathSelector {
                     downloadTargetName,
                     downloadImporterKey,
                     downloadSource,
+                    suggestedNames,
                 );
             }
         });
@@ -95,6 +106,7 @@ export class PathSelector {
         downloadTargetName?: string,
         downloadImporterKey?: string,
         downloadSource: DownloadSource = "nahidaLive",
+        suggestedNames?: string[],
     ) {
         const mainWindow = this.desktop.window.main.window;
         if (!mainWindow) {
@@ -109,6 +121,7 @@ export class PathSelector {
         this.desktop.ipc.postMessageToWindow(mainWindow, "pathSelector:modeSelect", {
             selectionId,
             suggestedName,
+            suggestedNames,
             downloadTargetName,
             downloadImporterKey,
             downloadSource,
@@ -121,15 +134,25 @@ export class PathSelector {
             throw new Error("Pending selection not found");
         }
 
-        const path = await this.selectFolderDialog();
+        try {
+            if (pending.selectFile) {
+                const result = await this.selectFileDialog(pending.suggestedName);
+                pending.resolve({
+                    mode: "folder",
+                    path: result ? path.dirname(result) : null,
+                    fileName: result ? path.basename(result) : undefined,
+                });
+                return;
+            }
 
-        if (path) {
-            pending.resolve({ mode: "folder", path });
-        } else {
-            pending.resolve({ mode: "folder", path: null });
+            const selectedPath = await this.selectFolderDialog();
+            pending.resolve({ mode: "folder", path: selectedPath });
+        } catch (error) {
+            pending.reject(error instanceof Error ? error : new Error(String(error)));
+            throw error;
+        } finally {
+            this.pendingSelections.delete(selectionId);
         }
-
-        this.pendingSelections.delete(selectionId);
     }
 
     public async selectModManagerPath(
@@ -177,5 +200,21 @@ export class PathSelector {
         }
 
         return savePath;
+    }
+
+    private async selectFileDialog(suggestedName?: string): Promise<string | null> {
+        const window = this.desktop.window.main.window;
+        if (!window) throw new Error("Main window not found");
+
+        const dialogResult = await dialog.showSaveDialog(window, {
+            defaultPath: suggestedName,
+        });
+        if (dialogResult.canceled || !dialogResult.filePath) return null;
+
+        const isWritable = await this.desktop.lib.fs.isPathWritable(
+            path.dirname(dialogResult.filePath),
+        );
+        if (!isWritable) throw new Error("Path is not writable");
+        return dialogResult.filePath;
     }
 }

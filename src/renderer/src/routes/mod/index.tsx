@@ -171,6 +171,7 @@ function ModRouteContent() {
     if (
       !shouldAutoResolve ||
       (!downloadMode?.suggestedName &&
+        !downloadMode?.suggestedNames?.length &&
         !downloadMode?.downloadTargetName &&
         !downloadMode?.downloadImporterKey)
     ) {
@@ -195,9 +196,7 @@ function ModRouteContent() {
       if (currentDownloadMode.downloadImporterKey && !gameByImporter) return;
 
       const primary = currentDownloadMode.downloadTargetName;
-      const fallback = currentDownloadMode.suggestedName;
-
-      let result = primary
+      const primaryResult = primary
         ? await window.api.invoke("mod:resolveDownloadTarget", primary, gameByImporter ?? undefined)
         : null;
 
@@ -210,13 +209,29 @@ function ModRouteContent() {
         return;
       }
 
-      if (!result && fallback) {
-        result = await window.api.invoke(
-          "mod:resolveDownloadTarget",
-          fallback,
-          gameByImporter ?? undefined,
-        );
-      }
+      const fallbackNames = currentDownloadMode.suggestedNames?.length
+        ? currentDownloadMode.suggestedNames
+        : currentDownloadMode.suggestedName
+          ? [currentDownloadMode.suggestedName]
+          : [];
+      const fallbackResults = primaryResult
+        ? []
+        : await Promise.all(
+            fallbackNames.map((name) =>
+              window.api.invoke("mod:resolveDownloadTarget", name, gameByImporter ?? undefined),
+            ),
+          );
+      const firstFallbackResult = fallbackResults[0] ?? null;
+      const result =
+        primaryResult ??
+        (firstFallbackResult &&
+        fallbackResults.every(
+          (candidate) =>
+            candidate?.game === firstFallbackResult.game &&
+            candidate.group.path === firstFallbackResult.group.path,
+        )
+          ? firstFallbackResult
+          : null);
 
       const stateAfterResolve = modStore.getState();
       if (
@@ -258,6 +273,7 @@ function ModRouteContent() {
   }, [
     downloadMode?.downloadId,
     downloadMode?.suggestedName,
+    downloadMode?.suggestedNames,
     downloadMode?.downloadTargetName,
     downloadMode?.downloadImporterKey,
     downloadMode?.downloadSource,

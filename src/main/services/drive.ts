@@ -1,4 +1,3 @@
-import path from "node:path";
 import { promisify } from "node:util";
 import { gunzip, gzip, zstdCompress, zstdDecompress } from "node:zlib";
 
@@ -16,6 +15,7 @@ import Upload, {
     type UploadParams,
 } from "@main/lib/upload";
 import type { LinkData } from "@main/server";
+import type { DownloadSource } from "@shared/mod";
 import { toErrorMessage } from "@shared/utils";
 import { dialog } from "electron";
 import { retry } from "es-toolkit";
@@ -26,7 +26,6 @@ import { nanoid } from "nanoid";
 import type { NahidaDesktop } from "..";
 import type { LocalTransfer, TransferParams } from "./transfer";
 
-import { saveFileDialog, selectDirectoryDialog } from "./dialog";
 import { processChunked } from "./util";
 
 const Fn = eden.akasha.content({ id: "" }).get;
@@ -248,11 +247,13 @@ export class DriveService {
             targetPath,
             link,
             data,
+            source = "nahidaLive",
         }: {
             items: Array<{ id: string; isDir: boolean; name: string }>;
             targetPath?: string;
             link?: LinkData;
             data?: DownloadMetadata;
+            source?: Extract<DownloadSource, "drive" | "nahidaLive">;
         }): Promise<"started" | "canceled"> => {
             if (items.length === 0) return "canceled";
 
@@ -262,47 +263,27 @@ export class DriveService {
 
             const isSingle = items.length === 1;
             const single = items[0];
-            const allDirs = items.every((item) => item.isDir);
-
             let savePath = targetPath;
             let suggestedName = isSingle ? single.name : undefined;
 
             if (!savePath) {
-                if (isSingle && !single.isDir) {
-                    const result = await saveFileDialog({ suggestedName });
-                    if (result.canceled) {
-                        this.desktop.logger.info(
-                            "Download cancelled by user selection",
-                            "Drive:Download",
-                        );
-                        return "canceled";
-                    }
-                    savePath = path.dirname(result.filePath);
-                    suggestedName = path.basename(result.filePath);
-                } else if (allDirs) {
-                    const result =
-                        await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(
-                            suggestedName,
-                        );
-                    if (!result.path) {
-                        this.desktop.logger.info(
-                            "Download cancelled by user selection",
-                            "Drive:Download",
-                        );
-                        return "canceled";
-                    }
-                    savePath = result.path;
-                } else {
-                    const result = await selectDirectoryDialog();
-                    if (result.canceled || !result.filePath) {
-                        this.desktop.logger.info(
-                            "Download cancelled by user selection",
-                            "Drive:Download",
-                        );
-                        return "canceled";
-                    }
-                    savePath = result.filePath;
+                const result = await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(
+                    suggestedName,
+                    undefined,
+                    undefined,
+                    source,
+                    items.map((item) => item.name),
+                    isSingle && !single.isDir,
+                );
+                if (!result.path) {
+                    this.desktop.logger.info(
+                        "Download cancelled by user selection",
+                        "Drive:Download",
+                    );
+                    return "canceled";
                 }
+                savePath = result.path;
+                suggestedName = isSingle ? (result.fileName ?? suggestedName) : undefined;
             }
 
             savePath = this.desktop.lib.fs.sanitizePath(savePath);

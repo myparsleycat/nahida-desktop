@@ -104,6 +104,7 @@ function RootComponent() {
   const [pathSelectorData, setPathSelectorData] = useState<{
     selectionId: string;
     suggestedName?: string;
+    suggestedNames?: string[];
     downloadTargetName?: string;
     downloadImporterKey?: string;
     downloadSource: DownloadSource;
@@ -113,6 +114,7 @@ function RootComponent() {
     (data: {
       selectionId: string;
       suggestedName?: string;
+      suggestedNames?: string[];
       downloadTargetName?: string;
       downloadImporterKey?: string;
       downloadSource: DownloadSource;
@@ -142,6 +144,7 @@ function RootComponent() {
           onOpenChange={(open) => !open && setPathSelectorData(null)}
           selectionId={pathSelectorData.selectionId}
           suggestedName={pathSelectorData.suggestedName}
+          suggestedNames={pathSelectorData.suggestedNames}
           downloadTargetName={pathSelectorData.downloadTargetName}
           downloadImporterKey={pathSelectorData.downloadImporterKey}
           downloadSource={pathSelectorData.downloadSource}
@@ -149,14 +152,14 @@ function RootComponent() {
       )}
 
       <main className={cn("flex w-screen overflow-hidden", screenHeight)}>
-        <div className="flex flex-row w-full">
+        <div className="flex w-full flex-row">
           {!isNoSidebar && <Sidebar />}
 
           <div
             className={cn(
-              "flex-1 min-w-0 h-full relative overflow-hidden",
+              "relative h-full min-w-0 flex-1 overflow-hidden",
               DEFAULT_BG,
-              titlebarStyle === "modern" ? "border-t border-l rounded-tl-lg" : "border-l",
+              titlebarStyle === "modern" ? "rounded-tl-lg border-t border-l" : "border-l",
             )}
           >
             <Outlet />
@@ -209,10 +212,10 @@ function ErrorComponent({ error }: ErrorComponentProps) {
 
           {error?.message ? (
             <details className="rounded-lg border bg-muted/40 px-3 py-2 text-xs">
-              <summary className="cursor-pointer select-none font-medium text-muted-foreground">
+              <summary className="cursor-pointer font-medium text-muted-foreground select-none">
                 {t("page.root.error.details")}
               </summary>
-              <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap wrap-break-word font-mono text-destructive">
+              <pre className="mt-2 max-h-48 overflow-auto font-mono wrap-break-word whitespace-pre-wrap text-destructive">
                 {error.message}
               </pre>
             </details>
