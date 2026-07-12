@@ -33,8 +33,15 @@ describe("DISABLED_PREFIX_REGEX", () => {
         assert.equal(DISABLED_PREFIX_REGEX.test(""), false);
     });
 
-    it("does not match 'disabled' repeated without separator", () => {
+    it("does not match repeated 'disabled' without a trailing separator", () => {
         assert.equal(DISABLED_PREFIX_REGEX.test("disableddisableddisabledFoo"), false);
+    });
+
+    it("matches repeated prefixes", () => {
+        assert.equal(DISABLED_PREFIX_REGEX.test("disableddisabled Foo"), true);
+        assert.equal(DISABLED_PREFIX_REGEX.test("disableddisableddisabled Foo"), true);
+        assert.equal(DISABLED_PREFIX_REGEX.test("disabled_disabled_Foo"), true);
+        assert.equal(DISABLED_PREFIX_REGEX.test("disabled_disabled_disabled_foo"), true);
     });
 });
 
@@ -81,20 +88,16 @@ describe("stripDisabledPrefix", () => {
         );
     });
 
-    it("strips only the first prefix with separator repetition (double)", () => {
-        assert.equal(stripDisabledPrefix("disabled_disabled_Foo"), "disabled_Foo");
-        assert.equal(stripDisabledPrefix("disabled disabled Foo"), "disabled Foo");
+    it("strips repeated prefixes (double)", () => {
+        assert.equal(stripDisabledPrefix("disableddisabled Foo"), "Foo");
+        assert.equal(stripDisabledPrefix("disabled_disabled_Foo"), "Foo");
+        assert.equal(stripDisabledPrefix("disabled disabled Foo"), "Foo");
     });
 
-    it("strips only the first prefix with separator repetition (triple)", () => {
-        assert.equal(
-            stripDisabledPrefix("disabled_disabled_disabled_foo"),
-            "disabled_disabled_foo",
-        );
-        assert.equal(
-            stripDisabledPrefix("disabled disabled disabled foo"),
-            "disabled disabled foo",
-        );
+    it("strips repeated prefixes (triple)", () => {
+        assert.equal(stripDisabledPrefix("disableddisableddisabled Foo"), "Foo");
+        assert.equal(stripDisabledPrefix("disabled_disabled_disabled_foo"), "foo");
+        assert.equal(stripDisabledPrefix("disabled disabled disabled foo"), "foo");
     });
 });
 

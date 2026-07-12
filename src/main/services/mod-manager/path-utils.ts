@@ -4,7 +4,7 @@ import { trim } from "es-toolkit";
 
 import type { NahidaDesktop } from "../..";
 
-export const DISABLED_PREFIX_REGEX = /^disabled[\s_]+/i;
+export const DISABLED_PREFIX_REGEX = /^(?:disabled[\s_]*)+[\s_]+/i;
 
 export function normalizeModPath(modPath: string): string {
     return path.normalize(modPath).toLowerCase();
