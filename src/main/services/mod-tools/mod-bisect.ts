@@ -33,8 +33,17 @@ interface UndoEntry {
 }
 
 const RENAME_CONCURRENCY = 8;
-const DISABLED_PATH_PATTERN = /^disabled[\s_]+/i;
+const DISABLED_FOLDER_PATTERN = /^disabled[\s_]+/i;
+const DISABLED_INI_PATTERN = /^disabled/i;
 const BISECT_INCONCLUSIVE_ERROR = "Bisect inconclusive";
+
+export function isDisabledBisectPath(relativePath: string): boolean {
+    const segments = relativePath.split(/[\\/]+/);
+    return (
+        segments.slice(0, -1).some((segment) => DISABLED_FOLDER_PATTERN.test(segment)) ||
+        DISABLED_INI_PATTERN.test(segments.at(-1) ?? "")
+    );
+}
 
 export class ModBisect {
     private session: InternalSession | null = null;
@@ -384,15 +393,7 @@ export class ModBisect {
     }
 
     private async isPathDisabled(filePath: string, modRootPath: string): Promise<boolean> {
-        const relative = path.relative(modRootPath, filePath);
-        const segments = relative.split(/[\\/]+/);
-        const basename = path.basename(filePath);
-        for (const segment of [...segments, basename]) {
-            if (DISABLED_PATH_PATTERN.test(segment)) {
-                return true;
-            }
-        }
-        return false;
+        return isDisabledBisectPath(path.relative(modRootPath, filePath));
     }
 
     private async disableInis(paths: string[]): Promise<void> {

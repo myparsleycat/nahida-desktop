@@ -24,8 +24,14 @@ export const DISABLED_PREFIX_STYLES = ["space", "underscore"] as const;
 
 export type DisabledPrefixStyle = (typeof DISABLED_PREFIX_STYLES)[number];
 
+export const DISABLED_PREFIX_REGEX = /^(?:disabled[\s_]*)+[\s_]+/i;
+
 export function disabledPrefixString(style: DisabledPrefixStyle): string {
     return style === "underscore" ? "DISABLED_" : "DISABLED ";
+}
+
+export function stripDisabledPrefix(name: string): string {
+    return name.replace(DISABLED_PREFIX_REGEX, "").trim();
 }
 
 export const DOWNLOAD_SOURCES = ["gamebanana", "nahidaLive", "hui", "drive"] as const;

@@ -12,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui
 import type { ModActionApi } from "@renderer/hooks/use-mod-actions";
 import { cn } from "@renderer/lib/utils";
 import type { ModInfo } from "@renderer/types/mod";
+import { stripDisabledPrefix } from "@shared/mod";
 import {
   BoxIcon,
   FolderIcon,
@@ -37,9 +38,7 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
 
   return (
     <div className="relative z-10 flex items-center justify-between pb-1">
-      <span className="truncate text-sm font-semibold">
-        {mod.name.replace(/^disabled[\s_]+/i, "").trim()}
-      </span>
+      <span className="truncate text-sm font-semibold">{stripDisabledPrefix(mod.name)}</span>
       <div className="flex items-center gap-1">
         <DropdownMenu>
           <DropdownMenuTrigger

@@ -284,13 +284,38 @@ fn is_disabled_folder_name(folder_name: &str) -> bool {
 
 fn strip_disabled_prefix(folder_name: &str) -> String {
     let trimmed = folder_name.trim();
-    let lower = trimmed.to_ascii_lowercase();
-    if lower.starts_with("disabled ") {
-        trimmed[9..].trim().to_string()
-    } else if lower.starts_with("disabled_") {
-        trimmed[9..].trim_start_matches('_').trim().to_string()
-    } else {
-        trimmed.to_string()
+    let mut offset = 0;
+
+    loop {
+        let Some(remainder) = trimmed.get(offset..) else {
+            return trimmed.to_string();
+        };
+        let Some(prefix) = remainder.get(..8) else {
+            return trimmed.to_string();
+        };
+        if !prefix.eq_ignore_ascii_case("disabled") {
+            return trimmed.to_string();
+        }
+
+        offset += 8;
+        let separator_start = offset;
+        while let Some(character) = trimmed.get(offset..).and_then(|value| value.chars().next()) {
+            if character != '_' && !character.is_whitespace() {
+                break;
+            }
+            offset += character.len_utf8();
+        }
+
+        if trimmed
+            .get(offset..offset.saturating_add(8))
+            .is_some_and(|value| value.eq_ignore_ascii_case("disabled"))
+        {
+            continue;
+        }
+        if offset > separator_start {
+            return trimmed[offset..].trim().to_string();
+        }
+        return trimmed.to_string();
     }
 }
 
@@ -700,8 +725,8 @@ pub fn get_mods_sync(group_path: String) -> FolderGroup {
 #[cfg(test)]
 mod tests {
     use super::{
-        find_group_preview, is_disabled_folder_name, parse_ini, scan_mod_folder,
-        strip_disabled_prefix, strip_line_comment, strip_value_comment,
+        find_group_preview, is_disabled_folder_name, normalize_relative_path, parse_ini,
+        scan_mod_folder, strip_disabled_prefix, strip_line_comment, strip_value_comment,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -760,6 +785,29 @@ mod tests {
     fn strip_disabled_prefix_handles_underscore_prefix() {
         assert_eq!(strip_disabled_prefix("DISABLED_Example"), "Example");
         assert_eq!(strip_disabled_prefix("disabled_My_Mod"), "My_Mod");
+    }
+
+    #[test]
+    fn strip_disabled_prefix_handles_repeated_prefixes() {
+        assert_eq!(strip_disabled_prefix("DISABLED DISABLED Foo"), "Foo");
+        assert_eq!(strip_disabled_prefix("DISABLED_DISABLED_Foo"), "Foo");
+        assert_eq!(strip_disabled_prefix("disableddisabled Foo"), "Foo");
+    }
+
+    #[test]
+    fn strip_disabled_prefix_preserves_repeated_text_without_final_separator() {
+        assert_eq!(
+            strip_disabled_prefix("disableddisableddisabledFoo"),
+            "disableddisableddisabledFoo"
+        );
+    }
+
+    #[test]
+    fn repeated_disabled_prefixes_have_the_same_normalized_path() {
+        assert_eq!(
+            normalize_relative_path(Path::new("DISABLED_DISABLED_Foo")),
+            normalize_relative_path(Path::new("Foo"))
+        );
     }
 
     #[test]
