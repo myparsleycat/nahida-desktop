@@ -1019,6 +1019,12 @@
           "moveFolderInsteadOfCopyDescription": "フォルダーをMODフォルダーにドロップする際、コピーせずに移動します (元ファイル削除)",
           "copyShaderFixesOnEnable": "有効化時にShaderFixesをコピー",
           "copyShaderFixesOnEnableDescription": "MODを有効化するとき、MOD内のShaderFixesファイルを有効なImporterのShaderFixesフォルダーへコピーします。",
+          "disabledPrefixStyle": "無効化MOD接頭辞の形式",
+          "disabledPrefixStyleDescription": "MOD無効化時に使用する接頭辞を選択します。有効化時は両方の形式が常に認識されます。",
+          "disabledPrefixStyles": {
+            "space": "DISABLED (スペース)",
+            "underscore": "DISABLED_ (アンダースコア)"
+          },
           "searchModPreview": "サブフォルダからモッドプレビューを検索",
           "searchModPreviewDescription": "キャラクター フォルダにプレビュー画像がない場合、モッド フォルダ内からプレビュー画像を検索します。",
           "autoResolveDownloadTarget": "ダウンロード先フォルダーを自動選択",

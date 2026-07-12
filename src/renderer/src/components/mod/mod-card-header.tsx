@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
+
 import wuwaModFixerIcon from "@/renderer/assets/img/wuwa-mod-fixer-icon.png";
 
 interface ModCardHeaderProps {
@@ -35,9 +36,9 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
   const isConvertingModel = actions.convertingModelPath === mod.path;
 
   return (
-    <div className="flex items-center justify-between pb-1 relative z-10">
-      <span className="text-sm truncate font-semibold">
-        {mod.name.replace(/disabled/gi, "").trim()}
+    <div className="relative z-10 flex items-center justify-between pb-1">
+      <span className="truncate text-sm font-semibold">
+        {mod.name.replace(/^disabled[\s_]+/i, "").trim()}
       </span>
       <div className="flex items-center gap-1">
         <DropdownMenu>
@@ -52,7 +53,7 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
           <DropdownMenuContent
             onClick={(event) => event.stopPropagation()}
             finalFocus={false}
-            className="max-w-52 w-full"
+            className="w-full max-w-52"
           >
             <DropdownMenuGroup>
               <DropdownMenuLabel>Mod Tools</DropdownMenuLabel>
@@ -94,7 +95,7 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                   className="p-0"
                 >
                   <Tooltip disableHoverablePopup>
-                    <TooltipTrigger className="w-full h-full text-start truncate p-1">
+                    <TooltipTrigger className="h-full w-full truncate p-1 text-start">
                       {preset.name}
                     </TooltipTrigger>
                     <TooltipContent>
@@ -117,7 +118,7 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                   className="p-0"
                 >
                   <Tooltip disableHoverablePopup>
-                    <TooltipTrigger className="w-full h-full text-start truncate p-1">
+                    <TooltipTrigger className="h-full w-full truncate p-1 text-start">
                       {tool.name}
                     </TooltipTrigger>
                     <TooltipContent>

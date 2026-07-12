@@ -54,7 +54,7 @@ export function ModListRow({
         </td>
         <td className="w-full max-w-0 p-2 text-left align-middle">
           <span className="block w-full truncate text-left font-medium">
-            {mod.name.replace(/disabled/gi, "").trim()}
+            {mod.name.replace(/^disabled[\s_]+/i, "").trim()}
           </span>
         </td>
         <td className="w-[1%] p-2 text-right align-middle whitespace-nowrap text-muted-foreground">

@@ -1018,6 +1018,12 @@
           "moveFolderInsteadOfCopyDescription": "将文件夹拖入模组文件夹时进行移动而非复制 (删除源文件)",
           "copyShaderFixesOnEnable": "启用时复制 ShaderFixes",
           "copyShaderFixesOnEnableDescription": "启用模组时，将模组中的 ShaderFixes 文件复制到已激活导入器的 ShaderFixes 文件夹。",
+          "disabledPrefixStyle": "禁用模组前缀格式",
+          "disabledPrefixStyleDescription": "选择禁用模组时使用的前缀。启用时始终识别两种格式。",
+          "disabledPrefixStyles": {
+            "space": "DISABLED (空格)",
+            "underscore": "DISABLED_ (下划线)"
+          },
           "searchModPreview": "在子文件夹中搜索模组预览",
           "searchModPreviewDescription": "如果角色文件夹中没有预览图像，则在模组文件夹内部搜索预览图像。",
           "autoResolveDownloadTarget": "自动选择下载目标文件夹",

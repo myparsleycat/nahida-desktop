@@ -20,6 +20,14 @@ export const SIDEBAR_LAYOUT_MODES = ["row", "grid"] as const;
 
 export type SidebarLayoutMode = (typeof SIDEBAR_LAYOUT_MODES)[number];
 
+export const DISABLED_PREFIX_STYLES = ["space", "underscore"] as const;
+
+export type DisabledPrefixStyle = (typeof DISABLED_PREFIX_STYLES)[number];
+
+export function disabledPrefixString(style: DisabledPrefixStyle): string {
+    return style === "underscore" ? "DISABLED_" : "DISABLED ";
+}
+
 export const DOWNLOAD_SOURCES = ["gamebanana", "nahidaLive", "hui", "drive"] as const;
 
 export type DownloadSource = (typeof DOWNLOAD_SOURCES)[number];

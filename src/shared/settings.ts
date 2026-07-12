@@ -1,6 +1,7 @@
 import type { DriveNameSortPolicy } from "./drive";
 import type {
     ArchiveExtractPathMode,
+    DisabledPrefixStyle,
     DownloadSource,
     ModGridLayoutMode,
     SidebarLayoutMode,
@@ -34,6 +35,7 @@ export interface AppSettings {
     "mod.gridResponsiveBaseWidth": number;
     "mod.gridFixedCardWidth": number;
     "mod.gridFixedColumnCount": number;
+    "mod.disabledPrefixStyle": DisabledPrefixStyle;
 
     "transfer.downloadConcurrency": number;
     "transfer.uploadConcurrency": number;
@@ -187,6 +189,11 @@ export const APP_SETTINGS = {
         publicKey: "mod.gridFixedColumnCount",
         scope: "mod",
         storageKey: "mod_grid_fixed_column_count",
+    },
+    "mod.disabledPrefixStyle": {
+        publicKey: "mod.disabledPrefixStyle",
+        scope: "mod",
+        storageKey: "mod_disabled_prefix_style",
     },
 
     "transfer.downloadConcurrency": {

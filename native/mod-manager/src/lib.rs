@@ -278,19 +278,17 @@ fn is_excluded_file(filename: &str) -> bool {
 }
 
 fn is_disabled_folder_name(folder_name: &str) -> bool {
-    folder_name
-        .trim()
-        .to_ascii_lowercase()
-        .starts_with("disabled ")
+    let lower = folder_name.trim().to_ascii_lowercase();
+    lower.starts_with("disabled ") || lower.starts_with("disabled_")
 }
 
 fn strip_disabled_prefix(folder_name: &str) -> String {
     let trimmed = folder_name.trim();
-    if trimmed
-        .get(..9)
-        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("disabled "))
-    {
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("disabled ") {
         trimmed[9..].trim().to_string()
+    } else if lower.starts_with("disabled_") {
+        trimmed[9..].trim_start_matches('_').trim().to_string()
     } else {
         trimmed.to_string()
     }
@@ -545,7 +543,7 @@ pub fn get_characters_folder_sync(
 
 fn scan_mod_folder(group_path: &Path, mod_path: &Path) -> Option<ModInfo> {
     let folder_name = mod_path.file_name()?.to_string_lossy().to_string();
-    let is_enabled = !folder_name.to_ascii_lowercase().starts_with("disabled ");
+    let is_enabled = !is_disabled_folder_name(&folder_name);
 
     let mut total_size = 0.0;
     let mut max_mtime_sys = SystemTime::UNIX_EPOCH;
@@ -702,8 +700,8 @@ pub fn get_mods_sync(group_path: String) -> FolderGroup {
 #[cfg(test)]
 mod tests {
     use super::{
-        find_group_preview, parse_ini, scan_mod_folder, strip_disabled_prefix, strip_line_comment,
-        strip_value_comment,
+        find_group_preview, is_disabled_folder_name, parse_ini, scan_mod_folder,
+        strip_disabled_prefix, strip_line_comment, strip_value_comment,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -756,6 +754,31 @@ mod tests {
     #[test]
     fn strip_disabled_prefix_handles_ascii_prefix() {
         assert_eq!(strip_disabled_prefix(" Disabled Example "), "Example");
+    }
+
+    #[test]
+    fn strip_disabled_prefix_handles_underscore_prefix() {
+        assert_eq!(strip_disabled_prefix("DISABLED_Example"), "Example");
+        assert_eq!(strip_disabled_prefix("disabled_My_Mod"), "My_Mod");
+    }
+
+    #[test]
+    fn is_disabled_folder_name_recognizes_both_separators() {
+        assert!(is_disabled_folder_name("DISABLED Foo"));
+        assert!(is_disabled_folder_name("DISABLED_Foo"));
+        assert!(is_disabled_folder_name("disabled_bar"));
+        assert!(!is_disabled_folder_name("DisableFoo"));
+    }
+
+    #[test]
+    fn scan_mod_folder_marks_underscore_prefix_as_disabled() {
+        let dir = TestDir::new("underscore-prefix-disabled");
+        dir.write_file("DISABLED_Aino Nude toggle/mod.ini");
+
+        let mod_info =
+            scan_mod_folder(dir.path(), &dir.path().join("DISABLED_Aino Nude toggle")).unwrap();
+
+        assert!(!mod_info.is_enabled);
     }
 
     #[test]

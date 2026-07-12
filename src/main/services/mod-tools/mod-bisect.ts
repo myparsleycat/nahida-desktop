@@ -1,16 +1,15 @@
 import path from "node:path";
-import { isNteImporter } from "@shared/mod";
+
+import { disabledPrefixString, isNteImporter, type DisabledPrefixStyle } from "@shared/mod";
 import type { BisectSnapshot, BisectStatus, GameConfig } from "@shared/types";
 import { delay, retry } from "es-toolkit";
 import fg from "fast-glob";
 import fse from "fs-extra";
 import pLimit from "p-limit";
+
 import type { NahidaDesktop } from "@/main";
-import {
-    BISECT_DISABLED_SUFFIX,
-    BISECT_KEEP_DISABLED_PREFIX,
-    BisectJournal,
-} from "./mod-bisect-journal";
+
+import { BISECT_DISABLED_SUFFIX, BisectJournal } from "./mod-bisect-journal";
 import { disabledPathFor, renameIniDisable, renameIniEnable } from "./mod-bisect-rename";
 
 interface InternalSession {
@@ -34,7 +33,7 @@ interface UndoEntry {
 }
 
 const RENAME_CONCURRENCY = 8;
-const DISABLED_PATH_PATTERN = /^disabled/i;
+const DISABLED_PATH_PATTERN = /^disabled[\s_]+/i;
 const BISECT_INCONCLUSIVE_ERROR = "Bisect inconclusive";
 
 export class ModBisect {
@@ -270,8 +269,11 @@ export class ModBisect {
             await this.revertAll(session, toReEnable);
         }
 
-        for (const originalPath of toKeep) {
-            await this.keepDisabled(originalPath);
+        if (toKeep.length > 0) {
+            const style = await this.desktop.setting.mod.getDisabledPrefixStyle();
+            for (const originalPath of toKeep) {
+                await this.keepDisabled(originalPath, style);
+            }
         }
 
         await this.stopD3dxGuard(session.game);
@@ -364,6 +366,9 @@ export class ModBisect {
                 "**/Disabled*/**",
                 "**/disabled *",
                 "**/DISABLED *",
+                "**/disabled_*",
+                "**/DISABLED_*",
+                "**/Disabled_*",
             ],
         });
 
@@ -433,11 +438,11 @@ export class ModBisect {
         return results.filter((p): p is string => p !== null);
     }
 
-    private async keepDisabled(originalPath: string): Promise<boolean> {
+    private async keepDisabled(originalPath: string, style: DisabledPrefixStyle): Promise<boolean> {
         const disabledPath = disabledPathFor(originalPath, BISECT_DISABLED_SUFFIX);
         const target = path.join(
             path.dirname(originalPath),
-            `${BISECT_KEEP_DISABLED_PREFIX}${path.basename(originalPath)}`,
+            `${disabledPrefixString(style)}${path.basename(originalPath)}`,
         );
         try {
             await fse.rename(disabledPath, target);

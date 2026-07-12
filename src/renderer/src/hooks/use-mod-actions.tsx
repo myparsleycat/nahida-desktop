@@ -40,7 +40,7 @@ import { ModFixRunnerDialogs } from "../components/mod/mod-fix-runner-dialogs";
 import { pasteModPreview } from "../components/mod/paste-preview";
 import { TextureResizeDialog } from "../components/mod/texture-resize-dialog";
 
-const DISABLED_PREFIX_REGEX = /^disabled\s+/i;
+const DISABLED_PREFIX_REGEX = /^disabled[\s_]+/i;
 
 function getRenameDefaultValue(name: string) {
   return name.replace(DISABLED_PREFIX_REGEX, "").trim();

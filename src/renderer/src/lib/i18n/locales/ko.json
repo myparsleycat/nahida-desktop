@@ -1038,6 +1038,12 @@
           "moveFolderInsteadOfCopyDescription": "폴더를 모드 폴더에 드롭할 때 복사하지 않고 이동합니다 (원본 삭제)",
           "copyShaderFixesOnEnable": "활성화 시 ShaderFixes 복사",
           "copyShaderFixesOnEnableDescription": "모드를 활성화할 때 모드 안의 ShaderFixes 파일을 활성 Importer의 ShaderFixes 폴더로 복사합니다.",
+          "disabledPrefixStyle": "비활성 모드 접두사 형식",
+          "disabledPrefixStyleDescription": "모드 비활성화 시 사용할 접두사를 선택합니다. 활성화 시 두 형식 모두 항상 인식됩니다.",
+          "disabledPrefixStyles": {
+            "space": "DISABLED (공백)",
+            "underscore": "DISABLED_ (밑줄)"
+          },
           "searchModPreview": "하위 폴더에서 미리보기 검색",
           "searchModPreviewDescription": "캐릭터 폴더에 프리뷰 이미지가 없는 경우, 모드 폴더 내부에서 프리뷰 이미지를 검색합니다.",
           "autoResolveDownloadTarget": "다운로드 대상 폴더 자동 선택",

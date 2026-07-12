@@ -227,6 +227,15 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         d.ipc.broadcast("mod:update-settings");
     });
 
+    rh("setting:mod:getDisabledPrefixStyle", async () => {
+        return await d.setting.mod.getDisabledPrefixStyle();
+    });
+
+    rh("setting:mod:setDisabledPrefixStyle", async (style) => {
+        await d.setting.mod.setDisabledPrefixStyle(style);
+        d.ipc.broadcast("mod:update-settings");
+    });
+
     rh("setting:transfer:getDownloadConcurrency", async () => {
         return await d.setting.transfer.getDownloadConcurrency();
     });

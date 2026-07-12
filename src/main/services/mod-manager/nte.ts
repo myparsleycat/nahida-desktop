@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 
+import { disabledPrefixString } from "@shared/mod";
 import type { FolderGroup, GameConfig, ModInfo, NteBootstrapProgress } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import fg from "fast-glob";
@@ -289,10 +290,11 @@ export async function setNteModEnabled(
                 ),
             ),
     );
+    const style = await desktop.setting.mod.getDisabledPrefixStyle();
     return await renameWithUniqueName(
         desktop.lib.fs,
         modPath,
-        `DISABLED ${stripDisabledPrefix(folderName)}`,
+        `${disabledPrefixString(style)}${stripDisabledPrefix(folderName)}`,
     );
 }
 

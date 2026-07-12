@@ -1,9 +1,9 @@
 import path from "node:path";
+
 import { app } from "electron";
 import fg from "fast-glob";
 
 export const BISECT_DISABLED_SUFFIX = "mod-bisect-disabled";
-export const BISECT_KEEP_DISABLED_PREFIX = "DISABLED ";
 
 export class BisectJournal {
     private readonly dir: string;
