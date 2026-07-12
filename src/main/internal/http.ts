@@ -1,5 +1,4 @@
 import ky from "ky";
-import { Agent, Pool } from "undici";
 
 import type { NahidaDesktop } from "../index";
 
@@ -10,28 +9,10 @@ const NHD_PREFIXES = ["http://localhost", "https://api.nahida.live"];
 interface FetcherOptions extends RequestInit {}
 
 export class DesktopHttpService {
-    private cachedAgent: Agent | null = null;
-
     constructor(private readonly desktop: NahidaDesktop) {}
 
     private isNHD(url: string) {
         return NHD_PREFIXES.some((prefix) => url.startsWith(prefix));
-    }
-
-    public async getAgent() {
-        if (this.cachedAgent) {
-            return this.cachedAgent;
-        }
-
-        this.cachedAgent = new Agent({
-            factory: (origin, options: Pool.Options) =>
-                new Pool(origin, {
-                    ...options,
-                    allowH2: true,
-                }),
-        });
-
-        return this.cachedAgent;
     }
 
     public async getHeaders(url: string) {
@@ -57,8 +38,6 @@ export class DesktopHttpService {
             retry: {
                 limit: 2,
             },
-            // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
-            dispatcher: await this.getAgent(),
             hooks: {
                 afterResponse: [
                     async ({ response }) => {

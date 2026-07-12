@@ -72,8 +72,6 @@ export class Auth {
             credentials: "include",
             throwHttpErrors: false,
             headers: await this.desktop.httpService.getHeaders(iWantToLoginUrl),
-            // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
-            dispatcher: await this.desktop.httpService.getAgent(),
         });
 
         if (!iWantToLoginResp.ok) {
@@ -92,8 +90,6 @@ export class Auth {
         const resp = await ky(data.stateResponse, {
             throwHttpErrors: false,
             headers: await this.desktop.httpService.getHeaders(data.stateResponse),
-            // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
-            dispatcher: await this.desktop.httpService.getAgent(),
         });
 
         if (!resp.body) {
