@@ -35,6 +35,7 @@
     "release:docs": "pnpm run docs:build && pnpm exec wrangler pages deploy docs/.vitepress/dist --project-name nahida-desktop-docs --branch main",
     "release:win": "pnpm run clean && pnpm run build && electron-builder --win --publish always",
     "start": "electron-vite preview",
+    "test": "vitest run",
     "typecheck": "oxlint --type-aware --type-check"
   },
   "dependencies": {
@@ -132,6 +133,7 @@
     "typescript": "^7.0.2",
     "vite": "^8.1.4",
     "vitepress": "2.0.0-alpha.17",
+    "vitest": "^4.1.10",
     "wrangler": "^4.110.0",
     "zustand": "^5.0.14"
   }
