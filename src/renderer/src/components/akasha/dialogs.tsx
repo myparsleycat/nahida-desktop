@@ -237,6 +237,7 @@ export function NewDirectoryDialog({ contents }: { contents: Content[] }) {
     },
     onSuccess: async () => {
       toast.success(t("page.drive.dialog.create_dir.#.toast-promise.success"));
+      form.reset();
       dialog.setOpen("createDirDialog", false);
       await queryClient.invalidateQueries();
     },
