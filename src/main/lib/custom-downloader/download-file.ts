@@ -1,14 +1,12 @@
+import fse from "fs-extra";
+import ky from "ky";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream } from "node:stream/web";
-import fse from "fs-extra";
-import ky from "ky";
-import type { Agent } from "undici";
 import type { ParallelDownloader } from "../parallel-downloader";
 
 interface HttpServiceLike {
     getHeaders: (url: string) => Promise<Record<string, string>>;
-    getAgent: () => Promise<Agent>;
 }
 
 export async function downloadFile(props: {
@@ -40,8 +38,6 @@ export async function downloadFile(props: {
         const resp = await ky.get(url, {
             signal,
             headers: await httpService.getHeaders(url),
-            // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
-            dispatcher: await httpService.getAgent(),
         });
         if (!resp.ok) {
             throw new Error(`Failed to download file: ${resp.statusText}`);

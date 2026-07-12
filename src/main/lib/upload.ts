@@ -330,8 +330,6 @@ export class UploadLib {
                         },
                     ],
                 },
-                // @ts-ignore - dispatcher is not in the type definition, but it's passed through to fetch.
-                dispatcher: await this.desktop.httpService.getAgent(),
             });
 
             if (!response.ok && onProgress && lastTransferredBytes > 0) {

@@ -45,7 +45,6 @@ export class CustomDownloader {
         this.desktop = desktop;
         this.downloader = new ParallelDownloader({
             logger: desktop.logger,
-            getAgent: () => this.desktop.httpService.getAgent(),
             getHeaders: (url: string) => this.desktop.httpService.getHeaders(url),
         });
     }
@@ -180,8 +179,6 @@ export class CustomDownloader {
             redirect: "follow",
             throwHttpErrors: false,
             headers: await this.desktop.httpService.getHeaders(trimmedUrl),
-            // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
-            dispatcher: await this.desktop.httpService.getAgent(),
         });
 
         const realFileUrl = resp.ok ? resp.url : trimmedUrl;
@@ -348,8 +345,6 @@ export class CustomDownloader {
             redirect: "follow",
             throwHttpErrors: false,
             headers: await this.desktop.httpService.getHeaders(fileUrl),
-            // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
-            dispatcher: await this.desktop.httpService.getAgent(),
         });
 
         const resp = await respPromise;
@@ -551,8 +546,6 @@ export class CustomDownloader {
             redirect: "follow",
             throwHttpErrors: false,
             headers: await this.desktop.httpService.getHeaders(fileUrl),
-            // @ts-expect-error - dispatcher is not in the type definition, but it's passed through to fetch.
-            dispatcher: await this.desktop.httpService.getAgent(),
         });
         if (!resp.ok) {
             throw new Error(`Failed to get real file URL: ${resp.statusText}`);

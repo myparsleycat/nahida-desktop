@@ -281,7 +281,6 @@ class FileDownloadTask {
     constructor(private readonly desktop: NahidaDesktop) {
         this.parallelDownloader = new ParallelDownloader({
             logger: this.desktop.logger,
-            getAgent: () => this.desktop.httpService.getAgent(),
             getHeaders: (url: string) => this.desktop.httpService.getHeaders(url),
         });
     }
@@ -400,8 +399,6 @@ class FileDownloadTask {
                     if (incremental > 0) onProgress(incremental);
                 }
             },
-            // @ts-expect-error
-            dispatcher: await this.desktop.httpService.getAgent(),
         });
 
         if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
