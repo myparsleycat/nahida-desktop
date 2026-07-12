@@ -118,6 +118,18 @@ fn process_section_data(
     })
 }
 
+fn strip_value_comment(value: &str) -> String {
+    value.trim().to_string()
+}
+
+fn strip_line_comment(line: &str) -> String {
+    let trimmed = line.trim();
+    if trimmed.starts_with(';') || trimmed.starts_with('#') {
+        return String::new();
+    }
+    trimmed.to_string()
+}
+
 fn parse_ini(path_str: &str) -> Vec<ToggleKey> {
     let path = Path::new(path_str);
     let file = match File::open(path) {
@@ -139,14 +151,13 @@ fn parse_ini(path_str: &str) -> Vec<ToggleKey> {
     for line_result in reader.lines() {
         let Ok(line) = line_result else { continue };
 
-        let mut clean_line = line.trim_start_matches('\u{FEFF}').trim();
+        let raw = line.trim_start_matches('\u{FEFF}').trim();
 
-        if let Some(pos) = clean_line.find(';') {
-            clean_line = clean_line[..pos].trim();
-        }
-        if let Some(pos) = clean_line.find('#') {
-            clean_line = clean_line[..pos].trim();
-        }
+        let clean_line = if let Some(eq_pos) = raw.find('=') {
+            format!("{}={}", &raw[..eq_pos], strip_value_comment(&raw[eq_pos + 1..]))
+        } else {
+            strip_line_comment(raw)
+        };
 
         if clean_line.is_empty() {
             continue;
@@ -690,7 +701,10 @@ pub fn get_mods_sync(group_path: String) -> FolderGroup {
 
 #[cfg(test)]
 mod tests {
-    use super::{find_group_preview, scan_mod_folder, strip_disabled_prefix};
+    use super::{
+        find_group_preview, parse_ini, scan_mod_folder, strip_disabled_prefix, strip_line_comment,
+        strip_value_comment,
+    };
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -723,6 +737,12 @@ mod tests {
                 .fold(self.path.clone(), |path, segment| path.join(segment));
             fs::create_dir_all(file_path.parent().unwrap()).unwrap();
             fs::write(&file_path, b"preview").unwrap();
+            file_path
+        }
+
+        fn write_ini(&self, name: &str, content: &str) -> PathBuf {
+            let file_path = self.path.join(name);
+            fs::write(&file_path, content).unwrap();
             file_path
         }
     }
@@ -800,5 +820,102 @@ mod tests {
             mod_info.preview,
             Some(root_preview.to_string_lossy().into_owned())
         );
+    }
+
+    #[test]
+    fn strip_value_comment_preserves_bare_semicolon() {
+        assert_eq!(strip_value_comment(";"), ";");
+    }
+
+    #[test]
+    fn strip_value_comment_preserves_inline_semicolon() {
+        assert_eq!(strip_value_comment("ctrl ;"), "ctrl ;");
+    }
+
+    #[test]
+    fn strip_value_comment_preserves_inline_comment_text() {
+        assert_eq!(strip_value_comment("0 ; some comment"), "0 ; some comment");
+    }
+
+    #[test]
+    fn strip_value_comment_preserves_inline_hash() {
+        assert_eq!(strip_value_comment("a#b"), "a#b");
+    }
+
+    #[test]
+    fn strip_value_comment_trims_whitespace() {
+        assert_eq!(strip_value_comment("  ;  "), ";");
+    }
+
+    #[test]
+    fn strip_line_comment_strips_leading_semicolon_line() {
+        assert_eq!(strip_line_comment("; full line comment"), "");
+    }
+
+    #[test]
+    fn strip_line_comment_strips_leading_hash_line() {
+        assert_eq!(strip_line_comment("# hash line comment"), "");
+    }
+
+    #[test]
+    fn strip_line_comment_preserves_inline_semicolon() {
+        assert_eq!(strip_line_comment("key = ;"), "key = ;");
+    }
+
+    #[test]
+    fn strip_line_comment_preserves_inline_hash() {
+        assert_eq!(strip_line_comment("key = a#b"), "key = a#b");
+    }
+
+    #[test]
+    fn parse_ini_reads_bare_semicolon_key() {
+        let dir = TestDir::new("ini-bare-semicolon");
+        let ini = dir.write_ini(
+            "mod.ini",
+            "[KeyOne]\ntype = cycle\nkey = ;\nback = ctrl\n$var = 1,2\n",
+        );
+
+        let keys = parse_ini(&ini.to_string_lossy());
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].key.as_deref(), Some(";"));
+    }
+
+    #[test]
+    fn parse_ini_reads_modifier_semicolon_key() {
+        let dir = TestDir::new("ini-modifier-semicolon");
+        let ini = dir.write_ini(
+            "mod.ini",
+            "[KeyTwo]\ntype = cycle\nkey = ctrl ;\n$var = 1,2\n",
+        );
+
+        let keys = parse_ini(&ini.to_string_lossy());
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].key.as_deref(), Some("ctrl ;"));
+    }
+
+    #[test]
+    fn parse_ini_skips_leading_semicolon_comment_line() {
+        let dir = TestDir::new("ini-leading-comment");
+        let ini = dir.write_ini(
+            "mod.ini",
+            "; this is a comment\n[KeyThree]\ntype = cycle\nkey = x\n$var = 1,2\n",
+        );
+
+        let keys = parse_ini(&ini.to_string_lossy());
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].key.as_deref(), Some("x"));
+    }
+
+    #[test]
+    fn parse_ini_preserves_value_with_inline_comment() {
+        let dir = TestDir::new("ini-inline-comment");
+        let ini = dir.write_ini(
+            "mod.ini",
+            "[KeyFour]\ntype = cycle\nkey = 0 ; note\n$var = 1,2\n",
+        );
+
+        let keys = parse_ini(&ini.to_string_lossy());
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].key.as_deref(), Some("0 ; note"));
     }
 }

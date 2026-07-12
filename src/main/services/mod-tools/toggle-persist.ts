@@ -1,7 +1,9 @@
 import path from "node:path";
+
 import { formatDate } from "@shared/utils";
 import { debounce, retry } from "es-toolkit";
 import fse from "fs-extra";
+
 import type { NahidaDesktop } from "@/main";
 
 export class TogglePersist {
@@ -451,7 +453,7 @@ export class TogglePersist {
 
             const keyMatch = trimmed.match(/^key\s*=\s*(.+)$/i);
             if (keyMatch) {
-                keyValue = keyMatch[1].split(";")[0].trim();
+                keyValue = keyMatch[1].trim();
                 continue;
             }
 

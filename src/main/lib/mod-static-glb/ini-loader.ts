@@ -1,6 +1,8 @@
 import path from "node:path";
+
 import fg from "fast-glob";
 import fse from "fs-extra";
+
 import type { IniSection } from "./types";
 
 export async function loadIniBundle(
@@ -140,19 +142,5 @@ function parseIni(text: string): IniSection[] {
 }
 
 function stripInlineComment(value: string): string {
-    let quote: '"' | "'" | null = null;
-    for (let index = 0; index < value.length; index++) {
-        const current = value[index];
-        if ((current === '"' || current === "'") && value[index - 1] !== "\\") {
-            quote = quote === current ? null : quote ? quote : (current as '"' | "'");
-            continue;
-        }
-        if (quote) {
-            continue;
-        }
-        if (current === ";" && index > 0 && /\s/.test(value[index - 1])) {
-            return value.slice(0, index).trim();
-        }
-    }
-    return value;
+    return value.trim();
 }

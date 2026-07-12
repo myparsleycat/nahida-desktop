@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import path from "node:path";
+
 import { formatKeySequence } from "@shared/key-formatter";
 
 export interface IniEntry {
@@ -52,8 +53,7 @@ export function parseIni(content: string): IniSection[] {
         if (eqIndex <= 0) continue;
 
         const rawKey = trimmed.slice(0, eqIndex).trim();
-        const rawValue = trimmed.slice(eqIndex + 1).trim();
-        const value = rawValue.split(";")[0].trim();
+        const value = trimmed.slice(eqIndex + 1).trim();
 
         currentSection.entries.push({
             key: rawKey,
