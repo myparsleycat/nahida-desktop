@@ -26,6 +26,10 @@ export function registerDriveHandlers(d: NahidaDesktop) {
         return d.service.drive.fn.startUpload({ destId, paths, conflictStrategy });
     });
 
+    rh("drive:fn:startModBundleUpload", async ({ collectionId, currentId, paths, sig }) => {
+        return d.service.drive.fn.startModBundleUpload({ collectionId, currentId, paths, sig });
+    });
+
     rh("drive:fn:getUploadConflicts", async ({ destId, paths }) => {
         return d.service.drive.fn.getUploadConflicts({ destId, paths });
     });

@@ -26,6 +26,9 @@ importers:
       '@hono/zod-validator':
         specifier: ^0.8.0
         version: 0.8.0(hono@4.12.29)(zod@4.4.3)
+      '@nahida/sdk':
+        specifier: github:myparsleycat/nahida-sdk#semver:v0.1.2
+        version: https://codeload.github.com/myparsleycat/nahida-sdk/tar.gz/9c275412e404c255735a4544c12e0b17c60bc15e
       auto-launch:
         specifier: ^5.0.6
         version: 5.0.6
@@ -56,6 +59,9 @@ importers:
       fast-glob:
         specifier: ^3.3.3
         version: 3.3.3
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       file-type:
         specifier: ^22.0.1
         version: 22.0.1
@@ -1417,6 +1423,11 @@ packages:
     resolution: {integrity: sha512-2Z0FATFHaoYJ8b+Y4y4Hgfn3FRFwuU5zRrk+9dFWp4uGAdHGqVEdP7HP+gLA3X469KXHmfupJaUbKo1b/aDKIg==}
     peerDependencies:
       three: '>= 0.159.0'
+
+  '@nahida/sdk@https://codeload.github.com/myparsleycat/nahida-sdk/tar.gz/9c275412e404c255735a4544c12e0b17c60bc15e':
+    resolution: {gitHosted: true, integrity: sha512-BOJCVANbWRpFLLMhaj/SznwiDK86VNht66fzUZtErnc5DPdr1oo0oxJrgI8f2ySEHZw1m6XGcmwncdaKaBGBlA==, tarball: https://codeload.github.com/myparsleycat/nahida-sdk/tar.gz/9c275412e404c255735a4544c12e0b17c60bc15e}
+    version: 0.1.2
+    engines: {node: '>=20'}
 
   '@napi-rs/cli@3.7.2':
     resolution: {integrity: sha512-shDW0Td/XZQpP04Yy+OsMt1ILMKGGkoLcy1zVAsSAK0fLfWm0Upgkmfs/NOV2ZhMQwkgpR3ZEdyHmTwgrUDQuA==}
@@ -3210,6 +3221,10 @@ packages:
   '@xmldom/xmldom@0.8.13':
     resolution: {integrity: sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw==}
     engines: {node: '>=10.0.0'}
+
+  '@zip.js/zip.js@2.8.26':
+    resolution: {integrity: sha512-RQ4h9F6DOiHxpdocUDrOl6xBM+yOtz+LkUol47AVWcfebGBDpZ7w7Xvz9PS24JgXvLGiXXzSAfdCdVy1tPlaFA==}
+    engines: {bun: '>=0.7.0', deno: '>=1.0.0', node: '>=18.0.0'}
 
   abbrev@1.1.1:
     resolution: {integrity: sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==}
@@ -6749,6 +6764,10 @@ snapshots:
       promise-worker-transferable: 1.0.4
       three: 0.185.1
 
+  '@nahida/sdk@https://codeload.github.com/myparsleycat/nahida-sdk/tar.gz/9c275412e404c255735a4544c12e0b17c60bc15e':
+    dependencies:
+      '@zip.js/zip.js': 2.8.26
+
   '@napi-rs/cli@3.7.2(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.2)(@types/node@26.1.1)':
     dependencies:
       '@inquirer/prompts': 8.5.2(@types/node@26.1.1)
@@ -8140,6 +8159,8 @@ snapshots:
       vue: 3.5.39(typescript@7.0.2)
 
   '@xmldom/xmldom@0.8.13': {}
+
+  '@zip.js/zip.js@2.8.26': {}
 
   abbrev@1.1.1: {}
 

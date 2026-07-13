@@ -18,6 +18,12 @@ import PQueue from "p-queue";
 
 import type { NahidaDesktop } from "..";
 
+import {
+    type BundleDownload,
+    type BundleDownloadEntry,
+    downloadBundleEntry,
+    isBundleEntryComplete,
+} from "./bundle-download";
 import { zstdDecompressAsync } from "./compressor";
 import { ParallelDownloader } from "./parallel-downloader";
 
@@ -45,6 +51,7 @@ export type DownloadMetadata = {
         parentId: string | null;
         name: string;
     }>;
+    bundles: BundleDownload[];
 };
 
 export const BATCH_ROOT_ID = "batch-root";
@@ -58,17 +65,24 @@ class DownloadStreamer {
         return zstdDecompressAsync(compressedData);
     }
 
-    private async parseStreamedData(data) {
-        if (data.compressed) {
-            const decompressed = await this.decompressData(data.data);
-            if (data.type === "cbor") {
+    private async parseStreamedData(data: unknown) {
+        if (typeof data === "string") return JSON.parse(data);
+        if (!data || typeof data !== "object") throw new Error("Invalid streamed data");
+
+        const envelope = data as { compressed?: boolean; data?: unknown; type?: string };
+        if (envelope.compressed) {
+            if (typeof envelope.data !== "string")
+                throw new Error("Invalid compressed stream data");
+            const decompressed = await this.decompressData(envelope.data);
+            if (envelope.type === "cbor") {
                 return decode(decompressed);
             }
             const decoder = new TextDecoder();
             return decoder.decode(decompressed);
         }
 
-        return JSON.parse(data.data);
+        if (typeof envelope.data === "string") return JSON.parse(envelope.data);
+        return envelope.data ?? data;
     }
 
     public async fetchMetadata({
@@ -86,6 +100,7 @@ class DownloadStreamer {
                 ...(link && { linkId: link.linkId }),
             },
             headers: {
+                "x-akasha-storage-version": "2",
                 ...(link && { "nhd-link-token": link.token }),
             },
         });
@@ -95,6 +110,7 @@ class DownloadStreamer {
             totalBytes: 0,
             files: [],
             dirs: [],
+            bundles: [],
         };
         let rootDir: DownloadMetadata["root"] | null = null;
 
@@ -107,21 +123,29 @@ class DownloadStreamer {
                 throw new Error("Download cancelled");
             }
 
-            switch (chunk.event) {
+            const streamChunk = chunk as unknown as { event: string; data: unknown };
+            switch (streamChunk.event) {
                 case "dirs": {
-                    const dirsChunk = await this.parseStreamedData(chunk.data);
+                    const dirsChunk = await this.parseStreamedData(streamChunk.data);
                     downloadData.dirs.push(...dirsChunk);
                     break;
                 }
                 case "files": {
-                    const filesChunk = await this.parseStreamedData(chunk.data);
+                    const filesChunk = await this.parseStreamedData(streamChunk.data);
                     downloadData.files.push(...filesChunk);
                     break;
                 }
                 case "metadata": {
-                    const metadata = chunk.data as unknown as DownloadMetadata;
+                    const metadata = streamChunk.data as DownloadMetadata;
                     downloadData.totalBytes = metadata.totalBytes;
                     rootDir = metadata.root;
+                    break;
+                }
+                case "bundles": {
+                    const bundlesChunk = await this.parseStreamedData(streamChunk.data);
+                    downloadData.bundles.push(
+                        ...(Array.isArray(bundlesChunk) ? bundlesChunk : [bundlesChunk]),
+                    );
                     break;
                 }
             }
@@ -144,13 +168,18 @@ class DownloadStreamer {
         id: string;
         link?: LinkData;
     }): Promise<DownloadMetadata> {
-        const [file] = await this.fetchFileDownloadsBatch({ ids: [id], link });
+        const batch = await this.fetchFileDownloadsBatch({ ids: [id], link });
+        const file = batch.files[0];
+        const bundleEntry = batch.bundles[0]?.entries[0];
+        const item = file ?? bundleEntry;
+        if (!item) throw new Error("File download metadata not received.");
 
         return {
-            root: { id: file.id, parentId: null, name: file.name },
-            totalBytes: file.size,
-            files: [file],
+            root: { id: item.id, parentId: null, name: item.name },
+            totalBytes: item.size,
+            files: batch.files,
             dirs: [],
+            bundles: batch.bundles,
         };
     }
 
@@ -160,31 +189,97 @@ class DownloadStreamer {
     }: {
         ids: string[];
         link?: LinkData;
-    }): Promise<DownloadMetadata["files"]> {
+    }): Promise<Pick<DownloadMetadata, "files" | "bundles">> {
         const { data, error } = await eden.akasha.file.downloads.post(
             { ids },
             {
+                headers: { "x-akasha-storage-version": "2" },
                 ...(link && {
                     query: { linkId: link.linkId },
-                    headers: { "nhd-link-token": link.token },
+                    headers: {
+                        "x-akasha-storage-version": "2",
+                        "nhd-link-token": link.token,
+                    },
                 }),
             },
         );
         if (error) throw error;
-        if (!data || data.length === 0) {
+        if (!data || (Array.isArray(data) && data.length === 0)) {
             throw new Error("File download URL not received.");
         }
 
-        return data.map((file) => ({
-            id: file.id,
-            fileId: file.id,
-            parentId: null,
-            name: file.name,
-            size: file.size,
-            compAlg: (file.compAlg as DownloadMetadata["files"][0]["compAlg"]) ?? null,
-            url: file.url,
-        }));
+        return normalizeFileDownloadResponse(data);
     }
+}
+
+function normalizeFileDownloadResponse(data: unknown): Pick<DownloadMetadata, "files" | "bundles"> {
+    const files: DownloadMetadata["files"] = [];
+    const bundles = new Map<string, BundleDownload>();
+    const response = data as {
+        files?: unknown[];
+        bundles?: BundleDownload[];
+    };
+    const items = Array.isArray(data) ? data : (response.files ?? []);
+
+    for (const value of items) {
+        const item = value as {
+            id?: string;
+            name?: string;
+            size?: number;
+            compAlg?: DownloadMetadata["files"][0]["compAlg"];
+            url?: string;
+            storage?: string;
+            bundle?: Omit<BundleDownload, "entries">;
+            entry?: Partial<BundleDownloadEntry>;
+        };
+        if (item.storage === "bundle" && item.bundle && item.entry) {
+            const id = item.id ?? item.entry.id ?? item.entry.fileId;
+            const name = item.name ?? item.entry.name;
+            if (
+                !id ||
+                !name ||
+                !item.entry.fileId ||
+                item.entry.size === undefined ||
+                !item.entry.sha256 ||
+                item.entry.dataOffset === undefined ||
+                item.entry.compressedSize === undefined ||
+                (item.entry.method !== 0 && item.entry.method !== 8)
+            ) {
+                throw new Error("Invalid bundle-only file download metadata");
+            }
+            const bundle = bundles.get(item.bundle.id) ?? { ...item.bundle, entries: [] };
+            bundle.entries.push({
+                id,
+                fileId: item.entry.fileId,
+                parentId: null,
+                name,
+                size: item.entry.size,
+                sha256: item.entry.sha256,
+                dataOffset: item.entry.dataOffset,
+                compressedSize: item.entry.compressedSize,
+                method: item.entry.method,
+                crc32: item.entry.crc32 ?? 0,
+            });
+            bundles.set(bundle.id, bundle);
+            continue;
+        }
+
+        if (!item.id || !item.name || item.size === undefined || !item.url) {
+            throw new Error("Invalid standalone file download metadata");
+        }
+        files.push({
+            id: item.id,
+            fileId: item.id,
+            parentId: null,
+            name: item.name,
+            size: item.size,
+            compAlg: item.compAlg ?? null,
+            url: item.url,
+        });
+    }
+
+    for (const bundle of response.bundles ?? []) bundles.set(bundle.id, bundle);
+    return { files, bundles: [...bundles.values()] };
 }
 
 class DownloadFileSystem {
@@ -619,6 +714,7 @@ export class DownloadLib {
             root: data.root,
             files: data.files,
             dirs: [data.root, ...data.dirs],
+            bundles: data.bundles,
             totalBytes: data.totalBytes,
         };
     }
@@ -647,23 +743,37 @@ export class DownloadLib {
 
         const mergedDirs: DownloadMetadata["dirs"] = [];
         const mergedFiles: DownloadMetadata["files"] = [];
+        const mergedBundles: DownloadMetadata["bundles"] = [];
         let totalBytes = 0;
 
         for (const fileChunk of chunk(files, FILE_ID_BATCH_LIMIT)) {
-            const fileEntries = await this.streamer.fetchFileDownloadsBatch({
+            const batch = await this.streamer.fetchFileDownloadsBatch({
                 ids: fileChunk.map((file) => file.id),
                 link,
             });
             if (signal.aborted) throw new Error("Download cancelled");
 
-            const returnedIds = new Set(fileEntries.map((file) => file.id));
+            const returnedIds = new Set([
+                ...batch.files.map((file) => file.id),
+                ...batch.bundles.flatMap((bundle) => bundle.entries.map((entry) => entry.id)),
+            ]);
             if (fileChunk.some((file) => !returnedIds.has(file.id))) {
                 throw new Error("Some selected files could not be fetched");
             }
 
-            for (const file of fileEntries) {
+            for (const file of batch.files) {
                 mergedFiles.push({ ...file, parentId: BATCH_ROOT_ID });
                 totalBytes += file.size;
+            }
+            for (const bundle of batch.bundles) {
+                mergedBundles.push({
+                    ...bundle,
+                    entries: bundle.entries.map((entry) => ({
+                        ...entry,
+                        parentId: BATCH_ROOT_ID,
+                    })),
+                });
+                totalBytes += bundle.entries.reduce((sum, entry) => sum + entry.size, 0);
             }
         }
 
@@ -681,6 +791,7 @@ export class DownloadLib {
                 mergedDirs.push({ ...meta.root, parentId: BATCH_ROOT_ID });
                 mergedDirs.push(...meta.dirs);
                 mergedFiles.push(...meta.files);
+                mergedBundles.push(...meta.bundles);
                 totalBytes += meta.totalBytes;
             }),
         );
@@ -690,6 +801,7 @@ export class DownloadLib {
             totalBytes,
             files: mergedFiles,
             dirs: mergedDirs,
+            bundles: mergedBundles,
         };
     }
 
@@ -721,7 +833,12 @@ export class DownloadLib {
 
             void this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
 
-            const isSingleFile = data.dirs.length === 0 && data.files.length === 1;
+            const bundleEntryCount = (data.bundles ?? []).reduce(
+                (count, bundle) => count + bundle.entries.length,
+                0,
+            );
+            const isSingleFile =
+                data.dirs.length === 0 && data.files.length + bundleEntryCount === 1;
             const pathMap = isSingleFile
                 ? new Map<string, string>([[data.root.id, params.savePath]])
                 : this.fs.resolveDirectoryPaths(data.root, data.dirs, params.savePath);
@@ -739,6 +856,11 @@ export class DownloadLib {
             }, 100);
 
             const redistributedFiles = this.fs.redistributeFilesBySize(data.files);
+            const redistributedBundleEntries = this.fs.redistributeFilesBySize(
+                (data.bundles ?? []).flatMap((bundle) =>
+                    bundle.entries.map((entry) => ({ bundle, entry, size: entry.size })),
+                ),
+            );
 
             for (const file of redistributedFiles) {
                 if (abort.signal.aborted) break;
@@ -775,6 +897,41 @@ export class DownloadLib {
                 });
             }
 
+            for (const item of redistributedBundleEntries) {
+                if (abort.signal.aborted) break;
+
+                await this.waitForQueueBackpressure();
+                if (abort.signal.aborted) break;
+
+                const parentPath = pathMap.get(singleFileParentKey ?? item.entry.parentId ?? "");
+                if (!parentPath) continue;
+                const filePath = path.join(parentPath, item.entry.name);
+
+                void this.fileQueue.add(async () => {
+                    if (abort.signal.aborted) return;
+                    if (!isSingleFile && !ensuredDirs.has(parentPath)) {
+                        await this.desktop.lib.fs.ensureDir(parentPath);
+                        ensuredDirs.add(parentPath);
+                    }
+
+                    await this.processBundleDownloadTask({
+                        pid,
+                        bundle: item.bundle,
+                        entry: item.entry,
+                        filePath,
+                        abort,
+                        onProgress: (bytes) => {
+                            downloadedBytes += bytes;
+                            throttledUpdate(downloadedBytes, downloadedCount);
+                        },
+                        onComplete: () => {
+                            downloadedCount++;
+                            throttledUpdate(downloadedBytes, downloadedCount);
+                        },
+                    });
+                });
+            }
+
             if (!isSingleFile) {
                 for (const dirPath of pathMap.values()) {
                     if (abort.signal.aborted) break;
@@ -792,6 +949,9 @@ export class DownloadLib {
             throttledUpdate.flush();
 
             if (abort.signal.aborted) return;
+            if ((this.desktop.service.transfer.getTransferByPID(pid)?.failedFiles ?? 0) > 0) {
+                throw new Error("One or more files failed to download");
+            }
 
             await this.finalizeDownload(pid, params.savePath);
         } catch (err) {
@@ -864,6 +1024,51 @@ export class DownloadLib {
             }
             this.desktop.service.transfer.markFileFailed(pid);
             this.desktop.logger.error(err, `DownloadLib:executeDownload:${file.name}`);
+        }
+    }
+
+    private async processBundleDownloadTask({
+        pid,
+        bundle,
+        entry,
+        filePath,
+        abort,
+        onProgress,
+        onComplete,
+    }: {
+        pid: string;
+        bundle: BundleDownload;
+        entry: BundleDownloadEntry;
+        filePath: string;
+        abort: AbortController;
+        onProgress: (bytes: number) => void;
+        onComplete: () => void;
+    }) {
+        if (abort.signal.aborted) return;
+
+        const isCompleted = await isBundleEntryComplete(filePath, entry);
+        if (isCompleted) {
+            this.desktop.service.transfer.markFileCompleted(pid, entry.id);
+            onProgress(entry.size);
+            onComplete();
+            return;
+        }
+
+        try {
+            await downloadBundleEntry({
+                bundle,
+                entry,
+                filePath,
+                signal: abort.signal,
+                fetcher: (url, init) => this.desktop.httpService.fetcher(url, init),
+                onProgress,
+            });
+            this.desktop.service.transfer.markFileCompleted(pid, entry.id);
+            onComplete();
+        } catch (error) {
+            if (abort.signal.aborted || (error as Error).name === "AbortError") return;
+            this.desktop.service.transfer.markFileFailed(pid);
+            this.desktop.logger.error(error, `DownloadLib:bundle:${bundle.id}:${entry.name}`);
         }
     }
 

@@ -15,6 +15,8 @@ import Piscina from "piscina";
 
 import type { NahidaDesktop } from "..";
 
+import { AkashaBundleUploader } from "./bundle-upload";
+
 const CHUNK_SIZE = 100;
 const UPLOAD_STREAM_CHUNK_SIZE = 64 * 1024;
 
@@ -67,15 +69,113 @@ export type UploadParams = {
     processedFiles?: FinalFile[];
     fileHashes?: Record<string, string>;
     conflictStrategy?: UploadConflictStrategy;
+    mode?: "drive" | "mod-v2";
+    collectionId?: string;
+    sig?: string;
+    sessionId?: string;
+    createdDirectories?: Array<{ id: string; path: string }>;
 };
 
 export class UploadLib {
     private readonly desktop: NahidaDesktop;
     private readonly fileQueue: PQueue = new PQueue({ concurrency: 8 });
     private readonly textEncoder = new TextEncoder();
+    private readonly bundleUploader: AkashaBundleUploader;
 
     public constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
+        this.bundleUploader = new AkashaBundleUploader(desktop);
+    }
+
+    public async executeModBundleUpload({
+        pid,
+        params,
+        files,
+        directories,
+        abortController,
+    }: {
+        pid: string;
+        params: UploadParams;
+        files: FilesComponent[];
+        directories: DirectoriesComponent[];
+        abortController: AbortController;
+    }) {
+        if (!params.collectionId || !params.sessionId) {
+            throw new Error("Mod bundle upload parameters are incomplete");
+        }
+        const hashes = params.fileHashes;
+        if (!hashes) throw new Error("Mod bundle upload hashes are missing");
+        const hashedFiles = files.map((file) => {
+            const sha256 = hashes[file.FID];
+            if (!sha256) throw new Error(`Hash missing for file ${file.name}`);
+            return { ...file, sha256 };
+        });
+        let uploadedBytes = 0;
+        let uploadedFiles = 0;
+        let plannedTotalSize = hashedFiles.reduce((sum, file) => sum + file.size, 0);
+        let plannedTotalFiles = hashedFiles.length;
+        const heartbeat = setInterval(() => {
+            void this.desktop.service.transfer.updateTransfer(pid, {
+                status: "progress",
+                transferedSize: uploadedBytes,
+                transferedFiles: uploadedFiles,
+            });
+        }, 500);
+
+        try {
+            await this.bundleUploader.execute({
+                collectionId: params.collectionId,
+                currentId: params.destId,
+                sig: params.sig,
+                sessionId: params.sessionId,
+                files: hashedFiles,
+                directories,
+                createdDirectories: params.createdDirectories,
+                signal: abortController.signal,
+                onDirectoriesCreated: (createdDirectories) => {
+                    params.createdDirectories = createdDirectories;
+                },
+                onDiagnostics: (diagnostics) => {
+                    for (const diagnostic of diagnostics) {
+                        this.desktop.logger[diagnostic.severity === "error" ? "error" : "warn"](
+                            diagnostic.message,
+                            "UploadLib:bundle-plan",
+                        );
+                    }
+                },
+                onInventoryPlanned: (plannedFiles) => {
+                    plannedTotalSize = plannedFiles.reduce((sum, file) => sum + file.size, 0);
+                    plannedTotalFiles = plannedFiles.length;
+                    void this.desktop.service.transfer.updateTransfer(pid, {
+                        totalSize: plannedTotalSize,
+                        totalFiles: plannedTotalFiles,
+                    });
+                },
+                onFileComplete: (fileId, size) => {
+                    if (this.desktop.service.transfer.isFileCompleted(pid, fileId)) return;
+                    this.desktop.service.transfer.markFileCompleted(pid, fileId);
+                    uploadedBytes += size;
+                    uploadedFiles++;
+                },
+            });
+            if (abortController.signal.aborted) return;
+            void this.desktop.service.transfer.updateTransfer(pid, {
+                status: "completed",
+                transferedSize: plannedTotalSize,
+                transferedFiles: plannedTotalFiles,
+                progress: 100,
+            });
+        } catch (error) {
+            if (abortController.signal.aborted) return;
+            this.desktop.logger.error(error, "UploadLib:executeModBundleUpload");
+            void this.desktop.service.transfer.updateTransfer(pid, {
+                status: "error",
+                error: toErrorMessage(error),
+            });
+            throw error;
+        } finally {
+            clearInterval(heartbeat);
+        }
     }
 
     private async syncQueueConcurrency() {
@@ -93,6 +193,7 @@ export class UploadLib {
     private async collect(
         paths: string[],
         additionalExt: string[] = [],
+        allowAll = false,
     ): Promise<{ files: FilesComponent[]; directories: DirectoriesComponent[] }> {
         const defaultAllowedExt = [
             ".buf",
@@ -123,9 +224,11 @@ export class UploadLib {
             ".pck",
             ".bin",
         ];
-        const allowedExt = [...defaultAllowedExt, ...additionalExt].map((ext) =>
-            ext.startsWith(".") ? ext.toLowerCase() : `.${ext.toLowerCase()}`,
-        );
+        const allowedExt = allowAll
+            ? []
+            : [...defaultAllowedExt, ...additionalExt].map((ext) =>
+                  ext.startsWith(".") ? ext.toLowerCase() : `.${ext.toLowerCase()}`,
+              );
         const rootFiles: Array<Omit<FilesComponent, "FID">> = [];
         const directoryPaths: string[] = [];
 
@@ -987,6 +1090,11 @@ export class UploadLib {
             conflictStrategy,
             paths,
         );
+    }
+
+    public async prepareModBundleUpload(paths: string[]) {
+        const { files, directories } = await this.collect(paths, [], true);
+        return this.prepareUploadWithStrategy(files, directories, [], "suffix", paths);
     }
 
     public async getRootNameConflicts(

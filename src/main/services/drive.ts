@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 import { gunzip, gzip, zstdCompress, zstdDecompress } from "node:zlib";
 
@@ -224,6 +225,53 @@ export class DriveService {
             });
         },
 
+        startModBundleUpload: async ({
+            collectionId,
+            currentId,
+            paths,
+            sig,
+        }: {
+            collectionId: string;
+            currentId: string;
+            paths?: string[];
+            sig?: string;
+        }) => {
+            const selectedPaths = await this.selectUploadPaths(paths);
+            if (!selectedPaths) return;
+            const preparation = await this.upload.prepareModBundleUpload(selectedPaths);
+            if (preparation.files.length < 1) throw new Error("NO_UPLOADABLE_FILES");
+            const restartParams: UploadParams = {
+                type: "upload",
+                mode: "mod-v2",
+                destId: currentId,
+                paths: selectedPaths,
+                collectionId,
+                sig,
+                sessionId: randomUUID(),
+                conflictStrategy: "suffix",
+            };
+            const { pid, abortController } = await this.createUploadTransferEntry({
+                destId: currentId,
+                paths: selectedPaths,
+                conflictStrategy: "suffix",
+                preparation,
+                restartParams,
+            });
+            this.processUploadAsync({
+                pid,
+                currentId,
+                restartParams,
+                preparation,
+                abortController,
+            }).catch((error) => {
+                this.desktop.logger.error(error, "Drive:ModBundleUpload:Preprocessing");
+                void this.desktop.service.transfer.updateTransfer(pid, {
+                    status: "error",
+                    error: toErrorMessage(error),
+                });
+            });
+        },
+
         getUploadConflicts: async ({ destId, paths }: { destId: string; paths?: string[] }) => {
             const selectedPaths = await this.selectUploadPaths(paths);
             if (!selectedPaths) {
@@ -402,10 +450,12 @@ export class DriveService {
         paths,
         conflictStrategy,
         preparation,
+        restartParams: suppliedRestartParams,
     }: {
         destId: string;
         paths: string[];
         conflictStrategy: UploadConflictStrategy;
+        restartParams?: UploadParams;
         preparation: {
             pid: string;
             files: FilesComponent[];
@@ -415,7 +465,12 @@ export class DriveService {
         };
     }) {
         const { pid, files, directories, processName } = preparation;
-        const restartParams: UploadParams = { type: "upload", destId, paths, conflictStrategy };
+        const restartParams: UploadParams = suppliedRestartParams ?? {
+            type: "upload",
+            destId,
+            paths,
+            conflictStrategy,
+        };
         const abortController = new AbortController();
 
         await this.desktop.service.transfer.createTransfer({
@@ -536,6 +591,17 @@ export class DriveService {
         const newAbort = new AbortController();
         this.desktop.service.transfer.updateAbortController(pid, newAbort);
 
+        if (currentParams.mode === "mod-v2") {
+            await this.upload.executeModBundleUpload({
+                pid,
+                params: currentParams,
+                files: preparation.files,
+                directories: preparation.directories,
+                abortController: newAbort,
+            });
+            return;
+        }
+
         await this.upload.executeUpload({
             currentId,
             pid,
@@ -628,6 +694,10 @@ export class DriveService {
                 if (!isDir && data.files?.length === 1) {
                     data.files[0].name = suggestedName;
                 }
+                const bundleEntries = (data.bundles ?? []).flatMap((bundle) => bundle.entries);
+                if (!isDir && data.files.length === 0 && bundleEntries.length === 1) {
+                    bundleEntries[0].name = suggestedName;
+                }
             }
 
             if (isSingle && isDir) {
@@ -671,13 +741,26 @@ export class DriveService {
             );
         }
 
+        if (data.bundles) {
+            await processChunked(
+                data.bundles.flatMap((bundle) => bundle.entries),
+                (entry) => {
+                    entry.name = this.desktop.lib.fs.sanitizeWindowsFilename(entry.name);
+                },
+                2000,
+                abortController.signal,
+            );
+        }
+
         const name = isSingle ? data.root?.name || "Download" : `${items.length} items`;
 
         const transfer = this.desktop.service.transfer.getTransferByPID(pid);
         if (transfer) {
             transfer.data = data;
             transfer.totalSize = data.totalBytes;
-            transfer.totalFiles = data.files.length;
+            transfer.totalFiles =
+                data.files.length +
+                (data.bundles ?? []).reduce((acc, bundle) => acc + bundle.entries.length, 0);
             transfer.name = name;
         }
 
@@ -751,6 +834,17 @@ export class DriveService {
                 existing.children ?? [],
                 params.conflictStrategy ?? "suffix",
             );
+
+            if (params.mode === "mod-v2") {
+                await this.upload.executeModBundleUpload({
+                    pid,
+                    params,
+                    files,
+                    directories,
+                    abortController: newAbort,
+                });
+                return;
+            }
 
             await this.upload.executeUpload({
                 currentId,

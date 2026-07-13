@@ -222,7 +222,13 @@ export class TransferService {
         initialStatus: TransferStatus;
         path?: string;
     }) {
-        const totalSize = data.files.reduce((acc, cur) => acc + cur.size, 0);
+        const totalSize =
+            data.files.reduce((acc, cur) => acc + cur.size, 0) +
+            (data.bundles ?? []).reduce(
+                (acc, bundle) =>
+                    acc + bundle.entries.reduce((entryAcc, entry) => entryAcc + entry.size, 0),
+                0,
+            );
         const transfer: LocalTransfer = {
             pid,
             type,
@@ -241,7 +247,9 @@ export class TransferService {
             speedSamples: [],
             data,
             name,
-            totalFiles: data.files.length,
+            totalFiles:
+                data.files.length +
+                (data.bundles ?? []).reduce((acc, bundle) => acc + bundle.entries.length, 0),
             transferedFiles: 0,
             failedFiles: 0,
             restartParams,

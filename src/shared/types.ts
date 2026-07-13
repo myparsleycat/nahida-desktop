@@ -364,6 +364,24 @@ export interface TransferData {
         parentId: string | null;
         name: string;
     }[];
+    bundles?: {
+        id: string;
+        url: string;
+        etag: string;
+        archiveSize: number;
+        entries: {
+            id: string;
+            fileId: string;
+            parentId: string | null;
+            name: string;
+            size: number;
+            sha256: string;
+            dataOffset: number;
+            compressedSize: number;
+            method: 0 | 8;
+            crc32: number;
+        }[];
+    }[];
 }
 
 export interface Transfer {

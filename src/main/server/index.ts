@@ -21,12 +21,14 @@ const linkData = z
 
 const liveData = z.object({
     type: uploadTypes,
+    storageVersion: z.literal(2).optional(),
     id: z.string(),
     isDir: z.boolean().default(true),
     link: linkData,
     suggestedName: z.string().optional(),
     data: z
         .object({
+            storageVersion: z.literal(2).optional(),
             root: z.object({
                 id: z.string(),
                 parentId: z.string().nullable(),
@@ -50,6 +52,30 @@ const liveData = z.object({
                     name: z.string(),
                 }),
             ),
+            bundles: z
+                .array(
+                    z.object({
+                        id: z.string(),
+                        url: z.string(),
+                        etag: z.string(),
+                        archiveSize: z.number().nonnegative(),
+                        entries: z.array(
+                            z.object({
+                                id: z.string(),
+                                fileId: z.string(),
+                                parentId: z.string().nullable(),
+                                name: z.string(),
+                                size: z.number().nonnegative(),
+                                sha256: z.string(),
+                                dataOffset: z.number().nonnegative(),
+                                compressedSize: z.number().nonnegative(),
+                                method: z.union([z.literal(0), z.literal(8)]),
+                                crc32: z.number().int().nonnegative(),
+                            }),
+                        ),
+                    }),
+                )
+                .default([]),
             totalBytes: z.number(),
         })
         .optional(),
