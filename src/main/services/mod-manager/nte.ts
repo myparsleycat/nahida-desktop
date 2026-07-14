@@ -757,7 +757,7 @@ if ($ShouldMoveTargetEntries) {
     Get-ChildItem -LiteralPath $TargetPath -Force | Move-Item -Destination $ModFolderPath -Force
 }
 `,
-        "NTE_MODS_LINK_ELEVATION_FAILED",
+        "NTE_MODS_UNLINK_ELEVATION_FAILED",
     );
     if (exitCode === 0) return;
     if (exitCode === 35) throw new Error("NTE_MODS_UNLINK_JUNCTION_FAILED");
