@@ -50,6 +50,19 @@ The **Diversify DLL Padding** tab backs up the selected GIMI importer's existing
 
 Before replacing the DLL, Nahida Desktop creates a `pepd` backup file in the same folder. The backup filename embeds a short SHA-256 hash of the diversified DLL, so the tool can detect when the DLL has been replaced after diversification (for example, by the **Start Build** action or by manual edits). If the backup is present and its embedded hash matches the current `d3d11.dll`, the tool treats the DLL padding as already diversified and shows a restore action. Otherwise, the stale backup is removed automatically and the DLL is treated as not yet diversified.
 
+## System folders and administrator permission
+
+If the selected GIMI importer path is under a protected location such as `C:\Program Files\`, Nahida Desktop may not be able to write `d3d11.dll` with normal user permissions.
+
+In that case:
+
+1. The 4001 Fixer shows a warning that Windows may ask for administrator permission.
+2. Build, diversify, and restore still prepare files in a user-writable temp directory when possible.
+3. When the final install into the importer folder needs higher privileges, Windows shows a UAC prompt and the elevated write is performed only for that step.
+4. If the game is currently using `d3d11.dll`, elevation will not help. Close the game first.
+
+If you deny the UAC prompt, the operation fails with an elevation error. Approve the prompt and try again.
+
 ## Unsafe Mode
 
 ![Image](/features/mod-tools/dll-builder/unsafe.png)

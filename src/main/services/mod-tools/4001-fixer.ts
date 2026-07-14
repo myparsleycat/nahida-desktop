@@ -15,6 +15,12 @@ import { nanoid } from "nanoid";
 
 import type { NahidaDesktop } from "@/main";
 
+import {
+    copyFilesElevated,
+    isFsPermissionError,
+    removeFilesElevated,
+} from "@/main/lib/elevated-fs";
+
 const execAsync = promisify(exec);
 
 type ExecBuildError = Error & {
@@ -174,6 +180,32 @@ export class FourThousandOneFixer {
         };
     }
 
+    public async checkImporterWriteAccess({ importerPath }: { importerPath?: string }) {
+        if (!importerPath || !(await fse.pathExists(importerPath))) {
+            return {
+                writable: false,
+                locked: false,
+                requiresElevation: false,
+                processes: [] as { name: string; pid: number }[],
+            };
+        }
+
+        const destinationCheck = await this.desktop.lib.fs.isPathWritable(
+            path.join(importerPath, TARGET_DLL_NAME),
+            {
+                detailed: true,
+                parentPath: importerPath,
+            },
+        );
+
+        return {
+            writable: destinationCheck.writable,
+            locked: destinationCheck.locked,
+            requiresElevation: !destinationCheck.writable && !destinationCheck.locked,
+            processes: destinationCheck.processes,
+        };
+    }
+
     private updateProgress(code: string, errorMessage = "") {
         this.currentProgress = code;
         this.currentErrorMessage = errorMessage;
@@ -212,15 +244,13 @@ export class FourThousandOneFixer {
             detailed: true,
             parentPath: importerPath,
         });
-        if (!destinationCheck.writable) {
-            const errorCode = destinationCheck.locked
-                ? "XXMI_ERR_DLL_IN_USE"
-                : "XXMI_ERR_DLL_NOT_WRITABLE";
+        if (destinationCheck.locked) {
             const errorMessage = this.desktop.lib.fs.formatProcessList(destinationCheck.processes);
-            this.updateProgress(errorCode, errorMessage);
+            this.updateProgress("XXMI_ERR_DLL_IN_USE", errorMessage);
             this.activeTask = null;
             return { success: false, errorMessage };
         }
+        const useElevated = !destinationCheck.writable;
 
         this.updateProgress("XXMI_FIND_VS");
         const vcvarsPath = await this.findVsDevCmd();
@@ -255,20 +285,15 @@ export class FourThousandOneFixer {
                 return { success: false };
             }
 
-            try {
-                await fse.copy(builtDllPath, finalDestination, { overwrite: true });
-            } catch (error) {
-                const lockInfo = await this.desktop.lib.fs.isLockedPathError(
-                    error,
-                    finalDestination,
-                );
-                if (lockInfo.isLocked) {
-                    const errorMessage = this.desktop.lib.fs.formatProcessList(lockInfo.processes);
-                    this.updateProgress("XXMI_ERR_DLL_IN_USE", errorMessage);
-                    this.activeTask = null;
-                    return { success: false, errorMessage };
-                }
-                throw error;
+            const installResult = await this.installFilesWithElevation(
+                [{ sourcePath: builtDllPath, targetPath: finalDestination }],
+                finalDestination,
+                useElevated,
+            );
+            if (!installResult.success) {
+                this.updateProgress(installResult.errorCode, installResult.errorMessage);
+                this.activeTask = null;
+                return { success: false, errorMessage: installResult.errorMessage };
             }
 
             const xxmiPath = await this.desktop.service.xxmi.getXXMIPath();
@@ -276,7 +301,7 @@ export class FourThousandOneFixer {
                 await this.enableUnsafeMode(xxmiPath, importerKey);
             }
 
-            await this.removeDiversifierBackups(importerPath);
+            await this.removeDiversifierBackups(importerPath, useElevated);
 
             this.updateProgress("XXMI_BUILD_SUCCESS");
             this.desktop.logger.info(
@@ -288,6 +313,12 @@ export class FourThousandOneFixer {
             return { success: true };
         } catch (error) {
             this.desktop.logger.error(error, "4001Fixer:buildD3D11Dll");
+            const elevated = this.mapElevatedError(error);
+            if (elevated) {
+                this.updateProgress(elevated.code, elevated.message);
+                this.activeTask = null;
+                return { success: false, errorMessage: elevated.message };
+            }
             const errorMessage = this.extractBuildErrorMessage(error);
             this.updateProgress("XXMI_ERR_BUILD_FAILED", errorMessage);
             this.activeTask = null;
@@ -338,22 +369,22 @@ export class FourThousandOneFixer {
             detailed: true,
             parentPath: importerPath,
         });
-        if (!destinationCheck.writable) {
-            const errorCode = destinationCheck.locked
-                ? "XXMI_ERR_DLL_IN_USE"
-                : "XXMI_ERR_DLL_NOT_WRITABLE";
+        if (destinationCheck.locked) {
             const errorMessage = this.desktop.lib.fs.formatProcessList(destinationCheck.processes);
-            this.updateProgress(errorCode, errorMessage);
+            this.updateProgress("XXMI_ERR_DLL_IN_USE", errorMessage);
             this.activeTask = null;
             return { success: false, errorMessage };
         }
+        const useElevated = !destinationCheck.writable;
 
         const tempPath = path.join(
-            importerPath,
+            os.tmpdir(),
+            D3D_BUILD_TEMP_DIR_NAME,
             `${TARGET_DLL_NAME}.${nanoid()}${DIVERSIFY_TEMP_SUFFIX}`,
         );
 
         try {
+            await fse.ensureDir(path.dirname(tempPath));
             this.updateProgress("XXMI_OBFUSCATING");
             const result = await diversifyDllPadding(targetDllPath, tempPath);
 
@@ -377,19 +408,20 @@ export class FourThousandOneFixer {
             const diversifiedHash = await this.hashDllFile(tempPath);
             const hashPrefix = diversifiedHash.slice(0, DIVERSIFIER_BACKUP_HASH_PREFIX_LENGTH);
             const newBackupPath = this.getBackupPath(importerPath, hashPrefix);
-            await fse.copy(targetDllPath, newBackupPath, { overwrite: false });
 
-            try {
-                await fse.move(tempPath, targetDllPath, { overwrite: true });
-            } catch (error) {
-                const lockInfo = await this.desktop.lib.fs.isLockedPathError(error, targetDllPath);
-                if (lockInfo.isLocked) {
-                    const errorMessage = this.desktop.lib.fs.formatProcessList(lockInfo.processes);
-                    this.updateProgress("XXMI_ERR_DLL_IN_USE", errorMessage);
-                    this.activeTask = null;
-                    return { success: false, errorMessage };
-                }
-                throw error;
+            const installResult = await this.installFilesWithElevation(
+                [
+                    { sourcePath: targetDllPath, targetPath: newBackupPath },
+                    { sourcePath: tempPath, targetPath: targetDllPath },
+                ],
+                targetDllPath,
+                useElevated,
+            );
+            if (!installResult.success) {
+                await this.removePathsBestEffort([newBackupPath], useElevated);
+                this.updateProgress(installResult.errorCode, installResult.errorMessage);
+                this.activeTask = null;
+                return { success: false, errorMessage: installResult.errorMessage };
             }
 
             const xxmiPath = await this.desktop.service.xxmi.getXXMIPath();
@@ -407,6 +439,12 @@ export class FourThousandOneFixer {
             return { success: true, backupPath: newBackupPath };
         } catch (error) {
             this.desktop.logger.error(error, "4001Fixer:diversifyD3D11DllPadding");
+            const elevated = this.mapElevatedError(error);
+            if (elevated) {
+                this.updateProgress(elevated.code, elevated.message);
+                this.activeTask = null;
+                return { success: false, errorMessage: elevated.message };
+            }
             const errorMessage = toErrorMessage(error);
             this.updateProgress("XXMI_ERR_OBFUSCATE_FAILED", errorMessage);
             this.activeTask = null;
@@ -446,20 +484,27 @@ export class FourThousandOneFixer {
             detailed: true,
             parentPath: importerPath,
         });
-        if (!destinationCheck.writable) {
-            const errorCode = destinationCheck.locked
-                ? "XXMI_ERR_DLL_IN_USE"
-                : "XXMI_ERR_DLL_NOT_WRITABLE";
+        if (destinationCheck.locked) {
             const errorMessage = this.desktop.lib.fs.formatProcessList(destinationCheck.processes);
-            this.updateProgress(errorCode, errorMessage);
+            this.updateProgress("XXMI_ERR_DLL_IN_USE", errorMessage);
             this.activeTask = null;
             return { success: false, errorMessage };
         }
+        const useElevated = !destinationCheck.writable;
 
         try {
             this.updateProgress("XXMI_RESTORING");
-            await fse.copy(backupPath, targetDllPath, { overwrite: true });
-            await this.removeDiversifierBackups(importerPath);
+            const installResult = await this.installFilesWithElevation(
+                [{ sourcePath: backupPath, targetPath: targetDllPath }],
+                targetDllPath,
+                useElevated,
+            );
+            if (!installResult.success) {
+                this.updateProgress(installResult.errorCode, installResult.errorMessage);
+                this.activeTask = null;
+                return { success: false, errorMessage: installResult.errorMessage };
+            }
+            await this.removeDiversifierBackups(importerPath, useElevated);
 
             this.updateProgress("XXMI_RESTORE_SUCCESS");
             this.desktop.logger.info(
@@ -471,6 +516,12 @@ export class FourThousandOneFixer {
             return { success: true, backupPath };
         } catch (error) {
             this.desktop.logger.error(error, "4001Fixer:restoreDiversifiedD3D11Dll");
+            const elevated = this.mapElevatedError(error);
+            if (elevated) {
+                this.updateProgress(elevated.code, elevated.message);
+                this.activeTask = null;
+                return { success: false, errorMessage: elevated.message };
+            }
             const lockInfo = await this.desktop.lib.fs.isLockedPathError(error, targetDllPath);
             const errorMessage = lockInfo.isLocked
                 ? this.desktop.lib.fs.formatProcessList(lockInfo.processes)
@@ -484,6 +535,71 @@ export class FourThousandOneFixer {
             this.activeTask = null;
             return { success: false, errorMessage };
         }
+    }
+
+    private async installFilesWithElevation(
+        fileCopies: readonly { sourcePath: string; targetPath: string }[],
+        lockTargetPath: string,
+        useElevated: boolean,
+    ): Promise<{ success: true } | { success: false; errorCode: string; errorMessage: string }> {
+        if (useElevated) {
+            try {
+                await copyFilesElevated(fileCopies, "XXMI_ERR_ELEVATED_COPY_FAILED");
+                return { success: true };
+            } catch (error) {
+                const elevated = this.mapElevatedError(error);
+                return {
+                    success: false,
+                    errorCode: elevated?.code ?? "XXMI_ERR_ELEVATION_FAILED",
+                    errorMessage: elevated?.message ?? toErrorMessage(error),
+                };
+            }
+        }
+
+        try {
+            for (const fileCopy of fileCopies) {
+                await fse.copy(fileCopy.sourcePath, fileCopy.targetPath, { overwrite: true });
+            }
+            return { success: true };
+        } catch (error) {
+            const lockInfo = await this.desktop.lib.fs.isLockedPathError(error, lockTargetPath);
+            if (lockInfo.isLocked) {
+                return {
+                    success: false,
+                    errorCode: "XXMI_ERR_DLL_IN_USE",
+                    errorMessage: this.desktop.lib.fs.formatProcessList(lockInfo.processes),
+                };
+            }
+            if (!isFsPermissionError(error) && !lockInfo.isPermissionError) {
+                throw error;
+            }
+
+            try {
+                await copyFilesElevated(fileCopies, "XXMI_ERR_ELEVATED_COPY_FAILED");
+                return { success: true };
+            } catch (elevatedError) {
+                const elevated = this.mapElevatedError(elevatedError);
+                return {
+                    success: false,
+                    errorCode: elevated?.code ?? "XXMI_ERR_ELEVATION_FAILED",
+                    errorMessage: elevated?.message ?? toErrorMessage(elevatedError),
+                };
+            }
+        }
+    }
+
+    private mapElevatedError(error: unknown) {
+        const message = toErrorMessage(error);
+        if (
+            message.startsWith("XXMI_ERR_ELEVATED_COPY_FAILED:") ||
+            message.startsWith("XXMI_ERR_ELEVATED_REMOVE_FAILED:") ||
+            message.startsWith("ELEVATED_COPY_FAILED:") ||
+            message.startsWith("ELEVATED_REMOVE_FAILED:") ||
+            message.startsWith("ELEVATED_PS_SPAWN_FAILED:")
+        ) {
+            return { code: "XXMI_ERR_ELEVATION_FAILED", message };
+        }
+        return null;
     }
 
     private getBackupPath(importerPath: string, hashPrefix: string) {
@@ -561,14 +677,39 @@ export class FourThousandOneFixer {
         return null;
     }
 
-    private async removeDiversifierBackups(importerPath: string) {
+    private async removeDiversifierBackups(importerPath: string, useElevated = false) {
         const entries = await fse.readdir(importerPath).catch(() => []);
-        await Promise.all(
-            entries
-                .filter((entry) => entry.startsWith(DIVERSIFIER_BACKUP_PREFIX))
-                .filter((entry) => entry.endsWith(".bak"))
-                .map((entry) => fse.remove(path.join(importerPath, entry))),
-        );
+        const backupPaths = entries
+            .filter((entry) => entry.startsWith(DIVERSIFIER_BACKUP_PREFIX))
+            .filter((entry) => entry.endsWith(".bak"))
+            .map((entry) => path.join(importerPath, entry));
+        await this.removePathsBestEffort(backupPaths, useElevated);
+    }
+
+    private async removePathsBestEffort(paths: readonly string[], useElevated: boolean) {
+        if (paths.length === 0) return;
+
+        try {
+            if (useElevated) {
+                await removeFilesElevated(paths, "XXMI_ERR_ELEVATED_REMOVE_FAILED");
+                return;
+            }
+            await Promise.all(paths.map((filePath) => fse.remove(filePath)));
+        } catch (error) {
+            if (!useElevated && isFsPermissionError(error)) {
+                try {
+                    await removeFilesElevated(paths, "XXMI_ERR_ELEVATED_REMOVE_FAILED");
+                    return;
+                } catch (elevatedError) {
+                    this.desktop.logger.warn(
+                        elevatedError,
+                        "4001Fixer:removePathsBestEffort:elevated",
+                    );
+                    return;
+                }
+            }
+            this.desktop.logger.warn(error, "4001Fixer:removePathsBestEffort");
+        }
     }
 
     private getBuildStateKey(buildId: string) {

@@ -1,9 +1,11 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
+
 import type { ProcessInfo } from "@native/fs";
 import { getLockingProcesses } from "@native/fs";
 import fg from "fast-glob";
 import fse from "fs-extra";
+
 import type { NahidaDesktop } from "..";
 
 export interface FileNode {
@@ -160,15 +162,27 @@ export class FS {
         return fse.stat(path);
     }
 
+    public isFsPermissionError(error: unknown) {
+        const code = (error as NodeJS.ErrnoException | undefined)?.code;
+        return code === "EPERM" || code === "EACCES";
+    }
+
     public async isLockedPathError(error: unknown, pathStr: string) {
         const code = (error as NodeJS.ErrnoException | undefined)?.code;
-        const isLocked = code === "EBUSY" || code === "EPERM" || code === "EACCES";
-        if (!isLocked) {
-            return { isLocked: false, processes: [] };
+        if (code !== "EBUSY" && code !== "EPERM" && code !== "EACCES") {
+            return { isLocked: false, isPermissionError: false, processes: [] };
         }
 
         const processes = await this.getLockingProcessesSafe(pathStr);
-        return { isLocked, processes };
+        if (processes.length > 0 || code === "EBUSY") {
+            return { isLocked: true, isPermissionError: false, processes };
+        }
+
+        return {
+            isLocked: false,
+            isPermissionError: code === "EPERM" || code === "EACCES",
+            processes: [],
+        };
     }
 
     private async getLockingProcessesSafe(pathStr: string) {
