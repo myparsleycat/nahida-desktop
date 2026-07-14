@@ -23,7 +23,7 @@ function RouteComponent() {
     );
   }
 
-  if (isBackendOffline) {
+  if (!session && isBackendOffline) {
     return (
       <main className="mx-auto flex h-full w-full flex-1 flex-col items-center justify-center space-y-6 p-4 select-none">
         <p className="mb-4 text-muted-foreground">{t("page.setting.acc.server_unreachable")}</p>
