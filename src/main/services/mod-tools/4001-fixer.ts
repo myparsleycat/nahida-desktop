@@ -409,14 +409,20 @@ export class FourThousandOneFixer {
             const hashPrefix = diversifiedHash.slice(0, DIVERSIFIER_BACKUP_HASH_PREFIX_LENGTH);
             const newBackupPath = this.getBackupPath(importerPath, hashPrefix);
 
-            const installResult = await this.installFilesWithElevation(
-                [
-                    { sourcePath: targetDllPath, targetPath: newBackupPath },
-                    { sourcePath: tempPath, targetPath: targetDllPath },
-                ],
-                targetDllPath,
-                useElevated,
-            );
+            let installResult;
+            try {
+                installResult = await this.installFilesWithElevation(
+                    [
+                        { sourcePath: targetDllPath, targetPath: newBackupPath },
+                        { sourcePath: tempPath, targetPath: targetDllPath },
+                    ],
+                    targetDllPath,
+                    useElevated,
+                );
+            } catch (installError) {
+                await this.removePathsBestEffort([newBackupPath], useElevated);
+                throw installError;
+            }
             if (!installResult.success) {
                 await this.removePathsBestEffort([newBackupPath], useElevated);
                 this.updateProgress(installResult.errorCode, installResult.errorMessage);
