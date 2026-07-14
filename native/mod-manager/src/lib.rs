@@ -278,8 +278,8 @@ fn is_excluded_file(filename: &str) -> bool {
 }
 
 fn is_disabled_folder_name(folder_name: &str) -> bool {
-    let lower = folder_name.trim().to_ascii_lowercase();
-    lower.starts_with("disabled ") || lower.starts_with("disabled_")
+    let trimmed = folder_name.trim();
+    strip_disabled_prefix(trimmed) != trimmed
 }
 
 fn strip_disabled_prefix(folder_name: &str) -> String {
@@ -815,7 +815,9 @@ mod tests {
         assert!(is_disabled_folder_name("DISABLED Foo"));
         assert!(is_disabled_folder_name("DISABLED_Foo"));
         assert!(is_disabled_folder_name("disabled_bar"));
+        assert!(is_disabled_folder_name("disableddisabled Foo"));
         assert!(!is_disabled_folder_name("DisableFoo"));
+        assert!(!is_disabled_folder_name("disableddisableddisabledFoo"));
     }
 
     #[test]
