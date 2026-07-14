@@ -20,6 +20,7 @@ import {
   MOD_GRID_LAYOUT_MODES,
   DOWNLOAD_SOURCES,
   SIDEBAR_LAYOUT_MODES,
+  type DisabledPrefixStyle,
   type ModGridLayoutMode,
   type SidebarLayoutMode,
 } from "@shared/mod";
@@ -42,6 +43,7 @@ const settingsConfig = {
   autoResolveDownloadTarget: "mod.autoResolveDownloadTarget",
   autoResolveDownloadTargetSources: "mod.autoResolveDownloadTargetSources",
   copyShaderFixesOnEnable: "mod.copyShaderFixesOnEnable",
+  disabledPrefixStyle: "mod.disabledPrefixStyle",
   sidebarLayout: "mod.sidebarLayout",
   gridLayoutMode: "mod.gridLayoutMode",
   gridResponsiveBaseWidth: "mod.gridResponsiveBaseWidth",
@@ -89,6 +91,14 @@ function ModSettingsRouteContent() {
     {
       value: "fixed_column_count",
       label: t("page.setting.mod.layout.grid.modes.fixed_column_count"),
+    },
+  ] as const;
+
+  const disabledPrefixStyleOptions = [
+    { value: "space", label: t("page.setting.mod.mod_management.disabledPrefixStyles.space") },
+    {
+      value: "underscore",
+      label: t("page.setting.mod.mod_management.disabledPrefixStyles.underscore"),
     },
   ] as const;
 
@@ -275,6 +285,36 @@ function ModSettingsRouteContent() {
                 checked={settings.copyShaderFixesOnEnable}
                 onCheckedChange={(val) => update("copyShaderFixesOnEnable", val)}
               />
+            </div>
+
+            <Separator />
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5 pr-4">
+                <span className="text-sm font-medium">
+                  {t("page.setting.mod.mod_management.disabledPrefixStyle")}
+                </span>
+                <p className="text-xs text-muted-foreground">
+                  {t("page.setting.mod.mod_management.disabledPrefixStyleDescription")}
+                </p>
+              </div>
+              <Select
+                value={settings.disabledPrefixStyle}
+                onValueChange={(val) => update("disabledPrefixStyle", val as DisabledPrefixStyle)}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {disabledPrefixStyleOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </div>
 
             <Separator />

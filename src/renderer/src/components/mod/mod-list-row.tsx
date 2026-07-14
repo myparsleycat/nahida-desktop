@@ -3,6 +3,7 @@ import type { ModActionApi } from "@renderer/hooks/use-mod-actions";
 import i18n from "@renderer/lib/i18n";
 import { cn } from "@renderer/lib/utils";
 import type { ModInfo } from "@renderer/types/mod";
+import { stripDisabledPrefix } from "@shared/mod";
 import { formatDate, formatSize } from "@shared/utils";
 import { FolderIcon } from "lucide-react";
 
@@ -54,7 +55,7 @@ export function ModListRow({
         </td>
         <td className="w-full max-w-0 p-2 text-left align-middle">
           <span className="block w-full truncate text-left font-medium">
-            {mod.name.replace(/disabled/gi, "").trim()}
+            {stripDisabledPrefix(mod.name)}
           </span>
         </td>
         <td className="w-[1%] p-2 text-right align-middle whitespace-nowrap text-muted-foreground">

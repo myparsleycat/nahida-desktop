@@ -2,10 +2,12 @@ import type { NahidaDesktop } from "@main/index";
 import { normalizeDriveNameSortPolicy, type DriveNameSortPolicy } from "@shared/drive";
 import {
     ARCHIVE_EXTRACT_PATH_MODES,
+    DISABLED_PREFIX_STYLES,
     DOWNLOAD_SOURCES,
     MOD_GRID_LAYOUT_MODES,
     SIDEBAR_LAYOUT_MODES,
     type ArchiveExtractPathMode,
+    type DisabledPrefixStyle,
     type DownloadSource,
     type ModGridLayoutMode,
     type SidebarLayoutMode,
@@ -468,6 +470,15 @@ export class Setting {
                         ),
                     ),
             },
+            "mod.disabledPrefixStyle": {
+                definition: APP_SETTINGS["mod.disabledPrefixStyle"],
+                getDefault: () => "space",
+                fromStored: (value) =>
+                    DISABLED_PREFIX_STYLES.includes(value as DisabledPrefixStyle)
+                        ? (value as DisabledPrefixStyle)
+                        : "space",
+                normalize: (value) => (DISABLED_PREFIX_STYLES.includes(value) ? value : "space"),
+            },
             "transfer.downloadConcurrency": {
                 definition: APP_SETTINGS["transfer.downloadConcurrency"],
                 getDefault: () => TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT,
@@ -817,6 +828,11 @@ export class Setting {
         getCopyShaderFixesOnEnable: async () => await this.get("mod.copyShaderFixesOnEnable"),
         setCopyShaderFixesOnEnable: async (enabled: boolean) => {
             await this.set("mod.copyShaderFixesOnEnable", enabled);
+        },
+        getDisabledPrefixStyle: async (): Promise<DisabledPrefixStyle> =>
+            await this.get("mod.disabledPrefixStyle"),
+        setDisabledPrefixStyle: async (style: DisabledPrefixStyle) => {
+            await this.set("mod.disabledPrefixStyle", style);
         },
     };
 

@@ -28,7 +28,7 @@ import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { useModMutations } from "@renderer/hooks/use-mod-mutations";
 import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
-import { isNteImporter } from "@shared/mod";
+import { isNteImporter, stripDisabledPrefix } from "@shared/mod";
 import { toErrorMessage } from "@shared/utils";
 import type { QueryClient } from "@tanstack/react-query";
 import { useRouteContext } from "@tanstack/react-router";
@@ -40,10 +40,8 @@ import { ModFixRunnerDialogs } from "../components/mod/mod-fix-runner-dialogs";
 import { pasteModPreview } from "../components/mod/paste-preview";
 import { TextureResizeDialog } from "../components/mod/texture-resize-dialog";
 
-const DISABLED_PREFIX_REGEX = /^disabled\s+/i;
-
 function getRenameDefaultValue(name: string) {
-  return name.replace(DISABLED_PREFIX_REGEX, "").trim();
+  return stripDisabledPrefix(name);
 }
 
 async function cleanupModelViewerSource(source: ModelViewerDialogSource | null) {

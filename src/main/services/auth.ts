@@ -1,3 +1,4 @@
+import { appVersion } from "@main/const";
 import type { NahidaDesktop } from "@main/index";
 import { focus } from "@main/windows/utils";
 import { BACKEND_URL } from "@shared/const";
@@ -5,6 +6,7 @@ import { SessionSchema } from "@shared/schemas/auth";
 import ky from "ky";
 import { parseServerSentEvents } from "parse-sse";
 import { Nullable, validate } from "valdex";
+
 import { openExternal } from "./util";
 
 export class Auth {
@@ -42,6 +44,10 @@ export class Auth {
 
     public async removeToken() {
         await this.desktop.lib.db.settings.updateValue("token", null);
+    }
+
+    public async hasToken() {
+        return !!(await this.getToken());
     }
 
     public async getSession() {
@@ -146,17 +152,24 @@ export class Auth {
 
     public async startLogout() {
         const token = await this.getToken();
-        if (token) {
-            const url = `${BACKEND_URL}/api/auth/sign-out`;
-            await this.desktop.httpService.fetcher(url, {
-                method: "POST",
-            });
-        }
-
         await this.removeToken();
         this.desktop.ipc.broadcast("auth:update", null);
-        // closeAllWindows();
-        // this.desktop.window.auth.createLoginWindow();
+
+        if (!token) return;
+
+        try {
+            await ky.post(`${BACKEND_URL}/api/auth/sign-out`, {
+                timeout: 10000,
+                retry: 0,
+                throwHttpErrors: false,
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "User-Agent": `Nahida Desktop/${appVersion}`,
+                },
+            });
+        } catch (err) {
+            this.desktop.logger.error(err, "Auth");
+        }
     }
 }
 

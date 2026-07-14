@@ -1,4 +1,4 @@
-import ky from "ky";
+import ky, { isNetworkError, isTimeoutError } from "ky";
 
 import type { NahidaDesktop } from "../index";
 
@@ -7,6 +7,10 @@ import { appVersion } from "../const";
 const NHD_PREFIXES = ["http://localhost", "https://api.nahida.live"];
 
 interface FetcherOptions extends RequestInit {}
+
+function isUnreachableError(error: unknown) {
+    return isTimeoutError(error) || isNetworkError(error);
+}
 
 export class DesktopHttpService {
     constructor(private readonly desktop: NahidaDesktop) {}
@@ -25,49 +29,60 @@ export class DesktopHttpService {
 
     public async fetcher(url: string, options?: FetcherOptions) {
         const isNHD = this.isNHD(url);
+        const headers = {
+            ...(options?.headers instanceof Headers
+                ? Object.fromEntries(options.headers.entries())
+                : (options?.headers as Record<string, string> | undefined)),
+            ...(await this.getHeaders(url)),
+        };
 
-        const resp = await ky(url, {
-            ...options,
-            headers: {
-                ...(options?.headers instanceof Headers
-                    ? Object.fromEntries(options.headers.entries())
-                    : (options?.headers as Record<string, string> | undefined)),
-                ...(await this.getHeaders(url)),
-            },
-            timeout: 100000,
-            retry: {
-                limit: 2,
-            },
-            hooks: {
-                afterResponse: [
-                    async ({ response }) => {
-                        if (response.status === 401 && isNHD) {
-                            await this.desktop.service.auth.getSession();
-                        }
-                    },
+        try {
+            const resp = await ky(url, {
+                ...options,
+                headers,
+                timeout: 100000,
+                retry: {
+                    limit: 2,
+                },
+                hooks: {
+                    afterResponse: [
+                        async ({ response }) => {
+                            if (response.status === 401 && isNHD) {
+                                await this.desktop.service.auth.getSession();
+                            }
+                        },
 
-                    ({ response }) => {
-                        if (response.status === 524) {
-                            return new Response("cloudflare timeout. but it's ok", { status: 200 });
-                        } else {
-                            return response;
-                        }
-                    },
-                ],
+                        ({ response }) => {
+                            if (response.status === 524) {
+                                return new Response("cloudflare timeout. but it's ok", {
+                                    status: 200,
+                                });
+                            } else {
+                                return response;
+                            }
+                        },
+                    ],
 
-                beforeError: [
-                    // @ts-expect-error
-                    async ({ response, error }) => {
-                        if (response && response.status === 524) {
+                    beforeError: [
+                        // @ts-expect-error
+                        async ({ response, error }) => {
+                            if (response && response.status === 524) {
+                                return error;
+                            }
+
                             return error;
-                        }
+                        },
+                    ],
+                },
+            });
 
-                        return error;
-                    },
-                ],
-            },
-        });
-
-        return resp;
+            if (isNHD) this.desktop.service.backendConnectivity.setOnline();
+            return resp;
+        } catch (error) {
+            if (isNHD && isUnreachableError(error)) {
+                this.desktop.service.backendConnectivity.setOffline();
+            }
+            throw error;
+        }
     }
 }

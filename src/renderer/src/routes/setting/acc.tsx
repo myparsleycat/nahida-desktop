@@ -11,21 +11,31 @@ export const Route = createFileRoute("/setting/acc")({
 });
 
 function RouteComponent() {
-  const { session, sessionInitialized, startLogin, startLogout } = useAuth();
+  const { session, sessionInitialized, hasToken, isBackendOffline, startLogin, startLogout } =
+    useAuth();
   const { t } = useTranslation();
 
   if (!sessionInitialized) {
     return (
-      <main className="flex-1 flex flex-col mx-auto p-4 space-y-6 w-full select-none items-center justify-center h-full">
+      <main className="mx-auto flex h-full w-full flex-1 flex-col items-center justify-center space-y-6 p-4 select-none">
         <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+      </main>
+    );
+  }
+
+  if (!session && isBackendOffline) {
+    return (
+      <main className="mx-auto flex h-full w-full flex-1 flex-col items-center justify-center space-y-6 p-4 select-none">
+        <p className="mb-4 text-muted-foreground">{t("page.setting.acc.server_unreachable")}</p>
+        {hasToken && <Button onClick={() => startLogout()}>{t("page.setting.acc.logout")}</Button>}
       </main>
     );
   }
 
   if (!session) {
     return (
-      <main className="flex-1 flex flex-col mx-auto p-4 space-y-6 w-full select-none items-center justify-center h-full">
-        <p className="text-muted-foreground mb-4">
+      <main className="mx-auto flex h-full w-full flex-1 flex-col items-center justify-center space-y-6 p-4 select-none">
+        <p className="mb-4 text-muted-foreground">
           {t("page.setting.acc.not_logged_in.description")}
         </p>
         <Button onClick={() => startLogin()}>{t("page.setting.acc.not_logged_in.login")}</Button>
@@ -34,7 +44,7 @@ function RouteComponent() {
   }
 
   return (
-    <main className="flex-1 flex flex-col mx-auto p-4 space-y-6 w-full select-none">
+    <main className="mx-auto flex w-full flex-1 flex-col space-y-6 p-4 select-none">
       <Card>
         <CardContent className="flex flex-row items-center justify-between">
           <div className="flex flex-row items-center space-x-3">

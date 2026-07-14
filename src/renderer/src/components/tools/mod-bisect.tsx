@@ -19,7 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui
 import { useGames } from "@renderer/hooks/use-mod-data";
 import { useSetting } from "@renderer/hooks/use-settings";
 import { setSetting } from "@renderer/lib/settings";
-import { isNteImporter } from "@shared/mod";
+import { disabledPrefixString, isNteImporter } from "@shared/mod";
 import type { BisectSnapshot, GameConfig } from "@shared/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -410,6 +410,7 @@ function DoneView({
   onFinalize: (keepDisabled: string[]) => void;
 }) {
   const { t } = useTranslation();
+  const { data: disabledPrefixStyle = "space" } = useSetting("mod.disabledPrefixStyle");
   const originalPath = snapshot.finalBadPath ?? "";
   const basename = originalPath ? (originalPath.split(/[\\/]+/).pop() ?? originalPath) : "";
   return (
@@ -426,7 +427,7 @@ function DoneView({
         <div className="text-xs text-muted-foreground">
           {t("page.tools.mod_bisect.keep_disabled_hint", {
             from: basename,
-            to: `DISABLED ${basename}`,
+            to: `${disabledPrefixString(disabledPrefixStyle)}${basename}`,
           })}
         </div>
         <div className="text-xs text-muted-foreground">

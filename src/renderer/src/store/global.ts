@@ -1,3 +1,4 @@
+import type { BackendStatus } from "@shared/backend";
 import type { Session } from "@shared/schemas/auth";
 import type { AppStatus, TransferWithoutData } from "@shared/types";
 import type { UpdaterReleaseNotes, UpdaterStatus } from "@shared/updater";
@@ -25,6 +26,10 @@ interface GlobalStore {
     sessionInitialized: boolean;
     setSession: (session: Session | null) => void;
     setSessionInitialized: (initialized: boolean) => void;
+    backendStatus: BackendStatus;
+    setBackendStatus: (status: BackendStatus) => void;
+    hasToken: boolean;
+    setHasToken: (hasToken: boolean) => void;
     transfers: TransferWithoutData[];
     setTransfers: (transfers: TransferWithoutData[]) => void;
 }
@@ -62,6 +67,10 @@ export const globalStore = createStore<GlobalStore>((set) => {
         sessionInitialized: false,
         setSession: (session) => set({ session, sessionInitialized: true }),
         setSessionInitialized: (sessionInitialized) => set({ sessionInitialized }),
+        backendStatus: "unknown",
+        setBackendStatus: (backendStatus) => set({ backendStatus }),
+        hasToken: false,
+        setHasToken: (hasToken) => set({ hasToken }),
         transfers: [],
         setTransfers: (transfers) => set({ transfers }),
     };

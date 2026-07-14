@@ -1,8 +1,15 @@
 import path from "node:path";
+
 import { electronApp, optimizer } from "@electron-toolkit/utils";
 import AutoLaunch from "auto-launch";
 import { app, protocol } from "electron";
 import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
+
+import type { NativeLib } from "./lib/native";
+import type ModManager from "./services/mod-manager";
+import type { ModTools } from "./services/mod-tools";
+import type { XXMI } from "./services/xxmi";
+
 import { IS_ELECTRON } from "./const";
 import { DB_FILE_NAME } from "./internal/const";
 import { DatabaseClient } from "./internal/db/client";
@@ -16,7 +23,6 @@ import Compressor from "./lib/compressor";
 import CryptoLib from "./lib/crypto";
 import CustomDownloader from "./lib/custom-downloader";
 import { FS } from "./lib/fs";
-import type { NativeLib } from "./lib/native";
 import { PathSelector } from "./lib/path-selector";
 import Tray from "./lib/tray";
 import Utils from "./lib/utils";
@@ -25,13 +31,11 @@ import { registerProtocal } from "./protocals";
 import { startServer } from "./server";
 import ArchiveService from "./services/archive";
 import Auth from "./services/auth";
+import { BackendConnectivity } from "./services/backend-connectivity";
 import { DriveService } from "./services/drive";
 import { GameBananaService } from "./services/gamebanana";
-import type ModManager from "./services/mod-manager";
-import type { ModTools } from "./services/mod-tools";
 import { StartupCleanupService } from "./services/startup-cleanup";
 import TransferService from "./services/transfer";
-import type { XXMI } from "./services/xxmi";
 import Setting from "./setting";
 import LoginWindow from "./windows/login";
 import MainWindow from "./windows/main";
@@ -79,6 +83,7 @@ export class NahidaDesktop {
 
     public service: {
         auth: Auth;
+        backendConnectivity: BackendConnectivity;
         drive: DriveService;
         gamebanana: GameBananaService;
         transfer: TransferService;
@@ -115,6 +120,7 @@ export class NahidaDesktop {
 
         this.service = {
             auth: new Auth(this),
+            backendConnectivity: new BackendConnectivity(this),
             drive: new DriveService(this),
             gamebanana: new GameBananaService(this),
             transfer: new TransferService(this),
@@ -203,6 +209,7 @@ export class NahidaDesktop {
 
         this.updater.initialize();
         await this.service.xxmi.init();
+        this.service.backendConnectivity.start();
 
         const logLevel = await this.setting.general.getLogLevel();
         this.logger.setLevel(logLevel);

@@ -17,6 +17,8 @@ export function useGlobalEvents(
 ) {
     const navi = useNavigate();
     const setSession = useGlobalStore((state) => state.setSession);
+    const setHasToken = useGlobalStore((state) => state.setHasToken);
+    const setBackendStatus = useGlobalStore((state) => state.setBackendStatus);
     const [listeners, setListeners] = useState<Map<string, () => void>>(new Map());
     const { i18n } = useTranslation();
 
@@ -50,8 +52,25 @@ export function useGlobalEvents(
 
         const removeAuthListener = window.api.on("auth:update", (session) => {
             setSession(session);
+            setHasToken(!!session);
         });
         setListeners(new Map(listeners.set("auth:update", removeAuthListener)));
+
+        const removeBackendStatusListener = window.api.on("backend:status", (status) => {
+            setBackendStatus(status);
+            if (status !== "online") return;
+
+            void (async () => {
+                try {
+                    const session = await window.api.invoke("auth:getSession");
+                    setSession(session);
+                    setHasToken(!!session || (await window.api.invoke("auth:hasToken")));
+                } catch (error) {
+                    console.error("Failed to refresh session after backend recovery", error);
+                }
+            })();
+        });
+        setListeners(new Map(listeners.set("backend:status", removeBackendStatusListener)));
 
         const removeLanguageListener = window.api.on("language:update", (language) => {
             void i18n.changeLanguage(language);

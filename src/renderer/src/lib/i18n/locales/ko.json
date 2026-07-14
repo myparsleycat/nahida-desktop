@@ -80,6 +80,7 @@
     },
     "drive": {
       "title": "드라이브",
+      "title_server_error": "드라이브 (서버 에러)",
       "share_drive": "공유 드라이브",
       "no_contents_section_message": {
         "0": "이 폴더에 파일이나 폴더가 없습니다",
@@ -182,7 +183,8 @@
       }
     },
     "share_drive": {
-      "title": "공유 드라이브"
+      "title": "공유 드라이브",
+      "title_server_error": "공유 드라이브 (서버 에러)"
     },
     "mod": {
       "title": "모드 매니저",
@@ -652,6 +654,8 @@
         "start_obfuscate": "패딩 다양화 시작",
         "start_restore": "백업 복원",
         "backup_path": "백업: {{path}}",
+        "system_folder_warning_title": "시스템 폴더가 선택되었습니다",
+        "system_folder_warning_description": "DLL 적용 또는 복원 시 Windows 관리자 권한 확인이 표시될 수 있습니다.",
         "progress": {
           "XXMI_INIT": "초기화 중...",
           "XXMI_OBFUSCATE_INIT": "DLL 패딩 다양화 준비 중...",
@@ -663,8 +667,9 @@
           "XXMI_OBFUSCATING": "D3D11 DLL 패딩 다양화 중...",
           "XXMI_RESTORING": "백업에서 D3D11 DLL 복원 중...",
           "XXMI_ERR_DLL_NOT_FOUND": "빌드된 d3d11.dll 파일을 찾을 수 없습니다.",
-          "XXMI_ERR_DLL_NOT_WRITABLE": "대상 Importer에 d3d11.dll을 쓸 수 없습니다. 폴더 권한을 확인하세요.",
+          "XXMI_ERR_DLL_NOT_WRITABLE": "대상 Importer에 d3d11.dll을 쓸 수 없습니다. 폴더 권한을 확인하거나 관리자 권한 요청을 허용하세요.",
           "XXMI_ERR_DLL_IN_USE": "d3d11.dll을 교체할 수 없습니다. 게임을 먼저 종료한 뒤 다시 시도하세요.",
+          "XXMI_ERR_ELEVATION_FAILED": "관리자 권한이 거부되었거나 권한 상승 후 쓰기에 실패했습니다. UAC 확인을 허용한 뒤 다시 시도하세요.",
           "XXMI_BUILD_SUCCESS": "d3d11.dll이 성공적으로 적용되었습니다.",
           "XXMI_OBFUSCATE_SUCCESS": "d3d11.dll 패딩 다양화가 완료되었습니다.",
           "XXMI_OBFUSCATE_ALREADY_APPLIED": "d3d11.dll은 이미 패딩 다양화가 적용되어 있습니다.",
@@ -1038,6 +1043,12 @@
           "moveFolderInsteadOfCopyDescription": "폴더를 모드 폴더에 드롭할 때 복사하지 않고 이동합니다 (원본 삭제)",
           "copyShaderFixesOnEnable": "활성화 시 ShaderFixes 복사",
           "copyShaderFixesOnEnableDescription": "모드를 활성화할 때 모드 안의 ShaderFixes 파일을 활성 Importer의 ShaderFixes 폴더로 복사합니다.",
+          "disabledPrefixStyle": "비활성 모드 접두사 형식",
+          "disabledPrefixStyleDescription": "모드 비활성화 시 사용할 접두사를 선택합니다. 활성화 시 두 형식 모두 항상 인식됩니다.",
+          "disabledPrefixStyles": {
+            "space": "DISABLED (공백)",
+            "underscore": "DISABLED_ (밑줄)"
+          },
           "searchModPreview": "하위 폴더에서 미리보기 검색",
           "searchModPreviewDescription": "캐릭터 폴더에 프리뷰 이미지가 없는 경우, 모드 폴더 내부에서 프리뷰 이미지를 검색합니다.",
           "autoResolveDownloadTarget": "다운로드 대상 폴더 자동 선택",
@@ -1116,6 +1127,7 @@
           "description": "로그인이 필요합니다.",
           "login": "로그인"
         },
+        "server_unreachable": "서버에 연결할 수 없습니다.",
         "my_account": "내 계정",
         "logout": "로그아웃"
       },

@@ -60,6 +60,9 @@ export function registerToolsHandlers(d: NahidaDesktop) {
     rh("tools:4001FixerGetDiversificationState", ({ importerPath }: { importerPath?: string }) =>
         d.service.modTools.fourThousandOneFixer.getDiversificationState({ importerPath }),
     );
+    rh("tools:4001FixerCheckImporterWriteAccess", ({ importerPath }: { importerPath?: string }) =>
+        d.service.modTools.fourThousandOneFixer.checkImporterWriteAccess({ importerPath }),
+    );
     rh("tools:4001FixerGetProviderReleases", (provider: string) =>
         d.service.modTools.fourThousandOneFixer.getProviderReleases(provider),
     );

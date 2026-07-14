@@ -80,6 +80,7 @@
     },
     "drive": {
       "title": "云端硬盘",
+      "title_server_error": "云端硬盘 (服务器错误)",
       "share_drive": "共享云端硬盘",
       "no_contents_section_message": {
         "0": "此文件夹中没有文件或文件夹",
@@ -182,7 +183,8 @@
       }
     },
     "share_drive": {
-      "title": "共享驱动器"
+      "title": "共享驱动器",
+      "title_server_error": "共享驱动器 (服务器错误)"
     },
     "mod": {
       "title": "模组管理器",
@@ -632,6 +634,8 @@
         "start_obfuscate": "开始填充多样化",
         "start_restore": "恢复备份",
         "backup_path": "备份: {{path}}",
+        "system_folder_warning_title": "已选择系统文件夹",
+        "system_folder_warning_description": "应用或恢复 DLL 时，Windows 可能会请求管理员权限。",
         "progress": {
           "XXMI_INIT": "正在初始化...",
           "XXMI_OBFUSCATE_INIT": "正在准备 DLL 填充多样化...",
@@ -643,8 +647,9 @@
           "XXMI_OBFUSCATING": "正在多样化 D3D11 DLL 填充...",
           "XXMI_RESTORING": "正在从备份恢复 D3D11 DLL...",
           "XXMI_ERR_DLL_NOT_FOUND": "未找到已构建的 d3d11.dll 文件。",
-          "XXMI_ERR_DLL_NOT_WRITABLE": "无法将 d3d11.dll 写入目标 Importer。请检查文件夹权限。",
+          "XXMI_ERR_DLL_NOT_WRITABLE": "无法将 d3d11.dll 写入目标 Importer。请检查文件夹权限，或允许管理员权限请求。",
           "XXMI_ERR_DLL_IN_USE": "无法替换 d3d11.dll。请先关闭游戏，然后重试。",
+          "XXMI_ERR_ELEVATION_FAILED": "管理员权限被拒绝，或提升权限后写入失败。请批准 UAC 提示后重试。",
           "XXMI_BUILD_SUCCESS": "d3d11.dll 已成功应用。",
           "XXMI_OBFUSCATE_SUCCESS": "d3d11.dll 填充已成功多样化。",
           "XXMI_OBFUSCATE_ALREADY_APPLIED": "d3d11.dll 填充已完成多样化。",
@@ -1018,6 +1023,12 @@
           "moveFolderInsteadOfCopyDescription": "将文件夹拖入模组文件夹时进行移动而非复制 (删除源文件)",
           "copyShaderFixesOnEnable": "启用时复制 ShaderFixes",
           "copyShaderFixesOnEnableDescription": "启用模组时，将模组中的 ShaderFixes 文件复制到已激活导入器的 ShaderFixes 文件夹。",
+          "disabledPrefixStyle": "禁用模组前缀格式",
+          "disabledPrefixStyleDescription": "选择禁用模组时使用的前缀。启用时始终识别两种格式。",
+          "disabledPrefixStyles": {
+            "space": "DISABLED (空格)",
+            "underscore": "DISABLED_ (下划线)"
+          },
           "searchModPreview": "在子文件夹中搜索模组预览",
           "searchModPreviewDescription": "如果角色文件夹中没有预览图像，则在模组文件夹内部搜索预览图像。",
           "autoResolveDownloadTarget": "自动选择下载目标文件夹",
@@ -1096,6 +1107,7 @@
           "description": "需要登录。",
           "login": "登录"
         },
+        "server_unreachable": "无法连接到服务器。",
         "my_account": "我的账户",
         "logout": "登出"
       },

@@ -6,4 +6,6 @@ export function registerAuthHandlers(d: NahidaDesktop) {
     rh("auth:startLogout", () => d.service.auth.startLogout());
     rh("auth:isLoggedIn", () => d.service.auth.isLoggedIn());
     rh("auth:getSession", () => d.service.auth.getSession());
+    rh("auth:hasToken", () => d.service.auth.hasToken());
+    rh("backend:getStatus", () => d.service.backendConnectivity.getStatus());
 }

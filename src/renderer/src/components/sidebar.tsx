@@ -43,7 +43,8 @@ export function Sidebar({ className }: { className?: string }) {
   const { t, i18n } = useTranslation();
   const appStatus = useGlobalStore((state) => state.appStatus);
   const transfers = useGlobalStore((state) => state.transfers);
-  const { session } = useAuth();
+  const { session, isBackendOffline } = useAuth();
+  const showDriveNav = !!session;
 
   const handlePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -212,7 +213,7 @@ export function Sidebar({ className }: { className?: string }) {
 
           <Separator orientation="horizontal" />
 
-          {session && (
+          {showDriveNav && (
             <>
               <Tooltip disableHoverablePopup>
                 <TooltipTrigger
@@ -220,10 +221,15 @@ export function Sidebar({ className }: { className?: string }) {
                     <Button
                       variant="ghost"
                       size="icon-lg"
-                      className={getNavButtonClassName(isDrivePage)}
+                      className={cn(
+                        getNavButtonClassName(isDrivePage),
+                        isBackendOffline && "opacity-50",
+                      )}
                       aria-current={isDrivePage ? "page" : undefined}
+                      aria-disabled={isBackendOffline}
                       onPointerDown={handlePointerDown}
                       onClick={() => {
+                        if (isBackendOffline) return;
                         const lastDriveId = viewStore.getState().lastDriveId;
                         void navi({
                           to: "/drive/drive/$id",
@@ -233,6 +239,7 @@ export function Sidebar({ className }: { className?: string }) {
                         });
                       }}
                       onDoubleClick={() => {
+                        if (isBackendOffline) return;
                         void navi({
                           to: "/drive/drive/$id",
                           params: {
@@ -245,7 +252,9 @@ export function Sidebar({ className }: { className?: string }) {
                 >
                   <HardDriveIcon className={cn(iconSize)} />
                 </TooltipTrigger>
-                <TooltipContent side="right">{t("page.drive.title")}</TooltipContent>
+                <TooltipContent side="right">
+                  {isBackendOffline ? t("page.drive.title_server_error") : t("page.drive.title")}
+                </TooltipContent>
               </Tooltip>
 
               <Tooltip disableHoverablePopup>
@@ -254,10 +263,15 @@ export function Sidebar({ className }: { className?: string }) {
                     <Button
                       variant="ghost"
                       size="icon-lg"
-                      className={getNavButtonClassName(isSharePage)}
+                      className={cn(
+                        getNavButtonClassName(isSharePage),
+                        isBackendOffline && "opacity-50",
+                      )}
                       aria-current={isSharePage ? "page" : undefined}
+                      aria-disabled={isBackendOffline}
                       onPointerDown={handlePointerDown}
                       onClick={() => {
+                        if (isBackendOffline) return;
                         const lastShareId = viewStore.getState().lastShareId;
                         void navi({
                           to: "/drive/share/$id",
@@ -267,6 +281,7 @@ export function Sidebar({ className }: { className?: string }) {
                         });
                       }}
                       onDoubleClick={() => {
+                        if (isBackendOffline) return;
                         void navi({
                           to: "/drive/share/$id",
                           params: {
@@ -279,7 +294,11 @@ export function Sidebar({ className }: { className?: string }) {
                 >
                   <Share2Icon className={cn(iconSize)} />
                 </TooltipTrigger>
-                <TooltipContent side="right">{t("page.share_drive.title")}</TooltipContent>
+                <TooltipContent side="right">
+                  {isBackendOffline
+                    ? t("page.share_drive.title_server_error")
+                    : t("page.share_drive.title")}
+                </TooltipContent>
               </Tooltip>
 
               <Separator orientation="horizontal" />

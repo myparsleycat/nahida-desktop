@@ -101,6 +101,7 @@
     },
     "drive": {
       "title": "Drive",
+      "title_server_error": "Drive (server error)",
       "share_drive": "Shared Drive",
       "no_contents_section_message": {
         "0": "No files or folders in this folder",
@@ -203,7 +204,8 @@
       }
     },
     "share_drive": {
-      "title": "Share Drive"
+      "title": "Share Drive",
+      "title_server_error": "Share Drive (server error)"
     },
     "mod": {
       "title": "Mod Manager",
@@ -672,6 +674,8 @@
         "start_obfuscate": "Diversify Padding",
         "start_restore": "Restore Backup",
         "backup_path": "Backup: {{path}}",
+        "system_folder_warning_title": "System folder selected",
+        "system_folder_warning_description": "Windows may ask for administrator permission when applying or restoring the DLL.",
         "progress": {
           "XXMI_INIT": "Initializing...",
           "XXMI_OBFUSCATE_INIT": "Preparing DLL padding diversification...",
@@ -683,8 +687,9 @@
           "XXMI_OBFUSCATING": "Diversifying D3D11 DLL padding...",
           "XXMI_RESTORING": "Restoring D3D11 DLL from backup...",
           "XXMI_ERR_DLL_NOT_FOUND": "Could not find the built d3d11.dll file.",
-          "XXMI_ERR_DLL_NOT_WRITABLE": "Cannot write d3d11.dll to the target Importer. Check the folder permissions.",
+          "XXMI_ERR_DLL_NOT_WRITABLE": "Cannot write d3d11.dll to the target Importer. Check the folder permissions or approve the administrator prompt.",
           "XXMI_ERR_DLL_IN_USE": "Cannot replace d3d11.dll. Close the game first, then try again.",
+          "XXMI_ERR_ELEVATION_FAILED": "Administrator permission was denied or the elevated write failed. Approve the UAC prompt and try again.",
           "XXMI_BUILD_SUCCESS": "d3d11.dll was applied successfully.",
           "XXMI_OBFUSCATE_SUCCESS": "d3d11.dll padding was diversified successfully.",
           "XXMI_OBFUSCATE_ALREADY_APPLIED": "d3d11.dll padding is already diversified.",
@@ -1056,6 +1061,12 @@
           "moveFolderInsteadOfCopyDescription": "Move instead of copy when dropping a folder into the mod folder (deletes original)",
           "copyShaderFixesOnEnable": "Copy ShaderFixes on enable",
           "copyShaderFixesOnEnableDescription": "Copy ShaderFixes files from the mod into the active Importer's ShaderFixes folder when enabling a mod.",
+          "disabledPrefixStyle": "Disabled mod prefix style",
+          "disabledPrefixStyleDescription": "Choose the prefix used when disabling mods. Both formats are always recognized when enabling.",
+          "disabledPrefixStyles": {
+            "space": "DISABLED (space)",
+            "underscore": "DISABLED_ (underscore)"
+          },
           "searchModPreview": "Search Preview in Subfolders",
           "searchModPreviewDescription": "If no preview image exists in the character folder, search for preview images inside mod folders.",
           "autoResolveDownloadTarget": "Automatically select download target folder",
@@ -1170,6 +1181,7 @@
           "description": "Login required.",
           "login": "Login"
         },
+        "server_unreachable": "Unable to connect to the server.",
         "my_account": "My Account",
         "logout": "Logout"
       },

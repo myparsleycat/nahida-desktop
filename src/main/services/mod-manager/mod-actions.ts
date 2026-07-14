@@ -1,9 +1,13 @@
 import path from "node:path";
-import { isNteImporter } from "@shared/mod";
+
+import { disabledPrefixString, isNteImporter } from "@shared/mod";
 import type { GameConfig } from "@shared/types";
 import { retry, trim } from "es-toolkit";
 import fg from "fast-glob";
+
 import type { NahidaDesktop } from "../..";
+import type { ShaderFixesProcessedFile } from "./shader-fixes";
+
 import {
     findNteGameByPath,
     getNteGroupRelativePath,
@@ -19,7 +23,6 @@ import {
     restoreDisabledPrefix,
     stripDisabledPrefix,
 } from "./path-utils";
-import type { ShaderFixesProcessedFile } from "./shader-fixes";
 import { ModShaderFixesService } from "./shader-fixes";
 
 export class ModActionsService {
@@ -79,7 +82,8 @@ export class ModActionsService {
         const folderName = path.basename(modPath);
 
         if (!DISABLED_PREFIX_REGEX.test(folderName)) {
-            const baseFolderName = `DISABLED ${folderName}`;
+            const style = await this.desktop.setting.mod.getDisabledPrefixStyle();
+            const baseFolderName = `${disabledPrefixString(style)}${folderName}`;
             try {
                 await this.shaderFixes.handleShaders(modPath, false);
                 return await renameWithUniqueName(this.desktop.lib.fs, modPath, baseFolderName);

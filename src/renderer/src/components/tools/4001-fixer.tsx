@@ -1,3 +1,4 @@
+import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
 import { Button } from "@renderer/components/ui/button";
 import {
   Select,
@@ -15,6 +16,7 @@ import {
   HammerIcon,
   Loader2Icon,
   RotateCcwIcon,
+  ShieldAlertIcon,
   ShieldCheckIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -42,6 +44,7 @@ export default function FourThousandOneFixer() {
   const [progress, setProgress] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [backupPath, setBackupPath] = useState("");
+  const [requiresElevation, setRequiresElevation] = useState(false);
   const [isUpdating, setIsUpdating] = useState(true);
   const [fetchError, setFetchError] = useState(false);
   const versionsRequestId = useRef(0);
@@ -126,6 +129,7 @@ export default function FourThousandOneFixer() {
   useEffect(() => {
     if (!selectedImporter) {
       setBackupPath("");
+      setRequiresElevation(false);
       return;
     }
 
@@ -136,6 +140,17 @@ export default function FourThousandOneFixer() {
       .then((state) => {
         if (cancelled) return;
         setBackupPath(state.backupPath ?? "");
+      });
+
+    void window.api
+      .invoke("tools:4001FixerCheckImporterWriteAccess", { importerPath: selectedImporter })
+      .then((access) => {
+        if (cancelled) return;
+        setRequiresElevation(access.requiresElevation);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRequiresElevation(false);
       });
 
     return () => {
@@ -288,6 +303,16 @@ export default function FourThousandOneFixer() {
           ))}
         </div>
       </div>
+
+      {requiresElevation ? (
+        <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-950 dark:text-amber-200">
+          <ShieldAlertIcon className="size-4" />
+          <AlertTitle>{t("page.tools.4001_fixer.system_folder_warning_title")}</AlertTitle>
+          <AlertDescription className="text-current/80">
+            {t("page.tools.4001_fixer.system_folder_warning_description")}
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <Tabs defaultValue="build" className="space-y-4">
         <TabsList>

@@ -80,6 +80,7 @@
     },
     "drive": {
       "title": "ドライブ",
+      "title_server_error": "ドライブ (サーバーエラー)",
       "share_drive": "共有ドライブ",
       "no_contents_section_message": {
         "0": "このフォルダーにはファイルやフォルダーがありません",
@@ -183,7 +184,8 @@
       }
     },
     "share_drive": {
-      "title": "共有ドライブ"
+      "title": "共有ドライブ",
+      "title_server_error": "共有ドライブ (サーバーエラー)"
     },
     "mod": {
       "title": "MODマネージャー",
@@ -633,6 +635,8 @@
         "start_obfuscate": "パディング多様化開始",
         "start_restore": "バックアップを復元",
         "backup_path": "バックアップ: {{path}}",
+        "system_folder_warning_title": "システムフォルダーが選択されています",
+        "system_folder_warning_description": "DLL の適用または復元時に、Windows の管理者権限確認が表示される場合があります。",
         "progress": {
           "XXMI_INIT": "初期化中...",
           "XXMI_OBFUSCATE_INIT": "DLL パディング多様化を準備中...",
@@ -644,8 +648,9 @@
           "XXMI_OBFUSCATING": "D3D11 DLL のパディングを多様化中...",
           "XXMI_RESTORING": "バックアップから D3D11 DLL を復元中...",
           "XXMI_ERR_DLL_NOT_FOUND": "ビルドされた d3d11.dll ファイルが見つかりません。",
-          "XXMI_ERR_DLL_NOT_WRITABLE": "対象 Importer に d3d11.dll を書き込めません。フォルダーの権限を確認してください。",
+          "XXMI_ERR_DLL_NOT_WRITABLE": "対象 Importer に d3d11.dll を書き込めません。フォルダーの権限を確認するか、管理者権限の要求を許可してください。",
           "XXMI_ERR_DLL_IN_USE": "d3d11.dll を置き換えられません。先にゲームを終了してからもう一度お試しください。",
+          "XXMI_ERR_ELEVATION_FAILED": "管理者権限が拒否されたか、昇格後の書き込みに失敗しました。UAC を許可してから再試行してください。",
           "XXMI_BUILD_SUCCESS": "d3d11.dll が正常に適用されました。",
           "XXMI_OBFUSCATE_SUCCESS": "d3d11.dll のパディング多様化が完了しました。",
           "XXMI_OBFUSCATE_ALREADY_APPLIED": "d3d11.dll はすでにパディング多様化済みです。",
@@ -1019,6 +1024,12 @@
           "moveFolderInsteadOfCopyDescription": "フォルダーをMODフォルダーにドロップする際、コピーせずに移動します (元ファイル削除)",
           "copyShaderFixesOnEnable": "有効化時にShaderFixesをコピー",
           "copyShaderFixesOnEnableDescription": "MODを有効化するとき、MOD内のShaderFixesファイルを有効なImporterのShaderFixesフォルダーへコピーします。",
+          "disabledPrefixStyle": "無効化MOD接頭辞の形式",
+          "disabledPrefixStyleDescription": "MOD無効化時に使用する接頭辞を選択します。有効化時は両方の形式が常に認識されます。",
+          "disabledPrefixStyles": {
+            "space": "DISABLED (スペース)",
+            "underscore": "DISABLED_ (アンダースコア)"
+          },
           "searchModPreview": "サブフォルダからモッドプレビューを検索",
           "searchModPreviewDescription": "キャラクター フォルダにプレビュー画像がない場合、モッド フォルダ内からプレビュー画像を検索します。",
           "autoResolveDownloadTarget": "ダウンロード先フォルダーを自動選択",
@@ -1097,6 +1108,7 @@
           "description": "ログインが必要です。",
           "login": "ログイン"
         },
+        "server_unreachable": "サーバーに接続できません。",
         "my_account": "マイアカウント",
         "logout": "ログアウト"
       },

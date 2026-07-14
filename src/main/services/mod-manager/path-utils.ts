@@ -1,8 +1,10 @@
 import path from "node:path";
-import { trim } from "es-toolkit";
+
+import { DISABLED_PREFIX_REGEX, stripDisabledPrefix } from "@shared/mod";
+
 import type { NahidaDesktop } from "../..";
 
-export const DISABLED_PREFIX_REGEX = /^disabled\s+/i;
+export { DISABLED_PREFIX_REGEX, stripDisabledPrefix } from "@shared/mod";
 
 export function normalizeModPath(modPath: string): string {
     return path.normalize(modPath).toLowerCase();
@@ -19,14 +21,9 @@ export function isSameOrChildPath(parentPath: string, targetPath: string): boole
     );
 }
 
-export function stripDisabledPrefix(folderName: string): string {
-    return trim(folderName.replace(DISABLED_PREFIX_REGEX, ""));
-}
-
 export function restoreDisabledPrefix(sourceFolderName: string, folderName: string): string {
-    if (DISABLED_PREFIX_REGEX.test(sourceFolderName)) {
-        return `DISABLED ${folderName}`;
-    }
+    const match = sourceFolderName.match(DISABLED_PREFIX_REGEX);
+    if (match) return `${match[0]}${folderName}`;
     return folderName;
 }
 

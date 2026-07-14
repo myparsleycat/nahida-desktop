@@ -1,7 +1,7 @@
-import { spawn } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 
+import { disabledPrefixString } from "@shared/mod";
 import type { FolderGroup, GameConfig, ModInfo, NteBootstrapProgress } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import fg from "fast-glob";
@@ -10,6 +10,13 @@ import { nanoid } from "nanoid";
 
 import type { NahidaDesktop } from "../..";
 
+import {
+    copyFilesWithBackupElevated,
+    isFsPermissionError,
+    rollbackFilesElevated,
+    runElevatedPowerShell,
+    toPowerShellString,
+} from "../../lib/elevated-fs";
 import {
     DISABLED_PREFIX_REGEX,
     isSameOrChildPath,
@@ -289,10 +296,11 @@ export async function setNteModEnabled(
                 ),
             ),
     );
+    const style = await desktop.setting.mod.getDisabledPrefixStyle();
     return await renameWithUniqueName(
         desktop.lib.fs,
         modPath,
-        `DISABLED ${stripDisabledPrefix(folderName)}`,
+        `${disabledPrefixString(style)}${stripDisabledPrefix(folderName)}`,
     );
 }
 
@@ -655,7 +663,8 @@ async function unlinkNteModsFolderDirect(modFolderPath: string) {
 }
 
 async function linkNteModsFolderElevated(targetPath: string, linkPath: string) {
-    const exitCode = await runElevatedPowerShell(`
+    const exitCode = await runElevatedPowerShell(
+        `
 $ErrorActionPreference = 'Stop'
 $TargetPath = ${toPowerShellString(targetPath)}
 $LinkPath = ${toPowerShellString(linkPath)}
@@ -704,7 +713,9 @@ if (Test-Path -LiteralPath $LinkPath) {
 $MklinkCommand = 'mklink /J "' + $LinkPath + '" "' + $TargetPath + '"'
 cmd.exe /d /c $MklinkCommand | Out-Null
 if ($LASTEXITCODE -ne 0) { exit 34 }
-`);
+`,
+        "NTE_MODS_LINK_ELEVATION_FAILED",
+    );
     if (exitCode === 0) return;
     if (exitCode === 32) throw new Error("NTE_MODS_LINK_CONFLICT");
     if (exitCode === 33) throw new Error("NTE_MODS_LINK_PATH_OCCUPIED");
@@ -714,7 +725,8 @@ if ($LASTEXITCODE -ne 0) { exit 34 }
 }
 
 async function unlinkNteModsFolderElevated(modFolderPath: string) {
-    const exitCode = await runElevatedPowerShell(`
+    const exitCode = await runElevatedPowerShell(
+        `
 $ErrorActionPreference = 'Stop'
 $ModFolderPath = ${toPowerShellString(modFolderPath)}
 
@@ -744,111 +756,20 @@ if ($LASTEXITCODE -ne 0) { exit 35 }
 if ($ShouldMoveTargetEntries) {
     Get-ChildItem -LiteralPath $TargetPath -Force | Move-Item -Destination $ModFolderPath -Force
 }
-`);
+`,
+        "NTE_MODS_UNLINK_ELEVATION_FAILED",
+    );
     if (exitCode === 0) return;
     if (exitCode === 35) throw new Error("NTE_MODS_UNLINK_JUNCTION_FAILED");
     throw new Error(`NTE_MODS_UNLINK_ELEVATED_FAILED:${exitCode}`);
 }
 
 async function copyBootstrapFilesElevated(fileCopies: readonly PreparedBootstrapFileCopy[]) {
-    const exitCode = await runElevatedPowerShell(`
-$ErrorActionPreference = 'Stop'
-$Copies = ${toPowerShellCopyArray(fileCopies)}
-
-foreach ($Copy in $Copies) {
-    [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($Copy.TargetPath)) | Out-Null
-    if ($Copy.Existed -and -not (Test-Path -LiteralPath $Copy.BackupPath)) {
-        [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($Copy.BackupPath)) | Out-Null
-        Copy-Item -LiteralPath $Copy.TargetPath -Destination $Copy.BackupPath -Force
-    }
-    Copy-Item -LiteralPath $Copy.SourcePath -Destination $Copy.TargetPath -Force
-}
-`);
-    if (exitCode === 0) return;
-    throw new Error(`NTE_BOOTSTRAP_ELEVATED_COPY_FAILED:${exitCode}`);
+    await copyFilesWithBackupElevated(fileCopies, "NTE_BOOTSTRAP_ELEVATED_COPY_FAILED");
 }
 
 async function rollbackBootstrapFilesElevated(fileCopies: readonly BootstrapRollbackFile[]) {
-    const exitCode = await runElevatedPowerShell(`
-$ErrorActionPreference = 'Stop'
-$Copies = ${toPowerShellRollbackArray(fileCopies)}
-
-foreach ($Copy in $Copies) {
-    if ($Copy.Existed) {
-        if (Test-Path -LiteralPath $Copy.BackupPath) {
-            [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($Copy.TargetPath)) | Out-Null
-            Copy-Item -LiteralPath $Copy.BackupPath -Destination $Copy.TargetPath -Force
-        }
-    } elseif (Test-Path -LiteralPath $Copy.TargetPath) {
-        Remove-Item -LiteralPath $Copy.TargetPath -Force
-    }
-}
-`);
-    if (exitCode === 0) return;
-    throw new Error(`NTE_BOOTSTRAP_ELEVATED_ROLLBACK_FAILED:${exitCode}`);
-}
-
-async function runElevatedPowerShell(command: string) {
-    return await runPowerShell(`
-$ErrorActionPreference = 'Stop'
-try {
-$Process = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', '${encodePowerShellCommand(command)}')
-if ($null -eq $Process -or $null -eq $Process.ExitCode) { exit 1 }
-exit $Process.ExitCode
-} catch {
-    exit 1
-}
-`);
-}
-
-function toPowerShellString(value: string) {
-    return `'${value.replaceAll("'", "''")}'`;
-}
-
-function toPowerShellBoolean(value: boolean) {
-    return value ? "$true" : "$false";
-}
-
-function toPowerShellCopyArray(fileCopies: readonly PreparedBootstrapFileCopy[]) {
-    return `@(\n${fileCopies
-        .map(
-            (fileCopy) =>
-                `[pscustomobject]@{ SourcePath = ${toPowerShellString(fileCopy.sourcePath)}; TargetPath = ${toPowerShellString(fileCopy.targetPath)}; BackupPath = ${toPowerShellString(fileCopy.backupPath)}; Existed = ${toPowerShellBoolean(fileCopy.existed)} }`,
-        )
-        .join("\n")}\n)`;
-}
-
-function toPowerShellRollbackArray(fileCopies: readonly BootstrapRollbackFile[]) {
-    return `@(\n${fileCopies
-        .map(
-            (fileCopy) =>
-                `[pscustomobject]@{ TargetPath = ${toPowerShellString(fileCopy.targetPath)}; BackupPath = ${toPowerShellString(fileCopy.backupPath)}; Existed = ${toPowerShellBoolean(fileCopy.existed)} }`,
-        )
-        .join("\n")}\n)`;
-}
-
-function encodePowerShellCommand(command: string) {
-    return Buffer.from(command, "utf16le").toString("base64");
-}
-
-async function runPowerShell(command: string) {
-    return await new Promise<number>((resolve, reject) => {
-        const child = spawn(
-            "powershell.exe",
-            [
-                "-NoProfile",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-EncodedCommand",
-                encodePowerShellCommand(command),
-            ],
-            { windowsHide: true },
-        );
-        child.on("error", (error) =>
-            reject(new Error(`NTE_MODS_LINK_ELEVATION_FAILED:${String(error)}`)),
-        );
-        child.on("close", (code) => resolve(code ?? 1));
-    });
+    await rollbackFilesElevated(fileCopies, "NTE_BOOTSTRAP_ELEVATED_ROLLBACK_FAILED");
 }
 
 async function getExistingNteModsLinkTarget(modFolderPath: string) {
@@ -872,11 +793,6 @@ async function canWriteNteDirectoryPath(dirPath: string) {
         await fse.remove(testPath).catch(() => {});
         return false;
     }
-}
-
-function isFsPermissionError(error: unknown) {
-    const code = (error as NodeJS.ErrnoException | undefined)?.code;
-    return code === "EPERM" || code === "EACCES";
 }
 
 async function moveExistingNteModsFolder(sourcePath: string, targetPath: string) {

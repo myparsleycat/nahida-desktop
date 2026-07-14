@@ -1,7 +1,9 @@
 // oxlint-disable typescript/no-explicit-any
+import type { BackendStatus } from "./backend";
 import type { Session } from "./schemas/auth";
 
 export type { IpcHandlers } from "./types.gen";
+export type { BackendStatus } from "./backend";
 
 export interface AppStatus {
     version: string;
@@ -284,6 +286,7 @@ export type IpcEvents = {
     "drive:update-settings": () => void;
 
     "auth:update": (session: Session | null) => void;
+    "backend:status": (status: BackendStatus) => void;
     "setting:update": (data: { key: string; value: any }) => void;
     "compact:log": (message: string) => void;
     "compact:progress": (payload: {
