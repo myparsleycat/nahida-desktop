@@ -80,6 +80,7 @@
     },
     "drive": {
       "title": "드라이브",
+      "title_server_error": "드라이브 (서버 에러)",
       "share_drive": "공유 드라이브",
       "no_contents_section_message": {
         "0": "이 폴더에 파일이나 폴더가 없습니다",
@@ -182,7 +183,8 @@
       }
     },
     "share_drive": {
-      "title": "공유 드라이브"
+      "title": "공유 드라이브",
+      "title_server_error": "공유 드라이브 (서버 에러)"
     },
     "mod": {
       "title": "모드 매니저",
@@ -1122,6 +1124,7 @@
           "description": "로그인이 필요합니다.",
           "login": "로그인"
         },
+        "server_unreachable": "서버에 연결할 수 없습니다.",
         "my_account": "내 계정",
         "logout": "로그아웃"
       },

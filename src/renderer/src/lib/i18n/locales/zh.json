@@ -80,6 +80,7 @@
     },
     "drive": {
       "title": "云端硬盘",
+      "title_server_error": "云端硬盘 (服务器错误)",
       "share_drive": "共享云端硬盘",
       "no_contents_section_message": {
         "0": "此文件夹中没有文件或文件夹",
@@ -182,7 +183,8 @@
       }
     },
     "share_drive": {
-      "title": "共享驱动器"
+      "title": "共享驱动器",
+      "title_server_error": "共享驱动器 (服务器错误)"
     },
     "mod": {
       "title": "模组管理器",
@@ -1102,6 +1104,7 @@
           "description": "需要登录。",
           "login": "登录"
         },
+        "server_unreachable": "无法连接到服务器。",
         "my_account": "我的账户",
         "logout": "登出"
       },

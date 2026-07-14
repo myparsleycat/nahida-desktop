@@ -101,6 +101,7 @@
     },
     "drive": {
       "title": "Drive",
+      "title_server_error": "Drive (server error)",
       "share_drive": "Shared Drive",
       "no_contents_section_message": {
         "0": "No files or folders in this folder",
@@ -203,7 +204,8 @@
       }
     },
     "share_drive": {
-      "title": "Share Drive"
+      "title": "Share Drive",
+      "title_server_error": "Share Drive (server error)"
     },
     "mod": {
       "title": "Mod Manager",
@@ -1176,6 +1178,7 @@
           "description": "Login required.",
           "login": "Login"
         },
+        "server_unreachable": "Unable to connect to the server.",
         "my_account": "My Account",
         "logout": "Logout"
       },

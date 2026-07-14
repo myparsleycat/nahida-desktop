@@ -80,6 +80,7 @@
     },
     "drive": {
       "title": "ドライブ",
+      "title_server_error": "ドライブ (サーバーエラー)",
       "share_drive": "共有ドライブ",
       "no_contents_section_message": {
         "0": "このフォルダーにはファイルやフォルダーがありません",
@@ -183,7 +184,8 @@
       }
     },
     "share_drive": {
-      "title": "共有ドライブ"
+      "title": "共有ドライブ",
+      "title_server_error": "共有ドライブ (サーバーエラー)"
     },
     "mod": {
       "title": "MODマネージャー",
@@ -1103,6 +1105,7 @@
           "description": "ログインが必要です。",
           "login": "ログイン"
         },
+        "server_unreachable": "サーバーに接続できません。",
         "my_account": "マイアカウント",
         "logout": "ログアウト"
       },
