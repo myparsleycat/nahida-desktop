@@ -38,6 +38,7 @@ export interface AppSettings {
     "mod.disabledPrefixStyle": DisabledPrefixStyle;
 
     "transfer.downloadConcurrency": number;
+    "transfer.downloadBandwidthLimitMibps": number;
     "transfer.uploadConcurrency": number;
     "transfer.uploadCreateManyConcurrency": number;
 
@@ -200,6 +201,11 @@ export const APP_SETTINGS = {
         publicKey: "transfer.downloadConcurrency",
         scope: "transfer",
         storageKey: "transfer_download_concurrency",
+    },
+    "transfer.downloadBandwidthLimitMibps": {
+        publicKey: "transfer.downloadBandwidthLimitMibps",
+        scope: "transfer",
+        storageKey: "transfer_download_bandwidth_limit_mibps",
     },
     "transfer.uploadConcurrency": {
         publicKey: "transfer.uploadConcurrency",

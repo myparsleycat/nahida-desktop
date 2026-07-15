@@ -1135,6 +1135,13 @@
         "uploadCreateManyConcurrency": {
           "title": "上传元数据并发请求数",
           "description": "设置在开始文件上传前可同时执行的 请求数量。范围：1 到 4"
+        },
+        "bandwidth": {
+          "title": "带宽"
+        },
+        "downloadBandwidthLimitMibps": {
+          "title": "下载带宽限制 (MiB/s)",
+          "description": "限制所有下载的合计速度。0 表示不限制。范围：0 到 1024"
         }
       },
       "drive": {
