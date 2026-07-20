@@ -164,10 +164,9 @@ function generateIpc(options: IpcGeneratorOptions) {
                 );
 
                 if (propertyMatch) {
-                    const propertyPath = propertyMatch[1];
                     channels.set(
                         channel,
-                        `() => typeof import("@main/index").desktop.${propertyPath}`,
+                        `() => typeof import("@main/index").desktop.${propertyMatch[1]}`,
                     );
                     continue;
                 }
@@ -182,9 +181,9 @@ function generateIpc(options: IpcGeneratorOptions) {
                         channel,
                         `(...args: Parameters<typeof ${importRef}>) => ReturnType<typeof ${importRef}>`,
                     );
-                } else {
-                    channels.set(channel, `(...args: any[]) => any`);
+                    continue;
                 }
+                channels.set(channel, `(...args: any[]) => any`);
             }
         }
 
