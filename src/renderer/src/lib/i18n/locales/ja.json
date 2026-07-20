@@ -1136,6 +1136,13 @@
         "uploadCreateManyConcurrency": {
           "title": "アップロードメタデータ同時リクエスト数",
           "description": "ファイルアップロード開始前に同時実行する リクエスト数を設定します。範囲: 1〜4"
+        },
+        "bandwidth": {
+          "title": "帯域幅"
+        },
+        "downloadBandwidthLimitMibps": {
+          "title": "ダウンロード帯域幅制限 (MiB/s)",
+          "description": "すべてのダウンロードの合計速度を制限します。0は無制限です。範囲: 0〜1024"
         }
       },
       "drive": {

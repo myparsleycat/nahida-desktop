@@ -1155,6 +1155,13 @@
         "uploadCreateManyConcurrency": {
           "title": "업로드 메타데이터 동시 요청 수",
           "description": "파일 업로드를 시작하기 전에 동시에 실행할 요청 수를 설정합니다. 범위: 1~4"
+        },
+        "bandwidth": {
+          "title": "대역폭"
+        },
+        "downloadBandwidthLimitMibps": {
+          "title": "다운로드 대역폭 제한 (MiB/s)",
+          "description": "모든 다운로드의 합산 속도를 제한합니다. 0은 무제한입니다. 범위: 0~1024"
         }
       },
       "drive": {

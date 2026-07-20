@@ -12,6 +12,7 @@ export const Route = createFileRoute("/setting/transfer")({
 
 const settingsConfig = {
   downloadConcurrency: "transfer.downloadConcurrency",
+  downloadBandwidthLimitMibps: "transfer.downloadBandwidthLimitMibps",
   uploadConcurrency: "transfer.uploadConcurrency",
   uploadCreateManyConcurrency: "transfer.uploadCreateManyConcurrency",
   moveTransferPageWhenStartTransfer: "general.moveTransferPageWhenStartTransfer",
@@ -19,6 +20,7 @@ const settingsConfig = {
 } as const;
 
 const DOWNLOAD_MIN_MAX = [16, 64];
+const DOWNLOAD_BANDWIDTH_MIN_MAX = [0, 1024];
 const UPLOAD_MIN_MAX = [4, 16];
 const UPLOAD_CREATE_MANY_MIN_MAX = [1, 4];
 
@@ -38,16 +40,22 @@ function RouteComponent() {
     return null;
   }
 
-  const handleConcurrencyBlur = async (
-    key: "downloadConcurrency" | "uploadConcurrency" | "uploadCreateManyConcurrency",
+  const handleNumberBlur = async (
+    key:
+      | "downloadConcurrency"
+      | "downloadBandwidthLimitMibps"
+      | "uploadConcurrency"
+      | "uploadCreateManyConcurrency",
     value: number,
   ) => {
     const nextValue =
       key === "downloadConcurrency"
         ? clamp(value, DOWNLOAD_MIN_MAX[0], DOWNLOAD_MIN_MAX[1])
-        : key === "uploadConcurrency"
-          ? clamp(value, UPLOAD_MIN_MAX[0], UPLOAD_MIN_MAX[1])
-          : clamp(value, UPLOAD_CREATE_MANY_MIN_MAX[0], UPLOAD_CREATE_MANY_MIN_MAX[1]);
+        : key === "downloadBandwidthLimitMibps"
+          ? clamp(value, DOWNLOAD_BANDWIDTH_MIN_MAX[0], DOWNLOAD_BANDWIDTH_MIN_MAX[1])
+          : key === "uploadConcurrency"
+            ? clamp(value, UPLOAD_MIN_MAX[0], UPLOAD_MIN_MAX[1])
+            : clamp(value, UPLOAD_CREATE_MANY_MIN_MAX[0], UPLOAD_CREATE_MANY_MIN_MAX[1]);
 
     setSettings((prev) => ({ ...prev, [key]: nextValue }));
 
@@ -84,7 +92,7 @@ function RouteComponent() {
                   downloadConcurrency: Number(e.target.value),
                 }))
               }
-              onBlur={(e) => handleConcurrencyBlur("downloadConcurrency", Number(e.target.value))}
+              onBlur={(e) => handleNumberBlur("downloadConcurrency", Number(e.target.value))}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.currentTarget.blur();
@@ -117,7 +125,7 @@ function RouteComponent() {
                   uploadConcurrency: Number(e.target.value),
                 }))
               }
-              onBlur={(e) => handleConcurrencyBlur("uploadConcurrency", Number(e.target.value))}
+              onBlur={(e) => handleNumberBlur("uploadConcurrency", Number(e.target.value))}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.currentTarget.blur();
@@ -151,7 +159,49 @@ function RouteComponent() {
                 }))
               }
               onBlur={(e) =>
-                handleConcurrencyBlur("uploadCreateManyConcurrency", Number(e.target.value))
+                handleNumberBlur("uploadCreateManyConcurrency", Number(e.target.value))
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.currentTarget.blur();
+                }
+              }}
+              className="w-28"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">
+            {t("page.setting.transfer.bandwidth.title")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-6">
+            <div className="space-y-0.5">
+              <span className="text-sm font-medium">
+                {t("page.setting.transfer.downloadBandwidthLimitMibps.title")}
+              </span>
+              <p className="text-xs text-muted-foreground">
+                {t("page.setting.transfer.downloadBandwidthLimitMibps.description")}
+              </p>
+            </div>
+            <Input
+              type="number"
+              min={DOWNLOAD_BANDWIDTH_MIN_MAX[0]}
+              max={DOWNLOAD_BANDWIDTH_MIN_MAX[1]}
+              step={1}
+              value={settings.downloadBandwidthLimitMibps}
+              onChange={(e) =>
+                setSettings((prev) => ({
+                  ...prev,
+                  downloadBandwidthLimitMibps: Number(e.target.value),
+                }))
+              }
+              onBlur={(e) =>
+                handleNumberBlur("downloadBandwidthLimitMibps", Number(e.target.value))
               }
               onKeyDown={(e) => {
                 if (e.key === "Enter") {

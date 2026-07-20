@@ -41,6 +41,8 @@ const MODEL_VIEWER_EXPOSURE_MIN = 0;
 const MODEL_VIEWER_EXPOSURE_MAX = 4;
 const TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT = 32;
 const TRANSFER_DOWNLOAD_CONCURRENCY_MIN_MAX = [16, 64];
+const TRANSFER_DOWNLOAD_BANDWIDTH_LIMIT_MIBPS_DEFAULT = 0;
+const TRANSFER_DOWNLOAD_BANDWIDTH_LIMIT_MIBPS_MIN_MAX = [0, 1024];
 const TRANSFER_UPLOAD_CONCURRENCY_DEFAULT = 8;
 const TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX = [4, 16];
 const TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT = 2;
@@ -506,6 +508,36 @@ export class Setting {
                         ),
                     ),
             },
+            "transfer.downloadBandwidthLimitMibps": {
+                definition: APP_SETTINGS["transfer.downloadBandwidthLimitMibps"],
+                getDefault: () => TRANSFER_DOWNLOAD_BANDWIDTH_LIMIT_MIBPS_DEFAULT,
+                fromStored: (value) =>
+                    clampTransferConcurrency(
+                        Number.parseInt(value ?? "", 10),
+                        TRANSFER_DOWNLOAD_BANDWIDTH_LIMIT_MIBPS_MIN_MAX[0],
+                        TRANSFER_DOWNLOAD_BANDWIDTH_LIMIT_MIBPS_MIN_MAX[1],
+                        TRANSFER_DOWNLOAD_BANDWIDTH_LIMIT_MIBPS_DEFAULT,
+                    ),
+                normalize: (value) =>
+                    clampTransferConcurrency(
+                        value,
+                        TRANSFER_DOWNLOAD_BANDWIDTH_LIMIT_MIBPS_MIN_MAX[0],
+                        TRANSFER_DOWNLOAD_BANDWIDTH_LIMIT_MIBPS_MIN_MAX[1],
+                        TRANSFER_DOWNLOAD_BANDWIDTH_LIMIT_MIBPS_DEFAULT,
+                    ),
+                toStored: (value) =>
+                    String(
+                        clampTransferConcurrency(
+                            value,
+                            TRANSFER_DOWNLOAD_BANDWIDTH_LIMIT_MIBPS_MIN_MAX[0],
+                            TRANSFER_DOWNLOAD_BANDWIDTH_LIMIT_MIBPS_MIN_MAX[1],
+                            TRANSFER_DOWNLOAD_BANDWIDTH_LIMIT_MIBPS_DEFAULT,
+                        ),
+                    ),
+                afterSet: (value) => {
+                    this.desktop.service.transfer.setDownloadBandwidthLimitMibps(value);
+                },
+            },
             "transfer.uploadConcurrency": {
                 definition: APP_SETTINGS["transfer.uploadConcurrency"],
                 getDefault: () => TRANSFER_UPLOAD_CONCURRENCY_DEFAULT,
@@ -840,6 +872,10 @@ export class Setting {
         getDownloadConcurrency: async () => await this.get("transfer.downloadConcurrency"),
         setDownloadConcurrency: async (concurrency: number) =>
             await this.set("transfer.downloadConcurrency", concurrency),
+        getDownloadBandwidthLimitMibps: async () =>
+            await this.get("transfer.downloadBandwidthLimitMibps"),
+        setDownloadBandwidthLimitMibps: async (mibps: number) =>
+            await this.set("transfer.downloadBandwidthLimitMibps", mibps),
         getUploadConcurrency: async () => await this.get("transfer.uploadConcurrency"),
         setUploadConcurrency: async (concurrency: number) =>
             await this.set("transfer.uploadConcurrency", concurrency),

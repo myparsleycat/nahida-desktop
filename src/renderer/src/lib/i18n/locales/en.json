@@ -1135,6 +1135,13 @@
           "title": "Upload metadata concurrency",
           "description": "Controls how many requests can run at the same time before file upload starts. Range: 1 to 4."
         },
+        "bandwidth": {
+          "title": "Bandwidth"
+        },
+        "downloadBandwidthLimitMibps": {
+          "title": "Download bandwidth limit (MiB/s)",
+          "description": "Limits total download speed across all transfers. 0 means unlimited. Range: 0 to 1024."
+        },
         "other": {
           "title": "Other"
         }

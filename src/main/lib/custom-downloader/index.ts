@@ -254,6 +254,10 @@ export class CustomDownloader {
                     },
                     downloader: this.downloader,
                     httpService: this.desktop.httpService,
+                    bandwidthLimiter: this.desktop.service.transfer.downloadBandwidth,
+                    slowChunkMonitor: this.desktop.service.transfer.slowChunkMonitor,
+                    fileId: pid,
+                    cohortKey: "custom",
                 });
 
                 throttledUpdate.flush();
@@ -432,6 +436,10 @@ export class CustomDownloader {
                     },
                     downloader: this.downloader,
                     httpService: this.desktop.httpService,
+                    bandwidthLimiter: this.desktop.service.transfer.downloadBandwidth,
+                    slowChunkMonitor: this.desktop.service.transfer.slowChunkMonitor,
+                    fileId: pid,
+                    cohortKey: "gamebanana",
                 });
 
                 throttledUpdate.flush();
@@ -466,6 +474,10 @@ export class CustomDownloader {
                         savePath: previewSavePath,
                         downloader: this.downloader,
                         httpService: this.desktop.httpService,
+                        bandwidthLimiter: this.desktop.service.transfer.downloadBandwidth,
+                        slowChunkMonitor: this.desktop.service.transfer.slowChunkMonitor,
+                        fileId: `${pid}:preview`,
+                        cohortKey: "gamebanana-preview",
                     });
                 }
 
@@ -614,6 +626,10 @@ export class CustomDownloader {
                     },
                     downloader: this.downloader,
                     httpService: this.desktop.httpService,
+                    bandwidthLimiter: this.desktop.service.transfer.downloadBandwidth,
+                    slowChunkMonitor: this.desktop.service.transfer.slowChunkMonitor,
+                    fileId: pid,
+                    cohortKey: "hui",
                 });
 
                 throttledUpdate.flush();

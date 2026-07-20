@@ -1,4 +1,6 @@
+import { BandwidthLimiter } from "@main/lib/bandwidth-limiter";
 import type { DownloadParams } from "@main/lib/download";
+import { SlowChunkMonitor } from "@main/lib/slow-chunk-monitor";
 import type { UploadParams } from "@main/lib/upload";
 import { getAggregateTransferProgress, isOpenTransferQueueStatus } from "@shared/transfer-progress";
 import type { Transfer, TransferData, TransferStatus, TransferWithoutData } from "@shared/types";
@@ -19,6 +21,8 @@ export interface LocalTransfer extends Transfer {
     error?: string;
 }
 
+const MIB = 1024 * 1024;
+
 export class TransferService {
     private desktop: NahidaDesktop;
     private isQueueRunning: boolean = false;
@@ -30,8 +34,20 @@ export class TransferService {
     private throttledEmits: Map<string, () => void> = new Map();
     private runners: Map<string, () => Promise<void>> = new Map();
 
+    public readonly downloadBandwidth = new BandwidthLimiter();
+    public readonly slowChunkMonitor = new SlowChunkMonitor();
+
     constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
+    }
+
+    public setDownloadBandwidthLimitMibps(mibps: number) {
+        this.downloadBandwidth.setRateBps(mibps > 0 ? mibps * MIB : 0);
+    }
+
+    public async applyBandwidthLimitsFromSettings() {
+        const mibps = await this.desktop.setting.transfer.getDownloadBandwidthLimitMibps();
+        this.setDownloadBandwidthLimitMibps(mibps);
     }
 
     public async refreshPowerSaveBlock() {

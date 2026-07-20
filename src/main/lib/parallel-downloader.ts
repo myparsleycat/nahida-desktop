@@ -1,9 +1,20 @@
-// oxlint-disable typescript/no-explicit-any
-import { retry } from "es-toolkit";
-import fse from "fs-extra";
-import ky from "ky";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
+
+// oxlint-disable typescript/no-explicit-any
+import fse from "fs-extra";
+import ky from "ky";
+
+import type { BandwidthLimiter } from "./bandwidth-limiter";
+
+import { createBandwidthLimitTransform } from "./bandwidth-limit-stream";
+import {
+    isAbortError,
+    SLOW_CHUNK_MAX_RECONNECTS,
+    sleepWithAbort,
+    slowReconnectDelayMs,
+    type SlowChunkMonitor,
+} from "./slow-chunk-monitor";
 
 export interface ParallelDownloadOptions {
     url: string;
@@ -15,6 +26,10 @@ export interface ParallelDownloadOptions {
     chunkSize?: number;
     maxChunks?: number;
     adaptive?: boolean;
+    bandwidthLimiter?: BandwidthLimiter;
+    slowChunkMonitor?: SlowChunkMonitor;
+    fileId?: string;
+    cohortKey?: string;
 }
 
 type SegmentStatus = "pending" | "running" | "completed";
@@ -96,6 +111,8 @@ export class ParallelDownloader {
         signal,
         onProgress,
         preservePartialOnAbort,
+        bandwidthLimiter,
+        onPhaseChange,
     }: {
         url: string;
         headers?: Record<string, string>;
@@ -105,6 +122,8 @@ export class ParallelDownloader {
         signal?: AbortSignal;
         onProgress?: (transferredBytes: number, incrementalBytes: number) => void;
         preservePartialOnAbort?: () => boolean;
+        bandwidthLimiter?: BandwidthLimiter;
+        onPhaseChange?: (phase: "network" | "bandwidth-wait") => void;
     }): Promise<void> {
         const requestHeaders: Record<string, string> = {
             Range: `bytes=${start}-${end}`,
@@ -132,6 +151,7 @@ export class ParallelDownloader {
 
         const fileStream = fse.createWriteStream(chunkPath);
         let transferredBytes = 0;
+        const source = Readable.fromWeb(response.body as any);
         const progressStream = new Transform({
             transform(chunk: Buffer, _encoding, callback) {
                 transferredBytes += chunk.byteLength;
@@ -141,9 +161,20 @@ export class ParallelDownloader {
         });
 
         try {
-            await pipeline(Readable.fromWeb(response.body as any), progressStream, fileStream, {
-                signal,
-            });
+            if (bandwidthLimiter) {
+                await pipeline(
+                    source,
+                    createBandwidthLimitTransform(bandwidthLimiter, {
+                        signal,
+                        onPhaseChange,
+                    }),
+                    progressStream,
+                    fileStream,
+                    { signal },
+                );
+            } else {
+                await pipeline(source, progressStream, fileStream, { signal });
+            }
         } catch (pipeErr) {
             fileStream.destroy();
             if (!preservePartialOnAbort?.()) {
@@ -346,6 +377,10 @@ export class ParallelDownloader {
             onProgress,
             maxChunks,
             adaptive = true,
+            bandwidthLimiter,
+            slowChunkMonitor,
+            fileId = savePath,
+            cohortKey = "parallel",
         } = options;
         const targetPath = `${savePath}.ntmp`;
 
@@ -454,72 +489,132 @@ export class ParallelDownloader {
                 const segment = await acquireSegment();
                 if (!segment) return;
 
-                const combinedSignal = signal
-                    ? AbortSignal.any([signal, segment.controller!.signal])
-                    : segment.controller!.signal;
+                let slowReconnects = 0;
+                let errorRetries = 0;
+                const MAX_ERROR_RETRIES = 2;
+                let completed = false;
 
-                try {
-                    await retry(
-                        () => {
-                            segment.transferredBytes = 0;
-
-                            return this.downloadChunk({
-                                url,
-                                headers,
-                                start: segment.start,
-                                end: segment.end,
-                                chunkPath: segment.chunkPath,
-                                signal: combinedSignal,
-                                onProgress: (transferredBytes) => {
-                                    segment.transferredBytes = transferredBytes;
-                                    const nextReported = Math.max(
-                                        segment.reportedBytes,
-                                        transferredBytes,
-                                    );
-                                    const incremental = nextReported - segment.reportedBytes;
-                                    segment.reportedBytes = nextReported;
-                                    if (incremental > 0) {
-                                        onProgress?.(incremental);
-                                    }
-                                },
-                                preservePartialOnAbort: () => segment.splitRequested,
-                            });
-                        },
-                        {
-                            retries: 2,
-                            delay: (attempt) => 2 ** attempt * 1000,
-                            shouldRetry: (err: any) =>
-                                !(
-                                    err.name === "AbortError" ||
-                                    signal?.aborted ||
-                                    segment.splitRequested
-                                ),
-                            signal,
-                        },
-                    );
-
-                    segment.status = "completed";
-                    segment.controller = undefined;
-                } catch (err) {
+                while (!completed) {
                     if (signal?.aborted) {
                         return;
                     }
 
-                    if ((err as Error).name === "AbortError" && segment.splitRequested) {
-                        await this.splitSegmentForRebalance({
-                            segment,
-                            segments,
-                            tempChunkPaths,
-                            savePath,
-                            nextSegmentId,
-                            onProgressAdjustment: onProgress,
-                        });
-                        schedulerSignal.notify();
-                        continue;
-                    }
+                    const attemptController = new AbortController();
+                    segment.controller = attemptController;
+                    segment.transferredBytes = 0;
+                    const previousReported = segment.reportedBytes;
+                    const combinedSignal = signal
+                        ? AbortSignal.any([signal, attemptController.signal])
+                        : attemptController.signal;
 
-                    segment.controller = undefined;
-                    throw err;
+                    const chunkSize = segment.end - segment.start + 1;
+                    const inFlight = slowChunkMonitor?.register({
+                        fileId,
+                        chunkIndex: segment.id,
+                        chunkSize,
+                        cohortKey,
+                        attemptController,
+                        slowReconnects,
+                    });
+
+                    try {
+                        await this.downloadChunk({
+                            url,
+                            headers,
+                            start: segment.start,
+                            end: segment.end,
+                            chunkPath: segment.chunkPath,
+                            signal: combinedSignal,
+                            onProgress: (transferredBytes) => {
+                                segment.transferredBytes = transferredBytes;
+                                if (inFlight) {
+                                    slowChunkMonitor?.recordSample(inFlight.key, transferredBytes);
+                                }
+                                const nextReported = Math.max(
+                                    segment.reportedBytes,
+                                    transferredBytes,
+                                );
+                                const incremental = nextReported - segment.reportedBytes;
+                                segment.reportedBytes = nextReported;
+                                if (incremental > 0) {
+                                    onProgress?.(incremental);
+                                }
+                            },
+                            preservePartialOnAbort: () => segment.splitRequested,
+                            bandwidthLimiter,
+                            onPhaseChange: (phase) => {
+                                if (inFlight) {
+                                    slowChunkMonitor?.setPhase(inFlight.key, phase);
+                                }
+                            },
+                        });
+
+                        segment.status = "completed";
+                        segment.controller = undefined;
+                        completed = true;
+                    } catch (err) {
+                        const reportedDelta = segment.reportedBytes - previousReported;
+                        if (reportedDelta > 0) {
+                            onProgress?.(-reportedDelta);
+                            segment.reportedBytes = previousReported;
+                        }
+
+                        if (signal?.aborted) {
+                            return;
+                        }
+
+                        if (isAbortError(err) && segment.splitRequested) {
+                            await this.splitSegmentForRebalance({
+                                segment,
+                                segments,
+                                tempChunkPaths,
+                                savePath,
+                                nextSegmentId,
+                                onProgressAdjustment: onProgress,
+                            });
+                            schedulerSignal.notify();
+                            completed = true;
+                            continue;
+                        }
+
+                        if (
+                            inFlight?.abortReason === "slow-chunk" &&
+                            slowReconnects < SLOW_CHUNK_MAX_RECONNECTS
+                        ) {
+                            slowReconnects += 1;
+                            this.options.logger?.warn(
+                                `Slow chunk reconnect for ${fileId} segment ${segment.id} (${inFlight.detect}, reconnect ${slowReconnects})`,
+                                "ParallelDownloader:slowChunk",
+                            );
+                            if (signal) {
+                                await sleepWithAbort(slowReconnectDelayMs(), signal);
+                            } else {
+                                await new Promise((resolve) =>
+                                    setTimeout(resolve, slowReconnectDelayMs()),
+                                );
+                            }
+                            continue;
+                        }
+
+                        if (!isAbortError(err) && errorRetries < MAX_ERROR_RETRIES) {
+                            errorRetries += 1;
+                            if (signal) {
+                                await sleepWithAbort(2 ** errorRetries * 1000, signal);
+                            } else {
+                                await new Promise((resolve) =>
+                                    setTimeout(resolve, 2 ** errorRetries * 1000),
+                                );
+                            }
+                            continue;
+                        }
+
+                        segment.controller = undefined;
+                        throw err;
+                    } finally {
+                        if (inFlight) {
+                            slowChunkMonitor?.unregister(inFlight.key);
+                        }
+                    }
                 }
 
                 schedulerSignal.notify();

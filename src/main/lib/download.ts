@@ -1,6 +1,6 @@
 import { createWriteStream } from "node:fs";
 import path from "node:path";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream } from "node:stream/web";
 import { createGunzip, createZstdDecompress } from "node:zlib";
@@ -13,13 +13,20 @@ import { decode } from "cbor-x";
 import { chunk, retry, throttle } from "es-toolkit";
 import fse from "fs-extra";
 import ky from "ky";
-import ms from "ms";
 import PQueue from "p-queue";
 
 import type { NahidaDesktop } from "..";
 
+import { createBandwidthLimitTransform } from "./bandwidth-limit-stream";
 import { zstdDecompressAsync } from "./compressor";
 import { ParallelDownloader } from "./parallel-downloader";
+import {
+    isAbortError,
+    SLOW_CHUNK_MAX_RECONNECTS,
+    sleepWithAbort,
+    slowReconnectDelayMs,
+    type SlowChunkTransferPhase,
+} from "./slow-chunk-monitor";
 
 export type DownloadParams = {
     type: "download";
@@ -339,6 +346,10 @@ class FileDownloadTask {
                 signal,
                 maxChunks: 8,
                 onProgress,
+                bandwidthLimiter: this.desktop.service.transfer.downloadBandwidth,
+                slowChunkMonitor: this.desktop.service.transfer.slowChunkMonitor,
+                fileId: file.id,
+                cohortKey: "drive-parallel",
             });
             return true;
         } catch (err) {
@@ -362,7 +373,7 @@ class FileDownloadTask {
         await retry(
             async () => {
                 if (signal.aborted) return;
-                await this.performDownload(file, targetPath, signal, onProgress);
+                await this.performDownload(file, targetPath, signal, { onProgress });
 
                 if (!isSmallFile && !signal.aborted) {
                     await this.desktop.lib.fs.rename(targetPath, filePath);
@@ -384,21 +395,18 @@ class FileDownloadTask {
         file: DownloadMetadata["files"][0],
         targetPath: string,
         signal: AbortSignal,
-        onProgress?: (bytes: number) => void,
+        options?: {
+            onProgress?: (bytes: number) => void;
+            onPhaseChange?: (
+                phase: Extract<SlowChunkTransferPhase, "network" | "bandwidth-wait">,
+            ) => void;
+        },
     ): Promise<void> {
-        let lastTransferredBytes = 0;
         const response = await ky(file.url, {
             headers: await this.desktop.httpService.getHeaders(file.url),
             signal,
             throwHttpErrors: false,
             timeout: 100000,
-            onDownloadProgress: (progress) => {
-                if (onProgress) {
-                    const incremental = progress.transferredBytes - lastTransferredBytes;
-                    lastTransferredBytes = progress.transferredBytes;
-                    if (incremental > 0) onProgress(incremental);
-                }
-            },
         });
 
         if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
@@ -406,14 +414,29 @@ class FileDownloadTask {
 
         const fileStream = createWriteStream(targetPath);
         const source = Readable.fromWeb(response.body as unknown as ReadableStream);
+        const bandwidth = createBandwidthLimitTransform(
+            this.desktop.service.transfer.downloadBandwidth,
+            {
+                signal,
+                onPhaseChange: options?.onPhaseChange,
+            },
+        );
+        const progress = new Transform({
+            transform(chunk: Buffer, _encoding, callback) {
+                options?.onProgress?.(chunk.byteLength);
+                callback(null, chunk);
+            },
+        });
 
         try {
             if (file.compAlg === "gzip") {
-                await pipeline(source, createGunzip(), fileStream, { signal });
+                await pipeline(source, bandwidth, progress, createGunzip(), fileStream, { signal });
             } else if (file.compAlg === "zstd") {
-                await pipeline(source, createZstdDecompress(), fileStream, { signal });
+                await pipeline(source, bandwidth, progress, createZstdDecompress(), fileStream, {
+                    signal,
+                });
             } else {
-                await pipeline(source, fileStream, { signal });
+                await pipeline(source, bandwidth, progress, fileStream, { signal });
             }
         } catch (pipeErr) {
             fileStream.destroy();
@@ -428,14 +451,12 @@ class FileDownloadTask {
         signal,
         onComplete,
         onProgress,
-        currentConcurrency,
     }: {
         file: DownloadMetadata["files"][0];
         filePath: string;
         signal: AbortSignal;
         onComplete: () => void;
         onProgress?: (bytes: number) => void;
-        currentConcurrency?: () => number;
     }): Promise<void> {
         if (file.size === 0) {
             await fse.writeFile(filePath, "");
@@ -446,130 +467,78 @@ class FileDownloadTask {
         const SMALL_FILE_THRESHOLD = 5 * 1024 * 1024;
         const isSmallFile = file.size < SMALL_FILE_THRESHOLD;
         const targetPath = isSmallFile ? filePath : `${filePath}.ntmp`;
-        const MAX_RETRY_ATTEMPTS = 2;
+        const MAX_ERROR_RETRIES = 2;
+        const monitor = this.desktop.service.transfer.slowChunkMonitor;
 
-        for (let retryCount = 0; retryCount <= MAX_RETRY_ATTEMPTS; retryCount++) {
+        let slowReconnects = 0;
+        let errorRetries = 0;
+
+        while (true) {
             if (signal.aborted) return;
 
+            const attemptController = new AbortController();
+            const combinedSignal = AbortSignal.any([signal, attemptController.signal]);
+            const transfer = monitor.register({
+                fileId: file.id,
+                chunkIndex: 0,
+                chunkSize: file.size,
+                cohortKey: "drive",
+                attemptController,
+                slowReconnects,
+            });
+
+            let attemptBytes = 0;
+
             try {
-                await this.attemptDownloadWithSlowSpeedCheck({
-                    file,
-                    targetPath,
-                    filePath,
-                    isSmallFile,
-                    signal,
-                    onProgress,
-                    currentConcurrency,
-                    retryCount,
-                    maxRetries: MAX_RETRY_ATTEMPTS,
+                await this.performDownload(file, targetPath, combinedSignal, {
+                    onProgress: (bytes) => {
+                        attemptBytes += bytes;
+                        monitor.recordSample(transfer.key, attemptBytes);
+                        onProgress?.(bytes);
+                    },
+                    onPhaseChange: (phase) => monitor.setPhase(transfer.key, phase),
                 });
+
+                if (!isSmallFile && !signal.aborted) {
+                    await this.desktop.lib.fs.rename(targetPath, filePath);
+                }
+
                 onComplete();
                 return;
             } catch (err) {
-                if (signal.aborted || (err as Error).name === "AbortError") {
-                    if ((err as Error).message !== "Slow speed retry") {
-                        await fse.remove(targetPath).catch(() => {});
-                        throw err;
-                    }
+                if (attemptBytes > 0) {
+                    onProgress?.(-attemptBytes);
                 }
+                await fse.remove(targetPath).catch(() => {});
 
-                if (retryCount >= MAX_RETRY_ATTEMPTS) {
-                    await fse.remove(targetPath).catch(() => {});
+                if (signal.aborted) {
                     throw err;
                 }
 
-                await fse.remove(targetPath).catch(() => {});
-                await new Promise((resolve) => setTimeout(resolve, 2 ** (retryCount + 1) * 1000));
+                if (
+                    transfer.abortReason === "slow-chunk" &&
+                    slowReconnects < SLOW_CHUNK_MAX_RECONNECTS
+                ) {
+                    slowReconnects += 1;
+                    this.desktop.logger.warn(
+                        `Slow chunk reconnect for ${file.name} (${transfer.detect}, speed=${Math.round(transfer.chunkSpeedBps / 1024)}KB/s, peerMedian=${Math.round(transfer.peerMedianBps / 1024)}KB/s, reconnect ${slowReconnects})`,
+                        "FileDownloadTask:slowChunk",
+                    );
+                    await sleepWithAbort(slowReconnectDelayMs(), signal);
+                    continue;
+                }
+
+                if (!isAbortError(err) && errorRetries < MAX_ERROR_RETRIES) {
+                    errorRetries += 1;
+                    await sleepWithAbort(2 ** errorRetries * 1000, signal);
+                    continue;
+                }
+
+                throw err;
+            } finally {
+                monitor.unregister(transfer.key);
             }
         }
-    }
-
-    private async attemptDownloadWithSlowSpeedCheck({
-        file,
-        targetPath,
-        filePath,
-        isSmallFile,
-        signal,
-        onProgress,
-        currentConcurrency,
-        retryCount,
-        maxRetries,
-    }: {
-        file: DownloadMetadata["files"][0];
-        targetPath: string;
-        filePath: string;
-        isSmallFile: boolean;
-        signal: AbortSignal;
-        onProgress?: (bytes: number) => void;
-        currentConcurrency?: () => number;
-        retryCount: number;
-        maxRetries: number;
-    }): Promise<void> {
-        const abortController = new AbortController();
-        const combinedSignal = AbortSignal.any([signal, abortController.signal]);
-
-        let speedCheckTimeout: ReturnType<typeof setInterval> | null = null;
-        let currentBytes = 0;
-
-        try {
-            if (currentConcurrency && currentConcurrency() < 6) {
-                speedCheckTimeout = this.startSpeedMonitor(
-                    file.name,
-                    () => currentBytes,
-                    () => {
-                        abortController.abort();
-                    },
-                    retryCount,
-                    maxRetries,
-                );
-            }
-
-            await this.performDownload(file, targetPath, combinedSignal, (bytes) => {
-                currentBytes += bytes;
-                onProgress?.(bytes);
-            });
-
-            if (speedCheckTimeout) clearTimeout(speedCheckTimeout);
-
-            if (!isSmallFile && !signal.aborted) {
-                await this.desktop.lib.fs.rename(targetPath, filePath);
-            }
-        } catch (err) {
-            if (speedCheckTimeout) clearTimeout(speedCheckTimeout);
-            if (combinedSignal.aborted && abortController.signal.aborted) {
-                throw new Error("Slow speed retry");
-            }
-            throw err;
-        }
-    }
-
-    private startSpeedMonitor(
-        fileName: string,
-        getCurrentBytes: () => number,
-        onSlow: () => void,
-        retryCount: number,
-        maxRetries: number,
-    ): ReturnType<typeof setInterval> {
-        const CHECK_INTERVAL = ms("1s");
-        const SLOW_SPEED_THRESHOLD = 500 * 1024; // 500KB/s
-
-        let lastBytes = getCurrentBytes();
-
-        return setInterval(() => {
-            const currentBytes = getCurrentBytes();
-            const diff = currentBytes - lastBytes;
-            const speed = diff / (CHECK_INTERVAL / 1000);
-
-            lastBytes = currentBytes;
-
-            if (speed < SLOW_SPEED_THRESHOLD && retryCount < maxRetries) {
-                this.desktop.logger.warn(
-                    `Slow download detected for ${fileName}: ${Math.round(speed / 1024)}KB/s. Retrying... (${retryCount + 1}/${maxRetries})`,
-                    "FileDownloadTask:slowSpeed",
-                );
-                onSlow();
-            }
-        }, CHECK_INTERVAL);
     }
 }
 
@@ -856,7 +825,6 @@ export class DownloadLib {
                     onComplete();
                 },
                 onProgress,
-                currentConcurrency: () => this.fileQueue.pending,
             });
         } catch (err) {
             if (abort.signal.aborted || (err as Error).name === "AbortError") {

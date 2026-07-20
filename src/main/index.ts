@@ -214,6 +214,8 @@ export class NahidaDesktop {
         const logLevel = await this.setting.general.getLogLevel();
         this.logger.setLevel(logLevel);
 
+        await this.service.transfer.applyBandwidthLimitsFromSettings();
+
         await this.window.main.createMainWindow();
         void this.syncAutoLaunchSetting();
     }
