@@ -930,6 +930,53 @@
           "reverting": "恢复中",
           "cancelled": "已取消"
         }
+      },
+      "body_shape": {
+        "title": "体型修改",
+        "mod_path": "模组文件夹",
+        "mod_path_placeholder": "包含 mod.ini / Position.buf 的文件夹",
+        "load": "加载网格",
+        "loading": "加载中",
+        "mesh": "位置缓冲",
+        "select_regions": "身体部位",
+        "select_regions_placeholder": "选择部位…",
+        "select_regions_hint": "在上方选择一个或多个部位，然后调节滑块。",
+        "no_regions": "没有匹配的部位",
+        "reset_selected": "重置所选部位",
+        "show_weights": "显示权重颜色",
+        "show_original": "显示原始网格",
+        "deform_amount": "变形强度",
+        "axis_x": "轴向缩放 X",
+        "axis_y": "轴向缩放 Y",
+        "axis_z": "轴向缩放 Z",
+        "regions": {
+          "shoulders": "肩部",
+          "chest": "胸部",
+          "waist": "腰部",
+          "hips": "骨盆",
+          "buttocks": "臀部",
+          "thighs": "大腿",
+          "calves": "小腿",
+          "arms": "手臂",
+          "head": "头部"
+        },
+        "export": "写回位置缓冲",
+        "exporting": "写入中",
+        "empty": "加载模组文件夹以调节体型。",
+        "metrics": {
+          "vertices": "顶点",
+          "moved": "移动顶点",
+          "max_disp": "最大位移"
+        },
+        "toast": {
+          "loaded": "已加载网格缓冲",
+          "loaded_description": "{{count}} 个位置缓冲",
+          "load_failed": "加载模组网格失败",
+          "exported": "已写回体型修改",
+          "exported_description": "写入 {{bytes}} 字节",
+          "exported_with_log": "已更新位置缓冲并写入 변경사항.txt",
+          "export_failed": "写回位置缓冲失败"
+        }
       }
     },
     "setting": {

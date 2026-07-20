@@ -1,0 +1,166 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import {
+    anisotropicScaleFromOriginal,
+    applyBrushStroke,
+    displacementMetrics,
+    extractPositions,
+    writePositionsIntoBuffer,
+} from "@shared/body-shape";
+import { describe, it } from "vitest";
+
+import { exportBodyShapeMesh, loadBodyShapeMod } from "./body-shape";
+
+function writeFloat3Buffer(filePath: string, positions: Float32Array): void {
+    const raw = new Uint8Array(positions.length * 4);
+    const written = writePositionsIntoBuffer(raw, 12, positions);
+    fs.writeFileSync(filePath, Buffer.from(written));
+}
+
+describe("BodyShapeEditor load/export", () => {
+    it("loads mod.ini position buffer, paints, deforms, exports with size guards", async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "body-shape-"));
+        const meshesDir = path.join(root, "Meshes");
+        fs.mkdirSync(meshesDir);
+
+        const original = new Float32Array([
+            0,
+            0,
+            0, // v0
+            1,
+            0,
+            0, // v1
+            0,
+            1,
+            0, // v2
+            0,
+            0,
+            1, // v3
+        ]);
+        const positionPath = path.join(meshesDir, "Position.buf");
+        writeFloat3Buffer(positionPath, original);
+
+        const indexPath = path.join(meshesDir, "Index.buf");
+        const indices = new Uint32Array([0, 1, 2, 0, 2, 3]);
+        fs.writeFileSync(indexPath, Buffer.from(indices.buffer));
+
+        fs.writeFileSync(
+            path.join(root, "mod.ini"),
+            [
+                "[ResourcePositionBuffer]",
+                "type = Buffer",
+                "stride = 12",
+                "filename = Meshes/Position.buf",
+                "",
+                "[ResourceIndexBuffer]",
+                "type = Buffer",
+                "format = DXGI_FORMAT_R32_UINT",
+                "filename = Meshes/Index.buf",
+                "",
+            ].join("\n"),
+            "utf8",
+        );
+
+        const sizeBefore = fs.statSync(positionPath).size;
+        const loaded = await loadBodyShapeMod(root);
+        assert.equal(loaded.meshes.length, 1);
+        const mesh = loaded.meshes[0];
+        assert.equal(mesh.vertexCount, 4);
+        assert.equal(mesh.positions.length, 12);
+
+        const weights = new Float32Array(mesh.vertexCount);
+        applyBrushStroke({
+            positions: mesh.positions,
+            weights,
+            hitPoint: [1, 0, 0],
+            radius: 0.6,
+            strength: 1,
+            mode: "paint",
+        });
+        assert.ok(weights[1] > 0.5);
+
+        const preview = new Float32Array(mesh.positions.length);
+        anisotropicScaleFromOriginal({
+            originalPositions: mesh.positions,
+            previewPositions: preview,
+            weights,
+            pivot: [0, 0, 0],
+            amount: 0.5,
+            axisScale: [1, 0, 0],
+        });
+
+        const metrics = displacementMetrics(mesh.positions, preview);
+        assert.ok(metrics.movedVertices >= 1);
+        assert.ok(Number.isFinite(metrics.maxDisplacement));
+        assert.ok(metrics.maxDisplacement > 0);
+
+        // Unpainted vertices must not move
+        for (let i = 0; i < mesh.vertexCount; i++) {
+            if (weights[i] <= 0) {
+                assert.equal(preview[i * 3], mesh.positions[i * 3]);
+                assert.equal(preview[i * 3 + 1], mesh.positions[i * 3 + 1]);
+                assert.equal(preview[i * 3 + 2], mesh.positions[i * 3 + 2]);
+            }
+        }
+
+        const indexBefore = fs.readFileSync(indexPath);
+
+        const result = await exportBodyShapeMesh({
+            modRoot: root,
+            positionPath: mesh.positionPath,
+            positionStride: mesh.positionStride,
+            positions: preview,
+            weights,
+            amount: 0.5,
+            axisScale: [1, 0, 0],
+            writeChangeLog: true,
+            changeSummary: {
+                amount: 0.5,
+                axisScale: [1, 0, 0],
+                movedVertices: metrics.movedVertices,
+                maxDisplacement: metrics.maxDisplacement,
+            },
+        });
+
+        assert.equal(result.positionBytes, sizeBefore);
+        assert.equal(fs.statSync(positionPath).size, sizeBefore);
+        assert.deepEqual([...fs.readFileSync(indexPath)], [...indexBefore]);
+
+        const after = extractPositions(new Uint8Array(fs.readFileSync(positionPath)), 12);
+        assert.deepEqual([...after], [...preview]);
+
+        const changeLog = path.join(root, "변경사항.txt");
+        assert.ok(fs.existsSync(changeLog));
+        assert.ok(fs.readFileSync(changeLog, "utf8").includes("체형"));
+
+        const metricsPath = process.env.BODY_SHAPE_METRICS_PATH;
+        if (metricsPath) {
+            fs.writeFileSync(
+                metricsPath,
+                JSON.stringify(
+                    {
+                        ...metrics,
+                        positionBytes: result.positionBytes,
+                        sizeUnchanged: result.positionBytes === sizeBefore,
+                        changeLogWritten: fs.existsSync(changeLog),
+                        onlyPaintedMoved: Array.from({ length: mesh.vertexCount }, (_, i) => {
+                            const w = weights[i];
+                            const d = Math.hypot(
+                                preview[i * 3] - mesh.positions[i * 3],
+                                preview[i * 3 + 1] - mesh.positions[i * 3 + 1],
+                                preview[i * 3 + 2] - mesh.positions[i * 3 + 2],
+                            );
+                            return w > 0 ? d > 1e-6 : d <= 1e-6;
+                        }).every(Boolean),
+                    },
+                    null,
+                    2,
+                ),
+                "utf8",
+            );
+        }
+    });
+});

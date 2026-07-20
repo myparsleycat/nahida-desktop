@@ -968,6 +968,53 @@
           "reverting": "Reverting",
           "cancelled": "Cancelled"
         }
+      },
+      "body_shape": {
+        "title": "Body Shape",
+        "mod_path": "Mod folder",
+        "mod_path_placeholder": "Folder containing mod.ini / Position.buf",
+        "load": "Load mesh",
+        "loading": "Loading",
+        "mesh": "Position buffer",
+        "select_regions": "Body regions",
+        "select_regions_placeholder": "Select regions…",
+        "select_regions_hint": "Select one or more regions above, then adjust their sliders.",
+        "no_regions": "No matching regions",
+        "reset_selected": "Reset selected regions",
+        "show_weights": "Show weight colors",
+        "show_original": "Show original mesh",
+        "deform_amount": "Deform amount",
+        "axis_x": "Axis scale X",
+        "axis_y": "Axis scale Y",
+        "axis_z": "Axis scale Z",
+        "regions": {
+          "shoulders": "Shoulders",
+          "chest": "Chest",
+          "waist": "Waist",
+          "hips": "Hips",
+          "buttocks": "Buttocks",
+          "thighs": "Thighs",
+          "calves": "Calves",
+          "arms": "Arms",
+          "head": "Head"
+        },
+        "export": "Write position buffer",
+        "exporting": "Writing",
+        "empty": "Load a mod folder to adjust body shape.",
+        "metrics": {
+          "vertices": "Vertices",
+          "moved": "Moved vertices",
+          "max_disp": "Max displacement"
+        },
+        "toast": {
+          "loaded": "Mesh buffers loaded",
+          "loaded_description": "{{count}} position buffer(s)",
+          "load_failed": "Failed to load mod mesh",
+          "exported": "Body shape written",
+          "exported_description": "Wrote {{bytes}} bytes",
+          "exported_with_log": "Position buffer updated and 변경사항.txt written",
+          "export_failed": "Failed to write position buffer"
+        }
       }
     },
     "setting": {

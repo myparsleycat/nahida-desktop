@@ -931,6 +931,53 @@
           "reverting": "復元中",
           "cancelled": "キャンセル済み"
         }
+      },
+      "body_shape": {
+        "title": "体型変更",
+        "mod_path": "MODフォルダ",
+        "mod_path_placeholder": "mod.ini / Position.buf があるフォルダ",
+        "load": "メッシュを読み込む",
+        "loading": "読み込み中",
+        "mesh": "位置バッファ",
+        "select_regions": "身体部位",
+        "select_regions_placeholder": "部位を選択…",
+        "select_regions_hint": "上で部位を1つ以上選び、スライダーを調整してください。",
+        "no_regions": "一致する部位がありません",
+        "reset_selected": "選択部位をリセット",
+        "show_weights": "ウェイト色を表示",
+        "show_original": "元メッシュを表示",
+        "deform_amount": "変形量",
+        "axis_x": "軸スケール X",
+        "axis_y": "軸スケール Y",
+        "axis_z": "軸スケール Z",
+        "regions": {
+          "shoulders": "肩",
+          "chest": "胸",
+          "waist": "腰",
+          "hips": "骨盤",
+          "buttocks": "尻",
+          "thighs": "太もも",
+          "calves": "ふくらはぎ",
+          "arms": "腕",
+          "head": "頭"
+        },
+        "export": "位置バッファを書き込む",
+        "exporting": "書き込み中",
+        "empty": "MODフォルダを読み込んで体型を調整してください。",
+        "metrics": {
+          "vertices": "頂点数",
+          "moved": "移動した頂点",
+          "max_disp": "最大移動距離"
+        },
+        "toast": {
+          "loaded": "メッシュバッファを読み込みました",
+          "loaded_description": "位置バッファ {{count}} 件",
+          "load_failed": "MODメッシュの読み込みに失敗しました",
+          "exported": "体型変更を書き込みました",
+          "exported_description": "{{bytes}} バイトを書き込みました",
+          "exported_with_log": "位置バッファを更新し 변경사항.txt を作成しました",
+          "export_failed": "位置バッファの書き込みに失敗しました"
+        }
       }
     },
     "setting": {

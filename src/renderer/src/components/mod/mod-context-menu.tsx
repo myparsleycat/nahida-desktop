@@ -20,11 +20,13 @@ import {
   ImageIcon,
   Loader2Icon,
   PencilIcon,
+  PersonStandingIcon,
   TerminalSquareIcon,
   TrashIcon,
 } from "lucide-react";
 import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+
 import wuwaModFixerIcon from "@/renderer/assets/img/wuwa-mod-fixer-icon.png";
 
 interface ModContextMenuProps {
@@ -172,6 +174,10 @@ export function ModContextMenu({ mod, actions, children }: ModContextMenuProps) 
             <ContextMenuItem onClick={() => actions.openTextureResizeDialog(mod)}>
               <ImageIcon className="mr-2 size-4" />
               {t("page.tools.texture_resizer.title")}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => actions.openBodyShapeDialog(mod)}>
+              <PersonStandingIcon className="mr-2 size-4" />
+              {t("page.tools.body_shape.title")}
             </ContextMenuItem>
           </>
         )}

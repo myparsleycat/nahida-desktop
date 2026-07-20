@@ -1,0 +1,45 @@
+export {
+    applySnorm8VectorCorrection,
+    assertFinitePositions,
+    detectSnorm8VectorLayout,
+    encodeFloat32Le,
+    extractPositions,
+    POSITION_STRIDE_FLOAT3,
+    validatePositionBuffer,
+    writePositionsIntoBuffer,
+    type LayoutValidationError,
+    type PositionLayoutValidation,
+} from "./buffer";
+export {
+    anisotropicScaleFromOriginal,
+    computeBoundingCenter,
+    computeWeightedPivot,
+    correctSnorm8TangentNormal,
+    displacementMetrics,
+    effectiveScaleFactors,
+} from "./deform";
+export {
+    applyMultiRegionDeform,
+    BODY_REGION_IDS,
+    composeDisplayWeights,
+    composeEffectiveScales,
+    computeMeshBounds,
+    computeRegionPivot,
+    generateRegionWeights,
+    REGION_PRESETS,
+    type ActiveRegionDeform,
+    type BodyRegionId,
+    type MeshBounds,
+    type RegionPreset,
+} from "./regions";
+export {
+    applyBrushStroke,
+    brushFalloff,
+    clamp01,
+    eraseVertex,
+    mirrorWeightsAcrossX,
+    paintVertex,
+    weightToRgb,
+    writeWeightColors,
+    type BrushMode,
+} from "./weights";
