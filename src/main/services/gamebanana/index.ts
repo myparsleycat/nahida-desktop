@@ -57,7 +57,7 @@ type ManualRmcSaveResult =
 
 export class GameBananaService {
     public readonly games = gameBananaGames;
-    private readonly apiBaseUrl = "https://gamebanana.com/apiv12";
+    private readonly apiBaseUrl = "https://gamebanana.com/apiv13";
     private readonly loginUrl = "https://gamebanana.com/members/account/login";
     private readonly logoutUrl = "https://gamebanana.com/members/account/logout";
     private readonly authUrls = [
@@ -751,15 +751,15 @@ export class GameBananaService {
     }
 
     private getModPreviewUrl(profile: Awaited<ReturnType<GameBananaService["getModProfile"]>>) {
-        const preview = profile._aPreviewMedia?._aImages?.[0];
+        const preview = profile._aPreviewContent?.screenshots?.[0];
         if (!preview) {
             return null;
         }
 
         const absoluteUrl = [
             preview._sFile,
-            preview._sFile800,
             preview._sFile530,
+            preview._sFile220,
             preview._sUrl,
         ].find((value) => Boolean(value && /^https?:\/\//i.test(value)));
         if (absoluteUrl) {
@@ -768,8 +768,8 @@ export class GameBananaService {
 
         const relativeUrl = [
             preview._sFile,
-            preview._sFile800,
             preview._sFile530,
+            preview._sFile220,
             preview._sUrl,
         ].find(Boolean);
         if (!relativeUrl || !preview._sBaseUrl) {

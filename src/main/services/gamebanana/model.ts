@@ -23,16 +23,30 @@ const PreviewImageSchema = z
         _sBaseUrl: UrlString.optional(),
         _sCaption: z.string().optional(),
         _sFile: z.string().optional(),
+        _sFile100: z.string().optional(),
+        _sFile220: z.string().optional(),
         _sFile530: z.string().optional(),
-        _sFile800: z.string().optional(),
     })
     .catchall(z.unknown());
 
+const normalizePreviewMedia = (value: unknown) => {
+    if (Array.isArray(value)) {
+        return { screenshots: value };
+    }
+    if (value && typeof value === "object") {
+        const record = value as Record<string, unknown>;
+        if (record.screenshot && !record.screenshots) {
+            return { screenshots: [record.screenshot] };
+        }
+    }
+    return value;
+};
+
 const PreviewMediaSchema = z.preprocess(
-    (value) => (Array.isArray(value) ? { _aImages: value } : value),
+    normalizePreviewMedia,
     z
         .object({
-            _aImages: z.array(PreviewImageSchema).optional(),
+            screenshots: z.array(PreviewImageSchema).optional(),
         })
         .catchall(z.unknown()),
 );
@@ -84,7 +98,7 @@ const SubmissionRecordSchema = z
         _tsDateAdded: z.number().optional(),
         _tsDateModified: z.number().optional(),
         _tsDateUpdated: z.number().optional(),
-        _aPreviewMedia: PreviewMediaSchema.optional(),
+        _aPreviewContent: PreviewMediaSchema.optional(),
         _aSubmitter: MemberSchema,
         _aRootCategory: NestedCategorySchema.optional(),
         _aSubCategory: NestedCategorySchema.optional(),
@@ -166,7 +180,7 @@ export const ModProfileSchema = z
         _idRow: NumericId,
         _sName: z.string(),
         _sProfileUrl: HttpUrlString,
-        _aPreviewMedia: PreviewMediaSchema.optional(),
+        _aPreviewContent: PreviewMediaSchema.optional(),
         _nPostCount: z.number().optional(),
         _nDownloadCount: z.number().optional(),
         _aFiles: z.array(ModFileSchema).optional(),

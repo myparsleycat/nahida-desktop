@@ -27,18 +27,18 @@ export function getSubmissionDateKey(
     return getSubmissionTimestamp(submission) ?? submission._idRow;
 }
 
-export function getSubmissionPreviewUrl(submission: { _aPreviewMedia?: PreviewMedia }) {
-    const preview = submission._aPreviewMedia?._aImages?.[0];
+export function getSubmissionPreviewUrl(submission: { _aPreviewContent?: PreviewMedia }) {
+    const preview = submission._aPreviewContent?.screenshots?.[0];
     return preview ? resolvePreviewImageUrl(preview, "preview") : undefined;
 }
 
-export function getSubmissionFullPreviewUrl(submission: { _aPreviewMedia?: PreviewMedia }) {
-    const preview = submission._aPreviewMedia?._aImages?.[0];
+export function getSubmissionFullPreviewUrl(submission: { _aPreviewContent?: PreviewMedia }) {
+    const preview = submission._aPreviewContent?.screenshots?.[0];
     return preview ? resolvePreviewImageUrl(preview) : undefined;
 }
 
-export function getSubmissionPreviewImages(submission: { _aPreviewMedia?: PreviewMedia }) {
-    const previews = submission._aPreviewMedia?._aImages ?? [];
+export function getSubmissionPreviewImages(submission: { _aPreviewContent?: PreviewMedia }) {
+    const previews = submission._aPreviewContent?.screenshots ?? [];
 
     return previews
         .map((preview, index) => {
@@ -62,8 +62,14 @@ export function getSubmissionPreviewImages(submission: { _aPreviewMedia?: Previe
 function resolvePreviewImageUrl(preview: PreviewImage, variant: "full" | "preview" = "full") {
     const candidates =
         variant === "preview"
-            ? [preview._sFile800, preview._sFile530, preview._sFile, preview._sUrl]
-            : [preview._sFile, preview._sFile800, preview._sFile530, preview._sUrl];
+            ? [
+                  preview._sFile530,
+                  preview._sFile220,
+                  preview._sFile100,
+                  preview._sFile,
+                  preview._sUrl,
+              ]
+            : [preview._sFile, preview._sFile530, preview._sFile220, preview._sUrl];
     const absoluteCandidate = candidates.find((value) => isAbsoluteUrl(value));
     if (absoluteCandidate) return absoluteCandidate;
 
