@@ -35,7 +35,10 @@ export type BodyShapeViewportHandle = {
 export type BodyShapeViewportProps = {
   originalPositions: Float32Array;
   previewPositions: Float32Array;
+  /** Regions used for deformation. */
   regions: ActiveRegionDeform[];
+  /** Regions used for weight heatmap (highlight preview or selection). */
+  displayRegions?: ActiveRegionDeform[];
   indices?: Uint32Array;
   showOriginal: boolean;
   showWeights: boolean;
@@ -101,6 +104,7 @@ function BodyShapeMesh({
   originalPositions,
   previewPositions,
   regions,
+  displayRegions,
   indices,
   showOriginal,
   showWeights,
@@ -115,6 +119,7 @@ function BodyShapeMesh({
   const colorsRef = useRef(new Float32Array(Math.floor(originalPositions.length / 3) * 3));
   const framedKeyRef = useRef<Float32Array | null>(null);
   const { camera } = useThree();
+  const heatmapRegions = displayRegions ?? regions;
 
   const geometry = useMemo(() => {
     const geo = new BufferGeometry();
@@ -154,14 +159,24 @@ function BodyShapeMesh({
     const positionAttr = geometry.getAttribute("position") as BufferAttribute;
     positionAttr.needsUpdate = true;
 
-    const displayWeights = composeDisplayWeights(vertexCount, showOriginal ? [] : regions);
+    const displayWeights = composeDisplayWeights(vertexCount, showOriginal ? [] : heatmapRegions, {
+      ignoreAmount: true,
+    });
     writeWeightColors(displayWeights, colorsRef.current);
     const colorAttr = geometry.getAttribute("color") as BufferAttribute;
     colorAttr.needsUpdate = true;
 
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
-  }, [geometry, originalPositions, previewPositions, regions, showOriginal, weightVersion]);
+  }, [
+    geometry,
+    originalPositions,
+    previewPositions,
+    regions,
+    heatmapRegions,
+    showOriginal,
+    weightVersion,
+  ]);
 
   const material = useMemo(() => {
     return new MeshStandardMaterial({

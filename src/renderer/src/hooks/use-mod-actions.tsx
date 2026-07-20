@@ -331,6 +331,10 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
         onOpenChange={(open) => !open && setBodyShapeMod(null)}
         modPath={bodyShapeMod?.path ?? ""}
         modName={bodyShapeMod?.name ?? ""}
+        onExported={() => {
+          void invalidateModGroup(queryClient, selectedGroupPath);
+          setBodyShapeMod(null);
+        }}
       />
 
       <ModelViewerDialog

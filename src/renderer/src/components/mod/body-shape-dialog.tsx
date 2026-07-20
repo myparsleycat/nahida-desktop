@@ -7,9 +7,16 @@ interface BodyShapeDialogProps {
   onOpenChange: (open: boolean) => void;
   modPath: string;
   modName: string;
+  onExported?: (result: { modRoot?: string; sourceModPath?: string }) => void;
 }
 
-export function BodyShapeDialog({ open, onOpenChange, modPath, modName }: BodyShapeDialogProps) {
+export function BodyShapeDialog({
+  open,
+  onOpenChange,
+  modPath,
+  modName,
+  onExported,
+}: BodyShapeDialogProps) {
   const { t } = useTranslation();
 
   return (
@@ -25,7 +32,9 @@ export function BodyShapeDialog({ open, onOpenChange, modPath, modName }: BodySh
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-hidden">
-          {open ? <BodyShapeTool fixedTargetPath={modPath} modName={modName} /> : null}
+          {open ? (
+            <BodyShapeTool fixedTargetPath={modPath} modName={modName} onExported={onExported} />
+          ) : null}
         </div>
       </DialogContent>
     </Dialog>

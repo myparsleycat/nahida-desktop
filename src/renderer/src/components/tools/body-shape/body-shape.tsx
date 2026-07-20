@@ -56,11 +56,14 @@ import {
   composeDisplayWeights,
   computeBoundingCenter,
   computeRegionPivot,
+  DEFAULT_BLEND_STRIDE,
   displacementMetrics,
+  extractBoneWeights,
   generateRegionWeights,
   REGION_PRESETS,
   writeWeightColors,
   type ActiveRegionDeform,
+  type BlendBoneInfo,
   type BodyRegionId,
 } from "@shared/body-shape";
 import { toErrorMessage } from "@shared/utils";
@@ -70,6 +73,22 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { ScrollArea } from "../../ui/scroll-area";
+
+const DEFAULT_AXIS_SCALE: [number, number, number] = [1, 0.15, 1];
+
+type ControlMode = "unified" | "perItem";
+
+type WeightSource = { kind: "bone"; boneId: number } | { kind: "region"; regionId: BodyRegionId };
+
+type DeformControl = {
+  amount: number;
+  axisScale: [number, number, number];
+};
+
+const DEFAULT_UNIFIED_CONTROL: DeformControl = {
+  amount: 0,
+  axisScale: [...DEFAULT_AXIS_SCALE],
+};
 
 type LoadedMesh = {
   id: string;
@@ -84,7 +103,10 @@ type LoadedMesh = {
   vectorPath?: string;
   vectorLayout?: "snorm8-tangent-normal" | null;
   glbMeshNames: string[];
-  regionWeightCache: Partial<Record<BodyRegionId, Float32Array>>;
+  blendBytes?: Uint8Array;
+  blendStride: number;
+  bones: BlendBoneInfo[];
+  weightCache: Map<string, Float32Array>;
 };
 
 type LoadResult = {
@@ -97,11 +119,6 @@ type ViewerSession = {
   glbPath: string;
   memorySessionId?: string;
   url: string;
-};
-
-type RegionControl = {
-  amount: number;
-  axisScale: [number, number, number];
 };
 
 function toFloat32(value: unknown): Float32Array {
@@ -125,23 +142,58 @@ function toUint32(value: unknown): Uint32Array | undefined {
   return undefined;
 }
 
-function defaultControls(): Record<BodyRegionId, RegionControl> {
-  return Object.fromEntries(
-    BODY_REGION_IDS.map((id) => [
-      id,
-      {
-        amount: 0,
-        axisScale: [...REGION_PRESETS[id].defaultAxisScale] as [number, number, number],
-      },
-    ]),
-  ) as Record<BodyRegionId, RegionControl>;
+function toUint8(value: unknown): Uint8Array | undefined {
+  if (value == null) return undefined;
+  if (value instanceof Uint8Array) return value;
+  if (ArrayBuffer.isView(value)) {
+    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  }
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (Array.isArray(value)) return Uint8Array.from(value as number[]);
+  return undefined;
 }
 
-function getOrCreateRegionWeights(mesh: LoadedMesh, regionId: BodyRegionId): Float32Array {
-  const cached = mesh.regionWeightCache[regionId];
+function weightKey(source: WeightSource): string {
+  return source.kind === "bone" ? `bone:${source.boneId}` : `region:${source.regionId}`;
+}
+
+function parseWeightKey(key: string): WeightSource | null {
+  if (key.startsWith("bone:")) {
+    const boneId = Number(key.slice(5));
+    if (!Number.isInteger(boneId) || boneId < 0) return null;
+    return { kind: "bone", boneId };
+  }
+  if (key.startsWith("region:")) {
+    const regionId = key.slice(7) as BodyRegionId;
+    if (!BODY_REGION_IDS.includes(regionId)) return null;
+    return { kind: "region", regionId };
+  }
+  return null;
+}
+
+function defaultControlFor(source: WeightSource): DeformControl {
+  if (source.kind === "region") {
+    return {
+      amount: 0,
+      axisScale: [...REGION_PRESETS[source.regionId].defaultAxisScale] as [number, number, number],
+    };
+  }
+  return { amount: 0, axisScale: [...DEFAULT_AXIS_SCALE] };
+}
+
+function getOrCreateWeights(mesh: LoadedMesh, source: WeightSource): Float32Array {
+  const key = weightKey(source);
+  const cached = mesh.weightCache.get(key);
   if (cached) return cached;
-  const weights = generateRegionWeights(mesh.originalPositions, regionId);
-  mesh.regionWeightCache[regionId] = weights;
+
+  const weights =
+    source.kind === "bone"
+      ? mesh.blendBytes
+        ? extractBoneWeights(mesh.blendBytes, source.boneId, mesh.vertexCount, mesh.blendStride)
+        : new Float32Array(mesh.vertexCount)
+      : generateRegionWeights(mesh.originalPositions, source.regionId);
+
+  mesh.weightCache.set(key, weights);
   return weights;
 }
 
@@ -162,9 +214,11 @@ async function cleanupViewerSession(session: ViewerSession | null) {
 export default function BodyShapeTool({
   fixedTargetPath,
   modName,
+  onExported,
 }: {
   fixedTargetPath?: string;
   modName?: string;
+  onExported?: (result: { modRoot?: string; sourceModPath?: string }) => void;
 } = {}) {
   const { t } = useTranslation();
   const [modPath, setModPath] = useState(fixedTargetPath ?? "");
@@ -174,10 +228,13 @@ export default function BodyShapeTool({
   const [viewerSession, setViewerSession] = useState<ViewerSession | null>(null);
   const [viewerReady, setViewerReady] = useState(false);
   const [selectedMeshId, setSelectedMeshId] = useState<string>("");
-  const [selectedRegions, setSelectedRegions] = useState<BodyRegionId[]>([]);
-  const [regionControls, setRegionControls] = useState(defaultControls);
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
+  const [controls, setControls] = useState<Record<string, DeformControl>>({});
+  const [unifiedControl, setUnifiedControl] = useState<DeformControl>(DEFAULT_UNIFIED_CONTROL);
+  const [controlMode, setControlMode] = useState<ControlMode>("unified");
   const [showOriginal, setShowOriginal] = useState(false);
-  const [showWeights, setShowWeights] = useState(false);
+  const [showWeights, setShowWeights] = useState(true);
   const [weightVersion, setWeightVersion] = useState(0);
   const [modelOrientation, setModelOrientation] = useState(DEFAULT_MODEL_ORIENTATION);
   const [doubleSidedEnabled, setDoubleSidedEnabled] = useState(true);
@@ -196,21 +253,66 @@ export default function BodyShapeTool({
     return loaded.meshes.find((mesh) => mesh.id === selectedMeshId) ?? loaded.meshes[0] ?? null;
   }, [loaded, selectedMeshId]);
 
+  const useBones = !!selectedMesh && selectedMesh.bones.length > 0;
+
+  const selectableItems = useMemo(() => {
+    if (!selectedMesh) return [] as { key: string; label: string }[];
+    if (useBones) {
+      return selectedMesh.bones.map((bone) => ({
+        key: weightKey({ kind: "bone", boneId: bone.id }),
+        label: t("page.tools.body_shape.bone_label", {
+          id: bone.id,
+          count: bone.vertexCount,
+        }),
+      }));
+    }
+    return BODY_REGION_IDS.map((id) => ({
+      key: weightKey({ kind: "region", regionId: id }),
+      label: t(`page.tools.body_shape.regions.${id}`),
+    }));
+  }, [selectedMesh, useBones, t]);
+
   const activeRegions: ActiveRegionDeform[] = useMemo(() => {
     if (!selectedMesh) return [];
     const boundsCenter = computeBoundingCenter(selectedMesh.originalPositions);
-    return selectedRegions.map((regionId) => {
-      const weights = getOrCreateRegionWeights(selectedMesh, regionId);
-      const control = regionControls[regionId];
-      return {
-        regionId,
-        weights,
-        amount: control.amount,
-        axisScale: control.axisScale,
-        pivot: computeRegionPivot(selectedMesh.originalPositions, weights, boundsCenter),
-      };
+    return selectedKeys.flatMap((key) => {
+      const source = parseWeightKey(key);
+      if (!source) return [];
+      const weights = getOrCreateWeights(selectedMesh, source);
+      const control =
+        controlMode === "unified" ? unifiedControl : (controls[key] ?? defaultControlFor(source));
+      return [
+        {
+          id: key,
+          weights,
+          amount: control.amount,
+          axisScale: control.axisScale,
+          pivot: computeRegionPivot(selectedMesh.originalPositions, weights, boundsCenter),
+        },
+      ];
     });
-  }, [selectedMesh, selectedRegions, regionControls, weightVersion]);
+  }, [selectedMesh, selectedKeys, controls, unifiedControl, controlMode, weightVersion]);
+
+  /** Heatmap regions: list highlight preview, else committed selection. */
+  const displayRegions: ActiveRegionDeform[] = useMemo(() => {
+    if (!selectedMesh) return [];
+    if (previewKey) {
+      const source = parseWeightKey(previewKey);
+      if (!source) return [];
+      const weights = getOrCreateWeights(selectedMesh, source);
+      const boundsCenter = computeBoundingCenter(selectedMesh.originalPositions);
+      return [
+        {
+          id: previewKey,
+          weights,
+          amount: 1,
+          axisScale: [1, 1, 1],
+          pivot: computeRegionPivot(selectedMesh.originalPositions, weights, boundsCenter),
+        },
+      ];
+    }
+    return activeRegions;
+  }, [selectedMesh, previewKey, activeRegions, weightVersion]);
 
   const metrics = useMemo(() => {
     if (!selectedMesh) return null;
@@ -240,11 +342,10 @@ export default function BodyShapeTool({
     }
 
     let vertexColors: Float32Array | undefined;
-    if (showWeights) {
-      const displayWeights = composeDisplayWeights(
-        selectedMesh.vertexCount,
-        showOriginal ? [] : activeRegions,
-      );
+    if (showWeights && displayRegions.length > 0 && !showOriginal) {
+      const displayWeights = composeDisplayWeights(selectedMesh.vertexCount, displayRegions, {
+        ignoreAmount: true,
+      });
       if (
         !weightColorsRef.current ||
         weightColorsRef.current.length !== selectedMesh.vertexCount * 3
@@ -262,16 +363,7 @@ export default function BodyShapeTool({
         vertexColors,
       },
     ];
-  }, [selectedMesh, activeRegions, showOriginal, showWeights, weightVersion]);
-
-  const regionItems = useMemo(
-    () =>
-      BODY_REGION_IDS.map((id) => ({
-        id,
-        label: t(`page.tools.body_shape.regions.${id}`),
-      })),
-    [t],
-  );
+  }, [selectedMesh, activeRegions, displayRegions, showOriginal, showWeights, weightVersion]);
 
   useEffect(() => {
     viewerSessionRef.current = viewerSession;
@@ -339,7 +431,10 @@ export default function BodyShapeTool({
           vectorPath: mesh.vectorPath,
           vectorLayout: mesh.vectorLayout ?? null,
           glbMeshNames: mesh.glbMeshNames ?? [],
-          regionWeightCache: {},
+          blendBytes: toUint8(mesh.blendBytes),
+          blendStride: mesh.blendStride ?? DEFAULT_BLEND_STRIDE,
+          bones: mesh.bones ?? [],
+          weightCache: new Map(),
         };
       });
       setLoaded({
@@ -348,11 +443,14 @@ export default function BodyShapeTool({
         meshes,
       });
       setSelectedMeshId(meshes[0]?.id ?? "");
-      setSelectedRegions([]);
-      setRegionControls(defaultControls());
+      setSelectedKeys([]);
+      setPreviewKey(null);
+      setControls({});
+      setUnifiedControl(DEFAULT_UNIFIED_CONTROL);
+      setControlMode("unified");
       setWeightVersion((v) => v + 1);
       setModelOrientation(DEFAULT_MODEL_ORIENTATION);
-      setShowWeights(false);
+      setShowWeights(true);
 
       let nextSession: ViewerSession | null = null;
       try {
@@ -393,37 +491,80 @@ export default function BodyShapeTool({
     void loadMod(fixedTargetPath);
   }, [fixedTargetPath]);
 
-  const updateRegionAmount = (regionId: BodyRegionId, amount: number) => {
-    setRegionControls((prev) => ({
-      ...prev,
-      [regionId]: { ...prev[regionId], amount },
-    }));
+  const applySelectedKeys = (nextKeys: string[]) => {
+    setSelectedKeys(nextKeys);
+    setControls((prevControls) => {
+      const updated = { ...prevControls };
+      for (const key of nextKeys) {
+        if (updated[key]) continue;
+        const source = parseWeightKey(key);
+        if (!source) continue;
+        updated[key] = defaultControlFor(source);
+        if (selectedMesh) getOrCreateWeights(selectedMesh, source);
+      }
+      return updated;
+    });
     setWeightVersion((v) => v + 1);
   };
 
-  const updateRegionAxis = (regionId: BodyRegionId, axis: 0 | 1 | 2, value: number) => {
-    setRegionControls((prev) => {
-      const nextScale = [...prev[regionId].axisScale] as [number, number, number];
-      nextScale[axis] = value;
-      return {
+  const handleItemHighlighted = (item: { key: string; label: string } | undefined) => {
+    const next = item?.key ?? null;
+    setPreviewKey(next);
+    if (next && selectedMesh) {
+      const source = parseWeightKey(next);
+      if (source) getOrCreateWeights(selectedMesh, source);
+    }
+    setWeightVersion((v) => v + 1);
+  };
+
+  const updateAmount = (key: string, amount: number) => {
+    if (controlMode === "unified") {
+      setUnifiedControl((prev) => ({ ...prev, amount }));
+    } else {
+      const source = parseWeightKey(key);
+      if (!source) return;
+      setControls((prev) => ({
         ...prev,
-        [regionId]: { ...prev[regionId], axisScale: nextScale },
-      };
-    });
+        [key]: { ...(prev[key] ?? defaultControlFor(source)), amount },
+      }));
+    }
+    setWeightVersion((v) => v + 1);
+  };
+
+  const updateAxis = (key: string, axis: 0 | 1 | 2, value: number) => {
+    if (controlMode === "unified") {
+      setUnifiedControl((prev) => {
+        const nextScale = [...prev.axisScale] as [number, number, number];
+        nextScale[axis] = value;
+        return { ...prev, axisScale: nextScale };
+      });
+    } else {
+      const source = parseWeightKey(key);
+      if (!source) return;
+      setControls((prev) => {
+        const current = prev[key] ?? defaultControlFor(source);
+        const nextScale = [...current.axisScale] as [number, number, number];
+        nextScale[axis] = value;
+        return { ...prev, [key]: { ...current, axisScale: nextScale } };
+      });
+    }
     setWeightVersion((v) => v + 1);
   };
 
   const resetSelected = () => {
-    setRegionControls((prev) => {
-      const next = { ...prev };
-      for (const id of selectedRegions) {
-        next[id] = {
-          amount: 0,
-          axisScale: [...REGION_PRESETS[id].defaultAxisScale] as [number, number, number],
-        };
-      }
-      return next;
-    });
+    if (controlMode === "unified") {
+      setUnifiedControl(DEFAULT_UNIFIED_CONTROL);
+    } else {
+      setControls((prev) => {
+        const next = { ...prev };
+        for (const key of selectedKeys) {
+          const source = parseWeightKey(key);
+          if (!source) continue;
+          next[key] = defaultControlFor(source);
+        }
+        return next;
+      });
+    }
     setWeightVersion((v) => v + 1);
   };
 
@@ -484,7 +625,9 @@ export default function BodyShapeTool({
         selectedMesh.originalPositions,
         selectedMesh.previewPositions,
       );
-      const displayWeights = composeDisplayWeights(selectedMesh.vertexCount, activeRegions);
+      const displayWeights = composeDisplayWeights(selectedMesh.vertexCount, activeRegions, {
+        ignoreAmount: true,
+      });
       const primary = activeRegions.find((r) => r.amount !== 0);
       const result = await window.api.invoke("tools:bodyShapeExport", {
         modRoot: loaded.modRoot,
@@ -505,12 +648,17 @@ export default function BodyShapeTool({
         },
       });
       toast.success(t("page.tools.body_shape.toast.exported"), {
-        description: result.changeLogPath
-          ? t("page.tools.body_shape.toast.exported_with_log")
-          : t("page.tools.body_shape.toast.exported_description", {
-              bytes: result.positionBytes,
-            }),
+        description: result.modRoot
+          ? t("page.tools.body_shape.toast.exported_as_mod", {
+              path: result.modRoot,
+            })
+          : result.changeLogPath
+            ? t("page.tools.body_shape.toast.exported_with_log")
+            : t("page.tools.body_shape.toast.exported_description", {
+                bytes: result.positionBytes,
+              }),
       });
+      onExported?.(result);
     } catch (error) {
       toast.error(t("page.tools.body_shape.toast.export_failed"), {
         description: toErrorMessage(error),
@@ -521,6 +669,7 @@ export default function BodyShapeTool({
   };
 
   const useTexturedViewer = !!viewerSession && !!selectedMesh;
+  const selectedItems = selectableItems.filter((item) => selectedKeys.includes(item.key));
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3">
@@ -583,6 +732,7 @@ export default function BodyShapeTool({
               originalPositions={selectedMesh.originalPositions}
               previewPositions={selectedMesh.previewPositions}
               regions={activeRegions}
+              displayRegions={displayRegions}
               indices={selectedMesh.indices}
               showOriginal={showOriginal}
               showWeights={showWeights}
@@ -654,8 +804,10 @@ export default function BodyShapeTool({
                       onValueChange={(value) => {
                         if (value) {
                           setSelectedMeshId(value);
-                          setSelectedRegions([]);
-                          setRegionControls(defaultControls());
+                          setSelectedKeys([]);
+                          setPreviewKey(null);
+                          setControls({});
+                          setUnifiedControl(DEFAULT_UNIFIED_CONTROL);
                           setWeightVersion((v) => v + 1);
                         }
                       }}
@@ -676,34 +828,52 @@ export default function BodyShapeTool({
                   </Field>
 
                   <Field>
-                    <FieldLabel>{t("page.tools.body_shape.select_regions")}</FieldLabel>
+                    <FieldLabel>
+                      {useBones
+                        ? t("page.tools.body_shape.select_bones")
+                        : t("page.tools.body_shape.select_regions")}
+                    </FieldLabel>
+                    {useBones ? (
+                      <p className="mb-2 text-[11px] text-muted-foreground">
+                        {t("page.tools.body_shape.pick_bones_hint")}
+                      </p>
+                    ) : (
+                      <p className="mb-2 text-[11px] text-muted-foreground">
+                        {t("page.tools.body_shape.no_blend_fallback")}
+                      </p>
+                    )}
                     <Combobox
                       multiple
-                      items={regionItems}
-                      value={regionItems.filter((item) => selectedRegions.includes(item.id))}
+                      autoHighlight
+                      items={selectableItems}
+                      value={selectedItems}
                       onValueChange={(next) => {
-                        const ids = (next ?? []).map((item) => item.id);
-                        setSelectedRegions(ids);
-                        for (const id of ids) {
-                          getOrCreateRegionWeights(selectedMesh, id);
+                        applySelectedKeys((next ?? []).map((item) => item.key));
+                      }}
+                      onItemHighlighted={handleItemHighlighted}
+                      onOpenChange={(open) => {
+                        if (!open) {
+                          setPreviewKey(null);
+                          setWeightVersion((v) => v + 1);
                         }
-                        setWeightVersion((v) => v + 1);
                       }}
                       itemToStringLabel={(item) => item.label}
-                      isItemEqualToValue={(a, b) => a.id === b.id}
+                      isItemEqualToValue={(a, b) => a.key === b.key}
                     >
                       <ComboboxChips>
                         <ComboboxValue>
-                          {(value: typeof regionItems) => (
+                          {(value: typeof selectableItems) => (
                             <>
                               {value.map((item) => (
-                                <ComboboxChip key={item.id}>{item.label}</ComboboxChip>
+                                <ComboboxChip key={item.key}>{item.label}</ComboboxChip>
                               ))}
                               <ComboboxInput
                                 placeholder={
                                   value.length > 0
                                     ? ""
-                                    : t("page.tools.body_shape.select_regions_placeholder")
+                                    : useBones
+                                      ? t("page.tools.body_shape.select_bones_placeholder")
+                                      : t("page.tools.body_shape.select_regions_placeholder")
                                 }
                               />
                             </>
@@ -711,10 +881,14 @@ export default function BodyShapeTool({
                         </ComboboxValue>
                       </ComboboxChips>
                       <ComboboxContent>
-                        <ComboboxEmpty>{t("page.tools.body_shape.no_regions")}</ComboboxEmpty>
+                        <ComboboxEmpty>
+                          {useBones
+                            ? t("page.tools.body_shape.no_bones")
+                            : t("page.tools.body_shape.no_regions")}
+                        </ComboboxEmpty>
                         <ComboboxList>
-                          {(item: (typeof regionItems)[number]) => (
-                            <ComboboxItem key={item.id} value={item}>
+                          {(item: (typeof selectableItems)[number]) => (
+                            <ComboboxItem key={item.key} value={item}>
                               {item.label}
                             </ComboboxItem>
                           )}
@@ -735,58 +909,128 @@ export default function BodyShapeTool({
                     </span>
                     <Switch checked={showOriginal} onCheckedChange={setShowOriginal} />
                   </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {t("page.tools.body_shape.unified_controls")}
+                    </span>
+                    <Switch
+                      checked={controlMode === "unified"}
+                      onCheckedChange={(checked) => {
+                        setControlMode(checked ? "unified" : "perItem");
+                        setWeightVersion((v) => v + 1);
+                      }}
+                    />
+                  </div>
 
-                  {selectedRegions.length === 0 ? (
+                  {selectedKeys.length === 0 && !previewKey ? (
                     <p className="text-xs text-muted-foreground">
-                      {t("page.tools.body_shape.select_regions_hint")}
+                      {useBones
+                        ? t("page.tools.body_shape.select_bones_hint")
+                        : t("page.tools.body_shape.select_regions_hint")}
                     </p>
+                  ) : selectedKeys.length === 0 ? null : controlMode === "unified" ? (
+                    <div className="space-y-2 rounded-md border bg-background/50 p-3">
+                      <div className="text-sm font-medium">
+                        {t("page.tools.body_shape.unified_controls_title", {
+                          count: selectedKeys.length,
+                        })}
+                      </div>
+                      <RangeField
+                        label={t("page.tools.body_shape.deform_amount")}
+                        value={unifiedControl.amount}
+                        defaultValue={DEFAULT_UNIFIED_CONTROL.amount}
+                        min={-0.5}
+                        max={0.5}
+                        step={0.01}
+                        display={`${(unifiedControl.amount * 100).toFixed(0)}%`}
+                        onChange={(value) => updateAmount(selectedKeys[0]!, value)}
+                      />
+                      <RangeField
+                        label={t("page.tools.body_shape.axis_x")}
+                        value={unifiedControl.axisScale[0]}
+                        defaultValue={DEFAULT_UNIFIED_CONTROL.axisScale[0]}
+                        min={0}
+                        max={2}
+                        step={0.05}
+                        display={unifiedControl.axisScale[0].toFixed(2)}
+                        onChange={(value) => updateAxis(selectedKeys[0]!, 0, value)}
+                      />
+                      <RangeField
+                        label={t("page.tools.body_shape.axis_y")}
+                        value={unifiedControl.axisScale[1]}
+                        defaultValue={DEFAULT_UNIFIED_CONTROL.axisScale[1]}
+                        min={0}
+                        max={2}
+                        step={0.05}
+                        display={unifiedControl.axisScale[1].toFixed(2)}
+                        onChange={(value) => updateAxis(selectedKeys[0]!, 1, value)}
+                      />
+                      <RangeField
+                        label={t("page.tools.body_shape.axis_z")}
+                        value={unifiedControl.axisScale[2]}
+                        defaultValue={DEFAULT_UNIFIED_CONTROL.axisScale[2]}
+                        min={0}
+                        max={2}
+                        step={0.05}
+                        display={unifiedControl.axisScale[2].toFixed(2)}
+                        onChange={(value) => updateAxis(selectedKeys[0]!, 2, value)}
+                      />
+                    </div>
                   ) : (
                     <div className="space-y-3">
-                      {selectedRegions.map((regionId) => {
-                        const control = regionControls[regionId];
+                      {selectedKeys.map((key) => {
+                        const source = parseWeightKey(key);
+                        if (!source) return null;
+                        const control = controls[key] ?? defaultControlFor(source);
+                        const label =
+                          source.kind === "bone"
+                            ? t("page.tools.body_shape.bone_id", { id: source.boneId })
+                            : t(`page.tools.body_shape.regions.${source.regionId}`);
                         return (
                           <div
-                            key={regionId}
+                            key={key}
                             className="space-y-2 rounded-md border bg-background/50 p-3"
                           >
-                            <div className="text-sm font-medium">
-                              {t(`page.tools.body_shape.regions.${regionId}`)}
-                            </div>
+                            <div className="text-sm font-medium">{label}</div>
                             <RangeField
                               label={t("page.tools.body_shape.deform_amount")}
                               value={control.amount}
+                              defaultValue={defaultControlFor(source).amount}
                               min={-0.5}
                               max={0.5}
                               step={0.01}
                               display={`${(control.amount * 100).toFixed(0)}%`}
-                              onChange={(value) => updateRegionAmount(regionId, value)}
+                              onChange={(value) => updateAmount(key, value)}
                             />
                             <RangeField
                               label={t("page.tools.body_shape.axis_x")}
                               value={control.axisScale[0]}
+                              defaultValue={defaultControlFor(source).axisScale[0]}
                               min={0}
                               max={2}
                               step={0.05}
                               display={control.axisScale[0].toFixed(2)}
-                              onChange={(value) => updateRegionAxis(regionId, 0, value)}
+                              onChange={(value) => updateAxis(key, 0, value)}
                             />
                             <RangeField
                               label={t("page.tools.body_shape.axis_y")}
                               value={control.axisScale[1]}
+                              defaultValue={defaultControlFor(source).axisScale[1]}
                               min={0}
                               max={2}
                               step={0.05}
                               display={control.axisScale[1].toFixed(2)}
-                              onChange={(value) => updateRegionAxis(regionId, 1, value)}
+                              onChange={(value) => updateAxis(key, 1, value)}
                             />
                             <RangeField
                               label={t("page.tools.body_shape.axis_z")}
                               value={control.axisScale[2]}
+                              defaultValue={defaultControlFor(source).axisScale[2]}
                               min={0}
                               max={2}
                               step={0.05}
                               display={control.axisScale[2].toFixed(2)}
-                              onChange={(value) => updateRegionAxis(regionId, 2, value)}
+                              onChange={(value) => updateAxis(key, 2, value)}
                             />
                           </div>
                         );
@@ -798,7 +1042,7 @@ export default function BodyShapeTool({
                     type="button"
                     variant="outline"
                     onClick={resetSelected}
-                    disabled={selectedRegions.length === 0}
+                    disabled={selectedKeys.length === 0}
                   >
                     {t("page.tools.body_shape.reset_selected")}
                   </Button>
@@ -815,6 +1059,11 @@ export default function BodyShapeTool({
                         {t("page.tools.body_shape.metrics.max_disp")}:{" "}
                         {metrics.maxDisplacement.toFixed(5)}
                       </div>
+                      {useBones ? (
+                        <div>
+                          {t("page.tools.body_shape.metrics.bones")}: {selectedMesh.bones.length}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -841,6 +1090,7 @@ export default function BodyShapeTool({
 function RangeField({
   label,
   value,
+  defaultValue,
   min,
   max,
   step,
@@ -849,6 +1099,7 @@ function RangeField({
 }: {
   label: string;
   value: number;
+  defaultValue: number;
   min: number;
   max: number;
   step: number;
@@ -868,6 +1119,11 @@ function RangeField({
         step={step}
         value={value}
         className="w-full accent-primary"
+        onPointerDown={(event) => {
+          if (!(event.ctrlKey || event.metaKey)) return;
+          event.preventDefault();
+          onChange(defaultValue);
+        }}
         onChange={(event) => onChange(Number(event.currentTarget.value))}
       />
     </Field>

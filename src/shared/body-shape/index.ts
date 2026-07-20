@@ -19,6 +19,20 @@ export {
     effectiveScaleFactors,
 } from "./deform";
 export {
+    BLEND_INDICES_OFFSET,
+    BLEND_INFLUENCE_COUNT,
+    BLEND_WEIGHTS_OFFSET,
+    DEFAULT_BLEND_STRIDE,
+    extractBoneWeights,
+    influencesAtVertex,
+    listBlendBones,
+    parseBlendBuffer,
+    rankBonesAtVertices,
+    validateBlendBuffer,
+    type BlendBoneInfo,
+    type ParsedBlendBuffer,
+} from "./blend";
+export {
     applyMultiRegionDeform,
     BODY_REGION_IDS,
     composeDisplayWeights,

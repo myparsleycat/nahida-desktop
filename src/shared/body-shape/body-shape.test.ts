@@ -11,9 +11,13 @@ import {
     detectSnorm8VectorLayout,
     displacementMetrics,
     eraseVertex,
+    extractBoneWeights,
     extractPositions,
     generateRegionWeights,
+    influencesAtVertex,
+    listBlendBones,
     paintVertex,
+    rankBonesAtVertices,
     validatePositionBuffer,
     writePositionsIntoBuffer,
 } from "./index";
@@ -141,10 +145,18 @@ describe("body-shape regions", () => {
     it("generates spatial weights without fixed vertex indices", () => {
         // Tall figure along Y with clear height bands
         const positions = new Float32Array([
-            0, 0, 0, // feet / calves
-            0, 0.5, 0, // mid / waist
-            0, 1, 0, // head
-            0.2, 0.38, -0.4, // rear hip
+            0,
+            0,
+            0, // feet / calves
+            0,
+            0.5,
+            0, // mid / waist
+            0,
+            1,
+            0, // head
+            0.2,
+            0.38,
+            -0.4, // rear hip
         ]);
         const waist = generateRegionWeights(positions, "waist");
         const head = generateRegionWeights(positions, "head");
@@ -176,14 +188,14 @@ describe("body-shape regions", () => {
             previewPositions: preview,
             regions: [
                 {
-                    regionId: "waist",
+                    id: "waist",
                     weights: w0,
                     amount: 0.5,
                     axisScale: [1, 0, 0],
                     pivot: [0, 0, 0],
                 },
                 {
-                    regionId: "hips",
+                    id: "hips",
                     weights: w1,
                     amount: 1,
                     axisScale: [1, 0, 0],
@@ -205,14 +217,14 @@ describe("body-shape regions", () => {
             previewPositions: second,
             regions: [
                 {
-                    regionId: "waist",
+                    id: "waist",
                     weights: w0,
                     amount: 0.5,
                     axisScale: [1, 0, 0],
                     pivot: [0, 0, 0],
                 },
                 {
-                    regionId: "hips",
+                    id: "hips",
                     weights: w1,
                     amount: 1,
                     axisScale: [1, 0, 0],
@@ -221,6 +233,49 @@ describe("body-shape regions", () => {
             ],
         });
         assert.deepEqual([...second], [...preview]);
+    });
+});
+
+describe("body-shape blend bones", () => {
+    it("lists bones and extracts per-bone normalized weights", () => {
+        // 3 verts, stride 16: indices@0 weights@8
+        const bytes = new Uint8Array(48);
+        // v0: bone 5 weight 255
+        bytes[0] = 5;
+        bytes[8] = 255;
+        // v1: bone 5 w=128, bone 7 w=127
+        bytes[16] = 5;
+        bytes[17] = 7;
+        bytes[24] = 128;
+        bytes[25] = 127;
+        // v2: bone 7 weight 255
+        bytes[32] = 7;
+        bytes[40] = 255;
+
+        const bones = listBlendBones(bytes, 3, 16);
+        assert.deepEqual(
+            bones.map((b) => b.id),
+            [5, 7],
+        );
+        assert.equal(bones.find((b) => b.id === 5)?.vertexCount, 2);
+        assert.equal(bones.find((b) => b.id === 7)?.vertexCount, 2);
+
+        const w5 = extractBoneWeights(bytes, 5, 3, 16);
+        assert.ok(Math.abs(w5[0] - 1) < 1e-6);
+        assert.ok(Math.abs(w5[1] - 128 / 255) < 1e-6);
+        assert.equal(w5[2], 0);
+
+        const w7 = extractBoneWeights(bytes, 7, 3, 16);
+        assert.equal(w7[0], 0);
+        assert.ok(Math.abs(w7[1] - 127 / 255) < 1e-6);
+        assert.ok(Math.abs(w7[2] - 1) < 1e-6);
+
+        const at1 = influencesAtVertex(bytes, 1, 16);
+        assert.equal(at1[0]?.boneId, 5);
+        assert.equal(at1[1]?.boneId, 7);
+
+        const ranked = rankBonesAtVertices(bytes, [1, 2], 16);
+        assert.equal(ranked[0]?.boneId, 7);
     });
 });
 

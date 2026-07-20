@@ -12,13 +12,33 @@ import {
 } from "@shared/body-shape";
 import { describe, it } from "vitest";
 
-import { exportBodyShapeMesh, loadBodyShapeMod } from "./body-shape";
+import {
+    bodyShapedFolderBaseName,
+    BODY_SHAPED_SUFFIX,
+    exportBodyShapeMesh,
+    loadBodyShapeMod,
+} from "./body-shape";
 
 function writeFloat3Buffer(filePath: string, positions: Float32Array): void {
     const raw = new Uint8Array(positions.length * 4);
     const written = writePositionsIntoBuffer(raw, 12, positions);
     fs.writeFileSync(filePath, Buffer.from(written));
 }
+
+describe("bodyShapedFolderBaseName", () => {
+    it("appends (Body Shaped) suffix and strips DISABLED prefix", () => {
+        assert.equal(
+            bodyShapedFolderBaseName("Astral Modulator Rover NSFW Heavy"),
+            "Astral Modulator Rover NSFW Heavy (Body Shaped)",
+        );
+        assert.equal(
+            bodyShapedFolderBaseName("DISABLED Astral Modulator Rover NSFW Heavy"),
+            "Astral Modulator Rover NSFW Heavy (Body Shaped)",
+        );
+        assert.equal(bodyShapedFolderBaseName("DISABLED_Foo"), "Foo (Body Shaped)");
+    });
+});
+});
 
 describe("BodyShapeEditor load/export", () => {
     it("loads mod.ini position buffer, paints, deforms, exports with size guards", async () => {
@@ -47,6 +67,15 @@ describe("BodyShapeEditor load/export", () => {
         const indices = new Uint32Array([0, 1, 2, 0, 2, 3]);
         fs.writeFileSync(indexPath, Buffer.from(indices.buffer));
 
+        // Blend: 4 verts × stride 16 — bone 3 on v1 (w=255), bone 9 on v2 (w=128)
+        const blendPath = path.join(meshesDir, "Blend.buf");
+        const blend = Buffer.alloc(4 * 16);
+        blend[16] = 3;
+        blend[16 + 8] = 255;
+        blend[32] = 9;
+        blend[32 + 8] = 128;
+        fs.writeFileSync(blendPath, blend);
+
         fs.writeFileSync(
             path.join(root, "mod.ini"),
             [
@@ -60,6 +89,12 @@ describe("BodyShapeEditor load/export", () => {
                 "format = DXGI_FORMAT_R32_UINT",
                 "filename = Meshes/Index.buf",
                 "",
+                "[ResourceBlendBuffer]",
+                "type = Buffer",
+                "format = DXGI_FORMAT_R8_UINT",
+                "stride = 16",
+                "filename = Meshes/Blend.buf",
+                "",
             ].join("\n"),
             "utf8",
         );
@@ -70,6 +105,12 @@ describe("BodyShapeEditor load/export", () => {
         const mesh = loaded.meshes[0];
         assert.equal(mesh.vertexCount, 4);
         assert.equal(mesh.positions.length, 12);
+        assert.ok(mesh.blendBytes);
+        assert.equal(mesh.blendStride, 16);
+        assert.deepEqual(
+            mesh.bones.map((b) => b.id),
+            [3, 9],
+        );
 
         const weights = new Float32Array(mesh.vertexCount);
         applyBrushStroke({

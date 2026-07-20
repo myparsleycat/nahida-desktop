@@ -264,7 +264,8 @@ export function generateRegionWeights(
 }
 
 export type ActiveRegionDeform = {
-    regionId: BodyRegionId;
+    /** Region preset id, bone id string, or any stable control key. */
+    id: string;
     weights: Float32Array;
     amount: number;
     axisScale: readonly [number, number, number];
@@ -321,11 +322,15 @@ export function applyMultiRegionDeform(options: {
 export function composeDisplayWeights(
     vertexCount: number,
     regions: readonly ActiveRegionDeform[],
+    options?: {
+        /** When true, show raw masks even if amount is 0 (bone picking). */ ignoreAmount?: boolean;
+    },
 ): Float32Array {
     const out = new Float32Array(vertexCount);
+    const ignoreAmount = options?.ignoreAmount === true;
     for (const region of regions) {
-        if (region.amount === 0) continue;
-        const strength = Math.min(1, Math.abs(region.amount) * 2);
+        if (!ignoreAmount && region.amount === 0) continue;
+        const strength = ignoreAmount ? 1 : Math.min(1, Math.abs(region.amount) * 2);
         for (let i = 0; i < vertexCount; i++) {
             const w = (region.weights[i] ?? 0) * strength;
             if (w > out[i]) out[i] = w;

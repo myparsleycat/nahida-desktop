@@ -10,11 +10,16 @@ import {
 import type { IniSection, Resource } from "@main/lib/mod-static-glb/types";
 import {
     applySnorm8VectorCorrection,
+    DEFAULT_BLEND_STRIDE,
     detectSnorm8VectorLayout,
     extractPositions,
+    listBlendBones,
+    validateBlendBuffer,
     validatePositionBuffer,
     writePositionsIntoBuffer,
+    type BlendBoneInfo,
 } from "@shared/body-shape";
+import { stripDisabledPrefix } from "@shared/mod";
 import fse from "fs-extra";
 
 export type BodyShapeMeshCandidate = {
@@ -34,6 +39,12 @@ export type BodyShapeMeshCandidate = {
     vectorLayout?: "snorm8-tangent-normal" | null;
     /** GLB mesh/node names (IB stems) that share this position buffer group. */
     glbMeshNames: string[];
+    blendPath?: string;
+    blendRelativePath?: string;
+    blendStride?: number;
+    /** Raw Blend.buf bytes (4 bone indices + 4 weights per vertex). */
+    blendBytes?: Uint8Array;
+    bones: BlendBoneInfo[];
 };
 
 export type BodyShapeLoadResult = {
@@ -67,7 +78,18 @@ export type BodyShapeExportResult = {
     vectorPath?: string;
     vectorBytes?: number;
     changeLogPath?: string;
+    /** New enabled mod folder created for the body-shaped variant. */
+    modRoot?: string;
+    /** Source mod path after disable (may be renamed with DISABLED prefix). */
+    sourceModPath?: string;
 };
+
+export const BODY_SHAPED_SUFFIX = " (Body Shaped)";
+const SHADER_FIXES_MOD_MARKER_FILE = ".nahida-shader-fixes.json";
+
+export function bodyShapedFolderBaseName(sourceFolderName: string): string {
+    return `${stripDisabledPrefix(sourceFolderName)}${BODY_SHAPED_SUFFIX}`;
+}
 
 export class BodyShapeEditor {
     constructor(private readonly desktop: NahidaDesktop) {}
@@ -79,10 +101,72 @@ export class BodyShapeEditor {
     }
 
     async exportMesh(input: BodyShapeExportInput): Promise<BodyShapeExportResult> {
-        return exportBodyShapeMesh(input, (message) => {
+        const warn = (message: string) => {
             this.desktop.logger.warn(message, "BodyShapeEditor");
-        });
+        };
+
+        const sourceRoot = path.resolve(input.modRoot);
+        if (!(await fse.pathExists(sourceRoot))) {
+            throw new Error(`Mod path does not exist: ${sourceRoot}`);
+        }
+
+        const parentPath = path.dirname(sourceRoot);
+        const existingFolderNames = await this.desktop.lib.fs.listDirectories(parentPath);
+        const targetFolderName = this.desktop.lib.fs.getUniqueName(
+            bodyShapedFolderBaseName(path.basename(sourceRoot)),
+            existingFolderNames,
+        );
+        const targetRoot = path.join(parentPath, targetFolderName);
+
+        let copied = false;
+        try {
+            await fse.copy(sourceRoot, targetRoot);
+            copied = true;
+            await fse.remove(path.join(targetRoot, SHADER_FIXES_MOD_MARKER_FILE));
+
+            const result = await exportBodyShapeMesh(
+                {
+                    ...input,
+                    modRoot: targetRoot,
+                    positionPath: remapPathIntoRoot(input.positionPath, sourceRoot, targetRoot),
+                    vectorPath: input.vectorPath
+                        ? remapPathIntoRoot(input.vectorPath, sourceRoot, targetRoot)
+                        : undefined,
+                },
+                warn,
+            );
+
+            const sourceModPath = await this.desktop.service.mod.fn.disable(sourceRoot);
+
+            return {
+                ...result,
+                modRoot: targetRoot,
+                sourceModPath,
+            };
+        } catch (error) {
+            if (copied && (await fse.pathExists(targetRoot))) {
+                try {
+                    await fse.remove(targetRoot);
+                } catch (cleanupError) {
+                    this.desktop.logger.error(
+                        cleanupError,
+                        `BodyShapeEditor:exportMesh:cleanup:${targetRoot}`,
+                    );
+                }
+            }
+            this.desktop.logger.error(error, `BodyShapeEditor:exportMesh:${sourceRoot}`);
+            throw error;
+        }
     }
+}
+
+function remapPathIntoRoot(filePath: string, sourceRoot: string, targetRoot: string): string {
+    const absolute = path.resolve(filePath);
+    const relative = path.relative(sourceRoot, absolute);
+    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+        throw new Error(`Path is outside mod root: ${filePath}`);
+    }
+    return path.join(targetRoot, relative);
 }
 
 /** Pure-ish load entry used by the service and unit tests. */
@@ -101,6 +185,7 @@ export async function loadBodyShapeMod(
     const positionResources = collectPositionResources(resources);
     const indexResources = collectIndexResources(resources);
     const vectorResources = collectVectorResources(resources);
+    const blendResources = collectBlendResources(resources);
 
     if (positionResources.length === 0) {
         throw new Error("No position buffer resources found in mod.ini");
@@ -129,6 +214,7 @@ export async function loadBodyShapeMod(
         const positions = extractPositions(new Uint8Array(bytes), position.stride);
         const indexMatch = matchCompanionResource(position, indexResources);
         const vectorMatch = matchCompanionResource(position, vectorResources);
+        const blendMatch = matchCompanionResource(position, blendResources);
 
         let indices: Uint32Array | undefined;
         let indexPath: string | undefined;
@@ -161,6 +247,36 @@ export async function loadBodyShapeMod(
             }
         }
 
+        let blendPath: string | undefined;
+        let blendRelativePath: string | undefined;
+        let blendStride: number | undefined;
+        let blendBytes: Uint8Array | undefined;
+        let bones: BlendBoneInfo[] = [];
+
+        if (blendMatch?.filename) {
+            blendPath = path.resolve(modRoot, blendMatch.filename);
+            if (await fse.pathExists(blendPath)) {
+                const raw = await fse.readFile(blendPath);
+                blendStride = blendMatch.stride ?? DEFAULT_BLEND_STRIDE;
+                const blendValidation = validateBlendBuffer(
+                    raw.byteLength,
+                    validation.vertexCount,
+                    blendStride,
+                );
+                if (!blendValidation.ok) {
+                    warn(`Skipping blend buffer ${blendPath}: ${blendValidation.reason}`);
+                    blendPath = undefined;
+                    blendStride = undefined;
+                } else {
+                    blendBytes = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+                    blendRelativePath = blendMatch.filename;
+                    bones = listBlendBones(blendBytes, validation.vertexCount, blendStride);
+                }
+            } else {
+                blendPath = undefined;
+            }
+        }
+
         meshes.push({
             id: position.name,
             name: position.name,
@@ -177,6 +293,11 @@ export async function loadBodyShapeMod(
             vectorStride,
             vectorLayout,
             glbMeshNames: resolveGlbMeshNames(position, indexResources, positionGroupKeys),
+            blendPath,
+            blendRelativePath,
+            blendStride,
+            blendBytes,
+            bones,
         });
     }
 
@@ -272,7 +393,7 @@ export async function exportBodyShapeMesh(
                 ? `- 방향 버퍼: ${path.relative(input.modRoot, result.vectorPath) || path.basename(result.vectorPath)}`
                 : "- 방향 버퍼: 수정하지 않음 (레이아웃 미검증 또는 균일 스케일)",
             "- 유지한 파일: Index, Blend, UV, Color 및 기타 원본 파일",
-            "- 변경 방식: 사용자 페인트 가중치 + 피벗 기준 축별 스케일 (원본 정점 기준 재계산)",
+            "- 변경 방식: 본/부위 가중치 + 피벗 기준 축별 스케일 (원본 정점 기준 재계산)",
         ];
         if (summary) {
             lines.push(
@@ -323,6 +444,13 @@ function collectVectorResources(resources: Resource[]): Resource[] {
     return resources.filter((resource) => {
         if (!resource.filename) return false;
         return /vector/i.test(resource.name);
+    });
+}
+
+function collectBlendResources(resources: Resource[]): Resource[] {
+    return resources.filter((resource) => {
+        if (!resource.filename) return false;
+        return /blend/i.test(resource.name);
     });
 }
 
