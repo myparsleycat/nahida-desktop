@@ -2,7 +2,7 @@ import path from "node:path";
 
 import { electronApp, optimizer } from "@electron-toolkit/utils";
 import AutoLaunch from "auto-launch";
-import { app, protocol } from "electron";
+import { app, crashReporter, protocol } from "electron";
 import { installExtension, REACT_DEVELOPER_TOOLS } from "electron-devtools-installer";
 
 import type { NativeLib } from "./lib/native";
@@ -48,6 +48,14 @@ if (IS_ELECTRON) {
     app?.commandLine.appendSwitch("disable-pinch-zoom");
     app?.commandLine.appendSwitch("disable-pinch");
 }
+
+crashReporter.start({
+    productName: "NahidaDesktop",
+    companyName: "nahida",
+    submitURL: "",
+    uploadToServer: false,
+    ignoreSystemCrashHandler: true,
+});
 
 const dbPath = !app.isPackaged ? DB_FILE_NAME : path.join(app.getPath("userData"), "data.db");
 

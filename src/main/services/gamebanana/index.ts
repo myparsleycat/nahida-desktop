@@ -501,7 +501,10 @@ export class GameBananaService {
                 this.loginWindow = loginWindow;
                 const webRequest = loginWindow.webContents.session.webRequest;
 
+                let cleanedUp = false;
                 const cleanup = () => {
+                    if (cleanedUp) return;
+                    cleanedUp = true;
                     webRequest.onHeadersReceived(null as never);
                     if (this.loginWindow === loginWindow) {
                         this.loginWindow = null;
@@ -527,9 +530,14 @@ export class GameBananaService {
                                     responseHeaders: details.responseHeaders,
                                 });
                                 resolveOnce(cookie);
-                                if (!loginWindow.isDestroyed()) {
-                                    loginWindow.close();
-                                }
+                                // close()를 webRequest 콜백 내부에서 동기 호출하면
+                                // Chromium 네트워크 스택 처리 중 webContents/세션이 teardown 되어
+                                // 네이티브 크래시(0xFFFF0003)가 발생함. 콜백 반환 후 close.
+                                setImmediate(() => {
+                                    if (!loginWindow.isDestroyed()) {
+                                        loginWindow.close();
+                                    }
+                                });
                                 return;
                             } catch {
                                 callback({
@@ -537,9 +545,11 @@ export class GameBananaService {
                                     responseHeaders: details.responseHeaders,
                                 });
                                 rejectOnce(new Error("GAMEBANANA_AUTH_FAILED"));
-                                if (!loginWindow.isDestroyed()) {
-                                    loginWindow.close();
-                                }
+                                setImmediate(() => {
+                                    if (!loginWindow.isDestroyed()) {
+                                        loginWindow.close();
+                                    }
+                                });
                                 return;
                             }
                         }
