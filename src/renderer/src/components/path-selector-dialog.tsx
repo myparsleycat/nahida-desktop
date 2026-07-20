@@ -91,7 +91,7 @@ export function PathSelectorDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent finalFocus={false} showCloseButton={false}>
+      <DialogContent showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>{t("components.path-selector-dialog.title")}</DialogTitle>
           <DialogDescription>
