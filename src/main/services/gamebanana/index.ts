@@ -525,33 +525,23 @@ export class GameBananaService {
                         if (cookie) {
                             try {
                                 await this.saveCookie(cookie);
-                                callback({
-                                    cancel: false,
-                                    responseHeaders: details.responseHeaders,
-                                });
                                 resolveOnce(cookie);
-                                // close()를 webRequest 콜백 내부에서 동기 호출하면
-                                // Chromium 네트워크 스택 처리 중 webContents/세션이 teardown 되어
-                                // 네이티브 크래시(0xFFFF0003)가 발생함. 콜백 반환 후 close.
-                                setImmediate(() => {
-                                    if (!loginWindow.isDestroyed()) {
-                                        loginWindow.close();
-                                    }
-                                });
-                                return;
                             } catch {
-                                callback({
-                                    cancel: false,
-                                    responseHeaders: details.responseHeaders,
-                                });
                                 rejectOnce(new Error("GAMEBANANA_AUTH_FAILED"));
-                                setImmediate(() => {
-                                    if (!loginWindow.isDestroyed()) {
-                                        loginWindow.close();
-                                    }
-                                });
-                                return;
                             }
+                            callback({
+                                cancel: false,
+                                responseHeaders: details.responseHeaders,
+                            });
+                            // close()를 webRequest 콜백 내부에서 동기 호출하면
+                            // Chromium 네트워크 스택 처리 중 webContents/세션이 teardown 되어
+                            // 네이티브 크래시(0xFFFF0003)가 발생함. 콜백 반환 후 close.
+                            setImmediate(() => {
+                                if (!loginWindow.isDestroyed()) {
+                                    loginWindow.close();
+                                }
+                            });
+                            return;
                         }
 
                         callback({ cancel: false, responseHeaders: details.responseHeaders });
