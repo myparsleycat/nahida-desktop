@@ -1,4 +1,31 @@
-import { BodyShapeViewport } from "@renderer/components/tools/body-shape/body-shape-viewport";
+import {
+  BodyShapeViewport,
+  type BodyShapeViewportHandle,
+} from "@renderer/components/tools/body-shape/body-shape-viewport";
+import {
+  formatOrientation,
+  parseOrientation,
+  type ModelViewerBodyShapeOverride,
+  type ModelViewerHandle,
+  type ModelViewerThreeEnvironment,
+  type ModelViewerThreeToneMapping,
+} from "@renderer/components/tools/model-viewer/model-viewer-contract";
+import {
+  DEFAULT_MODEL_ORIENTATION,
+  DEFAULT_THREE_EXPOSURE,
+} from "@renderer/components/tools/model-viewer/model-viewer-dialog-types";
+import {
+  clampThreeExposure,
+  normalizeThreeEnvironment,
+  normalizeThreeToneMapping,
+  withCacheBuster,
+} from "@renderer/components/tools/model-viewer/model-viewer-dialog-utils";
+import { ModelViewerMenuBar } from "@renderer/components/tools/model-viewer/model-viewer-menu-bar";
+import {
+  cleanupModelViewerUrl,
+  modelViewerSourceToUrl,
+} from "@renderer/components/tools/model-viewer/model-viewer-session";
+import { ThreeModelViewer } from "@renderer/components/tools/model-viewer/three-model-viewer";
 import { Button } from "@renderer/components/ui/button";
 import {
   Combobox,
@@ -22,6 +49,7 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Switch } from "@renderer/components/ui/switch";
+import { getSetting, setSetting } from "@renderer/lib/settings";
 import {
   applyMultiRegionDeform,
   BODY_REGION_IDS,
@@ -31,12 +59,13 @@ import {
   displacementMetrics,
   generateRegionWeights,
   REGION_PRESETS,
+  writeWeightColors,
   type ActiveRegionDeform,
   type BodyRegionId,
 } from "@shared/body-shape";
 import { toErrorMessage } from "@shared/utils";
 import { FolderOpenIcon, Loader2Icon, SaveIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -54,6 +83,7 @@ type LoadedMesh = {
   indices?: Uint32Array;
   vectorPath?: string;
   vectorLayout?: "snorm8-tangent-normal" | null;
+  glbMeshNames: string[];
   regionWeightCache: Partial<Record<BodyRegionId, Float32Array>>;
 };
 
@@ -61,6 +91,12 @@ type LoadResult = {
   modRoot: string;
   iniPath: string;
   meshes: LoadedMesh[];
+};
+
+type ViewerSession = {
+  glbPath: string;
+  memorySessionId?: string;
+  url: string;
 };
 
 type RegionControl = {
@@ -109,6 +145,20 @@ function getOrCreateRegionWeights(mesh: LoadedMesh, regionId: BodyRegionId): Flo
   return weights;
 }
 
+async function cleanupViewerSession(session: ViewerSession | null) {
+  if (!session) return;
+  cleanupModelViewerUrl(session.url);
+  try {
+    await window.api.invoke(
+      "tools:cleanupStaticGlbViewerFile",
+      session.glbPath,
+      session.memorySessionId,
+    );
+  } catch (error) {
+    console.warn("Failed to clean up body shape viewer session", error);
+  }
+}
+
 export default function BodyShapeTool({
   fixedTargetPath,
   modName,
@@ -121,13 +171,25 @@ export default function BodyShapeTool({
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [loaded, setLoaded] = useState<LoadResult | null>(null);
+  const [viewerSession, setViewerSession] = useState<ViewerSession | null>(null);
+  const [viewerReady, setViewerReady] = useState(false);
   const [selectedMeshId, setSelectedMeshId] = useState<string>("");
   const [selectedRegions, setSelectedRegions] = useState<BodyRegionId[]>([]);
   const [regionControls, setRegionControls] = useState(defaultControls);
   const [showOriginal, setShowOriginal] = useState(false);
-  const [showWeights, setShowWeights] = useState(true);
+  const [showWeights, setShowWeights] = useState(false);
   const [weightVersion, setWeightVersion] = useState(0);
+  const [modelOrientation, setModelOrientation] = useState(DEFAULT_MODEL_ORIENTATION);
+  const [doubleSidedEnabled, setDoubleSidedEnabled] = useState(true);
+  const [threeToneMapping, setThreeToneMapping] = useState<ModelViewerThreeToneMapping>("neutral");
+  const [threeEnvironment, setThreeEnvironment] = useState<ModelViewerThreeEnvironment>("studio");
+  const [threeExposure, setThreeExposure] = useState(DEFAULT_THREE_EXPOSURE);
   const isFixedTarget = Boolean(fixedTargetPath);
+  const viewerRef = useRef<ModelViewerHandle | null>(null);
+  const simpleViewportRef = useRef<BodyShapeViewportHandle | null>(null);
+  const initialCameraStateRef = useRef<ReturnType<ModelViewerHandle["captureCameraState"]>>(null);
+  const viewerSessionRef = useRef<ViewerSession | null>(null);
+  const weightColorsRef = useRef<Float32Array | null>(null);
 
   const selectedMesh = useMemo(() => {
     if (!loaded) return null;
@@ -164,6 +226,44 @@ export default function BodyShapeTool({
     return displacementMetrics(selectedMesh.originalPositions, selectedMesh.previewPositions);
   }, [selectedMesh, activeRegions, showOriginal, weightVersion]);
 
+  const bodyShapeOverrides = useMemo((): ModelViewerBodyShapeOverride[] | undefined => {
+    if (!selectedMesh || selectedMesh.glbMeshNames.length === 0) return undefined;
+
+    if (showOriginal || activeRegions.length === 0) {
+      selectedMesh.previewPositions.set(selectedMesh.originalPositions);
+    } else {
+      applyMultiRegionDeform({
+        originalPositions: selectedMesh.originalPositions,
+        previewPositions: selectedMesh.previewPositions,
+        regions: activeRegions,
+      });
+    }
+
+    let vertexColors: Float32Array | undefined;
+    if (showWeights) {
+      const displayWeights = composeDisplayWeights(
+        selectedMesh.vertexCount,
+        showOriginal ? [] : activeRegions,
+      );
+      if (
+        !weightColorsRef.current ||
+        weightColorsRef.current.length !== selectedMesh.vertexCount * 3
+      ) {
+        weightColorsRef.current = new Float32Array(selectedMesh.vertexCount * 3);
+      }
+      writeWeightColors(displayWeights, weightColorsRef.current);
+      vertexColors = weightColorsRef.current;
+    }
+
+    return [
+      {
+        meshNames: selectedMesh.glbMeshNames,
+        positions: selectedMesh.previewPositions,
+        vertexColors,
+      },
+    ];
+  }, [selectedMesh, activeRegions, showOriginal, showWeights, weightVersion]);
+
   const regionItems = useMemo(
     () =>
       BODY_REGION_IDS.map((id) => ({
@@ -172,6 +272,41 @@ export default function BodyShapeTool({
       })),
     [t],
   );
+
+  useEffect(() => {
+    viewerSessionRef.current = viewerSession;
+  }, [viewerSession]);
+
+  useEffect(() => {
+    return () => {
+      void cleanupViewerSession(viewerSessionRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([
+      getSetting("modelViewer.toneMapping"),
+      getSetting("modelViewer.environment"),
+      getSetting("modelViewer.exposure"),
+    ])
+      .then(([toneMapping, environment, exposure]) => {
+        if (cancelled) return;
+        setThreeToneMapping(normalizeThreeToneMapping(toneMapping));
+        setThreeEnvironment(normalizeThreeEnvironment(environment));
+        setThreeExposure(clampThreeExposure(exposure));
+      })
+      .catch((error) => {
+        console.error("Failed to load model viewer rendering settings", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    void viewerRef.current?.setDoubleSided(doubleSidedEnabled);
+  }, [doubleSidedEnabled, viewerReady]);
 
   const selectFolder = async () => {
     const selected = await window.api.invoke("util:showOpenDialog", {
@@ -184,6 +319,9 @@ export default function BodyShapeTool({
   const loadMod = async (path = modPath) => {
     if (!path || loading) return;
     setLoading(true);
+    setViewerReady(false);
+    initialCameraStateRef.current = null;
+    const previousSession = viewerSessionRef.current;
     try {
       const result = await window.api.invoke("tools:bodyShapeLoadMod", path);
       const meshes: LoadedMesh[] = result.meshes.map((mesh) => {
@@ -200,6 +338,7 @@ export default function BodyShapeTool({
           indices: toUint32(mesh.indices),
           vectorPath: mesh.vectorPath,
           vectorLayout: mesh.vectorLayout ?? null,
+          glbMeshNames: mesh.glbMeshNames ?? [],
           regionWeightCache: {},
         };
       });
@@ -212,6 +351,28 @@ export default function BodyShapeTool({
       setSelectedRegions([]);
       setRegionControls(defaultControls());
       setWeightVersion((v) => v + 1);
+      setModelOrientation(DEFAULT_MODEL_ORIENTATION);
+      setShowWeights(false);
+
+      let nextSession: ViewerSession | null = null;
+      try {
+        const preview = await window.api.invoke("tools:convertStaticGlbForViewer", path);
+        const glbPath = preview.mode === "variant-set" ? preview.activeGlbPath : preview.glbPath;
+        nextSession = {
+          glbPath,
+          memorySessionId: preview.memorySessionId,
+          url: withCacheBuster(modelViewerSourceToUrl(glbPath)),
+        };
+      } catch (error) {
+        console.warn("Body shape textured preview unavailable", error);
+        toast.message(t("page.tools.body_shape.toast.viewer_fallback"), {
+          description: toErrorMessage(error),
+        });
+      }
+
+      setViewerSession(nextSession);
+      void cleanupViewerSession(previousSession);
+
       toast.success(t("page.tools.body_shape.toast.loaded"), {
         description: t("page.tools.body_shape.toast.loaded_description", {
           count: meshes.length,
@@ -266,6 +427,50 @@ export default function BodyShapeTool({
     setWeightVersion((v) => v + 1);
   };
 
+  const rotateModel = (delta: [number, number, number]) => {
+    setModelOrientation((current) => {
+      const [roll, pitch, yaw] = parseOrientation(current);
+      return formatOrientation([roll + delta[0], pitch + delta[1], yaw + delta[2]]);
+    });
+  };
+
+  const handleResetView = () => {
+    setModelOrientation(DEFAULT_MODEL_ORIENTATION);
+    if (viewerSession) {
+      if (initialCameraStateRef.current) {
+        viewerRef.current?.restoreCameraState(initialCameraStateRef.current, {
+          includeFieldOfView: true,
+        });
+        return;
+      }
+      void viewerRef.current?.updateFraming();
+      return;
+    }
+    simpleViewportRef.current?.resetCamera();
+  };
+
+  const updateThreeToneMapping = (value: ModelViewerThreeToneMapping) => {
+    setThreeToneMapping(value);
+    void setSetting("modelViewer.toneMapping", value).catch((error) => {
+      console.error("Failed to persist model viewer tone mapping", error);
+    });
+  };
+
+  const updateThreeEnvironment = (value: ModelViewerThreeEnvironment) => {
+    setThreeEnvironment(value);
+    void setSetting("modelViewer.environment", value).catch((error) => {
+      console.error("Failed to persist model viewer environment", error);
+    });
+  };
+
+  const updateThreeExposure = (value: number) => {
+    const nextValue = clampThreeExposure(value);
+    setThreeExposure(nextValue);
+    void setSetting("modelViewer.exposure", nextValue).catch((error) => {
+      console.error("Failed to persist model viewer exposure", error);
+    });
+  };
+
   const exportMesh = async () => {
     if (!loaded || !selectedMesh || exporting) return;
     setExporting(true);
@@ -280,8 +485,6 @@ export default function BodyShapeTool({
         selectedMesh.previewPositions,
       );
       const displayWeights = composeDisplayWeights(selectedMesh.vertexCount, activeRegions);
-      // Export uses a representative amount/axis for vector correction when a single
-      // non-uniform region dominates; multi-region vector rewrite is skipped if complex.
       const primary = activeRegions.find((r) => r.amount !== 0);
       const result = await window.api.invoke("tools:bodyShapeExport", {
         modRoot: loaded.modRoot,
@@ -317,256 +520,319 @@ export default function BodyShapeTool({
     }
   };
 
+  const useTexturedViewer = !!viewerSession && !!selectedMesh;
+
   return (
-    <div className="grid h-full min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="relative min-h-80 overflow-hidden rounded-md border bg-muted/30">
-        {selectedMesh ? (
-          <BodyShapeViewport
-            originalPositions={selectedMesh.originalPositions}
-            previewPositions={selectedMesh.previewPositions}
-            regions={activeRegions}
-            indices={selectedMesh.indices}
-            showOriginal={showOriginal}
-            showWeights={showWeights}
-            weightVersion={weightVersion}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
-            {loading ? t("page.tools.body_shape.loading") : t("page.tools.body_shape.empty")}
-          </div>
-        )}
-        {loading && selectedMesh ? (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/20">
-            <div className="inline-flex items-center gap-2 rounded-md border bg-background/90 px-3 py-2 text-sm shadow-sm">
-              <Loader2Icon className="size-4 animate-spin" />
-              {t("page.tools.body_shape.loading")}
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-3">
+      {selectedMesh ? (
+        <ModelViewerMenuBar
+          rotateModel={rotateModel}
+          onResetView={handleResetView}
+          doubleSidedEnabled={doubleSidedEnabled}
+          onDoubleSidedChange={setDoubleSidedEnabled}
+          toneMapping={threeToneMapping}
+          onToneMappingChange={updateThreeToneMapping}
+          environment={threeEnvironment}
+          onEnvironmentChange={updateThreeEnvironment}
+          exposure={threeExposure}
+          onExposureDraftChange={setThreeExposure}
+          onExposureCommit={updateThreeExposure}
+          showToggleViewer={false}
+          isViewerBusy={loading}
+          onSaveTogglesToIni={() => {}}
+          onResetToggles={() => {}}
+          canSaveCapturedPreview={false}
+          onCapturePreviewClick={() => {}}
+          showTextureMenu={useTexturedViewer}
+          showRenderingMenu={useTexturedViewer}
+          showMiscMenu={false}
+        />
+      ) : null}
+
+      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="relative min-h-80 overflow-hidden rounded-md border bg-muted/30">
+          {selectedMesh && viewerSession ? (
+            <ThreeModelViewer
+              ref={viewerRef}
+              className="absolute inset-0 h-full w-full"
+              src={viewerSession.url}
+              orientation={modelOrientation}
+              bodyShapeOverrides={bodyShapeOverrides}
+              threeToneMapping={threeToneMapping}
+              threeEnvironment={threeEnvironment}
+              threeExposure={threeExposure}
+              onLoad={() => {
+                setViewerReady(true);
+                void (async () => {
+                  await viewerRef.current?.setDoubleSided(doubleSidedEnabled);
+                  if (!initialCameraStateRef.current) {
+                    await viewerRef.current?.updateFraming();
+                    initialCameraStateRef.current = viewerRef.current?.captureCameraState() ?? null;
+                  }
+                })();
+              }}
+              onError={(error) => {
+                toast.error(t("page.tools.body_shape.toast.viewer_error"), {
+                  description: toErrorMessage(error),
+                });
+              }}
+            />
+          ) : selectedMesh ? (
+            <BodyShapeViewport
+              ref={simpleViewportRef}
+              originalPositions={selectedMesh.originalPositions}
+              previewPositions={selectedMesh.previewPositions}
+              regions={activeRegions}
+              indices={selectedMesh.indices}
+              showOriginal={showOriginal}
+              showWeights={showWeights}
+              weightVersion={weightVersion}
+              orientation={modelOrientation}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
+              {loading ? t("page.tools.body_shape.loading") : t("page.tools.body_shape.empty")}
             </div>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="flex min-h-0 flex-col overflow-hidden rounded-md border bg-card/20">
-        <div className="border-b px-4 py-3">
-          <div className="text-sm font-medium">{t("page.tools.body_shape.title")}</div>
-          {modName ? <div className="truncate text-xs text-muted-foreground">{modName}</div> : null}
+          )}
+          {loading && selectedMesh ? (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/20">
+              <div className="inline-flex items-center gap-2 rounded-md border bg-background/90 px-3 py-2 text-sm shadow-sm">
+                <Loader2Icon className="size-4 animate-spin" />
+                {t("page.tools.body_shape.loading")}
+              </div>
+            </div>
+          ) : null}
         </div>
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="flex flex-col gap-4 p-4">
-            {!isFixedTarget ? (
-              <>
-                <Field>
-                  <FieldLabel>{t("page.tools.body_shape.mod_path")}</FieldLabel>
-                  <div className="flex gap-2">
-                    <Input
-                      value={modPath}
-                      onChange={(event) => setModPath(event.target.value)}
-                      placeholder={t("page.tools.body_shape.mod_path_placeholder")}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => void selectFolder()}
-                    >
-                      <FolderOpenIcon className="size-4" />
-                    </Button>
-                  </div>
-                </Field>
 
-                <Button type="button" onClick={() => void loadMod()} disabled={!modPath || loading}>
-                  {loading ? <Loader2Icon className="size-4 animate-spin" /> : null}
-                  {loading ? t("page.tools.body_shape.loading") : t("page.tools.body_shape.load")}
-                </Button>
-              </>
-            ) : null}
-
-            {loaded && selectedMesh ? (
-              <>
-                <Field>
-                  <FieldLabel>{t("page.tools.body_shape.mesh")}</FieldLabel>
-                  <Select
-                    value={selectedMesh.id}
-                    onValueChange={(value) => {
-                      if (value) {
-                        setSelectedMeshId(value);
-                        setSelectedRegions([]);
-                        setRegionControls(defaultControls());
-                        setWeightVersion((v) => v + 1);
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        {loaded.meshes.map((mesh) => (
-                          <SelectItem key={mesh.id} value={mesh.id}>
-                            {mesh.name} ({mesh.vertexCount})
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </Field>
-
-                <Field>
-                  <FieldLabel>{t("page.tools.body_shape.select_regions")}</FieldLabel>
-                  <Combobox
-                    multiple
-                    items={regionItems}
-                    value={regionItems.filter((item) => selectedRegions.includes(item.id))}
-                    onValueChange={(next) => {
-                      const ids = (next ?? []).map((item) => item.id);
-                      setSelectedRegions(ids);
-                      for (const id of ids) {
-                        getOrCreateRegionWeights(selectedMesh, id);
-                      }
-                      setWeightVersion((v) => v + 1);
-                    }}
-                    itemToStringLabel={(item) => item.label}
-                    isItemEqualToValue={(a, b) => a.id === b.id}
-                  >
-                    <ComboboxChips>
-                      <ComboboxValue>
-                        {(value: typeof regionItems) => (
-                          <>
-                            {value.map((item) => (
-                              <ComboboxChip key={item.id}>{item.label}</ComboboxChip>
-                            ))}
-                            <ComboboxInput
-                              placeholder={
-                                value.length > 0
-                                  ? ""
-                                  : t("page.tools.body_shape.select_regions_placeholder")
-                              }
-                            />
-                          </>
-                        )}
-                      </ComboboxValue>
-                    </ComboboxChips>
-                    <ComboboxContent>
-                      <ComboboxEmpty>{t("page.tools.body_shape.no_regions")}</ComboboxEmpty>
-                      <ComboboxList>
-                        {(item: (typeof regionItems)[number]) => (
-                          <ComboboxItem key={item.id} value={item}>
-                            {item.label}
-                          </ComboboxItem>
-                        )}
-                      </ComboboxList>
-                    </ComboboxContent>
-                  </Combobox>
-                </Field>
-
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">
-                    {t("page.tools.body_shape.show_weights")}
-                  </span>
-                  <Switch checked={showWeights} onCheckedChange={setShowWeights} />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">
-                    {t("page.tools.body_shape.show_original")}
-                  </span>
-                  <Switch checked={showOriginal} onCheckedChange={setShowOriginal} />
-                </div>
-
-                {selectedRegions.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    {t("page.tools.body_shape.select_regions_hint")}
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {selectedRegions.map((regionId) => {
-                      const control = regionControls[regionId];
-                      return (
-                        <div
-                          key={regionId}
-                          className="space-y-2 rounded-md border bg-background/50 p-3"
-                        >
-                          <div className="text-sm font-medium">
-                            {t(`page.tools.body_shape.regions.${regionId}`)}
-                          </div>
-                          <RangeField
-                            label={t("page.tools.body_shape.deform_amount")}
-                            value={control.amount}
-                            min={-0.5}
-                            max={0.5}
-                            step={0.01}
-                            display={`${(control.amount * 100).toFixed(0)}%`}
-                            onChange={(value) => updateRegionAmount(regionId, value)}
-                          />
-                          <RangeField
-                            label={t("page.tools.body_shape.axis_x")}
-                            value={control.axisScale[0]}
-                            min={0}
-                            max={2}
-                            step={0.05}
-                            display={control.axisScale[0].toFixed(2)}
-                            onChange={(value) => updateRegionAxis(regionId, 0, value)}
-                          />
-                          <RangeField
-                            label={t("page.tools.body_shape.axis_y")}
-                            value={control.axisScale[1]}
-                            min={0}
-                            max={2}
-                            step={0.05}
-                            display={control.axisScale[1].toFixed(2)}
-                            onChange={(value) => updateRegionAxis(regionId, 1, value)}
-                          />
-                          <RangeField
-                            label={t("page.tools.body_shape.axis_z")}
-                            value={control.axisScale[2]}
-                            min={0}
-                            max={2}
-                            step={0.05}
-                            display={control.axisScale[2].toFixed(2)}
-                            onChange={(value) => updateRegionAxis(regionId, 2, value)}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={resetSelected}
-                  disabled={selectedRegions.length === 0}
-                >
-                  {t("page.tools.body_shape.reset_selected")}
-                </Button>
-
-                {metrics ? (
-                  <div className="space-y-1 rounded-md border bg-background/50 p-3 text-xs text-muted-foreground">
-                    <div>
-                      {t("page.tools.body_shape.metrics.vertices")}: {metrics.vertexCount}
-                    </div>
-                    <div>
-                      {t("page.tools.body_shape.metrics.moved")}: {metrics.movedVertices}
-                    </div>
-                    <div>
-                      {t("page.tools.body_shape.metrics.max_disp")}:{" "}
-                      {metrics.maxDisplacement.toFixed(5)}
-                    </div>
-                  </div>
-                ) : null}
-
-                <Button type="button" onClick={() => void exportMesh()} disabled={exporting}>
-                  {exporting ? (
-                    <Loader2Icon className="size-4 animate-spin" />
-                  ) : (
-                    <SaveIcon className="size-4" />
-                  )}
-                  {exporting
-                    ? t("page.tools.body_shape.exporting")
-                    : t("page.tools.body_shape.export")}
-                </Button>
-              </>
+        <div className="flex min-h-0 flex-col overflow-hidden rounded-md border bg-card/20">
+          <div className="border-b px-4 py-3">
+            <div className="text-sm font-medium">{t("page.tools.body_shape.title")}</div>
+            {modName ? (
+              <div className="truncate text-xs text-muted-foreground">{modName}</div>
             ) : null}
           </div>
-        </ScrollArea>
+          <ScrollArea className="min-h-0 flex-1">
+            <div className="flex flex-col gap-4 p-4">
+              {!isFixedTarget ? (
+                <>
+                  <Field>
+                    <FieldLabel>{t("page.tools.body_shape.mod_path")}</FieldLabel>
+                    <div className="flex gap-2">
+                      <Input
+                        value={modPath}
+                        onChange={(event) => setModPath(event.target.value)}
+                        placeholder={t("page.tools.body_shape.mod_path_placeholder")}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => void selectFolder()}
+                      >
+                        <FolderOpenIcon className="size-4" />
+                      </Button>
+                    </div>
+                  </Field>
+
+                  <Button
+                    type="button"
+                    onClick={() => void loadMod()}
+                    disabled={!modPath || loading}
+                  >
+                    {loading ? <Loader2Icon className="size-4 animate-spin" /> : null}
+                    {loading ? t("page.tools.body_shape.loading") : t("page.tools.body_shape.load")}
+                  </Button>
+                </>
+              ) : null}
+
+              {loaded && selectedMesh ? (
+                <>
+                  <Field>
+                    <FieldLabel>{t("page.tools.body_shape.mesh")}</FieldLabel>
+                    <Select
+                      value={selectedMesh.id}
+                      onValueChange={(value) => {
+                        if (value) {
+                          setSelectedMeshId(value);
+                          setSelectedRegions([]);
+                          setRegionControls(defaultControls());
+                          setWeightVersion((v) => v + 1);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {loaded.meshes.map((mesh) => (
+                            <SelectItem key={mesh.id} value={mesh.id}>
+                              {mesh.name} ({mesh.vertexCount})
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+
+                  <Field>
+                    <FieldLabel>{t("page.tools.body_shape.select_regions")}</FieldLabel>
+                    <Combobox
+                      multiple
+                      items={regionItems}
+                      value={regionItems.filter((item) => selectedRegions.includes(item.id))}
+                      onValueChange={(next) => {
+                        const ids = (next ?? []).map((item) => item.id);
+                        setSelectedRegions(ids);
+                        for (const id of ids) {
+                          getOrCreateRegionWeights(selectedMesh, id);
+                        }
+                        setWeightVersion((v) => v + 1);
+                      }}
+                      itemToStringLabel={(item) => item.label}
+                      isItemEqualToValue={(a, b) => a.id === b.id}
+                    >
+                      <ComboboxChips>
+                        <ComboboxValue>
+                          {(value: typeof regionItems) => (
+                            <>
+                              {value.map((item) => (
+                                <ComboboxChip key={item.id}>{item.label}</ComboboxChip>
+                              ))}
+                              <ComboboxInput
+                                placeholder={
+                                  value.length > 0
+                                    ? ""
+                                    : t("page.tools.body_shape.select_regions_placeholder")
+                                }
+                              />
+                            </>
+                          )}
+                        </ComboboxValue>
+                      </ComboboxChips>
+                      <ComboboxContent>
+                        <ComboboxEmpty>{t("page.tools.body_shape.no_regions")}</ComboboxEmpty>
+                        <ComboboxList>
+                          {(item: (typeof regionItems)[number]) => (
+                            <ComboboxItem key={item.id} value={item}>
+                              {item.label}
+                            </ComboboxItem>
+                          )}
+                        </ComboboxList>
+                      </ComboboxContent>
+                    </Combobox>
+                  </Field>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {t("page.tools.body_shape.show_weights")}
+                    </span>
+                    <Switch checked={showWeights} onCheckedChange={setShowWeights} />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {t("page.tools.body_shape.show_original")}
+                    </span>
+                    <Switch checked={showOriginal} onCheckedChange={setShowOriginal} />
+                  </div>
+
+                  {selectedRegions.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      {t("page.tools.body_shape.select_regions_hint")}
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {selectedRegions.map((regionId) => {
+                        const control = regionControls[regionId];
+                        return (
+                          <div
+                            key={regionId}
+                            className="space-y-2 rounded-md border bg-background/50 p-3"
+                          >
+                            <div className="text-sm font-medium">
+                              {t(`page.tools.body_shape.regions.${regionId}`)}
+                            </div>
+                            <RangeField
+                              label={t("page.tools.body_shape.deform_amount")}
+                              value={control.amount}
+                              min={-0.5}
+                              max={0.5}
+                              step={0.01}
+                              display={`${(control.amount * 100).toFixed(0)}%`}
+                              onChange={(value) => updateRegionAmount(regionId, value)}
+                            />
+                            <RangeField
+                              label={t("page.tools.body_shape.axis_x")}
+                              value={control.axisScale[0]}
+                              min={0}
+                              max={2}
+                              step={0.05}
+                              display={control.axisScale[0].toFixed(2)}
+                              onChange={(value) => updateRegionAxis(regionId, 0, value)}
+                            />
+                            <RangeField
+                              label={t("page.tools.body_shape.axis_y")}
+                              value={control.axisScale[1]}
+                              min={0}
+                              max={2}
+                              step={0.05}
+                              display={control.axisScale[1].toFixed(2)}
+                              onChange={(value) => updateRegionAxis(regionId, 1, value)}
+                            />
+                            <RangeField
+                              label={t("page.tools.body_shape.axis_z")}
+                              value={control.axisScale[2]}
+                              min={0}
+                              max={2}
+                              step={0.05}
+                              display={control.axisScale[2].toFixed(2)}
+                              onChange={(value) => updateRegionAxis(regionId, 2, value)}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={resetSelected}
+                    disabled={selectedRegions.length === 0}
+                  >
+                    {t("page.tools.body_shape.reset_selected")}
+                  </Button>
+
+                  {metrics ? (
+                    <div className="space-y-1 rounded-md border bg-background/50 p-3 text-xs text-muted-foreground">
+                      <div>
+                        {t("page.tools.body_shape.metrics.vertices")}: {metrics.vertexCount}
+                      </div>
+                      <div>
+                        {t("page.tools.body_shape.metrics.moved")}: {metrics.movedVertices}
+                      </div>
+                      <div>
+                        {t("page.tools.body_shape.metrics.max_disp")}:{" "}
+                        {metrics.maxDisplacement.toFixed(5)}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <Button type="button" onClick={() => void exportMesh()} disabled={exporting}>
+                    {exporting ? (
+                      <Loader2Icon className="size-4 animate-spin" />
+                    ) : (
+                      <SaveIcon className="size-4" />
+                    )}
+                    {exporting
+                      ? t("page.tools.body_shape.exporting")
+                      : t("page.tools.body_shape.export")}
+                  </Button>
+                </>
+              ) : null}
+            </div>
+          </ScrollArea>
+        </div>
       </div>
     </div>
   );

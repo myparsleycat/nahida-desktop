@@ -15,10 +15,12 @@ import {
 } from "@renderer/components/ui/menubar";
 import { CameraIcon, RotateCcwIcon, SaveIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
+
 import type {
   ModelViewerThreeEnvironment,
   ModelViewerThreeToneMapping,
 } from "./model-viewer-contract";
+
 import {
   DEFAULT_THREE_EXPOSURE,
   MAX_THREE_EXPOSURE,
@@ -55,6 +57,12 @@ export interface ModelViewerMenuBarProps {
   /* Preview capture */
   canSaveCapturedPreview: boolean;
   onCapturePreviewClick: () => void;
+  /** Hide texture menu when unused by the host. */
+  showTextureMenu?: boolean;
+  /** Hide rendering menu when unused by the host. */
+  showRenderingMenu?: boolean;
+  /** Hide misc menu (e.g. capture preview) when unused by the host. */
+  showMiscMenu?: boolean;
 }
 
 export function ModelViewerMenuBar({
@@ -75,6 +83,9 @@ export function ModelViewerMenuBar({
   onResetToggles,
   canSaveCapturedPreview,
   onCapturePreviewClick,
+  showTextureMenu = true,
+  showRenderingMenu = true,
+  showMiscMenu = true,
 }: ModelViewerMenuBarProps) {
   const { t } = useTranslation();
 
@@ -102,102 +113,106 @@ export function ModelViewerMenuBar({
           </MenubarGroup>
         </MenubarContent>
       </MenubarMenu>
-      <MenubarMenu>
-        <MenubarTrigger>{t("page.tools.model_viewer.menu.texture")}</MenubarTrigger>
-        <MenubarContent>
-          <MenubarGroup>
-            <MenubarCheckboxItem
-              checked={doubleSidedEnabled}
-              onCheckedChange={(checked) => onDoubleSidedChange(checked === true)}
-            >
-              Double Sided
-            </MenubarCheckboxItem>
-          </MenubarGroup>
-        </MenubarContent>
-      </MenubarMenu>
-      <MenubarMenu>
-        <MenubarTrigger>{t("page.tools.model_viewer.menu.rendering")}</MenubarTrigger>
-        <MenubarContent>
-          <MenubarGroup>
-            <MenubarLabel className="text-xs text-muted-foreground">Tone Mapping</MenubarLabel>
-            <MenubarRadioGroup
-              value={toneMapping}
-              onValueChange={(value) => onToneMappingChange(value as ModelViewerThreeToneMapping)}
-            >
-              <MenubarRadioItem value="neutral">Neutral</MenubarRadioItem>
-              <MenubarRadioItem value="aces">ACES Filmic</MenubarRadioItem>
-              <MenubarRadioItem value="none">None</MenubarRadioItem>
-            </MenubarRadioGroup>
-          </MenubarGroup>
-          <MenubarSeparator />
-          <MenubarGroup>
-            <MenubarLabel className="text-xs text-muted-foreground">Environment</MenubarLabel>
-            <MenubarRadioGroup
-              value={environment}
-              onValueChange={(value) => onEnvironmentChange(value as ModelViewerThreeEnvironment)}
-            >
-              <MenubarRadioItem value="studio">Studio</MenubarRadioItem>
-              <MenubarRadioItem value="soft">Soft</MenubarRadioItem>
-              <MenubarRadioItem value="none">None</MenubarRadioItem>
-            </MenubarRadioGroup>
-          </MenubarGroup>
-          <MenubarSeparator />
-          <MenubarGroup>
-            <MenubarLabel className="text-xs text-muted-foreground">Exposure</MenubarLabel>
-            <div className="px-1.5 py-1">
-              <div className="mb-2 flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 px-2"
-                  onClick={() => onExposureCommit(exposure - 0.1)}
-                >
-                  -0.1
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 px-2"
-                  onClick={() => onExposureCommit(DEFAULT_THREE_EXPOSURE)}
-                >
-                  Reset
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 px-2"
-                  onClick={() => onExposureCommit(exposure + 0.1)}
-                >
-                  +0.1
-                </Button>
+      {showTextureMenu ? (
+        <MenubarMenu>
+          <MenubarTrigger>{t("page.tools.model_viewer.menu.texture")}</MenubarTrigger>
+          <MenubarContent>
+            <MenubarGroup>
+              <MenubarCheckboxItem
+                checked={doubleSidedEnabled}
+                onCheckedChange={(checked) => onDoubleSidedChange(checked === true)}
+              >
+                Double Sided
+              </MenubarCheckboxItem>
+            </MenubarGroup>
+          </MenubarContent>
+        </MenubarMenu>
+      ) : null}
+      {showRenderingMenu ? (
+        <MenubarMenu>
+          <MenubarTrigger>{t("page.tools.model_viewer.menu.rendering")}</MenubarTrigger>
+          <MenubarContent>
+            <MenubarGroup>
+              <MenubarLabel className="text-xs text-muted-foreground">Tone Mapping</MenubarLabel>
+              <MenubarRadioGroup
+                value={toneMapping}
+                onValueChange={(value) => onToneMappingChange(value as ModelViewerThreeToneMapping)}
+              >
+                <MenubarRadioItem value="neutral">Neutral</MenubarRadioItem>
+                <MenubarRadioItem value="aces">ACES Filmic</MenubarRadioItem>
+                <MenubarRadioItem value="none">None</MenubarRadioItem>
+              </MenubarRadioGroup>
+            </MenubarGroup>
+            <MenubarSeparator />
+            <MenubarGroup>
+              <MenubarLabel className="text-xs text-muted-foreground">Environment</MenubarLabel>
+              <MenubarRadioGroup
+                value={environment}
+                onValueChange={(value) => onEnvironmentChange(value as ModelViewerThreeEnvironment)}
+              >
+                <MenubarRadioItem value="studio">Studio</MenubarRadioItem>
+                <MenubarRadioItem value="soft">Soft</MenubarRadioItem>
+                <MenubarRadioItem value="none">None</MenubarRadioItem>
+              </MenubarRadioGroup>
+            </MenubarGroup>
+            <MenubarSeparator />
+            <MenubarGroup>
+              <MenubarLabel className="text-xs text-muted-foreground">Exposure</MenubarLabel>
+              <div className="px-1.5 py-1">
+                <div className="mb-2 flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={() => onExposureCommit(exposure - 0.1)}
+                  >
+                    -0.1
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={() => onExposureCommit(DEFAULT_THREE_EXPOSURE)}
+                  >
+                    Reset
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={() => onExposureCommit(exposure + 0.1)}
+                  >
+                    +0.1
+                  </Button>
+                </div>
+                <Input
+                  type="number"
+                  min={MIN_THREE_EXPOSURE}
+                  max={MAX_THREE_EXPOSURE}
+                  step={0.05}
+                  value={formatSliderValue(exposure)}
+                  onChange={(event) => {
+                    const nextValue = Number.parseFloat(event.target.value);
+                    if (Number.isFinite(nextValue)) {
+                      onExposureDraftChange(nextValue);
+                    }
+                  }}
+                  onBlur={(event) => {
+                    onExposureCommit(Number.parseFloat(event.target.value));
+                  }}
+                />
+                <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>{formatSliderValue(MIN_THREE_EXPOSURE)}</span>
+                  <span>{formatSliderValue(MAX_THREE_EXPOSURE)}</span>
+                </div>
               </div>
-              <Input
-                type="number"
-                min={MIN_THREE_EXPOSURE}
-                max={MAX_THREE_EXPOSURE}
-                step={0.05}
-                value={formatSliderValue(exposure)}
-                onChange={(event) => {
-                  const nextValue = Number.parseFloat(event.target.value);
-                  if (Number.isFinite(nextValue)) {
-                    onExposureDraftChange(nextValue);
-                  }
-                }}
-                onBlur={(event) => {
-                  onExposureCommit(Number.parseFloat(event.target.value));
-                }}
-              />
-              <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
-                <span>{formatSliderValue(MIN_THREE_EXPOSURE)}</span>
-                <span>{formatSliderValue(MAX_THREE_EXPOSURE)}</span>
-              </div>
-            </div>
-          </MenubarGroup>
-        </MenubarContent>
-      </MenubarMenu>
+            </MenubarGroup>
+          </MenubarContent>
+        </MenubarMenu>
+      ) : null}
       {showToggleViewer ? (
         <MenubarMenu>
           <MenubarTrigger>{t("page.tools.model_viewer.menu.toggle")}</MenubarTrigger>
@@ -216,17 +231,19 @@ export function ModelViewerMenuBar({
           </MenubarContent>
         </MenubarMenu>
       ) : null}
-      <MenubarMenu>
-        <MenubarTrigger>{t("page.tools.model_viewer.menu.misc")}</MenubarTrigger>
-        <MenubarContent>
-          <MenubarGroup>
-            <MenubarItem onClick={onCapturePreviewClick} disabled={!canSaveCapturedPreview}>
-              <CameraIcon />
-              {t("page.tools.model_viewer.menu.capture_set_preview")}
-            </MenubarItem>
-          </MenubarGroup>
-        </MenubarContent>
-      </MenubarMenu>
+      {showMiscMenu ? (
+        <MenubarMenu>
+          <MenubarTrigger>{t("page.tools.model_viewer.menu.misc")}</MenubarTrigger>
+          <MenubarContent>
+            <MenubarGroup>
+              <MenubarItem onClick={onCapturePreviewClick} disabled={!canSaveCapturedPreview}>
+                <CameraIcon />
+                {t("page.tools.model_viewer.menu.capture_set_preview")}
+              </MenubarItem>
+            </MenubarGroup>
+          </MenubarContent>
+        </MenubarMenu>
+      ) : null}
     </Menubar>
   );
 }

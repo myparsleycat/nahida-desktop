@@ -37,16 +37,25 @@ import {
 } from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+
 import type {
   ModelViewerAnimationClip,
   ModelViewerAnimationFrame,
+  ModelViewerBodyShapeOverride,
   ModelViewerCameraState,
   ModelViewerHandle,
   ModelViewerRealtimeShapeKey,
   ModelViewerSurfaceProps,
 } from "./model-viewer-contract";
+
 import { parseOrientation } from "./model-viewer-contract";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
+
+type BodyShapeBaseline = {
+  positions: Float32Array;
+  colors?: Float32Array;
+  vertexColorsEnabled: boolean;
+};
 
 type OrbitControlsImpl = ElementRef<typeof OrbitControls>;
 
@@ -83,6 +92,7 @@ export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurface
       className,
       animationClip,
       animationFrame,
+      bodyShapeOverrides,
       onError,
       onLoad,
       orientation,
@@ -165,6 +175,7 @@ export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurface
             controllerRef={controllerRef}
             animationClip={animationClip}
             animationFrame={animationFrame}
+            bodyShapeOverrides={bodyShapeOverrides}
             orientation={orientation}
             shapeKeys={shapeKeys}
             src={src}
@@ -185,6 +196,7 @@ function ThreeModelScene({
   controllerRef,
   animationClip,
   animationFrame,
+  bodyShapeOverrides,
   onError,
   onLoad,
   orientation,
@@ -213,7 +225,9 @@ function ThreeModelScene({
   const lastAppliedModelRootRef = useRef<Object3D | null>(null);
   const lastAppliedShapeKeysRef = useRef<ModelViewerRealtimeShapeKey[] | undefined>(undefined);
   const lastAppliedAnimationSignatureRef = useRef<string | null>(null);
+  const bodyShapeBaselineRef = useRef<WeakMap<Mesh, BodyShapeBaseline>>(new WeakMap());
   const desiredCameraDistanceRef = useRef<number | null>(null);
+  const hasBodyShapeOverrides = !!bodyShapeOverrides?.length;
 
   const rotation = useMemo(() => {
     const [roll, pitch, yaw] = parseOrientation(orientation);
@@ -508,7 +522,32 @@ function ThreeModelScene({
   }, []);
 
   useEffect(() => {
-    if (!modelRoot || !animationClip || animationClip.frames.length === 0) {
+    if (!modelRoot) {
+      return;
+    }
+
+    if (!bodyShapeOverrides?.length) {
+      restoreBodyShapeBaselines(modelRoot, bodyShapeBaselineRef.current);
+      invalidate();
+      return;
+    }
+
+    applyBodyShapeOverridesToScene(
+      modelRoot,
+      bodyShapeOverrides,
+      bodyShapeBaselineRef.current,
+      (error) => onErrorRef.current?.(error),
+    );
+    invalidate();
+  }, [bodyShapeOverrides, invalidate, modelRoot]);
+
+  useEffect(() => {
+    if (
+      !modelRoot ||
+      hasBodyShapeOverrides ||
+      !animationClip ||
+      animationClip.frames.length === 0
+    ) {
       lastAppliedAnimationSignatureRef.current = null;
       return;
     }
@@ -546,10 +585,10 @@ function ThreeModelScene({
     return () => {
       cancelled = true;
     };
-  }, [animationClip, animationFrame, invalidate, modelRoot]);
+  }, [animationClip, animationFrame, hasBodyShapeOverrides, invalidate, modelRoot]);
 
   useEffect(() => {
-    if (!modelRoot || !shapeKeys?.length) {
+    if (!modelRoot || hasBodyShapeOverrides || !shapeKeys?.length) {
       lastAppliedVariantSnapshotRef.current = null;
       lastAppliedModelRootRef.current = modelRoot;
       lastAppliedShapeKeysRef.current = shapeKeys;
@@ -592,7 +631,7 @@ function ThreeModelScene({
     return () => {
       cancelled = true;
     };
-  }, [invalidate, modelRoot, shapeKeys, variantState]);
+  }, [hasBodyShapeOverrides, invalidate, modelRoot, shapeKeys, variantState]);
 
   return (
     <>
@@ -847,6 +886,187 @@ function applyAnimationFrameToScene(root: Object3D, frame: LoadedAnimationFrame)
     }
 
     applyAnimationMeshToGeometry(object.geometry, mesh);
+  });
+}
+
+function applyBodyShapeOverridesToScene(
+  root: Object3D,
+  overrides: ModelViewerBodyShapeOverride[],
+  baselines: WeakMap<Mesh, BodyShapeBaseline>,
+  onError?: (error: Error) => void,
+) {
+  const nameSetByOverride = overrides.map((override) => new Set(override.meshNames));
+  const activeNames = new Set(overrides.flatMap((override) => override.meshNames));
+
+  root.traverse((object) => {
+    if (!(object instanceof Mesh) || !(object.geometry instanceof BufferGeometry)) {
+      return;
+    }
+
+    if (!activeNames.has(object.name)) {
+      restoreBodyShapeBaselineMesh(object, baselines);
+      return;
+    }
+
+    const overrideIndex = nameSetByOverride.findIndex((names) => names.has(object.name));
+    if (overrideIndex < 0) {
+      return;
+    }
+
+    const override = overrides[overrideIndex]!;
+    cacheBodyShapeBaseline(object, baselines);
+
+    const positionAttribute = object.geometry.getAttribute("position");
+    if (!(positionAttribute instanceof BufferAttribute)) {
+      return;
+    }
+
+    const positionArray = positionAttribute.array as Float32Array;
+    if (positionArray.length !== override.positions.length) {
+      onError?.(
+        new Error(
+          `Body shape vertex mismatch for ${object.name}: glb=${positionArray.length / 3} edit=${override.positions.length / 3}`,
+        ),
+      );
+      return;
+    }
+
+    positionArray.set(override.positions);
+    positionAttribute.needsUpdate = true;
+    object.geometry.computeVertexNormals();
+    object.geometry.computeBoundingBox();
+    object.geometry.computeBoundingSphere();
+
+    applyBodyShapeVertexColors(object, override.vertexColors, baselines.get(object));
+  });
+}
+
+function restoreBodyShapeBaselines(root: Object3D, baselines: WeakMap<Mesh, BodyShapeBaseline>) {
+  root.traverse((object) => {
+    if (!(object instanceof Mesh) || !(object.geometry instanceof BufferGeometry)) {
+      return;
+    }
+    restoreBodyShapeBaselineMesh(object, baselines);
+  });
+}
+
+function restoreBodyShapeBaselineMesh(mesh: Mesh, baselines: WeakMap<Mesh, BodyShapeBaseline>) {
+  if (!(mesh.geometry instanceof BufferGeometry)) {
+    return;
+  }
+
+  const baseline = baselines.get(mesh);
+  if (!baseline) {
+    return;
+  }
+
+  const positionAttribute = mesh.geometry.getAttribute("position");
+  if (positionAttribute instanceof BufferAttribute) {
+    const positionArray = positionAttribute.array as Float32Array;
+    if (positionArray.length === baseline.positions.length) {
+      positionArray.set(baseline.positions);
+      positionAttribute.needsUpdate = true;
+    }
+  }
+
+  if (baseline.colors) {
+    const colorAttribute = mesh.geometry.getAttribute("color");
+    if (colorAttribute instanceof BufferAttribute) {
+      const colorArray = colorAttribute.array as Float32Array;
+      if (colorArray.length === baseline.colors.length) {
+        colorArray.set(baseline.colors);
+        colorAttribute.needsUpdate = true;
+      }
+    }
+  } else {
+    mesh.geometry.deleteAttribute("color");
+  }
+
+  for (const material of collectMeshMaterials(mesh)) {
+    material.vertexColors = baseline.vertexColorsEnabled;
+    material.needsUpdate = true;
+  }
+
+  mesh.geometry.computeVertexNormals();
+  mesh.geometry.computeBoundingBox();
+  mesh.geometry.computeBoundingSphere();
+}
+
+function cacheBodyShapeBaseline(mesh: Mesh, baselines: WeakMap<Mesh, BodyShapeBaseline>) {
+  if (baselines.has(mesh) || !(mesh.geometry instanceof BufferGeometry)) {
+    return;
+  }
+
+  const positionAttribute = mesh.geometry.getAttribute("position");
+  if (!(positionAttribute instanceof BufferAttribute)) {
+    return;
+  }
+
+  const colorsAttribute = mesh.geometry.getAttribute("color");
+  const materials = collectMeshMaterials(mesh);
+  baselines.set(mesh, {
+    positions: new Float32Array(positionAttribute.array as Float32Array),
+    colors:
+      colorsAttribute instanceof BufferAttribute
+        ? new Float32Array(colorsAttribute.array as Float32Array)
+        : undefined,
+    vertexColorsEnabled: materials.some((material) => material.vertexColors),
+  });
+}
+
+function applyBodyShapeVertexColors(
+  mesh: Mesh,
+  vertexColors: Float32Array | undefined,
+  baseline?: BodyShapeBaseline,
+) {
+  if (!(mesh.geometry instanceof BufferGeometry)) {
+    return;
+  }
+
+  const materials = collectMeshMaterials(mesh);
+
+  if (!vertexColors) {
+    if (baseline?.colors) {
+      const colorAttribute = mesh.geometry.getAttribute("color");
+      if (colorAttribute instanceof BufferAttribute) {
+        const colorArray = colorAttribute.array as Float32Array;
+        if (colorArray.length === baseline.colors.length) {
+          colorArray.set(baseline.colors);
+          colorAttribute.needsUpdate = true;
+        }
+      }
+    } else {
+      mesh.geometry.deleteAttribute("color");
+    }
+    for (const material of materials) {
+      if (material.vertexColors !== (baseline?.vertexColorsEnabled ?? false)) {
+        material.vertexColors = baseline?.vertexColorsEnabled ?? false;
+        material.needsUpdate = true;
+      }
+    }
+    return;
+  }
+
+  const existing = mesh.geometry.getAttribute("color");
+  if (existing instanceof BufferAttribute && existing.array.length === vertexColors.length) {
+    (existing.array as Float32Array).set(vertexColors);
+    existing.needsUpdate = true;
+  } else {
+    mesh.geometry.setAttribute("color", new BufferAttribute(vertexColors.slice(), 3));
+  }
+
+  for (const material of materials) {
+    if (!material.vertexColors) {
+      material.vertexColors = true;
+      material.needsUpdate = true;
+    }
+  }
+}
+
+function collectMeshMaterials(mesh: Mesh): MeshStandardMaterial[] {
+  const list = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  return list.filter((material): material is MeshStandardMaterial => {
+    return !!material && "vertexColors" in material;
   });
 }
 

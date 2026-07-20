@@ -995,7 +995,9 @@
           "exported": "체형 변경을 저장했습니다",
           "exported_description": "{{bytes}}바이트 기록",
           "exported_with_log": "위치 버퍼를 갱신하고 변경사항.txt를 작성했습니다",
-          "export_failed": "위치 버퍼 저장에 실패했습니다"
+          "export_failed": "위치 버퍼 저장에 실패했습니다",
+          "viewer_fallback": "텍스처 미리보기를 사용할 수 없어 단순 뷰어로 표시합니다",
+          "viewer_error": "모델 뷰어 오류"
         }
       }
     },

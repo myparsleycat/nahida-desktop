@@ -1013,7 +1013,9 @@
           "exported": "Body shape written",
           "exported_description": "Wrote {{bytes}} bytes",
           "exported_with_log": "Position buffer updated and 변경사항.txt written",
-          "export_failed": "Failed to write position buffer"
+          "export_failed": "Failed to write position buffer",
+          "viewer_fallback": "Textured preview unavailable; using simple viewer",
+          "viewer_error": "Model viewer error"
         }
       }
     },

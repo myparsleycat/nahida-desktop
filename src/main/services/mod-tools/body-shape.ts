@@ -2,6 +2,11 @@ import path from "node:path";
 
 import type { NahidaDesktop } from "@main/index";
 import { loadIniBundle } from "@main/lib/mod-static-glb/ini-loader";
+import { bestKeyForIb, keyMatchesIb, strictKeyMatchesIb } from "@main/lib/mod-static-glb/mesh-key";
+import {
+    parseMihoyoBufferGroupResourceName,
+    parseWwmiBufferResourceName,
+} from "@main/lib/mod-static-glb/resource-loader";
 import type { IniSection, Resource } from "@main/lib/mod-static-glb/types";
 import {
     applySnorm8VectorCorrection,
@@ -27,6 +32,8 @@ export type BodyShapeMeshCandidate = {
     vectorRelativePath?: string;
     vectorStride?: number;
     vectorLayout?: "snorm8-tangent-normal" | null;
+    /** GLB mesh/node names (IB stems) that share this position buffer group. */
+    glbMeshNames: string[];
 };
 
 export type BodyShapeLoadResult = {
@@ -99,6 +106,9 @@ export async function loadBodyShapeMod(
         throw new Error("No position buffer resources found in mod.ini");
     }
 
+    const positionGroupKeys = positionResources
+        .map((resource) => resolveBufferGroupKey(resource.name))
+        .filter((key): key is string => !!key);
     const meshes: BodyShapeMeshCandidate[] = [];
 
     for (const position of positionResources) {
@@ -166,6 +176,7 @@ export async function loadBodyShapeMod(
             vectorRelativePath,
             vectorStride,
             vectorLayout,
+            glbMeshNames: resolveGlbMeshNames(position, indexResources, positionGroupKeys),
         });
     }
 
@@ -328,6 +339,44 @@ function companionKey(name: string): string {
         .replace(/(Position|Vector|Index|Blend|TexCoord|Color)Buffer/gi, "")
         .replace(/(Position|Vector|Index|Blend|Texcoord)/gi, "")
         .toLowerCase();
+}
+
+function resolveBufferGroupKey(resourceName: string): string | null {
+    return (
+        parseMihoyoBufferGroupResourceName(resourceName)?.key ||
+        parseWwmiBufferResourceName(resourceName)?.key ||
+        null
+    );
+}
+
+/** IB stems used as GLB mesh names for the position resource's buffer group. */
+function resolveGlbMeshNames(
+    position: Resource,
+    indexResources: Resource[],
+    positionGroupKeys: string[],
+): string[] {
+    const groupKey = resolveBufferGroupKey(position.name);
+    const names = new Set<string>();
+
+    if (groupKey && positionGroupKeys.length > 0) {
+        for (const ib of indexResources) {
+            if (!ib.filename) continue;
+            const stem = path.basename(ib.filename, path.extname(ib.filename));
+            const ibKey = bestKeyForIb(stem, ib.name, positionGroupKeys);
+            if (strictKeyMatchesIb(groupKey, ibKey) || keyMatchesIb(groupKey, ibKey)) {
+                names.add(stem);
+            }
+        }
+    }
+
+    if (names.size === 0) {
+        const companion = matchCompanionResource(position, indexResources);
+        if (companion?.filename) {
+            names.add(path.basename(companion.filename, path.extname(companion.filename)));
+        }
+    }
+
+    return [...names];
 }
 
 async function readIndexBuffer(filePath: string, format?: string): Promise<Uint32Array> {

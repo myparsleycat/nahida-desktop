@@ -976,7 +976,9 @@
           "exported": "体型変更を書き込みました",
           "exported_description": "{{bytes}} バイトを書き込みました",
           "exported_with_log": "位置バッファを更新し 변경사항.txt を作成しました",
-          "export_failed": "位置バッファの書き込みに失敗しました"
+          "export_failed": "位置バッファの書き込みに失敗しました",
+          "viewer_fallback": "テクスチャプレビューを利用できないため簡易ビューアで表示します",
+          "viewer_error": "モデルビューアエラー"
         }
       }
     },

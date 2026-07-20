@@ -975,7 +975,9 @@
           "exported": "已写回体型修改",
           "exported_description": "写入 {{bytes}} 字节",
           "exported_with_log": "已更新位置缓冲并写入 변경사항.txt",
-          "export_failed": "写回位置缓冲失败"
+          "export_failed": "写回位置缓冲失败",
+          "viewer_fallback": "无法使用贴图预览，已回退到简易查看器",
+          "viewer_error": "模型查看器错误"
         }
       }
     },

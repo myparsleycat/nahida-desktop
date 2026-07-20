@@ -75,6 +75,13 @@ export type ModelViewerHandle = {
     setDoubleSided: (doubleSided: boolean) => Promise<void> | void;
 };
 
+export type ModelViewerBodyShapeOverride = {
+    meshNames: string[];
+    positions: Float32Array;
+    /** When set, enables vertexColors and writes RGB colors (vertexCount * 3). */
+    vertexColors?: Float32Array;
+};
+
 export type ModelViewerSurfaceProps = {
     className?: string;
     orientation: string;
@@ -83,6 +90,8 @@ export type ModelViewerSurfaceProps = {
     shapeKeys?: ModelViewerRealtimeShapeKey[];
     animationClip?: ModelViewerAnimationClip;
     animationFrame?: number;
+    /** Live position overrides for body-shape editing (skips shape keys / animation). */
+    bodyShapeOverrides?: ModelViewerBodyShapeOverride[];
     threeToneMapping?: ModelViewerThreeToneMapping;
     threeEnvironment?: ModelViewerThreeEnvironment;
     threeExposure?: number;

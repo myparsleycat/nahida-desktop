@@ -1,20 +1,36 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
+import { parseOrientation } from "@renderer/components/tools/model-viewer/model-viewer-contract";
 import {
   applyMultiRegionDeform,
   composeDisplayWeights,
   writeWeightColors,
   type ActiveRegionDeform,
 } from "@shared/body-shape";
-import { useEffect, useMemo, useRef } from "react";
+import {
+  type ElementRef,
+  forwardRef,
+  type MutableRefObject,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+} from "react";
 import {
   BufferAttribute,
   BufferGeometry,
   Color,
   DoubleSide,
+  Euler,
+  MathUtils,
   Mesh,
   MeshStandardMaterial,
+  Vector3,
 } from "three";
+
+export type BodyShapeViewportHandle = {
+  resetCamera: () => void;
+};
 
 export type BodyShapeViewportProps = {
   originalPositions: Float32Array;
@@ -25,27 +41,61 @@ export type BodyShapeViewportProps = {
   showWeights: boolean;
   /** Bumped when region selection or amounts change. */
   weightVersion: number;
+  orientation?: string;
 };
 
-export function BodyShapeViewport(props: BodyShapeViewportProps) {
-  return (
-    <div className="h-full min-h-[320px] w-full rounded-md border border-border bg-background">
-      <Canvas
-        camera={{ position: [0, 1.2, 2.4], fov: 45, near: 0.01, far: 500 }}
-        dpr={Math.min(window.devicePixelRatio, 2)}
-        gl={{ antialias: true, alpha: true }}
-      >
-        <color attach="background" args={["#12141a"]} />
-        <ambientLight intensity={0.55} />
-        <hemisphereLight intensity={0.7} groundColor="#3a3f4a" position={[0, 1, 0]} />
-        <directionalLight intensity={1.4} position={[4, 6, 5]} />
-        <directionalLight intensity={0.5} position={[-4, 2, -3]} />
-        <BodyShapeMesh {...props} />
-        <OrbitControls makeDefault enableDamping dampingFactor={0.12} />
-      </Canvas>
-    </div>
-  );
-}
+type OrbitControlsImpl = ElementRef<typeof OrbitControls>;
+
+export const BodyShapeViewport = forwardRef<BodyShapeViewportHandle, BodyShapeViewportProps>(
+  function BodyShapeViewport(props, ref) {
+    const controlsRef = useRef<OrbitControlsImpl | null>(null);
+    const resetCameraRef = useRef<(() => void) | null>(null);
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        resetCamera: () => resetCameraRef.current?.(),
+      }),
+      [],
+    );
+
+    const rotation = useMemo(() => {
+      const [roll, pitch, yaw] = parseOrientation(props.orientation ?? "0deg 0deg 0deg");
+      return new Euler(
+        MathUtils.degToRad(pitch),
+        MathUtils.degToRad(yaw),
+        MathUtils.degToRad(roll),
+        "YXZ",
+      );
+    }, [props.orientation]);
+
+    return (
+      <div className="h-full min-h-[320px] w-full rounded-md border border-border bg-background">
+        <Canvas
+          camera={{ position: [0, 1.2, 2.4], fov: 45, near: 0.01, far: 500 }}
+          dpr={Math.min(window.devicePixelRatio, 2)}
+          gl={{ antialias: true, alpha: true }}
+        >
+          <color attach="background" args={["#12141a"]} />
+          <ambientLight intensity={0.55} />
+          <hemisphereLight intensity={0.7} groundColor="#3a3f4a" position={[0, 1, 0]} />
+          <directionalLight intensity={1.4} position={[4, 6, 5]} />
+          <directionalLight intensity={0.5} position={[-4, 2, -3]} />
+          <group rotation={rotation}>
+            <BodyShapeMesh
+              {...props}
+              controlsRef={controlsRef}
+              onRegisterReset={(reset) => {
+                resetCameraRef.current = reset;
+              }}
+            />
+          </group>
+          <OrbitControls ref={controlsRef} makeDefault enableDamping dampingFactor={0.12} />
+        </Canvas>
+      </div>
+    );
+  },
+);
 
 function BodyShapeMesh({
   originalPositions,
@@ -55,9 +105,15 @@ function BodyShapeMesh({
   showOriginal,
   showWeights,
   weightVersion,
-}: BodyShapeViewportProps) {
+  controlsRef,
+  onRegisterReset,
+}: BodyShapeViewportProps & {
+  controlsRef: MutableRefObject<OrbitControlsImpl | null>;
+  onRegisterReset: (reset: () => void) => void;
+}) {
   const meshRef = useRef<Mesh>(null);
   const colorsRef = useRef(new Float32Array(Math.floor(originalPositions.length / 3) * 3));
+  const framedKeyRef = useRef<Float32Array | null>(null);
   const { camera } = useThree();
 
   const geometry = useMemo(() => {
@@ -125,12 +181,28 @@ function BodyShapeMesh({
     };
   }, [geometry, material]);
 
-  useEffect(() => {
+  const frameCamera = () => {
     if (!geometry.boundingSphere) return;
+    const center = geometry.boundingSphere.center;
     const radius = Math.max(geometry.boundingSphere.radius, 0.1);
-    camera.position.set(radius * 1.6, radius * 1.1, radius * 2.2);
-    camera.lookAt(geometry.boundingSphere.center);
+    camera.position.copy(new Vector3(radius * 1.6, radius * 1.1, radius * 2.2).add(center));
+    camera.lookAt(center);
     camera.updateProjectionMatrix();
+    const controls = controlsRef.current;
+    if (controls) {
+      controls.target.copy(center);
+      controls.update();
+    }
+  };
+
+  useEffect(() => {
+    onRegisterReset(frameCamera);
+  });
+
+  useEffect(() => {
+    if (framedKeyRef.current === originalPositions) return;
+    framedKeyRef.current = originalPositions;
+    frameCamera();
   }, [camera, geometry, originalPositions]);
 
   return <mesh ref={meshRef} geometry={geometry} material={material} />;
