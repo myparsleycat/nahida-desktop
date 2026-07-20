@@ -51,7 +51,7 @@ if (IS_ELECTRON) {
 
 crashReporter.start({
     productName: "NahidaDesktop",
-    companyName: "nahida",
+    globalExtra: { _companyName: "nahida" },
     submitURL: "",
     uploadToServer: false,
     ignoreSystemCrashHandler: true,
