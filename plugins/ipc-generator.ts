@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+
 import type { Plugin } from "vite";
 
 interface IpcGeneratorOptions {
@@ -141,6 +142,8 @@ function generateIpc(options: IpcGeneratorOptions) {
                 }
 
                 // function call in arrow/return: => d.foo.bar(...) or return d.foo.bar(...)
+                // Use inline import type so the symbol resolves across the renderer tsconfig boundary,
+                // which does not include src/main/**/*.
                 const returnMatch = impl.match(
                     /(?:return|=>)\s*(?:await\s+)?(?:desktop|d)\.([a-zA-Z0-9_$.]+)\(/,
                 );
@@ -149,23 +152,38 @@ function generateIpc(options: IpcGeneratorOptions) {
                     const methodPath = returnMatch[1];
                     channels.set(
                         channel,
-                        `(...args: Parameters<typeof desktop.${methodPath}>) => ReturnType<typeof desktop.${methodPath}>`,
+                        `(...args: Parameters<typeof import("@main/index").desktop.${methodPath}>) => ReturnType<typeof import("@main/index").desktop.${methodPath}>`,
                     );
-                } else {
-                    //simple imported function call: => myFunc(...)
-                    const bareReturnMatch = impl.match(
-                        /(?:return|=>)\s*(?:await\s+)?([a-zA-Z0-9_$]+)\(/,
-                    );
-                    if (bareReturnMatch && importMap.has(bareReturnMatch[1])) {
-                        const importRef = importMap.get(bareReturnMatch[1]);
-                        channels.set(
-                            channel,
-                            `(...args: Parameters<typeof ${importRef}>) => ReturnType<typeof ${importRef}>`,
-                        );
-                    } else {
-                        channels.set(channel, `(...args: any[]) => any`);
-                    }
+                    continue;
                 }
+
+                // property access in arrow/return: => d.foo.bar (no trailing call)
+                // e.g. gamebanana:getGames returns d.service.gamebanana.games
+                const propertyMatch = impl.match(
+                    /(?:return|=>)\s*(?:await\s+)?(?:desktop|d)\.([a-zA-Z0-9_$.]+)/,
+                );
+
+                if (propertyMatch) {
+                    channels.set(
+                        channel,
+                        `() => typeof import("@main/index").desktop.${propertyMatch[1]}`,
+                    );
+                    continue;
+                }
+
+                //simple imported function call: => myFunc(...)
+                const bareReturnMatch = impl.match(
+                    /(?:return|=>)\s*(?:await\s+)?([a-zA-Z0-9_$]+)\(/,
+                );
+                if (bareReturnMatch && importMap.has(bareReturnMatch[1])) {
+                    const importRef = importMap.get(bareReturnMatch[1]);
+                    channels.set(
+                        channel,
+                        `(...args: Parameters<typeof ${importRef}>) => ReturnType<typeof ${importRef}>`,
+                    );
+                    continue;
+                }
+                channels.set(channel, `(...args: any[]) => any`);
             }
         }
 

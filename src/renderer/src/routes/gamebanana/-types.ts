@@ -25,8 +25,8 @@ export interface GameBananaBreadcrumbItem {
 }
 
 export type SubmissionListItem = GameSubfeedData["_aRecords"][number];
-export type PreviewMedia = NonNullable<SubmissionListItem["_aPreviewMedia"]>;
-export type PreviewImage = NonNullable<PreviewMedia["_aImages"]>[number];
+export type PreviewMedia = NonNullable<SubmissionListItem["_aPreviewContent"]>;
+export type PreviewImage = NonNullable<PreviewMedia["screenshots"]>[number];
 export type RootCategoryItem = GameOverviewData["profile"]["_aModRootCategories"][number];
 export type CategoryChildItem = CategoryOverviewData["categories"][number];
 export type ModFileItem = NonNullable<ModOverviewData["profile"]["_aFiles"]>[number];

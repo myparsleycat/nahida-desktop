@@ -1,10 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import type { TFunction } from "i18next";
+
+import type { GameBananaSubmissionSelection, GameSubfeedQuery } from "../-types";
+
 import { SubmissionCard } from "../-cards/submission-card";
 import { ErrorState, OverviewSkeleton, PaginationButtons } from "../-shared/common";
 import { getGameBananaErrorPresentation } from "../-shared/errors";
-import type { GameBananaSubmissionSelection, GameSubfeedQuery } from "../-types";
 import { getSubmissionDateKey } from "../-utils";
 
 export function GameHomePanel({
@@ -36,7 +38,7 @@ export function GameHomePanel({
         className="h-full min-h-0 min-w-0"
         viewportClassName="overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!w-full [&>div]:max-w-full"
       >
-        <div className="min-w-0 max-w-full space-y-4 p-4">
+        <div className="max-w-full min-w-0 space-y-4 p-4">
           <Card className="flex h-full min-h-0 flex-col p-0">
             <CardHeader>
               <div className="flex items-center justify-between gap-3 pt-3">
@@ -65,8 +67,8 @@ export function GameHomePanel({
                       details={errorPresentation.details}
                     />
                   )}
-                  <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                    {subfeedQuery.data?._aRecords.map((submission) => (
+                  <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-4">
+                    {getFeedRecords(subfeedQuery).map((submission) => (
                       <SubmissionCard
                         key={`feed-${submission._idRow}-${getSubmissionDateKey(submission)}`}
                         submission={submission}
@@ -88,4 +90,8 @@ export function GameHomePanel({
       </ScrollArea>
     </>
   );
+}
+
+function getFeedRecords(query: GameSubfeedQuery) {
+  return query.data?._aRecords.filter((record) => record._sModelName === "Mod") ?? [];
 }

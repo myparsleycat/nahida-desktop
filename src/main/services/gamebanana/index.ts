@@ -57,7 +57,7 @@ type ManualRmcSaveResult =
 
 export class GameBananaService {
     public readonly games = gameBananaGames;
-    private readonly apiBaseUrl = "https://gamebanana.com/apiv12";
+    private readonly apiBaseUrl = "https://gamebanana.com/apiv13";
     private readonly loginUrl = "https://gamebanana.com/members/account/login";
     private readonly logoutUrl = "https://gamebanana.com/members/account/logout";
     private readonly authUrls = [
@@ -501,7 +501,10 @@ export class GameBananaService {
                 this.loginWindow = loginWindow;
                 const webRequest = loginWindow.webContents.session.webRequest;
 
+                let cleanedUp = false;
                 const cleanup = () => {
+                    if (cleanedUp) return;
+                    cleanedUp = true;
                     webRequest.onHeadersReceived(null as never);
                     if (this.loginWindow === loginWindow) {
                         this.loginWindow = null;
@@ -522,26 +525,23 @@ export class GameBananaService {
                         if (cookie) {
                             try {
                                 await this.saveCookie(cookie);
-                                callback({
-                                    cancel: false,
-                                    responseHeaders: details.responseHeaders,
-                                });
                                 resolveOnce(cookie);
-                                if (!loginWindow.isDestroyed()) {
-                                    loginWindow.close();
-                                }
-                                return;
                             } catch {
-                                callback({
-                                    cancel: false,
-                                    responseHeaders: details.responseHeaders,
-                                });
                                 rejectOnce(new Error("GAMEBANANA_AUTH_FAILED"));
+                            }
+                            callback({
+                                cancel: false,
+                                responseHeaders: details.responseHeaders,
+                            });
+                            // close()를 webRequest 콜백 내부에서 동기 호출하면
+                            // Chromium 네트워크 스택 처리 중 webContents/세션이 teardown 되어
+                            // 네이티브 크래시(0xFFFF0003)가 발생함. 콜백 반환 후 close.
+                            setImmediate(() => {
                                 if (!loginWindow.isDestroyed()) {
                                     loginWindow.close();
                                 }
-                                return;
-                            }
+                            });
+                            return;
                         }
 
                         callback({ cancel: false, responseHeaders: details.responseHeaders });
@@ -741,15 +741,15 @@ export class GameBananaService {
     }
 
     private getModPreviewUrl(profile: Awaited<ReturnType<GameBananaService["getModProfile"]>>) {
-        const preview = profile._aPreviewMedia?._aImages?.[0];
+        const preview = profile._aPreviewContent?.screenshots?.[0];
         if (!preview) {
             return null;
         }
 
         const absoluteUrl = [
             preview._sFile,
-            preview._sFile800,
             preview._sFile530,
+            preview._sFile220,
             preview._sUrl,
         ].find((value) => Boolean(value && /^https?:\/\//i.test(value)));
         if (absoluteUrl) {
@@ -758,8 +758,8 @@ export class GameBananaService {
 
         const relativeUrl = [
             preview._sFile,
-            preview._sFile800,
             preview._sFile530,
+            preview._sFile220,
             preview._sUrl,
         ].find(Boolean);
         if (!relativeUrl || !preview._sBaseUrl) {
