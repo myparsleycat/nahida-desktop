@@ -10,7 +10,7 @@ import { getGameBananaErrorPresentation } from "../-shared/errors";
 import { getSubmissionDateKey } from "../-utils";
 
 function getFeedRecords(query: GameSubfeedQuery) {
-  return query.data?._aRecords.filter((record) => record._sModelName === "Mod");
+  return query.data?._aRecords.filter((record) => record._sModelName === "Mod") ?? [];
 }
 
 export function GameHomePanel({
