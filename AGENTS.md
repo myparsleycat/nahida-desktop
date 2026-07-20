@@ -116,6 +116,50 @@ function requireConfig(input: unknown) {
 - Prefer Effect schema helpers such as `Schema.UnknownFromJsonString` and `Schema.decodeUnknownOption` over manual `JSON.parse` wrapped in `Effect.try` when parsing untrusted JSON strings.
 - Add comments for non-obvious constraints and surprising behavior, not for obvious assignments or control flow.
 
+## Performance
+
+### High-Frequency Visual Feedback
+
+When only a visual attribute (e.g. vertex colors, heatmap) changes frequently but the underlying data (positions, geometry) stays the same, do not use React state to trigger re-renders. Use refs and imperative method calls instead.
+
+React's declarative model has high overhead for high-frequency updates: state change → memo re-execution → JSX diff → child component reconciliation → Canvas/Three.js commit. On large meshes (100k+ vertices) this can cost 200ms+ per update even when the actual computation is only 5ms.
+
+```tsx
+// Good — ref + imperative call, no React re-render
+const previewKeyRef = useRef<string | null>(null);
+
+const handleItemHighlighted = (item) => {
+  previewKeyRef.current = item?.key ?? null;
+  viewportRef.current?.updateColors(buildHighlightRegions(mesh, previewKeyRef.current));
+};
+
+// Imperative handle on the child component
+useImperativeHandle(ref, () => ({
+  updateColors: (regions) => {
+    const displayWeights = composeDisplayWeights(vertexCount, regions, { ignoreAmount: true });
+    writeWeightColors(displayWeights, colorsRef.current);
+    colorAttribute.needsUpdate = true;
+  },
+}), []);
+```
+
+```tsx
+// Bad — state change triggers full React re-render pipeline
+const [previewKey, setPreviewKey] = useState<string | null>(null);
+const [colorVersion, setColorVersion] = useState(0);
+
+const handleItemHighlighted = (item) => {
+  setPreviewKey(item?.key ?? null);
+  setColorVersion((v) => v + 1); // triggers 4 memos + JSX re-render + Canvas commit
+};
+```
+
+Guidelines:
+- Use refs (`useRef`) for values that only affect imperative visual output, not React-rendered UI
+- Expose imperative methods via `useImperativeHandle` on child components (e.g. `updateColors`, `updatePositions`)
+- Keep React state for values that affect JSX structure or text content
+- When positions change but only rarely, a `positionsChanged` boolean can skip expensive `computeVertexNormals` / `computeBoundingSphere` calls when positions are unchanged
+
 ## Type Checking
 
 - Do not run tsc directly; instead, execute pnpm lint -- file/to/path file/to/path2.

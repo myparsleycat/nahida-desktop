@@ -5,27 +5,12 @@ import {
 import {
   formatOrientation,
   parseOrientation,
-  type ModelViewerBodyShapeOverride,
-  type ModelViewerHandle,
-  type ModelViewerThreeEnvironment,
-  type ModelViewerThreeToneMapping,
 } from "@renderer/components/tools/model-viewer/model-viewer-contract";
 import {
   DEFAULT_MODEL_ORIENTATION,
   DEFAULT_THREE_EXPOSURE,
 } from "@renderer/components/tools/model-viewer/model-viewer-dialog-types";
-import {
-  clampThreeExposure,
-  normalizeThreeEnvironment,
-  normalizeThreeToneMapping,
-  withCacheBuster,
-} from "@renderer/components/tools/model-viewer/model-viewer-dialog-utils";
 import { ModelViewerMenuBar } from "@renderer/components/tools/model-viewer/model-viewer-menu-bar";
-import {
-  cleanupModelViewerUrl,
-  modelViewerSourceToUrl,
-} from "@renderer/components/tools/model-viewer/model-viewer-session";
-import { ThreeModelViewer } from "@renderer/components/tools/model-viewer/three-model-viewer";
 import { Button } from "@renderer/components/ui/button";
 import {
   Combobox,
@@ -49,7 +34,6 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Switch } from "@renderer/components/ui/switch";
-import { getSetting, setSetting } from "@renderer/lib/settings";
 import {
   applyMultiRegionDeform,
   BODY_REGION_IDS,
@@ -61,7 +45,6 @@ import {
   extractBoneWeights,
   generateRegionWeights,
   REGION_PRESETS,
-  writeWeightColors,
   type ActiveRegionDeform,
   type BlendBoneInfo,
   type BodyRegionId,
@@ -102,7 +85,6 @@ type LoadedMesh = {
   indices?: Uint32Array;
   vectorPath?: string;
   vectorLayout?: "snorm8-tangent-normal" | null;
-  glbMeshNames: string[];
   blendBytes?: Uint8Array;
   blendStride: number;
   bones: BlendBoneInfo[];
@@ -113,12 +95,6 @@ type LoadResult = {
   modRoot: string;
   iniPath: string;
   meshes: LoadedMesh[];
-};
-
-type ViewerSession = {
-  glbPath: string;
-  memorySessionId?: string;
-  url: string;
 };
 
 function toFloat32(value: unknown): Float32Array {
@@ -197,18 +173,21 @@ function getOrCreateWeights(mesh: LoadedMesh, source: WeightSource): Float32Arra
   return weights;
 }
 
-async function cleanupViewerSession(session: ViewerSession | null) {
-  if (!session) return;
-  cleanupModelViewerUrl(session.url);
-  try {
-    await window.api.invoke(
-      "tools:cleanupStaticGlbViewerFile",
-      session.glbPath,
-      session.memorySessionId,
-    );
-  } catch (error) {
-    console.warn("Failed to clean up body shape viewer session", error);
-  }
+function buildHighlightRegions(mesh: LoadedMesh, previewKey: string | null): ActiveRegionDeform[] {
+  if (!previewKey) return [];
+  const source = parseWeightKey(previewKey);
+  if (!source) return [];
+  const weights = getOrCreateWeights(mesh, source);
+  const boundsCenter = computeBoundingCenter(mesh.originalPositions);
+  return [
+    {
+      id: previewKey,
+      weights,
+      amount: 1,
+      axisScale: [1, 1, 1],
+      pivot: computeRegionPivot(mesh.originalPositions, weights, boundsCenter),
+    },
+  ];
 }
 
 export default function BodyShapeTool({
@@ -225,11 +204,8 @@ export default function BodyShapeTool({
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [loaded, setLoaded] = useState<LoadResult | null>(null);
-  const [viewerSession, setViewerSession] = useState<ViewerSession | null>(null);
-  const [viewerReady, setViewerReady] = useState(false);
   const [selectedMeshId, setSelectedMeshId] = useState<string>("");
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-  const [previewKey, setPreviewKey] = useState<string | null>(null);
   const [controls, setControls] = useState<Record<string, DeformControl>>({});
   const [unifiedControl, setUnifiedControl] = useState<DeformControl>(DEFAULT_UNIFIED_CONTROL);
   const [controlMode, setControlMode] = useState<ControlMode>("unified");
@@ -237,16 +213,13 @@ export default function BodyShapeTool({
   const [showWeights, setShowWeights] = useState(true);
   const [weightVersion, setWeightVersion] = useState(0);
   const [modelOrientation, setModelOrientation] = useState(DEFAULT_MODEL_ORIENTATION);
-  const [doubleSidedEnabled, setDoubleSidedEnabled] = useState(true);
-  const [threeToneMapping, setThreeToneMapping] = useState<ModelViewerThreeToneMapping>("neutral");
-  const [threeEnvironment, setThreeEnvironment] = useState<ModelViewerThreeEnvironment>("studio");
-  const [threeExposure, setThreeExposure] = useState(DEFAULT_THREE_EXPOSURE);
   const isFixedTarget = Boolean(fixedTargetPath);
-  const viewerRef = useRef<ModelViewerHandle | null>(null);
   const simpleViewportRef = useRef<BodyShapeViewportHandle | null>(null);
-  const initialCameraStateRef = useRef<ReturnType<ModelViewerHandle["captureCameraState"]>>(null);
-  const viewerSessionRef = useRef<ViewerSession | null>(null);
-  const weightColorsRef = useRef<Float32Array | null>(null);
+  const prevPositionInputsRef = useRef<{
+    regions: readonly ActiveRegionDeform[] | null;
+    showOriginal: boolean;
+  }>({ regions: null, showOriginal: false });
+  const previewKeyRef = useRef<string | null>(null);
 
   const selectedMesh = useMemo(() => {
     if (!loaded) return null;
@@ -293,112 +266,26 @@ export default function BodyShapeTool({
     });
   }, [selectedMesh, selectedKeys, controls, unifiedControl, controlMode, weightVersion]);
 
-  /** Heatmap regions: list highlight preview, else committed selection. */
-  const displayRegions: ActiveRegionDeform[] = useMemo(() => {
-    if (!selectedMesh) return [];
-    if (previewKey) {
-      const source = parseWeightKey(previewKey);
-      if (!source) return [];
-      const weights = getOrCreateWeights(selectedMesh, source);
-      const boundsCenter = computeBoundingCenter(selectedMesh.originalPositions);
-      return [
-        {
-          id: previewKey,
-          weights,
-          amount: 1,
-          axisScale: [1, 1, 1],
-          pivot: computeRegionPivot(selectedMesh.originalPositions, weights, boundsCenter),
-        },
-      ];
-    }
-    return activeRegions;
-  }, [selectedMesh, previewKey, activeRegions, weightVersion]);
-
   const metrics = useMemo(() => {
     if (!selectedMesh) return null;
     if (showOriginal || activeRegions.length === 0) {
       selectedMesh.previewPositions.set(selectedMesh.originalPositions);
-    } else {
-      applyMultiRegionDeform({
-        originalPositions: selectedMesh.originalPositions,
-        previewPositions: selectedMesh.previewPositions,
-        regions: activeRegions,
-      });
+      return displacementMetrics(selectedMesh.originalPositions, selectedMesh.previewPositions);
     }
+    applyMultiRegionDeform({
+      originalPositions: selectedMesh.originalPositions,
+      previewPositions: selectedMesh.previewPositions,
+      regions: activeRegions,
+    });
     return displacementMetrics(selectedMesh.originalPositions, selectedMesh.previewPositions);
   }, [selectedMesh, activeRegions, showOriginal, weightVersion]);
 
-  const bodyShapeOverrides = useMemo((): ModelViewerBodyShapeOverride[] | undefined => {
-    if (!selectedMesh || selectedMesh.glbMeshNames.length === 0) return undefined;
-
-    if (showOriginal || activeRegions.length === 0) {
-      selectedMesh.previewPositions.set(selectedMesh.originalPositions);
-    } else {
-      applyMultiRegionDeform({
-        originalPositions: selectedMesh.originalPositions,
-        previewPositions: selectedMesh.previewPositions,
-        regions: activeRegions,
-      });
-    }
-
-    let vertexColors: Float32Array | undefined;
-    if (showWeights && displayRegions.length > 0 && !showOriginal) {
-      const displayWeights = composeDisplayWeights(selectedMesh.vertexCount, displayRegions, {
-        ignoreAmount: true,
-      });
-      if (
-        !weightColorsRef.current ||
-        weightColorsRef.current.length !== selectedMesh.vertexCount * 3
-      ) {
-        weightColorsRef.current = new Float32Array(selectedMesh.vertexCount * 3);
-      }
-      writeWeightColors(displayWeights, weightColorsRef.current);
-      vertexColors = weightColorsRef.current;
-    }
-
-    return [
-      {
-        meshNames: selectedMesh.glbMeshNames,
-        positions: selectedMesh.previewPositions,
-        vertexColors,
-      },
-    ];
-  }, [selectedMesh, activeRegions, displayRegions, showOriginal, showWeights, weightVersion]);
-
+  const positionsChanged =
+    prevPositionInputsRef.current.regions !== activeRegions ||
+    prevPositionInputsRef.current.showOriginal !== showOriginal;
   useEffect(() => {
-    viewerSessionRef.current = viewerSession;
-  }, [viewerSession]);
-
-  useEffect(() => {
-    return () => {
-      void cleanupViewerSession(viewerSessionRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    void Promise.all([
-      getSetting("modelViewer.toneMapping"),
-      getSetting("modelViewer.environment"),
-      getSetting("modelViewer.exposure"),
-    ])
-      .then(([toneMapping, environment, exposure]) => {
-        if (cancelled) return;
-        setThreeToneMapping(normalizeThreeToneMapping(toneMapping));
-        setThreeEnvironment(normalizeThreeEnvironment(environment));
-        setThreeExposure(clampThreeExposure(exposure));
-      })
-      .catch((error) => {
-        console.error("Failed to load model viewer rendering settings", error);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    void viewerRef.current?.setDoubleSided(doubleSidedEnabled);
-  }, [doubleSidedEnabled, viewerReady]);
+    prevPositionInputsRef.current = { regions: activeRegions, showOriginal };
+  }, [activeRegions, showOriginal]);
 
   const selectFolder = async () => {
     const selected = await window.api.invoke("util:showOpenDialog", {
@@ -411,9 +298,6 @@ export default function BodyShapeTool({
   const loadMod = async (path = modPath) => {
     if (!path || loading) return;
     setLoading(true);
-    setViewerReady(false);
-    initialCameraStateRef.current = null;
-    const previousSession = viewerSessionRef.current;
     try {
       const result = await window.api.invoke("tools:bodyShapeLoadMod", path);
       const meshes: LoadedMesh[] = result.meshes.map((mesh) => {
@@ -430,7 +314,6 @@ export default function BodyShapeTool({
           indices: toUint32(mesh.indices),
           vectorPath: mesh.vectorPath,
           vectorLayout: mesh.vectorLayout ?? null,
-          glbMeshNames: mesh.glbMeshNames ?? [],
           blendBytes: toUint8(mesh.blendBytes),
           blendStride: mesh.blendStride ?? DEFAULT_BLEND_STRIDE,
           bones: mesh.bones ?? [],
@@ -444,32 +327,13 @@ export default function BodyShapeTool({
       });
       setSelectedMeshId(meshes[0]?.id ?? "");
       setSelectedKeys([]);
-      setPreviewKey(null);
+      previewKeyRef.current = null;
       setControls({});
       setUnifiedControl(DEFAULT_UNIFIED_CONTROL);
       setControlMode("unified");
       setWeightVersion((v) => v + 1);
       setModelOrientation(DEFAULT_MODEL_ORIENTATION);
       setShowWeights(true);
-
-      let nextSession: ViewerSession | null = null;
-      try {
-        const preview = await window.api.invoke("tools:convertStaticGlbForViewer", path);
-        const glbPath = preview.mode === "variant-set" ? preview.activeGlbPath : preview.glbPath;
-        nextSession = {
-          glbPath,
-          memorySessionId: preview.memorySessionId,
-          url: withCacheBuster(modelViewerSourceToUrl(glbPath)),
-        };
-      } catch (error) {
-        console.warn("Body shape textured preview unavailable", error);
-        toast.message(t("page.tools.body_shape.toast.viewer_fallback"), {
-          description: toErrorMessage(error),
-        });
-      }
-
-      setViewerSession(nextSession);
-      void cleanupViewerSession(previousSession);
 
       toast.success(t("page.tools.body_shape.toast.loaded"), {
         description: t("page.tools.body_shape.toast.loaded_description", {
@@ -509,12 +373,10 @@ export default function BodyShapeTool({
 
   const handleItemHighlighted = (item: { key: string; label: string } | undefined) => {
     const next = item?.key ?? null;
-    setPreviewKey(next);
-    if (next && selectedMesh) {
-      const source = parseWeightKey(next);
-      if (source) getOrCreateWeights(selectedMesh, source);
-    }
-    setWeightVersion((v) => v + 1);
+    previewKeyRef.current = next;
+    if (!selectedMesh) return;
+    const regions = buildHighlightRegions(selectedMesh, next);
+    simpleViewportRef.current?.updateColors(regions);
   };
 
   const updateAmount = (key: string, amount: number) => {
@@ -577,39 +439,7 @@ export default function BodyShapeTool({
 
   const handleResetView = () => {
     setModelOrientation(DEFAULT_MODEL_ORIENTATION);
-    if (viewerSession) {
-      if (initialCameraStateRef.current) {
-        viewerRef.current?.restoreCameraState(initialCameraStateRef.current, {
-          includeFieldOfView: true,
-        });
-        return;
-      }
-      void viewerRef.current?.updateFraming();
-      return;
-    }
     simpleViewportRef.current?.resetCamera();
-  };
-
-  const updateThreeToneMapping = (value: ModelViewerThreeToneMapping) => {
-    setThreeToneMapping(value);
-    void setSetting("modelViewer.toneMapping", value).catch((error) => {
-      console.error("Failed to persist model viewer tone mapping", error);
-    });
-  };
-
-  const updateThreeEnvironment = (value: ModelViewerThreeEnvironment) => {
-    setThreeEnvironment(value);
-    void setSetting("modelViewer.environment", value).catch((error) => {
-      console.error("Failed to persist model viewer environment", error);
-    });
-  };
-
-  const updateThreeExposure = (value: number) => {
-    const nextValue = clampThreeExposure(value);
-    setThreeExposure(nextValue);
-    void setSetting("modelViewer.exposure", nextValue).catch((error) => {
-      console.error("Failed to persist model viewer exposure", error);
-    });
   };
 
   const exportMesh = async () => {
@@ -668,7 +498,6 @@ export default function BodyShapeTool({
     }
   };
 
-  const useTexturedViewer = !!viewerSession && !!selectedMesh;
   const selectedItems = selectableItems.filter((item) => selectedKeys.includes(item.key));
 
   return (
@@ -677,66 +506,40 @@ export default function BodyShapeTool({
         <ModelViewerMenuBar
           rotateModel={rotateModel}
           onResetView={handleResetView}
-          doubleSidedEnabled={doubleSidedEnabled}
-          onDoubleSidedChange={setDoubleSidedEnabled}
-          toneMapping={threeToneMapping}
-          onToneMappingChange={updateThreeToneMapping}
-          environment={threeEnvironment}
-          onEnvironmentChange={updateThreeEnvironment}
-          exposure={threeExposure}
-          onExposureDraftChange={setThreeExposure}
-          onExposureCommit={updateThreeExposure}
+          doubleSidedEnabled={true}
+          onDoubleSidedChange={() => {}}
+          toneMapping="neutral"
+          onToneMappingChange={() => {}}
+          environment="studio"
+          onEnvironmentChange={() => {}}
+          exposure={DEFAULT_THREE_EXPOSURE}
+          onExposureDraftChange={() => {}}
+          onExposureCommit={() => {}}
           showToggleViewer={false}
           isViewerBusy={loading}
           onSaveTogglesToIni={() => {}}
           onResetToggles={() => {}}
           canSaveCapturedPreview={false}
           onCapturePreviewClick={() => {}}
-          showTextureMenu={useTexturedViewer}
-          showRenderingMenu={useTexturedViewer}
+          showTextureMenu={false}
+          showRenderingMenu={false}
           showMiscMenu={false}
         />
       ) : null}
 
       <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="relative min-h-80 overflow-hidden rounded-md border bg-muted/30">
-          {selectedMesh && viewerSession ? (
-            <ThreeModelViewer
-              ref={viewerRef}
-              className="absolute inset-0 h-full w-full"
-              src={viewerSession.url}
-              orientation={modelOrientation}
-              bodyShapeOverrides={bodyShapeOverrides}
-              threeToneMapping={threeToneMapping}
-              threeEnvironment={threeEnvironment}
-              threeExposure={threeExposure}
-              onLoad={() => {
-                setViewerReady(true);
-                void (async () => {
-                  await viewerRef.current?.setDoubleSided(doubleSidedEnabled);
-                  if (!initialCameraStateRef.current) {
-                    await viewerRef.current?.updateFraming();
-                    initialCameraStateRef.current = viewerRef.current?.captureCameraState() ?? null;
-                  }
-                })();
-              }}
-              onError={(error) => {
-                toast.error(t("page.tools.body_shape.toast.viewer_error"), {
-                  description: toErrorMessage(error),
-                });
-              }}
-            />
-          ) : selectedMesh ? (
+          {selectedMesh ? (
             <BodyShapeViewport
               ref={simpleViewportRef}
               originalPositions={selectedMesh.originalPositions}
               previewPositions={selectedMesh.previewPositions}
               regions={activeRegions}
-              displayRegions={displayRegions}
               indices={selectedMesh.indices}
               showOriginal={showOriginal}
               showWeights={showWeights}
               weightVersion={weightVersion}
+              positionsChanged={positionsChanged}
               orientation={modelOrientation}
             />
           ) : (
@@ -805,7 +608,7 @@ export default function BodyShapeTool({
                         if (value) {
                           setSelectedMeshId(value);
                           setSelectedKeys([]);
-                          setPreviewKey(null);
+                          previewKeyRef.current = null;
                           setControls({});
                           setUnifiedControl(DEFAULT_UNIFIED_CONTROL);
                           setWeightVersion((v) => v + 1);
@@ -853,8 +656,10 @@ export default function BodyShapeTool({
                       onItemHighlighted={handleItemHighlighted}
                       onOpenChange={(open) => {
                         if (!open) {
-                          setPreviewKey(null);
-                          setWeightVersion((v) => v + 1);
+                          previewKeyRef.current = null;
+                          if (selectedMesh) {
+                            simpleViewportRef.current?.updateColors(activeRegions);
+                          }
                         }
                       }}
                       itemToStringLabel={(item) => item.label}
@@ -922,13 +727,13 @@ export default function BodyShapeTool({
                     />
                   </div>
 
-                  {selectedKeys.length === 0 && !previewKey ? (
+                  {selectedKeys.length === 0 ? (
                     <p className="text-xs text-muted-foreground">
                       {useBones
                         ? t("page.tools.body_shape.select_bones_hint")
                         : t("page.tools.body_shape.select_regions_hint")}
                     </p>
-                  ) : selectedKeys.length === 0 ? null : controlMode === "unified" ? (
+                  ) : controlMode === "unified" ? (
                     <div className="space-y-2 rounded-md border bg-background/50 p-3">
                       <div className="text-sm font-medium">
                         {t("page.tools.body_shape.unified_controls_title", {

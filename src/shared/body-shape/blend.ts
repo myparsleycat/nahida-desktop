@@ -1,8 +1,16 @@
-/** WWMI Blend.buf: 4×u8 bone indices @0, 4×u8 weights @8 (sum≈255), stride typically 16. */
+/**
+ * WWMI Blend.buf layouts:
+ *  - padded (stride 16): 4×u8 bone indices @0, 4×u8 weights @8 (sum≈255).
+ *  - compact (stride 8): 4×u8 bone indices @0, 4×u8 weights @4 (sum≈255).
+ * WWMI Tools v1.5+ emits the compact 8-byte layout; older builds use padded 16-byte.
+ */
 export const BLEND_INDICES_OFFSET = 0;
 export const BLEND_WEIGHTS_OFFSET = 8;
 export const BLEND_INFLUENCE_COUNT = 4;
 export const DEFAULT_BLEND_STRIDE = 16;
+
+/** Stride below this is treated as compact (weights at offset 4); else padded (offset 8). */
+const COMPACT_STRIDE_THRESHOLD = 12;
 
 export type BlendBoneInfo = {
     id: number;
@@ -16,12 +24,16 @@ export type ParsedBlendBuffer = {
     bones: BlendBoneInfo[];
 };
 
+function weightsOffsetFor(stride: number): number {
+    return stride < COMPACT_STRIDE_THRESHOLD ? 4 : BLEND_WEIGHTS_OFFSET;
+}
+
 export function validateBlendBuffer(
     byteLength: number,
     vertexCount: number,
     stride = DEFAULT_BLEND_STRIDE,
 ): { ok: true; vertexCount: number } | { ok: false; reason: string } {
-    if (stride < BLEND_WEIGHTS_OFFSET + BLEND_INFLUENCE_COUNT) {
+    if (stride < BLEND_INFLUENCE_COUNT * 2) {
         return { ok: false, reason: `Blend stride too small: ${stride}` };
     }
     if (vertexCount <= 0) {
@@ -43,12 +55,13 @@ export function listBlendBones(
 ): BlendBoneInfo[] {
     const counts = new Map<number, number>();
     const limit = Math.min(vertexCount, Math.floor(bytes.byteLength / stride));
+    const weightsOffset = weightsOffsetFor(stride);
 
     for (let i = 0; i < limit; i++) {
         const base = i * stride;
         let influenced = false;
         for (let k = 0; k < BLEND_INFLUENCE_COUNT; k++) {
-            if (bytes[base + BLEND_WEIGHTS_OFFSET + k] === 0) continue;
+            if (bytes[base + weightsOffset + k] === 0) continue;
             const boneId = bytes[base + BLEND_INDICES_OFFSET + k];
             counts.set(boneId, (counts.get(boneId) ?? 0) + 1);
             influenced = true;
@@ -70,13 +83,14 @@ export function extractBoneWeights(
 ): Float32Array {
     const weights = new Float32Array(vertexCount);
     const limit = Math.min(vertexCount, Math.floor(bytes.byteLength / stride));
+    const weightsOffset = weightsOffsetFor(stride);
 
     for (let i = 0; i < limit; i++) {
         const base = i * stride;
         let w = 0;
         for (let k = 0; k < BLEND_INFLUENCE_COUNT; k++) {
             if (bytes[base + BLEND_INDICES_OFFSET + k] !== boneId) continue;
-            const nw = bytes[base + BLEND_WEIGHTS_OFFSET + k] / 255;
+            const nw = bytes[base + weightsOffset + k] / 255;
             if (nw > w) w = nw;
         }
         weights[i] = w;
@@ -92,11 +106,12 @@ export function influencesAtVertex(
     stride = DEFAULT_BLEND_STRIDE,
 ): Array<{ boneId: number; weight: number }> {
     const base = vertexIndex * stride;
-    if (base + BLEND_WEIGHTS_OFFSET + BLEND_INFLUENCE_COUNT > bytes.byteLength) return [];
+    const weightsOffset = weightsOffsetFor(stride);
+    if (base + weightsOffset + BLEND_INFLUENCE_COUNT > bytes.byteLength) return [];
 
     const out: Array<{ boneId: number; weight: number }> = [];
     for (let k = 0; k < BLEND_INFLUENCE_COUNT; k++) {
-        const weight = bytes[base + BLEND_WEIGHTS_OFFSET + k] / 255;
+        const weight = bytes[base + weightsOffset + k] / 255;
         if (weight <= 0) continue;
         out.push({
             boneId: bytes[base + BLEND_INDICES_OFFSET + k],

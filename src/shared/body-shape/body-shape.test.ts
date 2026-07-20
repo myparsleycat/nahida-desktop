@@ -277,6 +277,47 @@ describe("body-shape blend bones", () => {
         const ranked = rankBonesAtVertices(bytes, [1, 2], 16);
         assert.equal(ranked[0]?.boneId, 7);
     });
+
+    it("parses compact 8-byte stride layout (indices@0 weights@4)", () => {
+        // 3 verts, stride 8: indices@0 weights@4 (WWMI Tools v1.5+ compact layout)
+        const bytes = new Uint8Array(24);
+        // v0: bone 3 weight 255
+        bytes[0] = 3;
+        bytes[4] = 255;
+        // v1: bone 3 w=128, bone 7 w=127
+        bytes[8] = 3;
+        bytes[9] = 7;
+        bytes[12] = 128;
+        bytes[13] = 127;
+        // v2: bone 7 weight 255
+        bytes[16] = 7;
+        bytes[20] = 255;
+
+        const bones = listBlendBones(bytes, 3, 8);
+        assert.deepEqual(
+            bones.map((b) => b.id),
+            [3, 7],
+        );
+        assert.equal(bones.find((b) => b.id === 3)?.vertexCount, 2);
+        assert.equal(bones.find((b) => b.id === 7)?.vertexCount, 2);
+
+        const w3 = extractBoneWeights(bytes, 3, 3, 8);
+        assert.ok(Math.abs(w3[0] - 1) < 1e-6);
+        assert.ok(Math.abs(w3[1] - 128 / 255) < 1e-6);
+        assert.equal(w3[2], 0);
+
+        const w7 = extractBoneWeights(bytes, 7, 3, 8);
+        assert.equal(w7[0], 0);
+        assert.ok(Math.abs(w7[1] - 127 / 255) < 1e-6);
+        assert.ok(Math.abs(w7[2] - 1) < 1e-6);
+
+        const at1 = influencesAtVertex(bytes, 1, 8);
+        assert.equal(at1[0]?.boneId, 3);
+        assert.equal(at1[1]?.boneId, 7);
+
+        const ranked = rankBonesAtVertices(bytes, [1, 2], 8);
+        assert.equal(ranked[0]?.boneId, 7);
+    });
 });
 
 describe("body-shape buffer", () => {

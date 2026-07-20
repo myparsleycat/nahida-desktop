@@ -38,7 +38,6 @@ describe("bodyShapedFolderBaseName", () => {
         assert.equal(bodyShapedFolderBaseName("DISABLED_Foo"), "Foo (Body Shaped)");
     });
 });
-});
 
 describe("BodyShapeEditor load/export", () => {
     it("loads mod.ini position buffer, paints, deforms, exports with size guards", async () => {
@@ -203,5 +202,69 @@ describe("BodyShapeEditor load/export", () => {
                 "utf8",
             );
         }
+    });
+
+    it("loads compact 8-byte stride blend buffer and exposes bones", async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "body-shape-compact-"));
+        const meshesDir = path.join(root, "Meshes");
+        fs.mkdirSync(meshesDir);
+
+        const original = new Float32Array([
+            0,
+            0,
+            0, // v0
+            1,
+            0,
+            0, // v1
+            0,
+            1,
+            0, // v2
+            0,
+            0,
+            1, // v3
+        ]);
+        const positionPath = path.join(meshesDir, "Position.buf");
+        writeFloat3Buffer(positionPath, original);
+
+        // Blend: 4 verts × stride 8 (compact: indices@0 weights@4)
+        // bone 3 on v1 (w=255), bone 9 on v2 (w=128)
+        const blendPath = path.join(meshesDir, "Blend.buf");
+        const blend = Buffer.alloc(4 * 8);
+        blend[8] = 3;
+        blend[8 + 4] = 255;
+        blend[16] = 9;
+        blend[16 + 4] = 128;
+        fs.writeFileSync(blendPath, blend);
+
+        fs.writeFileSync(
+            path.join(root, "mod.ini"),
+            [
+                "[ResourcePositionBuffer]",
+                "type = Buffer",
+                "stride = 12",
+                "filename = Meshes/Position.buf",
+                "",
+                "[ResourceBlendBuffer]",
+                "type = Buffer",
+                "format = DXGI_FORMAT_R8_UINT",
+                "stride = 8",
+                "filename = Meshes/Blend.buf",
+                "",
+            ].join("\n"),
+            "utf8",
+        );
+
+        const loaded = await loadBodyShapeMod(root);
+        assert.equal(loaded.meshes.length, 1);
+        const mesh = loaded.meshes[0];
+        assert.equal(mesh.vertexCount, 4);
+        assert.ok(mesh.blendBytes);
+        assert.equal(mesh.blendStride, 8);
+        assert.deepEqual(
+            mesh.bones.map((b) => b.id),
+            [3, 9],
+        );
+        assert.equal(mesh.bones.find((b) => b.id === 3)?.vertexCount, 1);
+        assert.equal(mesh.bones.find((b) => b.id === 9)?.vertexCount, 1);
     });
 });

@@ -916,26 +916,30 @@ function applyBodyShapeOverridesToScene(
     const override = overrides[overrideIndex]!;
     cacheBodyShapeBaseline(object, baselines);
 
-    const positionAttribute = object.geometry.getAttribute("position");
-    if (!(positionAttribute instanceof BufferAttribute)) {
-      return;
-    }
+    const positionsChanged = override.positionsChanged !== false;
 
-    const positionArray = positionAttribute.array as Float32Array;
-    if (positionArray.length !== override.positions.length) {
-      onError?.(
-        new Error(
-          `Body shape vertex mismatch for ${object.name}: glb=${positionArray.length / 3} edit=${override.positions.length / 3}`,
-        ),
-      );
-      return;
-    }
+    if (positionsChanged) {
+      const positionAttribute = object.geometry.getAttribute("position");
+      if (!(positionAttribute instanceof BufferAttribute)) {
+        return;
+      }
 
-    positionArray.set(override.positions);
-    positionAttribute.needsUpdate = true;
-    object.geometry.computeVertexNormals();
-    object.geometry.computeBoundingBox();
-    object.geometry.computeBoundingSphere();
+      const positionArray = positionAttribute.array as Float32Array;
+      if (positionArray.length !== override.positions.length) {
+        onError?.(
+          new Error(
+            `Body shape vertex mismatch for ${object.name}: glb=${positionArray.length / 3} edit=${override.positions.length / 3}`,
+          ),
+        );
+        return;
+      }
+
+      positionArray.set(override.positions);
+      positionAttribute.needsUpdate = true;
+      object.geometry.computeVertexNormals();
+      object.geometry.computeBoundingBox();
+      object.geometry.computeBoundingSphere();
+    }
 
     applyBodyShapeVertexColors(object, override.vertexColors, baselines.get(object));
   });

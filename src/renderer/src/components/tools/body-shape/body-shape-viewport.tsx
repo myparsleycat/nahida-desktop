@@ -30,20 +30,22 @@ import {
 
 export type BodyShapeViewportHandle = {
   resetCamera: () => void;
+  /** Imperatively refresh the weight heatmap without triggering a React re-render. */
+  updateColors: (regions: ActiveRegionDeform[]) => void;
 };
 
 export type BodyShapeViewportProps = {
   originalPositions: Float32Array;
   previewPositions: Float32Array;
-  /** Regions used for deformation. */
+  /** Regions used for deformation and weight heatmap. */
   regions: ActiveRegionDeform[];
-  /** Regions used for weight heatmap (highlight preview or selection). */
-  displayRegions?: ActiveRegionDeform[];
   indices?: Uint32Array;
   showOriginal: boolean;
   showWeights: boolean;
   /** Bumped when region selection or amounts change. */
   weightVersion: number;
+  /** When false, positions are unchanged since the last apply — skip deform and normal recomputation. */
+  positionsChanged: boolean;
   orientation?: string;
 };
 
@@ -53,11 +55,13 @@ export const BodyShapeViewport = forwardRef<BodyShapeViewportHandle, BodyShapeVi
   function BodyShapeViewport(props, ref) {
     const controlsRef = useRef<OrbitControlsImpl | null>(null);
     const resetCameraRef = useRef<(() => void) | null>(null);
+    const updateColorsRef = useRef<((regions: ActiveRegionDeform[]) => void) | null>(null);
 
     useImperativeHandle(
       ref,
       () => ({
         resetCamera: () => resetCameraRef.current?.(),
+        updateColors: (regions) => updateColorsRef.current?.(regions),
       }),
       [],
     );
@@ -91,6 +95,9 @@ export const BodyShapeViewport = forwardRef<BodyShapeViewportHandle, BodyShapeVi
               onRegisterReset={(reset) => {
                 resetCameraRef.current = reset;
               }}
+              onRegisterUpdateColors={(update) => {
+                updateColorsRef.current = update;
+              }}
             />
           </group>
           <OrbitControls ref={controlsRef} makeDefault enableDamping dampingFactor={0.12} />
@@ -104,22 +111,41 @@ function BodyShapeMesh({
   originalPositions,
   previewPositions,
   regions,
-  displayRegions,
   indices,
   showOriginal,
   showWeights,
   weightVersion,
+  positionsChanged,
   controlsRef,
   onRegisterReset,
+  onRegisterUpdateColors,
 }: BodyShapeViewportProps & {
   controlsRef: MutableRefObject<OrbitControlsImpl | null>;
   onRegisterReset: (reset: () => void) => void;
+  onRegisterUpdateColors: (update: (regions: ActiveRegionDeform[]) => void) => void;
 }) {
   const meshRef = useRef<Mesh>(null);
   const colorsRef = useRef(new Float32Array(Math.floor(originalPositions.length / 3) * 3));
   const framedKeyRef = useRef<Float32Array | null>(null);
   const { camera } = useThree();
-  const heatmapRegions = displayRegions ?? regions;
+  const heatmapRegionsRef = useRef<ActiveRegionDeform[]>(regions);
+  heatmapRegionsRef.current = regions;
+
+  const writeColors = (regions: ActiveRegionDeform[]) => {
+    const vertexCount = Math.floor(originalPositions.length / 3);
+    const displayWeights = composeDisplayWeights(vertexCount, showOriginal ? [] : regions, {
+      ignoreAmount: true,
+    });
+    writeWeightColors(displayWeights, colorsRef.current);
+    const colorAttr = meshRef.current?.geometry.getAttribute("color") as
+      | BufferAttribute
+      | undefined;
+    if (colorAttr) colorAttr.needsUpdate = true;
+  };
+
+  useEffect(() => {
+    onRegisterUpdateColors(writeColors);
+  });
 
   const geometry = useMemo(() => {
     const geo = new BufferGeometry();
@@ -146,36 +172,42 @@ function BodyShapeMesh({
       geometry.setAttribute("color", new BufferAttribute(colorsRef.current, 3));
     }
 
-    if (showOriginal || regions.length === 0) {
-      previewPositions.set(originalPositions);
-    } else {
-      applyMultiRegionDeform({
-        originalPositions,
-        previewPositions,
-        regions,
-      });
+    if (positionsChanged) {
+      if (showOriginal || regions.length === 0) {
+        previewPositions.set(originalPositions);
+      } else {
+        applyMultiRegionDeform({
+          originalPositions,
+          previewPositions,
+          regions,
+        });
+      }
+
+      const positionAttr = geometry.getAttribute("position") as BufferAttribute;
+      positionAttr.needsUpdate = true;
     }
 
-    const positionAttr = geometry.getAttribute("position") as BufferAttribute;
-    positionAttr.needsUpdate = true;
-
-    const displayWeights = composeDisplayWeights(vertexCount, showOriginal ? [] : heatmapRegions, {
-      ignoreAmount: true,
-    });
+    const displayWeights = composeDisplayWeights(
+      vertexCount,
+      showOriginal ? [] : heatmapRegionsRef.current,
+      { ignoreAmount: true },
+    );
     writeWeightColors(displayWeights, colorsRef.current);
     const colorAttr = geometry.getAttribute("color") as BufferAttribute;
     colorAttr.needsUpdate = true;
 
-    geometry.computeVertexNormals();
-    geometry.computeBoundingSphere();
+    if (positionsChanged) {
+      geometry.computeVertexNormals();
+      geometry.computeBoundingSphere();
+    }
   }, [
     geometry,
     originalPositions,
     previewPositions,
     regions,
-    heatmapRegions,
     showOriginal,
     weightVersion,
+    positionsChanged,
   ]);
 
   const material = useMemo(() => {
