@@ -9,10 +9,6 @@ import { ErrorState, OverviewSkeleton, PaginationButtons } from "../-shared/comm
 import { getGameBananaErrorPresentation } from "../-shared/errors";
 import { getSubmissionDateKey } from "../-utils";
 
-function getFeedRecords(query: GameSubfeedQuery) {
-  return query.data?._aRecords.filter((record) => record._sModelName === "Mod") ?? [];
-}
-
 export function GameHomePanel({
   t,
   language,
@@ -94,4 +90,8 @@ export function GameHomePanel({
       </ScrollArea>
     </>
   );
+}
+
+function getFeedRecords(query: GameSubfeedQuery) {
+  return query.data?._aRecords.filter((record) => record._sModelName === "Mod") ?? [];
 }
