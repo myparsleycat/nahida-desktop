@@ -310,6 +310,99 @@ describe("BodyShapeEditor load/export", () => {
         assert.equal(otherMesh.blendRelativePath, `Buffer/${other}-Blend.buf`);
     });
 
+    it("matches MiHoYo shared positions to all bound index buffers", async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "body-shape-mihoyo-"));
+        const meshesDir = path.join(root, "Meshes");
+        fs.mkdirSync(meshesDir);
+
+        const positions = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]);
+        for (const name of ["body", "body2", "back"]) {
+            writeFloat3Buffer(path.join(meshesDir, `${name}Position.buf`), positions);
+        }
+        fs.writeFileSync(
+            path.join(meshesDir, "bodyA.ib"),
+            Buffer.from(new Uint32Array([0, 1, 2]).buffer),
+        );
+        fs.writeFileSync(
+            path.join(meshesDir, "bodyB.ib"),
+            Buffer.from(new Uint32Array([0, 2, 3]).buffer),
+        );
+        fs.writeFileSync(
+            path.join(meshesDir, "bodyUnexpected.ib"),
+            Buffer.from(new Uint32Array([1, 3, 2]).buffer),
+        );
+        fs.writeFileSync(
+            path.join(meshesDir, "body2A.ib"),
+            Buffer.from(new Uint32Array([0, 1, 3]).buffer),
+        );
+        fs.writeFileSync(
+            path.join(meshesDir, "backA.ib"),
+            Buffer.from(new Uint32Array([1, 2, 3]).buffer),
+        );
+
+        fs.writeFileSync(
+            path.join(root, "mod.ini"),
+            [
+                "[ResourcebodyPosition]",
+                "type = Buffer",
+                "stride = 12",
+                "filename = Meshes/bodyPosition.buf",
+                "",
+                "[ResourcebodyPositionCS]",
+                "type = StructuredBuffer",
+                "stride = 12",
+                "filename = Meshes/bodyPosition.buf",
+                "",
+                "[ResourcebodyAIB]",
+                "format = DXGI_FORMAT_R32_UINT",
+                "filename = Meshes/bodyA.ib",
+                "",
+                "[ResourcebodyBIB]",
+                "format = DXGI_FORMAT_R32_UINT",
+                "filename = Meshes/bodyB.ib",
+                "",
+                "[ResourceUnexpectedIndex]",
+                "format = DXGI_FORMAT_R32_UINT",
+                "filename = Meshes/bodyUnexpected.ib",
+                "",
+                "[Resourcebody2Position]",
+                "type = Buffer",
+                "stride = 12",
+                "filename = Meshes/body2Position.buf",
+                "",
+                "[Resourcebody2AIB]",
+                "format = DXGI_FORMAT_R32_UINT",
+                "filename = Meshes/body2A.ib",
+                "",
+                "[ResourcebackPosition]",
+                "type = Buffer",
+                "stride = 12",
+                "filename = Meshes/backPosition.buf",
+                "",
+                "[ResourcebackAIB]",
+                "format = DXGI_FORMAT_R32_UINT",
+                "filename = Meshes/backA.ib",
+                "",
+                "[TextureOverridebody]",
+                "vb0 = ResourcebodyPosition",
+                "ib = ResourceUnexpectedIndex",
+            ].join("\n"),
+            "utf8",
+        );
+
+        const loaded = await loadBodyShapeMod(root);
+        assert.equal(loaded.meshes.length, 3);
+        const body = loaded.meshes.find((mesh) => mesh.id === "bodyPosition");
+        const body2 = loaded.meshes.find((mesh) => mesh.id === "body2Position");
+        const back = loaded.meshes.find((mesh) => mesh.id === "backPosition");
+        assert.ok(body?.indices);
+        assert.ok(body2?.indices);
+        assert.ok(back?.indices);
+        assert.deepEqual([...body.indices], [0, 1, 2, 0, 2, 3, 1, 3, 2]);
+        assert.deepEqual([...body2.indices], [0, 1, 3]);
+        assert.deepEqual([...back.indices], [1, 2, 3]);
+    });
+
     it("loads native EFMI Component_VB0/IB/VB2 and skips LOD blend", async () => {
         const root = fs.mkdtempSync(path.join(os.tmpdir(), "body-shape-efmi-native-"));
         const meshesDir = path.join(root, "Meshes");

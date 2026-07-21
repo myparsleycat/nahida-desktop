@@ -2,11 +2,6 @@ import path from "node:path";
 
 import type { NahidaDesktop } from "@main/index";
 import { loadIniBundle } from "@main/lib/mod-static-glb/ini-loader";
-import { bestKeyForIb, keyMatchesIb, strictKeyMatchesIb } from "@main/lib/mod-static-glb/mesh-key";
-import {
-    parseMihoyoBufferGroupResourceName,
-    parseWwmiBufferResourceName,
-} from "@main/lib/mod-static-glb/resource-loader";
 import type { IniSection, Resource } from "@main/lib/mod-static-glb/types";
 import {
     applySnorm8VectorCorrection,
@@ -186,14 +181,16 @@ export async function loadBodyShapeMod(
     const indexResources = collectIndexResources(resources);
     const vectorResources = collectVectorResources(resources);
     const blendResources = collectBlendResources(resources);
+    const indexResourcesByPosition = matchIndexResources(
+        positionResources,
+        indexResources,
+        sections,
+    );
 
     if (positionResources.length === 0) {
         throw new Error("No position buffer resources found in mod.ini");
     }
 
-    const positionGroupKeys = positionResources
-        .map((resource) => resolveBufferGroupKey(resource.name))
-        .filter((key): key is string => !!key);
     const meshes: BodyShapeMeshCandidate[] = [];
 
     for (const position of positionResources) {
@@ -212,21 +209,32 @@ export async function loadBodyShapeMod(
         }
 
         const positions = extractPositions(new Uint8Array(bytes), position.stride);
-        const indexMatch = matchCompanionResource(position, indexResources);
+        const indexMatches = indexResourcesByPosition.get(resourceKey(position)) ?? [];
         const vectorMatch = matchCompanionResource(position, vectorResources);
         const blendMatch = matchCompanionResource(position, blendResources);
-
-        let indices: Uint32Array | undefined;
-        let indexPath: string | undefined;
-        let indexRelativePath: string | undefined;
-
-        if (indexMatch?.filename) {
-            indexPath = path.resolve(modRoot, indexMatch.filename);
-            if (await fse.pathExists(indexPath)) {
-                indices = await readIndexBuffer(indexPath, indexMatch.format);
-                indexRelativePath = indexMatch.filename;
-            }
-        }
+        const indexData = (
+            await Promise.all(
+                indexMatches.map(async (index) => {
+                    if (!index.filename) return null;
+                    const indexPath = path.resolve(modRoot, index.filename);
+                    if (!(await fse.pathExists(indexPath))) {
+                        warn(`Missing index buffer: ${indexPath}`);
+                        return null;
+                    }
+                    const indices = await readIndexBuffer(indexPath, index.format);
+                    if (indices.some((value) => value >= validation.vertexCount)) {
+                        warn(
+                            `Skipping index buffer ${indexPath}: index exceeds ${validation.vertexCount - 1}`,
+                        );
+                        return null;
+                    }
+                    return { indices, indexPath, relativePath: index.filename };
+                }),
+            )
+        ).filter((entry): entry is NonNullable<typeof entry> => !!entry);
+        const indices = combineIndexBuffers(indexData.map((entry) => entry.indices));
+        const indexPath = indexData[0]?.indexPath;
+        const indexRelativePath = indexData[0]?.relativePath;
 
         let vectorPath: string | undefined;
         let vectorRelativePath: string | undefined;
@@ -292,7 +300,9 @@ export async function loadBodyShapeMod(
             vectorRelativePath,
             vectorStride,
             vectorLayout,
-            glbMeshNames: resolveGlbMeshNames(position, indexResources, positionGroupKeys),
+            glbMeshNames: indexMatches.flatMap((index) =>
+                index.filename ? [path.basename(index.filename, path.extname(index.filename))] : [],
+            ),
             blendPath,
             blendRelativePath,
             blendStride,
@@ -430,7 +440,9 @@ function isLodResourceName(name: string): boolean {
 function collectPositionResources(resources: Resource[]): Resource[] {
     return resources.filter((resource) => {
         if (!resource.filename || !resource.stride) return false;
-        if (isLodResourceName(resource.name)) return false;
+        if (isLodResourceName(resource.name) || /position(?:\.\d+)?cs$/i.test(resource.name)) {
+            return false;
+        }
         if (/position/i.test(resource.name) && resource.stride >= 12) return true;
         // Native EFMI: ComponentN_VB0 is POSITION (xyz float32 + pad).
         if (/component\d+_vb0$/i.test(resource.name) && resource.stride >= 12) return true;
@@ -520,42 +532,108 @@ function resourceGroupKey(resource: Resource): string | undefined {
     return fromName || undefined;
 }
 
-function resolveBufferGroupKey(resourceName: string): string | null {
-    return (
-        parseMihoyoBufferGroupResourceName(resourceName)?.key ||
-        parseWwmiBufferResourceName(resourceName)?.key ||
-        null
+function matchIndexResources(
+    positions: Resource[],
+    indices: Resource[],
+    sections: IniSection[],
+): Map<string, Resource[]> {
+    const matches = new Map<string, Resource[]>();
+    const resourcesByName = new Map(
+        [...positions, ...indices].map((resource) => [resourceKey(resource), resource]),
     );
+
+    for (const section of sections) {
+        const position = resourceForReference(sectionValue(section, "vb0"), resourcesByName);
+        const index = resourceForReference(sectionValue(section, "ib"), resourcesByName);
+        if (position && index) addIndexMatch(matches, position, index);
+    }
+
+    for (const index of indices) {
+        const candidates = positions
+            .map((position) => ({ position, score: indexMatchScore(position, index) }))
+            .filter((candidate) => candidate.score > 0);
+        const bestScore = Math.max(...candidates.map((candidate) => candidate.score), 0);
+        const best = candidates.filter((candidate) => candidate.score === bestScore);
+        if (best.length === 1) addIndexMatch(matches, best[0].position, index);
+    }
+
+    if (indices.length === 1) {
+        for (const position of positions) {
+            if (!matches.has(resourceKey(position))) addIndexMatch(matches, position, indices[0]);
+        }
+    }
+
+    for (const matched of matches.values()) {
+        matched.sort((left, right) => indices.indexOf(left) - indices.indexOf(right));
+    }
+    return matches;
 }
 
-/** IB stems used as GLB mesh names for the position resource's buffer group. */
-function resolveGlbMeshNames(
+function sectionValue(section: IniSection, key: string): string | undefined {
+    return Object.entries(section.values).find(([name]) => name.toLowerCase() === key)?.[1];
+}
+
+function resourceForReference(
+    value: string | undefined,
+    resourcesByName: Map<string, Resource>,
+): Resource | undefined {
+    const name = value?.trim().match(/^Resource(.+)$/i)?.[1];
+    return name ? resourcesByName.get(name.toLowerCase()) : undefined;
+}
+
+function addIndexMatch(
+    matches: Map<string, Resource[]>,
     position: Resource,
-    indexResources: Resource[],
-    positionGroupKeys: string[],
-): string[] {
-    const groupKey = resolveBufferGroupKey(position.name);
-    const names = new Set<string>();
-
-    if (groupKey && positionGroupKeys.length > 0) {
-        for (const ib of indexResources) {
-            if (!ib.filename) continue;
-            const stem = path.basename(ib.filename, path.extname(ib.filename));
-            const ibKey = bestKeyForIb(stem, ib.name, positionGroupKeys);
-            if (strictKeyMatchesIb(groupKey, ibKey) || keyMatchesIb(groupKey, ibKey)) {
-                names.add(stem);
-            }
-        }
+    index: Resource,
+): void {
+    const key = resourceKey(position);
+    const matched = matches.get(key) ?? [];
+    if (!matched.some((candidate) => resourceKey(candidate) === resourceKey(index))) {
+        matched.push(index);
+        matches.set(key, matched);
     }
+}
 
-    if (names.size === 0) {
-        const companion = matchCompanionResource(position, indexResources);
-        if (companion?.filename) {
-            names.add(path.basename(companion.filename, path.extname(companion.filename)));
-        }
+function indexMatchScore(position: Resource, index: Resource): number {
+    const positionName = logicalResourceName(position.name, "position");
+    const indexName = logicalResourceName(index.name, "index");
+    if (!positionName.base || !indexName.base) return 0;
+    if (positionName.variant && indexName.variant && positionName.variant !== indexName.variant) {
+        return 0;
     }
+    if (!indexName.base.startsWith(positionName.base)) return 0;
 
-    return [...names];
+    const variantScore = positionName.variant === indexName.variant ? 100 : 0;
+    const exactScore = indexName.base === positionName.base ? 10_000 : 1_000;
+    return exactScore + positionName.base.length + variantScore;
+}
+
+function logicalResourceName(name: string, kind: "position" | "index") {
+    const withoutCs = name.replace(/cs$/i, "");
+    const variant = withoutCs.match(/\.(\d+)$/)?.[1];
+    const withoutVariant = withoutCs.replace(/\.\d+$/, "");
+    const withoutKind =
+        kind === "position"
+            ? withoutVariant.replace(/(?:position(?:buffer)?|_vb0)$/i, "")
+            : withoutVariant.replace(/(?:index(?:buffer)?|_ib|ib)$/i, "");
+
+    return { base: withoutKind.replace(/[^a-z0-9]/gi, "").toLowerCase(), variant };
+}
+
+function resourceKey(resource: Resource): string {
+    return resource.name.toLowerCase();
+}
+
+function combineIndexBuffers(buffers: Uint32Array[]): Uint32Array | undefined {
+    if (buffers.length === 0) return undefined;
+    if (buffers.length === 1) return buffers[0];
+
+    const indices = new Uint32Array(buffers.reduce((length, buffer) => length + buffer.length, 0));
+    buffers.reduce((offset, buffer) => {
+        indices.set(buffer, offset);
+        return offset + buffer.length;
+    }, 0);
+    return indices;
 }
 
 async function readIndexBuffer(filePath: string, format?: string): Promise<Uint32Array> {

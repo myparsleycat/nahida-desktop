@@ -2,6 +2,7 @@
  * Blend.buf layouts:
  *  - WWMI padded (stride 16): 4×u8 bone indices @0, 4×u8 weights @8 (sum≈255).
  *  - WWMI compact (stride 8): 4×u8 bone indices @0, 4×u8 weights @4 (sum≈255).
+ *  - MiHoYo (stride 32): 4×float32 weights @0 (sum≈1), 4×u32 bone indices @16.
  *  - EFMI (stride 12): 4×u16 UNORM weights @0 (sum≈65535), 4×u8 bone indices @8.
  *  - EFMI rigid (stride 4): 1×u32 bone index @0, implied weight 1.0.
  * WWMI Tools v1.5+ emits the compact 8-byte layout; older builds use padded 16-byte.
@@ -10,6 +11,11 @@ export const BLEND_INDICES_OFFSET = 0;
 export const BLEND_WEIGHTS_OFFSET = 8;
 export const BLEND_INFLUENCE_COUNT = 4;
 export const DEFAULT_BLEND_STRIDE = 16;
+
+/** MiHoYo stride-32: float32 weights start at 0, u32 indices at 16. */
+export const MIHOYO_BLEND_STRIDE = 32;
+export const MIHOYO_WEIGHTS_OFFSET = 0;
+export const MIHOYO_INDICES_OFFSET = 16;
 
 /** EFMI stride-12: u16 weights start at 0, u8 indices at 8. */
 export const EFMI_BLEND_STRIDE = 12;
@@ -34,12 +40,14 @@ export type ParsedBlendBuffer = {
 
 type BlendLayout =
     | { kind: "wwmi"; indicesOffset: number; weightsOffset: number }
+    | { kind: "mihoyo" }
     | { kind: "efmi" }
     | { kind: "rigid" };
 
 function layoutFor(stride: number): BlendLayout | null {
     if (stride === EFMI_RIGID_STRIDE) return { kind: "rigid" };
     if (stride === EFMI_BLEND_STRIDE) return { kind: "efmi" };
+    if (stride === MIHOYO_BLEND_STRIDE) return { kind: "mihoyo" };
     if (stride === 8) return { kind: "wwmi", indicesOffset: 0, weightsOffset: 4 };
     if (stride >= 16)
         return { kind: "wwmi", indicesOffset: 0, weightsOffset: BLEND_WEIGHTS_OFFSET };
@@ -79,6 +87,17 @@ function forEachInfluence(
         if (base + 4 > bytes.byteLength) return;
         const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
         visit(view.getUint32(base, true), 1);
+        return;
+    }
+
+    if (layout.kind === "mihoyo") {
+        if (base + stride > bytes.byteLength) return;
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        for (let k = 0; k < BLEND_INFLUENCE_COUNT; k++) {
+            const weight = view.getFloat32(base + MIHOYO_WEIGHTS_OFFSET + k * 4, true);
+            if (!Number.isFinite(weight) || weight <= 0) continue;
+            visit(view.getUint32(base + MIHOYO_INDICES_OFFSET + k * 4, true), weight);
+        }
         return;
     }
 

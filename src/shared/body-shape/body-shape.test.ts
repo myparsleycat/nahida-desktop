@@ -319,6 +319,42 @@ describe("body-shape blend bones", () => {
         assert.equal(ranked[0]?.boneId, 7);
     });
 
+    it("parses MiHoYo 32-byte stride layout (float32 weights@0 u32 indices@16)", () => {
+        const bytes = new Uint8Array(96);
+        const view = new DataView(bytes.buffer);
+        // v0: bone 7 weight 1
+        view.setFloat32(0, 1, true);
+        view.setUint32(16, 7, true);
+        // v1: bone 7 weight .75, bone 12 weight .25
+        view.setFloat32(32, 0.75, true);
+        view.setFloat32(36, 0.25, true);
+        view.setUint32(48, 7, true);
+        view.setUint32(52, 12, true);
+        // v2: bone 12 weight 1
+        view.setFloat32(64, 1, true);
+        view.setUint32(80, 12, true);
+
+        const bones = listBlendBones(bytes, 3, 32);
+        assert.deepEqual(
+            bones.map((bone) => bone.id),
+            [7, 12],
+        );
+        assert.equal(bones.find((bone) => bone.id === 7)?.vertexCount, 2);
+        assert.equal(bones.find((bone) => bone.id === 12)?.vertexCount, 2);
+
+        const w7 = extractBoneWeights(bytes, 7, 3, 32);
+        assert.deepEqual([...w7], [1, 0.75, 0]);
+        const w12 = extractBoneWeights(bytes, 12, 3, 32);
+        assert.deepEqual([...w12], [0, 0.25, 1]);
+
+        const at1 = influencesAtVertex(bytes, 1, 32);
+        assert.deepEqual(at1, [
+            { boneId: 7, weight: 0.75 },
+            { boneId: 12, weight: 0.25 },
+        ]);
+        assert.equal(rankBonesAtVertices(bytes, [1, 2], 32)[0]?.boneId, 12);
+    });
+
     it("parses EFMI 12-byte stride layout (u16 weights@0 u8 indices@8)", () => {
         // 3 verts, stride 12: 4×u16 UNORM weights @0, 4×u8 indices @8
         const bytes = new Uint8Array(36);
