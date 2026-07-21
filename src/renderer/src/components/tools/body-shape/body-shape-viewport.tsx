@@ -1,6 +1,7 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import { parseOrientation } from "@renderer/components/tools/model-viewer/model-viewer-contract";
+import type { BrushMode } from "@renderer/components/tools/model-viewer/model-viewer-menu-bar";
 import {
   applyMultiRegionDeform,
   composeDisplayWeights,
@@ -22,11 +23,21 @@ import {
   Color,
   DoubleSide,
   Euler,
+  LineBasicMaterial,
+  LineLoop,
   MathUtils,
+  Matrix3,
   Mesh,
   MeshStandardMaterial,
+  Quaternion,
+  Vector2,
   Vector3,
 } from "three";
+
+export type BrushStrokeInput = {
+  hitPoint: [number, number, number];
+  hitNormal?: [number, number, number];
+};
 
 export type BodyShapeViewportHandle = {
   resetCamera: () => void;
@@ -47,6 +58,15 @@ export type BodyShapeViewportProps = {
   /** When false, positions are unchanged since the last apply — skip deform and normal recomputation. */
   positionsChanged: boolean;
   orientation?: string;
+
+  /* Brush props */
+  brushEnabled?: boolean;
+  brushMode?: BrushMode;
+  brushRadius?: number;
+  brushStrength?: number;
+  brushMirrorX?: boolean;
+  onBrushStroke?: (stroke: BrushStrokeInput) => void;
+  onBrushRadiusChange?: (radius: number) => void;
 };
 
 type OrbitControlsImpl = ElementRef<typeof OrbitControls>;
@@ -116,6 +136,11 @@ function BodyShapeMesh({
   showWeights,
   weightVersion,
   positionsChanged,
+  brushEnabled = false,
+  brushRadius = 0.15,
+  brushMode = "paint",
+  onBrushStroke,
+  onBrushRadiusChange,
   controlsRef,
   onRegisterReset,
   onRegisterUpdateColors,
@@ -125,11 +150,15 @@ function BodyShapeMesh({
   onRegisterUpdateColors: (update: (regions: ActiveRegionDeform[]) => void) => void;
 }) {
   const meshRef = useRef<Mesh>(null);
+  const brushRingRef = useRef<LineLoop>(null);
   const colorsRef = useRef(new Float32Array(Math.floor(originalPositions.length / 3) * 3));
   const framedKeyRef = useRef<Float32Array | null>(null);
-  const { camera } = useThree();
+  const isPaintingRef = useRef(false);
+  const { camera, raycaster, gl } = useThree();
   const heatmapRegionsRef = useRef<ActiveRegionDeform[]>(regions);
   heatmapRegionsRef.current = regions;
+  const onBrushStrokeRef = useRef(onBrushStroke);
+  onBrushStrokeRef.current = onBrushStroke;
 
   const writeColors = (regions: ActiveRegionDeform[]) => {
     const vertexCount = Math.floor(originalPositions.length / 3);
@@ -221,12 +250,38 @@ function BodyShapeMesh({
     });
   }, [showWeights]);
 
+  const brushRingGeometry = useMemo(() => {
+    const segments = 32;
+    const ringGeo = new BufferGeometry();
+    const positions = new Float32Array((segments + 1) * 3);
+    for (let i = 0; i <= segments; i++) {
+      const theta = (i / segments) * Math.PI * 2;
+      positions[i * 3] = Math.cos(theta) * brushRadius;
+      positions[i * 3 + 1] = Math.sin(theta) * brushRadius;
+      positions[i * 3 + 2] = 0;
+    }
+    ringGeo.setAttribute("position", new BufferAttribute(positions, 3));
+    return ringGeo;
+  }, [brushRadius]);
+
+  const brushRingMaterial = useMemo(() => {
+    return new LineBasicMaterial({
+      color: brushMode === "erase" ? 0xef4444 : 0x3b82f6,
+      linewidth: 2,
+      depthTest: false,
+      transparent: true,
+      opacity: 0.85,
+    });
+  }, [brushMode]);
+
   useEffect(() => {
     return () => {
       geometry.dispose();
       material.dispose();
+      brushRingGeometry.dispose();
+      brushRingMaterial.dispose();
     };
-  }, [geometry, material]);
+  }, [geometry, material, brushRingGeometry, brushRingMaterial]);
 
   const frameCamera = () => {
     if (!geometry.boundingSphere) return;
@@ -252,5 +307,104 @@ function BodyShapeMesh({
     frameCamera();
   }, [camera, geometry, originalPositions]);
 
-  return <mesh ref={meshRef} geometry={geometry} material={material} />;
+  /* Brush Raycasting & Pointer Handlers */
+  useEffect(() => {
+    if (!brushEnabled) {
+      if (brushRingRef.current) brushRingRef.current.visible = false;
+      return;
+    }
+
+    const canvasElement = gl.domElement;
+
+    const performStrokeAtPointer = (event: PointerEvent) => {
+      if (!meshRef.current || !onBrushStrokeRef.current) return;
+      const rect = canvasElement.getBoundingClientRect();
+      const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(new Vector2(x, y), camera);
+      const intersects = raycaster.intersectObject(meshRef.current);
+
+      if (intersects.length > 0) {
+        const hit = intersects[0]!;
+        const hitPoint: [number, number, number] = [hit.point.x, hit.point.y, hit.point.z];
+        let hitNormal: [number, number, number] | undefined;
+        if (hit.face) {
+          const normalMatrix = new Matrix3().getNormalMatrix(meshRef.current.matrixWorld);
+          const worldNormal = hit.face.normal.clone().applyNormalMatrix(normalMatrix).normalize();
+          hitNormal = [worldNormal.x, worldNormal.y, worldNormal.z];
+        }
+
+        if (brushRingRef.current) {
+          brushRingRef.current.visible = true;
+          brushRingRef.current.position.copy(hit.point);
+          if (hit.face) {
+            const normalMatrix = new Matrix3().getNormalMatrix(meshRef.current.matrixWorld);
+            const worldNormal = hit.face.normal.clone().applyNormalMatrix(normalMatrix).normalize();
+            const up = new Vector3(0, 0, 1);
+            const q = new Quaternion().setFromUnitVectors(up, worldNormal);
+            brushRingRef.current.quaternion.copy(q);
+            brushRingRef.current.position.addScaledVector(worldNormal, 0.001);
+          }
+        }
+
+        if (isPaintingRef.current) {
+          onBrushStrokeRef.current({ hitPoint, hitNormal });
+        }
+      } else {
+        if (brushRingRef.current) brushRingRef.current.visible = false;
+      }
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.button === 0 && !event.altKey) {
+        isPaintingRef.current = true;
+        if (controlsRef.current) controlsRef.current.enabled = false;
+        performStrokeAtPointer(event);
+      }
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      performStrokeAtPointer(event);
+    };
+
+    const handlePointerUp = () => {
+      isPaintingRef.current = false;
+      if (controlsRef.current) controlsRef.current.enabled = true;
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      if (brushEnabled && event.ctrlKey && onBrushRadiusChange) {
+        event.preventDefault();
+        const delta = event.deltaY < 0 ? 0.01 : -0.01;
+        const nextRadius = Math.max(0.01, Math.min(2.0, brushRadius + delta));
+        onBrushRadiusChange(nextRadius);
+      }
+    };
+
+    canvasElement.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    canvasElement.addEventListener("wheel", handleWheel, { passive: false });
+
+    return () => {
+      canvasElement.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      canvasElement.removeEventListener("wheel", handleWheel);
+      if (controlsRef.current) controlsRef.current.enabled = true;
+    };
+  }, [brushEnabled, brushRadius, camera, gl, raycaster, controlsRef, onBrushRadiusChange]);
+
+  return (
+    <>
+      <mesh ref={meshRef} geometry={geometry} material={material} />
+      <lineLoop
+        ref={brushRingRef}
+        geometry={brushRingGeometry}
+        material={brushRingMaterial}
+        visible={false}
+      />
+    </>
+  );
 }

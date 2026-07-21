@@ -1,6 +1,7 @@
 import {
   BodyShapeViewport,
   type BodyShapeViewportHandle,
+  type BrushStrokeInput,
 } from "@renderer/components/tools/body-shape/body-shape-viewport";
 import {
   formatOrientation,
@@ -10,7 +11,11 @@ import {
   DEFAULT_MODEL_ORIENTATION,
   DEFAULT_THREE_EXPOSURE,
 } from "@renderer/components/tools/model-viewer/model-viewer-dialog-types";
-import { ModelViewerMenuBar } from "@renderer/components/tools/model-viewer/model-viewer-menu-bar";
+import {
+  ModelViewerMenuBar,
+  type BrushMode,
+  type BrushProps,
+} from "@renderer/components/tools/model-viewer/model-viewer-menu-bar";
 import { Button } from "@renderer/components/ui/button";
 import {
   Combobox,
@@ -35,6 +40,7 @@ import {
 } from "@renderer/components/ui/select";
 import { Switch } from "@renderer/components/ui/switch";
 import {
+  applyBrushStroke,
   applyMultiRegionDeform,
   BODY_REGION_IDS,
   composeDisplayWeights,
@@ -44,6 +50,7 @@ import {
   displacementMetrics,
   extractBoneWeights,
   generateRegionWeights,
+  mirrorWeightsAcrossX,
   REGION_PRESETS,
   type ActiveRegionDeform,
   type BlendBoneInfo,
@@ -157,8 +164,15 @@ function defaultControlFor(source: WeightSource): DeformControl {
   return { amount: 0, axisScale: [...DEFAULT_AXIS_SCALE] };
 }
 
-function getOrCreateWeights(mesh: LoadedMesh, source: WeightSource): Float32Array {
+function getOrCreateWeights(
+  mesh: LoadedMesh,
+  source: WeightSource,
+  customWeightsMap?: Map<string, Float32Array>,
+): Float32Array {
   const key = weightKey(source);
+  if (customWeightsMap?.has(key)) {
+    return customWeightsMap.get(key)!;
+  }
   const cached = mesh.weightCache.get(key);
   if (cached) return cached;
 
@@ -173,11 +187,15 @@ function getOrCreateWeights(mesh: LoadedMesh, source: WeightSource): Float32Arra
   return weights;
 }
 
-function buildHighlightRegions(mesh: LoadedMesh, previewKey: string | null): ActiveRegionDeform[] {
+function buildHighlightRegions(
+  mesh: LoadedMesh,
+  previewKey: string | null,
+  customWeightsMap?: Map<string, Float32Array>,
+): ActiveRegionDeform[] {
   if (!previewKey) return [];
   const source = parseWeightKey(previewKey);
   if (!source) return [];
-  const weights = getOrCreateWeights(mesh, source);
+  const weights = getOrCreateWeights(mesh, source, customWeightsMap);
   const boundsCenter = computeBoundingCenter(mesh.originalPositions);
   return [
     {
@@ -213,6 +231,15 @@ export default function BodyShapeTool({
   const [showWeights, setShowWeights] = useState(true);
   const [weightVersion, setWeightVersion] = useState(0);
   const [modelOrientation, setModelOrientation] = useState(DEFAULT_MODEL_ORIENTATION);
+
+  /* Brush state */
+  const [brushEnabled, setBrushEnabled] = useState(false);
+  const [brushMode, setBrushMode] = useState<BrushMode>("paint");
+  const [brushRadius, setBrushRadius] = useState(0.15);
+  const [brushStrength, setBrushStrength] = useState(0.1);
+  const [brushMirrorX, setBrushMirrorX] = useState(true);
+  const customWeightsMapRef = useRef<Map<string, Float32Array>>(new Map());
+
   const isFixedTarget = Boolean(fixedTargetPath);
   const simpleViewportRef = useRef<BodyShapeViewportHandle | null>(null);
   const prevPositionInputsRef = useRef<{
@@ -251,7 +278,7 @@ export default function BodyShapeTool({
     return selectedKeys.flatMap((key) => {
       const source = parseWeightKey(key);
       if (!source) return [];
-      const weights = getOrCreateWeights(selectedMesh, source);
+      const weights = getOrCreateWeights(selectedMesh, source, customWeightsMapRef.current);
       const control =
         controlMode === "unified" ? unifiedControl : (controls[key] ?? defaultControlFor(source));
       return [
@@ -265,6 +292,91 @@ export default function BodyShapeTool({
       ];
     });
   }, [selectedMesh, selectedKeys, controls, unifiedControl, controlMode, weightVersion]);
+
+  const handleBrushStroke = (stroke: BrushStrokeInput) => {
+    if (!selectedMesh || selectedKeys.length === 0) return;
+
+    const positions = showOriginal ? selectedMesh.originalPositions : selectedMesh.previewPositions;
+    const vertexCount = selectedMesh.vertexCount;
+    const r2 = brushRadius * brushRadius;
+    const [hx, hy, hz] = stroke.hitPoint;
+
+    const touchedIndices: number[] = [];
+    for (let i = 0; i < vertexCount; i++) {
+      const ox = i * 3;
+      const dx = positions[ox] - hx;
+      const dy = positions[ox + 1] - hy;
+      const dz = positions[ox + 2] - hz;
+      if (dx * dx + dy * dy + dz * dz <= r2) {
+        touchedIndices.push(i);
+      }
+    }
+
+    if (touchedIndices.length === 0) return;
+
+    let anyChanged = false;
+    for (const key of selectedKeys) {
+      const source = parseWeightKey(key);
+      if (!source) continue;
+
+      let weights = customWeightsMapRef.current.get(key);
+      if (!weights) {
+        const originalWeights = getOrCreateWeights(selectedMesh, source);
+        weights = new Float32Array(originalWeights);
+        customWeightsMapRef.current.set(key, weights);
+      }
+
+      const changedCount = applyBrushStroke({
+        positions,
+        weights,
+        hitPoint: stroke.hitPoint,
+        hitNormal: stroke.hitNormal,
+        radius: brushRadius,
+        strength: brushStrength,
+        mode: brushMode,
+      });
+
+      if (changedCount > 0) {
+        if (brushMirrorX) {
+          mirrorWeightsAcrossX(positions, weights, touchedIndices, 1e-3, brushMode);
+        }
+        anyChanged = true;
+      }
+    }
+
+    if (anyChanged) {
+      setWeightVersion((v) => v + 1);
+    }
+  };
+
+  const handleResetPaintedWeights = () => {
+    if (selectedKeys.length === 0) {
+      customWeightsMapRef.current.clear();
+    } else {
+      for (const key of selectedKeys) {
+        customWeightsMapRef.current.delete(key);
+      }
+    }
+    setWeightVersion((v) => v + 1);
+    toast.success(t("page.tools.body_shape.brush_reset"));
+  };
+
+  const hasPaintedWeights = selectedKeys.some((key) => customWeightsMapRef.current.has(key));
+
+  const brushProps: BrushProps = {
+    enabled: brushEnabled,
+    onEnabledChange: setBrushEnabled,
+    mode: brushMode,
+    onModeChange: setBrushMode,
+    radius: brushRadius,
+    onRadiusChange: setBrushRadius,
+    strength: brushStrength,
+    onStrengthChange: setBrushStrength,
+    mirrorX: brushMirrorX,
+    onMirrorXChange: setBrushMirrorX,
+    onResetPaintedWeights: handleResetPaintedWeights,
+    hasPaintedWeights,
+  };
 
   const metrics = useMemo(() => {
     if (!selectedMesh) return null;
@@ -521,6 +633,7 @@ export default function BodyShapeTool({
           onResetToggles={() => {}}
           canSaveCapturedPreview={false}
           onCapturePreviewClick={() => {}}
+          brushProps={brushProps}
           showTextureMenu={false}
           showRenderingMenu={false}
           showMiscMenu={false}
@@ -541,6 +654,13 @@ export default function BodyShapeTool({
               weightVersion={weightVersion}
               positionsChanged={positionsChanged}
               orientation={modelOrientation}
+              brushEnabled={brushEnabled}
+              brushMode={brushMode}
+              brushRadius={brushRadius}
+              brushStrength={brushStrength}
+              brushMirrorX={brushMirrorX}
+              onBrushStroke={handleBrushStroke}
+              onBrushRadiusChange={setBrushRadius}
             />
           ) : (
             <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
@@ -609,6 +729,7 @@ export default function BodyShapeTool({
                           setSelectedMeshId(value);
                           setSelectedKeys([]);
                           previewKeyRef.current = null;
+                          customWeightsMapRef.current.clear();
                           setControls({});
                           setUnifiedControl(DEFAULT_UNIFIED_CONTROL);
                           setWeightVersion((v) => v + 1);

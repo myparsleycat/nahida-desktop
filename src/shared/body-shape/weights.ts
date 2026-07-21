@@ -108,6 +108,7 @@ export function mirrorWeightsAcrossX(
     weights: Float32Array,
     sourceIndices: Iterable<number>,
     maxDistance = 1e-3,
+    mode: BrushMode = "paint",
 ): void {
     const vertexCount = Math.min(weights.length, Math.floor(positions.length / 3));
     const maxDistance2 = maxDistance * maxDistance;
@@ -134,7 +135,10 @@ export function mirrorWeightsAcrossX(
         }
 
         if (best >= 0) {
-            weights[best] = Math.max(weights[best], weights[source]);
+            weights[best] =
+                mode === "erase"
+                    ? Math.min(weights[best], weights[source])
+                    : Math.max(weights[best], weights[source]);
         }
     }
 }
