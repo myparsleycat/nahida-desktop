@@ -12,12 +12,7 @@ import {
 } from "@shared/body-shape";
 import { describe, it } from "vitest";
 
-import {
-    bodyShapedFolderBaseName,
-    BODY_SHAPED_SUFFIX,
-    exportBodyShapeMesh,
-    loadBodyShapeMod,
-} from "./body-shape";
+import { bodyShapedFolderBaseName, exportBodyShapeMesh, loadBodyShapeMod } from "./body-shape";
 
 function writeFloat3Buffer(filePath: string, positions: Float32Array): void {
     const raw = new Uint8Array(positions.length * 4);
@@ -202,6 +197,233 @@ describe("BodyShapeEditor load/export", () => {
                 "utf8",
             );
         }
+    });
+
+    it("matches EFMI hash-style Position/Blend/ComponentN companions", async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "body-shape-efmi-"));
+        const bufferDir = path.join(root, "Buffer");
+        fs.mkdirSync(bufferDir);
+
+        const hash = "34b08b7f";
+        const original = new Float32Array([
+            0,
+            0,
+            0, // v0
+            1,
+            0,
+            0, // v1
+            0,
+            1,
+            0, // v2
+            0,
+            0,
+            1, // v3
+        ]);
+        writeFloat3Buffer(path.join(bufferDir, `${hash}-Position.buf`), original);
+
+        const indices = new Uint32Array([0, 1, 2, 0, 2, 3]);
+        fs.writeFileSync(
+            path.join(bufferDir, `${hash}-Component1.buf`),
+            Buffer.from(indices.buffer),
+        );
+
+        // Blend: 4 verts × stride 16 — bone 3 on v1 (w=255), bone 9 on v2 (w=128)
+        const blend = Buffer.alloc(4 * 16);
+        blend[16] = 3;
+        blend[16 + 8] = 255;
+        blend[32] = 9;
+        blend[32 + 8] = 128;
+        fs.writeFileSync(path.join(bufferDir, `${hash}-Blend.buf`), blend);
+
+        // Second mesh group so single-candidate fallback cannot apply
+        const other = "aabbccdd";
+        writeFloat3Buffer(
+            path.join(bufferDir, `${other}-Position.buf`),
+            new Float32Array([2, 0, 0, 3, 0, 0, 2, 1, 0, 2, 0, 1]),
+        );
+        fs.writeFileSync(
+            path.join(bufferDir, `${other}-Component1.buf`),
+            Buffer.from(new Uint32Array([0, 1, 2, 0, 2, 3]).buffer),
+        );
+        fs.writeFileSync(path.join(bufferDir, `${other}-Blend.buf`), Buffer.alloc(4 * 16));
+
+        fs.writeFileSync(
+            path.join(root, "mod.ini"),
+            [
+                `[Resource${hash}Position]`,
+                "type = Buffer",
+                "stride = 12",
+                `filename = Buffer/${hash}-Position.buf`,
+                "",
+                `[Resource${hash}Blend]`,
+                "type = Buffer",
+                "format = DXGI_FORMAT_R8_UINT",
+                "stride = 16",
+                `filename = Buffer/${hash}-Blend.buf`,
+                "",
+                `[Resource_${hash}_Component1]`,
+                "type = Buffer",
+                "format = DXGI_FORMAT_R32_UINT",
+                `filename = Buffer/${hash}-Component1.buf`,
+                "",
+                `[Resource${other}Position]`,
+                "type = Buffer",
+                "stride = 12",
+                `filename = Buffer/${other}-Position.buf`,
+                "",
+                `[Resource${other}Blend]`,
+                "type = Buffer",
+                "format = DXGI_FORMAT_R8_UINT",
+                "stride = 16",
+                `filename = Buffer/${other}-Blend.buf`,
+                "",
+                `[Resource_${other}_Component1]`,
+                "type = Buffer",
+                "format = DXGI_FORMAT_R32_UINT",
+                `filename = Buffer/${other}-Component1.buf`,
+                "",
+            ].join("\n"),
+            "utf8",
+        );
+
+        const loaded = await loadBodyShapeMod(root);
+        assert.equal(loaded.meshes.length, 2);
+
+        const mesh = loaded.meshes.find((m) => m.id === `${hash}Position`);
+        assert.ok(mesh);
+        assert.ok(mesh.indices);
+        assert.equal(mesh.indices.length, 6);
+        assert.deepEqual([...mesh.indices], [0, 1, 2, 0, 2, 3]);
+        assert.equal(mesh.indexRelativePath, `Buffer/${hash}-Component1.buf`);
+        assert.ok(mesh.blendBytes);
+        assert.equal(mesh.blendRelativePath, `Buffer/${hash}-Blend.buf`);
+        assert.equal(mesh.blendStride, 16);
+        assert.deepEqual(
+            mesh.bones.map((b) => b.id),
+            [3, 9],
+        );
+
+        const otherMesh = loaded.meshes.find((m) => m.id === `${other}Position`);
+        assert.ok(otherMesh);
+        assert.ok(otherMesh.indices);
+        assert.equal(otherMesh.indexRelativePath, `Buffer/${other}-Component1.buf`);
+        assert.equal(otherMesh.blendRelativePath, `Buffer/${other}-Blend.buf`);
+    });
+
+    it("loads native EFMI Component_VB0/IB/VB2 and skips LOD blend", async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "body-shape-efmi-native-"));
+        const meshesDir = path.join(root, "Meshes");
+        fs.mkdirSync(meshesDir);
+
+        const writePaddedPosition = (filePath: string, positions: Float32Array) => {
+            const buf = Buffer.alloc((positions.length / 3) * 16);
+            for (let i = 0; i < positions.length / 3; i++) {
+                buf.writeFloatLE(positions[i * 3], i * 16);
+                buf.writeFloatLE(positions[i * 3 + 1], i * 16 + 4);
+                buf.writeFloatLE(positions[i * 3 + 2], i * 16 + 8);
+            }
+            fs.writeFileSync(filePath, buf);
+        };
+
+        writePaddedPosition(
+            path.join(meshesDir, "Component0_VB0.buf"),
+            new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]),
+        );
+        fs.writeFileSync(
+            path.join(meshesDir, "Component0_IB.buf"),
+            Buffer.from(new Uint16Array([0, 1, 2, 0, 2, 3]).buffer),
+        );
+        // Blend stride 12: 4×u16 weights @0, 4×u8 indices @8 — bone 3 on v1, bone 9 on v2
+        const blend0 = Buffer.alloc(4 * 12);
+        blend0.writeUInt16LE(65535, 12);
+        blend0[12 + 8] = 3;
+        blend0.writeUInt16LE(32768, 24);
+        blend0[24 + 8] = 9;
+        fs.writeFileSync(path.join(meshesDir, "Component0_VB2.buf"), blend0);
+        fs.writeFileSync(path.join(meshesDir, "Component0_VB2_LOD.buf"), Buffer.alloc(4 * 12));
+
+        // Second component: ensure Component1 does not cross-match Component0
+        writePaddedPosition(
+            path.join(meshesDir, "Component1_VB0.buf"),
+            new Float32Array([2, 0, 0, 3, 0, 0, 2, 1, 0, 2, 0, 1]),
+        );
+        fs.writeFileSync(
+            path.join(meshesDir, "Component1_IB.buf"),
+            Buffer.from(new Uint16Array([0, 1, 2, 0, 2, 3]).buffer),
+        );
+        const blend1 = Buffer.alloc(4 * 12);
+        blend1.writeUInt16LE(65535, 0);
+        blend1[8] = 7;
+        fs.writeFileSync(path.join(meshesDir, "Component1_VB2.buf"), blend1);
+
+        fs.writeFileSync(
+            path.join(root, "mod.ini"),
+            [
+                "[Resource_Component0_IB]",
+                "format = DXGI_FORMAT_R16_UINT",
+                "stride = 6",
+                "filename = Meshes/Component0_IB.buf",
+                "",
+                "[Resource_Component0_VB0]",
+                "stride = 16",
+                "filename = Meshes/Component0_VB0.buf",
+                "",
+                "[Resource_Component0_VB1]",
+                "stride = 12",
+                "filename = Meshes/Component0_VB1.buf",
+                "",
+                "[Resource_Component0_VB2]",
+                "stride = 12",
+                "filename = Meshes/Component0_VB2.buf",
+                "",
+                "[Resource_Component0_VB2_LOD]",
+                "stride = 12",
+                "filename = Meshes/Component0_VB2_LOD.buf",
+                "",
+                "[Resource_Component1_IB]",
+                "format = DXGI_FORMAT_R16_UINT",
+                "stride = 6",
+                "filename = Meshes/Component1_IB.buf",
+                "",
+                "[Resource_Component1_VB0]",
+                "stride = 16",
+                "filename = Meshes/Component1_VB0.buf",
+                "",
+                "[Resource_Component1_VB2]",
+                "stride = 12",
+                "filename = Meshes/Component1_VB2.buf",
+                "",
+            ].join("\n"),
+            "utf8",
+        );
+
+        const loaded = await loadBodyShapeMod(root);
+        assert.equal(loaded.meshes.length, 2);
+
+        const mesh0 = loaded.meshes.find((m) => m.id === "_Component0_VB0");
+        assert.ok(mesh0);
+        assert.equal(mesh0.vertexCount, 4);
+        assert.equal(mesh0.positionStride, 16);
+        assert.ok(mesh0.indices);
+        assert.equal(mesh0.indices.length, 6);
+        assert.deepEqual([...mesh0.indices], [0, 1, 2, 0, 2, 3]);
+        assert.equal(mesh0.indexRelativePath, "Meshes/Component0_IB.buf");
+        assert.ok(mesh0.blendBytes);
+        assert.equal(mesh0.blendRelativePath, "Meshes/Component0_VB2.buf");
+        assert.equal(mesh0.blendStride, 12);
+        assert.deepEqual(
+            mesh0.bones.map((b) => b.id),
+            [3, 9],
+        );
+
+        const mesh1 = loaded.meshes.find((m) => m.id === "_Component1_VB0");
+        assert.ok(mesh1);
+        assert.equal(mesh1.indexRelativePath, "Meshes/Component1_IB.buf");
+        assert.equal(mesh1.blendRelativePath, "Meshes/Component1_VB2.buf");
+        assert.deepEqual(
+            mesh1.bones.map((b) => b.id),
+            [7],
+        );
     });
 
     it("loads compact 8-byte stride blend buffer and exposes bones", async () => {

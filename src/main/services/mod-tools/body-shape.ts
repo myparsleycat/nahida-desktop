@@ -423,10 +423,17 @@ function collectResources(sections: IniSection[]): Resource[] {
         }));
 }
 
+function isLodResourceName(name: string): boolean {
+    return /_LOD$/i.test(name) || /_VB\d+_LOD/i.test(name);
+}
+
 function collectPositionResources(resources: Resource[]): Resource[] {
     return resources.filter((resource) => {
         if (!resource.filename || !resource.stride) return false;
+        if (isLodResourceName(resource.name)) return false;
         if (/position/i.test(resource.name) && resource.stride >= 12) return true;
+        // Native EFMI: ComponentN_VB0 is POSITION (xyz float32 + pad).
+        if (/component\d+_vb0$/i.test(resource.name) && resource.stride >= 12) return true;
         return false;
     });
 }
@@ -434,8 +441,18 @@ function collectPositionResources(resources: Resource[]): Resource[] {
 function collectIndexResources(resources: Resource[]): Resource[] {
     return resources.filter((resource) => {
         if (!resource.filename) return false;
+        if (isLodResourceName(resource.name)) return false;
         if (/index/i.test(resource.name)) return true;
-        if (resource.format && /R\d+_UINT/i.test(resource.format)) return true;
+        // EFMI ComponentN IBs use R16/R32_UINT without "Index" in the name.
+        // Exclude blend/color-style byte formats (R8_UINT) and non-index names that
+        // already identify as position/blend/vector/texcoord/color.
+        if (
+            resource.format &&
+            /R(?:16|32)_UINT/i.test(resource.format) &&
+            !/(position|blend|vector|texcoord|color)/i.test(resource.name)
+        ) {
+            return true;
+        }
         return false;
     });
 }
@@ -450,23 +467,57 @@ function collectVectorResources(resources: Resource[]): Resource[] {
 function collectBlendResources(resources: Resource[]): Resource[] {
     return resources.filter((resource) => {
         if (!resource.filename) return false;
-        return /blend/i.test(resource.name);
+        if (isLodResourceName(resource.name)) return false;
+        if (/blend/i.test(resource.name)) return true;
+        // Native EFMI: ComponentN_VB2 is BLEND (non-LOD).
+        if (/component\d+_vb2$/i.test(resource.name)) return true;
+        return false;
     });
 }
 
 function matchCompanionResource(position: Resource, candidates: Resource[]): Resource | undefined {
-    const positionKey = companionKey(position.name);
-    const exact = candidates.find((candidate) => companionKey(candidate.name) === positionKey);
+    if (candidates.length === 0) return undefined;
+
+    const positionNameKey = companionKey(position.name);
+    const exact = candidates.find((candidate) => companionKey(candidate.name) === positionNameKey);
     if (exact) return exact;
+
+    const positionGroup = resourceGroupKey(position);
+    if (positionGroup) {
+        const byGroup = candidates.find(
+            (candidate) => resourceGroupKey(candidate) === positionGroup,
+        );
+        if (byGroup) return byGroup;
+    }
+
     if (candidates.length === 1) return candidates[0];
     return undefined;
 }
 
 function companionKey(name: string): string {
-    return name
+    let key = name
+        .replace(/_VB\d+(?:_LOD)?$/i, "")
+        .replace(/_IB(?:_LOD)?$/i, "")
         .replace(/(Position|Vector|Index|Blend|TexCoord|Color)Buffer/gi, "")
-        .replace(/(Position|Vector|Index|Blend|Texcoord)/gi, "")
-        .toLowerCase();
+        .replace(/(Position|Vector|Index|Blend|Texcoord)/gi, "");
+
+    // Hash IB: 34b08b7f-Component1 → 34b08b7f. Keep bare Component0 for native EFMI.
+    if (!/^_?Component\d+$/i.test(key)) {
+        key = key.replace(/[_-]Component\d+$/i, "");
+    }
+
+    return key.replace(/[_-]+/g, "").toLowerCase();
+}
+
+/** Stable group id shared by Position/Blend/Index/ComponentN of the same mesh. */
+function resourceGroupKey(resource: Resource): string | undefined {
+    if (resource.filename) {
+        const stem = path.basename(resource.filename, path.extname(resource.filename));
+        const fromStem = companionKey(stem);
+        if (fromStem) return fromStem;
+    }
+    const fromName = companionKey(resource.name);
+    return fromName || undefined;
 }
 
 function resolveBufferGroupKey(resourceName: string): string | null {

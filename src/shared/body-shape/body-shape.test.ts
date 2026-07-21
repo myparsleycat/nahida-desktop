@@ -318,6 +318,73 @@ describe("body-shape blend bones", () => {
         const ranked = rankBonesAtVertices(bytes, [1, 2], 8);
         assert.equal(ranked[0]?.boneId, 7);
     });
+
+    it("parses EFMI 12-byte stride layout (u16 weights@0 u8 indices@8)", () => {
+        // 3 verts, stride 12: 4×u16 UNORM weights @0, 4×u8 indices @8
+        const bytes = new Uint8Array(36);
+        const view = new DataView(bytes.buffer);
+        // v0: bone 3 weight 65535
+        view.setUint16(0, 65535, true);
+        bytes[8] = 3;
+        // v1: bone 3 w=32768, bone 7 w=32767
+        view.setUint16(12, 32768, true);
+        view.setUint16(14, 32767, true);
+        bytes[20] = 3;
+        bytes[21] = 7;
+        // v2: bone 7 weight 65535
+        view.setUint16(24, 65535, true);
+        bytes[32] = 7;
+
+        const bones = listBlendBones(bytes, 3, 12);
+        assert.deepEqual(
+            bones.map((b) => b.id),
+            [3, 7],
+        );
+        assert.equal(bones.find((b) => b.id === 3)?.vertexCount, 2);
+        assert.equal(bones.find((b) => b.id === 7)?.vertexCount, 2);
+
+        const w3 = extractBoneWeights(bytes, 3, 3, 12);
+        assert.ok(Math.abs(w3[0] - 1) < 1e-6);
+        assert.ok(Math.abs(w3[1] - 32768 / 65535) < 1e-6);
+        assert.equal(w3[2], 0);
+
+        const w7 = extractBoneWeights(bytes, 7, 3, 12);
+        assert.equal(w7[0], 0);
+        assert.ok(Math.abs(w7[1] - 32767 / 65535) < 1e-6);
+        assert.ok(Math.abs(w7[2] - 1) < 1e-6);
+
+        const at1 = influencesAtVertex(bytes, 1, 12);
+        assert.equal(at1[0]?.boneId, 3);
+        assert.equal(at1[1]?.boneId, 7);
+
+        const ranked = rankBonesAtVertices(bytes, [1, 2], 12);
+        assert.equal(ranked[0]?.boneId, 7);
+    });
+
+    it("parses EFMI rigid 4-byte stride layout (u32 bone index @0)", () => {
+        const bytes = new Uint8Array(12);
+        const view = new DataView(bytes.buffer);
+        view.setUint32(0, 3, true);
+        view.setUint32(4, 7, true);
+        view.setUint32(8, 3, true);
+
+        const bones = listBlendBones(bytes, 3, 4);
+        assert.deepEqual(
+            bones.map((b) => b.id),
+            [3, 7],
+        );
+        assert.equal(bones.find((b) => b.id === 3)?.vertexCount, 2);
+        assert.equal(bones.find((b) => b.id === 7)?.vertexCount, 1);
+
+        const w3 = extractBoneWeights(bytes, 3, 3, 4);
+        assert.equal(w3[0], 1);
+        assert.equal(w3[1], 0);
+        assert.equal(w3[2], 1);
+
+        const at1 = influencesAtVertex(bytes, 1, 4);
+        assert.equal(at1[0]?.boneId, 7);
+        assert.equal(at1[0]?.weight, 1);
+    });
 });
 
 describe("body-shape buffer", () => {
