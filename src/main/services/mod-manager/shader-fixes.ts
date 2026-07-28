@@ -415,6 +415,10 @@ export class ModShaderFixesService {
         globalShaderPath: string,
     ): Promise<ShaderFixesOwnerIndex> {
         const manifestPaths = new Map<string, string>();
+        const currentManifestPath = this.getShaderFixesModManifestPath(modPath);
+        if (await fse.pathExists(currentManifestPath)) {
+            manifestPaths.set(normalizeModPath(currentManifestPath), currentManifestPath);
+        }
         await Promise.all(
             (await this.getShaderFixesManifestSearchRoots(modPath, globalShaderPath)).map(
                 async (root) => {
@@ -523,6 +527,23 @@ export class ModShaderFixesService {
         return this.normalizeShaderFixesOwnerTargetKey(path.relative(globalShaderPath, targetPath));
     }
 
+    private getShaderFixesPathFromManifestFile(file: ShaderFixesModManifestFile): string | null {
+        const relativePath = this.normalizeShaderFixesOwnerTargetKey(file.file);
+        if (!relativePath) return null;
+
+        const globalShaderPath = relativePath
+            .split("/")
+            .reduce((currentPath) => path.dirname(currentPath), path.resolve(file.targetPath));
+        if (
+            path.basename(globalShaderPath).toLowerCase() !== SHADER_FIXES_DIR_NAME.toLowerCase() ||
+            normalizeModPath(path.join(globalShaderPath, relativePath)) !==
+                normalizeModPath(path.resolve(file.targetPath))
+        ) {
+            return null;
+        }
+        return globalShaderPath;
+    }
+
     private async getShaderFixesFileCandidates(
         modPath: string,
     ): Promise<ShaderFixesFileCandidate[]> {
@@ -620,11 +641,11 @@ export class ModShaderFixesService {
                             ? Array.from(new Set([...indexedTarget.owners, modKey]))
                             : [modKey],
                 };
-                await this.writeShaderFixesOwnerIndex(globalShaderPath, ownerIndex);
                 await this.writeShaderFixesModManifest(modPath, manifest);
             }
 
             if (manifest.files.length > 0) {
+                await this.writeShaderFixesOwnerIndex(globalShaderPath, ownerIndex);
                 await this.writeShaderFixesModManifest(modPath, manifest);
             } else {
                 await this.deleteModManifest(modPath);
@@ -641,61 +662,65 @@ export class ModShaderFixesService {
         const manifest = await this.readShaderFixesModManifest(modPath);
         if (!manifest) return [];
 
-        const globalShaderPath = await this.getGlobalShaderFixesPath(modPath);
-        if (!globalShaderPath) return [];
-
         const processedFiles: ShaderFixesProcessedFile[] = [];
 
         try {
-            const currentOwnerIndex = await this.getShaderFixesOwnerIndex(
-                modPath,
-                globalShaderPath,
-            );
-            const missingOwner = manifest.files.some((file) => {
-                const targetKey = this.getShaderFixesOwnerTargetKey(
-                    globalShaderPath,
-                    file.targetPath,
+            for (const group of this.groupShaderFixesManifestFilesByImporter(
+                manifest.files,
+            ).values()) {
+                const currentOwnerIndex = await this.getShaderFixesOwnerIndex(
+                    modPath,
+                    group.globalShaderPath,
                 );
-                return (
-                    targetKey &&
-                    !currentOwnerIndex.targets[targetKey]?.owners.includes(manifest.modKey)
-                );
-            });
-            const ownerIndex = missingOwner
-                ? await this.rebuildShaderFixesOwnerIndex(modPath, globalShaderPath)
-                : currentOwnerIndex;
+                const missingOwner = group.files.some((file) => {
+                    const targetKey = this.getShaderFixesOwnerTargetKey(
+                        group.globalShaderPath,
+                        file.targetPath,
+                    );
+                    return (
+                        targetKey &&
+                        !currentOwnerIndex.targets[targetKey]?.owners.includes(manifest.modKey)
+                    );
+                });
+                const ownerIndex = missingOwner
+                    ? await this.rebuildShaderFixesOwnerIndex(modPath, group.globalShaderPath)
+                    : currentOwnerIndex;
 
-            for (const file of manifest.files) {
-                const targetKey = this.getShaderFixesOwnerTargetKey(
-                    globalShaderPath,
-                    file.targetPath,
-                );
-                if (!targetKey) continue;
+                for (const file of group.files) {
+                    const targetKey = this.getShaderFixesOwnerTargetKey(
+                        group.globalShaderPath,
+                        file.targetPath,
+                    );
+                    if (!targetKey) continue;
 
-                const target = ownerIndex.targets[targetKey];
-                if (!target?.owners.includes(manifest.modKey)) continue;
+                    const target = ownerIndex.targets[targetKey];
+                    if (!target?.owners.includes(manifest.modKey)) continue;
 
-                const remainingOwners = target.owners.filter((owner) => owner !== manifest.modKey);
-                if (remainingOwners.length > 0) {
-                    ownerIndex.targets[targetKey] = { ...target, owners: remainingOwners };
-                    continue;
-                }
-
-                if (await fse.pathExists(file.targetPath)) {
-                    const currentHash = await this.hashFile(file.targetPath);
-                    if (currentHash === file.hash) {
-                        processedFiles.push({
-                            ...file,
-                            modKey: manifest.modKey,
-                            createdTarget: true,
-                        });
-                        await fse.remove(file.targetPath);
+                    const remainingOwners = target.owners.filter(
+                        (owner) => owner !== manifest.modKey,
+                    );
+                    if (remainingOwners.length > 0) {
+                        ownerIndex.targets[targetKey] = { ...target, owners: remainingOwners };
+                        continue;
                     }
+
+                    if (await fse.pathExists(file.targetPath)) {
+                        const currentHash = await this.hashFile(file.targetPath);
+                        if (currentHash === file.hash) {
+                            processedFiles.push({
+                                ...file,
+                                modKey: manifest.modKey,
+                                createdTarget: true,
+                            });
+                            await fse.remove(file.targetPath);
+                        }
+                    }
+                    delete ownerIndex.targets[targetKey];
                 }
-                delete ownerIndex.targets[targetKey];
+
+                await this.writeShaderFixesOwnerIndex(group.globalShaderPath, ownerIndex);
             }
 
-            await this.writeShaderFixesOwnerIndex(globalShaderPath, ownerIndex);
             await this.deleteModManifest(modPath);
         } catch (err) {
             const shaderError = err instanceof Error ? err : new Error(String(err));
@@ -703,5 +728,22 @@ export class ModShaderFixesService {
         }
 
         return processedFiles;
+    }
+
+    private groupShaderFixesManifestFilesByImporter(files: ShaderFixesModManifestFile[]) {
+        return files.reduce((groups, file) => {
+            const globalShaderPath = this.getShaderFixesPathFromManifestFile(file);
+            if (!globalShaderPath) return groups;
+
+            const groupKey = normalizeModPath(globalShaderPath);
+            const group = groups.get(groupKey);
+            if (group) {
+                group.files.push(file);
+                return groups;
+            }
+
+            groups.set(groupKey, { globalShaderPath, files: [file] });
+            return groups;
+        }, new Map<string, { globalShaderPath: string; files: ShaderFixesModManifestFile[] }>());
     }
 }

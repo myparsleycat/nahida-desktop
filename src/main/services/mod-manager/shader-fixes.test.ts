@@ -106,6 +106,7 @@ describe("ModShaderFixesService", () => {
             }),
         );
         await service.handleShaders(modPath, true);
+        assert.equal(atomicWriteState.calls, 2);
         await fse.remove(path.join(modPath, "ShaderFixes"));
         fastGlobCalls.length = 0;
 
@@ -210,6 +211,46 @@ describe("ModShaderFixesService", () => {
         await service.handleShaders(secondModPath, false);
         assert.deepEqual(fastGlobCalls, []);
         assert.equal(await fse.pathExists(targetPath), false);
+    });
+
+    it("cleans the original importer after an enabled mod is moved", async () => {
+        const originalModPath = path.join(modsPath, "Group", "Mod");
+        const originalTargetPath = path.join(importerPath, "ShaderFixes", "moved.ini");
+        await fse.outputFile(path.join(originalModPath, "ShaderFixes", "moved.ini"), "moved");
+        await service.handleShaders(originalModPath, true);
+
+        const otherImporterPath = path.join(rootPath, "OtherImporter");
+        const otherModsPath = path.join(otherImporterPath, "Mods");
+        const movedModPath = path.join(otherModsPath, "Group", "Mod");
+        await fse.ensureDir(path.dirname(movedModPath));
+        importers.push({ key: "OtherImporter", importerFolder: otherImporterPath });
+        games.push({ game: "Other", modFolderPath: otherModsPath, importer: "OtherImporter" });
+        await fse.move(originalModPath, movedModPath);
+        await fse.remove(path.join(importerPath, "ShaderFixes", SHADER_FIXES_MOD_MARKER_FILE));
+        fastGlobCalls.length = 0;
+
+        await service.handleShaders(movedModPath, false);
+
+        assert.deepEqual(fastGlobCalls, [
+            { pattern: `**/${SHADER_FIXES_MOD_MARKER_FILE}`, cwd: modsPath },
+        ]);
+        assert.equal(await fse.pathExists(originalTargetPath), false);
+        assert.equal(
+            await fse.pathExists(path.join(movedModPath, SHADER_FIXES_MOD_MARKER_FILE)),
+            false,
+        );
+        assert.deepEqual(
+            await fse.readJson(
+                path.join(importerPath, "ShaderFixes", SHADER_FIXES_MOD_MARKER_FILE),
+            ),
+            { version: 1, targets: {} },
+        );
+        assert.equal(
+            await fse.pathExists(
+                path.join(otherImporterPath, "ShaderFixes", SHADER_FIXES_MOD_MARKER_FILE),
+            ),
+            false,
+        );
     });
 
     it("rebuilds a corrupted owner index before deleting files", async () => {
