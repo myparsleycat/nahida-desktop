@@ -48,6 +48,58 @@ export function anisotropicScaleFromOriginal(options: {
     }
 }
 
+/** Compute area-weighted vertex normals for an indexed triangle mesh. */
+export function computeVertexNormals(
+    positions: Float32Array,
+    indices: Uint16Array | Uint32Array,
+): Float32Array {
+    const vertexCount = Math.floor(positions.length / 3);
+    const normals = new Float32Array(vertexCount * 3);
+
+    for (let i = 0; i + 2 < indices.length; i += 3) {
+        const ai = indices[i];
+        const bi = indices[i + 1];
+        const ci = indices[i + 2];
+        if (ai >= vertexCount || bi >= vertexCount || ci >= vertexCount) continue;
+
+        const a = ai * 3;
+        const b = bi * 3;
+        const c = ci * 3;
+        const abx = positions[b] - positions[a];
+        const aby = positions[b + 1] - positions[a + 1];
+        const abz = positions[b + 2] - positions[a + 2];
+        const acx = positions[c] - positions[a];
+        const acy = positions[c + 1] - positions[a + 1];
+        const acz = positions[c + 2] - positions[a + 2];
+        const nx = aby * acz - abz * acy;
+        const ny = abz * acx - abx * acz;
+        const nz = abx * acy - aby * acx;
+        if (!Number.isFinite(nx) || !Number.isFinite(ny) || !Number.isFinite(nz)) continue;
+        if (nx === 0 && ny === 0 && nz === 0) continue;
+
+        normals[a] += nx;
+        normals[a + 1] += ny;
+        normals[a + 2] += nz;
+        normals[b] += nx;
+        normals[b + 1] += ny;
+        normals[b + 2] += nz;
+        normals[c] += nx;
+        normals[c + 1] += ny;
+        normals[c + 2] += nz;
+    }
+
+    for (let i = 0; i < vertexCount; i++) {
+        const o = i * 3;
+        const length = Math.hypot(normals[o], normals[o + 1], normals[o + 2]);
+        if (length === 0) continue;
+        normals[o] /= length;
+        normals[o + 1] /= length;
+        normals[o + 2] /= length;
+    }
+
+    return normals;
+}
+
 /** Effective per-vertex scale factors for normal/tangent correction: A_eff = I + w(A - I). */
 export function effectiveScaleFactors(
     weight: number,
@@ -124,6 +176,39 @@ export function correctSnorm8TangentNormal(
     vectors[base + 4] = clampSnorm8(nx);
     vectors[base + 5] = clampSnorm8(ny);
     vectors[base + 6] = clampSnorm8(nz);
+}
+
+export function recalculateNormalsAndTangents(options: {
+    positions: Float32Array;
+    indices?: Uint16Array | Uint32Array;
+    vectorBuffer: Int8Array;
+    layout: "snorm8-tangent-normal";
+}): Int8Array {
+    const { positions, indices, vectorBuffer } = options;
+    if (!indices || indices.length === 0) return vectorBuffer;
+
+    const computedNormals = computeVertexNormals(positions, indices);
+    const vertexCount = Math.min(
+        Math.floor(positions.length / 3),
+        Math.floor(vectorBuffer.length / 8),
+    );
+
+    const result = new Int8Array(vectorBuffer);
+    for (let i = 0; i < vertexCount; i += 1) {
+        const base = i * 8;
+        const no = i * 3;
+        const nx = computedNormals[no];
+        const ny = computedNormals[no + 1];
+        const nz = computedNormals[no + 2];
+        const nLen = Math.hypot(nx, ny, nz);
+        if (nLen > 1e-8) {
+            result[base + 4] = clampSnorm8(nx / nLen);
+            result[base + 5] = clampSnorm8(ny / nLen);
+            result[base + 6] = clampSnorm8(nz / nLen);
+        }
+    }
+
+    return result;
 }
 
 function clampSnorm8(value: number): number {

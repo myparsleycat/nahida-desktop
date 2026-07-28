@@ -1,3 +1,4 @@
+import { computeBoundingCenter } from "./deform";
 import { clamp01 } from "./weights";
 
 /** Built-in body-shape region ids selectable in the UI. */
@@ -270,6 +271,10 @@ export type ActiveRegionDeform = {
     amount: number;
     axisScale: readonly [number, number, number];
     pivot: readonly [number, number, number];
+    operation?: "scale" | "inflate" | "translate" | "taper";
+    normals?: Float32Array;
+    translation?: readonly [number, number, number];
+    taperFactor?: number;
 };
 
 /**
@@ -300,6 +305,32 @@ export function applyMultiRegionDeform(options: {
             if (region.amount === 0) continue;
             const w = region.weights[i] ?? 0;
             if (w <= 0) continue;
+
+            if (region.operation === "inflate") {
+                const normals = region.normals;
+                if (!normals || o + 2 >= normals.length) continue;
+                dx += normals[o] * region.amount * w;
+                dy += normals[o + 1] * region.amount * w;
+                dz += normals[o + 2] * region.amount * w;
+                continue;
+            }
+
+            if (region.operation === "translate") {
+                const tr = region.translation ?? [0, 1, 0];
+                dx += tr[0] * region.amount * w;
+                dy += tr[1] * region.amount * w;
+                dz += tr[2] * region.amount * w;
+                continue;
+            }
+
+            if (region.operation === "taper") {
+                const tf = region.taperFactor ?? 0.5;
+                const heightDiff = py - region.pivot[1];
+                const scale = region.amount * tf * w * heightDiff;
+                dx += (px - region.pivot[0]) * scale;
+                dz += (pz - region.pivot[2]) * scale;
+                continue;
+            }
 
             const sx = 1 + region.amount * region.axisScale[0] * w;
             const sy = 1 + region.amount * region.axisScale[1] * w;
@@ -377,7 +408,7 @@ export function composeEffectiveScales(
     }
 
     for (const region of regions) {
-        if (region.amount === 0) continue;
+        if (region.amount === 0 || region.operation === "inflate") continue;
         for (let i = 0; i < vertexCount; i++) {
             const w = region.weights[i] ?? 0;
             if (w <= 0) continue;
@@ -388,4 +419,64 @@ export function composeEffectiveScales(
     }
 
     return scales;
+}
+
+export type SelectionMask = {
+    id: string;
+    name: string;
+    weights: Float32Array;
+    visible: boolean;
+    locked: boolean;
+};
+
+export type ShapeLayer = {
+    id: string;
+    name: string;
+    maskId: string;
+    operation: "scale" | "inflate" | "translate" | "taper";
+    amount: number;
+    axisScale: [number, number, number];
+    translation: [number, number, number];
+    taperFactor: number;
+    enabled: boolean;
+};
+
+export function evaluateShapeLayers(options: {
+    originalPositions: Float32Array;
+    previewPositions: Float32Array;
+    masks: readonly SelectionMask[];
+    layers: readonly ShapeLayer[];
+    normals?: Float32Array;
+}): void {
+    const { originalPositions, previewPositions, masks, layers, normals } = options;
+    const maskMap = new Map(masks.map((m) => [m.id, m]));
+    const activeDeforms: ActiveRegionDeform[] = [];
+
+    for (const layer of layers) {
+        if (!layer.enabled || layer.amount === 0) continue;
+        const mask = maskMap.get(layer.maskId);
+        if (!mask || !mask.visible) continue;
+
+        activeDeforms.push({
+            id: layer.id,
+            weights: mask.weights,
+            amount: layer.amount,
+            axisScale: layer.axisScale,
+            pivot: computeRegionPivot(
+                originalPositions,
+                mask.weights,
+                computeBoundingCenter(originalPositions),
+            ),
+            operation: layer.operation,
+            normals,
+            translation: layer.translation,
+            taperFactor: layer.taperFactor,
+        });
+    }
+
+    applyMultiRegionDeform({
+        originalPositions,
+        previewPositions,
+        regions: activeDeforms,
+    });
 }

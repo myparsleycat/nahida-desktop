@@ -13,11 +13,14 @@ export {
 export {
     anisotropicScaleFromOriginal,
     computeBoundingCenter,
+    computeVertexNormals,
     computeWeightedPivot,
     correctSnorm8TangentNormal,
     displacementMetrics,
     effectiveScaleFactors,
+    recalculateNormalsAndTangents,
 } from "./deform";
+
 export {
     BLEND_INDICES_OFFSET,
     BLEND_INFLUENCE_COUNT,
@@ -46,13 +49,17 @@ export {
     composeEffectiveScales,
     computeMeshBounds,
     computeRegionPivot,
+    evaluateShapeLayers,
     generateRegionWeights,
     REGION_PRESETS,
     type ActiveRegionDeform,
     type BodyRegionId,
     type MeshBounds,
     type RegionPreset,
+    type SelectionMask,
+    type ShapeLayer,
 } from "./regions";
+
 export {
     applyBrushStroke,
     brushFalloff,
@@ -64,3 +71,14 @@ export {
     writeWeightColors,
     type BrushMode,
 } from "./weights";
+export {
+    applyGeodesicBrush,
+    buildConnectedComponents,
+    buildSymmetryMap,
+    buildVertexAdjacency,
+    growSelectionWeights,
+    mirrorWeightsWithCache,
+    selectConnectedComponent,
+    shrinkSelectionWeights,
+    smoothSelectionWeights,
+} from "./selection";

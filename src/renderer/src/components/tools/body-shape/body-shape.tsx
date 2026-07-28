@@ -41,23 +41,37 @@ import {
 import { Switch } from "@renderer/components/ui/switch";
 import {
   applyBrushStroke,
+  applyGeodesicBrush,
   applyMultiRegionDeform,
-  BODY_REGION_IDS,
+  buildConnectedComponents,
+  buildSymmetryMap,
+  buildVertexAdjacency,
   composeDisplayWeights,
   computeBoundingCenter,
+  computeMeshBounds,
   computeRegionPivot,
+  computeVertexNormals,
   DEFAULT_BLEND_STRIDE,
   displacementMetrics,
   extractBoneWeights,
-  generateRegionWeights,
+  growSelectionWeights,
   mirrorWeightsAcrossX,
-  REGION_PRESETS,
+  selectConnectedComponent,
+  shrinkSelectionWeights,
+  smoothSelectionWeights,
   type ActiveRegionDeform,
   type BlendBoneInfo,
-  type BodyRegionId,
 } from "@shared/body-shape";
 import { toErrorMessage } from "@shared/utils";
-import { FolderOpenIcon, Loader2Icon, SaveIcon } from "lucide-react";
+import {
+  FolderOpenIcon,
+  Loader2Icon,
+  Maximize2Icon,
+  Minimize2Icon,
+  Redo2Icon,
+  SaveIcon,
+  Undo2Icon,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -66,18 +80,22 @@ import { ScrollArea } from "../../ui/scroll-area";
 
 const DEFAULT_AXIS_SCALE: [number, number, number] = [1, 0.15, 1];
 
-type ControlMode = "unified" | "perItem";
+type WeightSource = { kind: "bone"; boneId: number };
 
-type WeightSource = { kind: "bone"; boneId: number } | { kind: "region"; regionId: BodyRegionId };
+type DeformOperation = "scale" | "inflate" | "translate" | "taper";
 
 type DeformControl = {
   amount: number;
   axisScale: [number, number, number];
+  translation: [number, number, number];
+  taperFactor: number;
 };
 
 const DEFAULT_UNIFIED_CONTROL: DeformControl = {
   amount: 0,
   axisScale: [...DEFAULT_AXIS_SCALE],
+  translation: [0, 0, 0],
+  taperFactor: 0.5,
 };
 
 type LoadedMesh = {
@@ -96,12 +114,22 @@ type LoadedMesh = {
   blendStride: number;
   bones: BlendBoneInfo[];
   weightCache: Map<string, Float32Array>;
+  selectionWeights: Float32Array;
+  adjacency?: readonly Uint32Array[];
+  originalNormals?: Float32Array;
+  componentIds?: Uint32Array;
+  symmetryMap?: Int32Array;
 };
 
 type LoadResult = {
   modRoot: string;
   iniPath: string;
   meshes: LoadedMesh[];
+};
+
+type SelectionHistoryEntry = {
+  before: Float32Array;
+  after: Float32Array;
 };
 
 function toFloat32(value: unknown): Float32Array {
@@ -136,8 +164,30 @@ function toUint8(value: unknown): Uint8Array | undefined {
   return undefined;
 }
 
+function nearestVertexToPoint(
+  positions: Float32Array,
+  candidates: readonly number[],
+  point: readonly [number, number, number],
+): number | undefined {
+  return candidates.reduce<number | undefined>((nearest, candidate) => {
+    if (candidate * 3 + 2 >= positions.length) return nearest;
+    if (nearest === undefined) return candidate;
+    const candidateOffset = candidate * 3;
+    const nearestOffset = nearest * 3;
+    const candidateDistance =
+      (positions[candidateOffset] - point[0]) ** 2 +
+      (positions[candidateOffset + 1] - point[1]) ** 2 +
+      (positions[candidateOffset + 2] - point[2]) ** 2;
+    const nearestDistance =
+      (positions[nearestOffset] - point[0]) ** 2 +
+      (positions[nearestOffset + 1] - point[1]) ** 2 +
+      (positions[nearestOffset + 2] - point[2]) ** 2;
+    return candidateDistance < nearestDistance ? candidate : nearest;
+  }, undefined);
+}
+
 function weightKey(source: WeightSource): string {
-  return source.kind === "bone" ? `bone:${source.boneId}` : `region:${source.regionId}`;
+  return `bone:${source.boneId}`;
 }
 
 function parseWeightKey(key: string): WeightSource | null {
@@ -146,22 +196,7 @@ function parseWeightKey(key: string): WeightSource | null {
     if (!Number.isInteger(boneId) || boneId < 0) return null;
     return { kind: "bone", boneId };
   }
-  if (key.startsWith("region:")) {
-    const regionId = key.slice(7) as BodyRegionId;
-    if (!BODY_REGION_IDS.includes(regionId)) return null;
-    return { kind: "region", regionId };
-  }
   return null;
-}
-
-function defaultControlFor(source: WeightSource): DeformControl {
-  if (source.kind === "region") {
-    return {
-      amount: 0,
-      axisScale: [...REGION_PRESETS[source.regionId].defaultAxisScale] as [number, number, number],
-    };
-  }
-  return { amount: 0, axisScale: [...DEFAULT_AXIS_SCALE] };
 }
 
 function getOrCreateWeights(
@@ -176,12 +211,9 @@ function getOrCreateWeights(
   const cached = mesh.weightCache.get(key);
   if (cached) return cached;
 
-  const weights =
-    source.kind === "bone"
-      ? mesh.blendBytes
-        ? extractBoneWeights(mesh.blendBytes, source.boneId, mesh.vertexCount, mesh.blendStride)
-        : new Float32Array(mesh.vertexCount)
-      : generateRegionWeights(mesh.originalPositions, source.regionId);
+  const weights = mesh.blendBytes
+    ? extractBoneWeights(mesh.blendBytes, source.boneId, mesh.vertexCount, mesh.blendStride)
+    : new Float32Array(mesh.vertexCount);
 
   mesh.weightCache.set(key, weights);
   return weights;
@@ -224,9 +256,8 @@ export default function BodyShapeTool({
   const [loaded, setLoaded] = useState<LoadResult | null>(null);
   const [selectedMeshId, setSelectedMeshId] = useState<string>("");
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-  const [controls, setControls] = useState<Record<string, DeformControl>>({});
   const [unifiedControl, setUnifiedControl] = useState<DeformControl>(DEFAULT_UNIFIED_CONTROL);
-  const [controlMode, setControlMode] = useState<ControlMode>("unified");
+  const [deformOperation, setDeformOperation] = useState<DeformOperation>("scale");
   const [showOriginal, setShowOriginal] = useState(false);
   const [showWeights, setShowWeights] = useState(true);
   const [weightVersion, setWeightVersion] = useState(0);
@@ -235,10 +266,11 @@ export default function BodyShapeTool({
   /* Brush state */
   const [brushEnabled, setBrushEnabled] = useState(false);
   const [brushMode, setBrushMode] = useState<BrushMode>("paint");
+  const [selectionToolMode, setSelectionToolMode] = useState<"brush" | "component">("brush");
+  const [brushReachMode, setBrushReachMode] = useState<"surface" | "through">("surface");
   const [brushRadius, setBrushRadius] = useState(0.15);
   const [brushStrength, setBrushStrength] = useState(0.1);
   const [brushMirrorX, setBrushMirrorX] = useState(true);
-  const customWeightsMapRef = useRef<Map<string, Float32Array>>(new Map());
 
   const isFixedTarget = Boolean(fixedTargetPath);
   const simpleViewportRef = useRef<BodyShapeViewportHandle | null>(null);
@@ -247,6 +279,12 @@ export default function BodyShapeTool({
     showOriginal: boolean;
   }>({ regions: null, showOriginal: false });
   const previewKeyRef = useRef<string | null>(null);
+  const selectionStrokeBeforeRef = useRef<Float32Array | null>(null);
+  const selectionHistoryRef = useRef<{
+    undo: SelectionHistoryEntry[];
+    redo: SelectionHistoryEntry[];
+  }>({ undo: [], redo: [] });
+  const [, setHistoryVersion] = useState(0);
 
   const selectedMesh = useMemo(() => {
     if (!loaded) return null;
@@ -257,111 +295,223 @@ export default function BodyShapeTool({
 
   const selectableItems = useMemo(() => {
     if (!selectedMesh) return [] as { key: string; label: string }[];
-    if (useBones) {
-      return selectedMesh.bones.map((bone) => ({
-        key: weightKey({ kind: "bone", boneId: bone.id }),
-        label: t("page.tools.body_shape.bone_label", {
-          id: bone.id,
-          count: bone.vertexCount,
-        }),
-      }));
-    }
-    return BODY_REGION_IDS.map((id) => ({
-      key: weightKey({ kind: "region", regionId: id }),
-      label: t(`page.tools.body_shape.regions.${id}`),
+    return selectedMesh.bones.map((bone) => ({
+      key: weightKey({ kind: "bone", boneId: bone.id }),
+      label: t("page.tools.body_shape.bone_label", {
+        id: bone.id,
+        count: bone.vertexCount,
+      }),
     }));
-  }, [selectedMesh, useBones, t]);
+  }, [selectedMesh, t]);
+
+  const hasSelection = useMemo(
+    () => selectedMesh?.selectionWeights.some((weight) => weight > 0) ?? false,
+    [selectedMesh, weightVersion],
+  );
+
+  const meshExtent = useMemo(() => {
+    if (!selectedMesh) return 1;
+    const size = computeMeshBounds(selectedMesh.originalPositions).size;
+    return Math.max(size[0], size[1], size[2], 1e-3);
+  }, [selectedMesh]);
 
   const activeRegions: ActiveRegionDeform[] = useMemo(() => {
-    if (!selectedMesh) return [];
-    const boundsCenter = computeBoundingCenter(selectedMesh.originalPositions);
-    return selectedKeys.flatMap((key) => {
-      const source = parseWeightKey(key);
-      if (!source) return [];
-      const weights = getOrCreateWeights(selectedMesh, source, customWeightsMapRef.current);
-      const control =
-        controlMode === "unified" ? unifiedControl : (controls[key] ?? defaultControlFor(source));
-      return [
-        {
-          id: key,
-          weights,
-          amount: control.amount,
-          axisScale: control.axisScale,
-          pivot: computeRegionPivot(selectedMesh.originalPositions, weights, boundsCenter),
-        },
-      ];
-    });
-  }, [selectedMesh, selectedKeys, controls, unifiedControl, controlMode, weightVersion]);
+    if (!selectedMesh || !hasSelection) return [];
+    const isTranslate = deformOperation === "translate";
+    return [
+      {
+        id: "selection",
+        weights: selectedMesh.selectionWeights,
+        amount: isTranslate ? 1 : unifiedControl.amount,
+        axisScale: unifiedControl.axisScale,
+        operation: deformOperation,
+        normals: selectedMesh.originalNormals,
+        translation: unifiedControl.translation,
+        taperFactor: unifiedControl.taperFactor,
+        pivot: computeRegionPivot(
+          selectedMesh.originalPositions,
+          selectedMesh.selectionWeights,
+          computeBoundingCenter(selectedMesh.originalPositions),
+        ),
+      },
+    ];
+  }, [selectedMesh, hasSelection, unifiedControl, deformOperation, weightVersion]);
+
+  const resetSelectionHistory = () => {
+    selectionHistoryRef.current = { undo: [], redo: [] };
+    selectionStrokeBeforeRef.current = null;
+    setHistoryVersion((version) => version + 1);
+  };
+
+  const commitSelectionHistory = (before: Float32Array) => {
+    if (!selectedMesh) return;
+    const after = new Float32Array(selectedMesh.selectionWeights);
+    if (before.every((weight, index) => weight === after[index])) return;
+    selectionHistoryRef.current.undo.push({ before, after });
+    if (selectionHistoryRef.current.undo.length > 50) {
+      selectionHistoryRef.current.undo.shift();
+    }
+    selectionHistoryRef.current.redo = [];
+    setHistoryVersion((version) => version + 1);
+  };
 
   const handleBrushStroke = (stroke: BrushStrokeInput) => {
-    if (!selectedMesh || selectedKeys.length === 0) return;
+    if (!selectedMesh) return;
 
-    const positions = showOriginal ? selectedMesh.originalPositions : selectedMesh.previewPositions;
-    const vertexCount = selectedMesh.vertexCount;
-    const r2 = brushRadius * brushRadius;
-    const [hx, hy, hz] = stroke.hitPoint;
+    if (selectionToolMode === "component") {
+      if (!selectedMesh.componentIds || stroke.vertexIndices === undefined) return;
+      const seedVertex = nearestVertexToPoint(
+        selectedMesh.previewPositions,
+        stroke.vertexIndices,
+        stroke.localPoint,
+      );
+      if (seedVertex === undefined) return;
+      const componentId = selectedMesh.componentIds[seedVertex];
+      if (componentId === undefined) return;
 
-    const touchedIndices: number[] = [];
-    for (let i = 0; i < vertexCount; i++) {
-      const ox = i * 3;
-      const dx = positions[ox] - hx;
-      const dy = positions[ox + 1] - hy;
-      const dz = positions[ox + 2] - hz;
-      if (dx * dx + dy * dy + dz * dz <= r2) {
-        touchedIndices.push(i);
-      }
-    }
-
-    if (touchedIndices.length === 0) return;
-
-    let anyChanged = false;
-    for (const key of selectedKeys) {
-      const source = parseWeightKey(key);
-      if (!source) continue;
-
-      let weights = customWeightsMapRef.current.get(key);
-      if (!weights) {
-        const originalWeights = getOrCreateWeights(selectedMesh, source);
-        weights = new Float32Array(originalWeights);
-        customWeightsMapRef.current.set(key, weights);
-      }
-
-      const changedCount = applyBrushStroke({
-        positions,
-        weights,
-        hitPoint: stroke.hitPoint,
-        hitNormal: stroke.hitNormal,
-        radius: brushRadius,
-        strength: brushStrength,
-        mode: brushMode,
+      const changedIndices = selectConnectedComponent({
+        weights: selectedMesh.selectionWeights,
+        componentIds: selectedMesh.componentIds,
+        targetComponentId: componentId,
+        mode: brushMode === "erase" ? "subtract" : "add",
       });
-
-      if (changedCount > 0) {
+      if (changedIndices.length > 0) {
         if (brushMirrorX) {
-          mirrorWeightsAcrossX(positions, weights, touchedIndices, 1e-3, brushMode);
+          mirrorWeightsAcrossX(
+            selectedMesh.originalPositions,
+            selectedMesh.selectionWeights,
+            changedIndices,
+            1e-3,
+            brushMode,
+            selectedMesh.symmetryMap,
+          );
         }
-        anyChanged = true;
+        setWeightVersion((version) => version + 1);
       }
+      return;
     }
 
-    if (anyChanged) {
-      setWeightVersion((v) => v + 1);
+    const seedVertex = stroke.vertexIndices
+      ? nearestVertexToPoint(selectedMesh.previewPositions, stroke.vertexIndices, stroke.localPoint)
+      : undefined;
+    const useSurfaceBrush = brushReachMode === "surface";
+    const changedIndices =
+      useSurfaceBrush && selectedMesh.adjacency && seedVertex !== undefined
+        ? applyGeodesicBrush({
+            positions: selectedMesh.originalPositions,
+            adjacency: selectedMesh.adjacency,
+            weights: selectedMesh.selectionWeights,
+            seedVertexIndices: [seedVertex],
+            radius: brushRadius,
+            strength: brushStrength,
+            mode: brushMode,
+            frontFacingOnly: true,
+            normals: selectedMesh.originalNormals,
+            hitNormal: stroke.localNormal,
+          })
+        : (() => {
+            const before = new Float32Array(selectedMesh.selectionWeights);
+            applyBrushStroke({
+              positions: showOriginal
+                ? selectedMesh.originalPositions
+                : selectedMesh.previewPositions,
+              weights: selectedMesh.selectionWeights,
+              hitPoint: stroke.localPoint,
+              hitNormal: useSurfaceBrush ? stroke.localNormal : undefined,
+              radius: brushRadius,
+              strength: brushStrength,
+              mode: brushMode,
+              normals: useSurfaceBrush ? selectedMesh.originalNormals : undefined,
+            });
+            return Uint32Array.from(
+              Array.from(before.keys()).filter(
+                (index) => before[index] !== selectedMesh.selectionWeights[index],
+              ),
+            );
+          })();
+
+    if (changedIndices.length === 0) return;
+    if (brushMirrorX) {
+      mirrorWeightsAcrossX(
+        selectedMesh.originalPositions,
+        selectedMesh.selectionWeights,
+        changedIndices,
+        1e-3,
+        brushMode,
+        selectedMesh.symmetryMap,
+      );
     }
+    setWeightVersion((version) => version + 1);
+  };
+
+  const handleBrushStrokeStart = () => {
+    if (!selectedMesh || selectionStrokeBeforeRef.current) return;
+    selectionStrokeBeforeRef.current = new Float32Array(selectedMesh.selectionWeights);
+  };
+
+  const handleBrushStrokeEnd = () => {
+    const before = selectionStrokeBeforeRef.current;
+    selectionStrokeBeforeRef.current = null;
+    if (before) commitSelectionHistory(before);
   };
 
   const handleResetPaintedWeights = () => {
-    if (selectedKeys.length === 0) {
-      customWeightsMapRef.current.clear();
-    } else {
-      for (const key of selectedKeys) {
-        customWeightsMapRef.current.delete(key);
-      }
-    }
-    setWeightVersion((v) => v + 1);
+    if (!selectedMesh) return;
+    const before = new Float32Array(selectedMesh.selectionWeights);
+    selectedMesh.selectionWeights.fill(0);
+    setSelectedKeys([]);
+    commitSelectionHistory(before);
+    setWeightVersion((version) => version + 1);
     toast.success(t("page.tools.body_shape.brush_reset"));
   };
 
-  const hasPaintedWeights = selectedKeys.some((key) => customWeightsMapRef.current.has(key));
+  const smoothSelection = () => {
+    if (!selectedMesh?.adjacency) return;
+    const before = new Float32Array(selectedMesh.selectionWeights);
+    smoothSelectionWeights(selectedMesh.selectionWeights, selectedMesh.adjacency, 0.5, 2);
+    commitSelectionHistory(before);
+    setWeightVersion((version) => version + 1);
+  };
+
+  const growSelection = () => {
+    if (!selectedMesh?.adjacency) return;
+    const before = new Float32Array(selectedMesh.selectionWeights);
+    growSelectionWeights(selectedMesh.selectionWeights, selectedMesh.adjacency, 1.0, 1);
+    commitSelectionHistory(before);
+    setWeightVersion((version) => version + 1);
+  };
+
+  const shrinkSelection = () => {
+    if (!selectedMesh?.adjacency) return;
+    const before = new Float32Array(selectedMesh.selectionWeights);
+    shrinkSelectionWeights(selectedMesh.selectionWeights, selectedMesh.adjacency, 1.0, 1);
+    commitSelectionHistory(before);
+    setWeightVersion((version) => version + 1);
+  };
+
+  const undoSelection = () => {
+    if (!selectedMesh) return;
+    const entry = selectionHistoryRef.current.undo.pop();
+    if (!entry) return;
+    selectedMesh.selectionWeights.set(entry.before);
+    selectionHistoryRef.current.redo.push(entry);
+    setSelectedKeys([]);
+    setHistoryVersion((version) => version + 1);
+    setWeightVersion((version) => version + 1);
+  };
+
+  const redoSelection = () => {
+    if (!selectedMesh) return;
+    const entry = selectionHistoryRef.current.redo.pop();
+    if (!entry) return;
+    selectedMesh.selectionWeights.set(entry.after);
+    selectionHistoryRef.current.undo.push(entry);
+    setSelectedKeys([]);
+    setHistoryVersion((version) => version + 1);
+    setWeightVersion((version) => version + 1);
+  };
+
+  const hasPaintedWeights = hasSelection;
 
   const brushProps: BrushProps = {
     enabled: brushEnabled,
@@ -414,6 +564,12 @@ export default function BodyShapeTool({
       const result = await window.api.invoke("tools:bodyShapeLoadMod", path);
       const meshes: LoadedMesh[] = result.meshes.map((mesh) => {
         const originalPositions = toFloat32(mesh.positions);
+        const indices = toUint32(mesh.indices);
+        const adjacency = indices ? buildVertexAdjacency(mesh.vertexCount, indices) : undefined;
+        const componentIds = adjacency
+          ? buildConnectedComponents(mesh.vertexCount, adjacency)
+          : undefined;
+        const symmetryMap = buildSymmetryMap(originalPositions, "x", 1e-3);
         return {
           id: mesh.id,
           name: mesh.name,
@@ -423,13 +579,18 @@ export default function BodyShapeTool({
           vertexCount: mesh.vertexCount,
           originalPositions,
           previewPositions: new Float32Array(originalPositions),
-          indices: toUint32(mesh.indices),
+          indices,
           vectorPath: mesh.vectorPath,
           vectorLayout: mesh.vectorLayout ?? null,
           blendBytes: toUint8(mesh.blendBytes),
           blendStride: mesh.blendStride ?? DEFAULT_BLEND_STRIDE,
           bones: mesh.bones ?? [],
           weightCache: new Map(),
+          selectionWeights: new Float32Array(mesh.vertexCount),
+          adjacency,
+          originalNormals: indices ? computeVertexNormals(originalPositions, indices) : undefined,
+          componentIds,
+          symmetryMap,
         };
       });
       setLoaded({
@@ -439,10 +600,10 @@ export default function BodyShapeTool({
       });
       setSelectedMeshId(meshes[0]?.id ?? "");
       setSelectedKeys([]);
+      resetSelectionHistory();
       previewKeyRef.current = null;
-      setControls({});
       setUnifiedControl(DEFAULT_UNIFIED_CONTROL);
-      setControlMode("unified");
+      setDeformOperation("scale");
       setWeightVersion((v) => v + 1);
       setModelOrientation(DEFAULT_MODEL_ORIENTATION);
       setShowWeights(true);
@@ -469,18 +630,22 @@ export default function BodyShapeTool({
 
   const applySelectedKeys = (nextKeys: string[]) => {
     setSelectedKeys(nextKeys);
-    setControls((prevControls) => {
-      const updated = { ...prevControls };
-      for (const key of nextKeys) {
-        if (updated[key]) continue;
-        const source = parseWeightKey(key);
-        if (!source) continue;
-        updated[key] = defaultControlFor(source);
-        if (selectedMesh) getOrCreateWeights(selectedMesh, source);
+    if (!selectedMesh) return;
+    const before = new Float32Array(selectedMesh.selectionWeights);
+    selectedMesh.selectionWeights.fill(0);
+    for (const key of nextKeys) {
+      const source = parseWeightKey(key);
+      if (!source) continue;
+      const boneWeights = getOrCreateWeights(selectedMesh, source);
+      for (let index = 0; index < selectedMesh.vertexCount; index++) {
+        selectedMesh.selectionWeights[index] = Math.max(
+          selectedMesh.selectionWeights[index],
+          boneWeights[index] ?? 0,
+        );
       }
-      return updated;
-    });
-    setWeightVersion((v) => v + 1);
+    }
+    commitSelectionHistory(before);
+    setWeightVersion((version) => version + 1);
   };
 
   const handleItemHighlighted = (item: { key: string; label: string } | undefined) => {
@@ -491,55 +656,41 @@ export default function BodyShapeTool({
     simpleViewportRef.current?.updateColors(regions);
   };
 
-  const updateAmount = (key: string, amount: number) => {
-    if (controlMode === "unified") {
-      setUnifiedControl((prev) => ({ ...prev, amount }));
-    } else {
-      const source = parseWeightKey(key);
-      if (!source) return;
-      setControls((prev) => ({
-        ...prev,
-        [key]: { ...(prev[key] ?? defaultControlFor(source)), amount },
-      }));
-    }
-    setWeightVersion((v) => v + 1);
+  const updateAmount = (amount: number) => {
+    setUnifiedControl((previous) => ({ ...previous, amount }));
+    setWeightVersion((version) => version + 1);
   };
 
-  const updateAxis = (key: string, axis: 0 | 1 | 2, value: number) => {
-    if (controlMode === "unified") {
-      setUnifiedControl((prev) => {
-        const nextScale = [...prev.axisScale] as [number, number, number];
-        nextScale[axis] = value;
-        return { ...prev, axisScale: nextScale };
-      });
-    } else {
-      const source = parseWeightKey(key);
-      if (!source) return;
-      setControls((prev) => {
-        const current = prev[key] ?? defaultControlFor(source);
-        const nextScale = [...current.axisScale] as [number, number, number];
-        nextScale[axis] = value;
-        return { ...prev, [key]: { ...current, axisScale: nextScale } };
-      });
-    }
-    setWeightVersion((v) => v + 1);
+  const updateAxis = (axis: 0 | 1 | 2, value: number) => {
+    setUnifiedControl((previous) => {
+      const axisScale = [...previous.axisScale] as [number, number, number];
+      axisScale[axis] = value;
+      return { ...previous, axisScale };
+    });
+    setWeightVersion((version) => version + 1);
+  };
+
+  const updateTranslation = (axis: 0 | 1 | 2, value: number) => {
+    setUnifiedControl((previous) => {
+      const translation = [...previous.translation] as [number, number, number];
+      translation[axis] = value;
+      return { ...previous, translation };
+    });
+    setWeightVersion((version) => version + 1);
+  };
+
+  const updateTaperFactor = (taperFactor: number) => {
+    setUnifiedControl((previous) => ({ ...previous, taperFactor }));
+    setWeightVersion((version) => version + 1);
   };
 
   const resetSelected = () => {
-    if (controlMode === "unified") {
-      setUnifiedControl(DEFAULT_UNIFIED_CONTROL);
-    } else {
-      setControls((prev) => {
-        const next = { ...prev };
-        for (const key of selectedKeys) {
-          const source = parseWeightKey(key);
-          if (!source) continue;
-          next[key] = defaultControlFor(source);
-        }
-        return next;
-      });
-    }
-    setWeightVersion((v) => v + 1);
+    setUnifiedControl({
+      ...DEFAULT_UNIFIED_CONTROL,
+      axisScale: [...DEFAULT_AXIS_SCALE],
+      translation: [0, 0, 0],
+    });
+    setWeightVersion((version) => version + 1);
   };
 
   const rotateModel = (delta: [number, number, number]) => {
@@ -578,7 +729,7 @@ export default function BodyShapeTool({
         positions: selectedMesh.previewPositions,
         vectorPath: selectedMesh.vectorPath,
         vectorLayout: selectedMesh.vectorLayout,
-        weights: displayWeights,
+        weights: deformOperation === "scale" ? displayWeights : undefined,
         amount: primary?.amount ?? 0,
         axisScale: primary ? [...primary.axisScale] : [1, 1, 1],
         writeChangeLog: true,
@@ -611,6 +762,8 @@ export default function BodyShapeTool({
   };
 
   const selectedItems = selectableItems.filter((item) => selectedKeys.includes(item.key));
+  const canUndoSelection = selectionHistoryRef.current.undo.length > 0;
+  const canRedoSelection = selectionHistoryRef.current.redo.length > 0;
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3">
@@ -660,6 +813,8 @@ export default function BodyShapeTool({
               brushStrength={brushStrength}
               brushMirrorX={brushMirrorX}
               onBrushStroke={handleBrushStroke}
+              onBrushStrokeStart={handleBrushStrokeStart}
+              onBrushStrokeEnd={handleBrushStrokeEnd}
               onBrushRadiusChange={setBrushRadius}
             />
           ) : (
@@ -728,10 +883,10 @@ export default function BodyShapeTool({
                         if (value) {
                           setSelectedMeshId(value);
                           setSelectedKeys([]);
+                          resetSelectionHistory();
                           previewKeyRef.current = null;
-                          customWeightsMapRef.current.clear();
-                          setControls({});
                           setUnifiedControl(DEFAULT_UNIFIED_CONTROL);
+                          setDeformOperation("scale");
                           setWeightVersion((v) => v + 1);
                         }
                       }}
@@ -752,76 +907,119 @@ export default function BodyShapeTool({
                   </Field>
 
                   <Field>
-                    <FieldLabel>
-                      {useBones
-                        ? t("page.tools.body_shape.select_bones")
-                        : t("page.tools.body_shape.select_regions")}
-                    </FieldLabel>
+                    <FieldLabel>{t("page.tools.body_shape.selection_mask")}</FieldLabel>
+                    <p className="mb-2 text-[11px] text-muted-foreground">
+                      {t("page.tools.body_shape.selection_mask_hint")}
+                    </p>
                     {useBones ? (
-                      <p className="mb-2 text-[11px] text-muted-foreground">
-                        {t("page.tools.body_shape.pick_bones_hint")}
-                      </p>
-                    ) : (
-                      <p className="mb-2 text-[11px] text-muted-foreground">
-                        {t("page.tools.body_shape.no_blend_fallback")}
-                      </p>
-                    )}
-                    <Combobox
-                      multiple
-                      autoHighlight
-                      items={selectableItems}
-                      value={selectedItems}
-                      onValueChange={(next) => {
-                        applySelectedKeys((next ?? []).map((item) => item.key));
-                      }}
-                      onItemHighlighted={handleItemHighlighted}
-                      onOpenChange={(open) => {
-                        if (!open) {
-                          previewKeyRef.current = null;
-                          if (selectedMesh) {
+                      <Combobox
+                        multiple
+                        autoHighlight
+                        items={selectableItems}
+                        value={selectedItems}
+                        onValueChange={(next) => {
+                          applySelectedKeys((next ?? []).map((item) => item.key));
+                        }}
+                        onItemHighlighted={handleItemHighlighted}
+                        onOpenChange={(open) => {
+                          if (!open) {
+                            previewKeyRef.current = null;
                             simpleViewportRef.current?.updateColors(activeRegions);
                           }
+                        }}
+                        itemToStringLabel={(item) => item.label}
+                        isItemEqualToValue={(a, b) => a.key === b.key}
+                      >
+                        <ComboboxChips>
+                          <ComboboxValue>
+                            {(value: typeof selectableItems) => (
+                              <>
+                                {value.map((item) => (
+                                  <ComboboxChip key={item.key}>{item.label}</ComboboxChip>
+                                ))}
+                                <ComboboxInput
+                                  placeholder={
+                                    value.length > 0
+                                      ? ""
+                                      : t("page.tools.body_shape.import_bones_placeholder")
+                                  }
+                                />
+                              </>
+                            )}
+                          </ComboboxValue>
+                        </ComboboxChips>
+                        <ComboboxContent>
+                          <ComboboxEmpty>{t("page.tools.body_shape.no_bones")}</ComboboxEmpty>
+                          <ComboboxList>
+                            {(item: (typeof selectableItems)[number]) => (
+                              <ComboboxItem key={item.key} value={item}>
+                                {item.label}
+                              </ComboboxItem>
+                            )}
+                          </ComboboxList>
+                        </ComboboxContent>
+                      </Combobox>
+                    ) : null}
+                  </Field>
+
+                  <Field>
+                    <FieldLabel>{t("page.tools.body_shape.selection_tool")}</FieldLabel>
+                    <Select
+                      value={selectionToolMode}
+                      onValueChange={(value) => {
+                        if (value === "brush" || value === "component") {
+                          setSelectionToolMode(value);
                         }
                       }}
-                      itemToStringLabel={(item) => item.label}
-                      isItemEqualToValue={(a, b) => a.key === b.key}
                     >
-                      <ComboboxChips>
-                        <ComboboxValue>
-                          {(value: typeof selectableItems) => (
-                            <>
-                              {value.map((item) => (
-                                <ComboboxChip key={item.key}>{item.label}</ComboboxChip>
-                              ))}
-                              <ComboboxInput
-                                placeholder={
-                                  value.length > 0
-                                    ? ""
-                                    : useBones
-                                      ? t("page.tools.body_shape.select_bones_placeholder")
-                                      : t("page.tools.body_shape.select_regions_placeholder")
-                                }
-                              />
-                            </>
-                          )}
-                        </ComboboxValue>
-                      </ComboboxChips>
-                      <ComboboxContent>
-                        <ComboboxEmpty>
-                          {useBones
-                            ? t("page.tools.body_shape.no_bones")
-                            : t("page.tools.body_shape.no_regions")}
-                        </ComboboxEmpty>
-                        <ComboboxList>
-                          {(item: (typeof selectableItems)[number]) => (
-                            <ComboboxItem key={item.key} value={item}>
-                              {item.label}
-                            </ComboboxItem>
-                          )}
-                        </ComboboxList>
-                      </ComboboxContent>
-                    </Combobox>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="brush">
+                            {t("page.tools.body_shape.tool_mode_brush")}
+                          </SelectItem>
+                          <SelectItem value="component" disabled={!selectedMesh.componentIds}>
+                            {t("page.tools.body_shape.tool_mode_component")}
+                          </SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
                   </Field>
+
+                  {selectionToolMode === "brush" ? (
+                    <Field>
+                      <FieldLabel>{t("page.tools.body_shape.brush_reach")}</FieldLabel>
+                      <Select
+                        value={brushReachMode}
+                        onValueChange={(value) => {
+                          if (value === "surface" || value === "through") {
+                            setBrushReachMode(value);
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value="surface">
+                              {t("page.tools.body_shape.brush_reach_surface")}
+                            </SelectItem>
+                            <SelectItem value="through">
+                              {t("page.tools.body_shape.brush_reach_through")}
+                            </SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {brushReachMode === "surface"
+                          ? t("page.tools.body_shape.brush_reach_surface_hint")
+                          : t("page.tools.body_shape.brush_reach_through_hint")}
+                      </p>
+                    </Field>
+                  ) : null}
 
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs text-muted-foreground">
@@ -835,143 +1033,226 @@ export default function BodyShapeTool({
                     </span>
                     <Switch checked={showOriginal} onCheckedChange={setShowOriginal} />
                   </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-muted-foreground">
-                      {t("page.tools.body_shape.unified_controls")}
-                    </span>
-                    <Switch
-                      checked={controlMode === "unified"}
-                      onCheckedChange={(checked) => {
-                        setControlMode(checked ? "unified" : "perItem");
-                        setWeightVersion((v) => v + 1);
-                      }}
-                    />
-                  </div>
-
-                  {selectedKeys.length === 0 ? (
+                  {!hasSelection ? (
                     <p className="text-xs text-muted-foreground">
-                      {useBones
-                        ? t("page.tools.body_shape.select_bones_hint")
-                        : t("page.tools.body_shape.select_regions_hint")}
+                      {t("page.tools.body_shape.selection_empty_hint")}
                     </p>
-                  ) : controlMode === "unified" ? (
+                  ) : (
                     <div className="space-y-2 rounded-md border bg-background/50 p-3">
                       <div className="text-sm font-medium">
-                        {t("page.tools.body_shape.unified_controls_title", {
-                          count: selectedKeys.length,
-                        })}
+                        {t("page.tools.body_shape.selection_controls")}
                       </div>
-                      <RangeField
-                        label={t("page.tools.body_shape.deform_amount")}
-                        value={unifiedControl.amount}
-                        defaultValue={DEFAULT_UNIFIED_CONTROL.amount}
-                        min={-0.5}
-                        max={0.5}
-                        step={0.01}
-                        display={`${(unifiedControl.amount * 100).toFixed(0)}%`}
-                        onChange={(value) => updateAmount(selectedKeys[0]!, value)}
-                      />
-                      <RangeField
-                        label={t("page.tools.body_shape.axis_x")}
-                        value={unifiedControl.axisScale[0]}
-                        defaultValue={DEFAULT_UNIFIED_CONTROL.axisScale[0]}
-                        min={0}
-                        max={2}
-                        step={0.05}
-                        display={unifiedControl.axisScale[0].toFixed(2)}
-                        onChange={(value) => updateAxis(selectedKeys[0]!, 0, value)}
-                      />
-                      <RangeField
-                        label={t("page.tools.body_shape.axis_y")}
-                        value={unifiedControl.axisScale[1]}
-                        defaultValue={DEFAULT_UNIFIED_CONTROL.axisScale[1]}
-                        min={0}
-                        max={2}
-                        step={0.05}
-                        display={unifiedControl.axisScale[1].toFixed(2)}
-                        onChange={(value) => updateAxis(selectedKeys[0]!, 1, value)}
-                      />
-                      <RangeField
-                        label={t("page.tools.body_shape.axis_z")}
-                        value={unifiedControl.axisScale[2]}
-                        defaultValue={DEFAULT_UNIFIED_CONTROL.axisScale[2]}
-                        min={0}
-                        max={2}
-                        step={0.05}
-                        display={unifiedControl.axisScale[2].toFixed(2)}
-                        onChange={(value) => updateAxis(selectedKeys[0]!, 2, value)}
-                      />
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {selectedKeys.map((key) => {
-                        const source = parseWeightKey(key);
-                        if (!source) return null;
-                        const control = controls[key] ?? defaultControlFor(source);
-                        const label =
-                          source.kind === "bone"
-                            ? t("page.tools.body_shape.bone_id", { id: source.boneId })
-                            : t(`page.tools.body_shape.regions.${source.regionId}`);
-                        return (
-                          <div
-                            key={key}
-                            className="space-y-2 rounded-md border bg-background/50 p-3"
-                          >
-                            <div className="text-sm font-medium">{label}</div>
+                      <Field>
+                        <FieldLabel>{t("page.tools.body_shape.deform_operation")}</FieldLabel>
+                        <Select
+                          value={deformOperation}
+                          onValueChange={(value) => {
+                            if (
+                              value !== "scale" &&
+                              value !== "inflate" &&
+                              value !== "translate" &&
+                              value !== "taper"
+                            ) {
+                              return;
+                            }
+                            setDeformOperation(value);
+                            setUnifiedControl((previous) => ({
+                              ...previous,
+                              amount: 0,
+                              translation: [0, 0, 0],
+                            }));
+                            setWeightVersion((version) => version + 1);
+                          }}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value="scale">
+                                {t("page.tools.body_shape.deform_scale")}
+                              </SelectItem>
+                              {selectedMesh.originalNormals ? (
+                                <SelectItem value="inflate">
+                                  {t("page.tools.body_shape.deform_inflate")}
+                                </SelectItem>
+                              ) : null}
+                              <SelectItem value="translate">
+                                {t("page.tools.body_shape.deform_translate")}
+                              </SelectItem>
+                              <SelectItem value="taper">
+                                {t("page.tools.body_shape.deform_taper")}
+                              </SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                      {deformOperation === "translate" ? (
+                        <>
+                          <RangeField
+                            label={t("page.tools.body_shape.translate_x")}
+                            value={unifiedControl.translation[0]}
+                            defaultValue={0}
+                            min={-meshExtent * 0.5}
+                            max={meshExtent * 0.5}
+                            step={meshExtent * 0.005}
+                            display={unifiedControl.translation[0].toFixed(3)}
+                            onChange={(value) => updateTranslation(0, value)}
+                          />
+                          <RangeField
+                            label={t("page.tools.body_shape.translate_y")}
+                            value={unifiedControl.translation[1]}
+                            defaultValue={0}
+                            min={-meshExtent * 0.5}
+                            max={meshExtent * 0.5}
+                            step={meshExtent * 0.005}
+                            display={unifiedControl.translation[1].toFixed(3)}
+                            onChange={(value) => updateTranslation(1, value)}
+                          />
+                          <RangeField
+                            label={t("page.tools.body_shape.translate_z")}
+                            value={unifiedControl.translation[2]}
+                            defaultValue={0}
+                            min={-meshExtent * 0.5}
+                            max={meshExtent * 0.5}
+                            step={meshExtent * 0.005}
+                            display={unifiedControl.translation[2].toFixed(3)}
+                            onChange={(value) => updateTranslation(2, value)}
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <RangeField
+                            label={t("page.tools.body_shape.deform_amount")}
+                            value={unifiedControl.amount}
+                            defaultValue={DEFAULT_UNIFIED_CONTROL.amount}
+                            min={
+                              deformOperation === "inflate"
+                                ? -0.25
+                                : deformOperation === "taper"
+                                  ? -1
+                                  : -0.5
+                            }
+                            max={
+                              deformOperation === "inflate"
+                                ? 0.25
+                                : deformOperation === "taper"
+                                  ? 1
+                                  : 0.5
+                            }
+                            step={0.01}
+                            display={
+                              deformOperation === "inflate"
+                                ? unifiedControl.amount.toFixed(3)
+                                : `${(unifiedControl.amount * 100).toFixed(0)}%`
+                            }
+                            onChange={updateAmount}
+                          />
+                          {deformOperation === "scale" ? (
+                            <>
+                              <RangeField
+                                label={t("page.tools.body_shape.axis_x")}
+                                value={unifiedControl.axisScale[0]}
+                                defaultValue={DEFAULT_UNIFIED_CONTROL.axisScale[0]}
+                                min={0}
+                                max={2}
+                                step={0.05}
+                                display={unifiedControl.axisScale[0].toFixed(2)}
+                                onChange={(value) => updateAxis(0, value)}
+                              />
+                              <RangeField
+                                label={t("page.tools.body_shape.axis_y")}
+                                value={unifiedControl.axisScale[1]}
+                                defaultValue={DEFAULT_UNIFIED_CONTROL.axisScale[1]}
+                                min={0}
+                                max={2}
+                                step={0.05}
+                                display={unifiedControl.axisScale[1].toFixed(2)}
+                                onChange={(value) => updateAxis(1, value)}
+                              />
+                              <RangeField
+                                label={t("page.tools.body_shape.axis_z")}
+                                value={unifiedControl.axisScale[2]}
+                                defaultValue={DEFAULT_UNIFIED_CONTROL.axisScale[2]}
+                                min={0}
+                                max={2}
+                                step={0.05}
+                                display={unifiedControl.axisScale[2].toFixed(2)}
+                                onChange={(value) => updateAxis(2, value)}
+                              />
+                            </>
+                          ) : null}
+                          {deformOperation === "taper" ? (
                             <RangeField
-                              label={t("page.tools.body_shape.deform_amount")}
-                              value={control.amount}
-                              defaultValue={defaultControlFor(source).amount}
-                              min={-0.5}
-                              max={0.5}
-                              step={0.01}
-                              display={`${(control.amount * 100).toFixed(0)}%`}
-                              onChange={(value) => updateAmount(key, value)}
-                            />
-                            <RangeField
-                              label={t("page.tools.body_shape.axis_x")}
-                              value={control.axisScale[0]}
-                              defaultValue={defaultControlFor(source).axisScale[0]}
+                              label={t("page.tools.body_shape.taper_factor")}
+                              value={unifiedControl.taperFactor}
+                              defaultValue={DEFAULT_UNIFIED_CONTROL.taperFactor}
                               min={0}
                               max={2}
                               step={0.05}
-                              display={control.axisScale[0].toFixed(2)}
-                              onChange={(value) => updateAxis(key, 0, value)}
+                              display={unifiedControl.taperFactor.toFixed(2)}
+                              onChange={updateTaperFactor}
                             />
-                            <RangeField
-                              label={t("page.tools.body_shape.axis_y")}
-                              value={control.axisScale[1]}
-                              defaultValue={defaultControlFor(source).axisScale[1]}
-                              min={0}
-                              max={2}
-                              step={0.05}
-                              display={control.axisScale[1].toFixed(2)}
-                              onChange={(value) => updateAxis(key, 1, value)}
-                            />
-                            <RangeField
-                              label={t("page.tools.body_shape.axis_z")}
-                              value={control.axisScale[2]}
-                              defaultValue={defaultControlFor(source).axisScale[2]}
-                              min={0}
-                              max={2}
-                              step={0.05}
-                              display={control.axisScale[2].toFixed(2)}
-                              onChange={(value) => updateAxis(key, 2, value)}
-                            />
-                          </div>
-                        );
-                      })}
+                          ) : null}
+                        </>
+                      )}
                     </div>
                   )}
 
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={resetSelected}
-                    disabled={selectedKeys.length === 0}
-                  >
-                    {t("page.tools.body_shape.reset_selected")}
-                  </Button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={undoSelection}
+                      disabled={!canUndoSelection}
+                    >
+                      <Undo2Icon className="size-4" />
+                      {t("page.tools.body_shape.undo_selection")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={redoSelection}
+                      disabled={!canRedoSelection}
+                    >
+                      <Redo2Icon className="size-4" />
+                      {t("page.tools.body_shape.redo_selection")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={growSelection}
+                      disabled={!hasSelection || !selectedMesh.adjacency}
+                    >
+                      <Maximize2Icon className="size-4" />
+                      {t("page.tools.body_shape.grow_selection")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={shrinkSelection}
+                      disabled={!hasSelection || !selectedMesh.adjacency}
+                    >
+                      <Minimize2Icon className="size-4" />
+                      {t("page.tools.body_shape.shrink_selection")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={smoothSelection}
+                      disabled={!hasSelection || !selectedMesh.adjacency}
+                    >
+                      {t("page.tools.body_shape.smooth_selection")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={resetSelected}
+                      disabled={!hasSelection}
+                    >
+                      {t("page.tools.body_shape.reset_selected")}
+                    </Button>
+                  </div>
 
                   {metrics ? (
                     <div className="space-y-1 rounded-md border bg-background/50 p-3 text-xs text-muted-foreground">

@@ -5,19 +5,30 @@ import { describe, it } from "vitest";
 import {
     anisotropicScaleFromOriginal,
     applyBrushStroke,
+    applyGeodesicBrush,
     applyMultiRegionDeform,
     applySnorm8VectorCorrection,
     brushFalloff,
+    buildConnectedComponents,
+    buildSymmetryMap,
+    buildVertexAdjacency,
     detectSnorm8VectorLayout,
     displacementMetrics,
+    computeVertexNormals,
     eraseVertex,
     extractBoneWeights,
     extractPositions,
     generateRegionWeights,
+    growSelectionWeights,
     influencesAtVertex,
     listBlendBones,
+    mirrorWeightsWithCache,
     paintVertex,
     rankBonesAtVertices,
+    recalculateNormalsAndTangents,
+    selectConnectedComponent,
+    shrinkSelectionWeights,
+    smoothSelectionWeights,
     validatePositionBuffer,
     writePositionsIntoBuffer,
 } from "./index";
@@ -67,9 +78,103 @@ describe("body-shape weights", () => {
         assert.equal(weights[0], 0);
         assert.equal(weights[1], 0);
     });
+
+    it("through brush selects opposite-facing vertices while front filter skips them", () => {
+        // Two vertices at same position with opposite normals
+        const positions = new Float32Array([0, 0, 0, 0, 0, 0]);
+        const normals = new Float32Array([0, 0, 1, 0, 0, -1]);
+        const frontWeights = new Float32Array(2);
+        const throughWeights = new Float32Array(2);
+
+        applyBrushStroke({
+            positions,
+            weights: frontWeights,
+            hitPoint: [0, 0, 0],
+            hitNormal: [0, 0, 1],
+            normals,
+            radius: 1,
+            strength: 1,
+            mode: "paint",
+        });
+        assert.ok(frontWeights[0] > 0);
+        assert.equal(frontWeights[1], 0);
+
+        applyBrushStroke({
+            positions,
+            weights: throughWeights,
+            hitPoint: [0, 0, 0],
+            radius: 1,
+            strength: 1,
+            mode: "paint",
+        });
+        assert.ok(throughWeights[0] > 0);
+        assert.ok(throughWeights[1] > 0);
+    });
+});
+
+describe("body-shape mesh selection", () => {
+    it("does not cross to a nearby disconnected surface", () => {
+        const positions = new Float32Array([
+            0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0.01, 1, 0, 0.01, 0, 1, 0.01,
+        ]);
+        const adjacency = buildVertexAdjacency(6, new Uint32Array([0, 1, 2, 3, 4, 5]));
+        const weights = new Float32Array(6);
+
+        const changed = applyGeodesicBrush({
+            positions,
+            adjacency,
+            weights,
+            seedVertexIndices: [0],
+            radius: 2,
+            strength: 1,
+            mode: "paint",
+        });
+
+        assert.deepEqual([...changed], [0, 1, 2]);
+        assert.ok(weights[0] > 0 && weights[1] > 0 && weights[2] > 0);
+        assert.deepEqual(Array.from(weights.slice(3)), [0, 0, 0]);
+    });
+
+    it("limits geodesic distance to the radius and applies falloff", () => {
+        const positions = new Float32Array([0, 0, 0, 0.5, 0, 0, 1, 0, 0]);
+        const adjacency = [new Uint32Array([1]), new Uint32Array([0, 2]), new Uint32Array([1])];
+        const weights = new Float32Array(3);
+
+        const changed = applyGeodesicBrush({
+            positions,
+            adjacency,
+            weights,
+            seedVertexIndices: [0],
+            radius: 1,
+            strength: 1,
+            mode: "paint",
+        });
+
+        assert.deepEqual([...changed], [0, 1]);
+        assert.deepEqual([...weights], [1, 0.5, 0]);
+    });
+
+    it("smooths weights from an iteration snapshot", () => {
+        const weights = new Float32Array([1, 0, 0]);
+        const adjacency = [new Uint32Array([1]), new Uint32Array([0, 2]), new Uint32Array([1])];
+
+        smoothSelectionWeights(weights, adjacency, 0.5, 1);
+
+        assert.deepEqual([...weights], [0.5, 0.25, 0]);
+    });
 });
 
 describe("body-shape deform", () => {
+    it("computes normalized vertex normals for a planar triangle", () => {
+        const normals = computeVertexNormals(
+            new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+            new Uint32Array([0, 1, 2]),
+        );
+
+        assert.ok(normals instanceof Float32Array);
+        assert.deepEqual([...normals], [0, 0, 1, 0, 0, 1, 0, 0, 1]);
+    });
+
     it("scales around pivot from original positions without stacking", () => {
         const original = new Float32Array([0, 0, 0, 2, 0, 0, 0, 4, 0]);
         const preview = new Float32Array(original.length);
@@ -233,6 +338,29 @@ describe("body-shape regions", () => {
             ],
         });
         assert.deepEqual([...second], [...preview]);
+    });
+
+    it("inflates vertices along normals by their selected weights", () => {
+        const original = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+        const preview = new Float32Array(original.length);
+
+        applyMultiRegionDeform({
+            originalPositions: original,
+            previewPositions: preview,
+            regions: [
+                {
+                    id: "chest",
+                    weights: new Float32Array([0, 0.5, 1]),
+                    amount: 2,
+                    axisScale: [1, 1, 1],
+                    pivot: [0, 0, 0],
+                    operation: "inflate",
+                    normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
+                },
+            ],
+        });
+
+        assert.deepEqual([...preview], [0, 0, 0, 1, 0, 1, 0, 1, 2]);
     });
 });
 
@@ -526,5 +654,202 @@ describe("body-shape buffer", () => {
         // painted vertex normals/tangents changed for non-uniform scale
         assert.notDeepEqual([...corrected.slice(0, 3)], [...vectors.slice(0, 3)]);
         assert.notDeepEqual([...corrected.slice(4, 7)], [...vectors.slice(4, 7)]);
+    });
+});
+
+describe("body-shape selection refinement", () => {
+    it("grows weights to adjacent vertices without propagating across disconnected components", () => {
+        // Triangles (0, 1, 4) and (1, 2, 5): 0 is adjacent to 1, 1 is adjacent to 2, but 0 is not adjacent to 2.
+        // Vertex 3 is isolated (part of triangle 3, 6, 7).
+        const indices = new Uint32Array([0, 1, 4, 1, 2, 5, 3, 6, 7]);
+        const adj = buildVertexAdjacency(8, indices);
+        const weights = new Float32Array(8);
+        weights[0] = 1;
+
+        growSelectionWeights(weights, adj, 1.0, 1);
+        assert.equal(weights[0], 1);
+        assert.equal(weights[1], 1);
+        assert.equal(weights[2], 0);
+        assert.equal(weights[3], 0);
+
+        growSelectionWeights(weights, adj, 0.5, 1);
+        assert.equal(weights[2], 0.5);
+        assert.equal(weights[3], 0);
+    });
+
+    it("shrinks weights from boundaries", () => {
+        const indices = new Uint32Array([0, 1, 4, 1, 2, 3]);
+        const adj = buildVertexAdjacency(5, indices);
+        const weights = new Float32Array([0, 1, 1, 1, 1]);
+
+        shrinkSelectionWeights(weights, adj, 1.0, 1);
+        assert.equal(weights[0], 0);
+        assert.equal(weights[1], 0);
+        assert.equal(weights[2], 1);
+    });
+
+    it("builds connected component IDs for separated submeshes", () => {
+        const indices = new Uint32Array([0, 1, 2, 3, 4, 5]);
+        const adj = buildVertexAdjacency(6, indices);
+        const comp = buildConnectedComponents(6, adj);
+
+        assert.equal(comp[0], comp[1]);
+        assert.equal(comp[1], comp[2]);
+        assert.equal(comp[3], comp[4]);
+        assert.equal(comp[4], comp[5]);
+        assert.notEqual(comp[0], comp[3]);
+    });
+
+    it("selects connected components with add, subtract, and replace modes", () => {
+        const comp = new Uint32Array([0, 0, 0, 1, 1, 1]);
+        const weights = new Float32Array(6);
+
+        selectConnectedComponent({
+            weights,
+            componentIds: comp,
+            targetComponentId: 0,
+            mode: "add",
+            weightValue: 0.8,
+        });
+        assert.ok(Math.abs(weights[0] - 0.8) < 1e-6);
+        assert.ok(Math.abs(weights[1] - 0.8) < 1e-6);
+        assert.ok(Math.abs(weights[2] - 0.8) < 1e-6);
+        assert.equal(weights[3], 0);
+
+        selectConnectedComponent({
+            weights,
+            componentIds: comp,
+            targetComponentId: 1,
+            mode: "replace",
+            weightValue: 1.0,
+        });
+        assert.deepEqual([...weights], [0, 0, 0, 1, 1, 1]);
+
+        selectConnectedComponent({
+            weights,
+            componentIds: comp,
+            targetComponentId: 1,
+            mode: "subtract",
+        });
+        assert.deepEqual([...weights], [0, 0, 0, 0, 0, 0]);
+    });
+
+    it("builds symmetry map and mirrors weights with cache in O(1) per vertex", () => {
+        // Vertices: v0 at (-1, 2, 3), v1 at (1, 2, 3), v2 at (0, 5, 0)
+        const positions = new Float32Array([-1, 2, 3, 1, 2, 3, 0, 5, 0]);
+        const symmetryMap = buildSymmetryMap(positions, "x", 1e-3);
+
+        assert.equal(symmetryMap[0], 1);
+        assert.equal(symmetryMap[1], 0);
+
+        const weights = new Float32Array([0.8, 0, 0]);
+        mirrorWeightsWithCache(weights, symmetryMap, [0], "paint");
+        assert.ok(Math.abs(weights[1] - 0.8) < 1e-6);
+    });
+
+    it("filters geodesic brush strokes by front-facing normal direction", () => {
+        const positions = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+        const indices = new Uint32Array([0, 1, 2]);
+        const adj = buildVertexAdjacency(3, indices);
+        const normals = new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]);
+        const weights = new Float32Array(3);
+
+        // Facing opposite direction (dot < 0) -> skipped when frontFacingOnly is true
+        applyGeodesicBrush({
+            positions,
+            adjacency: adj,
+            weights,
+            seedVertexIndices: [0],
+            radius: 2,
+            strength: 1,
+            mode: "paint",
+            frontFacingOnly: true,
+            normals,
+            hitNormal: [0, 0, -1],
+        });
+
+        assert.deepEqual([...weights], [0, 0, 0]);
+
+        // Facing same direction (dot > 0) -> applied
+        applyGeodesicBrush({
+            positions,
+            adjacency: adj,
+            weights,
+            seedVertexIndices: [0],
+            radius: 2,
+            strength: 1,
+            mode: "paint",
+            frontFacingOnly: true,
+            normals,
+            hitNormal: [0, 0, 1],
+        });
+
+        assert.ok(weights[0] > 0);
+    });
+
+    it("applies translate region deformation according to vertex weights", () => {
+        const original = new Float32Array([0, 0, 0, 1, 0, 0]);
+        const preview = new Float32Array(original.length);
+
+        applyMultiRegionDeform({
+            originalPositions: original,
+            previewPositions: preview,
+            regions: [
+                {
+                    id: "test",
+                    weights: new Float32Array([1, 0.5]),
+                    amount: 1,
+                    axisScale: [1, 1, 1],
+                    pivot: [0, 0, 0],
+                    operation: "translate",
+                    translation: [0, 2, 0],
+                },
+            ],
+        });
+
+        assert.deepEqual([...preview], [0, 2, 0, 1, 1, 0]);
+    });
+
+    it("applies taper region deformation relative to pivot height", () => {
+        // v0 at pivot height (no taper), v1 above pivot with full weight
+        const original = new Float32Array([1, 0, 0, 1, 2, 0]);
+        const preview = new Float32Array(original.length);
+
+        applyMultiRegionDeform({
+            originalPositions: original,
+            previewPositions: preview,
+            regions: [
+                {
+                    id: "test",
+                    weights: new Float32Array([1, 1]),
+                    amount: 1,
+                    axisScale: [1, 1, 1],
+                    pivot: [0, 0, 0],
+                    operation: "taper",
+                    taperFactor: 0.5,
+                },
+            ],
+        });
+
+        // heightDiff=0 -> unchanged; heightDiff=2, scale=1*0.5*1*2=1 -> x' = 1 + (1-0)*1 = 2
+        assert.deepEqual([...preview], [1, 0, 0, 2, 2, 0]);
+    });
+
+    it("recalculates vertex normals and encodes into snorm8 vector buffer", () => {
+        const positions = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+        const indices = new Uint32Array([0, 1, 2]);
+        const vectorBuffer = new Int8Array(24);
+
+        const updated = recalculateNormalsAndTangents({
+            positions,
+            indices,
+            vectorBuffer,
+            layout: "snorm8-tangent-normal",
+        });
+
+        // Face normal of xy plane triangle is +z (0, 0, 1) -> 127 in snorm8 at byte offset 6 (bytes 4-6 are nx,ny,nz)
+        assert.equal(updated[6], 127);
+        assert.equal(updated[14], 127);
+        assert.equal(updated[22], 127);
     });
 });

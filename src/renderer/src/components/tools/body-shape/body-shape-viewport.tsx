@@ -26,7 +26,6 @@ import {
   LineBasicMaterial,
   LineLoop,
   MathUtils,
-  Matrix3,
   Mesh,
   MeshStandardMaterial,
   Quaternion,
@@ -35,8 +34,9 @@ import {
 } from "three";
 
 export type BrushStrokeInput = {
-  hitPoint: [number, number, number];
-  hitNormal?: [number, number, number];
+  localPoint: [number, number, number];
+  localNormal?: [number, number, number];
+  vertexIndices?: [number, number, number];
 };
 
 export type BodyShapeViewportHandle = {
@@ -66,6 +66,8 @@ export type BodyShapeViewportProps = {
   brushStrength?: number;
   brushMirrorX?: boolean;
   onBrushStroke?: (stroke: BrushStrokeInput) => void;
+  onBrushStrokeStart?: () => void;
+  onBrushStrokeEnd?: () => void;
   onBrushRadiusChange?: (radius: number) => void;
 };
 
@@ -97,7 +99,7 @@ export const BodyShapeViewport = forwardRef<BodyShapeViewportHandle, BodyShapeVi
     }, [props.orientation]);
 
     return (
-      <div className="h-full min-h-[320px] w-full rounded-md border border-border bg-background">
+      <div className="h-full min-h-80 w-full rounded-md border border-border bg-background">
         <Canvas
           camera={{ position: [0, 1.2, 2.4], fov: 45, near: 0.01, far: 500 }}
           dpr={Math.min(window.devicePixelRatio, 2)}
@@ -140,6 +142,8 @@ function BodyShapeMesh({
   brushRadius = 0.15,
   brushMode = "paint",
   onBrushStroke,
+  onBrushStrokeStart,
+  onBrushStrokeEnd,
   onBrushRadiusChange,
   controlsRef,
   onRegisterReset,
@@ -159,6 +163,10 @@ function BodyShapeMesh({
   heatmapRegionsRef.current = regions;
   const onBrushStrokeRef = useRef(onBrushStroke);
   onBrushStrokeRef.current = onBrushStroke;
+  const onBrushStrokeStartRef = useRef(onBrushStrokeStart);
+  onBrushStrokeStartRef.current = onBrushStrokeStart;
+  const onBrushStrokeEndRef = useRef(onBrushStrokeEnd);
+  onBrushStrokeEndRef.current = onBrushStrokeEnd;
 
   const writeColors = (regions: ActiveRegionDeform[]) => {
     const vertexCount = Math.floor(originalPositions.length / 3);
@@ -327,29 +335,33 @@ function BodyShapeMesh({
 
       if (intersects.length > 0) {
         const hit = intersects[0]!;
-        const hitPoint: [number, number, number] = [hit.point.x, hit.point.y, hit.point.z];
-        let hitNormal: [number, number, number] | undefined;
-        if (hit.face) {
-          const normalMatrix = new Matrix3().getNormalMatrix(meshRef.current.matrixWorld);
-          const worldNormal = hit.face.normal.clone().applyNormalMatrix(normalMatrix).normalize();
-          hitNormal = [worldNormal.x, worldNormal.y, worldNormal.z];
-        }
+        const localPointVector = meshRef.current.worldToLocal(hit.point.clone());
+        const localPoint: [number, number, number] = [
+          localPointVector.x,
+          localPointVector.y,
+          localPointVector.z,
+        ];
+        const localNormal: [number, number, number] | undefined = hit.face
+          ? [hit.face.normal.x, hit.face.normal.y, hit.face.normal.z]
+          : undefined;
 
         if (brushRingRef.current) {
           brushRingRef.current.visible = true;
-          brushRingRef.current.position.copy(hit.point);
+          brushRingRef.current.position.copy(localPointVector);
           if (hit.face) {
-            const normalMatrix = new Matrix3().getNormalMatrix(meshRef.current.matrixWorld);
-            const worldNormal = hit.face.normal.clone().applyNormalMatrix(normalMatrix).normalize();
             const up = new Vector3(0, 0, 1);
-            const q = new Quaternion().setFromUnitVectors(up, worldNormal);
+            const q = new Quaternion().setFromUnitVectors(up, hit.face.normal);
             brushRingRef.current.quaternion.copy(q);
-            brushRingRef.current.position.addScaledVector(worldNormal, 0.001);
+            brushRingRef.current.position.addScaledVector(hit.face.normal, 0.001);
           }
         }
 
         if (isPaintingRef.current) {
-          onBrushStrokeRef.current({ hitPoint, hitNormal });
+          onBrushStrokeRef.current({
+            localPoint,
+            localNormal,
+            vertexIndices: hit.face ? [hit.face.a, hit.face.b, hit.face.c] : undefined,
+          });
         }
       } else {
         if (brushRingRef.current) brushRingRef.current.visible = false;
@@ -359,6 +371,7 @@ function BodyShapeMesh({
     const handlePointerDown = (event: PointerEvent) => {
       if (event.button === 0 && !event.altKey) {
         isPaintingRef.current = true;
+        onBrushStrokeStartRef.current?.();
         if (controlsRef.current) controlsRef.current.enabled = false;
         performStrokeAtPointer(event);
       }
@@ -369,6 +382,7 @@ function BodyShapeMesh({
     };
 
     const handlePointerUp = () => {
+      if (isPaintingRef.current) onBrushStrokeEndRef.current?.();
       isPaintingRef.current = false;
       if (controlsRef.current) controlsRef.current.enabled = true;
     };
