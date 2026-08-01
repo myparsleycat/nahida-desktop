@@ -451,8 +451,8 @@ export const CharacterSidebar = memo(function CharacterSidebar({
               </TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="end" className="w-56" finalFocus={false}>
-              <DropdownMenuLabel>{t("page.mod.character-sidebar.sort.field")}</DropdownMenuLabel>
               <DropdownMenuRadioGroup value={sortKey}>
+                <DropdownMenuLabel>{t("page.mod.character-sidebar.sort.field")}</DropdownMenuLabel>
                 {(["name", "mod-count", "enabled-mod-count"] as const).map((value) => (
                   <DropdownMenuRadioItem
                     key={value}
@@ -464,10 +464,10 @@ export const CharacterSidebar = memo(function CharacterSidebar({
                 ))}
               </DropdownMenuRadioGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuLabel>
-                {t("page.mod.character-sidebar.sort.direction")}
-              </DropdownMenuLabel>
               <DropdownMenuRadioGroup value={sortDirection}>
+                <DropdownMenuLabel>
+                  {t("page.mod.character-sidebar.sort.direction")}
+                </DropdownMenuLabel>
                 <DropdownMenuRadioItem
                   value="ascending"
                   onClick={() => setSortDirection("ascending")}
