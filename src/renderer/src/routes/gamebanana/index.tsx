@@ -90,7 +90,6 @@ function RouteComponent() {
   const [manualRmcValue, setManualRmcValue] = useState("");
   const [manualRmcError, setManualRmcError] = useState<string | null>(null);
   const [isSavingManualRmc, setIsSavingManualRmc] = useState(false);
-  const [isModUrlOpen, setIsModUrlOpen] = useState(false);
   const [modUrlValue, setModUrlValue] = useState("");
   const [modUrlError, setModUrlError] = useState<string | null>(null);
   const isAuthReady = authStatus === "ready";
@@ -108,6 +107,7 @@ function RouteComponent() {
   const modsPage = useGameBananaStore((state) => state.modsPage);
   const modSearch = useGameBananaStore((state) => state.modSearch);
   const modsSort = useGameBananaStore((state) => state.modsSort);
+  const isModUrlOpen = useGameBananaStore((state) => state.isModUrlOpen);
   const setInitialGame = useGameBananaStore((state) => state.setInitialGame);
   const setSelectedGame = useGameBananaStore((state) => state.setSelectedGame);
   const selectCategory = useGameBananaStore((state) => state.selectCategory);
@@ -119,6 +119,7 @@ function RouteComponent() {
   const setModsPage = useGameBananaStore((state) => state.setModsPage);
   const setModSearch = useGameBananaStore((state) => state.setModSearch);
   const setModsSort = useGameBananaStore((state) => state.setModsSort);
+  const toggleModUrl = useGameBananaStore((state) => state.toggleModUrl);
 
   const games = useMemo<GameOption[]>(
     () =>
@@ -271,7 +272,7 @@ function RouteComponent() {
 
   const handleToggleModUrl = () => {
     setModUrlError(null);
-    setIsModUrlOpen((open) => !open);
+    toggleModUrl();
   };
 
   const handleOpenModUrl = () => {
@@ -282,7 +283,6 @@ function RouteComponent() {
     }
 
     selectMod(selection);
-    setIsModUrlOpen(false);
     setModUrlValue("");
     setModUrlError(null);
   };

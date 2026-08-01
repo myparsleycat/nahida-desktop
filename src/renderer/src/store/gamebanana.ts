@@ -27,6 +27,7 @@ interface GameBananaState {
     modsPage: number;
     modSearch: string;
     modsSort: GameBananaModIndexSort;
+    isModUrlOpen: boolean;
     setSelectedGame: (game: GameBananaGameKey) => void;
     setInitialGame: (game: GameBananaGameKey) => void;
     requestModGameSync: () => void;
@@ -40,6 +41,7 @@ interface GameBananaState {
     setModsPage: (page: number) => void;
     setModSearch: (query: string) => void;
     setModsSort: (sort: GameBananaModIndexSort) => void;
+    toggleModUrl: () => void;
 }
 
 export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
@@ -52,6 +54,7 @@ export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
     modsPage: DEFAULT_MODS_PAGE,
     modSearch: "",
     modsSort: "Generic_Newest",
+    isModUrlOpen: false,
     setSelectedGame: (selectedGame) =>
         set({
             selectedGame,
@@ -121,6 +124,7 @@ export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
     setModsPage: (modsPage) => set({ modsPage: Math.max(1, modsPage) }),
     setModSearch: (modSearch) => set({ modSearch }),
     setModsSort: (modsSort) => set({ modsSort, modsPage: DEFAULT_MODS_PAGE }),
+    toggleModUrl: () => set((state) => ({ isModUrlOpen: !state.isModUrlOpen })),
 }));
 
 export function useGameBananaStore<T>(selector: (state: GameBananaState) => T): T {
