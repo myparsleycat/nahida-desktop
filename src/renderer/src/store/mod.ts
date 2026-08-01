@@ -2,6 +2,9 @@ import type { DownloadSource } from "@shared/mod";
 import type { FolderGroup, GameConfig, Preset } from "@shared/types";
 import { createStore, useStore } from "zustand";
 
+export type FolderSortKey = "name" | "mod-count" | "enabled-mod-count";
+export type FolderSortDirection = "ascending" | "descending";
+
 interface ModState {
     selectedGame: string;
     setSelectedGame: (game: string) => void;
@@ -58,6 +61,10 @@ interface ModState {
     setSortType: (type: "name" | "date" | "size") => void;
     sortOrder: "asc" | "desc";
     setSortOrder: (order: "asc" | "desc") => void;
+    folderSortKey: FolderSortKey;
+    setFolderSortKey: (key: FolderSortKey) => void;
+    folderSortDirection: FolderSortDirection;
+    setFolderSortDirection: (direction: FolderSortDirection) => void;
     expandedGroups: Set<string>;
     persistentGroups: Set<string>;
     iniListExpandedByGroupPath: Record<string, Record<string, boolean>>;
@@ -112,6 +119,10 @@ export const modStore = createStore<ModState>((set) => ({
     setSortType: (sortType) => set({ sortType }),
     sortOrder: "asc",
     setSortOrder: (sortOrder) => set({ sortOrder }),
+    folderSortKey: "name",
+    setFolderSortKey: (folderSortKey) => set({ folderSortKey }),
+    folderSortDirection: "ascending",
+    setFolderSortDirection: (folderSortDirection) => set({ folderSortDirection }),
 
     expandedGroups: new Set<string>(),
     persistentGroups: new Set<string>(),

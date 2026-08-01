@@ -217,7 +217,16 @@
         "open-in-explorer": "在文件资源管理器中打开",
         "create-folder": "新建文件夹",
         "delete-folder": "删除",
-        "sort-by-mod-count": "按模组数量降序排列",
+        "sort": {
+          "label": "文件夹排序",
+          "field": "排序依据",
+          "name": "名称",
+          "mod-count": "模组数量",
+          "enabled-mod-count": "已启用模组数量",
+          "direction": "排序方向",
+          "ascending": "升序",
+          "descending": "降序"
+        },
         "hide-empty-folders": "隐藏空文件夹",
         "active-mod-count": "已启用 {{enabled}} 个 / 共 {{total}} 个",
         "collapse-subgroups": "折叠子文件夹",

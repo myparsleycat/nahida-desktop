@@ -217,7 +217,16 @@
         "open-in-explorer": "파일 탐색기에서 열기",
         "create-folder": "새 폴더 만들기",
         "delete-folder": "삭제",
-        "sort-by-mod-count": "모드가 많은 순으로 정렬",
+        "sort": {
+          "label": "폴더 정렬",
+          "field": "정렬 기준",
+          "name": "이름",
+          "mod-count": "전체 모드 수",
+          "enabled-mod-count": "활성 모드 수",
+          "direction": "정렬 방향",
+          "ascending": "오름차순",
+          "descending": "내림차순"
+        },
         "hide-empty-folders": "빈 폴더 숨기기",
         "active-mod-count": "활성 {{enabled}}개 / 전체 {{total}}개",
         "collapse-subgroups": "서브폴더 접기",

@@ -19,6 +19,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@renderer/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@renderer/components/ui/dropdown-menu";
 import { Field, FieldError } from "@renderer/components/ui/field";
 import { Input } from "@renderer/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
@@ -32,7 +41,9 @@ import { toErrorMessage } from "@shared/utils";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowDown10Icon,
+  ArrowDownIcon,
+  ArrowUpDownIcon,
+  ArrowUpIcon,
   LayoutGridIcon,
   ListFilterIcon,
   ListIcon,
@@ -106,7 +117,10 @@ export const CharacterSidebar = memo(function CharacterSidebar({
   const selectedGroup = useModStore((s) => s.selectedGroup);
   const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortByModCount, setSortByModCount] = useState(false);
+  const sortKey = useModStore((s) => s.folderSortKey);
+  const setSortKey = useModStore((s) => s.setFolderSortKey);
+  const sortDirection = useModStore((s) => s.folderSortDirection);
+  const setSortDirection = useModStore((s) => s.setFolderSortDirection);
   const [hideEmptyGroups, setHideEmptyGroups] = useState(false);
   const [createFolderTarget, setCreateFolderTarget] = useState<FolderGroup | null>(null);
   const [pendingPreviewDrop, setPendingPreviewDrop] = useState<{
@@ -388,7 +402,8 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     onItemDrop: handleItemDrop,
     canAcceptDrop: canAcceptPreviewDrop,
     searchTerm,
-    sortByModCount,
+    sortKey,
+    sortDirection,
     hideEmptyGroups,
     onCreateFolder: handleCreateFolderOpen,
     onDeleteFolder: handleDeleteFolder,
@@ -413,25 +428,63 @@ export const CharacterSidebar = memo(function CharacterSidebar({
               onChange={(e) => handleSearchChange(e.target.value)}
             />
           </div>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant={sortByModCount ? "secondary" : "ghost"}
-                  aria-pressed={sortByModCount}
-                  onClick={() => setSortByModCount((value) => !value)}
-                />
-              }
-            >
-              <ArrowDown10Icon />
-              <span className="sr-only">{t("page.mod.character-sidebar.sort-by-mod-count")}</span>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {t("page.mod.character-sidebar.sort-by-mod-count")}
-            </TooltipContent>
-          </Tooltip>
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={t("page.mod.character-sidebar.sort.label")}
+                      />
+                    }
+                  />
+                }
+              >
+                <ArrowUpDownIcon />
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {t("page.mod.character-sidebar.sort.label")}
+              </TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="end" className="w-56" finalFocus={false}>
+              <DropdownMenuLabel>{t("page.mod.character-sidebar.sort.field")}</DropdownMenuLabel>
+              <DropdownMenuRadioGroup value={sortKey}>
+                {(["name", "mod-count", "enabled-mod-count"] as const).map((value) => (
+                  <DropdownMenuRadioItem
+                    key={value}
+                    value={value}
+                    onClick={() => setSortKey(value)}
+                  >
+                    {t(`page.mod.character-sidebar.sort.${value}`)}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>
+                {t("page.mod.character-sidebar.sort.direction")}
+              </DropdownMenuLabel>
+              <DropdownMenuRadioGroup value={sortDirection}>
+                <DropdownMenuRadioItem
+                  value="ascending"
+                  onClick={() => setSortDirection("ascending")}
+                >
+                  <ArrowUpIcon />
+                  {t("page.mod.character-sidebar.sort.ascending")}
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem
+                  value="descending"
+                  onClick={() => setSortDirection("descending")}
+                >
+                  <ArrowDownIcon />
+                  {t("page.mod.character-sidebar.sort.descending")}
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Tooltip>
             <TooltipTrigger
               render={

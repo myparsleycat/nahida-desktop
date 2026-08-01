@@ -238,7 +238,16 @@
         "open-in-explorer": "Open in File Explorer",
         "create-folder": "Create New Folder",
         "delete-folder": "Delete Folder",
-        "sort-by-mod-count": "Sort by most mods",
+        "sort": {
+          "label": "Sort folders",
+          "field": "Sort by",
+          "name": "Name",
+          "mod-count": "Mod count",
+          "enabled-mod-count": "Active mod count",
+          "direction": "Direction",
+          "ascending": "Ascending",
+          "descending": "Descending"
+        },
         "hide-empty-folders": "Hide empty folders",
         "active-mod-count": "{{enabled}} active / {{total}} total",
         "collapse-subgroups": "Collapse subgroups",
