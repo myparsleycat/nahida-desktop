@@ -57,6 +57,7 @@ pub struct FolderGroup {
     pub mods: Vec<ModInfo>,
     pub preview: Option<String>,
     pub mod_count: u32,
+    pub enabled_mod_count: u32,
 }
 
 fn get_map_value(data: &mut HashMap<String, String>, key: &str) -> Option<String> {
@@ -542,12 +543,23 @@ pub fn get_characters_folder_sync(
 
             let path_str = group_path.to_string_lossy().to_string();
 
-            let mod_count = match fs::read_dir(group_path) {
+            let (mod_count, enabled_mod_count) = match fs::read_dir(group_path) {
                 Ok(entries) => entries
                     .filter_map(|e| e.ok())
-                    .filter(|e| e.path().is_dir() && has_any_file(&e.path()))
-                    .count() as u32,
-                Err(_) => 0,
+                    .filter_map(|entry| {
+                        let mod_path = entry.path();
+                        if !mod_path.is_dir() || !has_any_file(&mod_path) {
+                            return None;
+                        }
+
+                        Some(!is_disabled_folder_name(
+                            &entry.file_name().to_string_lossy(),
+                        ))
+                    })
+                    .fold((0, 0), |(total, enabled), is_enabled| {
+                        (total + 1, enabled + u32::from(is_enabled))
+                    }),
+                Err(_) => (0, 0),
             };
 
             let preview = find_group_preview(group_path, search_depth);
@@ -558,6 +570,7 @@ pub fn get_characters_folder_sync(
                 mods: Vec::new(),
                 preview,
                 mod_count,
+                enabled_mod_count,
             }
         })
         .collect();
@@ -712,6 +725,7 @@ pub fn get_mods_sync(group_path: String) -> FolderGroup {
     mods.sort_by(|a, b| compare_str(&a.name, &b.name));
 
     let mod_count = mods.len() as u32;
+    let enabled_mod_count = mods.iter().filter(|mod_info| mod_info.is_enabled).count() as u32;
 
     FolderGroup {
         name: group_name,
@@ -719,14 +733,16 @@ pub fn get_mods_sync(group_path: String) -> FolderGroup {
         mods,
         preview,
         mod_count,
+        enabled_mod_count,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        find_group_preview, is_disabled_folder_name, normalize_relative_path, parse_ini,
-        scan_mod_folder, strip_disabled_prefix, strip_line_comment, strip_value_comment,
+        find_group_preview, get_characters_folder_sync, is_disabled_folder_name,
+        normalize_relative_path, parse_ini, scan_mod_folder, strip_disabled_prefix,
+        strip_line_comment, strip_value_comment,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -829,6 +845,20 @@ mod tests {
             scan_mod_folder(dir.path(), &dir.path().join("DISABLED_Aino Nude toggle")).unwrap();
 
         assert!(!mod_info.is_enabled);
+    }
+
+    #[test]
+    fn character_groups_count_enabled_mods_during_the_initial_scan() {
+        let dir = TestDir::new("enabled-mod-count");
+        dir.write_file("Character/Enabled Mod/mod.ini");
+        dir.write_file("Character/DISABLED_Disabled Mod/mod.ini");
+        fs::create_dir_all(dir.path().join("Character/Empty Mod")).unwrap();
+
+        let groups = get_characters_folder_sync(&dir.path().to_string_lossy(), Some(false));
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].mod_count, 2);
+        assert_eq!(groups[0].enabled_mod_count, 1);
     }
 
     #[test]

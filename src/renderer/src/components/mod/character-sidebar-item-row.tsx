@@ -1,5 +1,4 @@
-import { useTranslation } from "react-i18next";
-
+import { CharacterSidebarModCountBadge } from "./character-sidebar-mod-count-badge";
 import { Preview } from "./preview";
 
 interface CharacterSidebarItemRowProps {
@@ -19,10 +18,6 @@ export function CharacterSidebarItemRow({
   depth,
   previewCacheKey,
 }: CharacterSidebarItemRowProps) {
-  const { t } = useTranslation();
-  const total = group.modCount ?? group.mods.length;
-  const enabled = group.enabledModCount ?? group.mods.filter((mod) => mod.isEnabled).length;
-
   return (
     <>
       {depth > 0 && (
@@ -44,13 +39,7 @@ export function CharacterSidebarItemRow({
       </div>
 
       <span className="min-w-0 truncate text-left text-sm text-foreground">{group.name}</span>
-      <span
-        className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
-        title={t("page.mod.character-sidebar.active-mod-count", { enabled, total })}
-      >
-        <span className="size-1.5 rounded-full bg-emerald-500" />
-        {enabled} / {total}
-      </span>
+      <CharacterSidebarModCountBadge group={group} />
     </>
   );
 }

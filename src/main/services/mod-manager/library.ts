@@ -68,9 +68,7 @@ export class ModLibraryService {
             return await this.addManualSubGroupFlags(
                 game,
                 "",
-                await this.addEnabledModCounts(
-                    await getCharactersFolder(gameConfig.modFolderPath, shouldFallback),
-                ),
+                await getCharactersFolder(gameConfig.modFolderPath, shouldFallback),
             );
         } catch (error) {
             this.desktop.logger.error(error, `Mod:characters:${game}`);
@@ -94,9 +92,7 @@ export class ModLibraryService {
             return await this.addManualSubGroupFlags(
                 game?.game ?? "",
                 relativePath,
-                await this.addEnabledModCounts(
-                    await getCharactersFolder(folderPath, shouldFallback),
-                ),
+                await getCharactersFolder(folderPath, shouldFallback),
             );
         } catch (error) {
             this.desktop.logger.error(error, `Mod:subGroups:${folderPath}`);
@@ -793,35 +789,6 @@ export class ModLibraryService {
                             group.mods.filter((mod) => mod.isEnabled).length) -
                             manualChildCounts.enabled,
                     ),
-                };
-            }),
-        );
-    }
-
-    private async addEnabledModCounts(groups: FolderGroup[]) {
-        return await Promise.all(
-            groups.map(async (group) => {
-                const populatedFolders = (
-                    await Promise.all(
-                        (
-                            await fse.readdir(group.path, { withFileTypes: true }).catch(() => [])
-                        )
-                            .filter((entry) => entry.isDirectory())
-                            .map(async (entry) => ({
-                                name: entry.name,
-                                hasAnyFile: await folderHasAnyFile(
-                                    path.join(group.path, entry.name),
-                                    this.manualSubGroupFs(),
-                                ),
-                            })),
-                    )
-                ).filter((entry) => entry.hasAnyFile);
-
-                return {
-                    ...group,
-                    enabledModCount: populatedFolders.filter(
-                        (entry) => !DISABLED_PREFIX_REGEX.test(entry.name),
-                    ).length,
                 };
             }),
         );

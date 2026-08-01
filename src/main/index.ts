@@ -233,17 +233,21 @@ export class NahidaDesktop {
 export const desktop = new NahidaDesktop();
 let pendingDeepLinkRoute = getNahidaDeepLinkRoute(process.argv);
 
-app.on("open-url", (event, url) => {
-    event.preventDefault();
-    const route = parseNahidaDeepLink(url);
-    if (!route) return;
-
+function queueOrNavigateDeepLink(route: string) {
     if (!desktop.initialized || !desktop.window.main.window) {
         pendingDeepLinkRoute = route;
         return;
     }
 
-    void desktop.window.main.focusAndNavigate(route);
+    return desktop.window.main.focusAndNavigate(route);
+}
+
+app.on("open-url", (event, url) => {
+    event.preventDefault();
+    const route = parseNahidaDeepLink(url);
+    if (!route) return;
+
+    void queueOrNavigateDeepLink(route);
 });
 
 // 딥링크
@@ -301,12 +305,7 @@ void app.whenReady().then(async () => {
         try {
             const deepLinkRoute = getNahidaDeepLinkRoute(commandLine);
             if (deepLinkRoute) {
-                if (!desktop.initialized || !desktop.window.main.window) {
-                    pendingDeepLinkRoute = deepLinkRoute;
-                    return;
-                }
-
-                await desktop.window.main.focusAndNavigate(deepLinkRoute);
+                await queueOrNavigateDeepLink(deepLinkRoute);
                 return;
             }
 

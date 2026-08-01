@@ -906,7 +906,7 @@ async function countDirectMods(groupDir: string) {
                 return await isNteModEnabled(modPath);
             }),
         )
-    ).filter((enabled) => enabled !== null);
+    ).filter((enabled): enabled is boolean => enabled !== null);
 
     return {
         total: mods.length,

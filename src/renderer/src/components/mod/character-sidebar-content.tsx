@@ -132,15 +132,13 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
     isSearching && !showSubGroups
       ? childGroups.filter((sub) => sub.name.toLowerCase().includes(normalizedSearch))
       : childGroups;
-  const showChildGroups = showSubGroups
-    ? childGroups.length > 0
-    : manualSubGroups.length > 0 && (!isSearching || visibleChildGroups.length > 0);
   const groupsToRender = getVisibleGroups(
     showSubGroups ? childGroups : visibleChildGroups,
     sortKey,
     sortDirection,
     hideEmptyGroups,
   );
+  const showChildGroups = groupsToRender.length > 0;
   const resolvedItemStyle = useMemo(() => itemStyle?.(depth), [depth, itemStyle]);
 
   const handleChildItemClick = useCallback(
