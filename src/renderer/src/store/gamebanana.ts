@@ -1,4 +1,7 @@
-import type { GameBananaGameKey } from "@renderer/hooks/use-gamebanana-data";
+import type {
+    GameBananaGameKey,
+    GameBananaModIndexSort,
+} from "@renderer/hooks/use-gamebanana-data";
 import { createStore, useStore } from "zustand";
 
 const DEFAULT_SUBFEED_PAGE = 1;
@@ -23,6 +26,7 @@ interface GameBananaState {
     subfeedPage: number;
     modsPage: number;
     modSearch: string;
+    modsSort: GameBananaModIndexSort;
     setSelectedGame: (game: GameBananaGameKey) => void;
     setInitialGame: (game: GameBananaGameKey) => void;
     requestModGameSync: () => void;
@@ -35,6 +39,7 @@ interface GameBananaState {
     setSubfeedPage: (page: number) => void;
     setModsPage: (page: number) => void;
     setModSearch: (query: string) => void;
+    setModsSort: (sort: GameBananaModIndexSort) => void;
 }
 
 export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
@@ -46,6 +51,7 @@ export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
     subfeedPage: DEFAULT_SUBFEED_PAGE,
     modsPage: DEFAULT_MODS_PAGE,
     modSearch: "",
+    modsSort: "Generic_Newest",
     setSelectedGame: (selectedGame) =>
         set({
             selectedGame,
@@ -114,6 +120,7 @@ export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
     setSubfeedPage: (subfeedPage) => set({ subfeedPage: Math.max(1, subfeedPage) }),
     setModsPage: (modsPage) => set({ modsPage: Math.max(1, modsPage) }),
     setModSearch: (modSearch) => set({ modSearch }),
+    setModsSort: (modsSort) => set({ modsSort, modsPage: DEFAULT_MODS_PAGE }),
 }));
 
 export function useGameBananaStore<T>(selector: (state: GameBananaState) => T): T {

@@ -4,7 +4,7 @@ import path from "node:path";
 import type { GamePathRow } from "@main/internal/db/schema";
 import { getCharactersFolder, getMods } from "@native/mod-manager";
 import { findBestFuzzyMatch } from "@shared/fuzzy-match";
-import { isNteImporter } from "@shared/mod";
+import { DISABLED_PREFIX_REGEX, isNteImporter } from "@shared/mod";
 import type { FolderGroup, NteBootstrapProgress, Preset } from "@shared/types";
 import { GAME_MATCH_CASES } from "@shared/xxmi-match";
 import fse from "fs-extra";
@@ -68,7 +68,9 @@ export class ModLibraryService {
             return await this.addManualSubGroupFlags(
                 game,
                 "",
-                await getCharactersFolder(gameConfig.modFolderPath, shouldFallback),
+                await this.addEnabledModCounts(
+                    await getCharactersFolder(gameConfig.modFolderPath, shouldFallback),
+                ),
             );
         } catch (error) {
             this.desktop.logger.error(error, `Mod:characters:${game}`);
@@ -92,7 +94,9 @@ export class ModLibraryService {
             return await this.addManualSubGroupFlags(
                 game?.game ?? "",
                 relativePath,
-                await getCharactersFolder(folderPath, shouldFallback),
+                await this.addEnabledModCounts(
+                    await getCharactersFolder(folderPath, shouldFallback),
+                ),
             );
         } catch (error) {
             this.desktop.logger.error(error, `Mod:subGroups:${folderPath}`);
@@ -676,10 +680,10 @@ export class ModLibraryService {
 
     private async countManualChildPathsInModCount(game: string, groupRelativePath: string) {
         const manualChildPaths = await this.getManualChildPaths(game, groupRelativePath);
-        if (manualChildPaths.size === 0) return 0;
+        if (manualChildPaths.size === 0) return { total: 0, enabled: 0 };
 
         const modFolderPath = await this.gamePath(game);
-        if (!modFolderPath) return 0;
+        if (!modFolderPath) return { total: 0, enabled: 0 };
 
         const fs = this.manualSubGroupFs();
         const counts = await Promise.all(
@@ -689,15 +693,29 @@ export class ModLibraryService {
                     manualPath,
                     fs,
                 );
-                return (
-                    await Promise.all(diskPaths.map((diskPath) => folderHasAnyFile(diskPath, fs)))
-                ).some(Boolean)
-                    ? 1
-                    : 0;
+                const populatedPath = (
+                    await Promise.all(
+                        diskPaths.map(async (diskPath) => ({
+                            diskPath,
+                            hasAnyFile: await folderHasAnyFile(diskPath, fs),
+                        })),
+                    )
+                ).find((result) => result.hasAnyFile)?.diskPath;
+                if (!populatedPath) return { total: 0, enabled: 0 };
+                return {
+                    total: 1,
+                    enabled: DISABLED_PREFIX_REGEX.test(path.basename(populatedPath)) ? 0 : 1,
+                };
             }),
         );
 
-        return counts.reduce<number>((total, count) => total + count, 0);
+        return counts.reduce(
+            (total, count) => ({
+                total: total.total + count.total,
+                enabled: total.enabled + count.enabled,
+            }),
+            { total: 0, enabled: 0 },
+        );
     }
 
     private async getManualChildPaths(game: string, groupRelativePath: string) {
@@ -756,7 +774,7 @@ export class ModLibraryService {
 
                 const ownManualChildPaths = await this.getManualChildPaths(game, groupRelativePath);
 
-                const manualChildPathsInModCount = await this.countManualChildPathsInModCount(
+                const manualChildCounts = await this.countManualChildPathsInModCount(
                     game,
                     groupRelativePath,
                 );
@@ -767,8 +785,43 @@ export class ModLibraryService {
                     hasManualSubGroups: ownManualChildPaths.size > 0,
                     modCount: Math.max(
                         0,
-                        (group.modCount ?? group.mods.length) - manualChildPathsInModCount,
+                        (group.modCount ?? group.mods.length) - manualChildCounts.total,
                     ),
+                    enabledModCount: Math.max(
+                        0,
+                        (group.enabledModCount ??
+                            group.mods.filter((mod) => mod.isEnabled).length) -
+                            manualChildCounts.enabled,
+                    ),
+                };
+            }),
+        );
+    }
+
+    private async addEnabledModCounts(groups: FolderGroup[]) {
+        return await Promise.all(
+            groups.map(async (group) => {
+                const populatedFolders = (
+                    await Promise.all(
+                        (
+                            await fse.readdir(group.path, { withFileTypes: true }).catch(() => [])
+                        )
+                            .filter((entry) => entry.isDirectory())
+                            .map(async (entry) => ({
+                                name: entry.name,
+                                hasAnyFile: await folderHasAnyFile(
+                                    path.join(group.path, entry.name),
+                                    this.manualSubGroupFs(),
+                                ),
+                            })),
+                    )
+                ).filter((entry) => entry.hasAnyFile);
+
+                return {
+                    ...group,
+                    enabledModCount: populatedFolders.filter(
+                        (entry) => !DISABLED_PREFIX_REGEX.test(entry.name),
+                    ).length,
                 };
             }),
         );

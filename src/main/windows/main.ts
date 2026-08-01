@@ -31,6 +31,8 @@ export class MainWindow {
         let window = this.window;
         if (!window || window.isDestroyed()) {
             window = await this.createMainWindow(path);
+            if (window && !window.isDestroyed()) focus(window);
+            return window;
         }
 
         if (!window || window.isDestroyed()) {
@@ -38,9 +40,16 @@ export class MainWindow {
         }
 
         focus(window);
-        if (!window.webContents.isLoadingMainFrame()) {
-            this.desktop.ipc.postMessageToWindow(window, "fn:navi", path);
+        if (window.webContents.isLoadingMainFrame()) {
+            window.webContents.once("did-finish-load", () => {
+                if (!window.isDestroyed()) {
+                    this.desktop.ipc.postMessageToWindow(window, "fn:navi", path);
+                }
+            });
+            return window;
         }
+
+        this.desktop.ipc.postMessageToWindow(window, "fn:navi", path);
         return window;
     }
 

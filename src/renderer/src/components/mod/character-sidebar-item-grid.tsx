@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 // oxlint-disable no-unused-vars
 import { Preview } from "./preview";
 
@@ -6,7 +8,8 @@ interface CharacterSidebarItemGridProps {
     name: string;
     preview?: string;
     modCount?: number;
-    mods: unknown[];
+    enabledModCount?: number;
+    mods: { isEnabled: boolean }[];
   };
   depth: number;
   parentGroupName?: string;
@@ -19,7 +22,10 @@ export function CharacterSidebarItemGrid({
   parentGroupName,
   previewCacheKey,
 }: CharacterSidebarItemGridProps) {
+  const { t } = useTranslation();
   const isNestedGridItem = depth > 0;
+  const total = group.modCount ?? group.mods.length;
+  const enabled = group.enabledModCount ?? group.mods.filter((mod) => mod.isEnabled).length;
 
   return (
     <>
@@ -45,6 +51,13 @@ export function CharacterSidebarItemGrid({
             }
             allowPlay={true}
           />
+          <span
+            className="absolute right-1.5 bottom-1.5 flex items-center gap-1 rounded bg-background/85 px-1.5 py-0.5 text-[11px] text-muted-foreground shadow-sm backdrop-blur-sm"
+            title={t("page.mod.character-sidebar.active-mod-count", { enabled, total })}
+          >
+            <span className="size-1.5 rounded-full bg-emerald-500" />
+            {enabled} / {total}
+          </span>
         </div>
         <div className="flex min-w-0 items-center justify-center">
           <div className="truncate text-center text-xs font-medium text-foreground">

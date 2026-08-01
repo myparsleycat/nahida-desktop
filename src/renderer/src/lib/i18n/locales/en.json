@@ -238,6 +238,9 @@
         "open-in-explorer": "Open in File Explorer",
         "create-folder": "Create New Folder",
         "delete-folder": "Delete Folder",
+        "sort-by-mod-count": "Sort by most mods",
+        "hide-empty-folders": "Hide empty folders",
+        "active-mod-count": "{{enabled}} active / {{total}} total",
         "collapse-subgroups": "Collapse subgroups",
         "expand-subgroups": "Expand subgroups",
         "unpersist-subgroups": "Unpersist subgroups",
@@ -612,6 +615,13 @@
       "mods": "Mods",
       "mods_description": "Browse paged mod listings for the selected category.",
       "search_mods": "Search mods...",
+      "mod_sort": {
+        "label": "Sort mods",
+        "Generic_Newest": "Newest",
+        "Generic_MostLiked": "Most liked",
+        "Generic_MostDownloaded": "Most downloaded",
+        "Generic_MostViewed": "Most viewed"
+      },
       "previous": "Previous",
       "next": "Next",
       "retry_later": "Retry later",
@@ -1229,7 +1239,8 @@
       "file_name_placeholder": "Enter file name",
       "download_location": "Download Location",
       "need_select_character_folder": "Select a character folder on the left",
-      "select_path_failed": "Failed to select path."
+      "select_path_failed": "Failed to select path.",
+      "download_and_return": "Download and return to GameBanana"
     }
   },
   "updater": {

@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { Preview } from "./preview";
 
 interface CharacterSidebarItemRowProps {
@@ -5,7 +7,8 @@ interface CharacterSidebarItemRowProps {
     name: string;
     preview?: string;
     modCount?: number;
-    mods: unknown[];
+    enabledModCount?: number;
+    mods: { isEnabled: boolean }[];
   };
   depth: number;
   previewCacheKey?: number;
@@ -16,11 +19,15 @@ export function CharacterSidebarItemRow({
   depth,
   previewCacheKey,
 }: CharacterSidebarItemRowProps) {
+  const { t } = useTranslation();
+  const total = group.modCount ?? group.mods.length;
+  const enabled = group.enabledModCount ?? group.mods.filter((mod) => mod.isEnabled).length;
+
   return (
     <>
       {depth > 0 && (
         <div
-          className="absolute left-0 top-0 bottom-0 w-px bg-border/50"
+          className="absolute top-0 bottom-0 left-0 w-px bg-border/50"
           style={{ left: `${(depth - 1) * 16 + 16}px` }}
         />
       )}
@@ -37,8 +44,12 @@ export function CharacterSidebarItemRow({
       </div>
 
       <span className="min-w-0 truncate text-left text-sm text-foreground">{group.name}</span>
-      <span className="shrink-0 text-sm text-muted-foreground">
-        {group.modCount ?? group.mods.length}
+      <span
+        className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
+        title={t("page.mod.character-sidebar.active-mod-count", { enabled, total })}
+      >
+        <span className="size-1.5 rounded-full bg-emerald-500" />
+        {enabled} / {total}
       </span>
     </>
   );

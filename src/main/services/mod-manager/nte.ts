@@ -177,12 +177,14 @@ export async function getNteSubGroups(
             if (await hasDirectPak(nextPath)) return null;
 
             const preview = await findPreview(nextPath);
+            const modCounts = await countDirectMods(nextPath);
             return {
                 name: groupName,
                 path: nextPath,
                 mods: [],
                 ...(preview ? { preview } : {}),
-                modCount: await countDirectMods(nextPath),
+                modCount: modCounts.total,
+                enabledModCount: modCounts.enabled,
                 hasManualSubGroups: false,
             } satisfies FolderGroup;
         }),
@@ -219,6 +221,7 @@ export async function getNteMods(
         mods,
         ...(preview ? { preview } : {}),
         modCount: mods.length,
+        enabledModCount: mods.filter((mod) => mod.isEnabled).length,
     };
 }
 
@@ -893,16 +896,22 @@ async function hasDirectPak(dirPath: string) {
 }
 
 async function countDirectMods(groupDir: string) {
-    return (
+    const mods = (
         await Promise.all(
             (
                 await listDirectoryNames(groupDir)
-            ).map(
-                async (name): Promise<number> =>
-                    (await hasDirectPak(path.join(groupDir, name))) ? 1 : 0,
-            ),
+            ).map(async (name) => {
+                const modPath = path.join(groupDir, name);
+                if (!(await hasDirectPak(modPath))) return null;
+                return await isNteModEnabled(modPath);
+            }),
         )
-    ).reduce((total, count) => total + count, 0);
+    ).filter((enabled) => enabled !== null);
+
+    return {
+        total: mods.length,
+        enabled: mods.filter(Boolean).length,
+    };
 }
 
 async function findPreview(dirPath: string) {

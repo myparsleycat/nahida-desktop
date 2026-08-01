@@ -21,15 +21,24 @@ import {
 } from "@renderer/components/ui/dialog";
 import { Field, FieldError } from "@renderer/components/ui/field";
 import { Input } from "@renderer/components/ui/input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
 import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
 import { useSidebarLayoutSetting } from "@renderer/hooks/use-settings";
+import { setSetting } from "@renderer/lib/settings";
 import { useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
 import { toErrorMessage } from "@shared/utils";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2Icon, Search } from "lucide-react";
+import {
+  ArrowDown10Icon,
+  LayoutGridIcon,
+  ListFilterIcon,
+  ListIcon,
+  Loader2Icon,
+  Search,
+} from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -97,6 +106,8 @@ export const CharacterSidebar = memo(function CharacterSidebar({
   const selectedGroup = useModStore((s) => s.selectedGroup);
   const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
   const [searchTerm, setSearchTerm] = useState("");
+  const [sortByModCount, setSortByModCount] = useState(false);
+  const [hideEmptyGroups, setHideEmptyGroups] = useState(false);
   const [createFolderTarget, setCreateFolderTarget] = useState<FolderGroup | null>(null);
   const [pendingPreviewDrop, setPendingPreviewDrop] = useState<{
     group: FolderGroup;
@@ -107,6 +118,8 @@ export const CharacterSidebar = memo(function CharacterSidebar({
   const showSkeleton = useDelayedSkeleton(isLoading);
   const { confirmTrash, confirmTrashDialog } = useConfirmTrash();
   const { data: sidebarLayout = "row" } = useSidebarLayoutSetting();
+  const nextSidebarLayout = sidebarLayout === "grid" ? "row" : "grid";
+  const nextSidebarLayoutLabel = t(`page.setting.mod.layout.sidebar.modes.${nextSidebarLayout}`);
   const createFolderForm = useForm({
     defaultValues: {
       name: "",
@@ -375,6 +388,8 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     onItemDrop: handleItemDrop,
     canAcceptDrop: canAcceptPreviewDrop,
     searchTerm,
+    sortByModCount,
+    hideEmptyGroups,
     onCreateFolder: handleCreateFolderOpen,
     onDeleteFolder: handleDeleteFolder,
     onManualSubGroupChange: handleManualSubGroupChange,
@@ -387,8 +402,8 @@ export const CharacterSidebar = memo(function CharacterSidebar({
   return (
     <>
       <div className="flex h-full flex-col">
-        <div className="h-12 p-2">
-          <div className="relative">
+        <div className="flex h-12 items-center gap-1 p-2">
+          <div className="relative min-w-0 flex-1">
             <Search className="absolute top-1/2 right-2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               id="character-search-input"
@@ -398,6 +413,66 @@ export const CharacterSidebar = memo(function CharacterSidebar({
               onChange={(e) => handleSearchChange(e.target.value)}
             />
           </div>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant={sortByModCount ? "secondary" : "ghost"}
+                  aria-pressed={sortByModCount}
+                  onClick={() => setSortByModCount((value) => !value)}
+                />
+              }
+            >
+              <ArrowDown10Icon />
+              <span className="sr-only">{t("page.mod.character-sidebar.sort-by-mod-count")}</span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {t("page.mod.character-sidebar.sort-by-mod-count")}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant={hideEmptyGroups ? "secondary" : "ghost"}
+                  aria-pressed={hideEmptyGroups}
+                  onClick={() => setHideEmptyGroups((value) => !value)}
+                />
+              }
+            >
+              <ListFilterIcon />
+              <span className="sr-only">{t("page.mod.character-sidebar.hide-empty-folders")}</span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {t("page.mod.character-sidebar.hide-empty-folders")}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label={nextSidebarLayoutLabel}
+                  onClickPromise={async () => {
+                    try {
+                      await setSetting("mod.sidebarLayout", nextSidebarLayout);
+                    } catch (error) {
+                      toast.error(toErrorMessage(error));
+                    }
+                  }}
+                />
+              }
+            >
+              {sidebarLayout === "grid" ? <ListIcon /> : <LayoutGridIcon />}
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{nextSidebarLayoutLabel}</TooltipContent>
+          </Tooltip>
         </div>
 
         <ScrollArea className="flex-1 overflow-hidden">

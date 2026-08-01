@@ -13,6 +13,8 @@ export interface CharacterSidebarContentProps {
   onItemDrop: (group: FolderGroup, files: File[]) => void;
   canAcceptDrop: (files: File[]) => boolean;
   searchTerm: string;
+  sortByModCount: boolean;
+  hideEmptyGroups: boolean;
   onCreateFolder: (group: FolderGroup) => void;
   onDeleteFolder: (group: FolderGroup) => void;
   onManualSubGroupChange: (group: FolderGroup, enabled: boolean) => void;
@@ -62,6 +64,8 @@ interface CharacterSidebarItemWithChildrenProps {
   canAcceptDrop: (files: File[]) => boolean;
   depth: number;
   searchTerm: string;
+  sortByModCount: boolean;
+  hideEmptyGroups: boolean;
   onCreateFolder: (group: FolderGroup) => void;
   onDeleteFolder: (group: FolderGroup) => void;
   onManualSubGroupChange: (group: FolderGroup, enabled: boolean) => void;
@@ -87,6 +91,8 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   canAcceptDrop,
   depth,
   searchTerm,
+  sortByModCount,
+  hideEmptyGroups,
   onCreateFolder,
   onDeleteFolder,
   onManualSubGroupChange,
@@ -126,7 +132,11 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   const showChildGroups = showSubGroups
     ? childGroups.length > 0
     : manualSubGroups.length > 0 && (!isSearching || visibleChildGroups.length > 0);
-  const groupsToRender = showSubGroups ? childGroups : visibleChildGroups;
+  const groupsToRender = getVisibleGroups(
+    showSubGroups ? childGroups : visibleChildGroups,
+    sortByModCount,
+    hideEmptyGroups,
+  );
   const resolvedItemStyle = useMemo(() => itemStyle?.(depth), [depth, itemStyle]);
 
   const handleChildItemClick = useCallback(
@@ -192,6 +202,8 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
             collapseGroupPath={group.path}
             depth={depth + 1}
             searchTerm={searchTerm}
+            sortByModCount={sortByModCount}
+            hideEmptyGroups={hideEmptyGroups}
             onCreateFolder={onCreateFolder}
             onDeleteFolder={onDeleteFolder}
             onManualSubGroupChange={onManualSubGroupChange}
@@ -219,6 +231,8 @@ export function CharacterSidebarContent({
   onItemDrop,
   canAcceptDrop,
   searchTerm,
+  sortByModCount,
+  hideEmptyGroups,
   onCreateFolder,
   onDeleteFolder,
   onManualSubGroupChange,
@@ -240,7 +254,7 @@ export function CharacterSidebarContent({
         ? Array.from({ length: 8 }).map((_, index) => (
             <CharacterSidebarItemSkeleton key={index.toString()} layout={layout} />
           ))
-        : groups.map((group) => (
+        : getVisibleGroups(groups, sortByModCount, hideEmptyGroups).map((group) => (
             <CharacterSidebarItemWithChildren
               key={group.path}
               group={group}
@@ -250,6 +264,8 @@ export function CharacterSidebarContent({
               canAcceptDrop={canAcceptDrop}
               depth={0}
               searchTerm={searchTerm}
+              sortByModCount={sortByModCount}
+              hideEmptyGroups={hideEmptyGroups}
               onCreateFolder={onCreateFolder}
               onDeleteFolder={onDeleteFolder}
               onManualSubGroupChange={onManualSubGroupChange}
@@ -267,4 +283,17 @@ export function CharacterSidebarContent({
           ))}
     </div>
   );
+}
+
+function getVisibleGroups(
+  groups: FolderGroup[],
+  sortByModCount: boolean,
+  hideEmptyGroups: boolean,
+) {
+  return groups
+    .filter((group) => !hideEmptyGroups || (group.modCount ?? group.mods.length) > 0)
+    .toSorted((a, b) => {
+      if (!sortByModCount) return 0;
+      return (b.modCount ?? b.mods.length) - (a.modCount ?? a.mods.length);
+    });
 }

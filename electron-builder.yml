@@ -1,5 +1,9 @@
 appId: com.nahida.app
 productName: Nahida Desktop
+protocols:
+    - name: Nahida Desktop
+      schemes:
+          - nahida
 directories:
     buildResources: build
 files:

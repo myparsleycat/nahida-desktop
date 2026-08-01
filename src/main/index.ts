@@ -22,6 +22,7 @@ import { IPC } from "./ipc";
 import Compressor from "./lib/compressor";
 import CryptoLib from "./lib/crypto";
 import CustomDownloader from "./lib/custom-downloader";
+import { getNahidaDeepLinkRoute, parseNahidaDeepLink } from "./lib/deep-link";
 import { FS } from "./lib/fs";
 import { PathSelector } from "./lib/path-selector";
 import Tray from "./lib/tray";
@@ -178,7 +179,7 @@ export class NahidaDesktop {
         }
     }
 
-    public async init() {
+    public async init(initialRoute?: string) {
         if (this.initialized) return;
 
         // Reconcile before services because some constructors may read persisted app state.
@@ -224,12 +225,26 @@ export class NahidaDesktop {
 
         await this.service.transfer.applyBandwidthLimitsFromSettings();
 
-        await this.window.main.createMainWindow();
+        await this.window.main.createMainWindow(initialRoute);
         void this.syncAutoLaunchSetting();
     }
 }
 
 export const desktop = new NahidaDesktop();
+let pendingDeepLinkRoute = getNahidaDeepLinkRoute(process.argv);
+
+app.on("open-url", (event, url) => {
+    event.preventDefault();
+    const route = parseNahidaDeepLink(url);
+    if (!route) return;
+
+    if (!desktop.initialized || !desktop.window.main.window) {
+        pendingDeepLinkRoute = route;
+        return;
+    }
+
+    void desktop.window.main.focusAndNavigate(route);
+});
 
 // 딥링크
 if (process.defaultApp) {
@@ -284,9 +299,15 @@ void app.whenReady().then(async () => {
 
     app.on("second-instance", async (_event, commandLine, _workingDirectory) => {
         try {
-            const deepLinkUrl = commandLine.find((arg) => arg.startsWith("nahida://"));
-            if (deepLinkUrl?.startsWith("nahida://auth")) {
-                // AuthService.handleOAuth2Callback(deepLinkUrl);
+            const deepLinkRoute = getNahidaDeepLinkRoute(commandLine);
+            if (deepLinkRoute) {
+                if (!desktop.initialized || !desktop.window.main.window) {
+                    pendingDeepLinkRoute = deepLinkRoute;
+                    return;
+                }
+
+                await desktop.window.main.focusAndNavigate(deepLinkRoute);
+                return;
             }
 
             let mainWindow = desktop.window.main.window;
@@ -316,7 +337,12 @@ void app.whenReady().then(async () => {
         optimizer.watchWindowShortcuts(window);
     });
 
-    await desktop.init();
+    const initialDeepLinkRoute = pendingDeepLinkRoute;
+    await desktop.init(initialDeepLinkRoute ?? undefined);
+    if (pendingDeepLinkRoute && pendingDeepLinkRoute !== initialDeepLinkRoute) {
+        await desktop.window.main.focusAndNavigate(pendingDeepLinkRoute);
+    }
+    pendingDeepLinkRoute = null;
 });
 
 app.on("window-all-closed", async () => {
