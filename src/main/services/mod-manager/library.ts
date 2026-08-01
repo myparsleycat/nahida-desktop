@@ -153,6 +153,7 @@ export class ModLibraryService {
                 hasManualSubGroups: await this.hasManualChildren(game.game, relativePath),
                 mods,
                 modCount: mods.length,
+                enabledModCount: mods.filter((mod) => mod.isEnabled).length,
             };
         } catch (error) {
             this.desktop.logger.error(error, `Mod:mods:${groupPath}`);
@@ -689,18 +690,19 @@ export class ModLibraryService {
                     manualPath,
                     fs,
                 );
-                const populatedPath = (
+                const populatedPaths = (
                     await Promise.all(
                         diskPaths.map(async (diskPath) => ({
                             diskPath,
                             hasAnyFile: await folderHasAnyFile(diskPath, fs),
                         })),
                     )
-                ).find((result) => result.hasAnyFile)?.diskPath;
-                if (!populatedPath) return { total: 0, enabled: 0 };
+                ).filter((result) => result.hasAnyFile);
                 return {
-                    total: 1,
-                    enabled: DISABLED_PREFIX_REGEX.test(path.basename(populatedPath)) ? 0 : 1,
+                    total: populatedPaths.length,
+                    enabled: populatedPaths.filter(
+                        (result) => !DISABLED_PREFIX_REGEX.test(path.basename(result.diskPath)),
+                    ).length,
                 };
             }),
         );
