@@ -170,7 +170,9 @@ export interface FolderGroup {
     mods: ModInfo[];
     preview?: string;
     modCount?: number;
+    enabledModCount?: number;
     isManualSubGroup?: boolean;
+    hasSubGroups?: boolean;
     hasManualSubGroups?: boolean;
 }
 

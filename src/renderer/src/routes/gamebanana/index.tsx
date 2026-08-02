@@ -27,6 +27,9 @@ import { Loader2Icon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import isURL from "validator/lib/isURL";
+
+import type { GameOption } from "./-types";
+
 import { GameBananaToolbar } from "./-components/gamebanana-toolbar";
 import { CategoryPanel } from "./-panels/category-panel";
 import { GameHomePanel } from "./-panels/game-home-panel";
@@ -34,11 +37,20 @@ import { ModDetailPanel } from "./-panels/mod-detail-panel";
 import { GameBananaAuthState } from "./-shared/common";
 import { CategorySidebar } from "./-sidebars/category-sidebar";
 import { ModFilesSidebar } from "./-sidebars/mod-files-sidebar";
-import type { GameOption } from "./-types";
 
 const EMPTY_GAMES_MAP: Record<string, number> = {};
 
 export const Route = createFileRoute("/gamebanana/")({
+  validateSearch: (search: Record<string, unknown>) => {
+    const mod =
+      typeof search.mod === "number"
+        ? search.mod
+        : typeof search.mod === "string" && /^\d+$/.test(search.mod)
+          ? Number(search.mod)
+          : undefined;
+
+    return mod !== undefined && mod > 0 && Number.isSafeInteger(mod) ? { mod } : {};
+  },
   component: RouteComponent,
 });
 
@@ -48,7 +60,7 @@ function parseGameBananaModUrl(value: string) {
     !isURL(trimmedValue, {
       protocols: ["http", "https"],
       require_protocol: true,
-      host_whitelist: ["gamebanana.com"],
+      host_whitelist: ["gamebanana.com", "www.gamebanana.com"],
       disallow_auth: true,
       allow_fragments: true,
       allow_query_components: true,
@@ -69,6 +81,8 @@ function parseGameBananaModUrl(value: string) {
 
 function RouteComponent() {
   const { t, i18n } = useTranslation();
+  const { mod: deepLinkedModId } = Route.useSearch();
+  const navigate = Route.useNavigate();
   const [authStatus, setAuthStatus] = useState<"checking" | "ready" | "error">("checking");
   const [authErrorCode, setAuthErrorCode] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -76,7 +90,6 @@ function RouteComponent() {
   const [manualRmcValue, setManualRmcValue] = useState("");
   const [manualRmcError, setManualRmcError] = useState<string | null>(null);
   const [isSavingManualRmc, setIsSavingManualRmc] = useState(false);
-  const [isModUrlDialogOpen, setIsModUrlDialogOpen] = useState(false);
   const [modUrlValue, setModUrlValue] = useState("");
   const [modUrlError, setModUrlError] = useState<string | null>(null);
   const isAuthReady = authStatus === "ready";
@@ -93,6 +106,8 @@ function RouteComponent() {
   const subfeedPage = useGameBananaStore((state) => state.subfeedPage);
   const modsPage = useGameBananaStore((state) => state.modsPage);
   const modSearch = useGameBananaStore((state) => state.modSearch);
+  const modsSort = useGameBananaStore((state) => state.modsSort);
+  const isModUrlOpen = useGameBananaStore((state) => state.isModUrlOpen);
   const setInitialGame = useGameBananaStore((state) => state.setInitialGame);
   const setSelectedGame = useGameBananaStore((state) => state.setSelectedGame);
   const selectCategory = useGameBananaStore((state) => state.selectCategory);
@@ -103,6 +118,8 @@ function RouteComponent() {
   const setSubfeedPage = useGameBananaStore((state) => state.setSubfeedPage);
   const setModsPage = useGameBananaStore((state) => state.setModsPage);
   const setModSearch = useGameBananaStore((state) => state.setModSearch);
+  const setModsSort = useGameBananaStore((state) => state.setModsSort);
+  const toggleModUrl = useGameBananaStore((state) => state.toggleModUrl);
 
   const games = useMemo<GameOption[]>(
     () =>
@@ -121,6 +138,7 @@ function RouteComponent() {
   const categoryOverviewQuery = useGameBananaModCategoryOverview(
     selectedCategoryId,
     modsPage,
+    modsSort,
     isAuthReady,
   );
   const modOverviewQuery = useGameBananaModOverview(selectedMod, isAuthReady);
@@ -185,6 +203,16 @@ function RouteComponent() {
     setSelectedGame(gameBananaKey as GameBananaGameKey);
   }, [games, modGames, isModGamesLoading, setSelectedGame]);
 
+  useEffect(() => {
+    if (!isAuthReady || !deepLinkedModId) return;
+
+    selectMod({ id: deepLinkedModId, modelName: "Mod" });
+    void navigate({
+      replace: true,
+      search: (previous) => ({ ...previous, mod: undefined }),
+    });
+  }, [deepLinkedModId, isAuthReady, navigate, selectMod]);
+
   const rootCategories = gameOverviewQuery.data?.profile._aModRootCategories ?? [];
   const categoryChildren = categoryOverviewQuery.data?.categories ?? [];
   const mods = categoryOverviewQuery.data?.index._aRecords ?? [];
@@ -242,9 +270,9 @@ function RouteComponent() {
     void window.api.invoke("util:openExternal", currentProfileUrl);
   };
 
-  const handleOpenModUrlDialog = () => {
+  const handleToggleModUrl = () => {
     setModUrlError(null);
-    setIsModUrlDialogOpen(true);
+    toggleModUrl();
   };
 
   const handleOpenModUrl = () => {
@@ -255,7 +283,6 @@ function RouteComponent() {
     }
 
     selectMod(selection);
-    setIsModUrlDialogOpen(false);
     setModUrlValue("");
     setModUrlError(null);
   };
@@ -454,7 +481,7 @@ function RouteComponent() {
     <>
       <Titlebar title={{ text: "GameBanana", position: "center" }} />
       <main className="flex h-full flex-1 flex-col overflow-hidden bg-background">
-        <div className="lg:hidden flex h-full items-center justify-center p-4">
+        <div className="flex h-full items-center justify-center p-4 lg:hidden">
           <div className="w-full max-w-md rounded-xl border border-dashed p-6 text-center">
             <div className="text-base font-medium">{t("page.gamebanana.narrow_window.title")}</div>
             <div className="mt-2 text-sm text-muted-foreground">
@@ -463,7 +490,7 @@ function RouteComponent() {
           </div>
         </div>
 
-        <div className="hidden lg:flex lg:flex-col lg:flex-1 lg:overflow-hidden">
+        <div className="hidden lg:flex lg:flex-1 lg:flex-col lg:overflow-hidden">
           <div className="border-b px-4 py-3">
             <GameBananaToolbar
               games={games}
@@ -481,7 +508,8 @@ function RouteComponent() {
               isGamesLoading={isGamesLoading}
               gamesError={Boolean(gamesError)}
               onSelectGame={setSelectedGame}
-              onOpenModUrlDialog={handleOpenModUrlDialog}
+              isModUrlOpen={isModUrlOpen}
+              onToggleModUrl={handleToggleModUrl}
               onOpenGameProfile={handleOpenGameProfile}
               isLoggingOut={isLoggingOut}
               onLogout={handleLogout}
@@ -492,6 +520,27 @@ function RouteComponent() {
               canOpenProfile={Boolean(currentProfileUrl)}
               onResetToGameHome={resetToGameHome}
             />
+            {isModUrlOpen && (
+              <form
+                className="mt-3 flex items-start gap-2 border-t pt-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  handleOpenModUrl();
+                }}
+              >
+                <div className="min-w-0 flex-1 space-y-1">
+                  <Input
+                    value={modUrlValue}
+                    placeholder={t("page.gamebanana.open_mod_url.placeholder")}
+                    onChange={(event) => setModUrlValue(event.target.value)}
+                    aria-label={t("page.gamebanana.open_mod_url.title")}
+                    autoFocus
+                  />
+                  {modUrlError && <p className="text-sm text-destructive">{modUrlError}</p>}
+                </div>
+                <Button type="submit">{t("page.gamebanana.open_mod_url.confirm")}</Button>
+              </form>
+            )}
           </div>
 
           <div
@@ -520,10 +569,12 @@ function RouteComponent() {
                   filteredMods={filteredMods}
                   modSearch={modSearch}
                   modsPage={modsPage}
+                  modsSort={modsSort}
                   hasSidebar={showCategorySidebar}
                   onChangeModSearch={setModSearch}
                   onSelectMod={selectMod}
                   onModsPage={setModsPage}
+                  onModsSort={setModsSort}
                 />
               )}
 
@@ -538,7 +589,7 @@ function RouteComponent() {
             </div>
 
             {showCategorySidebar && (
-              <div className="min-h-0 min-w-0 pr-4 py-4">
+              <div className="min-h-0 min-w-0 py-4 pr-4">
                 {isViewingMod ? (
                   <ModFilesSidebar
                     t={t}
@@ -567,43 +618,6 @@ function RouteComponent() {
             )}
           </div>
         </div>
-        <Dialog
-          open={isModUrlDialogOpen}
-          onOpenChange={(open) => {
-            setIsModUrlDialogOpen(open);
-            if (!open) {
-              setModUrlError(null);
-            }
-          }}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{t("page.gamebanana.open_mod_url.title")}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-2">
-              <Input
-                value={modUrlValue}
-                placeholder={t("page.gamebanana.open_mod_url.placeholder")}
-                onChange={(event) => setModUrlValue(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    handleOpenModUrl();
-                  }
-                }}
-              />
-              {modUrlError && <p className="text-sm text-destructive">{modUrlError}</p>}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsModUrlDialogOpen(false)}>
-                {t("g.cancel")}
-              </Button>
-              <Button onClick={handleOpenModUrl}>
-                {t("page.gamebanana.open_mod_url.confirm")}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </main>
     </>
   );

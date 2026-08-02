@@ -1,6 +1,8 @@
 import path from "node:path";
+
 import type { NahidaDesktop } from "@main/index";
 import { rh } from "@main/ipc/helper";
+import { readGameBananaModId } from "@main/lib/mod-download-metadata";
 import { dialog } from "electron";
 
 export function registerModHandlers(desktop: NahidaDesktop) {
@@ -151,6 +153,10 @@ export function registerModHandlers(desktop: NahidaDesktop) {
 
     rh("mod:downloadFromUrl", async (url: string, groupPath: string) => {
         return await desktop.lib.customDownloader.downloadToGroup(url, groupPath);
+    });
+
+    rh("mod:getGameBananaModId", async (modPath: string) => {
+        return await readGameBananaModId(modPath);
     });
 
     rh(

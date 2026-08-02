@@ -35,6 +35,11 @@ export const gameBananaGames = {
 export type GameBananaGameKey = keyof typeof gameBananaGames;
 export type GameBananaCategorySort = "a_to_z" | "count";
 export type GameBananaFeedSort = "default";
+export type GameBananaModIndexSort =
+    | "Generic_Newest"
+    | "Generic_MostLiked"
+    | "Generic_MostDownloaded"
+    | "Generic_MostViewed";
 export type GameBananaModPostsSort = "popular" | "newest";
 export type GameBananaSubmissionModel = "Mod" | "Tool" | (string & {});
 type GameBananaCookieMap = Map<string, string>;
@@ -83,7 +88,7 @@ export class GameBananaService {
         },
         modCategory: {
             profilePage: `${this.apiBaseUrl}/ModCategory/{}/ProfilePage`,
-            index: `${this.apiBaseUrl}/Mod/Index?_nPerpage={}&_aFilters%5BGeneric_Category%5D={}&_nPage={}`,
+            index: `${this.apiBaseUrl}/Mod/Index?_nPerpage={}&_aFilters%5BGeneric_Category%5D={}&_nPage={}&_sSort={}`,
             categories: `${this.apiBaseUrl}/Mod/Categories?_idCategoryRow={}&_sSort={}&_bShowEmpty={}`,
         },
         mod: {
@@ -850,12 +855,20 @@ export class GameBananaService {
         categoryId,
         perPage = 15,
         page = 1,
+        sort = "Generic_Newest",
     }: {
         categoryId: number;
         perPage?: number;
         page?: number;
+        sort?: GameBananaModIndexSort;
     }) {
-        const url = this.formatUrl(this.baseUrls.modCategory.index, perPage, categoryId, page);
+        const url = this.formatUrl(
+            this.baseUrls.modCategory.index,
+            perPage,
+            categoryId,
+            page,
+            sort,
+        );
         return await this.requestJson(
             ModIndexSchema,
             url,
@@ -982,16 +995,18 @@ export class GameBananaService {
         page = 1,
         sort = "a_to_z",
         showEmpty = true,
+        modSort = "Generic_Newest",
     }: {
         categoryId: number;
         perPage?: number;
         page?: number;
         sort?: GameBananaCategorySort;
         showEmpty?: boolean;
+        modSort?: GameBananaModIndexSort;
     }) {
         const [profile, index, categories] = await Promise.all([
             this.getModCategoryProfile(categoryId),
-            this.getModIndex({ categoryId, perPage, page }),
+            this.getModIndex({ categoryId, perPage, page, sort: modSort }),
             this.getModCategories({ categoryId, sort, showEmpty }),
         ]);
 

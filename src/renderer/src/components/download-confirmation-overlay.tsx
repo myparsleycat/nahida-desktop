@@ -2,6 +2,7 @@ import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
 import { Logger } from "@renderer/lib/logger";
 import { useModStore } from "@renderer/store/mod";
+import { useNavigate } from "@tanstack/react-router";
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -9,6 +10,7 @@ import { toast } from "sonner";
 
 export function DownloadConfirmationOverlay() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
   const downloadMode = useModStore((s) => s.downloadMode);
   const setDownloadMode = useModStore((s) => s.setDownloadMode);
@@ -38,6 +40,9 @@ export function DownloadConfirmationOverlay() {
 
       setDownloadMode(null);
       resetUserSelectedDuringDownload();
+      if (downloadMode.downloadSource === "gamebanana") {
+        void navigate({ to: "/gamebanana" });
+      }
     } catch (error) {
       toast.error(t("components.download-confirmation-overlay.select_path_failed"));
       Logger.error(error, "DownloadConfirmationOverlay:handleConfirm");
@@ -125,7 +130,9 @@ export function DownloadConfirmationOverlay() {
               className="flex-1"
             >
               <Download className="mr-2 size-4" />
-              {t("g.select")}
+              {downloadMode.downloadSource === "gamebanana"
+                ? t("components.download-confirmation-overlay.download_and_return")
+                : t("g.select")}
             </Button>
           </div>
         </div>

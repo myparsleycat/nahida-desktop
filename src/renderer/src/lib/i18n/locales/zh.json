@@ -217,6 +217,18 @@
         "open-in-explorer": "在文件资源管理器中打开",
         "create-folder": "新建文件夹",
         "delete-folder": "删除",
+        "sort": {
+          "label": "文件夹排序",
+          "field": "排序依据",
+          "name": "名称",
+          "mod-count": "模组数量",
+          "enabled-mod-count": "已启用模组数量",
+          "direction": "排序方向",
+          "ascending": "升序",
+          "descending": "降序"
+        },
+        "hide-empty-folders": "隐藏空文件夹",
+        "active-mod-count": "已启用 {{enabled}} 个 / 共 {{total}} 个",
         "collapse-subgroups": "折叠子文件夹",
         "expand-subgroups": "探索子文件夹",
         "unpersist-subgroups": "取消子文件夹指定",
@@ -477,6 +489,7 @@
         "delete-preview": "删除预览",
         "open-cmd": "打开 CMD",
         "open-folder": "打开文件夹",
+        "open-gamebanana": "在 GameBanana 中查看",
         "mark-manual-subgroup": "指定为子分组",
         "rename": "重命名"
       },
@@ -585,6 +598,13 @@
       "mods": "模组",
       "mods_description": "分页浏览所选分类下的模组列表。",
       "search_mods": "搜索模组...",
+      "mod_sort": {
+        "label": "模组排序",
+        "Generic_Newest": "最新",
+        "Generic_MostLiked": "最多点赞",
+        "Generic_MostDownloaded": "最多下载",
+        "Generic_MostViewed": "最多浏览"
+      },
       "previous": "上一页",
       "next": "下一页",
       "retry_later": "请稍后重试",
@@ -1132,10 +1152,6 @@
           "title": "上传并发数",
           "description": "设置在网盘传输中可同时上传的文件数量。范围：4 到 16"
         },
-        "uploadCreateManyConcurrency": {
-          "title": "上传元数据并发请求数",
-          "description": "设置在开始文件上传前可同时执行的 请求数量。范围：1 到 4"
-        },
         "bandwidth": {
           "title": "带宽"
         },
@@ -1191,7 +1207,8 @@
       "file_name_placeholder": "输入文件名",
       "download_location": "下载位置",
       "need_select_character_folder": "请在左侧选择角色文件夹",
-      "select_path_failed": "选择路径失败。"
+      "select_path_failed": "选择路径失败。",
+      "download_and_return": "下载并返回 GameBanana"
     }
   },
   "updater": {

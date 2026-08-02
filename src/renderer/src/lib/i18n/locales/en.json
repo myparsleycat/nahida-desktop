@@ -92,10 +92,6 @@
         "uploadConcurrency": {
           "title": "Upload concurrency",
           "description": "Set the number of files to upload simultaneously in drive transfers. Range: 4-16"
-        },
-        "uploadCreateManyConcurrency": {
-          "title": "Upload metadata concurrency",
-          "description": "Set the number of requests to run simultaneously before starting file uploads. Range: 1-4"
         }
       }
     },
@@ -238,6 +234,18 @@
         "open-in-explorer": "Open in File Explorer",
         "create-folder": "Create New Folder",
         "delete-folder": "Delete Folder",
+        "sort": {
+          "label": "Sort folders",
+          "field": "Sort by",
+          "name": "Name",
+          "mod-count": "Mod count",
+          "enabled-mod-count": "Active mod count",
+          "direction": "Direction",
+          "ascending": "Ascending",
+          "descending": "Descending"
+        },
+        "hide-empty-folders": "Hide empty folders",
+        "active-mod-count": "{{enabled}} active / {{total}} total",
         "collapse-subgroups": "Collapse subgroups",
         "expand-subgroups": "Expand subgroups",
         "unpersist-subgroups": "Unpersist subgroups",
@@ -504,6 +512,7 @@
         "delete-preview": "Delete preview",
         "open-cmd": "Open CMD",
         "open-folder": "Open folder",
+        "open-gamebanana": "View on GameBanana",
         "mark-manual-subgroup": "Mark as subgroup",
         "rename": "Rename"
       },
@@ -612,6 +621,13 @@
       "mods": "Mods",
       "mods_description": "Browse paged mod listings for the selected category.",
       "search_mods": "Search mods...",
+      "mod_sort": {
+        "label": "Sort mods",
+        "Generic_Newest": "Newest",
+        "Generic_MostLiked": "Most liked",
+        "Generic_MostDownloaded": "Most downloaded",
+        "Generic_MostViewed": "Most viewed"
+      },
       "previous": "Previous",
       "next": "Next",
       "retry_later": "Retry later",
@@ -1131,10 +1147,6 @@
           "title": "Upload concurrency",
           "description": "Controls how many files can be uploaded at the same time in drive transfers. Range: 4 to 16."
         },
-        "uploadCreateManyConcurrency": {
-          "title": "Upload metadata concurrency",
-          "description": "Controls how many requests can run at the same time before file upload starts. Range: 1 to 4."
-        },
         "bandwidth": {
           "title": "Bandwidth"
         },
@@ -1229,7 +1241,8 @@
       "file_name_placeholder": "Enter file name",
       "download_location": "Download Location",
       "need_select_character_folder": "Select a character folder on the left",
-      "select_path_failed": "Failed to select path."
+      "select_path_failed": "Failed to select path.",
+      "download_and_return": "Download and return to GameBanana"
     }
   },
   "updater": {
