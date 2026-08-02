@@ -1,19 +1,37 @@
+type NahidaDeepLinkRouteHandler = (url: URL) => string | null;
+
 export function getNahidaDeepLinkRoute(commandLine: string[]) {
     return commandLine.map(parseNahidaDeepLink).find((route) => route !== null) ?? null;
 }
 
-export function parseNahidaDeepLink(value: string) {
+export function createNahidaDeepLinkParser(
+    handlers: Readonly<Record<string, NahidaDeepLinkRouteHandler>>,
+) {
+    return (value: string) => {
+        try {
+            const url = new URL(value);
+            if (url.protocol !== "nahida:") return null;
+
+            return handlers[url.hostname.toLowerCase()]?.(url) ?? null;
+        } catch {
+            return null;
+        }
+    };
+}
+
+export const parseNahidaDeepLink = createNahidaDeepLinkParser({
+    gamebanana: parseGameBananaDeepLink,
+});
+
+function parseGameBananaDeepLink(url: URL) {
+    const pathMatch = /^\/(?:mods?|open)\/(\d+)\/?$/i.exec(url.pathname);
+    const modId = pathMatch?.[1] ?? url.searchParams.get("id");
+    if (modId && isValidModId(modId)) return `/gamebanana?mod=${modId}`;
+
+    const sourceUrl = url.searchParams.get("url");
+    if (!sourceUrl) return null;
+
     try {
-        const url = new URL(value);
-        if (url.protocol !== "nahida:" || url.hostname.toLowerCase() !== "gamebanana") return null;
-
-        const pathMatch = /^\/(?:mods?|open)\/(\d+)\/?$/i.exec(url.pathname);
-        const modId = pathMatch?.[1] ?? url.searchParams.get("id");
-        if (modId && isValidModId(modId)) return `/gamebanana?mod=${modId}`;
-
-        const sourceUrl = url.searchParams.get("url");
-        if (!sourceUrl) return null;
-
         const gameBananaUrl = new URL(sourceUrl);
         if (
             !["http:", "https:"].includes(gameBananaUrl.protocol) ||
