@@ -257,7 +257,19 @@ async function uploadParts(
                 const start = index * PART_SIZE;
                 const size = Math.min(PART_SIZE, file.size - start);
                 const buffer = Buffer.allocUnsafe(size);
-                await handle.read(buffer, 0, size, start);
+                let bytesRead = 0;
+                while (bytesRead < size) {
+                    const result = await handle.read(
+                        buffer,
+                        bytesRead,
+                        size - bytesRead,
+                        start + bytesRead,
+                    );
+                    if (result.bytesRead === 0) {
+                        throw new Error(`Unexpected EOF while reading ${file.name}`);
+                    }
+                    bytesRead += result.bytesRead;
+                }
                 for (let attempt = 0; attempt <= RETRY_LIMIT; attempt++) {
                     signal?.throwIfAborted();
                     let attemptReportedBytes = 0;
@@ -491,14 +503,19 @@ function retryDelay(attempt: number, signal?: AbortSignal, cap = 8_000) {
             reject(signal.reason);
             return;
         }
-        const timer = setTimeout(resolve, Math.min(1000 * 2 ** attempt, cap));
-        signal?.addEventListener(
-            "abort",
+        const onAbort = () => {
+            clearTimeout(timer);
+            signal?.removeEventListener("abort", onAbort);
+            reject(signal?.reason);
+        };
+        const timer = setTimeout(
             () => {
-                clearTimeout(timer);
-                reject(signal.reason);
+                signal?.removeEventListener("abort", onAbort);
+                resolve();
             },
-            { once: true },
+            Math.min(1000 * 2 ** attempt, cap),
         );
+        signal?.addEventListener("abort", onAbort, { once: true });
+        if (signal?.aborted) onAbort();
     });
 }

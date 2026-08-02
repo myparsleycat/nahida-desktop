@@ -154,6 +154,98 @@ describe("uploadDriveFilesV2", () => {
         ).rejects.toThrow("denied.txt: invalid_parent");
     });
 
+    it("removes the abort listener after a retry delay completes", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout"] });
+        const controller = new AbortController();
+        const addEventListener = vi.spyOn(controller.signal, "addEventListener");
+        const removeEventListener = vi.spyOn(controller.signal, "removeEventListener");
+        mocks.plan.mockResolvedValue({
+            error: null,
+            data: {
+                requestId: "request-id",
+                items: [{ clientId: "retry", status: "pending", intentId: "intent" }],
+                uploads: [
+                    {
+                        intentId: "intent",
+                        url: "https://api.nahida.live/akasha/v2/uploads/intent",
+                        method: "POST",
+                        form: { token: "token", sha256: "a".repeat(64) },
+                    },
+                ],
+            },
+        });
+        mocks.request
+            .mockResolvedValueOnce(new Response("server error", { status: 500 }))
+            .mockResolvedValueOnce(
+                new Response(JSON.stringify({ status: "completed" }), { status: 200 }),
+            );
+
+        try {
+            const upload = uploadDriveFilesV2({
+                desktop,
+                currentId: "current",
+                requestId: "request-id",
+                files: [file("retry")],
+                queue: new PQueue({ concurrency: 1 }),
+                prepareDirectFile: async () => ({ data: Buffer.from("payload") }),
+                signal: controller.signal,
+            });
+            while (mocks.request.mock.calls.length === 0) {
+                await new Promise<void>((resolve) => setImmediate(resolve));
+            }
+            await new Promise<void>((resolve) => setImmediate(resolve));
+
+            const abortHandler = addEventListener.mock.calls.find(
+                ([event]) => event === "abort",
+            )?.[1];
+            expect(abortHandler).toBeDefined();
+            await vi.advanceTimersByTimeAsync(1_000);
+            await upload;
+
+            expect(removeEventListener).toHaveBeenCalledWith("abort", abortHandler);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("fails multipart upload when the source file ends before the planned size", async () => {
+        const filePath = path.join(os.tmpdir(), `nahida-upload-v2-${randomUUID()}.bin`);
+        const size = 80 * 1024 * 1024;
+        await writeFile(filePath, Buffer.from([0]));
+        mocks.plan.mockResolvedValue({
+            error: null,
+            data: {
+                requestId: "request-id",
+                items: [{ clientId: "large", status: "pending", intentId: "intent" }],
+                uploads: [
+                    {
+                        intentId: "intent",
+                        url: "https://api.nahida.live/akasha/v2/uploads/intent",
+                        method: "POST",
+                        form: { token: "token", sha256: "a".repeat(64) },
+                    },
+                ],
+            },
+        });
+
+        try {
+            await expect(
+                uploadDriveFilesV2({
+                    desktop,
+                    currentId: "current",
+                    requestId: "request-id",
+                    files: [{ ...file("large"), fullPath: filePath, size }],
+                    queue: new PQueue({ concurrency: 1 }),
+                    prepareDirectFile: async () => ({ data: Buffer.from("unused") }),
+                }),
+            ).rejects.toThrow("Unexpected EOF while reading large.txt");
+        } finally {
+            await rm(filePath, { force: true });
+        }
+
+        expect(mocks.request).not.toHaveBeenCalled();
+    });
+
     it("rolls back multipart progress when completion fails", async () => {
         const filePath = path.join(os.tmpdir(), `nahida-upload-v2-${randomUUID()}.bin`);
         const size = 80 * 1024 * 1024;
