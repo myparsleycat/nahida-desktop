@@ -56,7 +56,10 @@ export function ModContextMenu({ mod, actions, children }: ModContextMenuProps) 
     void window.api
       .invoke("mod:getGameBananaModId", modPath)
       .then((modId) => setGameBananaSource({ modPath, modId }))
-      .catch((error) => Logger.error(error, "ModContextMenu:loadGameBananaModId"));
+      .catch((error) => {
+        Logger.error(error, "ModContextMenu:loadGameBananaModId");
+        setGameBananaSource((source) => (source?.modPath === modPath ? null : source));
+      });
   };
 
   return (

@@ -493,7 +493,7 @@ export class UploadLib {
             if (abortController.signal.aborted) return;
             this.desktop.logger.error(
                 err,
-                `UploadLib:executeUpload:pid=${pid}:destId=${params.destId}:stage=${operation.stage}:paths=${params.paths.join(",")}`,
+                `UploadLib:executeUpload:pid=${pid}:destId=${params.destId}:stage=${operation.stage}:pathCount=${params.paths.length}`,
             );
             void this.desktop.service.transfer.updateTransfer(pid, {
                 status: "error",

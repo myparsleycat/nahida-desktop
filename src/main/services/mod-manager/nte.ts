@@ -185,6 +185,7 @@ export async function getNteSubGroups(
                 ...(preview ? { preview } : {}),
                 modCount: modCounts.total,
                 enabledModCount: modCounts.enabled,
+                hasSubGroups: await hasNteSubGroups(nextPath),
                 hasManualSubGroups: false,
             } satisfies FolderGroup;
         }),
@@ -873,6 +874,16 @@ async function listDirectoryNames(dirPath: string) {
         .filter((entry) => entry.isDirectory())
         .map((entry) => entry.name)
         .sort((a, b) => a.localeCompare(b));
+}
+
+async function hasNteSubGroups(groupDir: string) {
+    return (
+        await Promise.all(
+            (
+                await listDirectoryNames(groupDir)
+            ).map(async (name) => !(await hasDirectPak(path.join(groupDir, name)))),
+        )
+    ).some(Boolean);
 }
 
 function isDisabledFile(fileName: string) {

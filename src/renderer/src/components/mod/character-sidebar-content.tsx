@@ -299,7 +299,10 @@ function getVisibleGroups(
   return groups
     .filter(
       (group) =>
-        !hideEmptyGroups || (group.modCount ?? group.mods.length) > 0 || group.hasManualSubGroups,
+        !hideEmptyGroups ||
+        (group.modCount ?? group.mods.length) > 0 ||
+        group.hasSubGroups ||
+        group.hasManualSubGroups,
     )
     .toSorted((a, b) => {
       const comparison =
