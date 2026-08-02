@@ -20,10 +20,9 @@ export function CharacterSidebarModCountBadge({
 
   return (
     <span
-      className={cn("flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground", className)}
+      className={cn("flex shrink-0 items-center text-xs text-muted-foreground", className)}
       title={t("page.mod.character-sidebar.active-mod-count", { enabled, total })}
     >
-      <span className="size-1.5 rounded-full bg-emerald-500" />
       {enabled} / {total}
     </span>
   );
