@@ -12,6 +12,11 @@ type GameBananaModPosts = Awaited<ReturnType<IpcHandlers["gamebanana:getModPosts
 
 export type GameBananaGameKey = keyof GameBananaGames;
 export type GameBananaModPostsSort = "popular" | "newest";
+export type GameBananaModIndexSort =
+    | "Generic_Newest"
+    | "Generic_MostLiked"
+    | "Generic_MostDownloaded"
+    | "Generic_MostViewed";
 export interface GameBananaSubmissionSelection {
     id: number;
     modelName: string;
@@ -44,13 +49,19 @@ export function useGameBananaGameSubfeed(gameId?: number, page = 1, enabled = tr
     });
 }
 
-export function useGameBananaModCategoryOverview(categoryId?: number, page = 1, enabled = true) {
+export function useGameBananaModCategoryOverview(
+    categoryId?: number,
+    page = 1,
+    sort: GameBananaModIndexSort = "Generic_Newest",
+    enabled = true,
+) {
     return useQuery<GameBananaModCategoryOverview>({
-        queryKey: ["gamebanana", "modCategoryOverview", categoryId, page],
+        queryKey: ["gamebanana", "modCategoryOverview", categoryId, page, sort],
         queryFn: () =>
             window.api.invoke("gamebanana:getModCategoryOverview", {
                 categoryId: categoryId as number,
                 page,
+                modSort: sort,
             }),
         enabled: enabled && Number.isFinite(categoryId),
         // placeholderData: keepPreviousData,

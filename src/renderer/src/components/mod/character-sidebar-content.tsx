@@ -1,4 +1,4 @@
-import { useModStore } from "@renderer/store/mod";
+import { type FolderSortDirection, type FolderSortKey, useModStore } from "@renderer/store/mod";
 import type { FolderGroup } from "@renderer/types/mod";
 import type { SidebarLayoutMode } from "@shared/mod";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -13,6 +13,9 @@ export interface CharacterSidebarContentProps {
   onItemDrop: (group: FolderGroup, files: File[]) => void;
   canAcceptDrop: (files: File[]) => boolean;
   searchTerm: string;
+  sortKey: FolderSortKey;
+  sortDirection: FolderSortDirection;
+  hideEmptyGroups: boolean;
   onCreateFolder: (group: FolderGroup) => void;
   onDeleteFolder: (group: FolderGroup) => void;
   onManualSubGroupChange: (group: FolderGroup, enabled: boolean) => void;
@@ -62,6 +65,9 @@ interface CharacterSidebarItemWithChildrenProps {
   canAcceptDrop: (files: File[]) => boolean;
   depth: number;
   searchTerm: string;
+  sortKey: FolderSortKey;
+  sortDirection: FolderSortDirection;
+  hideEmptyGroups: boolean;
   onCreateFolder: (group: FolderGroup) => void;
   onDeleteFolder: (group: FolderGroup) => void;
   onManualSubGroupChange: (group: FolderGroup, enabled: boolean) => void;
@@ -87,6 +93,9 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
   canAcceptDrop,
   depth,
   searchTerm,
+  sortKey,
+  sortDirection,
+  hideEmptyGroups,
   onCreateFolder,
   onDeleteFolder,
   onManualSubGroupChange,
@@ -123,10 +132,13 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
     isSearching && !showSubGroups
       ? childGroups.filter((sub) => sub.name.toLowerCase().includes(normalizedSearch))
       : childGroups;
-  const showChildGroups = showSubGroups
-    ? childGroups.length > 0
-    : manualSubGroups.length > 0 && (!isSearching || visibleChildGroups.length > 0);
-  const groupsToRender = showSubGroups ? childGroups : visibleChildGroups;
+  const groupsToRender = getVisibleGroups(
+    showSubGroups ? childGroups : visibleChildGroups,
+    sortKey,
+    sortDirection,
+    hideEmptyGroups,
+  );
+  const showChildGroups = groupsToRender.length > 0;
   const resolvedItemStyle = useMemo(() => itemStyle?.(depth), [depth, itemStyle]);
 
   const handleChildItemClick = useCallback(
@@ -192,6 +204,9 @@ const CharacterSidebarItemWithChildren = memo(function CharacterSidebarItemWithC
             collapseGroupPath={group.path}
             depth={depth + 1}
             searchTerm={searchTerm}
+            sortKey={sortKey}
+            sortDirection={sortDirection}
+            hideEmptyGroups={hideEmptyGroups}
             onCreateFolder={onCreateFolder}
             onDeleteFolder={onDeleteFolder}
             onManualSubGroupChange={onManualSubGroupChange}
@@ -219,6 +234,9 @@ export function CharacterSidebarContent({
   onItemDrop,
   canAcceptDrop,
   searchTerm,
+  sortKey,
+  sortDirection,
+  hideEmptyGroups,
   onCreateFolder,
   onDeleteFolder,
   onManualSubGroupChange,
@@ -240,7 +258,7 @@ export function CharacterSidebarContent({
         ? Array.from({ length: 8 }).map((_, index) => (
             <CharacterSidebarItemSkeleton key={index.toString()} layout={layout} />
           ))
-        : groups.map((group) => (
+        : getVisibleGroups(groups, sortKey, sortDirection, hideEmptyGroups).map((group) => (
             <CharacterSidebarItemWithChildren
               key={group.path}
               group={group}
@@ -250,6 +268,9 @@ export function CharacterSidebarContent({
               canAcceptDrop={canAcceptDrop}
               depth={0}
               searchTerm={searchTerm}
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              hideEmptyGroups={hideEmptyGroups}
               onCreateFolder={onCreateFolder}
               onDeleteFolder={onDeleteFolder}
               onManualSubGroupChange={onManualSubGroupChange}
@@ -267,4 +288,28 @@ export function CharacterSidebarContent({
           ))}
     </div>
   );
+}
+
+function getVisibleGroups(
+  groups: FolderGroup[],
+  sortKey: FolderSortKey,
+  sortDirection: FolderSortDirection,
+  hideEmptyGroups: boolean,
+) {
+  return groups
+    .filter(
+      (group) =>
+        !hideEmptyGroups || (group.modCount ?? group.mods.length) > 0 || group.hasManualSubGroups,
+    )
+    .toSorted((a, b) => {
+      const comparison =
+        sortKey === "name"
+          ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
+          : sortKey === "mod-count"
+            ? (a.modCount ?? a.mods.length) - (b.modCount ?? b.mods.length)
+            : (a.enabledModCount ?? a.mods.filter((mod) => mod.isEnabled).length) -
+              (b.enabledModCount ?? b.mods.filter((mod) => mod.isEnabled).length);
+
+      return sortDirection === "ascending" ? comparison : -comparison;
+    });
 }

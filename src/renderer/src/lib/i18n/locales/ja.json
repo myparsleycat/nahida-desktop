@@ -218,6 +218,18 @@
         "open-in-explorer": "ファイルエクスプローラーで開く",
         "create-folder": "新しいフォルダーを作成",
         "delete-folder": "削除",
+        "sort": {
+          "label": "フォルダーを並べ替え",
+          "field": "並べ替え基準",
+          "name": "名前",
+          "mod-count": "MOD 数",
+          "enabled-mod-count": "有効な MOD 数",
+          "direction": "並べ替え方向",
+          "ascending": "昇順",
+          "descending": "降順"
+        },
+        "hide-empty-folders": "空のフォルダーを非表示",
+        "active-mod-count": "有効 {{enabled}} 件 / 全 {{total}} 件",
         "collapse-subgroups": "サブフォルダーを折りたたむ",
         "expand-subgroups": "サブフォルダーを探索",
         "unpersist-subgroups": "サブフォルダー指定を解除",
@@ -478,6 +490,7 @@
         "delete-preview": "プレビューを削除",
         "open-cmd": "CMDを開く",
         "open-folder": "フォルダーを開く",
+        "open-gamebanana": "GameBananaで表示",
         "mark-manual-subgroup": "サブグループとして指定",
         "rename": "名前を変更"
       },
@@ -586,6 +599,13 @@
       "mods": "MOD",
       "mods_description": "選択したカテゴリの MOD 一覧をページ単位で表示します。",
       "search_mods": "MOD を検索...",
+      "mod_sort": {
+        "label": "MOD の並べ替え",
+        "Generic_Newest": "新着順",
+        "Generic_MostLiked": "高評価順",
+        "Generic_MostDownloaded": "ダウンロード順",
+        "Generic_MostViewed": "閲覧数順"
+      },
       "previous": "前へ",
       "next": "次へ",
       "retry_later": "後でもう一度お試しください",
@@ -1192,7 +1212,8 @@
       "file_name_placeholder": "ファイル名を入力してください",
       "download_location": "ダウンロード先",
       "need_select_character_folder": "左側でキャラクターフォルダーを選択してください",
-      "select_path_failed": "パスの選択に失敗しました。"
+      "select_path_failed": "パスの選択に失敗しました。",
+      "download_and_return": "ダウンロードして GameBanana に戻る"
     }
   },
   "updater": {

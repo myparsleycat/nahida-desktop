@@ -1,4 +1,5 @@
 // oxlint-disable no-unused-vars
+import { CharacterSidebarModCountBadge } from "./character-sidebar-mod-count-badge";
 import { Preview } from "./preview";
 
 interface CharacterSidebarItemGridProps {
@@ -6,7 +7,8 @@ interface CharacterSidebarItemGridProps {
     name: string;
     preview?: string;
     modCount?: number;
-    mods: unknown[];
+    enabledModCount?: number;
+    mods: { isEnabled: boolean }[];
   };
   depth: number;
   parentGroupName?: string;
@@ -44,6 +46,10 @@ export function CharacterSidebarItemGrid({
               </span>
             }
             allowPlay={true}
+          />
+          <CharacterSidebarModCountBadge
+            group={group}
+            className="absolute right-1.5 bottom-1.5 gap-1 rounded bg-background/85 px-1.5 py-0.5 text-[11px] shadow-sm backdrop-blur-sm"
           />
         </div>
         <div className="flex min-w-0 items-center justify-center">

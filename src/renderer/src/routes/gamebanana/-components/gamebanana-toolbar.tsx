@@ -17,8 +17,15 @@ import {
   MenubarTrigger,
 } from "@renderer/components/ui/menubar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
-import { ArrowLeftIcon, ExternalLinkIcon, LinkIcon, LogOutIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ChevronDownIcon,
+  ExternalLinkIcon,
+  LinkIcon,
+  LogOutIcon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
+
 import type { GameBananaBreadcrumbItem, GameOption } from "../-types";
 
 export function GameBananaToolbar({
@@ -34,7 +41,8 @@ export function GameBananaToolbar({
   canGoBack,
   isLoggingOut,
   onSelectGame,
-  onOpenModUrlDialog,
+  isModUrlOpen,
+  onToggleModUrl,
   onOpenGameProfile,
   onLogout,
   onGoBack,
@@ -53,8 +61,9 @@ export function GameBananaToolbar({
   canOpenProfile: boolean;
   canGoBack: boolean;
   isLoggingOut: boolean;
+  isModUrlOpen: boolean;
   onSelectGame: (game: GameOption["key"]) => void;
-  onOpenModUrlDialog: () => void;
+  onToggleModUrl: () => void;
   onOpenGameProfile: () => void;
   onLogout: () => void;
   onGoBack: () => void;
@@ -167,8 +176,15 @@ export function GameBananaToolbar({
           {stageLabel}
         </ButtonGroupText>
         <Tooltip>
-          <TooltipTrigger render={<Button variant="outline" onClick={onOpenModUrlDialog} />}>
+          <TooltipTrigger
+            render={
+              <Button variant="outline" onClick={onToggleModUrl} aria-expanded={isModUrlOpen} />
+            }
+          >
             <LinkIcon />
+            <ChevronDownIcon
+              className={isModUrlOpen ? "rotate-180 transition-transform" : "transition-transform"}
+            />
             <span className="sr-only">{t("page.gamebanana.open_mod_url.button")}</span>
           </TooltipTrigger>
           <TooltipContent side="bottom">{t("page.gamebanana.open_mod_url.button")}</TooltipContent>

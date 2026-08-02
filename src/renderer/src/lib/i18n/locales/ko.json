@@ -217,6 +217,18 @@
         "open-in-explorer": "파일 탐색기에서 열기",
         "create-folder": "새 폴더 만들기",
         "delete-folder": "삭제",
+        "sort": {
+          "label": "폴더 정렬",
+          "field": "정렬 기준",
+          "name": "이름",
+          "mod-count": "전체 모드 수",
+          "enabled-mod-count": "활성 모드 수",
+          "direction": "정렬 방향",
+          "ascending": "오름차순",
+          "descending": "내림차순"
+        },
+        "hide-empty-folders": "빈 폴더 숨기기",
+        "active-mod-count": "활성 {{enabled}}개 / 전체 {{total}}개",
         "collapse-subgroups": "서브폴더 접기",
         "expand-subgroups": "서브폴더로 탐색",
         "unpersist-subgroups": "서브폴더 지정 해제",
@@ -484,6 +496,7 @@
         "delete-preview": "프리뷰 삭제",
         "open-cmd": "CMD 열기",
         "open-folder": "폴더 열기",
+        "open-gamebanana": "GameBanana에서 보기",
         "mark-manual-subgroup": "서브그룹으로 지정",
         "rename": "이름 변경"
       },
@@ -592,6 +605,13 @@
       "mods": "모드",
       "mods_description": "선택한 카테고리의 모드 목록을 페이지별로 탐색합니다.",
       "search_mods": "모드 검색...",
+      "mod_sort": {
+        "label": "모드 정렬",
+        "Generic_Newest": "최신순",
+        "Generic_MostLiked": "좋아요순",
+        "Generic_MostDownloaded": "다운로드순",
+        "Generic_MostViewed": "조회순"
+      },
       "previous": "이전",
       "next": "다음",
       "retry_later": "잠시 후 다시 시도하세요",
@@ -1211,7 +1231,8 @@
       "file_name_placeholder": "파일 이름을 입력하세요",
       "download_location": "다운로드 위치",
       "need_select_character_folder": "좌측에서 캐릭터 폴더를 선택하세요",
-      "select_path_failed": "경로 선택에 실패했습니다."
+      "select_path_failed": "경로 선택에 실패했습니다.",
+      "download_and_return": "다운로드 후 GameBanana로 돌아가기"
     }
   },
   "updater": {

@@ -1,3 +1,4 @@
+import { CharacterSidebarModCountBadge } from "./character-sidebar-mod-count-badge";
 import { Preview } from "./preview";
 
 interface CharacterSidebarItemRowProps {
@@ -5,7 +6,8 @@ interface CharacterSidebarItemRowProps {
     name: string;
     preview?: string;
     modCount?: number;
-    mods: unknown[];
+    enabledModCount?: number;
+    mods: { isEnabled: boolean }[];
   };
   depth: number;
   previewCacheKey?: number;
@@ -20,7 +22,7 @@ export function CharacterSidebarItemRow({
     <>
       {depth > 0 && (
         <div
-          className="absolute left-0 top-0 bottom-0 w-px bg-border/50"
+          className="absolute top-0 bottom-0 left-0 w-px bg-border/50"
           style={{ left: `${(depth - 1) * 16 + 16}px` }}
         />
       )}
@@ -37,9 +39,7 @@ export function CharacterSidebarItemRow({
       </div>
 
       <span className="min-w-0 truncate text-left text-sm text-foreground">{group.name}</span>
-      <span className="shrink-0 text-sm text-muted-foreground">
-        {group.modCount ?? group.mods.length}
-      </span>
+      <CharacterSidebarModCountBadge group={group} />
     </>
   );
 }

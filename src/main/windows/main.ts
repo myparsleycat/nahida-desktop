@@ -28,19 +28,24 @@ export class MainWindow {
     }
 
     public async focusAndNavigate(path: string) {
-        let window = this.window;
-        if (!window || window.isDestroyed()) {
-            window = await this.createMainWindow(path);
+        if (!this.window || this.window.isDestroyed()) {
+            const window = await this.createMainWindow(path);
+            if (window && !window.isDestroyed()) focus(window);
+            return window;
         }
 
-        if (!window || window.isDestroyed()) {
-            return null;
-        }
-
+        const window = this.window;
         focus(window);
-        if (!window.webContents.isLoadingMainFrame()) {
-            this.desktop.ipc.postMessageToWindow(window, "fn:navi", path);
+        if (window.webContents.isLoadingMainFrame()) {
+            window.webContents.once("did-finish-load", () => {
+                if (!window.isDestroyed()) {
+                    this.desktop.ipc.postMessageToWindow(window, "fn:navi", path);
+                }
+            });
+            return window;
         }
+
+        this.desktop.ipc.postMessageToWindow(window, "fn:navi", path);
         return window;
     }
 
