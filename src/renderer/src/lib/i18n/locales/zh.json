@@ -1152,10 +1152,6 @@
           "title": "上传并发数",
           "description": "设置在网盘传输中可同时上传的文件数量。范围：4 到 16"
         },
-        "uploadCreateManyConcurrency": {
-          "title": "上传元数据并发请求数",
-          "description": "设置在开始文件上传前可同时执行的 请求数量。范围：1 到 4"
-        },
         "bandwidth": {
           "title": "带宽"
         },

@@ -92,10 +92,6 @@
         "uploadConcurrency": {
           "title": "Upload concurrency",
           "description": "Set the number of files to upload simultaneously in drive transfers. Range: 4-16"
-        },
-        "uploadCreateManyConcurrency": {
-          "title": "Upload metadata concurrency",
-          "description": "Set the number of requests to run simultaneously before starting file uploads. Range: 1-4"
         }
       }
     },
@@ -1150,10 +1146,6 @@
         "uploadConcurrency": {
           "title": "Upload concurrency",
           "description": "Controls how many files can be uploaded at the same time in drive transfers. Range: 4 to 16."
-        },
-        "uploadCreateManyConcurrency": {
-          "title": "Upload metadata concurrency",
-          "description": "Controls how many requests can run at the same time before file upload starts. Range: 1 to 4."
         },
         "bandwidth": {
           "title": "Bandwidth"

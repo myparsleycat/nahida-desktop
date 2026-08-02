@@ -45,8 +45,6 @@ const TRANSFER_DOWNLOAD_BANDWIDTH_LIMIT_MIBPS_DEFAULT = 0;
 const TRANSFER_DOWNLOAD_BANDWIDTH_LIMIT_MIBPS_MIN_MAX = [0, 1024];
 const TRANSFER_UPLOAD_CONCURRENCY_DEFAULT = 8;
 const TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX = [4, 16];
-const TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT = 2;
-const TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX = [1, 4];
 const MOD_GRID_WIDTH_MIN = 240;
 const MOD_GRID_WIDTH_MAX = 640;
 const MOD_GRID_COLUMN_MIN = 1;
@@ -565,33 +563,6 @@ export class Setting {
                         ),
                     ),
             },
-            "transfer.uploadCreateManyConcurrency": {
-                definition: APP_SETTINGS["transfer.uploadCreateManyConcurrency"],
-                getDefault: () => TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT,
-                fromStored: (value) =>
-                    clampTransferConcurrency(
-                        Number.parseInt(value ?? "", 10),
-                        TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[0],
-                        TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[1],
-                        TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT,
-                    ),
-                normalize: (value) =>
-                    clampTransferConcurrency(
-                        value,
-                        TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[0],
-                        TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[1],
-                        TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT,
-                    ),
-                toStored: (value) =>
-                    String(
-                        clampTransferConcurrency(
-                            value,
-                            TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[0],
-                            TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[1],
-                            TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT,
-                        ),
-                    ),
-            },
             "drive.nameSortPolicy": {
                 definition: APP_SETTINGS["drive.nameSortPolicy"],
                 getDefault: () => normalizeDriveNameSortPolicy(null),
@@ -879,10 +850,6 @@ export class Setting {
         getUploadConcurrency: async () => await this.get("transfer.uploadConcurrency"),
         setUploadConcurrency: async (concurrency: number) =>
             await this.set("transfer.uploadConcurrency", concurrency),
-        getUploadCreateManyConcurrency: async () =>
-            await this.get("transfer.uploadCreateManyConcurrency"),
-        setUploadCreateManyConcurrency: async (concurrency: number) =>
-            await this.set("transfer.uploadCreateManyConcurrency", concurrency),
     };
 
     drive = {

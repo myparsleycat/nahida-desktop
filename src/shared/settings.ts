@@ -40,7 +40,6 @@ export interface AppSettings {
     "transfer.downloadConcurrency": number;
     "transfer.downloadBandwidthLimitMibps": number;
     "transfer.uploadConcurrency": number;
-    "transfer.uploadCreateManyConcurrency": number;
 
     "drive.nameSortPolicy": DriveNameSortPolicy;
 
@@ -212,12 +211,6 @@ export const APP_SETTINGS = {
         scope: "transfer",
         storageKey: "transfer_upload_concurrency",
     },
-    "transfer.uploadCreateManyConcurrency": {
-        publicKey: "transfer.uploadCreateManyConcurrency",
-        scope: "transfer",
-        storageKey: "transfer_upload_create_many_concurrency",
-    },
-
     "drive.nameSortPolicy": {
         publicKey: "drive.nameSortPolicy",
         scope: "drive",

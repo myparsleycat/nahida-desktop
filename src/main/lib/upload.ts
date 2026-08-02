@@ -1,22 +1,20 @@
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 
-import { eden, eden2url } from "@main/client";
 import sha256PiscinaWorker from "@main/worker/drive/sha256-piscina.worker?modulePath";
 import { collectFiles } from "@native/fs";
 import type { Content } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
-import { chunk, groupBy, orderBy, retry, sumBy } from "es-toolkit";
+import { orderBy, sumBy } from "es-toolkit";
 import { fileTypeFromBuffer } from "file-type";
 import fse from "fs-extra";
-import ky from "ky";
 import { nanoid } from "nanoid";
 import PQueue from "p-queue";
 import Piscina from "piscina";
 
 import type { NahidaDesktop } from "..";
 
-const CHUNK_SIZE = 100;
-const UPLOAD_STREAM_CHUNK_SIZE = 64 * 1024;
+import { uploadDriveFilesV2 } from "./upload-v2";
 
 export type FilesComponent = {
     FID: string;
@@ -25,12 +23,6 @@ export type FilesComponent = {
     size: number;
     parentPath: string;
     fullPath: string;
-    form?: {
-        parentId: string | null;
-        sha256: string;
-        name: string;
-        key: string;
-    };
 };
 
 export type DirectoriesComponent = {
@@ -67,27 +59,14 @@ export type UploadParams = {
     processedFiles?: FinalFile[];
     fileHashes?: Record<string, string>;
     conflictStrategy?: UploadConflictStrategy;
+    requestId?: string;
 };
 
 export class UploadLib {
     private readonly desktop: NahidaDesktop;
-    private readonly fileQueue: PQueue = new PQueue({ concurrency: 8 });
-    private readonly textEncoder = new TextEncoder();
 
     public constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
-    }
-
-    private async syncQueueConcurrency() {
-        this.fileQueue.concurrency = await this.desktop.setting.transfer.getUploadConcurrency();
-    }
-
-    private clearPendingFileQueue() {
-        this.fileQueue.clear();
-    }
-
-    private async getCreateManyConcurrency() {
-        return await this.desktop.setting.transfer.getUploadCreateManyConcurrency();
     }
 
     private async collect(
@@ -236,347 +215,6 @@ export class UploadLib {
         return isByMimeType || isByName;
     }
 
-    private async reverseFile(buf: Buffer) {
-        const uint8Array = new Uint8Array(buf);
-        return uint8Array.slice().reverse();
-    }
-
-    private async uploadFile(
-        file: FinalFile,
-        signal?: AbortSignal,
-        onProgress?: (bytes: number) => void,
-    ) {
-        if (signal?.aborted) throw new Error("Aborted");
-        const { fullPath, form } = file;
-
-        const readable = await this.desktop.lib.fs.isPathReadable(fullPath);
-        if (!readable) throw new Error("path is not readable");
-        if (!form) throw new Error("form is not defined");
-
-        const CHUNK_THRESHOLD = 50 * 1024 * 1024; // 50MB
-        if (file.size > CHUNK_THRESHOLD) {
-            await this.uploadLargeFile(file, signal, onProgress);
-        } else {
-            await this.uploadSmallFile(file, signal, onProgress);
-        }
-    }
-
-    private async postFormData({
-        name,
-        sha256,
-        key,
-        parentId,
-        fileToUpload,
-        part,
-        compAlg,
-        signal,
-        onProgress,
-    }: {
-        name: string;
-        sha256: string;
-        key: string;
-        parentId?: string | null;
-        fileToUpload: Buffer | Blob;
-        part?: string;
-        compAlg?: string;
-        signal?: AbortSignal;
-        onProgress?: (bytes: number) => void;
-    }) {
-        const uploadUrl = eden2url.akasha.file.upload.url();
-
-        const boundary = `----nahida-desktop-${nanoid()}`;
-        const fields: Array<[string, string]> = [
-            ["sha256", sha256],
-            ["key", key],
-            ["name", name],
-        ];
-        if (part) fields.push(["part", part]);
-        if (compAlg) fields.push(["comp-alg", compAlg]);
-        if (parentId) fields.push(["parent", parentId]);
-
-        let lastTransferredBytes = 0;
-        const normalizedFile =
-            fileToUpload instanceof Blob
-                ? new Uint8Array(await fileToUpload.arrayBuffer())
-                : new Uint8Array(fileToUpload);
-        const multipart = this.createMultipartUploadBody({
-            boundary,
-            fields,
-            file: normalizedFile,
-            filename: name,
-            onProgress: (bytes) => {
-                lastTransferredBytes += bytes;
-                onProgress?.(bytes);
-            },
-        });
-
-        try {
-            const response = await ky.post(uploadUrl, {
-                body: multipart.body,
-                headers: {
-                    ...(await this.desktop.httpService.getHeaders(uploadUrl)),
-                    "Content-Type": `multipart/form-data; boundary=${boundary}`,
-                    "Content-Length": String(multipart.contentLength),
-                },
-                signal,
-                throwHttpErrors: false,
-                timeout: 100000,
-                // @ts-expect-error - duplex is required by Node/undici for streaming request bodies.
-                duplex: "half",
-                hooks: {
-                    beforeRequest: [
-                        () => {
-                            lastTransferredBytes = 0;
-                        },
-                    ],
-                },
-            });
-
-            if (!response.ok && onProgress && lastTransferredBytes > 0) {
-                onProgress(-lastTransferredBytes);
-            }
-
-            return response;
-        } catch (error) {
-            if (onProgress && lastTransferredBytes > 0) {
-                onProgress(-lastTransferredBytes);
-            }
-            throw error;
-        }
-    }
-
-    private createMultipartUploadBody({
-        boundary,
-        fields,
-        file,
-        filename,
-        onProgress,
-    }: {
-        boundary: string;
-        fields: Array<[string, string]>;
-        file: Uint8Array;
-        filename: string;
-        onProgress?: (bytes: number) => void;
-    }) {
-        const encode = (value: string) => this.textEncoder.encode(value);
-        const escapeHeaderValue = (value: string) =>
-            value
-                .replaceAll("\\", "\\\\")
-                .replaceAll('"', '\\"')
-                .replaceAll("\r", "")
-                .replaceAll("\n", "");
-
-        const fieldParts: Uint8Array[] = [];
-        for (const [fieldName, fieldValue] of fields) {
-            fieldParts.push(
-                encode(
-                    `\r\n--${boundary}\r\nContent-Disposition: form-data; name="${escapeHeaderValue(fieldName)}"\r\n\r\n${fieldValue}`,
-                ),
-            );
-        }
-
-        const fileHeader = encode(
-            `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${escapeHeaderValue(filename)}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
-        );
-        const fileFooter = encode(`\r\n--${boundary}--\r\n`);
-        const contentLength =
-            fieldParts.reduce((total, part) => total + part.byteLength, 0) +
-            fileHeader.byteLength +
-            file.byteLength +
-            fileFooter.byteLength;
-
-        let fieldIndex = 0;
-        let fileOffset = 0;
-        let sentFileHeader = false;
-        let sentFileFooter = false;
-
-        const body = new ReadableStream<Uint8Array>({
-            pull(controller) {
-                if (!sentFileHeader) {
-                    controller.enqueue(fileHeader);
-                    sentFileHeader = true;
-                    return;
-                }
-
-                if (fileOffset < file.byteLength) {
-                    const end = Math.min(fileOffset + UPLOAD_STREAM_CHUNK_SIZE, file.byteLength);
-                    const chunk = file.subarray(fileOffset, end);
-                    fileOffset = end;
-                    controller.enqueue(chunk);
-                    onProgress?.(chunk.byteLength);
-                    return;
-                }
-
-                if (fieldIndex < fieldParts.length) {
-                    controller.enqueue(fieldParts[fieldIndex]);
-                    fieldIndex++;
-                    return;
-                }
-
-                if (!sentFileFooter) {
-                    controller.enqueue(fileFooter);
-                    sentFileFooter = true;
-                    return;
-                }
-
-                controller.close();
-            },
-        });
-
-        return { body, contentLength };
-    }
-
-    private async uploadLargeFile(
-        file: FinalFile,
-        signal?: AbortSignal,
-        onProgress?: (bytes: number) => void,
-    ) {
-        const { name, sha256, fullPath, form } = file;
-
-        if (!form) {
-            throw new Error("form is not defined");
-        }
-
-        const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
-        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-        const maxIndex = totalChunks - 1;
-
-        const fd = await fse.open(fullPath, "r");
-        try {
-            const chunkQueue = new PQueue({ concurrency: 4 });
-            const uploadChunk = async (index: number) => {
-                const start = index * CHUNK_SIZE;
-                const end = Math.min(start + CHUNK_SIZE, file.size);
-                const length = end - start;
-                const buffer = Buffer.allocUnsafe(length);
-                await fse.read(fd, buffer, 0, length, start);
-
-                const partToken = `${index}-${maxIndex}`;
-                let chunkToUpload: Buffer = buffer;
-
-                await retry(
-                    async () => {
-                        if (signal?.aborted) throw new Error("Aborted");
-                        const response = await this.postFormData({
-                            name,
-                            sha256,
-                            key: form.key,
-                            parentId: form.parentId,
-                            fileToUpload: chunkToUpload,
-                            part: partToken,
-                            signal,
-                            onProgress,
-                        });
-
-                        if (!response.ok) {
-                            if (response.status === 403) {
-                                const reversed = await this.reverseFile(chunkToUpload);
-                                chunkToUpload = Buffer.from(reversed);
-                            }
-                            const errorText = await response.text().catch(() => "Unknown error");
-                            throw new Error(`Chunk ${index} upload failed: ${errorText}`);
-                        }
-                    },
-                    {
-                        retries: 3,
-                        delay: (attempt) => 2 ** attempt * 1000,
-                        shouldRetry: () => !signal?.aborted,
-                    },
-                );
-            };
-
-            const promises: Promise<void>[] = [];
-            for (let i = 0; i < maxIndex; i++) {
-                promises.push(chunkQueue.add(() => uploadChunk(i)));
-            }
-            await Promise.all(promises);
-            await uploadChunk(maxIndex);
-        } finally {
-            await fse.close(fd);
-        }
-    }
-
-    private async uploadSmallFile(
-        file: FinalFile,
-        signal?: AbortSignal,
-        onProgress?: (bytes: number) => void,
-    ) {
-        const { name, sha256, fullPath, form } = file;
-
-        if (!form) {
-            throw new Error("form is not defined");
-        }
-
-        const fileBuffer = await fse.readFile(fullPath);
-        const isPreview = await this.isPreviewFile(fileBuffer, name);
-
-        let zstdFile: Buffer | undefined;
-        if (!isPreview && file.size > 100) {
-            zstdFile = (await this.desktop.lib.compressor.zstd.compress(fileBuffer)) ?? undefined;
-            if (!zstdFile) throw new Error("Failed to compress file");
-        }
-
-        const compAlg = zstdFile ? "zstd" : undefined;
-        let fileToUpload: Buffer = zstdFile || fileBuffer;
-        let uploadedPayloadBytes = 0;
-        let reportedOriginalBytes = 0;
-        const reportOriginalFileProgress = (bytes: number) => {
-            if (!onProgress) return;
-
-            if (bytes < 0) {
-                uploadedPayloadBytes = 0;
-                if (reportedOriginalBytes > 0) {
-                    onProgress(-reportedOriginalBytes);
-                    reportedOriginalBytes = 0;
-                }
-                return;
-            }
-
-            uploadedPayloadBytes += bytes;
-            const payloadSize = Math.max(1, fileToUpload.byteLength);
-            const targetOriginalBytes = Math.min(
-                file.size,
-                Math.floor((uploadedPayloadBytes / payloadSize) * file.size),
-            );
-            const incremental = targetOriginalBytes - reportedOriginalBytes;
-
-            if (incremental > 0) {
-                reportedOriginalBytes = targetOriginalBytes;
-                onProgress(incremental);
-            }
-        };
-
-        await retry(
-            async () => {
-                if (signal?.aborted) throw new Error("Aborted");
-                const response = await this.postFormData({
-                    name,
-                    sha256,
-                    key: form.key,
-                    parentId: form.parentId,
-                    fileToUpload,
-                    compAlg,
-                    signal,
-                    onProgress: reportOriginalFileProgress,
-                });
-
-                if (!response.ok) {
-                    if (response.status === 403) {
-                        const reversed = await this.reverseFile(fileToUpload);
-                        fileToUpload = Buffer.from(reversed);
-                    }
-                    const errorText = await response.text().catch(() => "Unknown error");
-                    throw new Error(`Upload failed: ${errorText}`);
-                }
-            },
-            {
-                retries: 3,
-                delay: (attempt) => 2 ** attempt * 1000,
-                shouldRetry: () => !signal?.aborted,
-            },
-        );
-    }
-
     public async calculateHashes(
         files: ParentIdFiles[],
         onProgress?: (count: number) => void,
@@ -673,12 +311,14 @@ export class UploadLib {
 
     public async filesUpload({
         currentId,
+        requestId,
         files,
         onProgress,
         signal,
         pid,
     }: {
         currentId: string;
+        requestId: string;
         files: FinalFile[];
         totalSize: number;
         onProgress?: (progress: UploadProgress) => void;
@@ -688,148 +328,35 @@ export class UploadLib {
         const filesToProcess = pid
             ? files.filter((f) => !this.desktop.service.transfer.isFileCompleted(pid, f.FID))
             : files;
-
-        const redistributedFiles = this.redistributeFilesBySize(filesToProcess);
-
-        const hashGroups = groupBy(redistributedFiles, (file) => file.sha256 || "unknown");
-        const representativeFiles: FinalFile[] = [];
-        const allRemainingFiles: FinalFile[] = [];
-
-        Object.values(hashGroups).forEach((group) => {
-            if (group.length > 0) {
-                representativeFiles.push(group[0]);
-                if (group.length > 1) {
-                    allRemainingFiles.push(...group.slice(1));
-                }
-            }
+        if (filesToProcess.length === 0) return;
+        const queue = new PQueue({
+            concurrency: await this.desktop.setting.transfer.getUploadConcurrency(),
         });
+        const clearQueue = () => queue.clear();
+        signal?.addEventListener("abort", clearQueue, { once: true });
 
-        const BACKPRESSURE_LIMIT = (this.fileQueue.concurrency || 32) * 3;
-
-        const queueUploads = async (filesToUpload: FinalFile[]) => {
-            for (const file of filesToUpload) {
-                if (signal?.aborted) break;
-
-                if (this.fileQueue.size >= BACKPRESSURE_LIMIT) {
-                    await new Promise<void>((resolve) => {
-                        this.fileQueue.once("next", () => resolve());
-                    });
-                }
-
-                if (signal?.aborted) break;
-
-                void this.fileQueue.add(async () => {
-                    if (signal?.aborted) return;
-                    try {
-                        await this.uploadFile(file, signal, (bytes) => {
-                            if (onProgress) {
-                                onProgress({
-                                    bytes,
-                                    isServerDeduplicated: false,
-                                });
-                            }
-                        });
-                        if (onProgress) {
-                            onProgress({
-                                bytes: 0,
-                                fileId: file.FID,
-                                isServerDeduplicated: false,
-                            });
-                        }
-                    } catch (err) {
-                        if (signal?.aborted) return;
-                        this.desktop.logger.error(err, `UploadLib:filesUpload:${file.name}`);
+        try {
+            await uploadDriveFilesV2({
+                desktop: this.desktop,
+                currentId,
+                requestId,
+                files: this.redistributeFilesBySize(filesToProcess),
+                queue,
+                signal,
+                onProgress,
+                prepareDirectFile: async (file) => {
+                    const data = await fse.readFile(file.fullPath);
+                    if (file.size <= 100 || (await this.isPreviewFile(data, file.name))) {
+                        return { data };
                     }
-                });
-            }
-        };
-
-        const processChunk = async (chunkItems: FinalFile[]) => {
-            if (signal?.aborted || chunkItems.length === 0) return;
-
-            const fileMetadatas = chunkItems.map((f) => ({
-                FID: f.FID,
-                parentId: f.parentId,
-                name: f.name,
-                path: f.path,
-                size: f.size,
-                sha256: f.sha256,
-            }));
-
-            const { data } = await retry(
-                async () => {
-                    const result = await eden.akasha.file.create_many.post({
-                        current: currentId,
-                        files: fileMetadatas,
-                    });
-
-                    if (result.error) {
-                        throw new Error(
-                            `[create_files chunk failed] ${toErrorMessage(result.error.value)}`,
-                        );
-                    }
-
-                    return result;
+                    return {
+                        data: await this.desktop.lib.compressor.zstd.compress(data),
+                        compAlg: "zstd",
+                    };
                 },
-                {
-                    retries: 3,
-                    delay: (attempt) => 2 ** attempt * 1000,
-                    shouldRetry: () => !signal?.aborted,
-                },
-            );
-
-            const serverDataMap = new Map(data.map((item) => [item.FID, item]));
-            const filesToUpload: FinalFile[] = [];
-            const serverDeduplicatedFiles: FinalFile[] = [];
-
-            chunkItems.forEach((file) => {
-                const serverInfo = serverDataMap.get(file.FID);
-                if (serverInfo?.form) {
-                    file.form = serverInfo.form;
-                    filesToUpload.push(file);
-                } else {
-                    serverDeduplicatedFiles.push(file);
-                }
             });
-
-            if (onProgress && serverDeduplicatedFiles.length > 0) {
-                for (const file of serverDeduplicatedFiles) {
-                    onProgress({
-                        bytes: file.size,
-                        fileId: file.FID,
-                        isServerDeduplicated: true,
-                    });
-                }
-            }
-
-            await queueUploads(filesToUpload);
-        };
-
-        const processMetadataChunks = async (chunks: FinalFile[][], concurrency: number) => {
-            const metadataQueue = new PQueue({ concurrency });
-
-            await Promise.all(
-                chunks.map((fileChunk) =>
-                    metadataQueue.add(async () => {
-                        if (signal?.aborted) return;
-                        await processChunk(fileChunk);
-                    }),
-                ),
-            );
-        };
-
-        const representativeChunks = chunk(representativeFiles, CHUNK_SIZE);
-        await processMetadataChunks(representativeChunks, await this.getCreateManyConcurrency());
-
-        if (!signal?.aborted) {
-            await this.fileQueue.onIdle();
-        }
-
-        const remainingChunks = chunk(allRemainingFiles, CHUNK_SIZE);
-        await processMetadataChunks(remainingChunks, 1);
-
-        if (!signal?.aborted) {
-            await this.fileQueue.onIdle();
+        } finally {
+            signal?.removeEventListener("abort", clearQueue);
         }
     }
 
@@ -855,15 +382,9 @@ export class UploadLib {
         processedFiles?: FinalFile[];
         initialTransferedSize?: number;
     }) {
-        const handleAbort = () => {
-            this.clearPendingFileQueue();
-        };
-
-        abortController.signal.addEventListener("abort", handleAbort, { once: true });
+        const operation = { stage: "create-directories" };
 
         try {
-            await this.syncQueueConcurrency();
-
             void this.desktop.service.transfer.updateTransfer(pid, {
                 status: "preparing",
                 transferedFiles: 0,
@@ -884,6 +405,7 @@ export class UploadLib {
             );
 
             let finalFiles: FinalFile[] = [];
+            operation.stage = "resolve-file-hashes";
             if (params.fileHashes) {
                 finalFiles = parentIdProcessedFiles.map((f) => {
                     const hash = params.fileHashes?.[f.FID];
@@ -936,10 +458,14 @@ export class UploadLib {
             updateUI();
 
             const heartbeat = setInterval(updateUI, 500);
+            const requestId = params.requestId ?? randomUUID();
+            params.requestId = requestId;
 
             try {
+                operation.stage = "plan-and-upload-v2";
                 await this.filesUpload({
                     currentId,
+                    requestId,
                     files: finalFiles,
                     totalSize,
                     onProgress: (progress: UploadProgress) => {
@@ -965,14 +491,15 @@ export class UploadLib {
             });
         } catch (err) {
             if (abortController.signal.aborted) return;
-            this.desktop.logger.error(err, "UploadLib:executeUpload");
+            this.desktop.logger.error(
+                err,
+                `UploadLib:executeUpload:pid=${pid}:destId=${params.destId}:stage=${operation.stage}:paths=${params.paths.join(",")}`,
+            );
             void this.desktop.service.transfer.updateTransfer(pid, {
                 status: "error",
                 error: toErrorMessage(err),
             });
             throw err;
-        } finally {
-            abortController.signal.removeEventListener("abort", handleAbort);
         }
     }
 
