@@ -489,6 +489,7 @@
         "delete-preview": "删除预览",
         "open-cmd": "打开 CMD",
         "open-folder": "打开文件夹",
+        "open-gamebanana": "在 GameBanana 中查看",
         "mark-manual-subgroup": "指定为子分组",
         "rename": "重命名"
       },

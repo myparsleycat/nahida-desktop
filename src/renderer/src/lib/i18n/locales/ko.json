@@ -496,6 +496,7 @@
         "delete-preview": "프리뷰 삭제",
         "open-cmd": "CMD 열기",
         "open-folder": "폴더 열기",
+        "open-gamebanana": "GameBanana에서 보기",
         "mark-manual-subgroup": "서브그룹으로 지정",
         "rename": "이름 변경"
       },

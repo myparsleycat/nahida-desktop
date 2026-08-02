@@ -2,6 +2,7 @@ import { execFile } from "child_process";
 import crypto from "node:crypto";
 import path from "node:path";
 import { promisify } from "util";
+
 import fse from "fs-extra";
 
 const execFileAsync = promisify(execFile);
@@ -42,6 +43,29 @@ export type ModDownloadMetadata = DirectModDownloadMetadata | GameBananaModDownl
 export type ModDownloadMetadataInput =
     | Omit<DirectModDownloadMetadata, "id">
     | Omit<GameBananaModDownloadMetadata, "id">;
+
+export async function readGameBananaModId(dirPath: string) {
+    const metadata: unknown = await fse
+        .readJson(path.join(dirPath, MOD_DOWNLOAD_METADATA_FILE_NAME))
+        .catch(() => null);
+    if (
+        !metadata ||
+        typeof metadata !== "object" ||
+        !("source" in metadata) ||
+        metadata.source !== "gamebanana" ||
+        !("mod" in metadata) ||
+        !metadata.mod ||
+        typeof metadata.mod !== "object" ||
+        !("id" in metadata.mod) ||
+        typeof metadata.mod.id !== "number" ||
+        !Number.isSafeInteger(metadata.mod.id) ||
+        metadata.mod.id <= 0
+    ) {
+        return undefined;
+    }
+
+    return metadata.mod.id;
+}
 
 export async function writeModDownloadMetadata(
     dirPath: string,

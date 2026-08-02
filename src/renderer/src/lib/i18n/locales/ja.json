@@ -490,6 +490,7 @@
         "delete-preview": "プレビューを削除",
         "open-cmd": "CMDを開く",
         "open-folder": "フォルダーを開く",
+        "open-gamebanana": "GameBananaで表示",
         "mark-manual-subgroup": "サブグループとして指定",
         "rename": "名前を変更"
       },
