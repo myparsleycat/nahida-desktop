@@ -607,12 +607,6 @@ export default function BodyShapeTool({
       setWeightVersion((v) => v + 1);
       setModelOrientation(DEFAULT_MODEL_ORIENTATION);
       setShowWeights(true);
-
-      toast.success(t("page.tools.body_shape.toast.loaded"), {
-        description: t("page.tools.body_shape.toast.loaded_description", {
-          count: meshes.length,
-        }),
-      });
     } catch (error) {
       toast.error(t("page.tools.body_shape.toast.load_failed"), {
         description: toErrorMessage(error),
