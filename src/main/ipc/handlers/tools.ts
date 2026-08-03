@@ -1,5 +1,6 @@
 import type { NahidaDesktop } from "@main/index";
 import { rh } from "@main/ipc/helper";
+import type { BodyShapeExportInput } from "@main/services/mod-tools/body-shape";
 import type {
     StaticGlbConvertInput,
     StaticGlbViewerInput,
@@ -95,5 +96,11 @@ export function registerToolsHandlers(d: NahidaDesktop) {
     );
     rh("tools:cleanupStaticGlbViewerFile", (glbPath: string, memorySessionId?: string) =>
         d.service.modTools.staticGlb.cleanupViewerFile(glbPath, memorySessionId),
+    );
+    rh("tools:bodyShapeLoadMod", (modPath: string) =>
+        d.service.modTools.bodyShape.loadMod(modPath),
+    );
+    rh("tools:bodyShapeExport", (input: BodyShapeExportInput) =>
+        d.service.modTools.bodyShape.exportMesh(input),
     );
 }

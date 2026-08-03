@@ -1,5 +1,7 @@
 import type { NahidaDesktop } from "@/main";
+
 import { FourThousandOneFixer } from "./4001-fixer";
+import { BodyShapeEditor } from "./body-shape";
 import { FixTool } from "./fix-tool";
 import { ModBisect } from "./mod-bisect";
 import { StaticGlb } from "./static-glb";
@@ -17,6 +19,7 @@ export class ModTools {
     public readonly textureResizer: TextureResizer;
     public readonly wuwaModFixer: WuwaModFixer;
     public readonly modBisect: ModBisect;
+    public readonly bodyShape: BodyShapeEditor;
 
     constructor(private readonly desktop: NahidaDesktop) {
         this.fixTool = new FixTool(this.desktop);
@@ -26,6 +29,7 @@ export class ModTools {
         this.staticGlb = new StaticGlb(this.desktop);
         this.textureResizer = new TextureResizer(this.desktop);
         this.wuwaModFixer = new WuwaModFixer(this.desktop);
+        this.bodyShape = new BodyShapeEditor(this.desktop);
         const modBisect = (this.modBisect = new ModBisect(this.desktop));
         modBisect.recovering = (async () => {
             try {

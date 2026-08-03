@@ -18,6 +18,7 @@ import {
   FolderIcon,
   ImageIcon,
   Loader2Icon,
+  PersonStandingIcon,
   TerminalSquareIcon,
   TrashIcon,
   WrenchIcon,
@@ -64,6 +65,16 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
               >
                 <ImageIcon className="size-4" />
                 {t("page.tools.texture_resizer.title")}
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={(event) => {
+                  event.stopPropagation();
+                  actions.openBodyShapeDialog(mod);
+                }}
+              >
+                <PersonStandingIcon className="size-4" />
+                {t("page.tools.body_shape.title")}
               </DropdownMenuItem>
 
               {actions.runner.showWuwaFixer && (
