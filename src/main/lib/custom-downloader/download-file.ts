@@ -99,6 +99,7 @@ export async function downloadFile(props: {
             const resp = await ky.get(url, {
                 signal: combinedSignal,
                 headers: await httpService.getHeaders(url),
+                throwHttpErrors: false,
                 fetch: createUndiciFetcher(await httpService.getAgent()),
             });
             if (!resp.ok) {

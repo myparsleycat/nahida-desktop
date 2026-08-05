@@ -98,11 +98,17 @@ describe("FileDownloadTask range handling", () => {
     it("appends an existing temporary file when the server honors Range", async () => {
         const targetPath = path.join(tempDir, "file.bin.ntmp");
         await writeFile(targetPath, "hello");
-        mocks.request.mockResolvedValue(new Response(" world", { status: 206 }));
+        const rangedFile = { ...file, size: 11 };
+        mocks.request.mockResolvedValue(
+            new Response(" world", {
+                status: 206,
+                headers: { "Content-Range": "bytes 5-10/11" },
+            }),
+        );
         const desktop = createDesktop();
 
         const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
-        await task.performDownload(file, targetPath, new AbortController().signal, {
+        await task.performDownload(rangedFile, targetPath, new AbortController().signal, {
             resumeFrom: 5,
         });
 
@@ -133,6 +139,35 @@ describe("FileDownloadTask range handling", () => {
 
         expect(await readFile(targetPath, "utf8")).toBe("complete");
         expect(onResumeReset).toHaveBeenCalledOnce();
+    });
+
+    it("restarts when the resumed Content-Range does not match", async () => {
+        const targetPath = path.join(tempDir, "file.bin.ntmp");
+        await writeFile(targetPath, "hello");
+        mocks.request
+            .mockResolvedValueOnce(
+                new Response("wrong", {
+                    status: 206,
+                    headers: { "Content-Range": "bytes 0-4/8" },
+                }),
+            )
+            .mockResolvedValueOnce(new Response("complete", { status: 200 }));
+        const onResumeReset = vi.fn();
+        const desktop = createDesktop();
+
+        const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
+        await task.performDownload(file, targetPath, new AbortController().signal, {
+            onResumeReset,
+            resumeFrom: 5,
+        });
+
+        expect(await readFile(targetPath, "utf8")).toBe("complete");
+        expect(onResumeReset).toHaveBeenCalledOnce();
+        expect(mocks.request).toHaveBeenNthCalledWith(
+            2,
+            file.url,
+            expect.objectContaining({ headers: { Authorization: "Bearer token" } }),
+        );
     });
 
     it("retries without Range after a 416 response", async () => {
@@ -207,13 +242,35 @@ describe("FileDownloadTask executeWithSlowRetry progress correction", () => {
         await writeFile(targetPath, "hello");
 
         const fullFile = { ...file, size: 11 };
+        let partialChunkSent = false;
 
         mocks.request
-            .mockResolvedValueOnce(new Response(" world", { status: 206 }))
+            .mockResolvedValueOnce(
+                new Response(
+                    new ReadableStream({
+                        async pull(controller) {
+                            if (partialChunkSent || controller.desiredSize === null) return;
+                            partialChunkSent = true;
+                            controller.enqueue(new TextEncoder().encode(" wo"));
+                            await new Promise((resolve) => setTimeout(resolve, 50));
+                            controller.error(new Error("network failure"));
+                        },
+                    }),
+                    {
+                        status: 206,
+                        headers: { "Content-Range": "bytes 5-10/11" },
+                    },
+                ),
+            )
             .mockImplementationOnce(async () => {
                 throw new Error("network failure");
             })
-            .mockResolvedValueOnce(new Response("hello world", { status: 206 }));
+            .mockResolvedValueOnce(
+                new Response("rld", {
+                    status: 206,
+                    headers: { "Content-Range": "bytes 8-10/11" },
+                }),
+            );
 
         const desktop = createDesktop();
         (desktop.lib.fs.rename as ReturnType<typeof vi.fn>).mockImplementation(
@@ -238,9 +295,7 @@ describe("FileDownloadTask executeWithSlowRetry progress correction", () => {
         });
 
         expect(onComplete).toHaveBeenCalledOnce();
-
-        let total = 0;
-        for (const b of progressCalls) total += b;
-        expect(total).toBe(11);
-    });
+        expect(mocks.request).toHaveBeenCalledTimes(3);
+        expect(progressCalls.reduce((sum, bytes) => sum + bytes, 0)).toBe(11);
+    }, 15000);
 });

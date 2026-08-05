@@ -73,6 +73,23 @@ async function drainResponseBody(response: Response, signal?: AbortSignal) {
     }
 }
 
+function isExpectedContentRange(value: string | null, resumeFrom: number, fileSize: number) {
+    const match = /^bytes\s+(\d+)-(\d+)\/(\d+)$/i.exec(value ?? "");
+    if (!match) return false;
+
+    const start = Number(match[1]);
+    const end = Number(match[2]);
+    const total = Number(match[3]);
+    return (
+        Number.isSafeInteger(start) &&
+        Number.isSafeInteger(end) &&
+        Number.isSafeInteger(total) &&
+        start === resumeFrom &&
+        end === fileSize - 1 &&
+        total === fileSize
+    );
+}
+
 class DownloadStreamer {
     constructor(private readonly desktop: NahidaDesktop) {}
 
@@ -429,7 +446,7 @@ class FileDownloadTask {
 
         if (append && response.status === 416) {
             await drainResponseBody(response, signal).catch(() => {});
-            if (resumeFrom >= file.size) return;
+            if (resumeFrom === file.size) return;
             await fse.remove(targetPath).catch(() => {});
             options?.onResumeReset?.();
             response = await request(headers);
@@ -445,6 +462,22 @@ class FileDownloadTask {
             await fse.remove(targetPath).catch(() => {});
             options?.onResumeReset?.();
             append = false;
+        }
+
+        if (
+            append &&
+            !isExpectedContentRange(response.headers.get("Content-Range"), resumeFrom, file.size)
+        ) {
+            await drainResponseBody(response, signal).catch(() => {});
+            await fse.remove(targetPath).catch(() => {});
+            options?.onResumeReset?.();
+            response = await request(headers);
+            append = false;
+
+            if (!response.ok) {
+                await drainResponseBody(response, signal).catch(() => {});
+                throw new Error(`Download failed: ${response.statusText}`);
+            }
         }
 
         if (!response.body) throw new Error("No response body");
