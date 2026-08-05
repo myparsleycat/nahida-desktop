@@ -174,13 +174,41 @@ export function weightToRgb(weight: number): [number, number, number] {
     return [0.95, 0.9 * (1 - t), 0.05 * (1 - t)];
 }
 
+/**
+ * Map weight 0–1 to RGB and write directly into `out` at `offset` (no allocation).
+ * Equivalent to weightToRgb but avoids creating a temporary [r,g,b] array per vertex.
+ */
+export function weightToRgbInto(weight: number, out: Float32Array, offset: number): void {
+    const w = clamp01(weight);
+    if (w <= 0) {
+        out[offset] = 0.12;
+        out[offset + 1] = 0.12;
+        out[offset + 2] = 0.14;
+        return;
+    }
+    if (w < 0.5) {
+        const t = w / 0.5;
+        out[offset] = 0.1 * t;
+        out[offset + 1] = 0.25 + 0.35 * t;
+        out[offset + 2] = 0.85 - 0.2 * t;
+        return;
+    }
+    if (w < 0.85) {
+        const t = (w - 0.5) / 0.35;
+        out[offset] = 0.1 + 0.85 * t;
+        out[offset + 1] = 0.6 + 0.3 * t;
+        out[offset + 2] = 0.65 * (1 - t);
+        return;
+    }
+    const t = (w - 0.85) / 0.15;
+    out[offset] = 0.95;
+    out[offset + 1] = 0.9 * (1 - t);
+    out[offset + 2] = 0.05 * (1 - t);
+}
+
 export function writeWeightColors(weights: Float32Array, colors: Float32Array): void {
     const count = Math.min(weights.length, Math.floor(colors.length / 3));
     for (let i = 0; i < count; i++) {
-        const [r, g, b] = weightToRgb(weights[i]);
-        const o = i * 3;
-        colors[o] = r;
-        colors[o + 1] = g;
-        colors[o + 2] = b;
+        weightToRgbInto(weights[i], colors, i * 3);
     }
 }

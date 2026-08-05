@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import type { NahidaDesktop } from "@main/index";
 // vision-llm disabled — LLM imports isolated
 // import { LLM_API_KEY_SETTING_KEY, resolveLlmApiKey, type LlmConfig } from "@main/lib/llm";
+import touchMaskWorker from "@main/worker/mod-tools/touch-mask.worker?modulePath";
+import type { TouchMaskWorkerInput } from "@main/worker/mod-tools/touch-mask.worker";
 import { DISABLED_PREFIX_REGEX, stripDisabledPrefix } from "@shared/mod";
 import type { TouchProfileLlmSettings } from "@shared/touch-profile-llm";
 // vision-llm disabled — protocol/reasoning/normalize only used by vision path
@@ -24,6 +26,7 @@ import { app } from "electron";
 import fse from "fs-extra";
 import { nanoid } from "nanoid";
 import pLimit from "p-limit";
+import Piscina from "piscina";
 
 import { analyzeTouchMod, hashTouchFiles, loadTouchMeshBuffers } from "./touch-profile-analyzer";
 import {
@@ -52,11 +55,13 @@ import {
     TOUCH_SHADER_FILES,
     TOUCH_VISION_CONCURRENCY,
     type TouchApplyResult,
+    type TouchComponentAnalysis,
     type TouchComponentDraft,
     type TouchDraft,
     type TouchModAnalysis,
     type TouchModInspection,
     type TouchRollbackResult,
+    type TouchZoneSpec,
 } from "./touch-profile-types";
 import { validateTouchOutput } from "./touch-profile-validator";
 // vision-llm disabled — vision pipeline imports isolated
@@ -143,6 +148,29 @@ export class TouchProfileService {
     private readonly sessions = new Map<string, SessionState>();
     // vision-llm disabled — vision cache isolated
     // private readonly visionCache: TouchProfileVisionCache;
+
+    /**
+     * Worker pool for CPU-heavy mask computation. Mask building (nearest-seed
+     * search + adjacency smoothing) is the main cause of main-thread lockups on
+     * large meshes (>100k vertices), so it is offloaded here. Structured clone is
+     * used (no transferList) so the meshCache originals in the main process stay
+     * usable for subsequent preview hits. Created lazily so the Piscina constructor
+     * (which needs a resolved worker path) does not run in non-Vite contexts such
+     * as unit tests, where `?modulePath` is not available.
+     */
+    private maskPool: Piscina | null = null;
+
+    private getMaskPool() {
+        if (!this.maskPool) {
+            this.maskPool = new Piscina({
+                filename: touchMaskWorker,
+                minThreads: 0,
+                maxThreads: 2,
+                idleTimeout: 5000,
+            });
+        }
+        return this.maskPool;
+    }
 
     constructor(private readonly desktop: NahidaDesktop) {
         // vision-llm disabled
@@ -741,7 +769,15 @@ export class TouchProfileService {
                 session.meshCache.get(component.id) ?? (await loadTouchMeshBuffers(component));
             session.meshCache.set(component.id, mesh);
 
-            const masks = buildVertexMasks(
+            this.broadcast({
+                sessionId: input.sessionId,
+                stage: "preview",
+                progress: 0.4,
+                message: `Building mask for ${component.name}`,
+                componentId: component.id,
+            });
+
+            const masks = await this.computeMasks(
                 component.vertexCount,
                 mesh.positions,
                 mesh.indices,
@@ -768,6 +804,37 @@ export class TouchProfileService {
                 `TouchProfile:getPreview:${input.sessionId}:${input.componentId}`,
             );
             throw error;
+        }
+    }
+
+    /**
+     * Compute vertex masks on a worker thread to avoid blocking the main process
+     * event loop on large meshes. Falls back to synchronous buildVertexMasks if the
+     * worker pool rejects (e.g. transient worker failure), so correctness is preserved.
+     */
+    private async computeMasks(
+        vertexCount: number,
+        positions: Float32Array,
+        indices: Uint32Array,
+        component: TouchComponentAnalysis,
+        zones: TouchZoneSpec[],
+    ): Promise<Float32Array> {
+        const workerInput: TouchMaskWorkerInput = {
+            vertexCount,
+            positions,
+            indices,
+            component,
+            zones,
+        };
+        try {
+            const result = await this.getMaskPool().run(workerInput);
+            return result.masks;
+        } catch (error) {
+            this.desktop.logger.warn(
+                error,
+                `TouchProfile:computeMasks:worker-fallback:${component.id}`,
+            );
+            return buildVertexMasks(vertexCount, positions, indices, component, zones);
         }
     }
 

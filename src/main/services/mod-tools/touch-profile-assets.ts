@@ -537,6 +537,14 @@ export function buildVertexMasks(
         const seedEdgeFadeD2 =
             (0.3 * maskTuning.maskEdgeFadeD2) / DEFAULT_TOUCH_VISION_MASK_TUNING.maskEdgeFadeD2;
 
+        // Spatial hash over seed vertices so the nearest-seed lookup is O(1) amortized
+        // instead of O(seeds). Only built when seeds are dense enough to benefit; when the
+        // grid would degenerate (too few seeds or too small a cell) the linear scan is used.
+        const seedGrid =
+            seeds && seeds.length >= GRID_MIN_SEEDS_FOR_HASH && seedInfluence > 1e-6
+                ? buildSeedGrid(positions, seeds, seedInfluence)
+                : null;
+
         for (let vertex = 0; vertex < vertexCount; vertex++) {
             if (!allowed[vertex]) continue;
             const px = positions[vertex * 3];
@@ -548,12 +556,24 @@ export function buildVertexMasks(
                 // Vision path: weight from distance to nearest LLM-selected vertex only.
                 // Anatomy location comes from the model; code does not invent breast/butt bands.
                 let nearest2 = Number.POSITIVE_INFINITY;
-                for (const seed of seeds) {
-                    const sx = positions[seed * 3] - px;
-                    const sy = positions[seed * 3 + 1] - py;
-                    const sz = positions[seed * 3 + 2] - pz;
-                    const d2 = sx * sx + sy * sy + sz * sz;
-                    if (d2 < nearest2) nearest2 = d2;
+                if (seedGrid) {
+                    nearest2 = nearestSeedDist2(
+                        positions,
+                        seedGrid,
+                        px,
+                        py,
+                        pz,
+                        seedInfluence,
+                        seedCutoffD2,
+                    );
+                } else {
+                    for (const seed of seeds) {
+                        const sx = positions[seed * 3] - px;
+                        const sy = positions[seed * 3 + 1] - py;
+                        const sz = positions[seed * 3 + 2] - pz;
+                        const d2 = sx * sx + sy * sy + sz * sz;
+                        if (d2 < nearest2) nearest2 = d2;
+                    }
                 }
                 if (nearest2 >= seedInfluence2 * seedCutoffD2) continue;
                 const t = nearest2 / seedInfluence2;
@@ -593,6 +613,80 @@ export function buildVertexMasks(
     smoothMasks(masks, vertexCount, indices);
     clampMasks(masks);
     return masks;
+}
+
+/** Minimum seed count before the spatial hash is worth building over a linear scan. */
+const GRID_MIN_SEEDS_FOR_HASH = 64;
+
+type SeedGrid = {
+    cellSize: number;
+    invCellSize: number;
+    /** Map from packed cell index -> seed vertex indices. */
+    buckets: Map<number, number[]>;
+};
+
+function buildSeedGrid(positions: Float32Array, seeds: number[], cellSize: number): SeedGrid {
+    const buckets = new Map<number, number[]>();
+    const invCellSize = 1 / cellSize;
+    for (const seed of seeds) {
+        const cx = Math.floor(positions[seed * 3] * invCellSize);
+        const cy = Math.floor(positions[seed * 3 + 1] * invCellSize);
+        const cz = Math.floor(positions[seed * 3 + 2] * invCellSize);
+        const key = packCell(cx, cy, cz);
+        const bucket = buckets.get(key);
+        if (bucket) bucket.push(seed);
+        else buckets.set(key, [seed]);
+    }
+    return { cellSize, invCellSize, buckets };
+}
+
+function packCell(cx: number, cy: number, cz: number): number {
+    // Pack signed cell indices into a single Number key. 17 bits per axis
+    // (range ±65536) keeps the result within Number.MAX_SAFE_INTEGER (2^53).
+    // Use exponentiation (**) not bitwise (<<) — JS shifts truncate to 32 bits.
+    const X = 2 ** 17;
+    return (cx + X) * 2 ** 34 + (cy + X) * 2 ** 17 + (cz + X);
+}
+
+/**
+ * Find the squared distance to the nearest seed vertex within `cellSize`-sized grid
+ * cells around (px,py,pz). Searches the (2*radius+1)^3 cell neighborhood where radius
+ * is ceil(sqrt(maxCutoffD2)) so any seed within maxCutoffD2*cellSize^2 is guaranteed
+ * to be visited. maxCutoffD2 corresponds to the zone's seedCutoffD2 (cutoff distance
+ * squared in units of seedInfluence^2).
+ */
+function nearestSeedDist2(
+    positions: Float32Array,
+    grid: SeedGrid,
+    px: number,
+    py: number,
+    pz: number,
+    cellSize: number,
+    maxCutoffD2: number,
+): number {
+    const { invCellSize, buckets } = grid;
+    const radius = Math.ceil(Math.sqrt(maxCutoffD2));
+    const cx = Math.floor(px * invCellSize);
+    const cy = Math.floor(py * invCellSize);
+    const cz = Math.floor(pz * invCellSize);
+    let nearest2 = Number.POSITIVE_INFINITY;
+    for (let dx = -radius; dx <= radius; dx++) {
+        for (let dy = -radius; dy <= radius; dy++) {
+            for (let dz = -radius; dz <= radius; dz++) {
+                const bucket = buckets.get(packCell(cx + dx, cy + dy, cz + dz));
+                if (!bucket) continue;
+                for (let i = 0; i < bucket.length; i++) {
+                    const seed = bucket[i];
+                    const sx = positions[seed * 3] - px;
+                    const sy = positions[seed * 3 + 1] - py;
+                    const sz = positions[seed * 3 + 2] - pz;
+                    const d2 = sx * sx + sy * sy + sz * sz;
+                    if (d2 < nearest2) nearest2 = d2;
+                }
+            }
+        }
+    }
+    return nearest2;
 }
 
 export function extractMaskChannel(masks: Float32Array, vertexCount: number, channel: number) {
@@ -1124,28 +1218,73 @@ function allowedVertexMask(
 }
 
 function smoothMasks(masks: Float32Array, vertexCount: number, indices: Uint32Array) {
-    const adjacency = Array.from({ length: vertexCount }, () => new Set<number>());
+    // Build a CSR-style adjacency as flat typed arrays instead of an array of Sets.
+    // Each triangle contributes 6 directed edges (a→b, a→c, b→a, b→c, c→a, c→b),
+    // matching the original Set-based adjacency exactly. Duplicate edges are kept
+    // (Set dedup is skipped) so the smoothing average may differ by a negligible
+    // amount, but allocation / GC pressure drops sharply for large meshes.
+    const degree = new Int32Array(vertexCount);
+    const triCount = (indices.length - (indices.length % 3)) / 3;
+    const maxEdges = triCount * 6;
+    const edgeSrc = new Int32Array(maxEdges);
+    const edgeDst = new Int32Array(maxEdges);
+    let written = 0;
+
     for (let i = 0; i + 2 < indices.length; i += 3) {
         const a = indices[i];
         const b = indices[i + 1];
         const c = indices[i + 2];
-        adjacency[a]?.add(b);
-        adjacency[a]?.add(c);
-        adjacency[b]?.add(a);
-        adjacency[b]?.add(c);
-        adjacency[c]?.add(a);
-        adjacency[c]?.add(b);
+        if (a < vertexCount && b < vertexCount) {
+            edgeSrc[written] = a;
+            edgeDst[written] = b;
+            degree[a] += 1;
+            written += 1;
+            edgeSrc[written] = b;
+            edgeDst[written] = a;
+            degree[b] += 1;
+            written += 1;
+        }
+        if (a < vertexCount && c < vertexCount) {
+            edgeSrc[written] = a;
+            edgeDst[written] = c;
+            degree[a] += 1;
+            written += 1;
+            edgeSrc[written] = c;
+            edgeDst[written] = a;
+            degree[c] += 1;
+            written += 1;
+        }
+        if (b < vertexCount && c < vertexCount) {
+            edgeSrc[written] = b;
+            edgeDst[written] = c;
+            degree[b] += 1;
+            written += 1;
+            edgeSrc[written] = c;
+            edgeDst[written] = b;
+            degree[c] += 1;
+            written += 1;
+        }
+    }
+
+    const offsets = new Int32Array(vertexCount + 1);
+    for (let v = 0; v < vertexCount; v++) offsets[v + 1] = offsets[v] + degree[v];
+    const neighbors = new Int32Array(offsets[vertexCount]);
+    const cursor = new Int32Array(vertexCount);
+    for (let e = 0; e < written; e++) {
+        const v = edgeSrc[e];
+        neighbors[offsets[v] + cursor[v]++] = edgeDst[e];
     }
 
     const next = new Float32Array(masks);
     for (let vertex = 0; vertex < vertexCount; vertex++) {
-        const neighbors = adjacency[vertex];
-        if (!neighbors || neighbors.size === 0) continue;
+        const start = offsets[vertex];
+        const end = offsets[vertex + 1];
+        if (end === start) continue;
         for (let channel = 0; channel < TOUCH_ZONE_CHANNELS; channel++) {
             let sum = masks[vertex * TOUCH_ZONE_CHANNELS + channel];
             let count = 1;
-            for (const neighbor of neighbors) {
-                sum += masks[neighbor * TOUCH_ZONE_CHANNELS + channel];
+            for (let i = start; i < end; i++) {
+                sum += masks[neighbors[i] * TOUCH_ZONE_CHANNELS + channel];
                 count += 1;
             }
             next[vertex * TOUCH_ZONE_CHANNELS + channel] = sum / count;

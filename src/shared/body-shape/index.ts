@@ -68,6 +68,7 @@ export {
     mirrorWeightsAcrossX,
     paintVertex,
     weightToRgb,
+    weightToRgbInto,
     writeWeightColors,
     type BrushMode,
 } from "./weights";

@@ -183,6 +183,7 @@ export default function TouchProfileTool({
   const [selectedZoneId, setSelectedZoneId] = useState(ALL_ZONES);
   const [linkedComponents, setLinkedComponents] = useState<Record<string, boolean>>({});
   const [preview, setPreview] = useState<TouchProfilePreview | null>(null);
+  const [lastValidPreview, setLastValidPreview] = useState<TouchProfilePreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewReloadVersion, setPreviewReloadVersion] = useState(0);
@@ -254,6 +255,16 @@ export default function TouchProfileTool({
   const selectedComponentIsValid = selectedComponent !== undefined;
   const selectedZone = selectedComponent?.zones.find((zone) => zone.id === selectedZoneId);
   const activePreview = preview?.componentId === selectedComponentId ? preview : null;
+  // While a new component's preview is loading, keep the previous component's
+  // mesh on the Canvas instead of unmounting/remounting the WebGL context (which
+  // forces shader recompilation and stalls the renderer main thread). Falls back
+  // to the last successful preview; a stale-component overlay is shown via
+  // previewLoading so the user knows the displayed mesh is not the current one.
+  const displayPreview = activePreview ?? (previewLoading ? lastValidPreview : null);
+
+  useEffect(() => {
+    if (activePreview) setLastValidPreview(activePreview);
+  }, [activePreview]);
 
   useEffect(() => {
     draftSessionRef.current = draft?.sessionId ?? null;
@@ -286,6 +297,7 @@ export default function TouchProfileTool({
     if (!draft?.sessionId || !selectedComponentId) {
       if (!draft) return;
       setPreview(null);
+      setLastValidPreview(null);
       setPreviewError(null);
       setPreviewLoading(false);
       return;
@@ -386,6 +398,7 @@ export default function TouchProfileTool({
     setResult(null);
     setInputError(null);
     setPreview(null);
+    setLastValidPreview(null);
     setPreviewError(null);
     setMeshPreview(null);
     setMeshPreviewError(null);
@@ -467,6 +480,7 @@ export default function TouchProfileTool({
     setDraft(null);
     setPhase("select");
     setPreview(null);
+    setLastValidPreview(null);
     setPreviewError(null);
     setSelectedComponentId("");
     setSelectedZoneId(ALL_ZONES);
@@ -750,6 +764,7 @@ export default function TouchProfileTool({
     setInspection(null);
     setPhase("select");
     setPreview(null);
+    setLastValidPreview(null);
     setPreviewError(null);
     setMeshPreview(null);
     setMeshPreviewError(null);
@@ -867,19 +882,19 @@ export default function TouchProfileTool({
               orientation={modelOrientation}
               frameKey={meshPreview.sessionId}
             />
-          ) : activePreview ? (
+          ) : displayPreview ? (
             <BodyShapeViewport
               ref={viewportRef}
-              originalPositions={activePreview.positions}
-              previewPositions={activePreview.positions}
+              originalPositions={displayPreview.positions}
+              previewPositions={displayPreview.positions}
               regions={previewRegions}
-              indices={activePreview.indices}
+              indices={displayPreview.indices}
               showOriginal={false}
               showWeights={true}
               weightVersion={previewReloadVersion}
               positionsChanged={false}
               orientation={modelOrientation}
-              frameKey={activePreview.sessionId}
+              frameKey={displayPreview.sessionId}
             />
           ) : (
             <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
