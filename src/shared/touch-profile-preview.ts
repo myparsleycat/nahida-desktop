@@ -1,6 +1,7 @@
+import type { BlendBoneInfo } from "./body-shape";
 import type { TouchZoneSettings } from "./touch-profile-settings";
 
-export type TouchProfileZoneSource = "vision" | "manual";
+export type TouchProfileZoneSource = "vision" | "manual" | "bone";
 
 export type TouchProfileZoneMetadata = {
     id: string;
@@ -28,6 +29,8 @@ export type TouchProfileComponentSummary = {
     warnings: string[];
     currentTurn?: number;
     turnHistory?: TouchProfileTurnSummary[];
+    hasBlend: boolean;
+    bones: BlendBoneInfo[];
 };
 
 export type TouchProfilePreviewInput = {
@@ -41,11 +44,28 @@ export type TouchProfileMeshPreview = {
     vertexCount: number;
     positions: Float32Array;
     indices: Uint32Array;
+    bones: BlendBoneInfo[];
+    blendStride?: number;
+    blendBytes?: Uint8Array;
+};
+
+export type TouchBoneZoneSelection = {
+    boneId: number;
+    channel: number | null;
+    label?: string;
+};
+
+export type TouchBoneComponentSelection = {
+    componentId: string;
+    zones: TouchBoneZoneSelection[];
 };
 
 export type TouchProfileAnalyzeComponentsInput = {
     sessionId: string;
     componentIds: string[];
+    mode?: "vision" | "bone";
+    boneSelections?: TouchBoneComponentSelection[];
+    weightThreshold?: number;
 };
 
 export type TouchProfilePreviewZone = TouchProfileZoneMetadata & {

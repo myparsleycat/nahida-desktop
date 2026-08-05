@@ -42,6 +42,7 @@ function makeComponent(vertexCount = 120) {
                 label: "skin",
             },
         ],
+        bones: [],
     } satisfies TouchComponentAnalysis;
 }
 

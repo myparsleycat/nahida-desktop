@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import type { IniSection, Resource } from "@main/lib/mod-static-glb/types";
 import fse from "fs-extra";
 
@@ -175,6 +177,69 @@ function indexMatchScore(position: Resource, index: Resource) {
     const variantScore = positionName.variant === indexName.variant ? 100 : 0;
     const exactScore = indexName.base === positionName.base ? 10_000 : 1_000;
     return exactScore + positionName.base.length + variantScore;
+}
+
+export function collectVectorResources(resources: Resource[]): Resource[] {
+    return resources.filter((resource) => {
+        if (!resource.filename) return false;
+        return /vector/i.test(resource.name);
+    });
+}
+
+export function collectBlendResources(resources: Resource[]): Resource[] {
+    return resources.filter((resource) => {
+        if (!resource.filename) return false;
+        if (isLodResourceName(resource.name)) return false;
+        if (/blend/i.test(resource.name)) return true;
+        if (/component\d+_vb2$/i.test(resource.name)) return true;
+        return false;
+    });
+}
+
+export function matchCompanionResource(
+    position: Resource,
+    candidates: Resource[],
+): Resource | undefined {
+    if (candidates.length === 0) return undefined;
+
+    const positionNameKey = companionKey(position.name);
+    const exact = candidates.find((candidate) => companionKey(candidate.name) === positionNameKey);
+    if (exact) return exact;
+
+    const positionGroup = resourceGroupKey(position);
+    if (positionGroup) {
+        const byGroup = candidates.find(
+            (candidate) => resourceGroupKey(candidate) === positionGroup,
+        );
+        if (byGroup) return byGroup;
+    }
+
+    if (candidates.length === 1) return candidates[0];
+    return undefined;
+}
+
+function companionKey(name: string): string {
+    let key = name
+        .replace(/_VB\d+(?:_LOD)?$/i, "")
+        .replace(/_IB(?:_LOD)?$/i, "")
+        .replace(/(Position|Vector|Index|Blend|TexCoord|Color)Buffer/gi, "")
+        .replace(/(Position|Vector|Index|Blend|Texcoord)/gi, "");
+
+    if (!/^_?Component\d+$/i.test(key)) {
+        key = key.replace(/[_-]Component\d+$/i, "");
+    }
+
+    return key.replace(/[_-]+/g, "").toLowerCase();
+}
+
+function resourceGroupKey(resource: Resource): string | undefined {
+    if (resource.filename) {
+        const stem = path.basename(resource.filename, path.extname(resource.filename));
+        const fromStem = companionKey(stem);
+        if (fromStem) return fromStem;
+    }
+    const fromName = companionKey(resource.name);
+    return fromName || undefined;
 }
 
 function logicalResourceName(name: string, kind: "position" | "index") {

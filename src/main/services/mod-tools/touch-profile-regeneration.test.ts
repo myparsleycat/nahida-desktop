@@ -93,6 +93,7 @@ describe("TouchProfileService regeneration", () => {
             objectMaps: [
                 { firstIndex: 0, indexCount: 3, objectMode: 7, objectId: 1, label: "main" },
             ],
+            bones: [],
         } satisfies TouchComponentAnalysis;
         const componentDraft = {
             componentId: component.id,

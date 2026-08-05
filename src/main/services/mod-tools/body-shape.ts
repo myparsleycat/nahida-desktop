@@ -2,7 +2,6 @@ import path from "node:path";
 
 import type { NahidaDesktop } from "@main/index";
 import { loadIniBundle } from "@main/lib/mod-static-glb/ini-loader";
-import type { Resource } from "@main/lib/mod-static-glb/types";
 import {
     applySnorm8VectorCorrection,
     DEFAULT_BLEND_STRIDE,
@@ -18,10 +17,12 @@ import { stripDisabledPrefix } from "@shared/mod";
 import fse from "fs-extra";
 
 import {
+    collectBlendResources,
     collectIndexResources,
     collectPositionResources,
     collectResources,
-    isLodResourceName,
+    collectVectorResources,
+    matchCompanionResource,
     matchIndexResources,
     readIndexBuffer,
     resourceKey,
@@ -429,69 +430,6 @@ export async function exportBodyShapeMesh(
     }
 
     return result;
-}
-
-function collectVectorResources(resources: Resource[]): Resource[] {
-    return resources.filter((resource) => {
-        if (!resource.filename) return false;
-        return /vector/i.test(resource.name);
-    });
-}
-
-function collectBlendResources(resources: Resource[]): Resource[] {
-    return resources.filter((resource) => {
-        if (!resource.filename) return false;
-        if (isLodResourceName(resource.name)) return false;
-        if (/blend/i.test(resource.name)) return true;
-        // Native EFMI: ComponentN_VB2 is BLEND (non-LOD).
-        if (/component\d+_vb2$/i.test(resource.name)) return true;
-        return false;
-    });
-}
-
-function matchCompanionResource(position: Resource, candidates: Resource[]): Resource | undefined {
-    if (candidates.length === 0) return undefined;
-
-    const positionNameKey = companionKey(position.name);
-    const exact = candidates.find((candidate) => companionKey(candidate.name) === positionNameKey);
-    if (exact) return exact;
-
-    const positionGroup = resourceGroupKey(position);
-    if (positionGroup) {
-        const byGroup = candidates.find(
-            (candidate) => resourceGroupKey(candidate) === positionGroup,
-        );
-        if (byGroup) return byGroup;
-    }
-
-    if (candidates.length === 1) return candidates[0];
-    return undefined;
-}
-
-function companionKey(name: string): string {
-    let key = name
-        .replace(/_VB\d+(?:_LOD)?$/i, "")
-        .replace(/_IB(?:_LOD)?$/i, "")
-        .replace(/(Position|Vector|Index|Blend|TexCoord|Color)Buffer/gi, "")
-        .replace(/(Position|Vector|Index|Blend|Texcoord)/gi, "");
-
-    // Hash IB: 34b08b7f-Component1 → 34b08b7f. Keep bare Component0 for native EFMI.
-    if (!/^_?Component\d+$/i.test(key)) {
-        key = key.replace(/[_-]Component\d+$/i, "");
-    }
-
-    return key.replace(/[_-]+/g, "").toLowerCase();
-}
-
-/** Stable group id shared by Position/Blend/Index/ComponentN of the same mesh. */
-function resourceGroupKey(resource: Resource): string | undefined {
-    if (resource.filename) {
-        const stem = path.basename(resource.filename, path.extname(resource.filename));
-        const fromStem = companionKey(stem);
-        if (fromStem) return fromStem;
-    }
-    const fromName = companionKey(resource.name);
-    return fromName || undefined;
 }
 
 function combineIndexBuffers(buffers: Uint32Array[]): Uint32Array | undefined {

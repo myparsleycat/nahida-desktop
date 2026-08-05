@@ -43,9 +43,11 @@ export async function validateTouchOutput(input: {
     );
     if (duplicates.length > 0) {
         issues.push({
-            level: "error",
+            // Preserve the source INI because some mods intentionally split special
+            // sections such as Constants and Present across repeated headers.
+            level: "warning",
             code: "duplicate_ini_section",
-            message: `Duplicate INI sections: ${[...new Set(duplicates)].join(", ")}`,
+            message: `Duplicate INI sections preserved: ${[...new Set(duplicates)].join(", ")}`,
         });
     }
 

@@ -14,6 +14,17 @@ import { ModelViewerMenuBar } from "@renderer/components/tools/model-viewer/mode
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
 import { Checkbox } from "@renderer/components/ui/checkbox";
+import {
+  Combobox,
+  ComboboxChip,
+  ComboboxChips,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxValue,
+} from "@renderer/components/ui/combobox";
 import { Field, FieldLabel } from "@renderer/components/ui/field";
 import { Input } from "@renderer/components/ui/input";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
@@ -28,7 +39,14 @@ import {
 import { Slider } from "@renderer/components/ui/slider";
 import { Switch } from "@renderer/components/ui/switch";
 import { cn } from "@renderer/lib/utils";
+import {
+  computeBoundingCenter,
+  computeRegionPivot,
+  extractBoneWeights,
+  type ActiveRegionDeform,
+} from "@shared/body-shape";
 import type {
+  TouchBoneZoneSelection,
   TouchProfileComponentSummary,
   TouchProfileMeshPreview,
   TouchProfilePreview,
@@ -43,9 +61,10 @@ import {
   type TouchZoneSettings,
   type TouchZoneStrengthPreset,
 } from "@shared/touch-profile-settings";
-import type { TouchProfileProgressEvent } from "@shared/types";
+// vision-llm disabled — progress event type no longer used
+// import type { TouchProfileProgressEvent } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
-import { FolderOpenIcon, Loader2Icon, RotateCcwIcon, SparklesIcon, Undo2Icon } from "lucide-react";
+import { FolderOpenIcon, Loader2Icon, RotateCcwIcon, Undo2Icon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -53,6 +72,16 @@ import { toast } from "sonner";
 const ALL_ZONES = "__all__";
 const DEFAULT_MASK_STRENGTH = 1;
 const DEFAULT_MASK_CURVE = 1;
+const BONE_WEIGHT_THRESHOLD_RANGE = { min: 0.005, max: 0.5, step: 0.005 } as const;
+const DEFAULT_BONE_WEIGHT_THRESHOLD = 0.01;
+const TOUCH_ZONE_CHANNEL_COUNT = 12;
+const CHANNEL_LABELS = [
+  "L Breast",
+  "R Breast",
+  "L Butt/Thigh",
+  "R Butt/Thigh",
+  ...Array.from({ length: TOUCH_ZONE_CHANNEL_COUNT - 4 }, (_, i) => `Ch ${i + 4}`),
+] as const;
 
 type TouchDraft = {
   sessionId: string;
@@ -84,6 +113,8 @@ type TouchModInspection = {
     indexCount: number;
     variantKey?: string;
     variantCondition?: string;
+    hasBlend: boolean;
+    bones: Array<{ id: number; vertexCount: number }>;
   }>;
 };
 
@@ -110,10 +141,12 @@ export default function TouchProfileTool({
   const { t } = useTranslation();
   const viewportRef = useRef<BodyShapeViewportHandle | null>(null);
   const draftSessionRef = useRef<string | null>(null);
+  const bonePreviewRef = useRef<string | null>(null);
 
   const [modPath, setModPath] = useState(fixedTargetPath ?? "");
   const [loading, setLoading] = useState(false);
-  const [reanalyzing, setReanalyzing] = useState(false);
+  // vision-llm disabled — reanalyzing state isolated (vision reanalyze only)
+  // const [reanalyzing, setReanalyzing] = useState(false);
   const [applying, setApplying] = useState(false);
   const [rollingBack, setRollingBack] = useState(false);
   const [draft, setDraft] = useState<TouchDraft | null>(null);
@@ -124,9 +157,14 @@ export default function TouchProfileTool({
   const [meshPreview, setMeshPreview] = useState<TouchProfileMeshPreview | null>(null);
   const [meshPreviewLoading, setMeshPreviewLoading] = useState(false);
   const [meshPreviewError, setMeshPreviewError] = useState<string | null>(null);
-  const [progress, setProgress] = useState<TouchProfileProgressEvent | null>(null);
   const [result, setResult] = useState<TouchApplyResultState | null>(null);
   const [inputError, setInputError] = useState<TouchProfileInputError | null>(null);
+  // vision-llm disabled — analysisMode fixed to bone
+  const analysisMode = "bone" as const;
+  const [weightThreshold, setWeightThreshold] = useState(DEFAULT_BONE_WEIGHT_THRESHOLD);
+  const [boneZoneAssignments, setBoneZoneAssignments] = useState<
+    Record<string, TouchBoneZoneSelection[]>
+  >({});
 
   const [selectedComponentId, setSelectedComponentId] = useState("");
   const [selectedZoneId, setSelectedZoneId] = useState(ALL_ZONES);
@@ -140,48 +178,50 @@ export default function TouchProfileTool({
   const settingsSaveQueueRef = useRef(Promise.resolve());
   const previewRefreshRequestRef = useRef(0);
 
-  const reanalyzeTurn = async (componentId: string) => {
-    if (!draft || reanalyzing) return;
-    setReanalyzing(true);
-    try {
-      const next = await window.api.invoke("tools:touchProfileReanalyzeTurn", {
-        sessionId: draft.sessionId,
-        componentId,
-      });
-      setDraft(next);
-      setPreviewReloadVersion((v) => v + 1);
-      const updatedComponent = next.components.find((c) => c.componentId === componentId);
-      toast.success(
-        t("page.tools.touch_profile.toast.reanalyzed", {
-          turn: updatedComponent?.currentTurn ?? 1,
-        }),
-      );
-    } catch (error) {
-      toast.error(t("page.tools.touch_profile.toast.reanalyze_failed"), {
-        description: toErrorMessage(error),
-      });
-    } finally {
-      setReanalyzing(false);
-    }
-  };
+  // vision-llm disabled — reanalyzeTurn (vision-only) isolated
+  // const reanalyzeTurn = async (componentId: string) => {
+  //   if (!draft || reanalyzing) return;
+  //   setReanalyzing(true);
+  //   try {
+  //     const next = await window.api.invoke("tools:touchProfileReanalyzeTurn", {
+  //       sessionId: draft.sessionId,
+  //       componentId,
+  //     });
+  //     setDraft(next as unknown as TouchDraft);
+  //     setPreviewReloadVersion((v) => v + 1);
+  //     const updatedComponent = next.components.find((c) => c.componentId === componentId);
+  //     toast.success(
+  //       t("page.tools.touch_profile.toast.reanalyzed", {
+  //         turn: updatedComponent?.currentTurn ?? 1,
+  //       }),
+  //     );
+  //   } catch (error) {
+  //     toast.error(t("page.tools.touch_profile.toast.reanalyze_failed"), {
+  //       description: toErrorMessage(error),
+  //     });
+  //   } finally {
+  //     setReanalyzing(false);
+  //   }
+  // };
 
-  const selectTurn = async (componentId: string, turn: number) => {
-    if (!draft) return;
-    try {
-      const next = await window.api.invoke("tools:touchProfileSelectTurn", {
-        sessionId: draft.sessionId,
-        componentId,
-        turn,
-      });
-      setDraft(next);
-      setPreviewReloadVersion((v) => v + 1);
-      toast.success(t("page.tools.touch_profile.toast.turn_selected", { turn }));
-    } catch (error) {
-      toast.error(t("page.tools.touch_profile.toast.turn_select_failed"), {
-        description: toErrorMessage(error),
-      });
-    }
-  };
+  // vision-llm disabled — selectTurn (vision turn history) isolated
+  // const selectTurn = async (componentId: string, turn: number) => {
+  //   if (!draft) return;
+  //   try {
+  //     const next = await window.api.invoke("tools:touchProfileSelectTurn", {
+  //       sessionId: draft.sessionId,
+  //       componentId,
+  //       turn,
+  //     });
+  //     setDraft(next as unknown as TouchDraft);
+  //     setPreviewReloadVersion((v) => v + 1);
+  //     toast.success(t("page.tools.touch_profile.toast.turn_selected", { turn }));
+  //   } catch (error) {
+  //     toast.error(t("page.tools.touch_profile.toast.turn_select_failed"), {
+  //       description: toErrorMessage(error),
+  //     });
+  //   }
+  // };
 
   const isFixedTarget = Boolean(fixedTargetPath);
   const selectedMeshComponentId = inspection?.components.find(
@@ -201,12 +241,6 @@ export default function TouchProfileTool({
   const selectedComponentIsValid = selectedComponent !== undefined;
   const selectedZone = selectedComponent?.zones.find((zone) => zone.id === selectedZoneId);
   const activePreview = preview?.componentId === selectedComponentId ? preview : null;
-
-  useEffect(() => {
-    return window.api.on("tools:touchProfileProgress", (event) => {
-      setProgress(event);
-    });
-  }, []);
 
   useEffect(() => {
     draftSessionRef.current = draft?.sessionId ?? null;
@@ -338,7 +372,6 @@ export default function TouchProfileTool({
     setDraft(null);
     setResult(null);
     setInputError(null);
-    setProgress(null);
     setPreview(null);
     setPreviewError(null);
     setMeshPreview(null);
@@ -346,6 +379,7 @@ export default function TouchProfileTool({
     setSelectedComponentId("");
     setSelectedZoneId(ALL_ZONES);
     setLinkedComponents({});
+    setBoneZoneAssignments({});
     try {
       const next = await window.api.invoke("tools:touchProfilePrepare", {
         modPath: targetPath,
@@ -381,14 +415,22 @@ export default function TouchProfileTool({
       return;
     }
     setLoading(true);
-    setProgress(null);
     setInputError(null);
     try {
+      const boneSelections =
+        analysisMode === "bone"
+          ? Object.entries(boneZoneAssignments)
+              .filter(([, zones]) => zones.length > 0)
+              .map(([componentId, zones]) => ({ componentId, zones }))
+          : undefined;
       const next = await window.api.invoke("tools:touchProfileAnalyzeComponents", {
         sessionId: inspection.sessionId,
         componentIds: [...selectedMeshIds],
+        mode: analysisMode,
+        boneSelections,
+        weightThreshold: analysisMode === "bone" ? weightThreshold : undefined,
       });
-      setDraft(next);
+      setDraft(next as unknown as TouchDraft);
       setPhase("review");
       toast.success(t("page.tools.touch_profile.toast.loaded"));
     } catch (error) {
@@ -411,24 +453,56 @@ export default function TouchProfileTool({
   const backToSelect = () => {
     setDraft(null);
     setPhase("select");
-    setProgress(null);
     setPreview(null);
     setPreviewError(null);
     setSelectedComponentId("");
     setSelectedZoneId(ALL_ZONES);
+    setBoneZoneAssignments({});
+    bonePreviewRef.current = null;
+    viewportRef.current?.updateColors([]);
   };
 
-  const clearVisionCache = async () => {
-    if (loading) return;
-    try {
-      await window.api.invoke("tools:touchProfileClearVisionCache");
-      toast.success(t("page.tools.touch_profile.toast.vision_cache_cleared"));
-    } catch (error) {
-      toast.error(t("page.tools.touch_profile.toast.vision_cache_clear_failed"), {
-        description: toErrorMessage(error),
-      });
+  const handleBoneHighlight = (boneId: number | null) => {
+    bonePreviewRef.current = boneId !== null ? `bone:${boneId}` : null;
+    if (!meshPreview || !meshPreview.blendBytes || meshPreview.blendStride === undefined) {
+      viewportRef.current?.updateColors([]);
+      return;
     }
+    if (boneId === null) {
+      viewportRef.current?.updateColors([]);
+      return;
+    }
+    const weights = extractBoneWeights(
+      meshPreview.blendBytes,
+      boneId,
+      meshPreview.vertexCount,
+      meshPreview.blendStride,
+    );
+    const boundsCenter = computeBoundingCenter(meshPreview.positions);
+    const regions: ActiveRegionDeform[] = [
+      {
+        id: `bone:${boneId}`,
+        weights,
+        amount: 1,
+        axisScale: [1, 1, 1],
+        pivot: computeRegionPivot(meshPreview.positions, weights, boundsCenter),
+      },
+    ];
+    viewportRef.current?.updateColors(regions);
   };
+
+  // vision-llm disabled — clearVisionCache isolated
+  // const clearVisionCache = async () => {
+  //   if (loading) return;
+  //   try {
+  //     await window.api.invoke("tools:touchProfileClearVisionCache");
+  //     toast.success(t("page.tools.touch_profile.toast.vision_cache_cleared"));
+  //   } catch (error) {
+  //     toast.error(t("page.tools.touch_profile.toast.vision_cache_clear_failed"), {
+  //       description: toErrorMessage(error),
+  //     });
+  //   }
+  // };
 
   const applyDraft = async (force = false) => {
     if (!draft || applying || pendingSettingsSaves > 0) return;
@@ -635,7 +709,6 @@ export default function TouchProfileTool({
     setDraft(null);
     setInspection(null);
     setPhase("select");
-    setProgress(null);
     setPreview(null);
     setPreviewError(null);
     setMeshPreview(null);
@@ -661,7 +734,6 @@ export default function TouchProfileTool({
         reenableSourceOnRollback: result.reenableSourceOnRollback,
       });
       setResult(null);
-      setProgress(null);
       setPreviewError(null);
       setPreviewReloadVersion((version) => version + 1);
       setModPath(next.sourceModRoot);
@@ -751,7 +823,7 @@ export default function TouchProfileTool({
               regions={meshPreviewRegions}
               indices={meshPreview.indices}
               showOriginal={false}
-              showWeights={false}
+              showWeights
               weightVersion={0}
               positionsChanged={false}
               orientation={modelOrientation}
@@ -825,34 +897,7 @@ export default function TouchProfileTool({
                 </Field>
               ) : null}
 
-              {phase === "select" ? (
-                <div className="flex space-x-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void clearVisionCache()}
-                    disabled={loading}
-                  >
-                    <RotateCcwIcon className="mr-2 size-4" />
-                    {t("page.tools.touch_profile.vision_cache_clear_button")}
-                  </Button>
-
-                  <Button
-                    type="button"
-                    onClick={() => void loadMod()}
-                    disabled={!modPath || loading || Boolean(result)}
-                  >
-                    {loading ? (
-                      <Loader2Icon className="mr-2 size-4 animate-spin" />
-                    ) : (
-                      <SparklesIcon className="mr-2 size-4" />
-                    )}
-                    {loading
-                      ? t("page.tools.touch_profile.analyzing")
-                      : t("page.tools.touch_profile.analyze")}
-                  </Button>
-                </div>
-              ) : (
+              {phase === "select" ? null : (
                 <Button
                   type="button"
                   variant="outline"
@@ -862,21 +907,6 @@ export default function TouchProfileTool({
                   {t("page.tools.touch_profile.discard")}
                 </Button>
               )}
-
-              {progress ? (
-                <div className="rounded-md border border-border px-3 py-2 text-xs">
-                  <div className="font-medium">
-                    {t(`page.tools.touch_profile.stage.${progress.stage}`)}
-                  </div>
-                  <div className="mt-1 text-muted-foreground">{progress.message}</div>
-                  <div className="mt-2 h-1.5 overflow-hidden rounded bg-muted">
-                    <div
-                      className="h-full bg-accent transition-all"
-                      style={{ width: `${Math.round(progress.progress * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              ) : null}
 
               {inputError ? (
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -1014,10 +1044,261 @@ export default function TouchProfileTool({
                     ))}
                   </div>
 
+                  {analysisMode === "bone" ? (
+                    <div className="space-y-3 rounded-md border border-border/60 p-3">
+                      <div>
+                        <div className="text-sm font-medium">
+                          {t("page.tools.touch_profile.bone_select_title")}
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {t("page.tools.touch_profile.bone_select_hint")}
+                        </div>
+                      </div>
+                      <div>
+                        <FieldLabel>{t("page.tools.touch_profile.weight_threshold")}</FieldLabel>
+                        <div className="mt-1 flex items-center gap-3">
+                          <Slider
+                            value={[weightThreshold]}
+                            min={BONE_WEIGHT_THRESHOLD_RANGE.min}
+                            max={BONE_WEIGHT_THRESHOLD_RANGE.max}
+                            step={BONE_WEIGHT_THRESHOLD_RANGE.step}
+                            onValueChange={(values) => {
+                              const v = Array.isArray(values) ? values[0] : values;
+                              if (typeof v === "number") setWeightThreshold(v);
+                            }}
+                            className="flex-1"
+                          />
+                          <span className="w-14 text-right text-xs tabular-nums">
+                            {weightThreshold.toFixed(3)}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {t("page.tools.touch_profile.weight_threshold_hint")}
+                        </div>
+                      </div>
+                      {inspection.components
+                        .filter((c) => selectedMeshIds.has(c.id))
+                        .map((component) => {
+                          const assignments = boneZoneAssignments[component.id] ?? [];
+                          const hasBlend = component.hasBlend;
+                          const boneItems = component.bones.map((bone) => ({
+                            key: `bone:${bone.id}`,
+                            label: t("page.tools.touch_profile.bone_label", {
+                              id: bone.id,
+                              count: bone.vertexCount,
+                            }),
+                          }));
+                          const selectedBoneItems = boneItems.filter((item) =>
+                            assignments.some((a) => `bone:${a.boneId}` === item.key),
+                          );
+                          return (
+                            <div key={component.id} className="space-y-2">
+                              <div className="flex items-center gap-2 text-sm font-medium">
+                                <span>{component.name}</span>
+                                {!hasBlend ? (
+                                  <Badge variant="destructive">
+                                    {t("page.tools.touch_profile.no_blend")}
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline">
+                                    {component.bones.length}{" "}
+                                    {t("page.tools.touch_profile.bones_count")}
+                                  </Badge>
+                                )}
+                              </div>
+                              {hasBlend ? (
+                                <>
+                                  <Combobox
+                                    multiple
+                                    autoHighlight
+                                    items={boneItems}
+                                    value={selectedBoneItems}
+                                    onValueChange={(next) => {
+                                      const nextKeys = (next ?? []).map((item) => item.key);
+                                      const nextAssignments = nextKeys.map((key) => {
+                                        const boneId = Number(key.slice(5));
+                                        const existing = assignments.find(
+                                          (a) => a.boneId === boneId,
+                                        );
+                                        if (existing) return existing;
+                                        return { boneId, channel: null };
+                                      });
+                                      setBoneZoneAssignments((current) => ({
+                                        ...current,
+                                        [component.id]: nextAssignments,
+                                      }));
+                                    }}
+                                    onItemHighlighted={(item) => {
+                                      const boneId = item ? Number(item.key.slice(5)) : null;
+                                      handleBoneHighlight(boneId);
+                                    }}
+                                    onOpenChange={(open) => {
+                                      if (!open) handleBoneHighlight(null);
+                                    }}
+                                    itemToStringLabel={(item) => item.label}
+                                    isItemEqualToValue={(a, b) => a.key === b.key}
+                                  >
+                                    <ComboboxChips>
+                                      <ComboboxValue>
+                                        {(value: typeof boneItems) => (
+                                          <>
+                                            {value.map((item) => {
+                                              const boneId = Number(item.key.slice(5));
+                                              return (
+                                                <ComboboxChip
+                                                  key={item.key}
+                                                  onMouseEnter={() => handleBoneHighlight(boneId)}
+                                                  onMouseLeave={() => handleBoneHighlight(null)}
+                                                >
+                                                  {item.label}
+                                                </ComboboxChip>
+                                              );
+                                            })}
+                                            <ComboboxInput
+                                              placeholder={
+                                                value.length > 0
+                                                  ? ""
+                                                  : t(
+                                                      "page.tools.touch_profile.bone_select_placeholder",
+                                                    )
+                                              }
+                                            />
+                                          </>
+                                        )}
+                                      </ComboboxValue>
+                                    </ComboboxChips>
+                                    <ComboboxContent>
+                                      <ComboboxEmpty>
+                                        {t("page.tools.touch_profile.no_bones")}
+                                      </ComboboxEmpty>
+                                      <ComboboxList>
+                                        {(item: (typeof boneItems)[number]) => (
+                                          <ComboboxItem key={item.key} value={item}>
+                                            {item.label}
+                                          </ComboboxItem>
+                                        )}
+                                      </ComboboxList>
+                                    </ComboboxContent>
+                                  </Combobox>
+
+                                  {assignments.length > 0 ? (
+                                    <div className="space-y-1.5">
+                                      {assignments.map((assignment, ai) => {
+                                        return (
+                                          <div
+                                            key={`${assignment.boneId}-${ai}`}
+                                            className="flex items-center gap-2 rounded-md border border-border/40 px-2 py-1.5"
+                                          >
+                                            <span className="min-w-0 flex-1 truncate text-xs font-medium">
+                                              {t("page.tools.touch_profile.bone_label", {
+                                                id: assignment.boneId,
+                                                count:
+                                                  component.bones.find(
+                                                    (b) => b.id === assignment.boneId,
+                                                  )?.vertexCount ?? 0,
+                                              })}
+                                            </span>
+                                            <Select
+                                              value={
+                                                assignment.channel === null
+                                                  ? null
+                                                  : String(assignment.channel)
+                                              }
+                                              onValueChange={(value) => {
+                                                const channel =
+                                                  value === null ? null : Number(value);
+                                                setBoneZoneAssignments((current) => ({
+                                                  ...current,
+                                                  [component.id]: (current[component.id] ?? []).map(
+                                                    (a, idx) =>
+                                                      idx === ai ? { ...a, channel } : a,
+                                                  ),
+                                                }));
+                                              }}
+                                            >
+                                              <SelectTrigger className="h-7 w-28 text-xs">
+                                                <SelectValue
+                                                  placeholder={t(
+                                                    "page.tools.touch_profile.channel_select_placeholder",
+                                                  )}
+                                                />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                {Array.from(
+                                                  { length: TOUCH_ZONE_CHANNEL_COUNT },
+                                                  (_, ch) => {
+                                                    const otherBone = assignments.find(
+                                                      (a, idx) => idx !== ai && a.channel === ch,
+                                                    );
+                                                    return (
+                                                      <SelectItem
+                                                        key={ch}
+                                                        value={String(ch)}
+                                                        className="text-xs"
+                                                      >
+                                                        {CHANNEL_LABELS[ch]}
+                                                        {otherBone
+                                                          ? ` (${t(
+                                                              "page.tools.touch_profile.bone_label_short",
+                                                              { id: otherBone.boneId },
+                                                            )})`
+                                                          : ""}
+                                                      </SelectItem>
+                                                    );
+                                                  },
+                                                )}
+                                              </SelectContent>
+                                            </Select>
+                                            <Input
+                                              value={assignment.label ?? ""}
+                                              placeholder={t(
+                                                "page.tools.touch_profile.zone_label_placeholder",
+                                              )}
+                                              onChange={(e) => {
+                                                const label = e.target.value;
+                                                setBoneZoneAssignments((current) => ({
+                                                  ...current,
+                                                  [component.id]: (current[component.id] ?? []).map(
+                                                    (a, idx) =>
+                                                      idx === ai
+                                                        ? { ...a, label: label || undefined }
+                                                        : a,
+                                                  ),
+                                                }));
+                                              }}
+                                              className="h-7 w-28 text-xs"
+                                            />
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : null}
+                                </>
+                              ) : (
+                                <div className="text-xs text-muted-foreground">
+                                  {t("page.tools.touch_profile.no_blend_hint")}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  ) : null}
+
                   <Button
                     type="button"
                     onClick={() => void analyzeSelected()}
-                    disabled={loading || selectedMeshIds.size === 0}
+                    disabled={
+                      loading ||
+                      selectedMeshIds.size === 0 ||
+                      (analysisMode === "bone" &&
+                        (![...selectedMeshIds].some(
+                          (id) => (boneZoneAssignments[id] ?? []).length > 0,
+                        ) ||
+                          [...selectedMeshIds].some((id) =>
+                            (boneZoneAssignments[id] ?? []).some((a) => a.channel === null),
+                          )))
+                    }
                   >
                     {loading ? <Loader2Icon className="mr-2 size-4 animate-spin" /> : null}
                     {loading
@@ -1044,7 +1325,8 @@ export default function TouchProfileTool({
                           : t("page.tools.touch_profile.no")}
                       </span>
                     </div>
-                    {draft.llm ? (
+                    {/* vision-llm disabled — LLM summary isolated */}
+                    {/* {draft.llm ? (
                       <div
                         className="mt-2 truncate text-xs text-muted-foreground"
                         title={draft.llm.endpoint}
@@ -1052,7 +1334,7 @@ export default function TouchProfileTool({
                         {t("page.tools.touch_profile.llm_summary")}: {draft.llm.protocol} /{" "}
                         {draft.llm.model}
                       </div>
-                    ) : null}
+                    ) : null} */}
                   </div>
 
                   <Field>
@@ -1137,7 +1419,8 @@ export default function TouchProfileTool({
                             {t("page.tools.touch_profile.turn_label")}: Turn{" "}
                             {selectedComponent.currentTurn ?? 1}
                           </span>
-                          {selectedComponent.turnHistory &&
+                          {/* vision-llm disabled — turn history select isolated */}
+                          {/* {selectedComponent.turnHistory &&
                           selectedComponent.turnHistory.length > 1 ? (
                             <Select
                               value={String(selectedComponent.currentTurn ?? 1)}
@@ -1160,9 +1443,10 @@ export default function TouchProfileTool({
                                 </SelectGroup>
                               </SelectContent>
                             </Select>
-                          ) : null}
+                          ) : null} */}
                         </div>
-                        <Button
+                        {/* vision-llm disabled — reanalyze button isolated */}
+                        {/* <Button
                           type="button"
                           variant="outline"
                           size="sm"
@@ -1178,7 +1462,7 @@ export default function TouchProfileTool({
                           {reanalyzing
                             ? t("page.tools.touch_profile.reanalyzing")
                             : t("page.tools.touch_profile.reanalyze")}
-                        </Button>
+                        </Button> */}
                       </div>
                       {selectedComponent.zones
                         .filter(
@@ -1561,8 +1845,10 @@ export default function TouchProfileTool({
   );
 }
 
-function sourceLabel(source: "vision" | "manual", t: (key: string) => string) {
+function sourceLabel(source: "vision" | "manual" | "bone", t: (key: string) => string) {
+  // vision-llm disabled — vision source branch kept for type completeness
   if (source === "vision") return t("page.tools.touch_profile.vision_source");
+  if (source === "bone") return t("page.tools.touch_profile.mode_bone");
   return t("page.tools.touch_profile.manual_source");
 }
 

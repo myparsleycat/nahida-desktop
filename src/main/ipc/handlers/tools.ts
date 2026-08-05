@@ -10,10 +10,11 @@ import type {
     TouchProfileLoadInput,
     TouchProfileRegenerateInput,
     TouchProfileRollbackInput,
-    TouchProfileLlmApiKeyInput,
+    // vision-llm disabled — LLM/vision-only input types isolated
+    // TouchProfileLlmApiKeyInput,
     TouchProfileUpdateZoneSettingsInput,
-    TouchProfileReanalyzeTurnInput,
-    TouchProfileSelectTurnInput,
+    // TouchProfileReanalyzeTurnInput,
+    // TouchProfileSelectTurnInput,
 } from "@main/services/mod-tools/touch-profile";
 import type { TouchDraft } from "@main/services/mod-tools/touch-profile-types";
 import type {
@@ -118,9 +119,10 @@ export function registerToolsHandlers(d: NahidaDesktop) {
     rh("tools:bodyShapeExport", (input: BodyShapeExportInput) =>
         d.service.modTools.bodyShape.exportMesh(input),
     );
-    rh("tools:touchProfileLoadMod", (input: TouchProfileLoadInput | string) =>
-        d.service.modTools.touchProfile.loadMod(input),
-    );
+    // vision-llm disabled — loadMod isolated
+    // rh("tools:touchProfileLoadMod", (input: TouchProfileLoadInput | string) =>
+    //     d.service.modTools.touchProfile.loadMod(input),
+    // );
     rh("tools:touchProfilePrepare", (input: TouchProfileLoadInput | string) =>
         d.service.modTools.touchProfile.prepareMod(input),
     );
@@ -136,23 +138,25 @@ export function registerToolsHandlers(d: NahidaDesktop) {
     rh("tools:touchProfileSaveDraft", (draft: TouchDraft) =>
         d.service.modTools.touchProfile.saveDraft(draft),
     );
-    rh("tools:touchProfileClearVisionCache", () =>
-        d.service.modTools.touchProfile.clearVisionCache(),
-    );
-    rh("tools:touchProfileGetLlmSettings", () => d.service.modTools.touchProfile.getLlmSettings());
-    rh("tools:touchProfileSetLlmApiKey", (input: TouchProfileLlmApiKeyInput) =>
-        d.service.modTools.touchProfile.setLlmApiKey(input),
-    );
-    rh("tools:touchProfileClearLlmApiKey", () => d.service.modTools.touchProfile.clearLlmApiKey());
+    // vision-llm disabled — vision cache / LLM settings handlers isolated
+    // rh("tools:touchProfileClearVisionCache", () =>
+    //     d.service.modTools.touchProfile.clearVisionCache(),
+    // );
+    // rh("tools:touchProfileGetLlmSettings", () => d.service.modTools.touchProfile.getLlmSettings());
+    // rh("tools:touchProfileSetLlmApiKey", (input: TouchProfileLlmApiKeyInput) =>
+    //     d.service.modTools.touchProfile.setLlmApiKey(input),
+    // );
+    // rh("tools:touchProfileClearLlmApiKey", () => d.service.modTools.touchProfile.clearLlmApiKey());
     rh("tools:touchProfileUpdateZoneSettings", (input: TouchProfileUpdateZoneSettingsInput) =>
         d.service.modTools.touchProfile.updateZoneSettings(input),
     );
-    rh("tools:touchProfileReanalyzeTurn", (input: TouchProfileReanalyzeTurnInput) =>
-        d.service.modTools.touchProfile.reanalyzeTurn(input),
-    );
-    rh("tools:touchProfileSelectTurn", (input: TouchProfileSelectTurnInput) =>
-        d.service.modTools.touchProfile.selectTurn(input),
-    );
+    // vision-llm disabled — reanalyze/selectTurn (vision-only) handlers isolated
+    // rh("tools:touchProfileReanalyzeTurn", (input: TouchProfileReanalyzeTurnInput) =>
+    //     d.service.modTools.touchProfile.reanalyzeTurn(input),
+    // );
+    // rh("tools:touchProfileSelectTurn", (input: TouchProfileSelectTurnInput) =>
+    //     d.service.modTools.touchProfile.selectTurn(input),
+    // );
     rh("tools:touchProfileDiscardDraft", (sessionId: string) =>
         d.service.modTools.touchProfile.discardDraft(sessionId),
     );

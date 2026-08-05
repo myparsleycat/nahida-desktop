@@ -70,6 +70,7 @@ function makeTouchComponent(vertexCount: number, kind: TouchComponentAnalysis["k
                 label: "skin",
             },
         ],
+        bones: [],
     } satisfies TouchComponentAnalysis;
 }
 
@@ -358,6 +359,7 @@ describe("touch asset helpers", () => {
                     label: "clothed",
                 },
             ],
+            bones: [],
         } satisfies TouchComponentAnalysis;
         const zone = {
             id: "left_breast",
@@ -453,6 +455,7 @@ describe("touch asset helpers", () => {
             indexCount: indices.length,
             drawRanges: [{ firstIndex: 0, indexCount: indices.length, baseVertex: 0 }],
             objectMaps: [],
+            bones: [],
         } satisfies TouchComponentAnalysis;
         const zone = {
             id: "mesh_zone",
@@ -585,6 +588,57 @@ describe("touch zone settings", () => {
 
             assert.equal(validation.ok, true);
             assert.deepEqual(validation.issues, []);
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    it("preserves duplicate INI sections as warnings", async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "touch-profile-duplicate-sections-"));
+        try {
+            const runtimeDir = path.join(root, "Resources", "IM");
+            fs.mkdirSync(runtimeDir, { recursive: true });
+            for (const shader of TOUCH_SHADER_FILES) {
+                fs.writeFileSync(path.join(runtimeDir, shader), "");
+            }
+
+            const iniPath = path.join(root, "mod.ini");
+            fs.writeFileSync(
+                iniPath,
+                [
+                    "[Constants]",
+                    "global $active = 0",
+                    "",
+                    "[Present]",
+                    "post $active = 0",
+                    "",
+                    "[constants]",
+                    "global $menu = 0",
+                    "",
+                    "[present]",
+                    "run = CommandListMenu",
+                ].join("\n"),
+            );
+
+            const validation = await validateTouchOutput({
+                outputRoot: root,
+                iniPath,
+                components: [],
+                drafts: [],
+                assets: [],
+            });
+
+            assert.equal(validation.ok, true);
+            assert.deepEqual(
+                validation.issues.map(({ level, code, message }) => ({ level, code, message })),
+                [
+                    {
+                        level: "warning",
+                        code: "duplicate_ini_section",
+                        message: "Duplicate INI sections preserved: constants, present",
+                    },
+                ],
+            );
         } finally {
             fs.rmSync(root, { recursive: true, force: true });
         }
@@ -767,6 +821,7 @@ describe("zonesFromVisionPolygons", () => {
                     label: "clothed",
                 },
             ],
+            bones: [],
         };
 
         const transforms = buildAllViewTransforms(positions);

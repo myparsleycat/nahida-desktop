@@ -3,15 +3,24 @@ import path from "node:path";
 
 import { loadIniBundle } from "@main/lib/mod-static-glb/ini-loader";
 import type { IniSection, Resource } from "@main/lib/mod-static-glb/types";
-import { extractPositions, validatePositionBuffer } from "@shared/body-shape";
+import {
+    DEFAULT_BLEND_STRIDE,
+    extractPositions,
+    listBlendBones,
+    validateBlendBuffer,
+    validatePositionBuffer,
+    type BlendBoneInfo,
+} from "@shared/body-shape";
 import fse from "fs-extra";
 
 import {
+    collectBlendResources,
     collectCommandLists,
     collectIndexResources,
     collectPositionResources,
     collectResources,
     expandCommandListLines,
+    matchCompanionResource,
     matchIndexResources,
     readIndexBuffer,
     resourceForReference,
@@ -51,6 +60,7 @@ export async function analyzeTouchMod(
     const resources = collectResources(sections);
     const positionResources = collectPositionResources(resources);
     const indexResources = collectIndexResources(resources);
+    const blendResources = collectBlendResources(resources);
     const commandLists = collectCommandLists(sections);
     const indexByPosition = matchIndexResources(
         positionResources,
@@ -144,6 +154,35 @@ export async function analyzeTouchMod(
         );
 
         const positions = extractPositions(new Uint8Array(positionBytes), position.stride);
+        const blendMatch = matchCompanionResource(position, blendResources);
+        let blendRelativePath: string | undefined;
+        let blendPath: string | undefined;
+        let blendStride: number | undefined;
+        let bones: BlendBoneInfo[] = [];
+        if (blendMatch?.filename) {
+            const resolvedBlendPath = path.resolve(modRoot, blendMatch.filename);
+            if (await fse.pathExists(resolvedBlendPath)) {
+                const raw = await fse.readFile(resolvedBlendPath);
+                const resolvedStride = blendMatch.stride ?? DEFAULT_BLEND_STRIDE;
+                const blendValidation = validateBlendBuffer(
+                    raw.byteLength,
+                    validation.vertexCount,
+                    resolvedStride,
+                );
+                if (!blendValidation.ok) {
+                    warn(`Skipping blend buffer ${resolvedBlendPath}: ${blendValidation.reason}`);
+                } else {
+                    blendRelativePath = blendMatch.filename;
+                    blendPath = resolvedBlendPath;
+                    blendStride = resolvedStride;
+                    bones = listBlendBones(
+                        new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength),
+                        validation.vertexCount,
+                        resolvedStride,
+                    );
+                }
+            }
+        }
         const objectMaps = buildObjectMapCandidates(
             drawRanges,
             kind,
@@ -175,6 +214,10 @@ export async function analyzeTouchMod(
             variantCondition: drawContext.variantCondition,
             drawRanges,
             objectMaps,
+            blendRelativePath,
+            blendPath,
+            blendStride,
+            bones,
         });
     }
 
@@ -188,7 +231,7 @@ export async function analyzeTouchMod(
     ];
     const meshHash = await hashTouchFiles(
         components.flatMap((component) =>
-            [component.positionPath, component.indexPath].filter(
+            [component.positionPath, component.indexPath, component.blendPath].filter(
                 (entry): entry is string => !!entry,
             ),
         ),
@@ -218,7 +261,24 @@ export async function loadTouchMeshBuffers(component: TouchComponentAnalysis) {
     const indices = component.indexPath
         ? await readIndexBuffer(component.indexPath, component.indexFormat)
         : new Uint32Array();
-    return { positions, normals, indices, positionBytes };
+    let blendBytes: Uint8Array | undefined;
+    let bones: BlendBoneInfo[] = component.bones;
+    if (component.blendPath && component.blendStride) {
+        const raw = await fse.readFile(component.blendPath);
+        blendBytes = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+        if (bones.length === 0) {
+            bones = listBlendBones(blendBytes, component.vertexCount, component.blendStride);
+        }
+    }
+    return {
+        positions,
+        normals,
+        indices,
+        positionBytes,
+        blendBytes,
+        blendStride: component.blendStride,
+        bones,
+    };
 }
 
 function gradeComponent(input: {

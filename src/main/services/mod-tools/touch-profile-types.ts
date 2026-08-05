@@ -1,3 +1,4 @@
+import type { BlendBoneInfo } from "@shared/body-shape";
 import type { TouchProfileLlmSettings } from "@shared/touch-profile-llm";
 import type { TouchZoneSettings } from "@shared/touch-profile-settings";
 
@@ -107,6 +108,10 @@ export type TouchComponentAnalysis = {
     variantCondition?: string;
     drawRanges: TouchDrawRange[];
     objectMaps: TouchObjectMapEntry[];
+    blendRelativePath?: string;
+    blendPath?: string;
+    blendStride?: number;
+    bones: BlendBoneInfo[];
 };
 
 export type TouchModAnalysis = {
@@ -132,6 +137,8 @@ export type TouchComponentInspection = {
     variantKey?: string;
     variantCondition?: string;
     objectMaps: TouchObjectMapEntry[];
+    hasBlend: boolean;
+    bones: BlendBoneInfo[];
 };
 
 export type TouchModInspection = {
@@ -182,7 +189,7 @@ export type TouchZoneSpec = {
     confidence: number;
     center: [number, number, number];
     radius: [number, number, number];
-    source: "vision" | "manual";
+    source: "vision" | "manual" | "bone";
     settings: TouchZoneSettings;
     /**
      * Vertices selected from vision polygons (any view). When present, soft masks are

@@ -2,15 +2,21 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { NahidaDesktop } from "@main/index";
-import { LLM_API_KEY_SETTING_KEY, resolveLlmApiKey, type LlmConfig } from "@main/lib/llm";
+// vision-llm disabled — LLM imports isolated
+// import { LLM_API_KEY_SETTING_KEY, resolveLlmApiKey, type LlmConfig } from "@main/lib/llm";
 import { DISABLED_PREFIX_REGEX, stripDisabledPrefix } from "@shared/mod";
+import type { TouchProfileLlmSettings } from "@shared/touch-profile-llm";
+// vision-llm disabled — protocol/reasoning/normalize only used by vision path
+// import type {
+//     TouchProfileLlmProtocol,
+//     TouchProfileLlmReasoning,
+// } from "@shared/touch-profile-llm";
+// import { normalizeTouchProfileLlmSettings } from "@shared/touch-profile-llm";
 import type {
-    TouchProfileLlmSettings,
-    TouchProfileLlmProtocol,
-    TouchProfileLlmReasoning,
-} from "@shared/touch-profile-llm";
-import { normalizeTouchProfileLlmSettings } from "@shared/touch-profile-llm";
-import type { TouchProfilePreview, TouchProfilePreviewInput } from "@shared/touch-profile-preview";
+    TouchProfileAnalyzeComponentsInput,
+    TouchProfilePreview,
+    TouchProfilePreviewInput,
+} from "@shared/touch-profile-preview";
 import type { TouchProfileMeshPreview } from "@shared/touch-profile-preview";
 import type { TouchZoneSettings } from "@shared/touch-profile-settings";
 import type { TouchProfileProgressEvent } from "@shared/types";
@@ -27,6 +33,7 @@ import {
     writeTouchComponentAssets,
     type TouchGeneratedAssets,
 } from "./touch-profile-assets";
+import { analyzeComponentWithBones, DEFAULT_BONE_WEIGHT_THRESHOLD } from "./touch-profile-bone";
 import { assertTouchProfileInputAllowed } from "./touch-profile-detection";
 import { compileTouchIni } from "./touch-profile-ini";
 import { normalizeTouchZoneSettings } from "./touch-profile-settings";
@@ -48,13 +55,14 @@ import {
     type TouchRollbackResult,
 } from "./touch-profile-types";
 import { validateTouchOutput } from "./touch-profile-validator";
-import {
-    analyzeComponentVision,
-    reanalyzeComponentVisionTurn,
-    renderComponentPreviews,
-    type TouchVisionCacheContext,
-} from "./touch-profile-vision";
-import { TouchProfileVisionCache } from "./touch-profile-vision-cache";
+// vision-llm disabled — vision pipeline imports isolated
+// import {
+//     analyzeComponentVision,
+//     reanalyzeComponentVisionTurn,
+//     renderComponentPreviews,
+//     type TouchVisionCacheContext,
+// } from "./touch-profile-vision";
+// import { TouchProfileVisionCache } from "./touch-profile-vision-cache";
 
 export type TouchProfileLoadInput = {
     modPath: string;
@@ -96,12 +104,13 @@ export type TouchProfileLlmSettingsView = TouchProfileLlmSettings & {
     apiKeyConfigured: boolean;
 };
 
-const TOUCH_PROFILE_LLM_SETTING_KEYS = [
-    "tools.touchProfileLlmProtocol",
-    "tools.touchProfileLlmEndpoint",
-    "tools.touchProfileLlmModel",
-    "tools.touchProfileLlmReasoning",
-] as const;
+// vision-llm disabled — LLM setting keys isolated
+// const TOUCH_PROFILE_LLM_SETTING_KEYS = [
+//     "tools.touchProfileLlmProtocol",
+//     "tools.touchProfileLlmEndpoint",
+//     "tools.touchProfileLlmModel",
+//     "tools.touchProfileLlmReasoning",
+// ] as const;
 
 export type TouchProfileRollbackInput = {
     sessionId: string;
@@ -128,52 +137,52 @@ type SessionState = {
 
 export class TouchProfileService {
     private readonly sessions = new Map<string, SessionState>();
-    private readonly visionCache: TouchProfileVisionCache;
+    // vision-llm disabled — vision cache isolated
+    // private readonly visionCache: TouchProfileVisionCache;
 
     constructor(private readonly desktop: NahidaDesktop) {
-        this.visionCache = new TouchProfileVisionCache(desktop.lib.db, desktop.logger);
+        // vision-llm disabled
+        // this.visionCache = new TouchProfileVisionCache(desktop.lib.db, desktop.logger);
     }
 
-    async getLlmSettings(): Promise<TouchProfileLlmSettingsView> {
-        const settings = await this.desktop.setting.getMany(TOUCH_PROFILE_LLM_SETTING_KEYS);
-        const resolved = normalizeTouchProfileLlmSettings({
-            protocol: settings["tools.touchProfileLlmProtocol"] as TouchProfileLlmProtocol,
-            endpoint: settings["tools.touchProfileLlmEndpoint"],
-            model: settings["tools.touchProfileLlmModel"],
-            reasoning: settings["tools.touchProfileLlmReasoning"] as TouchProfileLlmReasoning,
-        });
-        const apiKey = await this.getStoredLlmApiKey();
+    // vision-llm disabled — LLM settings methods isolated
+    // async getLlmSettings(): Promise<TouchProfileLlmSettingsView> {
+    //     const settings = await this.desktop.setting.getMany(TOUCH_PROFILE_LLM_SETTING_KEYS);
+    //     const resolved = normalizeTouchProfileLlmSettings({
+    //         protocol: settings["tools.touchProfileLlmProtocol"] as TouchProfileLlmProtocol,
+    //         endpoint: settings["tools.touchProfileLlmEndpoint"],
+    //         model: settings["tools.touchProfileLlmModel"],
+    //         reasoning: settings["tools.touchProfileLlmReasoning"] as TouchProfileLlmReasoning,
+    //     });
+    //     const apiKey = await this.getStoredLlmApiKey();
+    //     return {
+    //         ...resolved,
+    //         apiKeyConfigured: Boolean(resolveLlmApiKey(resolved, apiKey)),
+    //     };
+    // }
+    // async setLlmApiKey(input: TouchProfileLlmApiKeyInput): Promise<TouchProfileLlmSettingsView> {
+    //     const apiKey = input.apiKey.trim();
+    //     if (!apiKey) throw new Error("LLM API key cannot be empty");
+    //     await this.desktop.lib.db.settings.upsert(
+    //         LLM_API_KEY_SETTING_KEY,
+    //         this.desktop.lib.crypto.encryptString(apiKey),
+    //     );
+    //     return await this.getLlmSettings();
+    // }
+    // async clearLlmApiKey(): Promise<TouchProfileLlmSettingsView> {
+    //     await this.desktop.lib.db.settings.upsert(LLM_API_KEY_SETTING_KEY, null);
+    //     return await this.getLlmSettings();
+    // }
 
-        return {
-            ...resolved,
-            apiKeyConfigured: Boolean(resolveLlmApiKey(resolved, apiKey)),
-        };
-    }
-
-    async setLlmApiKey(input: TouchProfileLlmApiKeyInput): Promise<TouchProfileLlmSettingsView> {
-        const apiKey = input.apiKey.trim();
-        if (!apiKey) throw new Error("LLM API key cannot be empty");
-
-        await this.desktop.lib.db.settings.upsert(
-            LLM_API_KEY_SETTING_KEY,
-            this.desktop.lib.crypto.encryptString(apiKey),
-        );
-        return await this.getLlmSettings();
-    }
-
-    async clearLlmApiKey(): Promise<TouchProfileLlmSettingsView> {
-        await this.desktop.lib.db.settings.upsert(LLM_API_KEY_SETTING_KEY, null);
-        return await this.getLlmSettings();
-    }
-
-    async loadMod(input: TouchProfileLoadInput | string): Promise<TouchDraft> {
-        const modPath = typeof input === "string" ? input : input.modPath;
-        const inspection = await this.prepareMod(modPath);
-        return await this.analyzeComponents({
-            sessionId: inspection.sessionId,
-            componentIds: inspection.components.map((component) => component.id),
-        });
-    }
+    // vision-llm disabled — loadMod used vision default, isolated
+    // async loadMod(input: TouchProfileLoadInput | string): Promise<TouchDraft> {
+    //     const modPath = typeof input === "string" ? input : input.modPath;
+    //     const inspection = await this.prepareMod(modPath);
+    //     return await this.analyzeComponents({
+    //         sessionId: inspection.sessionId,
+    //         componentIds: inspection.components.map((component) => component.id),
+    //     });
+    // }
 
     async prepareMod(input: TouchProfileLoadInput | string): Promise<TouchModInspection> {
         const modPath = typeof input === "string" ? input : input.modPath;
@@ -219,6 +228,8 @@ export class TouchProfileService {
                     variantKey: component.variantKey,
                     variantCondition: component.variantCondition,
                     objectMaps: component.objectMaps,
+                    hasBlend: !!component.blendPath,
+                    bones: component.bones,
                 })),
             };
         } catch (error) {
@@ -239,6 +250,9 @@ export class TouchProfileService {
                     vertexCount: cached.positions.length / 3,
                     positions: cached.positions,
                     indices: cached.indices,
+                    bones: cached.bones,
+                    blendStride: cached.blendStride,
+                    blendBytes: cached.blendBytes,
                 };
             }
 
@@ -257,6 +271,9 @@ export class TouchProfileService {
                 vertexCount: mesh.positions.length / 3,
                 positions: mesh.positions,
                 indices: mesh.indices,
+                bones: mesh.bones,
+                blendStride: mesh.blendStride,
+                blendBytes: mesh.blendBytes,
             };
         } catch (error) {
             this.desktop.logger.error(
@@ -267,10 +284,7 @@ export class TouchProfileService {
         }
     }
 
-    async analyzeComponents(input: {
-        sessionId: string;
-        componentIds: string[];
-    }): Promise<TouchDraft> {
+    async analyzeComponents(input: TouchProfileAnalyzeComponentsInput): Promise<TouchDraft> {
         const session = this.requireSession(input.sessionId);
         if (!session.analysis) {
             throw new Error(`Touch profile session has no analysis: ${input.sessionId}`);
@@ -284,17 +298,23 @@ export class TouchProfileService {
         const unselectedComponents = analysis.components.filter(
             (component) => !selectedIds.has(component.id),
         );
+        const mode = input.mode ?? "bone";
 
         try {
             const meshCache = new Map<string, Awaited<ReturnType<typeof loadTouchMeshBuffers>>>();
             const totalComponents = Math.max(selectedComponents.length, 1);
             const limit = pLimit(TOUCH_VISION_CONCURRENCY);
-            const llm = await this.getResolvedLlmConfig();
             let lastProgress = 0.05;
             const broadcastProgress = (event: TouchProfileProgressEvent) => {
                 lastProgress = Math.max(lastProgress, event.progress);
                 this.broadcast({ ...event, progress: lastProgress });
             };
+
+            const boneSelectionsByComponent = new Map(
+                (input.boneSelections ?? []).map((entry) => [entry.componentId, entry.zones]),
+            );
+            const weightThreshold = input.weightThreshold ?? DEFAULT_BONE_WEIGHT_THRESHOLD;
+
             const results = await Promise.allSettled(
                 selectedComponents.map((component, index) =>
                     limit(async () => {
@@ -302,43 +322,78 @@ export class TouchProfileService {
                             sessionId: input.sessionId,
                             stage: "preview",
                             progress: 0.1 + (index / totalComponents) * 0.25,
-                            message: `Preparing previews for ${component.name}`,
+                            message:
+                                mode === "bone"
+                                    ? `Loading mesh for ${component.name}`
+                                    : `Preparing previews for ${component.name}`,
                             componentId: component.id,
                         });
 
                         const mesh = await loadTouchMeshBuffers(component);
                         meshCache.set(component.id, mesh);
-                        const { previews, transforms } = await renderComponentPreviews({
-                            sessionDir,
-                            component,
-                            positions: mesh.positions,
-                            indices: mesh.indices,
-                        });
 
-                        broadcastProgress({
-                            sessionId: input.sessionId,
-                            stage: "vision",
-                            progress: 0.35 + (index / totalComponents) * 0.4,
-                            message: `Analyzing touch zones for ${component.name}`,
+                        if (mode === "bone") {
+                            broadcastProgress({
+                                sessionId: input.sessionId,
+                                stage: "vision",
+                                progress: 0.35 + (index / totalComponents) * 0.4,
+                                message: `Analyzing bone zones for ${component.name}`,
+                                componentId: component.id,
+                            });
+                            const selections = boneSelectionsByComponent.get(component.id) ?? [];
+                            return analyzeComponentWithBones({
+                                component,
+                                positions: mesh.positions,
+                                indices: mesh.indices,
+                                blendBytes: mesh.blendBytes ?? new Uint8Array(),
+                                blendStride: mesh.blendStride ?? 0,
+                                bones: mesh.bones,
+                                selections,
+                                weightThreshold,
+                                objectId: 1,
+                            });
+                        }
+
+                        // vision-llm disabled — vision pipeline isolated
+                        // const { previews, transforms } = await renderComponentPreviews({
+                        //     sessionDir,
+                        //     component,
+                        //     positions: mesh.positions,
+                        //     indices: mesh.indices,
+                        // });
+                        // broadcastProgress({
+                        //     sessionId: input.sessionId,
+                        //     stage: "vision",
+                        //     progress: 0.35 + (index / totalComponents) * 0.4,
+                        //     message: `Analyzing touch zones for ${component.name}`,
+                        //     componentId: component.id,
+                        // });
+                        // const llm = await this.getResolvedLlmConfig();
+                        // return analyzeComponentVision({
+                        //     component,
+                        //     positions: mesh.positions,
+                        //     indices: mesh.indices,
+                        //     previews,
+                        //     transforms,
+                        //     objectId: 1,
+                        //     sessionDir,
+                        //     llm,
+                        //     visionCache: this.visionCache,
+                        //     visionCacheContext: {
+                        //         meshHash: analysis.meshHash,
+                        //         iniHash: analysis.iniHash,
+                        //     } satisfies TouchVisionCacheContext,
+                        // });
+
+                        // Non-bone mode fallback: empty non-interactive draft
+                        return {
                             componentId: component.id,
-                        });
-
-                        // Interactive results determine the final object IDs, so assign them after all positions finish.
-                        return analyzeComponentVision({
-                            component,
-                            positions: mesh.positions,
-                            indices: mesh.indices,
-                            previews,
-                            transforms,
+                            interactive: false,
                             objectId: 1,
-                            sessionDir,
-                            llm,
-                            visionCache: this.visionCache,
-                            visionCacheContext: {
-                                meshHash: analysis.meshHash,
-                                iniHash: analysis.iniHash,
-                            } satisfies TouchVisionCacheContext,
-                        });
+                            zones: [],
+                            confidence: 0,
+                            warnings: ["Vision LLM mode is disabled"],
+                        };
                     }),
                 ),
             );
@@ -377,7 +432,11 @@ export class TouchProfileService {
                 confidences.length > 0
                     ? confidences.reduce((sum, value) => sum + value, 0) / confidences.length
                     : 0;
-            const visionUsed = analyzedDrafts.some((entry) => entry.vision !== undefined);
+            // vision-llm disabled — visionUsed/llmConfig simplified
+            // const visionUsed =
+            //     mode === "vision" && analyzedDrafts.some((entry) => entry.vision !== undefined);
+            // const llmConfig = mode === "vision" ? await this.getResolvedLlmConfig() : null;
+            const visionUsed = false;
 
             const draft: TouchDraft = {
                 sessionId: input.sessionId,
@@ -386,12 +445,21 @@ export class TouchProfileService {
                 analysis,
                 components,
                 visionUsed,
-                modelName: llm.model,
+                modelName: mode === "bone" ? "bone-weight" : "",
+                // vision-llm disabled — llmConfig always null, ternary simplified to false branch
+                // llm: llmConfig
+                //     ? {
+                //           protocol: llmConfig.protocol,
+                //           endpoint: llmConfig.endpoint,
+                //           model: llmConfig.model,
+                //           reasoning: llmConfig.reasoning,
+                //       }
+                //     : {
                 llm: {
-                    protocol: llm.protocol,
-                    endpoint: llm.endpoint,
-                    model: llm.model,
-                    reasoning: llm.reasoning,
+                    protocol: "openai-compatible",
+                    endpoint: "",
+                    model: "",
+                    reasoning: "auto",
                 },
                 promptVersion: TOUCH_PROMPT_VERSION,
                 runtimeVersion: TOUCH_RUNTIME_VERSION,
@@ -440,15 +508,16 @@ export class TouchProfileService {
         return next;
     }
 
-    async clearVisionCache(): Promise<{ ok: true }> {
-        try {
-            await this.visionCache.clear();
-            return { ok: true };
-        } catch (error) {
-            this.desktop.logger.error(error, "TouchProfile:clearVisionCache");
-            throw error;
-        }
-    }
+    // vision-llm disabled — clearVisionCache isolated
+    // async clearVisionCache(): Promise<{ ok: true }> {
+    //     try {
+    //         await this.visionCache.clear();
+    //         return { ok: true };
+    //     } catch (error) {
+    //         this.desktop.logger.error(error, "TouchProfile:clearVisionCache");
+    //         throw error;
+    //     }
+    // }
 
     async updateZoneSettings(input: TouchProfileUpdateZoneSettingsInput): Promise<TouchDraft> {
         try {
@@ -496,167 +565,147 @@ export class TouchProfileService {
         }
     }
 
-    async reanalyzeTurn(input: TouchProfileReanalyzeTurnInput): Promise<TouchDraft> {
-        try {
-            const session = this.requireSession(input.sessionId);
-            if (session.operation) {
-                throw new Error(`Touch profile is busy with ${session.operation}`);
-            }
+    // vision-llm disabled — reanalyzeTurn (vision-only) isolated
+    // async reanalyzeTurn(input: TouchProfileReanalyzeTurnInput): Promise<TouchDraft> {
+    //     try {
+    //         const session = this.requireSession(input.sessionId);
+    //         if (session.operation) {
+    //             throw new Error(`Touch profile is busy with ${session.operation}`);
+    //         }
+    //         const componentAnalysis = session.analysis.components.find(
+    //             (entry) => entry.id === input.componentId,
+    //         );
+    //         if (!componentAnalysis) {
+    //             throw new Error(`Touch component not found: ${input.componentId}`);
+    //         }
+    //         if (!session.draft) {
+    //             throw new Error(`Touch profile has no draft: ${input.sessionId}`);
+    //         }
+    //         const componentDraft = session.draft.components.find(
+    //             (entry) => entry.componentId === input.componentId,
+    //         );
+    //         if (!componentDraft) {
+    //             throw new Error(`Touch component draft not found: ${input.componentId}`);
+    //         }
+    //         const currentTurn = componentDraft.currentTurn ?? 1;
+    //         if (!componentDraft.vision) {
+    //             throw new Error(`No previous vision result available for ${input.componentId}`);
+    //         }
+    //         const mesh =
+    //             session.meshCache.get(componentAnalysis.id) ??
+    //             (await loadTouchMeshBuffers(componentAnalysis));
+    //         session.meshCache.set(componentAnalysis.id, mesh);
+    //         const { previews, transforms } = await renderComponentPreviews({
+    //             sessionDir: session.sessionDir,
+    //             component: componentAnalysis,
+    //             positions: mesh.positions,
+    //             indices: mesh.indices,
+    //         });
+    //         const llm = await this.getResolvedLlmConfig();
+    //         const history = componentDraft.turnHistory ? [...componentDraft.turnHistory] : [];
+    //         const maxTurn = history.reduce((max, entry) => Math.max(max, entry.turn), 0);
+    //         const effectiveTurn = Math.max(currentTurn + 1, maxTurn + 1);
+    //         this.broadcast({
+    //             sessionId: input.sessionId,
+    //             stage: "vision",
+    //             progress: 0.5,
+    //             message: `Re-analyzing turn ${effectiveTurn} for ${componentAnalysis.name}`,
+    //             componentId: componentAnalysis.id,
+    //         });
+    //         const baselineResult =
+    //             history.find((entry) => entry.turn === 1)?.vision ?? componentDraft.vision;
+    //         const turnResult = await reanalyzeComponentVisionTurn({
+    //             component: componentAnalysis,
+    //             positions: mesh.positions,
+    //             indices: mesh.indices,
+    //             previews,
+    //             transforms,
+    //             objectId: componentDraft.objectId,
+    //             turn: effectiveTurn,
+    //             previousResult: componentDraft.vision,
+    //             baselineResult,
+    //             llm,
+    //             sessionDir: session.sessionDir,
+    //         });
+    //         history.push(turnResult.turnRecord);
+    //         const updatedComponent: TouchComponentDraft = {
+    //             ...componentDraft,
+    //             currentTurn: effectiveTurn,
+    //             zones: turnResult.zones,
+    //             confidence: turnResult.confidence,
+    //             warnings: turnResult.warnings,
+    //             vision: turnResult.vision,
+    //             visionApproved: turnResult.vision.approved,
+    //             turnHistory: history,
+    //         };
+    //         const updatedComponents = session.draft.components.map((entry) =>
+    //             entry.componentId === input.componentId ? updatedComponent : entry,
+    //         );
+    //         const draft = await this.saveDraft({
+    //             ...session.draft,
+    //             components: updatedComponents,
+    //         });
+    //         this.broadcast({
+    //             sessionId: input.sessionId,
+    //             stage: "complete",
+    //             progress: 1,
+    //             message: `Turn ${effectiveTurn} analysis complete`,
+    //             componentId: componentAnalysis.id,
+    //         });
+    //         return draft;
+    //     } catch (error) {
+    //         this.desktop.logger.error(
+    //             error,
+    //             `TouchProfile:reanalyzeTurn:${input.sessionId}:${input.componentId}`,
+    //         );
+    //         throw error;
+    //     }
+    // }
 
-            const componentAnalysis = session.analysis.components.find(
-                (entry) => entry.id === input.componentId,
-            );
-            if (!componentAnalysis) {
-                throw new Error(`Touch component not found: ${input.componentId}`);
-            }
-
-            if (!session.draft) {
-                throw new Error(`Touch profile has no draft: ${input.sessionId}`);
-            }
-            const componentDraft = session.draft.components.find(
-                (entry) => entry.componentId === input.componentId,
-            );
-            if (!componentDraft) {
-                throw new Error(`Touch component draft not found: ${input.componentId}`);
-            }
-
-            const currentTurn = componentDraft.currentTurn ?? 1;
-
-            if (!componentDraft.vision) {
-                throw new Error(`No previous vision result available for ${input.componentId}`);
-            }
-
-            const mesh =
-                session.meshCache.get(componentAnalysis.id) ??
-                (await loadTouchMeshBuffers(componentAnalysis));
-            session.meshCache.set(componentAnalysis.id, mesh);
-
-            const { previews, transforms } = await renderComponentPreviews({
-                sessionDir: session.sessionDir,
-                component: componentAnalysis,
-                positions: mesh.positions,
-                indices: mesh.indices,
-            });
-
-            const llm = await this.getResolvedLlmConfig();
-
-            const history = componentDraft.turnHistory ? [...componentDraft.turnHistory] : [];
-            const maxTurn = history.reduce((max, entry) => Math.max(max, entry.turn), 0);
-            const effectiveTurn = Math.max(currentTurn + 1, maxTurn + 1);
-
-            this.broadcast({
-                sessionId: input.sessionId,
-                stage: "vision",
-                progress: 0.5,
-                message: `Re-analyzing turn ${effectiveTurn} for ${componentAnalysis.name}`,
-                componentId: componentAnalysis.id,
-            });
-
-            const baselineResult =
-                history.find((entry) => entry.turn === 1)?.vision ?? componentDraft.vision;
-
-            const turnResult = await reanalyzeComponentVisionTurn({
-                component: componentAnalysis,
-                positions: mesh.positions,
-                indices: mesh.indices,
-                previews,
-                transforms,
-                objectId: componentDraft.objectId,
-                turn: effectiveTurn,
-                previousResult: componentDraft.vision,
-                baselineResult,
-                llm,
-                sessionDir: session.sessionDir,
-            });
-
-            history.push(turnResult.turnRecord);
-
-            const updatedComponent: TouchComponentDraft = {
-                ...componentDraft,
-                currentTurn: effectiveTurn,
-                zones: turnResult.zones,
-                confidence: turnResult.confidence,
-                warnings: turnResult.warnings,
-                vision: turnResult.vision,
-                visionApproved: turnResult.vision.approved,
-                turnHistory: history,
-            };
-
-            const updatedComponents = session.draft.components.map((entry) =>
-                entry.componentId === input.componentId ? updatedComponent : entry,
-            );
-
-            const draft = await this.saveDraft({
-                ...session.draft,
-                components: updatedComponents,
-            });
-
-            this.broadcast({
-                sessionId: input.sessionId,
-                stage: "complete",
-                progress: 1,
-                message: `Turn ${effectiveTurn} analysis complete`,
-                componentId: componentAnalysis.id,
-            });
-
-            return draft;
-        } catch (error) {
-            this.desktop.logger.error(
-                error,
-                `TouchProfile:reanalyzeTurn:${input.sessionId}:${input.componentId}`,
-            );
-            throw error;
-        }
-    }
-
-    async selectTurn(input: TouchProfileSelectTurnInput): Promise<TouchDraft> {
-        try {
-            const session = this.requireSession(input.sessionId);
-            if (session.operation) {
-                throw new Error(`Touch profile is busy with ${session.operation}`);
-            }
-            if (!session.draft) {
-                throw new Error(`Touch profile has no draft: ${input.sessionId}`);
-            }
-
-            const componentDraft = session.draft.components.find(
-                (entry) => entry.componentId === input.componentId,
-            );
-            if (!componentDraft) {
-                throw new Error(`Touch component draft not found: ${input.componentId}`);
-            }
-
-            const record = componentDraft.turnHistory?.find((entry) => entry.turn === input.turn);
-            if (!record) {
-                throw new Error(`Turn ${input.turn} not found in history for ${input.componentId}`);
-            }
-
-            const updatedComponent: TouchComponentDraft = {
-                ...componentDraft,
-                currentTurn: input.turn,
-                zones: record.zones,
-                confidence: record.confidence,
-                warnings: record.warnings,
-                vision: record.vision,
-                visionApproved: record.approved,
-            };
-
-            const updatedComponents = session.draft.components.map((entry) =>
-                entry.componentId === input.componentId ? updatedComponent : entry,
-            );
-
-            return await this.saveDraft({
-                ...session.draft,
-                components: updatedComponents,
-            });
-        } catch (error) {
-            this.desktop.logger.error(
-                error,
-                `TouchProfile:selectTurn:${input.sessionId}:${input.componentId}:${input.turn}`,
-            );
-            throw error;
-        }
-    }
+    // vision-llm disabled — selectTurn (vision turn history) isolated
+    // async selectTurn(input: TouchProfileSelectTurnInput): Promise<TouchDraft> {
+    //     try {
+    //         const session = this.requireSession(input.sessionId);
+    //         if (session.operation) {
+    //             throw new Error(`Touch profile is busy with ${session.operation}`);
+    //         }
+    //         if (!session.draft) {
+    //             throw new Error(`Touch profile has no draft: ${input.sessionId}`);
+    //         }
+    //         const componentDraft = session.draft.components.find(
+    //             (entry) => entry.componentId === input.componentId,
+    //         );
+    //         if (!componentDraft) {
+    //             throw new Error(`Touch component draft not found: ${input.componentId}`);
+    //         }
+    //         const record = componentDraft.turnHistory?.find((entry) => entry.turn === input.turn);
+    //         if (!record) {
+    //             throw new Error(`Turn ${input.turn} not found in history for ${input.componentId}`);
+    //         }
+    //         const updatedComponent: TouchComponentDraft = {
+    //             ...componentDraft,
+    //             currentTurn: input.turn,
+    //             zones: record.zones,
+    //             confidence: record.confidence,
+    //             warnings: record.warnings,
+    //             vision: record.vision,
+    //             visionApproved: record.approved,
+    //         };
+    //         const updatedComponents = session.draft.components.map((entry) =>
+    //             entry.componentId === input.componentId ? updatedComponent : entry,
+    //         );
+    //         return await this.saveDraft({
+    //             ...session.draft,
+    //             components: updatedComponents,
+    //         });
+    //     } catch (error) {
+    //         this.desktop.logger.error(
+    //             error,
+    //             `TouchProfile:selectTurn:${input.sessionId}:${input.componentId}:${input.turn}`,
+    //         );
+    //         throw error;
+    //     }
+    // }
 
     async getPreview(input: TouchProfilePreviewInput): Promise<TouchProfilePreview> {
         try {
@@ -1074,31 +1123,30 @@ export class TouchProfileService {
         return session;
     }
 
-    private async getResolvedLlmConfig(): Promise<LlmConfig> {
-        const settings = await this.desktop.setting.getMany(TOUCH_PROFILE_LLM_SETTING_KEYS);
-        const resolved = normalizeTouchProfileLlmSettings({
-            protocol: settings["tools.touchProfileLlmProtocol"] as TouchProfileLlmProtocol,
-            endpoint: settings["tools.touchProfileLlmEndpoint"],
-            model: settings["tools.touchProfileLlmModel"],
-            reasoning: settings["tools.touchProfileLlmReasoning"] as TouchProfileLlmReasoning,
-        });
-        return {
-            ...resolved,
-            apiKey: resolveLlmApiKey(resolved, await this.getStoredLlmApiKey()),
-        };
-    }
-
-    private async getStoredLlmApiKey() {
-        const encrypted = await this.desktop.lib.db.settings.getValue(LLM_API_KEY_SETTING_KEY);
-        if (!encrypted) return undefined;
-
-        try {
-            return this.desktop.lib.crypto.decryptString(encrypted);
-        } catch (error) {
-            this.desktop.logger.error(error, "TouchProfile:getLlmApiKey");
-            return undefined;
-        }
-    }
+    // vision-llm disabled — LLM config helpers isolated
+    // private async getResolvedLlmConfig(): Promise<LlmConfig> {
+    //     const settings = await this.desktop.setting.getMany(TOUCH_PROFILE_LLM_SETTING_KEYS);
+    //     const resolved = normalizeTouchProfileLlmSettings({
+    //         protocol: settings["tools.touchProfileLlmProtocol"] as TouchProfileLlmProtocol,
+    //         endpoint: settings["tools.touchProfileLlmEndpoint"],
+    //         model: settings["tools.touchProfileLlmModel"],
+    //         reasoning: settings["tools.touchProfileLlmReasoning"] as TouchProfileLlmReasoning,
+    //     });
+    //     return {
+    //         ...resolved,
+    //         apiKey: resolveLlmApiKey(resolved, await this.getStoredLlmApiKey()),
+    //     };
+    // }
+    // private async getStoredLlmApiKey() {
+    //     const encrypted = await this.desktop.lib.db.settings.getValue(LLM_API_KEY_SETTING_KEY);
+    //     if (!encrypted) return undefined;
+    //     try {
+    //         return this.desktop.lib.crypto.decryptString(encrypted);
+    //     } catch (error) {
+    //         this.desktop.logger.error(error, "TouchProfile:getLlmApiKey");
+    //         return undefined;
+    //     }
+    // }
 
     private claimOperation(
         session: SessionState,
@@ -1255,9 +1303,11 @@ function isTouchDraftAutoApplyable(
     minConfidence: number,
     avgConfidence: number,
 ) {
-    const hasUnapprovedVision = interactive.some(
-        (component) => component.vision !== undefined && component.visionApproved !== true,
-    );
+    // vision-llm disabled — vision approval check isolated (bone zones have no vision field)
+    // const hasUnapprovedVision = interactive.some(
+    //     (component) => component.vision !== undefined && component.visionApproved !== true,
+    // );
+    const hasUnapprovedVision = false;
     return (
         interactive.length > 0 &&
         !hasUnapprovedVision &&
