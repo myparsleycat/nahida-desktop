@@ -5,6 +5,7 @@ import {
     TOUCH_PROFILE_MASK_CURVE_RANGE,
     TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE,
     TOUCH_PROFILE_MASK_STRENGTH_RANGE,
+    type TouchMaskCoreAttenuation,
 } from "@shared/touch-profile-settings";
 import fse from "fs-extra";
 import { PNG } from "pngjs";
@@ -517,6 +518,10 @@ export function buildVertexMasks(
                   ),
               )
             : 1;
+        const coreAttenuation = resolveCoreAttenuation(
+            maskRadiusScale,
+            zone.settings.maskCoreAttenuation ?? "off",
+        );
 
         const seeds =
             zone.seedVertices && zone.seedVertices.length > 0
@@ -579,7 +584,8 @@ export function buildVertexMasks(
                 const t = nearest2 / seedInfluence2;
                 weight =
                     Math.pow(1 - t / seedCutoffD2, maskCurve) *
-                    (1 - smoothstep(seedCutoffD2 - seedEdgeFadeD2, seedCutoffD2, t));
+                    (1 - smoothstep(seedCutoffD2 - seedEdgeFadeD2, seedCutoffD2, t)) *
+                    coreAttenuation;
             } else {
                 const dx = (px - zone.center[0]) / (zone.radius[0] * maskRadiusScale);
                 const dy = (py - zone.center[1]) / (zone.radius[1] * maskRadiusScale);
@@ -1304,6 +1310,19 @@ function clampMasks(masks: Float32Array) {
 function smoothstep(edge0: number, edge1: number, value: number) {
     const normalized = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
     return normalized * normalized * (3 - 2 * normalized);
+}
+
+/**
+ * Core intensity multiplier for the Vision mask path when the area is shrunk.
+ * "off" keeps the core pinned at full intensity (legacy behavior); other modes
+ * scale the seed-proximal peak along the chosen curve. Expansion (scale >= 1)
+ * never boosts the core, which is already clamped at 1 by clampMasks.
+ */
+function resolveCoreAttenuation(maskRadiusScale: number, mode: TouchMaskCoreAttenuation): number {
+    if (mode === "off" || maskRadiusScale >= 1) return 1;
+    if (mode === "linear") return maskRadiusScale;
+    if (mode === "sqrt") return Math.sqrt(maskRadiusScale);
+    return Math.pow(maskRadiusScale, 0.4);
 }
 
 function computeBounds(positions: Float32Array, allowed: Uint8Array) {

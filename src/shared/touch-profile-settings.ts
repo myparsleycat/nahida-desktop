@@ -1,6 +1,9 @@
 export type TouchZoneStrengthPreset = "light" | "normal" | "strong";
 export type TouchPhysicsPreset = "soft" | "normal" | "firm" | "custom";
 
+/** How the core (seed-proximal) mask intensity attenuates when the area is shrunk. */
+export type TouchMaskCoreAttenuation = "off" | "linear" | "sqrt" | "pow";
+
 export type TouchProfileAdvancedSettings = {
     radius: number;
     strength: number;
@@ -17,6 +20,12 @@ export type TouchZoneSettings = {
     maskCurve: number;
     /** Radius multiplier applied to the generated vertex mask for this zone. */
     maskRadiusScale: number;
+    /**
+     * Core attenuation curve for the Vision mask path. When the area is shrunk
+     * (maskRadiusScale < 1), the core intensity scales along the chosen curve;
+     * "off" keeps the core pinned at full intensity (legacy behavior).
+     */
+    maskCoreAttenuation: TouchMaskCoreAttenuation;
     strengthPreset: TouchZoneStrengthPreset;
     physicsPreset: TouchPhysicsPreset;
     advanced: TouchProfileAdvancedSettings;
@@ -24,7 +33,7 @@ export type TouchZoneSettings = {
 
 export const TOUCH_PROFILE_MASK_STRENGTH_RANGE = { min: 0, max: 2, step: 0.05 } as const;
 export const TOUCH_PROFILE_MASK_CURVE_RANGE = { min: 0, max: 2, step: 0.05 } as const;
-export const TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE = { min: 0.5, max: 1.5, step: 0.1 } as const;
+export const TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE = { min: 0.1, max: 2, step: 0.1 } as const;
 
 export const TOUCH_PROFILE_SETTING_RANGES = {
     radius: { min: 0.02, max: 1, step: 0.01 },
@@ -78,6 +87,7 @@ export function createDefaultTouchZoneSettings(): TouchZoneSettings {
         maskStrength: 1,
         maskCurve: 1,
         maskRadiusScale: 1,
+        maskCoreAttenuation: "off",
         strengthPreset: "normal",
         physicsPreset: "normal",
         advanced: { ...DEFAULT_TOUCH_PROFILE_ADVANCED },

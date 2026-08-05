@@ -414,11 +414,11 @@ describe("touch asset helpers", () => {
         );
         const shrunkZone = {
             ...zone,
-            settings: { ...zone.settings, maskRadiusScale: 0.5 },
+            settings: { ...zone.settings, maskRadiusScale: 0.1 },
         };
         const expandedZone = {
             ...zone,
-            settings: { ...zone.settings, maskRadiusScale: 1.5 },
+            settings: { ...zone.settings, maskRadiusScale: 2 },
         };
         const shrunk = extractMaskChannel(
             buildVertexMasks(vertexCount, positions, indices, component, [shrunkZone]),
@@ -438,14 +438,56 @@ describe("touch asset helpers", () => {
         );
         const seededShrunk = extractMaskChannel(
             buildVertexMasks(vertexCount, positions, indices, component, [
-                { ...seededZone, settings: { ...zone.settings, maskRadiusScale: 0.5 } },
+                { ...seededZone, settings: { ...zone.settings, maskRadiusScale: 0.1 } },
             ]),
             vertexCount,
             zone.channel,
         );
         const seededExpanded = extractMaskChannel(
             buildVertexMasks(vertexCount, positions, indices, component, [
-                { ...seededZone, settings: { ...zone.settings, maskRadiusScale: 1.5 } },
+                { ...seededZone, settings: { ...zone.settings, maskRadiusScale: 2 } },
+            ]),
+            vertexCount,
+            zone.channel,
+        );
+        const seededLinearCore = extractMaskChannel(
+            buildVertexMasks(vertexCount, positions, indices, component, [
+                {
+                    ...seededZone,
+                    settings: {
+                        ...zone.settings,
+                        maskRadiusScale: 0.1,
+                        maskCoreAttenuation: "linear",
+                    },
+                },
+            ]),
+            vertexCount,
+            zone.channel,
+        );
+        const seededSqrtCore = extractMaskChannel(
+            buildVertexMasks(vertexCount, positions, indices, component, [
+                {
+                    ...seededZone,
+                    settings: {
+                        ...zone.settings,
+                        maskRadiusScale: 0.1,
+                        maskCoreAttenuation: "sqrt",
+                    },
+                },
+            ]),
+            vertexCount,
+            zone.channel,
+        );
+        const seededPowCore = extractMaskChannel(
+            buildVertexMasks(vertexCount, positions, indices, component, [
+                {
+                    ...seededZone,
+                    settings: {
+                        ...zone.settings,
+                        maskRadiusScale: 0.1,
+                        maskCoreAttenuation: "pow",
+                    },
+                },
             ]),
             vertexCount,
             zone.channel,
@@ -465,6 +507,24 @@ describe("touch asset helpers", () => {
             seededExpanded.reduce((sum, value) => sum + value, 0) >
                 seededBase.reduce((sum, value) => sum + value, 0),
         );
+        // Core attenuation ties the seed-proximal peak to the shrink factor.
+        // The fixture mesh is sparse, so smoothing dilutes the seed peak; compare
+        // neighborhood maxima instead of exact values. Seed 59 sits on the
+        // clipped side of the left_breast zone, so only the left seed matters.
+        const seedPeak = (weights: Float32Array, seed: number) =>
+            Math.max(weights[seed - 1]!, weights[seed]!, weights[seed + 1]!);
+        const basePeak = seedPeak(seededBase, 19);
+        const linearPeak = seedPeak(seededLinearCore, 19);
+        const sqrtPeak = seedPeak(seededSqrtCore, 19);
+        const powPeak = seedPeak(seededPowCore, 19);
+        assert.ok(basePeak > 0.9, `core must stay strong without attenuation: ${basePeak}`);
+        assert.ok(linearPeak < basePeak * 0.5, `linear core too strong: ${linearPeak}`);
+        assert.ok(sqrtPeak < basePeak * 0.6, `sqrt core too strong: ${sqrtPeak}`);
+        assert.ok(powPeak < basePeak * 0.7, `pow core too strong: ${powPeak}`);
+        assert.ok(linearPeak < sqrtPeak, `linear must attenuate more than sqrt`);
+        assert.ok(sqrtPeak < powPeak, `sqrt must attenuate more than pow`);
+        assert.ok(powPeak < basePeak, `pow must still attenuate the core`);
+        assert.ok(seedPeak(seededShrunk, 19) > linearPeak, `off must beat linear attenuation`);
         for (let vertex = 0; vertex < vertexCount; vertex++) {
             if (base[vertex] <= 1e-6) continue;
             assert.ok(Math.abs(halfStrength[vertex] - base[vertex] * 0.5) < 1e-5);
@@ -548,6 +608,13 @@ describe("touch zone settings", () => {
         assert.equal(
             normalizeTouchZoneSettings({
                 ...createDefaultTouchZoneSettings(),
+                maskRadiusScale: 2,
+            }).maskRadiusScale,
+            2,
+        );
+        assert.equal(
+            normalizeTouchZoneSettings({
+                ...createDefaultTouchZoneSettings(),
                 maskCurve: 0,
             }).maskCurve,
             0,
@@ -572,7 +639,7 @@ describe("touch zone settings", () => {
             () =>
                 normalizeTouchZoneSettings({
                     ...createDefaultTouchZoneSettings(),
-                    maskRadiusScale: 1.6,
+                    maskRadiusScale: 2.1,
                 }),
             /mask radius scale out of range/,
         );

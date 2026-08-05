@@ -25,7 +25,7 @@ import {
   ComboboxList,
   ComboboxValue,
 } from "@renderer/components/ui/combobox";
-import { Field, FieldLabel } from "@renderer/components/ui/field";
+import { Field, FieldDescription, FieldLabel } from "@renderer/components/ui/field";
 import { Input } from "@renderer/components/ui/input";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import {
@@ -57,6 +57,7 @@ import {
   TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE,
   TOUCH_PROFILE_MASK_STRENGTH_RANGE,
   TOUCH_PROFILE_SETTING_RANGES,
+  type TouchMaskCoreAttenuation,
   type TouchPhysicsPreset,
   type TouchProfileAdvancedSettings,
   type TouchZoneSettings,
@@ -81,6 +82,7 @@ const ALL_ZONES = "__all__";
 const DEFAULT_MASK_STRENGTH = 1;
 const DEFAULT_MASK_CURVE = 1;
 const DEFAULT_MASK_RADIUS_SCALE = 1;
+const DEFAULT_MASK_CORE_ATTENUATION = "off" as const;
 const BONE_WEIGHT_THRESHOLD_RANGE = { min: 0, max: 1, step: 0.005 } as const;
 const DEFAULT_BONE_WEIGHT_THRESHOLD = 0.01;
 const DEFAULT_BONE_WEIGHT_THRESHOLD_MAX = 1;
@@ -1716,6 +1718,50 @@ export default function TouchProfileTool({
                                 </div>
                               </div>
                               <Field className="mt-3">
+                                <FieldLabel>
+                                  {t("page.tools.touch_profile.mask_core_attenuation")}
+                                </FieldLabel>
+                                <Select
+                                  value={
+                                    zone.settings.maskCoreAttenuation ??
+                                    DEFAULT_MASK_CORE_ATTENUATION
+                                  }
+                                  onValueChange={(value) => {
+                                    if (isTouchMaskCoreAttenuation(value)) {
+                                      updateZoneSettings(
+                                        selectedComponent.componentId,
+                                        zone.id,
+                                        { ...zone.settings, maskCoreAttenuation: value },
+                                        { zoneIds: linkedZoneIds, refreshPreview: true },
+                                      );
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectGroup>
+                                      <SelectItem value="off">
+                                        {t("page.tools.touch_profile.mask_core_attenuation_off")}
+                                      </SelectItem>
+                                      <SelectItem value="linear">
+                                        {t("page.tools.touch_profile.mask_core_attenuation_linear")}
+                                      </SelectItem>
+                                      <SelectItem value="sqrt">
+                                        {t("page.tools.touch_profile.mask_core_attenuation_sqrt")}
+                                      </SelectItem>
+                                      <SelectItem value="pow">
+                                        {t("page.tools.touch_profile.mask_core_attenuation_pow")}
+                                      </SelectItem>
+                                    </SelectGroup>
+                                  </SelectContent>
+                                </Select>
+                                <FieldDescription>
+                                  {t("page.tools.touch_profile.mask_core_attenuation_hint")}
+                                </FieldDescription>
+                              </Field>
+                              <Field className="mt-3">
                                 <div className="flex items-center justify-between gap-2">
                                   <FieldLabel>
                                     {t("page.tools.touch_profile.mask_strength")}
@@ -1980,6 +2026,10 @@ function isTouchPhysicsPreset(value: string): value is Exclude<TouchPhysicsPrese
   return value === "soft" || value === "normal" || value === "firm";
 }
 
+function isTouchMaskCoreAttenuation(value: string | null): value is TouchMaskCoreAttenuation {
+  return value === "off" || value === "linear" || value === "sqrt" || value === "pow";
+}
+
 function createPresetSettings(
   preset: Exclude<TouchPhysicsPreset, "custom">,
   strengthPreset: TouchZoneStrengthPreset,
@@ -1991,6 +2041,7 @@ function createPresetSettings(
     maskStrength,
     maskCurve,
     maskRadiusScale,
+    maskCoreAttenuation: "off",
     strengthPreset,
     physicsPreset: preset,
     advanced: { ...TOUCH_PHYSICS_PRESETS[preset] },

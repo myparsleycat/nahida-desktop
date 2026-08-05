@@ -5,6 +5,7 @@ import {
     TOUCH_PROFILE_SETTING_RANGES,
     TOUCH_ZONE_STRENGTH_MULTIPLIERS,
     type TouchProfileAdvancedSettings,
+    type TouchMaskCoreAttenuation,
     type TouchZoneSettings,
     type TouchZoneStrengthPreset,
 } from "@shared/touch-profile-settings";
@@ -59,6 +60,13 @@ export function normalizeTouchZoneSettings(input: unknown): TouchZoneSettings {
         throw new Error("Touch mask radius scale out of range");
     }
 
+    const maskCoreAttenuation = input.maskCoreAttenuation ?? "off";
+    if (!isTouchMaskCoreAttenuation(maskCoreAttenuation)) {
+        throw new Error(
+            `Invalid touch mask core attenuation: ${JSON.stringify(maskCoreAttenuation)}`,
+        );
+    }
+
     if (!isRecord(input.advanced)) {
         throw new Error("Touch advanced settings must be an object");
     }
@@ -79,7 +87,15 @@ export function normalizeTouchZoneSettings(input: unknown): TouchZoneSettings {
         }),
     ) as unknown as TouchProfileAdvancedSettings;
 
-    return { maskStrength, maskCurve, maskRadiusScale, strengthPreset, physicsPreset, advanced };
+    return {
+        maskStrength,
+        maskCurve,
+        maskRadiusScale,
+        maskCoreAttenuation,
+        strengthPreset,
+        physicsPreset,
+        advanced,
+    };
 }
 
 export function resolveTouchJiggleParams(settings: TouchZoneSettings, objectId: number) {
@@ -110,4 +126,8 @@ function isTouchZoneStrengthPreset(value: unknown): value is TouchZoneStrengthPr
 
 function isTouchPhysicsPreset(value: unknown): value is "soft" | "normal" | "firm" | "custom" {
     return value === "soft" || value === "normal" || value === "firm" || value === "custom";
+}
+
+function isTouchMaskCoreAttenuation(value: unknown): value is TouchMaskCoreAttenuation {
+    return value === "off" || value === "linear" || value === "sqrt" || value === "pow";
 }
