@@ -4,7 +4,7 @@ import { Input } from "@renderer/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@renderer/components/ui/popover";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { InfoIcon, Pencil, Save, X } from "lucide-react";
+import { InfoIcon, Pencil, Save, SearchIcon, X } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -21,6 +21,7 @@ interface SettingItem {
 function RouteComponent() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const [searchQuery, setSearchQuery] = useState("");
   const { data: settings, isLoading } = useQuery<SettingItem[]>({
     queryKey: ["settings", "advanced"],
     queryFn: async () => {
@@ -41,6 +42,10 @@ function RouteComponent() {
     },
   });
 
+  const filteredSettings = settings?.filter((setting) =>
+    setting.key.toLocaleLowerCase().includes(searchQuery.trim().toLocaleLowerCase()),
+  );
+
   if (isLoading) {
     return <div className="p-4">Loading...</div>;
   }
@@ -53,6 +58,16 @@ function RouteComponent() {
         <AlertDescription>{t("page.setting.adv.warning_description")}</AlertDescription>
       </Alert>
 
+      <div className="relative">
+        <SearchIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-muted-foreground" />
+        <Input
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder={t("page.setting.adv.search_placeholder")}
+          className="pl-9"
+        />
+      </div>
+
       <div className="overflow-hidden rounded-md border text-[13px]">
         <div className="grid grid-cols-[minmax(150px,1fr)_minmax(200px,3fr)_80px] border-b bg-muted/50 font-medium text-muted-foreground">
           <div className="p-3 tracking-wider uppercase">Key</div>
@@ -60,7 +75,7 @@ function RouteComponent() {
           <div className="p-3 text-center tracking-wider uppercase">Action</div>
         </div>
         <div className="grid grid-cols-[minmax(150px,1fr)_minmax(200px,3fr)_80px]">
-          {settings?.map((setting) => (
+          {filteredSettings?.map((setting) => (
             <SettingRow
               key={setting.key}
               setting={setting}
@@ -69,6 +84,11 @@ function RouteComponent() {
           ))}
         </div>
       </div>
+      {filteredSettings?.length === 0 && (
+        <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+          {t("page.setting.adv.no_results")}
+        </div>
+      )}
     </div>
   );
 }

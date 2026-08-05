@@ -583,6 +583,8 @@
       "category_panel_description_nested": "Browse subcategories in the current category.",
       "category_panel_description_selected": "Browse subcategories in \"{{name}}\".",
       "no_categories": "There are no categories to display.",
+      "search_categories": "Search categories...",
+      "no_category_results": "No matching categories found.",
       "stage": {
         "game": "Game",
         "category": "Category",
@@ -612,6 +614,12 @@
         "views": "Views",
         "downloads": "Downloads"
       },
+      "like": "Like",
+      "liked": "Liked",
+      "unlike": "Unlike",
+      "like_unavailable": "Like is unavailable for this mod.",
+      "like_failed": "Failed to update the like.",
+      "download_failed": "GameBanana download failed.",
       "top_submissions": "Top Submissions",
       "latest_feed": "Latest Feed",
       "latest_feed_description": "Recent submissions for the selected game.",
@@ -1490,7 +1498,9 @@
       "adv": {
         "title": "Advanced",
         "warning_title": "Caution",
-        "warning_description": "Changing settings here may affect app behavior."
+        "warning_description": "Changing settings here may affect app behavior.",
+        "search_placeholder": "Search setting keys...",
+        "no_results": "No matching setting keys found."
       }
     },
     "docs": {

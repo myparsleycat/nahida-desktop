@@ -560,6 +560,8 @@
       "category_panel_description_nested": "浏览当前分类下的子分类。",
       "category_panel_description_selected": "浏览“{{name}}”下的子分类。",
       "no_categories": "没有可显示的分类。",
+      "search_categories": "搜索分类...",
+      "no_category_results": "没有匹配的分类。",
       "stage": {
         "game": "游戏",
         "category": "分类",
@@ -589,6 +591,12 @@
         "views": "浏览量",
         "downloads": "下载量"
       },
+      "like": "点赞",
+      "liked": "已点赞",
+      "unlike": "取消点赞",
+      "like_unavailable": "此模组无法点赞。",
+      "like_failed": "更新点赞状态失败。",
+      "download_failed": "GameBanana 下载失败。",
       "top_submissions": "热门投稿",
       "latest_feed": "最新动态",
       "latest_feed_description": "所选游戏的最新投稿。",
@@ -1416,7 +1424,9 @@
       "adv": {
         "title": "高级设置",
         "warning_title": "注意",
-        "warning_description": "更改此处的设置可能会影响应用行为。"
+        "warning_description": "更改此处的设置可能会影响应用行为。",
+        "search_placeholder": "搜索设置键...",
+        "no_results": "没有匹配的设置键。"
       },
       "transfer": {
         "title": "传输",
