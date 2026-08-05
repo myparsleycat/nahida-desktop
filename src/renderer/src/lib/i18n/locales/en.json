@@ -988,7 +988,6 @@
       },
       "touch_profile": {
         "title": "Touch Profile",
-        "description": "Convert a non-touch 3DMigoto mod into an enabled Touch variant using mesh analysis and optional Vision LLM. The source mod is disabled.",
         "mod_path": "Mod folder",
         "mod_path_placeholder": "Mod folder_PH",
         "use_vision": "Use Vision LLM",

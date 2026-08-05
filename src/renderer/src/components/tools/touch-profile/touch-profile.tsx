@@ -907,11 +907,7 @@ export default function TouchProfileTool({
             </div>
             {modName ? (
               <div className="truncate text-xs text-muted-foreground">{modName}</div>
-            ) : (
-              <div className="mt-1 text-xs text-muted-foreground">
-                {t("page.tools.touch_profile.description")}
-              </div>
-            )}
+            ) : null}
           </div>
 
           <ScrollArea className="min-h-0 flex-1">

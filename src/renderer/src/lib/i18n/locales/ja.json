@@ -955,7 +955,6 @@
       },
       "touch_profile": {
         "title": "タッチプロファイル",
-        "description": "non-touch の 3DMigoto モードをメッシュ解析と Vision LLM で Touch 版（有効）に変換します。元の Mod は無効化されます。",
         "mod_path": "Mod フォルダ",
         "mod_path_placeholder": "Mod フォルダ_PH",
         "use_vision": "Vision LLM を使用",

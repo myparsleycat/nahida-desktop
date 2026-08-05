@@ -974,7 +974,6 @@
       },
       "touch_profile": {
         "title": "터치 프로필",
-        "description": "non-touch 3DMigoto 모드를 메시 분석과 Vision LLM으로 Touch 변형(활성)으로 변환합니다. 원본 모드는 비활성화됩니다.",
         "mod_path": "모드 폴더",
         "mod_path_placeholder": "모드 폴더_PH",
         "use_vision": "Vision LLM 사용",

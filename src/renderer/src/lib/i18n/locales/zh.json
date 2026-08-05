@@ -954,7 +954,6 @@
       },
       "touch_profile": {
         "title": "触摸配置",
-        "description": "通过网格分析与 Vision LLM，将 non-touch 3DMigoto 模组转换为启用的 Touch 版本。源模组会被禁用。",
         "mod_path": "模组文件夹",
         "mod_path_placeholder": "模组文件夹_PH",
         "use_vision": "使用 Vision LLM",
