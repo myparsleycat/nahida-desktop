@@ -33,7 +33,11 @@ import {
     writeTouchComponentAssets,
     type TouchGeneratedAssets,
 } from "./touch-profile-assets";
-import { analyzeComponentWithBones, DEFAULT_BONE_WEIGHT_THRESHOLD } from "./touch-profile-bone";
+import {
+    analyzeComponentWithBones,
+    DEFAULT_BONE_WEIGHT_THRESHOLD,
+    DEFAULT_BONE_WEIGHT_THRESHOLD_MAX,
+} from "./touch-profile-bone";
 import { assertTouchProfileInputAllowed } from "./touch-profile-detection";
 import { compileTouchIni } from "./touch-profile-ini";
 import { normalizeTouchZoneSettings } from "./touch-profile-settings";
@@ -313,7 +317,10 @@ export class TouchProfileService {
             const boneSelectionsByComponent = new Map(
                 (input.boneSelections ?? []).map((entry) => [entry.componentId, entry.zones]),
             );
-            const weightThreshold = input.weightThreshold ?? DEFAULT_BONE_WEIGHT_THRESHOLD;
+            const weightThreshold = input.weightThreshold ?? [
+                DEFAULT_BONE_WEIGHT_THRESHOLD,
+                DEFAULT_BONE_WEIGHT_THRESHOLD_MAX,
+            ];
 
             const results = await Promise.allSettled(
                 selectedComponents.map((component, index) =>

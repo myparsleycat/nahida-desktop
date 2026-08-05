@@ -1079,7 +1079,7 @@
         "add_bone_zone": "ボーンゾーン追加",
         "remove_bone_zone": "ボーンゾーン削除",
         "weight_threshold": "ウェイト閾値",
-        "weight_threshold_hint": "この値以上のウェイトを持つ頂点がタッチゾーンに含まれます。",
+        "weight_threshold_hint": "この範囲内のウェイトを持つ頂点がタッチゾーンに含まれます。",
         "zone_label_placeholder": "ラベル（任意）",
         "no_blend": "Blendなし",
         "no_blend_hint": "このメッシュにはBlendバッファがないため、ボーン/ウェイト方式を使用できません。",

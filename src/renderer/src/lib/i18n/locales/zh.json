@@ -1077,7 +1077,7 @@
         "add_bone_zone": "添加骨骼区域",
         "remove_bone_zone": "删除骨骼区域",
         "weight_threshold": "权重阈值",
-        "weight_threshold_hint": "权重高于此值的顶点将被包含在触摸区域中。",
+        "weight_threshold_hint": "权重在此范围内的顶点将被包含在触摸区域中。",
         "zone_label_placeholder": "标签（可选）",
         "no_blend": "无 Blend",
         "no_blend_hint": "此网格没有 Blend 缓冲区，无法使用骨骼/权重方式。",

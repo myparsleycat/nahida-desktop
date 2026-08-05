@@ -81,8 +81,9 @@ const ALL_ZONES = "__all__";
 const DEFAULT_MASK_STRENGTH = 1;
 const DEFAULT_MASK_CURVE = 1;
 const DEFAULT_MASK_RADIUS_SCALE = 1;
-const BONE_WEIGHT_THRESHOLD_RANGE = { min: 0.005, max: 0.5, step: 0.005 } as const;
+const BONE_WEIGHT_THRESHOLD_RANGE = { min: 0, max: 1, step: 0.005 } as const;
 const DEFAULT_BONE_WEIGHT_THRESHOLD = 0.01;
+const DEFAULT_BONE_WEIGHT_THRESHOLD_MAX = 1;
 const TOUCH_ZONE_CHANNEL_COUNT = 12;
 const CHANNEL_LABELS = [
   "L Breast",
@@ -170,7 +171,10 @@ export default function TouchProfileTool({
   const [inputError, setInputError] = useState<TouchProfileInputError | null>(null);
   // vision-llm disabled — analysisMode fixed to bone
   const analysisMode = "bone" as const;
-  const [weightThreshold, setWeightThreshold] = useState(DEFAULT_BONE_WEIGHT_THRESHOLD);
+  const [weightThreshold, setWeightThreshold] = useState<[number, number]>([
+    DEFAULT_BONE_WEIGHT_THRESHOLD,
+    DEFAULT_BONE_WEIGHT_THRESHOLD_MAX,
+  ]);
   const [boneZoneAssignments, setBoneZoneAssignments] = useState<
     Record<string, TouchBoneZoneSelection[]>
   >({});
@@ -487,6 +491,9 @@ export default function TouchProfileTool({
       meshPreview.vertexCount,
       meshPreview.blendStride,
     );
+    for (let i = 0; i < weights.length; i++) {
+      if (weights[i] < weightThreshold[0] || weights[i] > weightThreshold[1]) weights[i] = 0;
+    }
     const boundsCenter = computeBoundingCenter(meshPreview.positions);
     const regions: ActiveRegionDeform[] = [
       {
@@ -1084,18 +1091,15 @@ export default function TouchProfileTool({
                         <FieldLabel>{t("page.tools.touch_profile.weight_threshold")}</FieldLabel>
                         <div className="mt-1 flex items-center gap-3">
                           <Slider
-                            value={[weightThreshold]}
+                            value={weightThreshold}
                             min={BONE_WEIGHT_THRESHOLD_RANGE.min}
                             max={BONE_WEIGHT_THRESHOLD_RANGE.max}
                             step={BONE_WEIGHT_THRESHOLD_RANGE.step}
-                            onValueChange={(values) => {
-                              const v = Array.isArray(values) ? values[0] : values;
-                              if (typeof v === "number") setWeightThreshold(v);
-                            }}
+                            onValueChange={(values) => setWeightThreshold([values[0], values[1]])}
                             className="flex-1"
                           />
-                          <span className="w-14 text-right text-xs tabular-nums">
-                            {weightThreshold.toFixed(3)}
+                          <span className="w-20 text-right text-xs tabular-nums">
+                            {weightThreshold[0].toFixed(3)} ~ {weightThreshold[1].toFixed(3)}
                           </span>
                         </div>
                         <div className="mt-1 text-xs text-muted-foreground">

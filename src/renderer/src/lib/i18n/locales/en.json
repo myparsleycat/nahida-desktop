@@ -1111,7 +1111,7 @@
         "add_bone_zone": "Add bone zone",
         "remove_bone_zone": "Remove bone zone",
         "weight_threshold": "Weight threshold",
-        "weight_threshold_hint": "Vertices with weight above this value are included in the touch zone.",
+        "weight_threshold_hint": "Vertices with weight within this range are included in the touch zone.",
         "zone_label_placeholder": "Label (optional)",
         "no_blend": "No Blend",
         "no_blend_hint": "This mesh has no Blend buffer; bone/weight mode is unavailable.",

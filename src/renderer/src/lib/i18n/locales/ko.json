@@ -1097,7 +1097,7 @@
         "add_bone_zone": "본 영역 추가",
         "remove_bone_zone": "본 영역 삭제",
         "weight_threshold": "가중치 임계값",
-        "weight_threshold_hint": "이 값 이상의 가중치를 가진 정점이 터치 영역에 포함됩니다.",
+        "weight_threshold_hint": "이 범위 안의 가중치를 가진 정점이 터치 영역에 포함됩니다.",
         "zone_label_placeholder": "라벨 (선택)",
         "no_blend": "Blend 없음",
         "no_blend_hint": "이 메시에는 Blend 버퍼가 없어 본/가중치 방식을 사용할 수 없습니다.",

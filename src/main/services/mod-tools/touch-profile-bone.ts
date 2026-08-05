@@ -9,7 +9,8 @@ import type {
 } from "./touch-profile-types";
 
 export const DEFAULT_BONE_WEIGHT_THRESHOLD = 0.01;
-export const BONE_WEIGHT_THRESHOLD_RANGE = { min: 0.005, max: 0.5, step: 0.005 } as const;
+export const DEFAULT_BONE_WEIGHT_THRESHOLD_MAX = 1;
+export const BONE_WEIGHT_THRESHOLD_RANGE = { min: 0, max: 1, step: 0.005 } as const;
 
 export type BoneAnalysisInput = {
     component: TouchComponentAnalysis;
@@ -19,7 +20,7 @@ export type BoneAnalysisInput = {
     blendStride: number;
     bones: BlendBoneInfo[];
     selections: TouchBoneZoneSelection[];
-    weightThreshold: number;
+    weightThreshold: [number, number];
     objectId: number;
 };
 
@@ -63,13 +64,18 @@ export function analyzeComponentWithBones(input: BoneAnalysisInput): TouchCompon
         );
         const seedVertices: number[] = [];
         for (let vertex = 0; vertex < vertexCount; vertex++) {
-            if (boneWeights[vertex] >= weightThreshold) seedVertices.push(vertex);
+            if (
+                boneWeights[vertex] > 0 &&
+                boneWeights[vertex] >= weightThreshold[0] &&
+                boneWeights[vertex] <= weightThreshold[1]
+            )
+                seedVertices.push(vertex);
         }
 
         const minSelected = Math.min(12, Math.max(3, Math.floor(vertexCount * 0.01)));
         if (seedVertices.length < minSelected) {
             warnings.push(
-                `Bone ${selection.boneId}: only ${seedVertices.length} vertices above threshold ${weightThreshold} (need ${minSelected})`,
+                `Bone ${selection.boneId}: only ${seedVertices.length} vertices within threshold ${weightThreshold[0]}-${weightThreshold[1]} (need ${minSelected})`,
             );
             continue;
         }

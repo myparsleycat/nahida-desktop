@@ -65,7 +65,7 @@ export type TouchProfileAnalyzeComponentsInput = {
     componentIds: string[];
     mode?: "vision" | "bone";
     boneSelections?: TouchBoneComponentSelection[];
-    weightThreshold?: number;
+    weightThreshold?: [number, number];
 };
 
 export type TouchProfilePreviewZone = TouchProfileZoneMetadata & {

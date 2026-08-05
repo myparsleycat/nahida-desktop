@@ -46,6 +46,26 @@ function makeBlendBytesWWMI(vertexCount: number, boneAssignments: number[][]): U
     return bytes;
 }
 
+function makeBlendBytesWithWeights(
+    vertexCount: number,
+    boneWeights: [number, number][][],
+): Uint8Array {
+    const stride = 16;
+    const bytes = new Uint8Array(vertexCount * stride);
+    for (let vertex = 0; vertex < vertexCount; vertex++) {
+        const base = vertex * stride;
+        const influences = boneWeights[vertex] ?? [];
+        for (let k = 0; k < 4; k++) {
+            const influence = influences[k];
+            if (influence !== undefined) {
+                bytes[base + k] = influence[0];
+                bytes[base + 8 + k] = influence[1];
+            }
+        }
+    }
+    return bytes;
+}
+
 describe("analyzeComponentWithBones", () => {
     it("produces interactive draft with seed vertices from bone weights", () => {
         const vertexCount = 300;
@@ -72,7 +92,7 @@ describe("analyzeComponentWithBones", () => {
                 { id: 3, vertexCount: 100 },
             ],
             selections: [{ boneId: 5, channel: 0, label: "Test" }],
-            weightThreshold: 0.01,
+            weightThreshold: [0.01, 1],
             objectId: 1,
         });
 
@@ -95,7 +115,7 @@ describe("analyzeComponentWithBones", () => {
             blendStride: 0,
             bones: [],
             selections: [{ boneId: 0, channel: 0 }],
-            weightThreshold: 0.01,
+            weightThreshold: [0.01, 1],
             objectId: 1,
         });
 
@@ -118,7 +138,7 @@ describe("analyzeComponentWithBones", () => {
             blendStride: 16,
             bones: [{ id: 5, vertexCount: 300 }],
             selections: [],
-            weightThreshold: 0.01,
+            weightThreshold: [0.01, 1],
             objectId: 1,
         });
 
@@ -130,9 +150,7 @@ describe("analyzeComponentWithBones", () => {
         const vertexCount = 600;
         const component = makeComponent(vertexCount);
         const positions = new Float32Array(vertexCount * 3);
-        const boneAssignments = Array.from({ length: vertexCount }, (_, i) =>
-            i < 5 ? [5] : [3],
-        );
+        const boneAssignments = Array.from({ length: vertexCount }, (_, i) => (i < 5 ? [5] : [3]));
         const blendBytes = makeBlendBytesWWMI(vertexCount, boneAssignments);
 
         const result = analyzeComponentWithBones({
@@ -146,7 +164,7 @@ describe("analyzeComponentWithBones", () => {
                 { id: 3, vertexCount: 295 },
             ],
             selections: [{ boneId: 5, channel: 0 }],
-            weightThreshold: 0.01,
+            weightThreshold: [0.01, 1],
             objectId: 1,
         });
 
@@ -177,7 +195,7 @@ describe("analyzeComponentWithBones", () => {
             blendStride: 16,
             bones: [{ id: 1, vertexCount: vertexCount }],
             selections: [{ boneId: 1, channel: 2 }],
-            weightThreshold: 0.01,
+            weightThreshold: [0.01, 1],
             objectId: 1,
         });
 
@@ -193,6 +211,83 @@ describe("analyzeComponentWithBones", () => {
         assert.ok(zone.radius[2] > 0);
     });
 
+    it("selects only vertices whose weight is within the threshold range", () => {
+        const vertexCount = 300;
+        const component = makeComponent(vertexCount);
+        const positions = new Float32Array(vertexCount * 3);
+        const boneWeights: [number, number][][] = Array.from({ length: vertexCount }, (_, i) =>
+            i < 100 ? [[5, 64]] : i < 200 ? [[5, 128]] : [[5, 255]],
+        );
+        const blendBytes = makeBlendBytesWithWeights(vertexCount, boneWeights);
+
+        const result = analyzeComponentWithBones({
+            component,
+            positions,
+            indices: new Uint32Array(),
+            blendBytes,
+            blendStride: 16,
+            bones: [{ id: 5, vertexCount }],
+            selections: [{ boneId: 5, channel: 0 }],
+            weightThreshold: [0.3, 0.9],
+            objectId: 1,
+        });
+
+        assert.equal(result.interactive, true);
+        assert.equal(result.zones.length, 1);
+        assert.equal(result.zones[0].seedVertices?.length, 100);
+        assert.equal(result.zones[0].seedVertices?.[0], 100);
+    });
+
+    it("returns non-interactive when no vertices are within the threshold range", () => {
+        const vertexCount = 300;
+        const component = makeComponent(vertexCount);
+        const positions = new Float32Array(vertexCount * 3);
+        const boneWeights: [number, number][][] = Array.from({ length: vertexCount }, () => [
+            [5, 64],
+        ]);
+        const blendBytes = makeBlendBytesWithWeights(vertexCount, boneWeights);
+
+        const result = analyzeComponentWithBones({
+            component,
+            positions,
+            indices: new Uint32Array(),
+            blendBytes,
+            blendStride: 16,
+            bones: [{ id: 5, vertexCount }],
+            selections: [{ boneId: 5, channel: 0 }],
+            weightThreshold: [0.9, 1],
+            objectId: 1,
+        });
+
+        assert.equal(result.interactive, false);
+        assert.equal(result.zones.length, 0);
+        assert.ok(result.warnings.some((w) => w.includes("within threshold")));
+    });
+
+    it("excludes unassigned vertices when the lower bound is 0", () => {
+        const vertexCount = 300;
+        const component = makeComponent(vertexCount);
+        const positions = new Float32Array(vertexCount * 3);
+        const boneAssignments = Array.from({ length: vertexCount }, (_, i) => (i < 200 ? [5] : []));
+        const blendBytes = makeBlendBytesWWMI(vertexCount, boneAssignments);
+
+        const result = analyzeComponentWithBones({
+            component,
+            positions,
+            indices: new Uint32Array(),
+            blendBytes,
+            blendStride: 16,
+            bones: [{ id: 5, vertexCount: 200 }],
+            selections: [{ boneId: 5, channel: 0 }],
+            weightThreshold: [0, 1],
+            objectId: 1,
+        });
+
+        assert.equal(result.interactive, true);
+        assert.equal(result.zones.length, 1);
+        assert.equal(result.zones[0].seedVertices?.length, 200);
+    });
+
     it("returns non-interactive for grade C components", () => {
         const component = { ...makeComponent(300), supportGrade: "C" as const };
         const result = analyzeComponentWithBones({
@@ -206,7 +301,7 @@ describe("analyzeComponentWithBones", () => {
             blendStride: 16,
             bones: [{ id: 1, vertexCount: 300 }],
             selections: [{ boneId: 1, channel: 0 }],
-            weightThreshold: 0.01,
+            weightThreshold: [0.01, 1],
             objectId: 1,
         });
 
