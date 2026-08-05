@@ -209,11 +209,12 @@ export class TransferService {
         return transfer.completedFileUuids.size;
     }
 
-    public markFileFailed(pid: string) {
+    public markFileFailed(pid: string, error?: string) {
         const transfer = this.transfers.find((t) => t.pid === pid);
         if (!transfer) return;
 
         transfer.failedFiles = (transfer.failedFiles || 0) + 1;
+        if (error && !transfer.error) transfer.error = error;
         this.emitUpdate();
     }
 
