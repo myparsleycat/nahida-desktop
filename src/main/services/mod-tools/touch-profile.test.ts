@@ -1623,4 +1623,53 @@ describe("analyzeTouchMod", () => {
         assert.equal(body2.kind, "body");
         assert.equal(body2.interactiveCandidate, false);
     });
+
+    it("keeps the user-selected root as sourceRoot when the INI lives in a body subfolder", async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "touch-profile-subfolder-"));
+        const bodyRoot = path.join(root, "body");
+        const faceRoot = path.join(root, "face");
+        fs.mkdirSync(bodyRoot);
+        fs.mkdirSync(faceRoot);
+        for (const dir of [bodyRoot, faceRoot]) {
+            fs.writeFileSync(
+                path.join(dir, `${path.basename(dir)}.ini`),
+                [
+                    "[TextureOverridebodyBlend]",
+                    "vb0 = ResourcebodyPosition",
+                    "[TextureOverridebodyA]",
+                    "ib = ResourcebodyAIB",
+                    "drawindexed = 3, 0, 0",
+                    "[ResourcebodyPosition]",
+                    "type = Buffer",
+                    "stride = 40",
+                    "filename = bodyPosition.buf",
+                    "[ResourcebodyAIB]",
+                    "type = Buffer",
+                    "format = DXGI_FORMAT_R32_UINT",
+                    "filename = bodyA.ib",
+                ].join("\n"),
+                "utf8",
+            );
+            const bytes = Buffer.alloc(3 * 40);
+            for (let index = 0; index < 3; index++) {
+                bytes.writeFloatLE(index * 0.01, index * 40);
+                bytes.writeFloatLE(0.1, index * 40 + 4);
+                bytes.writeFloatLE(1.0, index * 40 + 8);
+            }
+            fs.writeFileSync(path.join(dir, "bodyPosition.buf"), bytes);
+            fs.writeFileSync(
+                path.join(dir, "bodyA.ib"),
+                Buffer.from(new Uint32Array([0, 1, 2]).buffer),
+            );
+        }
+
+        const analysis = await analyzeTouchMod(root);
+
+        assert.equal(analysis.sourceRoot, root);
+        assert.equal(path.resolve(analysis.modRoot), bodyRoot);
+        assert.equal(analysis.modRootRelativeToSource, "body");
+        assert.equal(path.resolve(analysis.sourceRoot, analysis.modRootRelativeToSource), bodyRoot);
+        assert.ok(analysis.components.length > 0);
+        fs.rmSync(root, { recursive: true, force: true });
+    });
 });

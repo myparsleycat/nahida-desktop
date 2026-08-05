@@ -115,7 +115,12 @@ export type TouchComponentAnalysis = {
 };
 
 export type TouchModAnalysis = {
+    /** Directory containing the resolved INI (may be a body/face subfolder). */
     modRoot: string;
+    /** Directory the user selected; used for output naming and source disabling. */
+    sourceRoot: string;
+    /** modRoot relative to sourceRoot; reapplies to the renamed source after disable. */
+    modRootRelativeToSource: string;
     iniPath: string;
     iniRelativePath: string;
     sourceFilesRelativePaths: string[];

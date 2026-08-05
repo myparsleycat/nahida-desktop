@@ -116,6 +116,8 @@ describe("TouchProfileService regeneration", () => {
         } satisfies TouchDraft["components"][number];
         const analysis = {
             modRoot: sourceRoot,
+            sourceRoot,
+            modRootRelativeToSource: ".",
             iniPath,
             iniRelativePath: "mod.ini",
             sourceFilesRelativePaths: ["mod.ini", "bodyPosition.buf", "bodyIndex.ib"],

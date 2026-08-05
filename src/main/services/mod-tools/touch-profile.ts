@@ -448,7 +448,7 @@ export class TouchProfileService {
             const draft: TouchDraft = {
                 sessionId: input.sessionId,
                 createdAt: new Date().toISOString(),
-                sourceModRoot: analysis.modRoot,
+                sourceModRoot: analysis.sourceRoot,
                 analysis,
                 components,
                 visionUsed,
@@ -1015,7 +1015,10 @@ export class TouchProfileService {
                     : "Patching touch INI",
         });
 
-        const sourceIniPath = resolveRelativePath(input.sourceRoot, draft.analysis.iniRelativePath);
+        const sourceIniPath = resolveRelativePath(
+            path.join(input.sourceRoot, draft.analysis.modRootRelativeToSource),
+            draft.analysis.iniRelativePath,
+        );
         const targetIniPath = rebasePath(sourceIniPath, input.sourceRoot, input.targetRoot);
         await compileTouchIni({
             sourceIniPath,
@@ -1201,24 +1204,25 @@ function rebaseTouchAnalysis(
     sourceRoot: string,
     targetRoot: string,
 ) {
+    const analysisRoot = path.join(sourceRoot, analysis.modRootRelativeToSource);
     return {
         ...analysis,
         modRoot: targetRoot,
         iniPath: rebasePath(
-            resolveRelativePath(sourceRoot, analysis.iniRelativePath),
+            resolveRelativePath(analysisRoot, analysis.iniRelativePath),
             sourceRoot,
             targetRoot,
         ),
         components: analysis.components.map((component) => ({
             ...component,
             positionPath: rebasePath(
-                resolveRelativePath(sourceRoot, component.positionRelativePath),
+                resolveRelativePath(analysisRoot, component.positionRelativePath),
                 sourceRoot,
                 targetRoot,
             ),
             indexPath: component.indexRelativePath
                 ? rebasePath(
-                      resolveRelativePath(sourceRoot, component.indexRelativePath),
+                      resolveRelativePath(analysisRoot, component.indexRelativePath),
                       sourceRoot,
                       targetRoot,
                   )
@@ -1236,20 +1240,21 @@ function assertTouchDraftCanApply(draft: TouchDraft, force = false) {
 }
 
 async function assertTouchSourceUnchanged(analysis: TouchDraft["analysis"], sourceRoot: string) {
+    const analysisRoot = path.join(sourceRoot, analysis.modRootRelativeToSource);
     const meshPaths = analysis.components.flatMap((component) => [
-        resolveRelativePath(sourceRoot, component.positionRelativePath),
+        resolveRelativePath(analysisRoot, component.positionRelativePath),
         ...(component.indexRelativePath
-            ? [resolveRelativePath(sourceRoot, component.indexRelativePath)]
+            ? [resolveRelativePath(analysisRoot, component.indexRelativePath)]
             : []),
     ]);
     const sourcePaths = (
         analysis.sourceFilesRelativePaths?.length
             ? analysis.sourceFilesRelativePaths
             : [analysis.iniRelativePath]
-    ).map((relativePath) => resolveRelativePath(sourceRoot, relativePath));
+    ).map((relativePath) => resolveRelativePath(analysisRoot, relativePath));
     const [meshHash, iniHash] = await Promise.all([
-        hashTouchFiles(meshPaths, sourceRoot),
-        hashTouchFiles(sourcePaths, sourceRoot),
+        hashTouchFiles(meshPaths, analysisRoot),
+        hashTouchFiles(sourcePaths, analysisRoot),
     ]);
 
     if (meshHash !== analysis.meshHash || iniHash !== analysis.iniHash) {

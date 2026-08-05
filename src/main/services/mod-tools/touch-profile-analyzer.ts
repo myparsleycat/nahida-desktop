@@ -241,6 +241,8 @@ export async function analyzeTouchMod(
 
     return {
         modRoot,
+        sourceRoot: resolved,
+        modRootRelativeToSource: path.relative(resolved, modRoot) || ".",
         iniPath,
         iniRelativePath: path.relative(modRoot, iniPath) || path.basename(iniPath),
         sourceFilesRelativePaths: sourcePaths.map((sourcePath) =>
