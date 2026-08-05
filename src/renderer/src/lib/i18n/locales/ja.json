@@ -562,6 +562,8 @@
       "category_panel_description_nested": "現在のカテゴリのサブカテゴリを探索します。",
       "category_panel_description_selected": "\"{{name}}\" のサブカテゴリを探索します。",
       "no_categories": "表示できるカテゴリがありません。",
+      "search_categories": "カテゴリを検索...",
+      "no_category_results": "一致するカテゴリはありません。",
       "stage": {
         "game": "ゲーム",
         "category": "カテゴリ",
@@ -591,6 +593,12 @@
         "views": "閲覧数",
         "downloads": "ダウンロード"
       },
+      "like": "いいね",
+      "liked": "いいね済み",
+      "unlike": "いいねを取り消す",
+      "like_unavailable": "この MOD ではいいねを利用できません。",
+      "like_failed": "いいねの更新に失敗しました。",
+      "download_failed": "GameBanana のダウンロードに失敗しました。",
       "top_submissions": "注目投稿",
       "latest_feed": "最新フィード",
       "latest_feed_description": "選択したゲームの最近の投稿です。",
@@ -1412,7 +1420,9 @@
       "adv": {
         "title": "詳細設定",
         "warning_title": "注意",
-        "warning_description": "ここでの設定を変更すると、アプリの動作に影響を与える可能性があります。"
+        "warning_description": "ここでの設定を変更すると、アプリの動作に影響を与える可能性があります。",
+        "search_placeholder": "設定キーを検索...",
+        "no_results": "一致する設定キーはありません。"
       },
       "transfer": {
         "title": "転送",

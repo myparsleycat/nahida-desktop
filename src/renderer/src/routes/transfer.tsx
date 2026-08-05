@@ -71,8 +71,6 @@ function RouteComponent() {
   }, []);
 
   const transferItems: TransferItemProps[] = transfers.map((t) => {
-    const error = "error" in t ? t.error : undefined;
-
     return {
       id: t.pid,
       fileName: t.name,
@@ -87,7 +85,7 @@ function RouteComponent() {
       totalFiles: t.totalFiles,
       processedFiles: t.transferedFiles,
       failedFiles: t.failedFiles,
-      error: typeof error === "string" ? error : undefined,
+      error: t.error,
     };
   });
 

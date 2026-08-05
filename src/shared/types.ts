@@ -411,6 +411,7 @@ export interface Transfer {
     transferedFiles: number;
     failedFiles: number;
     path?: string;
+    error?: string;
 }
 
 export type TransferWithoutData = Omit<Transfer, "data">;

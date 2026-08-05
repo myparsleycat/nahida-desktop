@@ -17,12 +17,14 @@ import {
   type GameBananaModPostsSort,
   type GameBananaSubmissionSelection,
 } from "@renderer/hooks/use-gamebanana-data";
+import { Logger } from "@renderer/lib/logger";
 import { cn } from "@renderer/lib/utils";
 import DOMPurify from "dompurify";
 import type { TFunction } from "i18next";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
+  HeartIcon,
   ImageIcon,
   Loader2Icon,
   MessageSquareIcon,
@@ -30,6 +32,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { toast } from "sonner";
 
 import type { ModOverviewQuery } from "../-types";
 
@@ -240,11 +243,36 @@ export function ModDetailPanel({
   const hiddenPreviewCount = previews.length - (maxVisiblePreviews - 1);
   const [lightboxPreviewIndex, setLightboxPreviewIndex] = useState<number | null>(null);
   const [commentSort, setCommentSort] = useState<GameBananaModPostsSort>("popular");
+  const [isLikePending, setIsLikePending] = useState(false);
   const commentsQuery = useGameBananaModPosts(modId, modelName, 1, commentSort, Boolean(modId));
   const modErrorPresentation = getGameBananaErrorPresentation(modOverviewQuery.error, t);
   const commentsErrorPresentation = getGameBananaErrorPresentation(commentsQuery.error, t);
   const lightboxPreview =
     lightboxPreviewIndex === null ? null : (previews[lightboxPreviewIndex] ?? null);
+  const profile = modOverviewQuery.data?.profile;
+  const likeAccess = modOverviewQuery.data?.config._aAccess;
+  const isLiked = profile?._bAccessorHasLiked ?? likeAccess?.Like_Trash === true;
+  const canToggleLike = likeAccess?.Like_Add === true || likeAccess?.Like_Trash === true;
+
+  const handleLike = async () => {
+    if (!modId || !canToggleLike || isLikePending) return;
+
+    setIsLikePending(true);
+    try {
+      await window.api.invoke("gamebanana:toggleModLike", {
+        itemId: modId,
+        modelName,
+      });
+      await modOverviewQuery.refetch();
+    } catch (error) {
+      toast.error(t("page.gamebanana.like_failed"), {
+        description: String(error instanceof Error ? error.message : error),
+      });
+      Logger.error(error, "ModDetailPanel:handleLike");
+    } finally {
+      setIsLikePending(false);
+    }
+  };
 
   useEffect(() => {
     setLightboxPreviewIndex(null);
@@ -252,6 +280,10 @@ export function ModDetailPanel({
 
   useEffect(() => {
     setCommentSort("popular");
+  }, [modId, modelName]);
+
+  useEffect(() => {
+    setIsLikePending(false);
   }, [modId, modelName]);
 
   const comments = useMemo(() => {
@@ -314,8 +346,37 @@ export function ModDetailPanel({
                     </Badge>
                     <Badge variant="outline">{modOverviewQuery.data.profile._aGame._sName}</Badge>
                   </div>
-                  <div className="text-2xl font-semibold">
-                    {modOverviewQuery.data.profile._sName}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0 text-2xl font-semibold">
+                      {modOverviewQuery.data.profile._sName}
+                    </div>
+                    <Button
+                      type="button"
+                      variant={isLiked ? "default" : "outline"}
+                      size="sm"
+                      disabled={!canToggleLike || isLikePending}
+                      aria-pressed={isLiked}
+                      title={
+                        canToggleLike
+                          ? isLiked
+                            ? t("page.gamebanana.unlike")
+                            : t("page.gamebanana.like")
+                          : t("page.gamebanana.like_unavailable")
+                      }
+                      onClick={() => void handleLike()}
+                    >
+                      {isLikePending ? (
+                        <Loader2Icon className="size-4 animate-spin" />
+                      ) : (
+                        <HeartIcon className={cn("size-4", isLiked && "fill-current")} />
+                      )}
+                      <span>
+                        {formatNumber(modOverviewQuery.data.profile._nLikeCount ?? 0, language)}
+                      </span>
+                      <span className="sr-only">
+                        {isLiked ? t("page.gamebanana.liked") : t("page.gamebanana.like")}
+                      </span>
+                    </Button>
                   </div>
                 </div>
               ) : null}

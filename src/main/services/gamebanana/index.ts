@@ -942,6 +942,32 @@ export class GameBananaService {
         );
     }
 
+    public async toggleModLike({
+        itemId,
+        modelName = "Mod",
+    }: {
+        itemId: number;
+        modelName?: GameBananaSubmissionModel;
+    }) {
+        const profile =
+            this.getLastViewedModProfile(itemId, modelName) ??
+            (await this.getModProfile(itemId, modelName));
+        const wasLiked =
+            profile._bAccessorHasLiked ??
+            (await this.getModConfig(itemId, modelName))._aAccess?.Like_Trash === true;
+        const url = this.formatUrl(`${this.apiBaseUrl}/${modelName}/{}/Like`, itemId);
+
+        await this.request(url, {
+            method: wasLiked ? "DELETE" : "POST",
+            headers: {
+                Referer: this.getSubmissionReferer(modelName, itemId),
+            },
+        });
+
+        this.lastViewedModProfile = null;
+        return { liked: !wasLiked };
+    }
+
     public async getModPosts({
         modId,
         modelName = "Mod",

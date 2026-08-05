@@ -162,7 +162,15 @@ export function registerModHandlers(desktop: NahidaDesktop) {
     rh(
         "mod:downloadGameBananaFile",
         async (props: { itemId: number; fileId: number; modelName?: string }) => {
-            return await desktop.lib.customDownloader.GBDownloader(props);
+            try {
+                return await desktop.lib.customDownloader.GBDownloader(props);
+            } catch (error) {
+                desktop.logger.error(
+                    error,
+                    `Mod:downloadGameBananaFile:${props.modelName ?? "Mod"}:${props.itemId}:${props.fileId}`,
+                );
+                throw error;
+            }
         },
     );
 
