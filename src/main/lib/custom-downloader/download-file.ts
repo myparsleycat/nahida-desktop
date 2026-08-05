@@ -4,6 +4,7 @@ import type { ReadableStream } from "node:stream/web";
 
 import fse from "fs-extra";
 import ky from "ky";
+import type { Agent } from "undici";
 
 import type { BandwidthLimiter } from "../bandwidth-limiter";
 import type { ParallelDownloader } from "../parallel-downloader";
@@ -19,6 +20,7 @@ import {
 
 interface HttpServiceLike {
     getHeaders: (url: string) => Promise<Record<string, string>>;
+    getAgent: () => Promise<Agent>;
 }
 
 export async function downloadFile(props: {
@@ -96,8 +98,11 @@ export async function downloadFile(props: {
             const resp = await ky.get(url, {
                 signal: combinedSignal,
                 headers: await httpService.getHeaders(url),
+                // @ts-expect-error dispatcher is not in Ky's RequestInit type.
+                dispatcher: await httpService.getAgent(),
             });
             if (!resp.ok) {
+                await resp.body?.cancel().catch(() => {});
                 throw new Error(`Failed to download file: ${resp.statusText}`);
             }
             if (!resp.body) {

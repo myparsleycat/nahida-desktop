@@ -45,6 +45,7 @@ export class CustomDownloader {
         this.desktop = desktop;
         this.downloader = new ParallelDownloader({
             logger: desktop.logger,
+            getAgent: () => this.desktop.httpService.getAgent(),
             getHeaders: (url: string) => this.desktop.httpService.getHeaders(url),
         });
     }

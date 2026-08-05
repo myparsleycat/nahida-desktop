@@ -27,12 +27,17 @@ type DownloadTask = {
         file: DownloadMetadata["files"][number],
         targetPath: string,
         signal: AbortSignal,
+        options?: {
+            onResumeReset?: () => void;
+            resumeFrom?: number;
+        },
     ) => Promise<void>;
 };
 
 const desktop = {
     httpService: {
         getHeaders: vi.fn().mockResolvedValue({ Authorization: "Bearer token" }),
+        getAgent: vi.fn().mockResolvedValue({}),
     },
     logger: {
         error: vi.fn(),
@@ -56,7 +61,7 @@ const file: DownloadMetadata["files"][number] = {
     url: "https://example.test/file.bin",
 };
 
-describe("FileDownloadTask temporary file handling", () => {
+describe("FileDownloadTask range handling", () => {
     let tempDir: string;
 
     beforeEach(async () => {
@@ -68,21 +73,64 @@ describe("FileDownloadTask temporary file handling", () => {
         await rm(tempDir, { recursive: true, force: true });
     });
 
-    it("overwrites an existing temporary file without sending a Range header", async () => {
+    it("appends an existing temporary file when the server honors Range", async () => {
         const targetPath = path.join(tempDir, "file.bin.ntmp");
-        await writeFile(targetPath, "stale partial data");
-        mocks.request.mockResolvedValue(new Response("complete", { status: 200 }));
+        await writeFile(targetPath, "hello");
+        mocks.request.mockResolvedValue(new Response(" world", { status: 206 }));
 
         const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
-        await task.performDownload(file, targetPath, new AbortController().signal);
+        await task.performDownload(file, targetPath, new AbortController().signal, {
+            resumeFrom: 5,
+        });
 
-        expect(await readFile(targetPath, "utf8")).toBe("complete");
+        expect(await readFile(targetPath, "utf8")).toBe("hello world");
         expect(mocks.request).toHaveBeenCalledWith(
             file.url,
             expect.objectContaining({
-                headers: { Authorization: "Bearer token" },
+                headers: {
+                    Authorization: "Bearer token",
+                    Range: "bytes=5-",
+                },
             }),
         );
-        expect(mocks.request.mock.calls[0]?.[1]?.headers).not.toHaveProperty("Range");
+    });
+
+    it("restarts from the beginning when Range is ignored", async () => {
+        const targetPath = path.join(tempDir, "file.bin.ntmp");
+        await writeFile(targetPath, "stale partial data");
+        mocks.request.mockResolvedValue(new Response("complete", { status: 200 }));
+        const onResumeReset = vi.fn();
+
+        const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
+        await task.performDownload(file, targetPath, new AbortController().signal, {
+            onResumeReset,
+            resumeFrom: 5,
+        });
+
+        expect(await readFile(targetPath, "utf8")).toBe("complete");
+        expect(onResumeReset).toHaveBeenCalledOnce();
+    });
+
+    it("retries without Range after a 416 response", async () => {
+        const targetPath = path.join(tempDir, "file.bin.ntmp");
+        await writeFile(targetPath, "stale partial data");
+        mocks.request
+            .mockResolvedValueOnce(new Response(null, { status: 416 }))
+            .mockResolvedValueOnce(new Response("complete", { status: 200 }));
+        const onResumeReset = vi.fn();
+
+        const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
+        await task.performDownload(file, targetPath, new AbortController().signal, {
+            onResumeReset,
+            resumeFrom: 5,
+        });
+
+        expect(await readFile(targetPath, "utf8")).toBe("complete");
+        expect(onResumeReset).toHaveBeenCalledOnce();
+        expect(mocks.request).toHaveBeenNthCalledWith(
+            2,
+            file.url,
+            expect.objectContaining({ headers: { Authorization: "Bearer token" } }),
+        );
     });
 });

@@ -1,4 +1,5 @@
 import ky, { isNetworkError, isTimeoutError } from "ky";
+import { Agent, Pool } from "undici";
 
 import type { NahidaDesktop } from "../index";
 
@@ -13,10 +14,28 @@ function isUnreachableError(error: unknown) {
 }
 
 export class DesktopHttpService {
+    private cachedAgent: Agent | null = null;
+
     constructor(private readonly desktop: NahidaDesktop) {}
 
     private isNHD(url: string) {
         return NHD_PREFIXES.some((prefix) => url.startsWith(prefix));
+    }
+
+    public async getAgent() {
+        if (this.cachedAgent) {
+            return this.cachedAgent;
+        }
+
+        this.cachedAgent = new Agent({
+            factory: (origin, options: Pool.Options) =>
+                new Pool(origin, {
+                    ...options,
+                    allowH2: true,
+                }),
+        });
+
+        return this.cachedAgent;
     }
 
     public async getHeaders(url: string) {
@@ -44,6 +63,9 @@ export class DesktopHttpService {
                 retry: {
                     limit: 2,
                 },
+                // Use the patched userland Undici parser instead of Electron's bundled fetch.
+                // @ts-expect-error dispatcher is not in the RequestInit type definition.
+                dispatcher: await this.getAgent(),
                 hooks: {
                     afterResponse: [
                         async ({ response }) => {

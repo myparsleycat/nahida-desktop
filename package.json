@@ -73,6 +73,7 @@
     "ps-list": "^9.0.0",
     "rotating-file-stream": "^3.2.9",
     "sharp": "^0.35.3",
+    "undici": "^8.7.0",
     "valdex": "^1.0.4",
     "validator": "^13.15.35",
     "write-file-atomic": "^8.0.0",
