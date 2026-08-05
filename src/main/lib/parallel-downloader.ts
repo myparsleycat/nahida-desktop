@@ -1,4 +1,4 @@
-import { Readable, Transform } from "node:stream";
+import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 // oxlint-disable typescript/no-explicit-any
@@ -15,6 +15,7 @@ import {
     slowReconnectDelayMs,
     type SlowChunkMonitor,
 } from "./slow-chunk-monitor";
+import { webStreamToNodeReadable } from "./web-stream-to-readable";
 
 export interface ParallelDownloadOptions {
     url: string;
@@ -151,7 +152,7 @@ export class ParallelDownloader {
 
         const fileStream = fse.createWriteStream(chunkPath);
         let transferredBytes = 0;
-        const source = Readable.fromWeb(response.body as any);
+        const source = webStreamToNodeReadable(response.body, signal);
         const progressStream = new Transform({
             transform(chunk: Buffer, _encoding, callback) {
                 transferredBytes += chunk.byteLength;

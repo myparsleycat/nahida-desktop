@@ -1,8 +1,7 @@
 import { createWriteStream } from "node:fs";
 import path from "node:path";
-import { Readable, Transform } from "node:stream";
+import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import type { ReadableStream } from "node:stream/web";
 import { createGunzip, createZstdDecompress } from "node:zlib";
 
 import { eden } from "@main/client";
@@ -27,6 +26,7 @@ import {
     slowReconnectDelayMs,
     type SlowChunkTransferPhase,
 } from "./slow-chunk-monitor";
+import { webStreamToNodeReadable } from "./web-stream-to-readable";
 
 export type DownloadParams = {
     type: "download";
@@ -399,7 +399,7 @@ class FileDownloadTask {
         if (!response.body) throw new Error("No response body");
 
         const fileStream = createWriteStream(targetPath);
-        const source = Readable.fromWeb(response.body as unknown as ReadableStream);
+        const source = webStreamToNodeReadable(response.body, signal);
         const bandwidth = createBandwidthLimitTransform(
             this.desktop.service.transfer.downloadBandwidth,
             {
