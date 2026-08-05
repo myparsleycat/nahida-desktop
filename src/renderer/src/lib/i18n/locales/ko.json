@@ -971,6 +971,122 @@
           "cancelled": "취소됨"
         }
       },
+      "touch_profile": {
+        "title": "터치 프로필",
+        "description": "non-touch 3DMigoto 모드를 메시 분석과 Vision LLM으로 Touch 변형(활성)으로 변환합니다. 원본 모드는 비활성화됩니다.",
+        "mod_path": "모드 폴더",
+        "mod_path_placeholder": "모드 폴더_PH",
+        "use_vision": "Vision LLM 사용",
+        "vision_cache_clear_button": "캐시 비우기",
+        "analyze": "모드 분석",
+        "analyzing": "분석 중",
+        "reanalyze": "재분석 (다음 턴)",
+        "reanalyzing": "재분석 중...",
+        "turn_label": "분석 턴",
+        "turn_select": "턴 선택",
+        "turn_approved": "LLM 승인됨 (LGTM)",
+        "turn_pending": "피드백 권장",
+        "max_turn_reached": "최대 턴 수 도달",
+        "discard": "초안 폐기",
+        "create": "Touch 모드 생성",
+        "force_create": "강제 생성",
+        "regenerate": "옵션으로 재생성",
+        "open_folder": "폴더 열기",
+        "rollback": "롤백",
+        "rolling_back": "롤백 중",
+        "result": "생성된 Touch 모드",
+        "source": "원본 모드",
+        "support_grade": "지원 등급",
+        "auto_apply": "자동 적용 가능",
+        "interactive": "상호작용",
+        "confidence": "신뢰도",
+        "link_settings": "설정 연결",
+        "zones": "영역",
+        "vision_source": "Vision",
+        "manual_source": "수동",
+        "yes": "예",
+        "no": "아니오",
+        "stage": {
+          "scan": "스캔",
+          "preview": "프리뷰",
+          "vision": "Vision",
+          "assets": "에셋",
+          "ini": "INI",
+          "validate": "검증",
+          "complete": "완료"
+        },
+        "toast": {
+          "loaded": "Touch 초안 준비 완료",
+          "load_failed": "모드 분석 실패",
+          "created": "Touch 모드 생성 완료",
+          "create_failed": "Touch 모드 생성 실패",
+          "regenerated": "Touch 모드 재생성 완료",
+          "regenerate_failed": "Touch 모드 재생성 실패",
+          "rolled_back": "Touch 모드 롤백 완료",
+          "rollback_failed": "Touch 모드 롤백 실패",
+          "settings_save_failed": "터치 설정 저장 실패",
+          "reanalyzed": "LLM 재분석 완료 (턴 {{turn}})",
+          "reanalyze_failed": "LLM 재분석 실패",
+          "turn_selected": "턴 {{turn}} 선택됨",
+          "turn_select_failed": "턴 선택 실패",
+          "vision_cache_cleared": "Vision 캐시를 비웠습니다",
+          "vision_cache_clear_failed": "Vision 캐시 삭제 실패",
+          "no_components_selected": "분석할 메시를 하나 이상 선택하세요."
+        },
+        "input_error": {
+          "already_touch": {
+            "title": "이미 Touch 모드입니다",
+            "description": "이미 생성된 Touch 모드는 다시 변환할 수 없습니다. 원본 non-touch 모드를 선택하거나 기존 변환을 롤백한 뒤 다시 시도하세요."
+          },
+          "suspected_touch": {
+            "title": "Touch 모드로 추정됩니다",
+            "description": "기존 Touch 런타임이 감지되어 안전하게 변환할 수 없습니다. 원본 non-touch 모드를 선택하세요."
+          }
+        },
+        "skipped": "제외됨",
+        "preview_title": "터치 영향 영역 미리보기",
+        "mesh_select_title": "터치 분석 메시 선택",
+        "mesh_select_hint": "터치 존을 분석할 메시를 선택하세요. 목록에서 메시를 클릭하면 3D 프리뷰를 볼 수 있습니다.",
+        "mesh_select_count": "선택 {{selected}}/{{total}}",
+        "mesh_select_all": "모두 선택",
+        "mesh_select_candidates": "후보만",
+        "mesh_select_none": "모두 해제",
+        "mesh_next": "다음",
+        "mesh_back": "메시 선택으로 돌아가기",
+        "mesh_non_candidate": "후보 아님",
+        "llm_summary": "분석 LLM",
+        "component": "메시 구성 요소",
+        "component_placeholder": "구성 요소 선택",
+        "zone": "영향 영역",
+        "zone_placeholder": "영역 선택",
+        "all_zones": "모든 영역",
+        "preview_loading": "3D 프리뷰 준비 중",
+        "preview_empty": "프리뷰할 상호작용 메시가 없습니다.",
+        "preview_failed": "프리뷰를 불러오지 못했습니다",
+        "no_interactive_components": "상호작용 가능한 메시 구성 요소가 없습니다.",
+        "mask_strength": "Touch mask 강도",
+        "mask_strength_reset": "Touch mask 강도 초기화",
+        "mask_curve": "영향 분포",
+        "mask_curve_reset": "영향 분포 초기화",
+        "mask_curve_hint": "낮을수록 약한 영역을 평탄화하고, 높을수록 강한 중심 영역에 집중합니다.",
+        "touch_strength": "터치 강도",
+        "strength_light": "약함",
+        "strength_normal": "보통",
+        "strength_strong": "강함",
+        "physics_preset": "영역 물리",
+        "physics_soft": "부드러움",
+        "physics_normal": "보통",
+        "physics_firm": "탄탄함",
+        "physics_custom": "사용자 지정",
+        "advanced_title": "고급 설정",
+        "advanced_description": "선택한 영역의 물리 반응을 직접 조정합니다.",
+        "advanced_radius": "반경",
+        "advanced_strength": "강도",
+        "advanced_damping": "감쇠",
+        "advanced_spring": "복원력",
+        "advanced_max_offset": "최대 변위",
+        "advanced_falloff": "낙차"
+      },
       "body_shape": {
         "title": "체형 변경",
         "mod_path": "모드 폴더",
@@ -1078,7 +1194,51 @@
         "account": "계정",
         "advanced": "고급",
         "drive": "드라이브",
-        "transfer": "전송"
+        "transfer": "전송",
+        "tools": "도구"
+      },
+      "tools": {
+        "title": "도구",
+        "touch_profile": {
+          "title": "터치 프로필",
+          "llm": {
+            "title": "Vision LLM",
+            "description": "터치 영역 분석에 사용할 프로토콜과 모델을 설정합니다.",
+            "protocol": {
+              "title": "프로토콜",
+              "openai-response": "OpenAI Responses",
+              "openai-compatible": "OpenAI Compatible",
+              "anthropic": "Anthropic Messages"
+            },
+            "endpoint": {
+              "title": "API Base URL",
+              "description": "예: https://api.openai.com/v1"
+            },
+            "model": {
+              "title": "모델명"
+            },
+            "reasoning": {
+              "title": "추론 수준",
+              "auto": "자동",
+              "low": "낮음",
+              "medium": "중간",
+              "high": "높음"
+            },
+            "api_key": {
+              "title": "API 키",
+              "description": "키는 Windows 사용자 저장소에 암호화하여 저장합니다. 환경 변수도 사용할 수 있습니다.",
+              "configured": "저장된 API 키를 변경하려면 입력하세요",
+              "placeholder": "API 키 입력",
+              "save": "저장",
+              "clear": "삭제",
+              "api_key_saved": "API 키를 저장했습니다",
+              "api_key_cleared": "API 키를 삭제했습니다",
+              "api_key_save_failed": "API 키 저장 실패",
+              "api_key_clear_failed": "API 키 삭제 실패",
+              "api_key_load_failed": "API 키 상태를 불러오지 못했습니다"
+            }
+          }
+        }
       },
       "gen": {
         "application": {

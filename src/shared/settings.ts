@@ -6,6 +6,7 @@ import type {
     ModGridLayoutMode,
     SidebarLayoutMode,
 } from "./mod";
+import type { TouchProfileLlmProtocol, TouchProfileLlmReasoning } from "./touch-profile-llm";
 import type { AutoUpdateMode } from "./updater";
 
 export interface AppSettings {
@@ -37,6 +38,11 @@ export interface AppSettings {
     "mod.gridFixedColumnCount": number;
     "mod.disabledPrefixStyle": DisabledPrefixStyle;
 
+    "tools.touchProfileLlmProtocol": TouchProfileLlmProtocol;
+    "tools.touchProfileLlmEndpoint": string;
+    "tools.touchProfileLlmModel": string;
+    "tools.touchProfileLlmReasoning": TouchProfileLlmReasoning;
+
     "transfer.downloadConcurrency": number;
     "transfer.downloadBandwidthLimitMibps": number;
     "transfer.uploadConcurrency": number;
@@ -54,7 +60,14 @@ export interface AppSettings {
 
 export type SettingKey = keyof AppSettings;
 
-export type SettingScope = "general" | "mod" | "transfer" | "drive" | "modelViewer" | "xxmi";
+export type SettingScope =
+    | "general"
+    | "mod"
+    | "tools"
+    | "transfer"
+    | "drive"
+    | "modelViewer"
+    | "xxmi";
 
 export interface SettingDefinition<K extends SettingKey = SettingKey> {
     publicKey: K;
@@ -194,6 +207,27 @@ export const APP_SETTINGS = {
         publicKey: "mod.disabledPrefixStyle",
         scope: "mod",
         storageKey: "mod_disabled_prefix_style",
+    },
+
+    "tools.touchProfileLlmProtocol": {
+        publicKey: "tools.touchProfileLlmProtocol",
+        scope: "tools",
+        storageKey: "tools_touch_profile_llm_protocol",
+    },
+    "tools.touchProfileLlmEndpoint": {
+        publicKey: "tools.touchProfileLlmEndpoint",
+        scope: "tools",
+        storageKey: "tools_touch_profile_llm_endpoint",
+    },
+    "tools.touchProfileLlmModel": {
+        publicKey: "tools.touchProfileLlmModel",
+        scope: "tools",
+        storageKey: "tools_touch_profile_llm_model",
+    },
+    "tools.touchProfileLlmReasoning": {
+        publicKey: "tools.touchProfileLlmReasoning",
+        scope: "tools",
+        storageKey: "tools_touch_profile_llm_reasoning",
     },
 
     "transfer.downloadConcurrency": {

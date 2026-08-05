@@ -952,6 +952,123 @@
           "cancelled": "キャンセル済み"
         }
       },
+      "touch_profile": {
+        "title": "タッチプロファイル",
+        "description": "non-touch の 3DMigoto モードをメッシュ解析と Vision LLM で Touch 版（有効）に変換します。元の Mod は無効化されます。",
+        "mod_path": "Mod フォルダ",
+        "mod_path_placeholder": "Mod フォルダ_PH",
+        "use_vision": "Vision LLM を使用",
+        "vision_cache_clear_button": "キャッシュを消去",
+        "analyze": "Mod を解析",
+        "analyzing": "解析中",
+        "reanalyze": "再解析（次のターン）",
+        "reanalyzing": "再解析中...",
+        "turn_label": "解析ターン",
+        "turn_select": "ターン選択",
+        "turn_approved": "LLM 承認済み (LGTM)",
+        "turn_pending": "フィードバック推奨",
+        "max_turn_reached": "最大ターン数に達しました",
+        "discard": "下書きを破棄",
+        "create": "Touch Mod を作成",
+        "force_create": "強制作成",
+        "regenerate": "設定で再生成",
+        "open_folder": "フォルダを開く",
+        "rollback": "ロールバック",
+        "rolling_back": "ロールバック中",
+        "result": "作成された Touch Mod",
+        "source": "元の Mod",
+        "support_grade": "対応グレード",
+        "auto_apply": "自動適用可能",
+        "interactive": "インタラクティブ",
+        "confidence": "信頼度",
+        "link_settings": "設定をリンク",
+        "zones": "ゾーン",
+        "vision_source": "Vision",
+        "manual_source": "手動",
+        "yes": "はい",
+        "no": "いいえ",
+        "stage": {
+          "scan": "スキャン",
+          "preview": "プレビュー",
+          "vision": "Vision",
+          "assets": "アセット",
+          "ini": "INI",
+          "validate": "検証",
+          "complete": "完了"
+        },
+        "toast": {
+          "loaded": "Touch 下書きの準備完了",
+          "load_failed": "Mod の解析に失敗",
+          "created": "Touch Mod を作成しました",
+          "create_failed": "Touch Mod の作成に失敗",
+          "regenerated": "Touch Mod を再生成しました",
+          "regenerate_failed": "Touch Mod の再生成に失敗",
+          "rolled_back": "Touch Mod をロールバックしました",
+          "rollback_failed": "Touch Mod のロールバックに失敗",
+          "settings_save_failed": "タッチ設定の保存に失敗しました",
+          "reanalyzed": "LLM 再解析完了（ターン {{turn}}）",
+          "reanalyze_failed": "LLM 再解析失敗",
+          "turn_selected": "ターン {{turn}} を選択しました",
+          "turn_select_failed": "ターンの選択に失敗しました",
+          "vision_cache_cleared": "Vision キャッシュを消去しました",
+          "vision_cache_clear_failed": "Vision キャッシュの消去に失敗しました",
+          "no_components_selected": "分析するメッシュを1つ以上選択してください。"
+        },
+        "input_error": {
+          "already_touch": {
+            "title": "すでに Touch Mod です",
+            "description": "生成済みの Touch Mod を再変換することはできません。元の non-touch Mod を選択するか、既存の変換をロールバックしてから再試行してください。"
+          },
+          "suspected_touch": {
+            "title": "Touch Mod の可能性があります",
+            "description": "既存の Touch ランタイムが検出されたため、安全に変換できません。元の non-touch Mod を選択してください。"
+          }
+        },
+        "skipped": "除外",
+        "preview_title": "タッチ影響範囲プレビュー",
+        "mesh_select_title": "タッチ解析するメッシュを選択",
+        "mesh_select_hint": "タッチゾーンを解析するメッシュを選択してください。リスト内のメッシュをクリックすると3Dプレビューを確認できます。",
+        "mesh_select_count": "選択 {{selected}}/{{total}}",
+        "mesh_select_all": "すべて選択",
+        "mesh_select_candidates": "候補のみ",
+        "mesh_select_none": "すべて解除",
+        "mesh_next": "次へ",
+        "mesh_back": "メッシュ選択に戻る",
+        "mesh_non_candidate": "候補外",
+        "preview_title": "タッチ影響範囲プレビュー",
+        "llm_summary": "分析 LLM",
+        "component": "メッシュコンポーネント",
+        "component_placeholder": "コンポーネントを選択",
+        "zone": "影響ゾーン",
+        "zone_placeholder": "ゾーンを選択",
+        "all_zones": "すべてのゾーン",
+        "preview_loading": "3Dプレビューを準備中",
+        "preview_empty": "プレビュー可能なインタラクティブメッシュがありません。",
+        "preview_failed": "プレビューの読み込みに失敗しました",
+        "no_interactive_components": "インタラクティブなメッシュコンポーネントがありません。",
+        "mask_strength": "Touch maskの強度",
+        "mask_strength_reset": "Touch maskの強度をリセット",
+        "mask_curve": "影響分布",
+        "mask_curve_reset": "影響分布をリセット",
+        "mask_curve_hint": "値が低いほど弱い領域を均一化し、高いほど中心の強い領域に集中します。",
+        "touch_strength": "タッチ強度",
+        "strength_light": "弱い",
+        "strength_normal": "標準",
+        "strength_strong": "強い",
+        "physics_preset": "ゾーン物理",
+        "physics_soft": "柔らかい",
+        "physics_normal": "標準",
+        "physics_firm": "硬い",
+        "physics_custom": "カスタム",
+        "advanced_title": "詳細設定",
+        "advanced_description": "選択したゾーンの物理反応を調整します。",
+        "advanced_radius": "半径",
+        "advanced_strength": "強度",
+        "advanced_damping": "減衰",
+        "advanced_spring": "復元力",
+        "advanced_max_offset": "最大変位",
+        "advanced_falloff": "減衰範囲"
+      },
       "body_shape": {
         "title": "体型変更",
         "mod_path": "MODフォルダ",
@@ -1058,7 +1175,51 @@
         "account": "ID",
         "advanced": "詳細",
         "drive": "ドライブ",
-        "transfer": "Transfer"
+        "transfer": "Transfer",
+        "tools": "ツール"
+      },
+      "tools": {
+        "title": "ツール",
+        "touch_profile": {
+          "title": "タッチプロファイル",
+          "llm": {
+            "title": "Vision LLM",
+            "description": "タッチ領域の分析に使用するプロトコルとモデルを設定します。",
+            "protocol": {
+              "title": "プロトコル",
+              "openai-response": "OpenAI Responses",
+              "openai-compatible": "OpenAI Compatible",
+              "anthropic": "Anthropic Messages"
+            },
+            "endpoint": {
+              "title": "API Base URL",
+              "description": "例: https://api.openai.com/v1"
+            },
+            "model": {
+              "title": "モデル"
+            },
+            "reasoning": {
+              "title": "推論レベル",
+              "auto": "自動",
+              "low": "低い",
+              "medium": "中",
+              "high": "高い"
+            },
+            "api_key": {
+              "title": "API キー",
+              "description": "キーは Windows ユーザーストアで暗号化して保存します。環境変数も使用できます。",
+              "configured": "保存済みのキーを変更するには入力してください",
+              "placeholder": "API キーを入力",
+              "save": "保存",
+              "clear": "削除",
+              "api_key_saved": "API キーを保存しました",
+              "api_key_cleared": "API キーを削除しました",
+              "api_key_save_failed": "API キーの保存に失敗しました",
+              "api_key_clear_failed": "API キーの削除に失敗しました",
+              "api_key_load_failed": "API キーの状態を読み込めませんでした"
+            }
+          }
+        }
       },
       "gen": {
         "application": {

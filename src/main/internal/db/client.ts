@@ -1,4 +1,5 @@
 import { DatabaseSync, type StatementSync } from "node:sqlite";
+
 import type {
     AppStateRow,
     GamePathRow,
@@ -14,8 +15,10 @@ import type {
     TableForeignKeySpec,
     TableIndexSpec,
     TableSpec,
+    TouchProfileVisionCacheRow,
     ToggleViewerArtifactRow,
 } from "./schema";
+
 import { APP_SCHEMA_VERSION, TABLE_SPECS } from "./schema";
 
 type SqlValue = string | number | bigint | Uint8Array | Buffer | null;
@@ -571,6 +574,34 @@ export class DatabaseClient {
         },
         deleteAll: async () => {
             this.run(`DELETE FROM "image_cache"`);
+        },
+    };
+
+    public readonly touchProfileVisionCache = {
+        get: async (cacheKey: string) => {
+            const row = this.get<TouchProfileVisionCacheRow>(
+                `SELECT "cache_key" AS "cacheKey",
+                        "result",
+                        "updated_at" AS "updatedAt"
+                 FROM "touch_profile_vision_cache"
+                 WHERE "cache_key" = ?
+                 LIMIT 1`,
+                [cacheKey],
+            );
+            return row ?? null;
+        },
+        upsert: async (row: TouchProfileVisionCacheRow) => {
+            this.run(
+                `INSERT INTO "touch_profile_vision_cache" ("cache_key", "result", "updated_at")
+                 VALUES (?, ?, ?)
+                 ON CONFLICT("cache_key") DO UPDATE
+                 SET "result" = excluded."result",
+                     "updated_at" = excluded."updated_at"`,
+                [row.cacheKey, row.result, row.updatedAt],
+            );
+        },
+        deleteAll: async () => {
+            this.run(`DELETE FROM "touch_profile_vision_cache"`);
         },
     };
 

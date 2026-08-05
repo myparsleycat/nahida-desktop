@@ -2,7 +2,7 @@ import path from "node:path";
 
 import type { NahidaDesktop } from "@main/index";
 import { loadIniBundle } from "@main/lib/mod-static-glb/ini-loader";
-import type { IniSection, Resource } from "@main/lib/mod-static-glb/types";
+import type { Resource } from "@main/lib/mod-static-glb/types";
 import {
     applySnorm8VectorCorrection,
     DEFAULT_BLEND_STRIDE,
@@ -16,6 +16,16 @@ import {
 } from "@shared/body-shape";
 import { stripDisabledPrefix } from "@shared/mod";
 import fse from "fs-extra";
+
+import {
+    collectIndexResources,
+    collectPositionResources,
+    collectResources,
+    isLodResourceName,
+    matchIndexResources,
+    readIndexBuffer,
+    resourceKey,
+} from "./mod-buffer-parser";
 
 export type BodyShapeMeshCandidate = {
     id: string;
@@ -421,54 +431,6 @@ export async function exportBodyShapeMesh(
     return result;
 }
 
-function collectResources(sections: IniSection[]): Resource[] {
-    return sections
-        .filter((section) => section.header === "Resource")
-        .map((section) => ({
-            name: section.name,
-            filename: section.values.filename,
-            stride: section.values.stride ? Number(section.values.stride) : undefined,
-            format: section.values.format,
-            values: section.values,
-        }));
-}
-
-function isLodResourceName(name: string): boolean {
-    return /_LOD$/i.test(name) || /_VB\d+_LOD/i.test(name);
-}
-
-function collectPositionResources(resources: Resource[]): Resource[] {
-    return resources.filter((resource) => {
-        if (!resource.filename || !resource.stride) return false;
-        if (isLodResourceName(resource.name) || /position(?:\.\d+)?cs$/i.test(resource.name)) {
-            return false;
-        }
-        if (/position/i.test(resource.name) && resource.stride >= 12) return true;
-        // Native EFMI: ComponentN_VB0 is POSITION (xyz float32 + pad).
-        if (/component\d+_vb0$/i.test(resource.name) && resource.stride >= 12) return true;
-        return false;
-    });
-}
-
-function collectIndexResources(resources: Resource[]): Resource[] {
-    return resources.filter((resource) => {
-        if (!resource.filename) return false;
-        if (isLodResourceName(resource.name)) return false;
-        if (/index/i.test(resource.name)) return true;
-        // EFMI ComponentN IBs use R16/R32_UINT without "Index" in the name.
-        // Exclude blend/color-style byte formats (R8_UINT) and non-index names that
-        // already identify as position/blend/vector/texcoord/color.
-        if (
-            resource.format &&
-            /R(?:16|32)_UINT/i.test(resource.format) &&
-            !/(position|blend|vector|texcoord|color)/i.test(resource.name)
-        ) {
-            return true;
-        }
-        return false;
-    });
-}
-
 function collectVectorResources(resources: Resource[]): Resource[] {
     return resources.filter((resource) => {
         if (!resource.filename) return false;
@@ -532,98 +494,6 @@ function resourceGroupKey(resource: Resource): string | undefined {
     return fromName || undefined;
 }
 
-function matchIndexResources(
-    positions: Resource[],
-    indices: Resource[],
-    sections: IniSection[],
-): Map<string, Resource[]> {
-    const matches = new Map<string, Resource[]>();
-    const resourcesByName = new Map(
-        [...positions, ...indices].map((resource) => [resourceKey(resource), resource]),
-    );
-
-    for (const section of sections) {
-        const position = resourceForReference(sectionValue(section, "vb0"), resourcesByName);
-        const index = resourceForReference(sectionValue(section, "ib"), resourcesByName);
-        if (position && index) addIndexMatch(matches, position, index);
-    }
-
-    for (const index of indices) {
-        const candidates = positions
-            .map((position) => ({ position, score: indexMatchScore(position, index) }))
-            .filter((candidate) => candidate.score > 0);
-        const bestScore = Math.max(...candidates.map((candidate) => candidate.score), 0);
-        const best = candidates.filter((candidate) => candidate.score === bestScore);
-        if (best.length === 1) addIndexMatch(matches, best[0].position, index);
-    }
-
-    if (indices.length === 1) {
-        for (const position of positions) {
-            if (!matches.has(resourceKey(position))) addIndexMatch(matches, position, indices[0]);
-        }
-    }
-
-    for (const matched of matches.values()) {
-        matched.sort((left, right) => indices.indexOf(left) - indices.indexOf(right));
-    }
-    return matches;
-}
-
-function sectionValue(section: IniSection, key: string): string | undefined {
-    return Object.entries(section.values).find(([name]) => name.toLowerCase() === key)?.[1];
-}
-
-function resourceForReference(
-    value: string | undefined,
-    resourcesByName: Map<string, Resource>,
-): Resource | undefined {
-    const name = value?.trim().match(/^Resource(.+)$/i)?.[1];
-    return name ? resourcesByName.get(name.toLowerCase()) : undefined;
-}
-
-function addIndexMatch(
-    matches: Map<string, Resource[]>,
-    position: Resource,
-    index: Resource,
-): void {
-    const key = resourceKey(position);
-    const matched = matches.get(key) ?? [];
-    if (!matched.some((candidate) => resourceKey(candidate) === resourceKey(index))) {
-        matched.push(index);
-        matches.set(key, matched);
-    }
-}
-
-function indexMatchScore(position: Resource, index: Resource): number {
-    const positionName = logicalResourceName(position.name, "position");
-    const indexName = logicalResourceName(index.name, "index");
-    if (!positionName.base || !indexName.base) return 0;
-    if (positionName.variant && indexName.variant && positionName.variant !== indexName.variant) {
-        return 0;
-    }
-    if (!indexName.base.startsWith(positionName.base)) return 0;
-
-    const variantScore = positionName.variant === indexName.variant ? 100 : 0;
-    const exactScore = indexName.base === positionName.base ? 10_000 : 1_000;
-    return exactScore + positionName.base.length + variantScore;
-}
-
-function logicalResourceName(name: string, kind: "position" | "index") {
-    const withoutCs = name.replace(/cs$/i, "");
-    const variant = withoutCs.match(/\.(\d+)$/)?.[1];
-    const withoutVariant = withoutCs.replace(/\.\d+$/, "");
-    const withoutKind =
-        kind === "position"
-            ? withoutVariant.replace(/(?:position(?:buffer)?|_vb0)$/i, "")
-            : withoutVariant.replace(/(?:index(?:buffer)?|_ib|ib)$/i, "");
-
-    return { base: withoutKind.replace(/[^a-z0-9]/gi, "").toLowerCase(), variant };
-}
-
-function resourceKey(resource: Resource): string {
-    return resource.name.toLowerCase();
-}
-
 function combineIndexBuffers(buffers: Uint32Array[]): Uint32Array | undefined {
     if (buffers.length === 0) return undefined;
     if (buffers.length === 1) return buffers[0];
@@ -634,22 +504,4 @@ function combineIndexBuffers(buffers: Uint32Array[]): Uint32Array | undefined {
         return offset + buffer.length;
     }, 0);
     return indices;
-}
-
-async function readIndexBuffer(filePath: string, format?: string): Promise<Uint32Array> {
-    const bytes = await fse.readFile(filePath);
-    const use16 =
-        format?.toUpperCase().includes("R16") ||
-        (bytes.byteLength % 4 !== 0 && bytes.byteLength % 2 === 0);
-
-    if (use16) {
-        const src = new Uint16Array(
-            bytes.buffer,
-            bytes.byteOffset,
-            Math.floor(bytes.byteLength / 2),
-        );
-        return Uint32Array.from(src);
-    }
-
-    return new Uint32Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 4));
 }

@@ -19,6 +19,7 @@ import {
   ImageIcon,
   Loader2Icon,
   PersonStandingIcon,
+  SparklesIcon,
   TerminalSquareIcon,
   TrashIcon,
   WrenchIcon,
@@ -75,6 +76,16 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
               >
                 <PersonStandingIcon className="size-4" />
                 {t("page.tools.body_shape.title")}
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={(event) => {
+                  event.stopPropagation();
+                  actions.openTouchProfileDialog(mod);
+                }}
+              >
+                <SparklesIcon className="size-4" />
+                {t("page.tools.touch_profile.title")}
               </DropdownMenuItem>
 
               {actions.runner.showWuwaFixer && (

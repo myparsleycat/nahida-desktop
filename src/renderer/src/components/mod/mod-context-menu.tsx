@@ -24,6 +24,7 @@ import {
   Loader2Icon,
   PencilIcon,
   PersonStandingIcon,
+  SparklesIcon,
   TerminalSquareIcon,
   TrashIcon,
 } from "lucide-react";
@@ -222,6 +223,10 @@ export function ModContextMenu({ mod, actions, children }: ModContextMenuProps) 
             <ContextMenuItem onClick={() => actions.openBodyShapeDialog(mod)}>
               <PersonStandingIcon className="mr-2 size-4" />
               {t("page.tools.body_shape.title")}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => actions.openTouchProfileDialog(mod)}>
+              <SparklesIcon className="mr-2 size-4" />
+              {t("page.tools.touch_profile.title")}
             </ContextMenuItem>
           </>
         )}

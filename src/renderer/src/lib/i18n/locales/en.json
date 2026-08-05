@@ -985,6 +985,122 @@
           "cancelled": "Cancelled"
         }
       },
+      "touch_profile": {
+        "title": "Touch Profile",
+        "description": "Convert a non-touch 3DMigoto mod into an enabled Touch variant using mesh analysis and optional Vision LLM. The source mod is disabled.",
+        "mod_path": "Mod folder",
+        "mod_path_placeholder": "Mod folder_PH",
+        "use_vision": "Use Vision LLM",
+        "vision_cache_clear_button": "Clear cache",
+        "analyze": "Analyze mod",
+        "analyzing": "Analyzing",
+        "reanalyze": "Re-analyze (Next turn)",
+        "reanalyzing": "Re-analyzing...",
+        "turn_label": "Analysis Turn",
+        "turn_select": "Select Turn",
+        "turn_approved": "LLM Approved (LGTM)",
+        "turn_pending": "Feedback Recommended",
+        "max_turn_reached": "Max turn limit reached",
+        "discard": "Discard draft",
+        "create": "Create Touch mod",
+        "force_create": "Force create",
+        "regenerate": "Regenerate with options",
+        "open_folder": "Open folder",
+        "rollback": "Rollback",
+        "rolling_back": "Rolling back",
+        "result": "Created Touch mod",
+        "source": "Source mod",
+        "support_grade": "Support grade",
+        "auto_apply": "Auto-apply ready",
+        "interactive": "Interactive",
+        "confidence": "Confidence",
+        "link_settings": "Link settings",
+        "zones": "Zones",
+        "vision_source": "Vision",
+        "manual_source": "Manual",
+        "yes": "Yes",
+        "no": "No",
+        "stage": {
+          "scan": "Scan",
+          "preview": "Preview",
+          "vision": "Vision",
+          "assets": "Assets",
+          "ini": "INI",
+          "validate": "Validate",
+          "complete": "Complete"
+        },
+        "toast": {
+          "loaded": "Touch draft ready",
+          "load_failed": "Failed to analyze mod",
+          "created": "Touch mod created",
+          "create_failed": "Failed to create Touch mod",
+          "regenerated": "Touch mod regenerated",
+          "regenerate_failed": "Failed to regenerate Touch mod",
+          "rolled_back": "Touch mod rolled back",
+          "rollback_failed": "Failed to roll back Touch mod",
+          "settings_save_failed": "Failed to save touch settings",
+          "reanalyzed": "LLM re-analysis complete (Turn {{turn}})",
+          "reanalyze_failed": "LLM re-analysis failed",
+          "turn_selected": "Turn {{turn}} selected",
+          "turn_select_failed": "Failed to select turn",
+          "vision_cache_cleared": "Vision cache cleared",
+          "vision_cache_clear_failed": "Failed to clear Vision cache",
+          "no_components_selected": "Select at least one mesh to analyze."
+        },
+        "input_error": {
+          "already_touch": {
+            "title": "This is already a Touch mod",
+            "description": "A generated Touch mod cannot be converted again. Select the original non-touch mod or roll back the existing conversion before trying again."
+          },
+          "suspected_touch": {
+            "title": "This appears to be a Touch mod",
+            "description": "An existing Touch runtime was detected, so this mod cannot be safely converted. Select the original non-touch mod."
+          }
+        },
+        "skipped": "Skipped",
+        "preview_title": "Touch Influence Preview",
+        "mesh_select_title": "Select Meshes for Touch Analysis",
+        "mesh_select_hint": "Choose which meshes to analyze for touch zones. Click a mesh in the list to preview it in 3D.",
+        "mesh_select_count": "Selected {{selected}}/{{total}}",
+        "mesh_select_all": "Select all",
+        "mesh_select_candidates": "Candidates only",
+        "mesh_select_none": "Clear all",
+        "mesh_next": "Next",
+        "mesh_back": "Back to mesh selection",
+        "mesh_non_candidate": "Not a candidate",
+        "llm_summary": "Analysis LLM",
+        "component": "Mesh component",
+        "component_placeholder": "Select a component",
+        "zone": "Influence zone",
+        "zone_placeholder": "Select a zone",
+        "all_zones": "All zones",
+        "preview_loading": "Preparing 3D preview",
+        "preview_empty": "No interactive mesh is available for preview.",
+        "preview_failed": "Failed to load preview",
+        "no_interactive_components": "No interactive mesh components were found.",
+        "mask_strength": "Touch mask strength",
+        "mask_strength_reset": "Reset Touch mask strength",
+        "mask_curve": "Influence distribution",
+        "mask_curve_reset": "Reset influence distribution",
+        "mask_curve_hint": "Lower values flatten weaker areas; higher values concentrate influence toward the center.",
+        "touch_strength": "Touch strength",
+        "strength_light": "Light",
+        "strength_normal": "Normal",
+        "strength_strong": "Strong",
+        "physics_preset": "Area physics",
+        "physics_soft": "Soft",
+        "physics_normal": "Normal",
+        "physics_firm": "Firm",
+        "physics_custom": "Custom",
+        "advanced_title": "Advanced settings",
+        "advanced_description": "Adjust the physical response of the selected area.",
+        "advanced_radius": "Radius",
+        "advanced_strength": "Strength",
+        "advanced_damping": "Damping",
+        "advanced_spring": "Spring",
+        "advanced_max_offset": "Maximum displacement",
+        "advanced_falloff": "Falloff"
+      },
       "body_shape": {
         "title": "Body Shape",
         "mod_path": "Mod folder",
@@ -1092,7 +1208,51 @@
         "mod": "Mod",
         "account": "Account",
         "advanced": "Advanced",
-        "drive": "Drive"
+        "drive": "Drive",
+        "tools": "Tools"
+      },
+      "tools": {
+        "title": "Tools",
+        "touch_profile": {
+          "title": "Touch Profile",
+          "llm": {
+            "title": "Vision LLM",
+            "description": "Choose the protocol and model used to analyze touch regions.",
+            "protocol": {
+              "title": "Protocol",
+              "openai-response": "OpenAI Responses",
+              "openai-compatible": "OpenAI Compatible",
+              "anthropic": "Anthropic Messages"
+            },
+            "endpoint": {
+              "title": "API Base URL",
+              "description": "Example: https://api.openai.com/v1"
+            },
+            "model": {
+              "title": "Model"
+            },
+            "reasoning": {
+              "title": "Reasoning level",
+              "auto": "Automatic",
+              "low": "Low",
+              "medium": "Medium",
+              "high": "High"
+            },
+            "api_key": {
+              "title": "API key",
+              "description": "The key is encrypted with the Windows user store. Environment variables are also supported.",
+              "configured": "Enter a new key to replace the saved key",
+              "placeholder": "Enter API key",
+              "save": "Save",
+              "clear": "Clear",
+              "api_key_saved": "API key saved",
+              "api_key_cleared": "API key cleared",
+              "api_key_save_failed": "Failed to save API key",
+              "api_key_clear_failed": "Failed to clear API key",
+              "api_key_load_failed": "Failed to load API key status"
+            }
+          }
+        }
       },
       "gen": {
         "application": {

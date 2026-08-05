@@ -7,33 +7,34 @@ import type { IniSection } from "./types";
 
 export async function loadIniBundle(
     input: string,
-): Promise<{ iniPath: string; sections: IniSection[] }> {
+): Promise<{ iniPath: string; sections: IniSection[]; sourcePaths: string[] }> {
     const iniPath = await findIni(input);
     const iniText = await fse.readFile(iniPath, "utf8");
     const sections = parseIni(iniText);
     const mergedRefs = extractMergedIniRefs(iniText, path.dirname(iniPath));
 
     if (mergedRefs.length === 0) {
-        return { iniPath, sections };
+        return { iniPath, sections, sourcePaths: [iniPath] };
     }
 
-    const extraSections = (
+    const mergedIniFiles = (
         await Promise.all(
             mergedRefs
                 .filter((refPath) => path.resolve(refPath) !== path.resolve(iniPath))
                 .map(async (refPath) => {
                     if (!(await fse.pathExists(refPath))) {
-                        return [];
+                        return null;
                     }
                     const refText = await fse.readFile(refPath, "utf8");
-                    return parseIni(refText);
+                    return { path: refPath, sections: parseIni(refText) };
                 }),
         )
-    ).flat();
+    ).filter((entry): entry is NonNullable<typeof entry> => !!entry);
 
     return {
         iniPath,
-        sections: [...sections, ...extraSections],
+        sections: [sections, ...mergedIniFiles.map((entry) => entry.sections)].flat(),
+        sourcePaths: [iniPath, ...mergedIniFiles.map((entry) => entry.path)],
     };
 }
 

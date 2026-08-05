@@ -5,6 +5,21 @@ import type {
     StaticGlbConvertInput,
     StaticGlbViewerInput,
 } from "@main/services/mod-tools/static-glb";
+import type {
+    TouchProfileApplyInput,
+    TouchProfileLoadInput,
+    TouchProfileRegenerateInput,
+    TouchProfileRollbackInput,
+    TouchProfileLlmApiKeyInput,
+    TouchProfileUpdateZoneSettingsInput,
+    TouchProfileReanalyzeTurnInput,
+    TouchProfileSelectTurnInput,
+} from "@main/services/mod-tools/touch-profile";
+import type { TouchDraft } from "@main/services/mod-tools/touch-profile-types";
+import type {
+    TouchProfileAnalyzeComponentsInput,
+    TouchProfilePreviewInput,
+} from "@shared/touch-profile-preview";
 
 export function registerToolsHandlers(d: NahidaDesktop) {
     rh("tools:getTextureResizeSettings", () => d.service.modTools.textureResizer.getSettings());
@@ -102,5 +117,52 @@ export function registerToolsHandlers(d: NahidaDesktop) {
     );
     rh("tools:bodyShapeExport", (input: BodyShapeExportInput) =>
         d.service.modTools.bodyShape.exportMesh(input),
+    );
+    rh("tools:touchProfileLoadMod", (input: TouchProfileLoadInput | string) =>
+        d.service.modTools.touchProfile.loadMod(input),
+    );
+    rh("tools:touchProfilePrepare", (input: TouchProfileLoadInput | string) =>
+        d.service.modTools.touchProfile.prepareMod(input),
+    );
+    rh("tools:touchProfileGetMeshPreview", (input: TouchProfilePreviewInput) =>
+        d.service.modTools.touchProfile.getMeshPreview(input),
+    );
+    rh("tools:touchProfileAnalyzeComponents", (input: TouchProfileAnalyzeComponentsInput) =>
+        d.service.modTools.touchProfile.analyzeComponents(input),
+    );
+    rh("tools:touchProfileGetPreview", (input: TouchProfilePreviewInput) =>
+        d.service.modTools.touchProfile.getPreview(input),
+    );
+    rh("tools:touchProfileSaveDraft", (draft: TouchDraft) =>
+        d.service.modTools.touchProfile.saveDraft(draft),
+    );
+    rh("tools:touchProfileClearVisionCache", () =>
+        d.service.modTools.touchProfile.clearVisionCache(),
+    );
+    rh("tools:touchProfileGetLlmSettings", () => d.service.modTools.touchProfile.getLlmSettings());
+    rh("tools:touchProfileSetLlmApiKey", (input: TouchProfileLlmApiKeyInput) =>
+        d.service.modTools.touchProfile.setLlmApiKey(input),
+    );
+    rh("tools:touchProfileClearLlmApiKey", () => d.service.modTools.touchProfile.clearLlmApiKey());
+    rh("tools:touchProfileUpdateZoneSettings", (input: TouchProfileUpdateZoneSettingsInput) =>
+        d.service.modTools.touchProfile.updateZoneSettings(input),
+    );
+    rh("tools:touchProfileReanalyzeTurn", (input: TouchProfileReanalyzeTurnInput) =>
+        d.service.modTools.touchProfile.reanalyzeTurn(input),
+    );
+    rh("tools:touchProfileSelectTurn", (input: TouchProfileSelectTurnInput) =>
+        d.service.modTools.touchProfile.selectTurn(input),
+    );
+    rh("tools:touchProfileDiscardDraft", (sessionId: string) =>
+        d.service.modTools.touchProfile.discardDraft(sessionId),
+    );
+    rh("tools:touchProfileApply", (input: TouchProfileApplyInput) =>
+        d.service.modTools.touchProfile.apply(input),
+    );
+    rh("tools:touchProfileRegenerate", (input: TouchProfileRegenerateInput) =>
+        d.service.modTools.touchProfile.regenerate(input),
+    );
+    rh("tools:touchProfileRollback", (input: TouchProfileRollbackInput) =>
+        d.service.modTools.touchProfile.rollback(input),
     );
 }

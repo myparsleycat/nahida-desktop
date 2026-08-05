@@ -951,6 +951,122 @@
           "cancelled": "已取消"
         }
       },
+      "touch_profile": {
+        "title": "触摸配置",
+        "description": "通过网格分析与 Vision LLM，将 non-touch 3DMigoto 模组转换为启用的 Touch 版本。源模组会被禁用。",
+        "mod_path": "模组文件夹",
+        "mod_path_placeholder": "模组文件夹_PH",
+        "use_vision": "使用 Vision LLM",
+        "vision_cache_clear_button": "清除缓存",
+        "analyze": "分析模组",
+        "analyzing": "分析中",
+        "reanalyze": "重新分析（下一轮）",
+        "reanalyzing": "重新分析中...",
+        "turn_label": "分析轮次",
+        "turn_select": "选择轮次",
+        "turn_approved": "LLM 已批准 (LGTM)",
+        "turn_pending": "建议提供反馈",
+        "max_turn_reached": "已达到最大轮次限制",
+        "discard": "丢弃草稿",
+        "create": "创建 Touch 模组",
+        "force_create": "强制创建",
+        "regenerate": "使用选项重新生成",
+        "open_folder": "打开文件夹",
+        "rollback": "回滚",
+        "rolling_back": "回滚中",
+        "result": "已创建的 Touch 模组",
+        "source": "源模组",
+        "support_grade": "支持等级",
+        "auto_apply": "可自动应用",
+        "interactive": "可交互",
+        "confidence": "置信度",
+        "link_settings": "链接设置",
+        "zones": "区域",
+        "vision_source": "Vision",
+        "manual_source": "手动",
+        "yes": "是",
+        "no": "否",
+        "stage": {
+          "scan": "扫描",
+          "preview": "预览",
+          "vision": "Vision",
+          "assets": "资源",
+          "ini": "INI",
+          "validate": "验证",
+          "complete": "完成"
+        },
+        "toast": {
+          "loaded": "Touch 草稿已就绪",
+          "load_failed": "模组分析失败",
+          "created": "已创建 Touch 模组",
+          "create_failed": "创建 Touch 模组失败",
+          "regenerated": "已重新生成 Touch 模组",
+          "regenerate_failed": "重新生成 Touch 模组失败",
+          "rolled_back": "已回滚 Touch 模组",
+          "rollback_failed": "回滚 Touch 模组失败",
+          "settings_save_failed": "保存触摸设置失败",
+          "reanalyzed": "LLM 重新分析完成（轮次 {{turn}}）",
+          "reanalyze_failed": "LLM 重新分析失败",
+          "turn_selected": "已选择轮次 {{turn}}",
+          "turn_select_failed": "选择轮次失败",
+          "vision_cache_cleared": "Vision 缓存已清除",
+          "vision_cache_clear_failed": "清除 Vision 缓存失败",
+          "no_components_selected": "请至少选择一个网格进行分析。"
+        },
+        "input_error": {
+          "already_touch": {
+            "title": "此模组已经是 Touch 模组",
+            "description": "已生成的 Touch 模组不能再次转换。请选择原始 non-touch 模组，或先回滚现有转换后再试。"
+          },
+          "suspected_touch": {
+            "title": "此模组可能是 Touch 模组",
+            "description": "检测到现有 Touch 运行时，无法安全转换。请选择原始 non-touch 模组。"
+          }
+        },
+        "skipped": "已跳过",
+        "preview_title": "触摸影响区域预览",
+        "mesh_select_title": "选择要进行触摸分析的网格",
+        "mesh_select_hint": "选择要分析触摸区域的网格。点击列表中的网格可查看 3D 预览。",
+        "mesh_select_count": "已选 {{selected}}/{{total}}",
+        "mesh_select_all": "全选",
+        "mesh_select_candidates": "仅候选项",
+        "mesh_select_none": "全部取消",
+        "mesh_next": "下一步",
+        "mesh_back": "返回网格选择",
+        "mesh_non_candidate": "非候选项",
+        "llm_summary": "分析 LLM",
+        "component": "网格组件",
+        "component_placeholder": "选择组件",
+        "zone": "影响区域",
+        "zone_placeholder": "选择区域",
+        "all_zones": "所有区域",
+        "preview_loading": "正在准备 3D 预览",
+        "preview_empty": "没有可供预览的可交互网格。",
+        "preview_failed": "加载预览失败",
+        "no_interactive_components": "未找到可交互的网格组件。",
+        "mask_strength": "Touch mask 强度",
+        "mask_strength_reset": "重置 Touch mask 强度",
+        "mask_curve": "影响分布",
+        "mask_curve_reset": "重置影响分布",
+        "mask_curve_hint": "数值越低越能平滑较弱区域，数值越高越集中于中心强影响区域。",
+        "touch_strength": "触摸强度",
+        "strength_light": "轻",
+        "strength_normal": "标准",
+        "strength_strong": "强",
+        "physics_preset": "区域物理",
+        "physics_soft": "柔软",
+        "physics_normal": "标准",
+        "physics_firm": "坚实",
+        "physics_custom": "自定义",
+        "advanced_title": "高级设置",
+        "advanced_description": "直接调整所选区域的物理反应。",
+        "advanced_radius": "半径",
+        "advanced_strength": "强度",
+        "advanced_damping": "阻尼",
+        "advanced_spring": "回弹力",
+        "advanced_max_offset": "最大位移",
+        "advanced_falloff": "衰减"
+      },
       "body_shape": {
         "title": "体型修改",
         "mod_path": "模组文件夹",
@@ -975,7 +1091,6 @@
         "brush_reach_through": "穿透",
         "brush_reach_surface_hint": "沿网格表面扩展，并优先选择朝前的顶点。",
         "brush_reach_through_hint": "选择三维半径内的所有顶点，包括背面。",
-
         "import_bones_placeholder": "导入骨骼权重…",
         "select_regions": "身体部位",
         "select_regions_placeholder": "选择部位…",
@@ -1058,7 +1173,51 @@
         "account": "账户",
         "advanced": "高级设置",
         "drive": "网盘",
-        "transfer": "Transfer"
+        "transfer": "Transfer",
+        "tools": "工具"
+      },
+      "tools": {
+        "title": "工具",
+        "touch_profile": {
+          "title": "触摸配置",
+          "llm": {
+            "title": "Vision LLM",
+            "description": "设置用于分析 Touch 区域的协议和模型。",
+            "protocol": {
+              "title": "协议",
+              "openai-response": "OpenAI Responses",
+              "openai-compatible": "OpenAI Compatible",
+              "anthropic": "Anthropic Messages"
+            },
+            "endpoint": {
+              "title": "API Base URL",
+              "description": "示例：https://api.openai.com/v1"
+            },
+            "model": {
+              "title": "模型名"
+            },
+            "reasoning": {
+              "title": "推理级别",
+              "auto": "自动",
+              "low": "低",
+              "medium": "中",
+              "high": "高"
+            },
+            "api_key": {
+              "title": "API 密钥",
+              "description": "密钥会使用 Windows 用户存储加密保存，也支持使用环境变量。",
+              "configured": "输入新密钥以替换已保存的密钥",
+              "placeholder": "输入 API 密钥",
+              "save": "保存",
+              "clear": "清除",
+              "api_key_saved": "API 密钥已保存",
+              "api_key_cleared": "API 密钥已清除",
+              "api_key_save_failed": "保存 API 密钥失败",
+              "api_key_clear_failed": "清除 API 密钥失败",
+              "api_key_load_failed": "无法加载 API 密钥状态"
+            }
+          }
+        }
       },
       "gen": {
         "application": {

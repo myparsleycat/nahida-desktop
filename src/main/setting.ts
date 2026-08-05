@@ -18,6 +18,15 @@ import {
     type SettingDefinition,
     type SettingKey,
 } from "@shared/settings";
+import {
+    DEFAULT_TOUCH_PROFILE_LLM_ENDPOINT,
+    DEFAULT_TOUCH_PROFILE_LLM_MODEL,
+    DEFAULT_TOUCH_PROFILE_LLM_PROTOCOL,
+    DEFAULT_TOUCH_PROFILE_LLM_REASONING,
+    isTouchProfileLlmProtocol,
+    isTouchProfileLlmReasoning,
+    normalizeTouchProfileLlmEndpoint,
+} from "@shared/touch-profile-llm";
 import type { AutoUpdateMode } from "@shared/updater";
 import AutoLaunch from "auto-launch";
 import { app, BrowserWindow } from "electron";
@@ -479,6 +488,35 @@ export class Setting {
                         : "space",
                 normalize: (value) => (DISABLED_PREFIX_STYLES.includes(value) ? value : "space"),
             },
+            "tools.touchProfileLlmProtocol": {
+                definition: APP_SETTINGS["tools.touchProfileLlmProtocol"],
+                getDefault: () => DEFAULT_TOUCH_PROFILE_LLM_PROTOCOL,
+                fromStored: (value) =>
+                    isTouchProfileLlmProtocol(value) ? value : DEFAULT_TOUCH_PROFILE_LLM_PROTOCOL,
+                normalize: (value) =>
+                    isTouchProfileLlmProtocol(value) ? value : DEFAULT_TOUCH_PROFILE_LLM_PROTOCOL,
+            },
+            "tools.touchProfileLlmEndpoint": {
+                definition: APP_SETTINGS["tools.touchProfileLlmEndpoint"],
+                getDefault: () =>
+                    process.env.NAHIDA_LLM_BASE_URL?.trim() || DEFAULT_TOUCH_PROFILE_LLM_ENDPOINT,
+                fromStored: (value) => normalizeTouchProfileLlmEndpoint(value ?? ""),
+                normalize: (value) => normalizeTouchProfileLlmEndpoint(value),
+            },
+            "tools.touchProfileLlmModel": {
+                definition: APP_SETTINGS["tools.touchProfileLlmModel"],
+                getDefault: () => DEFAULT_TOUCH_PROFILE_LLM_MODEL,
+                fromStored: (value) => value?.trim() || DEFAULT_TOUCH_PROFILE_LLM_MODEL,
+                normalize: (value) => value.trim() || DEFAULT_TOUCH_PROFILE_LLM_MODEL,
+            },
+            "tools.touchProfileLlmReasoning": {
+                definition: APP_SETTINGS["tools.touchProfileLlmReasoning"],
+                getDefault: () => DEFAULT_TOUCH_PROFILE_LLM_REASONING,
+                fromStored: (value) =>
+                    isTouchProfileLlmReasoning(value) ? value : DEFAULT_TOUCH_PROFILE_LLM_REASONING,
+                normalize: (value) =>
+                    isTouchProfileLlmReasoning(value) ? value : DEFAULT_TOUCH_PROFILE_LLM_REASONING,
+            },
             "transfer.downloadConcurrency": {
                 definition: APP_SETTINGS["transfer.downloadConcurrency"],
                 getDefault: () => TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT,
@@ -908,7 +946,7 @@ export class Setting {
     advanced = {
         getAll: async () => {
             const rows = await this.desktop.lib.db.settings.list();
-            const sensitiveKeys = ["password", "token", "secret", "credentials"];
+            const sensitiveKeys = ["password", "token", "secret", "credentials", "api_key"];
 
             return rows.map((row) => {
                 const isSensitive = sensitiveKeys.some((k) => row.key.toLowerCase().includes(k));

@@ -40,6 +40,7 @@ import { BodyShapeDialog } from "../components/mod/body-shape-dialog";
 import { ModFixRunnerDialogs } from "../components/mod/mod-fix-runner-dialogs";
 import { pasteModPreview } from "../components/mod/paste-preview";
 import { TextureResizeDialog } from "../components/mod/texture-resize-dialog";
+import { TouchProfileDialog } from "../components/mod/touch-profile-dialog";
 
 function getRenameDefaultValue(name: string) {
   return stripDisabledPrefix(name);
@@ -83,6 +84,7 @@ export interface ModActionApi {
   openRenameDialog: (mod: ModInfo) => void;
   openTextureResizeDialog: (mod: ModInfo) => void;
   openBodyShapeDialog: (mod: ModInfo) => void;
+  openTouchProfileDialog: (mod: ModInfo) => void;
   openWuwaFixer: (mod: ModInfo) => Promise<void>;
   markAsManualSubGroup: (mod: ModInfo) => Promise<void>;
   runPreset: (mod: ModInfo, presetId: string) => Promise<void>;
@@ -105,6 +107,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
 
   const [textureResizeMod, setTextureResizeMod] = useState<ModInfo | null>(null);
   const [bodyShapeMod, setBodyShapeMod] = useState<ModInfo | null>(null);
+  const [touchProfileMod, setTouchProfileMod] = useState<ModInfo | null>(null);
   const [renameDialogState, setRenameDialogState] = useState<{
     groupPath?: string;
     mod: ModInfo;
@@ -337,6 +340,19 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
         }}
       />
 
+      <TouchProfileDialog
+        open={touchProfileMod !== null}
+        onOpenChange={(open) => !open && setTouchProfileMod(null)}
+        modPath={touchProfileMod?.path ?? ""}
+        modName={touchProfileMod?.name ?? ""}
+        onApplied={() => {
+          void invalidateModGroup(queryClient, selectedGroupPath);
+        }}
+        onRolledBack={() => {
+          void invalidateModGroup(queryClient, selectedGroupPath);
+        }}
+      />
+
       <ModelViewerDialog
         open={showModelViewer}
         onOpenChange={(open) => {
@@ -368,6 +384,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
     openRenameDialog: (mod) => setRenameDialogState({ mod, groupPath: selectedGroupPath }),
     openTextureResizeDialog: (mod) => setTextureResizeMod(mod),
     openBodyShapeDialog: (mod) => setBodyShapeMod(mod),
+    openTouchProfileDialog: (mod) => setTouchProfileMod(mod),
     openWuwaFixer: async (mod) => {
       await runner.handleOpenWuwaFixer(mod.path);
     },

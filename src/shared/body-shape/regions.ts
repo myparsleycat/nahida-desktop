@@ -361,9 +361,9 @@ export function composeDisplayWeights(
     const ignoreAmount = options?.ignoreAmount === true;
     for (const region of regions) {
         if (!ignoreAmount && region.amount === 0) continue;
-        const strength = ignoreAmount ? 1 : Math.min(1, Math.abs(region.amount) * 2);
+        const amountStrength = ignoreAmount ? 1 : Math.min(1, Math.abs(region.amount) * 2);
         for (let i = 0; i < vertexCount; i++) {
-            const w = (region.weights[i] ?? 0) * strength;
+            const w = Math.min(1, Math.max(0, (region.weights[i] ?? 0) * amountStrength));
             if (w > out[i]) out[i] = w;
         }
     }

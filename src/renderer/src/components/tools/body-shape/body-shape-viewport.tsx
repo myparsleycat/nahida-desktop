@@ -57,6 +57,8 @@ export type BodyShapeViewportProps = {
   weightVersion: number;
   /** When false, positions are unchanged since the last apply — skip deform and normal recomputation. */
   positionsChanged: boolean;
+  /** Stable identity for the mesh frame; changing mask data should not reframe the camera. */
+  frameKey?: string;
   orientation?: string;
 
   /* Brush props */
@@ -138,6 +140,7 @@ function BodyShapeMesh({
   showWeights,
   weightVersion,
   positionsChanged,
+  frameKey,
   brushEnabled = false,
   brushRadius = 0.15,
   brushMode = "paint",
@@ -156,7 +159,7 @@ function BodyShapeMesh({
   const meshRef = useRef<Mesh>(null);
   const brushRingRef = useRef<LineLoop>(null);
   const colorsRef = useRef(new Float32Array(Math.floor(originalPositions.length / 3) * 3));
-  const framedKeyRef = useRef<Float32Array | null>(null);
+  const framedKeyRef = useRef<string | Float32Array | null>(null);
   const isPaintingRef = useRef(false);
   const { camera, raycaster, gl } = useThree();
   const heatmapRegionsRef = useRef<ActiveRegionDeform[]>(regions);
@@ -310,10 +313,11 @@ function BodyShapeMesh({
   });
 
   useEffect(() => {
-    if (framedKeyRef.current === originalPositions) return;
-    framedKeyRef.current = originalPositions;
+    const nextFrameKey = frameKey ?? originalPositions;
+    if (framedKeyRef.current === nextFrameKey) return;
+    framedKeyRef.current = nextFrameKey;
     frameCamera();
-  }, [camera, geometry, originalPositions]);
+  }, [camera, frameKey, geometry, originalPositions]);
 
   /* Brush Raycasting & Pointer Handlers */
   useEffect(() => {

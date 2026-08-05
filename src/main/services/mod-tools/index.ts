@@ -8,6 +8,7 @@ import { StaticGlb } from "./static-glb";
 import { TextureResizer } from "./texture-resizer";
 import { TogglePersist } from "./toggle-persist";
 import { ToggleViewer } from "./toggle-viewer";
+import { TouchProfileService } from "./touch-profile";
 import { WuwaModFixer } from "./wuwa-mod-fixer";
 
 export class ModTools {
@@ -20,6 +21,7 @@ export class ModTools {
     public readonly wuwaModFixer: WuwaModFixer;
     public readonly modBisect: ModBisect;
     public readonly bodyShape: BodyShapeEditor;
+    public readonly touchProfile: TouchProfileService;
 
     constructor(private readonly desktop: NahidaDesktop) {
         this.fixTool = new FixTool(this.desktop);
@@ -30,6 +32,7 @@ export class ModTools {
         this.textureResizer = new TextureResizer(this.desktop);
         this.wuwaModFixer = new WuwaModFixer(this.desktop);
         this.bodyShape = new BodyShapeEditor(this.desktop);
+        this.touchProfile = new TouchProfileService(this.desktop);
         const modBisect = (this.modBisect = new ModBisect(this.desktop));
         modBisect.recovering = (async () => {
             try {

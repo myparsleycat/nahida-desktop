@@ -5,6 +5,7 @@ import StaticGlbConverter from "@renderer/components/tools/static-glb-converter"
 import TextureResizer from "@renderer/components/tools/texture-resizer";
 import TogglePersistence from "@renderer/components/tools/toggle-persistence";
 import ToggleViewerGenerator from "@renderer/components/tools/toggle-viewer-generator";
+import TouchProfileTool from "@renderer/components/tools/touch-profile/touch-profile";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { cn } from "@renderer/lib/utils";
 import { Link } from "@tanstack/react-router";
@@ -68,6 +69,11 @@ const toolPages: ToolPage[] = [
     nameKey: "page.tools.body_shape.title",
     initials: "BS",
     component: () => <BodyShapeTool />,
+  },
+  {
+    nameKey: "page.tools.touch_profile.title",
+    initials: "AT",
+    component: () => <TouchProfileTool />,
   },
 ];
 
