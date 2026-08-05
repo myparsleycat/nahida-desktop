@@ -16,6 +16,17 @@ export function registerGameBananaHandlers(d: NahidaDesktop) {
     );
     rh("gamebanana:getModIndex", async (input) => d.service.gamebanana.getModIndex(input));
     rh("gamebanana:getModOverview", async (input) => d.service.gamebanana.getModOverview(input));
+    rh("gamebanana:toggleModLike", async (input) => {
+        try {
+            return await d.service.gamebanana.toggleModLike(input);
+        } catch (error) {
+            d.logger.error(
+                error,
+                `GameBanana:toggleModLike:${input.modelName ?? "Mod"}:${input.itemId}`,
+            );
+            throw error;
+        }
+    });
     rh("gamebanana:getModPosts", async (input) => d.service.gamebanana.getModPosts(input));
     rh("gamebanana:logout", async () => d.service.gamebanana.logout());
 }

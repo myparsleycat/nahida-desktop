@@ -566,6 +566,8 @@
       "category_panel_description_nested": "현재 카테고리의 하위 카테고리를 탐색합니다.",
       "category_panel_description_selected": "\"{{name}}\"의 하위 카테고리를 탐색합니다.",
       "no_categories": "표시할 카테고리가 없습니다.",
+      "search_categories": "카테고리 검색...",
+      "no_category_results": "일치하는 카테고리가 없습니다.",
       "stage": {
         "game": "게임",
         "category": "카테고리",
@@ -595,6 +597,12 @@
         "views": "조회수",
         "downloads": "다운로드"
       },
+      "like": "좋아요",
+      "liked": "좋아요 누름",
+      "unlike": "좋아요 취소",
+      "like_unavailable": "이 모드에는 좋아요를 사용할 수 없습니다.",
+      "like_failed": "좋아요 상태를 변경하지 못했습니다.",
+      "download_failed": "GameBanana 다운로드에 실패했습니다.",
       "top_submissions": "주요 제출물",
       "latest_feed": "최신 피드",
       "latest_feed_description": "선택한 게임의 최근 제출물입니다.",
@@ -1154,7 +1162,9 @@
       "adv": {
         "title": "고급",
         "warning_title": "주의",
-        "warning_description": "이 곳의 설정을 변경하면 앱 동작에 영향을 줄 수 있습니다."
+        "warning_description": "이 곳의 설정을 변경하면 앱 동작에 영향을 줄 수 있습니다.",
+        "search_placeholder": "설정 key 검색...",
+        "no_results": "일치하는 설정 key가 없습니다."
       },
       "transfer": {
         "title": "전송",

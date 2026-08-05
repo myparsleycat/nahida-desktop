@@ -102,6 +102,7 @@ function RouteComponent() {
   const selectedGameKey = useGameBananaStore((state) => state.selectedGame);
   const selectedCategoryId = useGameBananaStore((state) => state.selectedCategoryId);
   const categoryBreadcrumbs = useGameBananaStore((state) => state.categoryBreadcrumbs);
+  const categorySearch = useGameBananaStore((state) => state.categorySearch);
   const selectedMod = useGameBananaStore((state) => state.selectedMod);
   const subfeedPage = useGameBananaStore((state) => state.subfeedPage);
   const modsPage = useGameBananaStore((state) => state.modsPage);
@@ -118,6 +119,7 @@ function RouteComponent() {
   const setSubfeedPage = useGameBananaStore((state) => state.setSubfeedPage);
   const setModsPage = useGameBananaStore((state) => state.setModsPage);
   const setModSearch = useGameBananaStore((state) => state.setModSearch);
+  const setCategorySearch = useGameBananaStore((state) => state.setCategorySearch);
   const setModsSort = useGameBananaStore((state) => state.setModsSort);
   const toggleModUrl = useGameBananaStore((state) => state.toggleModUrl);
 
@@ -610,7 +612,9 @@ function RouteComponent() {
                     rootCategories={rootCategories}
                     categoryChildren={categoryChildren}
                     selectedCategoryId={selectedCategoryId}
+                    categorySearch={categorySearch}
                     onSelectCategory={selectCategory}
+                    onChangeCategorySearch={setCategorySearch}
                     onResetToGameHome={resetToGameHome}
                   />
                 )}

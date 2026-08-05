@@ -2,6 +2,7 @@ import path from "node:path";
 
 import type { ResolvedArchiveExtractPathMode } from "@shared/mod";
 import type { TransferData } from "@shared/types";
+import { toErrorMessage } from "@shared/utils";
 import { throttle } from "es-toolkit";
 import fse from "fs-extra";
 import ky from "ky";
@@ -351,10 +352,14 @@ export class CustomDownloader {
             headers: await this.desktop.httpService.getHeaders(fileUrl),
         });
 
-        const resp = await respPromise;
+        const resp = await respPromise.catch((error) => {
+            throw new Error(`GAMEBANANA_DOWNLOAD_HEAD_FAILED:${toErrorMessage(error)}`);
+        });
 
         if (!resp.ok) {
-            throw new Error(`Failed to get real file URL: ${resp.statusText}`);
+            throw new Error(
+                `GAMEBANANA_DOWNLOAD_HEAD_FAILED:${resp.status}:${resp.statusText || "UNKNOWN"}`,
+            );
         }
 
         const realFileUrl = resp.url;
@@ -526,7 +531,10 @@ export class CustomDownloader {
                     void this.desktop.service.transfer.updateTransfer(pid, { status: "canceled" });
                 } else {
                     this.desktop.logger.error(err, "GameBanana:downloadFromGB");
-                    void this.desktop.service.transfer.updateTransfer(pid, { status: "error" });
+                    void this.desktop.service.transfer.updateTransfer(pid, {
+                        status: "error",
+                        error: toErrorMessage(err),
+                    });
                 }
             } finally {
                 await fse.remove(stagingPath).catch(() => {});

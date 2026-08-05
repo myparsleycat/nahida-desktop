@@ -22,6 +22,7 @@ interface GameBananaState {
     pendingModGameSync: boolean;
     selectedCategoryId?: number;
     categoryBreadcrumbs: GameBananaBreadcrumb[];
+    categorySearch: string;
     selectedMod?: GameBananaSelectedSubmission;
     subfeedPage: number;
     modsPage: number;
@@ -33,6 +34,7 @@ interface GameBananaState {
     requestModGameSync: () => void;
     consumeModGameSync: () => boolean;
     selectCategory: (categoryId: number, categoryName: string) => void;
+    setCategorySearch: (query: string) => void;
     selectMod: (submission: GameBananaSelectedSubmission) => void;
     clearSelectedMod: () => void;
     selectBreadcrumbCategory: (index: number) => void;
@@ -49,6 +51,7 @@ export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
     pendingModGameSync: false,
     selectedCategoryId: undefined,
     categoryBreadcrumbs: [],
+    categorySearch: "",
     selectedMod: undefined,
     subfeedPage: DEFAULT_SUBFEED_PAGE,
     modsPage: DEFAULT_MODS_PAGE,
@@ -60,6 +63,7 @@ export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
             selectedGame,
             selectedCategoryId: undefined,
             categoryBreadcrumbs: [],
+            categorySearch: "",
             selectedMod: undefined,
             subfeedPage: DEFAULT_SUBFEED_PAGE,
             modsPage: DEFAULT_MODS_PAGE,
@@ -88,6 +92,7 @@ export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
             return {
                 selectedCategoryId: categoryId,
                 categoryBreadcrumbs: nextBreadcrumbs,
+                categorySearch: "",
                 selectedMod: undefined,
                 modsPage: DEFAULT_MODS_PAGE,
                 modSearch: "",
@@ -106,6 +111,7 @@ export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
             return {
                 selectedCategoryId: nextCategory.id,
                 categoryBreadcrumbs: nextBreadcrumbs,
+                categorySearch: "",
                 selectedMod: undefined,
                 modsPage: DEFAULT_MODS_PAGE,
                 modSearch: "",
@@ -115,6 +121,7 @@ export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
         set({
             selectedCategoryId: undefined,
             categoryBreadcrumbs: [],
+            categorySearch: "",
             selectedMod: undefined,
             subfeedPage: DEFAULT_SUBFEED_PAGE,
             modsPage: DEFAULT_MODS_PAGE,
@@ -123,6 +130,7 @@ export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
     setSubfeedPage: (subfeedPage) => set({ subfeedPage: Math.max(1, subfeedPage) }),
     setModsPage: (modsPage) => set({ modsPage: Math.max(1, modsPage) }),
     setModSearch: (modSearch) => set({ modSearch }),
+    setCategorySearch: (categorySearch) => set({ categorySearch }),
     setModsSort: (modsSort) => set({ modsSort, modsPage: DEFAULT_MODS_PAGE }),
     toggleModUrl: () => set((state) => ({ isModUrlOpen: !state.isModUrlOpen })),
 }));
