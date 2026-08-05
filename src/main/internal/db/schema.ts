@@ -47,6 +47,12 @@ export type ImageCacheRow = {
     size: number;
 };
 
+export type TouchProfileVisionCacheRow = {
+    cacheKey: string;
+    result: string;
+    updatedAt: string;
+};
+
 export type ScriptType = "python" | "exec";
 
 export type ScriptRow = {
@@ -121,7 +127,7 @@ export type TableSpec = {
     foreignKeys?: TableForeignKeySpec[];
 };
 
-export const APP_SCHEMA_VERSION = 1;
+export const APP_SCHEMA_VERSION = 2;
 
 export const TABLE_SPECS: TableSpec[] = [
     {
@@ -203,6 +209,14 @@ export const TABLE_SPECS: TableSpec[] = [
             { name: "hash", type: "TEXT", primaryKey: true, notNull: true },
             { name: "image", type: "BLOB", notNull: true },
             { name: "size", type: "INTEGER", notNull: true, defaultSql: "0" },
+        ],
+    },
+    {
+        name: "touch_profile_vision_cache",
+        columns: [
+            { name: "cache_key", type: "TEXT", primaryKey: true, notNull: true },
+            { name: "result", type: "TEXT", notNull: true },
+            { name: "updated_at", type: "TEXT", notNull: true, defaultSql: "''" },
         ],
     },
     {
