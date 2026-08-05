@@ -54,6 +54,7 @@ import type {
 import {
   TOUCH_PHYSICS_PRESETS,
   TOUCH_PROFILE_MASK_CURVE_RANGE,
+  TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE,
   TOUCH_PROFILE_MASK_STRENGTH_RANGE,
   TOUCH_PROFILE_SETTING_RANGES,
   type TouchPhysicsPreset,
@@ -64,7 +65,14 @@ import {
 // vision-llm disabled — progress event type no longer used
 // import type { TouchProfileProgressEvent } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
-import { FolderOpenIcon, Loader2Icon, RotateCcwIcon, Undo2Icon } from "lucide-react";
+import {
+  FolderOpenIcon,
+  Loader2Icon,
+  Maximize2Icon,
+  Minimize2Icon,
+  RotateCcwIcon,
+  Undo2Icon,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -72,6 +80,7 @@ import { toast } from "sonner";
 const ALL_ZONES = "__all__";
 const DEFAULT_MASK_STRENGTH = 1;
 const DEFAULT_MASK_CURVE = 1;
+const DEFAULT_MASK_RADIUS_SCALE = 1;
 const BONE_WEIGHT_THRESHOLD_RANGE = { min: 0.005, max: 0.5, step: 0.005 } as const;
 const DEFAULT_BONE_WEIGHT_THRESHOLD = 0.01;
 const TOUCH_ZONE_CHANNEL_COUNT = 12;
@@ -698,6 +707,30 @@ export default function TouchProfileTool({
     options?: { zoneIds?: string[] },
   ) => {
     updateZoneMaskCurve(componentId, zone, DEFAULT_MASK_CURVE, options);
+  };
+
+  const updateZoneMaskRadiusScale = (
+    componentId: string,
+    zone: TouchProfileComponentSummary["zones"][number],
+    delta: number,
+    options?: { zoneIds?: string[] },
+  ) => {
+    if (!Number.isFinite(delta)) return;
+    const current = zone.settings.maskRadiusScale ?? DEFAULT_MASK_RADIUS_SCALE;
+    const next = Math.max(
+      TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE.min,
+      Math.min(
+        TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE.max,
+        Math.round((current + delta) * 100) / 100,
+      ),
+    );
+    if (next === current) return;
+    updateZoneSettings(
+      componentId,
+      zone.id,
+      { ...zone.settings, maskRadiusScale: next },
+      { refreshPreview: true, ...options },
+    );
   };
 
   const discardDraft = async () => {
@@ -1574,6 +1607,8 @@ export default function TouchProfileTool({
                                             zone.settings.strengthPreset,
                                             zone.settings.maskStrength ?? DEFAULT_MASK_STRENGTH,
                                             zone.settings.maskCurve ?? DEFAULT_MASK_CURVE,
+                                            zone.settings.maskRadiusScale ??
+                                              DEFAULT_MASK_RADIUS_SCALE,
                                           ),
                                           { zoneIds: linkedZoneIds },
                                         );
@@ -1603,6 +1638,70 @@ export default function TouchProfileTool({
                                     </SelectContent>
                                   </Select>
                                 </Field>
+                              </div>
+                              <div className="mt-3">
+                                <div className="mb-1.5 flex items-center justify-between gap-2">
+                                  <span className="text-sm font-medium">
+                                    {t("page.tools.touch_profile.mask_radius")}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground tabular-nums">
+                                    {Math.round(
+                                      (zone.settings.maskRadiusScale ?? DEFAULT_MASK_RADIUS_SCALE) *
+                                        100,
+                                    )}
+                                    %
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-xs"
+                                    onClick={() =>
+                                      updateZoneMaskRadiusScale(
+                                        selectedComponent.componentId,
+                                        zone,
+                                        -TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE.step,
+                                        { zoneIds: linkedZoneIds },
+                                      )
+                                    }
+                                    disabled={
+                                      applying ||
+                                      rollingBack ||
+                                      (zone.settings.maskRadiusScale ??
+                                        DEFAULT_MASK_RADIUS_SCALE) <=
+                                        TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE.min
+                                    }
+                                  >
+                                    <Minimize2Icon className="mr-1.5 size-3.5" />
+                                    {t("page.tools.touch_profile.mask_radius_shrink")}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-xs"
+                                    onClick={() =>
+                                      updateZoneMaskRadiusScale(
+                                        selectedComponent.componentId,
+                                        zone,
+                                        TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE.step,
+                                        { zoneIds: linkedZoneIds },
+                                      )
+                                    }
+                                    disabled={
+                                      applying ||
+                                      rollingBack ||
+                                      (zone.settings.maskRadiusScale ??
+                                        DEFAULT_MASK_RADIUS_SCALE) >=
+                                        TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE.max
+                                    }
+                                  >
+                                    <Maximize2Icon className="mr-1.5 size-3.5" />
+                                    {t("page.tools.touch_profile.mask_radius_grow")}
+                                  </Button>
+                                </div>
                               </div>
                               <Field className="mt-3">
                                 <div className="flex items-center justify-between gap-2">
@@ -1874,10 +1973,12 @@ function createPresetSettings(
   strengthPreset: TouchZoneStrengthPreset,
   maskStrength: number,
   maskCurve: number,
+  maskRadiusScale: number,
 ): TouchZoneSettings {
   return {
     maskStrength,
     maskCurve,
+    maskRadiusScale,
     strengthPreset,
     physicsPreset: preset,
     advanced: { ...TOUCH_PHYSICS_PRESETS[preset] },

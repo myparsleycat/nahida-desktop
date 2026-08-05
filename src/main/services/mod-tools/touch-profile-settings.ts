@@ -1,5 +1,6 @@
 import {
     TOUCH_PROFILE_MASK_CURVE_RANGE,
+    TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE,
     TOUCH_PROFILE_MASK_STRENGTH_RANGE,
     TOUCH_PROFILE_SETTING_RANGES,
     TOUCH_ZONE_STRENGTH_MULTIPLIERS,
@@ -48,6 +49,16 @@ export function normalizeTouchZoneSettings(input: unknown): TouchZoneSettings {
         throw new Error("Touch mask curve out of range");
     }
 
+    const maskRadiusScale = input.maskRadiusScale ?? 1;
+    if (
+        typeof maskRadiusScale !== "number" ||
+        !Number.isFinite(maskRadiusScale) ||
+        maskRadiusScale < TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE.min ||
+        maskRadiusScale > TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE.max
+    ) {
+        throw new Error("Touch mask radius scale out of range");
+    }
+
     if (!isRecord(input.advanced)) {
         throw new Error("Touch advanced settings must be an object");
     }
@@ -68,7 +79,7 @@ export function normalizeTouchZoneSettings(input: unknown): TouchZoneSettings {
         }),
     ) as unknown as TouchProfileAdvancedSettings;
 
-    return { maskStrength, maskCurve, strengthPreset, physicsPreset, advanced };
+    return { maskStrength, maskCurve, maskRadiusScale, strengthPreset, physicsPreset, advanced };
 }
 
 export function resolveTouchJiggleParams(settings: TouchZoneSettings, objectId: number) {

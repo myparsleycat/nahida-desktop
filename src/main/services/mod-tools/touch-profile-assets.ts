@@ -3,6 +3,7 @@ import path from "node:path";
 import {
     createDefaultTouchZoneSettings,
     TOUCH_PROFILE_MASK_CURVE_RANGE,
+    TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE,
     TOUCH_PROFILE_MASK_STRENGTH_RANGE,
 } from "@shared/touch-profile-settings";
 import fse from "fs-extra";
@@ -507,6 +508,15 @@ export function buildVertexMasks(
                   Math.min(TOUCH_PROFILE_MASK_CURVE_RANGE.max, zone.settings.maskCurve),
               )
             : 1;
+        const maskRadiusScale = Number.isFinite(zone.settings.maskRadiusScale)
+            ? Math.max(
+                  TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE.min,
+                  Math.min(
+                      TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE.max,
+                      zone.settings.maskRadiusScale,
+                  ),
+              )
+            : 1;
 
         const seeds =
             zone.seedVertices && zone.seedVertices.length > 0
@@ -517,7 +527,9 @@ export function buildVertexMasks(
                   Math.min(zone.radius[0], zone.radius[1], zone.radius[2]) * VISION_SEED_INFLUENCE,
                   Math.max(...zone.radius) * 0.2,
                   0.02,
-              ) * maskTuning.seedInfluenceScale
+              ) *
+              maskRadiusScale *
+              maskTuning.seedInfluenceScale
             : 0;
         const seedInfluence2 = seedInfluence * seedInfluence;
         const seedCutoffD2 =
@@ -549,9 +561,9 @@ export function buildVertexMasks(
                     Math.pow(1 - t / seedCutoffD2, maskCurve) *
                     (1 - smoothstep(seedCutoffD2 - seedEdgeFadeD2, seedCutoffD2, t));
             } else {
-                const dx = (px - zone.center[0]) / zone.radius[0];
-                const dy = (py - zone.center[1]) / zone.radius[1];
-                const dz = (pz - zone.center[2]) / zone.radius[2];
+                const dx = (px - zone.center[0]) / (zone.radius[0] * maskRadiusScale);
+                const dy = (py - zone.center[1]) / (zone.radius[1] * maskRadiusScale);
+                const dz = (pz - zone.center[2]) / (zone.radius[2] * maskRadiusScale);
                 const d2 = dx * dx + dy * dy + dz * dz;
                 if (d2 >= maskTuning.maskCutoffD2) continue;
                 const edgeFade =

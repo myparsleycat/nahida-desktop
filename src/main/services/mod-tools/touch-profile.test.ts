@@ -323,7 +323,7 @@ describe("touch asset helpers", () => {
         assert.deepEqual(bakeSampleOffsets(104373, 55830).slice(0, 2), [104373, 112348]);
     });
 
-    it("applies per-zone mask strength to generated vertex masks", () => {
+    it("applies per-zone mask settings to generated vertex masks", () => {
         const vertexCount = 80;
         const positions = new Float32Array(vertexCount * 3);
         for (let i = 0; i < vertexCount; i++) {
@@ -412,11 +412,59 @@ describe("touch asset helpers", () => {
             vertexCount,
             zone.channel,
         );
+        const shrunkZone = {
+            ...zone,
+            settings: { ...zone.settings, maskRadiusScale: 0.5 },
+        };
+        const expandedZone = {
+            ...zone,
+            settings: { ...zone.settings, maskRadiusScale: 1.5 },
+        };
+        const shrunk = extractMaskChannel(
+            buildVertexMasks(vertexCount, positions, indices, component, [shrunkZone]),
+            vertexCount,
+            zone.channel,
+        );
+        const expanded = extractMaskChannel(
+            buildVertexMasks(vertexCount, positions, indices, component, [expandedZone]),
+            vertexCount,
+            zone.channel,
+        );
+        const seededZone = { ...zone, seedVertices: [19, 59] };
+        const seededBase = extractMaskChannel(
+            buildVertexMasks(vertexCount, positions, indices, component, [seededZone]),
+            vertexCount,
+            zone.channel,
+        );
+        const seededShrunk = extractMaskChannel(
+            buildVertexMasks(vertexCount, positions, indices, component, [
+                { ...seededZone, settings: { ...zone.settings, maskRadiusScale: 0.5 } },
+            ]),
+            vertexCount,
+            zone.channel,
+        );
+        const seededExpanded = extractMaskChannel(
+            buildVertexMasks(vertexCount, positions, indices, component, [
+                { ...seededZone, settings: { ...zone.settings, maskRadiusScale: 1.5 } },
+            ]),
+            vertexCount,
+            zone.channel,
+        );
 
         assert.ok(base.some((value) => value > 0));
         assert.ok(increasedStrength.some((value, vertex) => value > base[vertex] + 1e-6));
         assert.ok(flattened.some((value, vertex) => value > base[vertex] + 1e-6));
         assert.ok(concentrated.some((value, vertex) => value < base[vertex] - 1e-6));
+        assert.ok(shrunk.some((value, vertex) => value < base[vertex] - 1e-6));
+        assert.ok(expanded.some((value, vertex) => value > base[vertex] + 1e-6));
+        assert.ok(
+            seededShrunk.reduce((sum, value) => sum + value, 0) <
+                seededBase.reduce((sum, value) => sum + value, 0),
+        );
+        assert.ok(
+            seededExpanded.reduce((sum, value) => sum + value, 0) >
+                seededBase.reduce((sum, value) => sum + value, 0),
+        );
         for (let vertex = 0; vertex < vertexCount; vertex++) {
             if (base[vertex] <= 1e-6) continue;
             assert.ok(Math.abs(halfStrength[vertex] - base[vertex] * 0.5) < 1e-5);
@@ -489,6 +537,14 @@ describe("touch zone settings", () => {
 
         assert.equal(settings.maskStrength, 1.5);
         assert.equal(settings.maskCurve, 1);
+        assert.equal(settings.maskRadiusScale, 1);
+        assert.equal(
+            normalizeTouchZoneSettings({
+                ...createDefaultTouchZoneSettings(),
+                maskRadiusScale: 1.5,
+            }).maskRadiusScale,
+            1.5,
+        );
         assert.equal(
             normalizeTouchZoneSettings({
                 ...createDefaultTouchZoneSettings(),
@@ -511,6 +567,14 @@ describe("touch zone settings", () => {
                     maskCurve: 2.1,
                 }),
             /mask curve out of range/,
+        );
+        assert.throws(
+            () =>
+                normalizeTouchZoneSettings({
+                    ...createDefaultTouchZoneSettings(),
+                    maskRadiusScale: 1.6,
+                }),
+            /mask radius scale out of range/,
         );
     });
 

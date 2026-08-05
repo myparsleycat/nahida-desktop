@@ -15,6 +15,8 @@ export type TouchZoneSettings = {
     maskStrength: number;
     /** Exponent applied to the generated vertex mask to flatten or concentrate its influence. */
     maskCurve: number;
+    /** Radius multiplier applied to the generated vertex mask for this zone. */
+    maskRadiusScale: number;
     strengthPreset: TouchZoneStrengthPreset;
     physicsPreset: TouchPhysicsPreset;
     advanced: TouchProfileAdvancedSettings;
@@ -22,6 +24,7 @@ export type TouchZoneSettings = {
 
 export const TOUCH_PROFILE_MASK_STRENGTH_RANGE = { min: 0, max: 2, step: 0.05 } as const;
 export const TOUCH_PROFILE_MASK_CURVE_RANGE = { min: 0, max: 2, step: 0.05 } as const;
+export const TOUCH_PROFILE_MASK_RADIUS_SCALE_RANGE = { min: 0.5, max: 1.5, step: 0.1 } as const;
 
 export const TOUCH_PROFILE_SETTING_RANGES = {
     radius: { min: 0.02, max: 1, step: 0.01 },
@@ -74,6 +77,7 @@ export function createDefaultTouchZoneSettings(): TouchZoneSettings {
     return {
         maskStrength: 1,
         maskCurve: 1,
+        maskRadiusScale: 1,
         strengthPreset: "normal",
         physicsPreset: "normal",
         advanced: { ...DEFAULT_TOUCH_PROFILE_ADVANCED },
