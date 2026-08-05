@@ -29,7 +29,7 @@ export function TouchProfileDialog({
       >
         <DialogHeader className="pr-10">
           <DialogTitle className="truncate" title={modName}>
-            {modName || t("page.tools.touch_profile.title")}
+            {modName || `${t("page.tools.touch_profile.title")} (${t("g.beta")})`}
           </DialogTitle>
         </DialogHeader>
 

@@ -902,7 +902,9 @@ export default function TouchProfileTool({
 
         <div className="flex min-h-0 flex-col overflow-hidden rounded-md border bg-card/20">
           <div className="border-b px-4 py-3">
-            <div className="text-sm font-medium">{t("page.tools.touch_profile.title")}</div>
+            <div className="text-sm font-medium">
+              {t("page.tools.touch_profile.title")} ({t("g.beta")})
+            </div>
             {modName ? (
               <div className="truncate text-xs text-muted-foreground">{modName}</div>
             ) : (

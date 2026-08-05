@@ -19,12 +19,14 @@ type ToolPage =
   | {
       nameKey: string;
       initials: string;
+      beta?: boolean;
       component: () => React.ReactNode;
       path?: never;
     }
   | {
       nameKey: string;
       initials: string;
+      beta?: boolean;
       path: string;
       component?: never;
     };
@@ -68,11 +70,13 @@ const toolPages: ToolPage[] = [
   {
     nameKey: "page.tools.body_shape.title",
     initials: "BS",
+    beta: true,
     component: () => <BodyShapeTool />,
   },
   {
     nameKey: "page.tools.touch_profile.title",
     initials: "AT",
+    beta: true,
     component: () => <TouchProfileTool />,
   },
 ];
@@ -84,6 +88,9 @@ export default function ToolsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const activeTool = activeIndex !== null ? toolPages[activeIndex] : null;
+
+  const formatToolName = (tool: ToolPage) =>
+    tool.beta ? `${t(tool.nameKey)} (${t("g.beta")})` : t(tool.nameKey);
 
   return (
     <div
@@ -113,7 +120,7 @@ export default function ToolsPage() {
             {toolPages.map((tool, index) => {
               const isActive = activeIndex === index;
               const isExternal = !!tool.path;
-              const toolName = t(tool.nameKey);
+              const toolName = formatToolName(tool);
 
               if (isExternal) {
                 return (
@@ -186,7 +193,7 @@ export default function ToolsPage() {
             {activeTool && (
               <>
                 <span>/</span>
-                <span className="text-foreground">{t(activeTool.nameKey)}</span>
+                <span className="text-foreground">{formatToolName(activeTool)}</span>
               </>
             )}
           </div>
@@ -200,7 +207,7 @@ export default function ToolsPage() {
               <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
                 {toolPages.map((tool, index) => {
                   const isExternal = !!tool.path;
-                  const toolName = t(tool.nameKey);
+                  const toolName = formatToolName(tool);
 
                   if (isExternal) {
                     return (

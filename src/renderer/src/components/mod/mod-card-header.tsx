@@ -75,7 +75,7 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                 }}
               >
                 <PersonStandingIcon className="size-4" />
-                {t("page.tools.body_shape.title")}
+                {t("page.tools.body_shape.title")} ({t("g.beta")})
               </DropdownMenuItem>
 
               <DropdownMenuItem
@@ -85,7 +85,7 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                 }}
               >
                 <SparklesIcon className="size-4" />
-                {t("page.tools.touch_profile.title")}
+                {t("page.tools.touch_profile.title")} ({t("g.beta")})
               </DropdownMenuItem>
 
               {actions.runner.showWuwaFixer && (

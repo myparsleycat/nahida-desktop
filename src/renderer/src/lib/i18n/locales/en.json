@@ -16,7 +16,8 @@
     "close": "Close",
     "rename": "Rename",
     "download": "Download",
-    "later": "Later"
+    "later": "Later",
+    "beta": "Beta"
   },
   "page": {
     "root": {

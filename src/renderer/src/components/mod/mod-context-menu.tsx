@@ -222,11 +222,11 @@ export function ModContextMenu({ mod, actions, children }: ModContextMenuProps) 
             </ContextMenuItem>
             <ContextMenuItem onClick={() => actions.openBodyShapeDialog(mod)}>
               <PersonStandingIcon className="mr-2 size-4" />
-              {t("page.tools.body_shape.title")}
+              {t("page.tools.body_shape.title")} ({t("g.beta")})
             </ContextMenuItem>
             <ContextMenuItem onClick={() => actions.openTouchProfileDialog(mod)}>
               <SparklesIcon className="mr-2 size-4" />
-              {t("page.tools.touch_profile.title")}
+              {t("page.tools.touch_profile.title")} ({t("g.beta")})
             </ContextMenuItem>
           </>
         )}

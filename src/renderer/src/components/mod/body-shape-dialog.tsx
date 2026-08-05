@@ -27,7 +27,7 @@ export function BodyShapeDialog({
       >
         <DialogHeader className="pr-10">
           <DialogTitle className="truncate" title={modName}>
-            {modName || t("page.tools.body_shape.title")}
+            {modName || `${t("page.tools.body_shape.title")} (${t("g.beta")})`}
           </DialogTitle>
         </DialogHeader>
 
