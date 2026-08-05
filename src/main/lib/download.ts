@@ -1,8 +1,7 @@
 import { createWriteStream } from "node:fs";
 import path from "node:path";
-import { Readable, Transform } from "node:stream";
+import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import type { ReadableStream } from "node:stream/web";
 import { createGunzip, createZstdDecompress } from "node:zlib";
 
 import { eden } from "@main/client";
@@ -27,6 +26,7 @@ import {
     slowReconnectDelayMs,
     type SlowChunkTransferPhase,
 } from "./slow-chunk-monitor";
+import { webStreamToNodeReadable } from "./web-stream-to-readable";
 
 export type DownloadParams = {
     type: "download";
@@ -480,7 +480,7 @@ class FileDownloadTask {
         if (!response.body) throw new Error("No response body");
 
         const fileStream = createWriteStream(targetPath, append ? { flags: "a" } : undefined);
-        const source = Readable.fromWeb(response.body as unknown as ReadableStream);
+        const source = webStreamToNodeReadable(response.body, signal);
         const bandwidth = createBandwidthLimitTransform(
             this.desktop.service.transfer.downloadBandwidth,
             {
@@ -804,6 +804,13 @@ export class DownloadLib {
             let downloadedCount = initialTransferedFiles ?? 0;
             let hasFailedOperation = false;
 
+            const handleQueuedFailure = (error: unknown, where: string) => {
+                if (abort.signal.aborted || isAbortError(error)) return;
+
+                hasFailedOperation = true;
+                this.desktop.logger.error(error, where);
+            };
+
             const throttledUpdate = throttle((bytes: number, count: number) => {
                 void this.desktop.service.transfer.updateTransfer(pid, {
                     transferedSize: bytes,
@@ -824,73 +831,84 @@ export class DownloadLib {
 
                 const filePath = path.join(parentPath, file.name);
 
-                void this.fileQueue.add(async () => {
-                    if (abort.signal.aborted) return;
+                void this.fileQueue
+                    .add(async () => {
+                        if (abort.signal.aborted) return;
 
-                    try {
-                        if (!isSingleFile && parentPath && !ensuredDirs.has(parentPath)) {
-                            await this.desktop.lib.fs.ensureDir(parentPath);
-                            ensuredDirs.add(parentPath);
+                        try {
+                            if (!isSingleFile && parentPath && !ensuredDirs.has(parentPath)) {
+                                await this.desktop.lib.fs.ensureDir(parentPath);
+                                ensuredDirs.add(parentPath);
+                            }
+
+                            const completed = await this.processFileDownloadTask({
+                                pid,
+                                file,
+                                filePath,
+                                abort,
+                                onProgress: (bytes) => {
+                                    downloadedBytes += bytes;
+                                    throttledUpdate(downloadedBytes, downloadedCount);
+                                },
+                                onComplete: () => {
+                                    downloadedCount++;
+                                    throttledUpdate(downloadedBytes, downloadedCount);
+                                },
+                            });
+
+                            if (!completed) hasFailedOperation = true;
+                        } catch (err) {
+                            if (abort.signal.aborted || isAbortError(err)) return;
+
+                            hasFailedOperation = true;
+                            this.desktop.service.transfer.markFileFailed(
+                                pid,
+                                `${file.name}: ${toErrorMessage(err)}`,
+                            );
+                            this.desktop.logger.error(
+                                err,
+                                `DownloadLib:executeDownload:${file.name}:prepare`,
+                            );
                         }
-
-                        const completed = await this.processFileDownloadTask({
-                            pid,
-                            file,
-                            filePath,
-                            abort,
-                            onProgress: (bytes) => {
-                                downloadedBytes += bytes;
-                                throttledUpdate(downloadedBytes, downloadedCount);
-                            },
-                            onComplete: () => {
-                                downloadedCount++;
-                                throttledUpdate(downloadedBytes, downloadedCount);
-                            },
-                        });
-
-                        if (!completed) hasFailedOperation = true;
-                    } catch (err) {
-                        if (abort.signal.aborted || isAbortError(err)) return;
-
-                        hasFailedOperation = true;
-                        this.desktop.service.transfer.markFileFailed(
-                            pid,
-                            `${file.name}: ${toErrorMessage(err)}`,
-                        );
-                        this.desktop.logger.error(
-                            err,
-                            `DownloadLib:executeDownload:${file.name}:prepare`,
-                        );
-                    }
-                });
+                    })
+                    .catch((err) => {
+                        handleQueuedFailure(err, `DownloadLib:executeDownload:${file.name}:queue`);
+                    });
             }
 
             if (!isSingleFile) {
                 for (const dirPath of pathMap.values()) {
                     if (abort.signal.aborted) break;
                     if (!ensuredDirs.has(dirPath)) {
-                        void this.fileQueue.add(async () => {
-                            if (abort.signal.aborted) return;
+                        void this.fileQueue
+                            .add(async () => {
+                                if (abort.signal.aborted) return;
 
-                            try {
-                                await this.desktop.lib.fs.ensureDir(dirPath);
-                                ensuredDirs.add(dirPath);
-                            } catch (err) {
-                                if (abort.signal.aborted || isAbortError(err)) return;
+                                try {
+                                    await this.desktop.lib.fs.ensureDir(dirPath);
+                                    ensuredDirs.add(dirPath);
+                                } catch (err) {
+                                    if (abort.signal.aborted || isAbortError(err)) return;
 
-                                hasFailedOperation = true;
-                                const errorMessage = `Directory preparation failed for ${dirPath}: ${toErrorMessage(err)}`;
-                                this.desktop.logger.error(
+                                    hasFailedOperation = true;
+                                    const errorMessage = `Directory preparation failed for ${dirPath}: ${toErrorMessage(err)}`;
+                                    this.desktop.logger.error(
+                                        err,
+                                        `DownloadLib:executeDownload:directory:${dirPath}`,
+                                    );
+                                    await this.desktop.service.transfer.updateTransfer(pid, {
+                                        error:
+                                            this.desktop.service.transfer.getTransferByPID(pid)
+                                                ?.error ?? errorMessage,
+                                    });
+                                }
+                            })
+                            .catch((err) => {
+                                handleQueuedFailure(
                                     err,
-                                    `DownloadLib:executeDownload:directory:${dirPath}`,
+                                    `DownloadLib:executeDownload:directory:${dirPath}:queue`,
                                 );
-                                await this.desktop.service.transfer.updateTransfer(pid, {
-                                    error:
-                                        this.desktop.service.transfer.getTransferByPID(pid)
-                                            ?.error ?? errorMessage,
-                                });
-                            }
-                        });
+                            });
                     }
                 }
             }

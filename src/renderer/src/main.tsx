@@ -1,9 +1,10 @@
+import "@renderer/lib/i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createHashHistory, createRouter, RouterProvider } from "@tanstack/react-router";
-import "./index.css";
-import "@renderer/lib/i18n";
-import { StrictMode, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
+
+import "./index.css";
 import { routeTree } from "./routeTree.gen";
 
 const hashHistory = createHashHistory();
@@ -36,11 +37,11 @@ const Root = () => {
   }, []);
 
   return (
-    <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider key={key} router={router} />
-      </QueryClientProvider>
-    </StrictMode>
+    // <StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider key={key} router={router} />
+    </QueryClientProvider>
+    // </StrictMode>
   );
 };
 

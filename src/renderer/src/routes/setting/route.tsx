@@ -13,6 +13,7 @@ import {
   ServerCrash,
   Settings,
   User,
+  Wrench,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -40,6 +41,7 @@ function RouteComponent() {
     () => [
       { icon: Settings, label: t("page.setting.tabs.general"), path: "/setting/gen" },
       { icon: GamepadIcon, label: t("page.setting.tabs.mod"), path: "/setting/mod" },
+      { icon: Wrench, label: t("page.setting.tabs.tools"), path: "/setting/tools" },
       { icon: PackageIcon, label: "XXMI", path: "/setting/xxmi" },
       { icon: HardDrive, label: t("page.setting.tabs.drive"), path: "/setting/drive" },
       { icon: User, label: t("page.setting.tabs.account"), path: "/setting/acc" },
