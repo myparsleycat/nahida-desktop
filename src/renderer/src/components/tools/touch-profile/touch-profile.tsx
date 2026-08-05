@@ -800,11 +800,9 @@ export default function TouchProfileTool({
 
   const emptyMessage = loading
     ? t("page.tools.touch_profile.analyzing")
-    : phase === "select"
-      ? t("page.tools.touch_profile.mesh_select_hint")
-      : previewLoading
-        ? t("page.tools.touch_profile.preview_loading")
-        : t("page.tools.touch_profile.preview_empty");
+    : previewLoading
+      ? t("page.tools.touch_profile.preview_loading")
+      : t("page.tools.touch_profile.preview_empty");
 
   const meshPreviewRegions = useMemo(
     () => [
@@ -966,9 +964,6 @@ export default function TouchProfileTool({
                           total: inspection.components.length,
                         })}
                       </span>
-                    </div>
-                    <div className="mt-2 text-xs text-muted-foreground">
-                      {t("page.tools.touch_profile.mesh_select_hint")}
                     </div>
                   </div>
 

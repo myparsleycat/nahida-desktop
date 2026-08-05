@@ -1026,7 +1026,6 @@
         "skipped": "已跳过",
         "preview_title": "触摸影响区域预览",
         "mesh_select_title": "选择要进行触摸分析的网格",
-        "mesh_select_hint": "选择要分析触摸区域的网格。点击列表中的网格可查看 3D 预览。",
         "mesh_select_count": "已选 {{selected}}/{{total}}",
         "mesh_select_all": "全选",
         "mesh_select_candidates": "仅候选项",

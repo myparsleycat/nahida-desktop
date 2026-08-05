@@ -1060,7 +1060,6 @@
         "skipped": "Skipped",
         "preview_title": "Touch Influence Preview",
         "mesh_select_title": "Select Meshes for Touch Analysis",
-        "mesh_select_hint": "Choose which meshes to analyze for touch zones. Click a mesh in the list to preview it in 3D.",
         "mesh_select_count": "Selected {{selected}}/{{total}}",
         "mesh_select_all": "Select all",
         "mesh_select_candidates": "Candidates only",

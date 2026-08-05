@@ -1027,7 +1027,6 @@
         "skipped": "除外",
         "preview_title": "タッチ影響範囲プレビュー",
         "mesh_select_title": "タッチ解析するメッシュを選択",
-        "mesh_select_hint": "タッチゾーンを解析するメッシュを選択してください。リスト内のメッシュをクリックすると3Dプレビューを確認できます。",
         "mesh_select_count": "選択 {{selected}}/{{total}}",
         "mesh_select_all": "すべて選択",
         "mesh_select_candidates": "候補のみ",
