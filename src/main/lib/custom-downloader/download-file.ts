@@ -17,6 +17,7 @@ import {
     slowReconnectDelayMs,
     type SlowChunkMonitor,
 } from "../slow-chunk-monitor";
+import { createUndiciFetcher } from "../undici-fetch";
 
 interface HttpServiceLike {
     getHeaders: (url: string) => Promise<Record<string, string>>;
@@ -98,8 +99,7 @@ export async function downloadFile(props: {
             const resp = await ky.get(url, {
                 signal: combinedSignal,
                 headers: await httpService.getHeaders(url),
-                // @ts-expect-error dispatcher is not in Ky's RequestInit type.
-                dispatcher: await httpService.getAgent(),
+                fetch: createUndiciFetcher(await httpService.getAgent()),
             });
             if (!resp.ok) {
                 await resp.body?.cancel().catch(() => {});

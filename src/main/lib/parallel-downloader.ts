@@ -16,6 +16,7 @@ import {
     slowReconnectDelayMs,
     type SlowChunkMonitor,
 } from "./slow-chunk-monitor";
+import { createUndiciFetcher } from "./undici-fetch";
 
 export interface ParallelDownloadOptions {
     url: string;
@@ -73,8 +74,7 @@ export class ParallelDownloader {
                 headers: await this.options.getHeaders(url),
                 timeout: 10000,
                 throwHttpErrors: false,
-                // @ts-expect-error dispatcher is not in Ky's RequestInit type.
-                dispatcher: await this.options.getAgent(),
+                fetch: createUndiciFetcher(await this.options.getAgent()),
             });
 
             const acceptRanges = response.headers.get("Accept-Ranges");
@@ -142,8 +142,7 @@ export class ParallelDownloader {
             signal,
             throwHttpErrors: false,
             timeout: 100000,
-            // @ts-expect-error dispatcher is not in Ky's RequestInit type.
-            dispatcher: await this.options.getAgent(),
+            fetch: createUndiciFetcher(await this.options.getAgent()),
         });
 
         if (response.status !== 206) {

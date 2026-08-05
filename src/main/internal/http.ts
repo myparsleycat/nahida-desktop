@@ -4,6 +4,7 @@ import { Agent, Pool } from "undici";
 import type { NahidaDesktop } from "../index";
 
 import { appVersion } from "../const";
+import { createUndiciFetcher } from "../lib/undici-fetch";
 
 const NHD_PREFIXES = ["http://localhost", "https://api.nahida.live"];
 
@@ -63,9 +64,7 @@ export class DesktopHttpService {
                 retry: {
                     limit: 2,
                 },
-                // Use the patched userland Undici parser instead of Electron's bundled fetch.
-                // @ts-expect-error dispatcher is not in the RequestInit type definition.
-                dispatcher: await this.getAgent(),
+                fetch: createUndiciFetcher(await this.getAgent()),
                 hooks: {
                     afterResponse: [
                         async ({ response }) => {

@@ -27,6 +27,7 @@ import {
     slowReconnectDelayMs,
     type SlowChunkTransferPhase,
 } from "./slow-chunk-monitor";
+import { createUndiciFetcher } from "./undici-fetch";
 
 export type DownloadParams = {
     type: "download";
@@ -415,8 +416,7 @@ class FileDownloadTask {
                 signal,
                 throwHttpErrors: false,
                 timeout: 100000,
-                // @ts-expect-error dispatcher is not in Ky's RequestInit type.
-                dispatcher: await this.desktop.httpService.getAgent(),
+                fetch: createUndiciFetcher(await this.desktop.httpService.getAgent()),
             });
 
         let response = await request({
