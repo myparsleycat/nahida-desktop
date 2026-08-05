@@ -9,6 +9,7 @@ import type { DownloadMetadata } from "./download";
 
 import { BandwidthLimiter } from "./bandwidth-limiter";
 import { DownloadLib } from "./download";
+import { SlowChunkMonitor } from "./slow-chunk-monitor";
 
 const mocks = vi.hoisted(() => ({
     request: vi.fn(),
@@ -32,24 +33,45 @@ type DownloadTask = {
             resumeFrom?: number;
         },
     ) => Promise<void>;
+    executeWithSlowRetry: (input: {
+        file: DownloadMetadata["files"][number];
+        filePath: string;
+        signal: AbortSignal;
+        onComplete: () => void;
+        onProgress?: (bytes: number) => void;
+    }) => Promise<void>;
+    getResumeOffset: (
+        file: DownloadMetadata["files"][number],
+        targetPath: string,
+    ) => Promise<number>;
 };
 
-const desktop = {
-    httpService: {
-        getHeaders: vi.fn().mockResolvedValue({ Authorization: "Bearer token" }),
-        getAgent: vi.fn().mockResolvedValue({}),
-    },
-    logger: {
-        error: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-    },
-    service: {
-        transfer: {
-            downloadBandwidth: new BandwidthLimiter(),
+const slowChunkMonitor = new SlowChunkMonitor();
+
+function createDesktop() {
+    return {
+        httpService: {
+            getHeaders: vi.fn().mockResolvedValue({ Authorization: "Bearer token" }),
+            getAgent: vi.fn().mockResolvedValue({}),
         },
-    },
-} as unknown as NahidaDesktop;
+        logger: {
+            error: vi.fn(),
+            info: vi.fn(),
+            warn: vi.fn(),
+        },
+        service: {
+            transfer: {
+                downloadBandwidth: new BandwidthLimiter(),
+                slowChunkMonitor,
+            },
+        },
+        lib: {
+            fs: {
+                rename: vi.fn(async (_from: string, _to: string) => {}),
+            },
+        },
+    } as unknown as NahidaDesktop;
+}
 
 const file: DownloadMetadata["files"][number] = {
     id: "file-id",
@@ -77,6 +99,7 @@ describe("FileDownloadTask range handling", () => {
         const targetPath = path.join(tempDir, "file.bin.ntmp");
         await writeFile(targetPath, "hello");
         mocks.request.mockResolvedValue(new Response(" world", { status: 206 }));
+        const desktop = createDesktop();
 
         const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
         await task.performDownload(file, targetPath, new AbortController().signal, {
@@ -100,6 +123,7 @@ describe("FileDownloadTask range handling", () => {
         await writeFile(targetPath, "stale partial data");
         mocks.request.mockResolvedValue(new Response("complete", { status: 200 }));
         const onResumeReset = vi.fn();
+        const desktop = createDesktop();
 
         const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
         await task.performDownload(file, targetPath, new AbortController().signal, {
@@ -118,6 +142,7 @@ describe("FileDownloadTask range handling", () => {
             .mockResolvedValueOnce(new Response(null, { status: 416 }))
             .mockResolvedValueOnce(new Response("complete", { status: 200 }));
         const onResumeReset = vi.fn();
+        const desktop = createDesktop();
 
         const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
         await task.performDownload(file, targetPath, new AbortController().signal, {
@@ -132,5 +157,90 @@ describe("FileDownloadTask range handling", () => {
             file.url,
             expect.objectContaining({ headers: { Authorization: "Bearer token" } }),
         );
+    });
+
+    it("treats 416 as already complete when the temp file covers the full size", async () => {
+        const targetPath = path.join(tempDir, "file.bin.ntmp");
+        await writeFile(targetPath, "complete");
+        mocks.request.mockResolvedValue(new Response(null, { status: 416 }));
+        const desktop = createDesktop();
+        const fullFile = { ...file, size: 8 };
+
+        const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
+        await task.performDownload(fullFile, targetPath, new AbortController().signal, {
+            resumeFrom: 8,
+        });
+
+        expect(await readFile(targetPath, "utf8")).toBe("complete");
+        expect(mocks.request).toHaveBeenCalledTimes(1);
+    });
+
+    it("deletes the temp file and returns zero for compressed files", async () => {
+        const targetPath = path.join(tempDir, "file.bin.ntmp");
+        await writeFile(targetPath, "stale-gzip");
+        const desktop = createDesktop();
+        const gzipFile = { ...file, compAlg: "gzip" as const };
+
+        const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
+        const offset = await task.getResumeOffset(gzipFile, targetPath);
+
+        expect(offset).toBe(0);
+        await expect(readFile(targetPath, "utf8")).rejects.toThrow();
+    });
+});
+
+describe("FileDownloadTask executeWithSlowRetry progress correction", () => {
+    let tempDir: string;
+
+    beforeEach(async () => {
+        mocks.request.mockReset();
+        tempDir = await mkdtemp(path.join(os.tmpdir(), "nahida-download-test-"));
+    });
+
+    afterEach(async () => {
+        await rm(tempDir, { recursive: true, force: true });
+    });
+
+    it("reports resume delta across multiple failed attempts", async () => {
+        const filePath = path.join(tempDir, "file.bin");
+        const targetPath = `${filePath}.ntmp`;
+        await writeFile(targetPath, "hello");
+
+        const fullFile = { ...file, size: 11 };
+
+        mocks.request
+            .mockResolvedValueOnce(new Response(" world", { status: 206 }))
+            .mockImplementationOnce(async () => {
+                throw new Error("network failure");
+            })
+            .mockResolvedValueOnce(new Response("hello world", { status: 206 }));
+
+        const desktop = createDesktop();
+        (desktop.lib.fs.rename as ReturnType<typeof vi.fn>).mockImplementation(
+            async (_from: string, to: string) => {
+                const data = await readFile(targetPath, "utf8");
+                await writeFile(to, data);
+            },
+        );
+
+        const progressCalls: number[] = [];
+        const onComplete = vi.fn();
+
+        const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
+        await task.executeWithSlowRetry({
+            file: fullFile,
+            filePath,
+            signal: new AbortController().signal,
+            onComplete,
+            onProgress: (bytes) => {
+                progressCalls.push(bytes);
+            },
+        });
+
+        expect(onComplete).toHaveBeenCalledOnce();
+
+        let total = 0;
+        for (const b of progressCalls) total += b;
+        expect(total).toBe(11);
     });
 });

@@ -57,13 +57,15 @@ export type DownloadMetadata = {
 export const BATCH_ROOT_ID = "batch-root";
 const FILE_ID_BATCH_LIMIT = 100;
 
-async function drainResponseBody(response: Response) {
+async function drainResponseBody(response: Response, signal?: AbortSignal) {
     const reader = response.body?.getReader();
     if (!reader) return;
 
     try {
-        while (!(await reader.read()).done) {
-            // Drain the response before issuing a replacement request.
+        while (true) {
+            if (signal?.aborted) return;
+            const { done } = await reader.read();
+            if (done) return;
         }
     } finally {
         reader.releaseLock();
@@ -426,7 +428,8 @@ class FileDownloadTask {
         let append = resumeFrom > 0 && !file.compAlg;
 
         if (append && response.status === 416) {
-            await drainResponseBody(response).catch(() => {});
+            await drainResponseBody(response, signal).catch(() => {});
+            if (resumeFrom >= file.size) return;
             await fse.remove(targetPath).catch(() => {});
             options?.onResumeReset?.();
             response = await request(headers);
@@ -434,7 +437,7 @@ class FileDownloadTask {
         }
 
         if (!response.ok) {
-            await drainResponseBody(response).catch(() => {});
+            await drainResponseBody(response, signal).catch(() => {});
             throw new Error(`Download failed: ${response.statusText}`);
         }
 
@@ -541,6 +544,10 @@ class FileDownloadTask {
 
             try {
                 const resumeFrom = await this.getResumeOffset(file, targetPath);
+                const resumeDelta = resumeFrom - reportedResumeBytes;
+                if (resumeDelta !== 0) onProgress?.(resumeDelta);
+                reportedResumeBytes = resumeFrom;
+
                 await this.performDownload(file, targetPath, combinedSignal, {
                     resumeFrom,
                     onProgress: (bytes) => {
