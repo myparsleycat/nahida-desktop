@@ -52,7 +52,6 @@ function createDesktop() {
     return {
         httpService: {
             getHeaders: vi.fn().mockResolvedValue({ Authorization: "Bearer token" }),
-            getAgent: vi.fn().mockResolvedValue({}),
         },
         logger: {
             error: vi.fn(),

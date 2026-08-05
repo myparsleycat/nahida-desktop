@@ -1,10 +1,8 @@
 import ky, { isNetworkError, isTimeoutError } from "ky";
-import { Agent, Pool } from "undici";
 
 import type { NahidaDesktop } from "../index";
 
 import { appVersion } from "../const";
-import { createUndiciFetcher } from "../lib/undici-fetch";
 
 const NHD_PREFIXES = ["http://localhost", "https://api.nahida.live"];
 
@@ -15,28 +13,10 @@ function isUnreachableError(error: unknown) {
 }
 
 export class DesktopHttpService {
-    private cachedAgent: Agent | null = null;
-
     constructor(private readonly desktop: NahidaDesktop) {}
 
     private isNHD(url: string) {
         return NHD_PREFIXES.some((prefix) => url.startsWith(prefix));
-    }
-
-    public async getAgent() {
-        if (this.cachedAgent) {
-            return this.cachedAgent;
-        }
-
-        this.cachedAgent = new Agent({
-            factory: (origin, options: Pool.Options) =>
-                new Pool(origin, {
-                    ...options,
-                    allowH2: true,
-                }),
-        });
-
-        return this.cachedAgent;
     }
 
     public async getHeaders(url: string) {
@@ -64,7 +44,6 @@ export class DesktopHttpService {
                 retry: {
                     limit: 2,
                 },
-                fetch: createUndiciFetcher(await this.getAgent()),
                 hooks: {
                     afterResponse: [
                         async ({ response }) => {

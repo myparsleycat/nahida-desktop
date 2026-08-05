@@ -4,7 +4,6 @@ import type { ReadableStream } from "node:stream/web";
 
 import fse from "fs-extra";
 import ky from "ky";
-import type { Agent } from "undici";
 
 import type { BandwidthLimiter } from "../bandwidth-limiter";
 import type { ParallelDownloader } from "../parallel-downloader";
@@ -17,11 +16,9 @@ import {
     slowReconnectDelayMs,
     type SlowChunkMonitor,
 } from "../slow-chunk-monitor";
-import { createUndiciFetcher } from "../undici-fetch";
 
 interface HttpServiceLike {
     getHeaders: (url: string) => Promise<Record<string, string>>;
-    getAgent: () => Promise<Agent>;
 }
 
 export async function downloadFile(props: {
@@ -100,7 +97,6 @@ export async function downloadFile(props: {
                 signal: combinedSignal,
                 headers: await httpService.getHeaders(url),
                 throwHttpErrors: false,
-                fetch: createUndiciFetcher(await httpService.getAgent()),
             });
             if (!resp.ok) {
                 await resp.body?.cancel().catch(() => {});

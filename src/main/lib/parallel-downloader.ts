@@ -4,7 +4,6 @@ import { pipeline } from "node:stream/promises";
 // oxlint-disable typescript/no-explicit-any
 import fse from "fs-extra";
 import ky from "ky";
-import type { Agent } from "undici";
 
 import type { BandwidthLimiter } from "./bandwidth-limiter";
 
@@ -16,7 +15,6 @@ import {
     slowReconnectDelayMs,
     type SlowChunkMonitor,
 } from "./slow-chunk-monitor";
-import { createUndiciFetcher } from "./undici-fetch";
 
 export interface ParallelDownloadOptions {
     url: string;
@@ -63,7 +61,6 @@ export class ParallelDownloader {
                 info: (msg: string, ...args: any[]) => void;
                 warn: (msg: string, ...args: any[]) => void;
             };
-            getAgent: () => Promise<Agent>;
             getHeaders: (url: string) => Promise<Record<string, string>>;
         },
     ) {}
@@ -74,7 +71,6 @@ export class ParallelDownloader {
                 headers: await this.options.getHeaders(url),
                 timeout: 10000,
                 throwHttpErrors: false,
-                fetch: createUndiciFetcher(await this.options.getAgent()),
             });
 
             const acceptRanges = response.headers.get("Accept-Ranges");
@@ -142,7 +138,6 @@ export class ParallelDownloader {
             signal,
             throwHttpErrors: false,
             timeout: 100000,
-            fetch: createUndiciFetcher(await this.options.getAgent()),
         });
 
         if (response.status !== 206) {

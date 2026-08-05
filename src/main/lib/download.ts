@@ -27,7 +27,6 @@ import {
     slowReconnectDelayMs,
     type SlowChunkTransferPhase,
 } from "./slow-chunk-monitor";
-import { createUndiciFetcher } from "./undici-fetch";
 
 export type DownloadParams = {
     type: "download";
@@ -307,7 +306,6 @@ class FileDownloadTask {
     constructor(private readonly desktop: NahidaDesktop) {
         this.parallelDownloader = new ParallelDownloader({
             logger: this.desktop.logger,
-            getAgent: () => this.desktop.httpService.getAgent(),
             getHeaders: (url: string) => this.desktop.httpService.getHeaders(url),
         });
     }
@@ -435,7 +433,6 @@ class FileDownloadTask {
                 signal,
                 throwHttpErrors: false,
                 timeout: 100000,
-                fetch: createUndiciFetcher(await this.desktop.httpService.getAgent()),
             });
 
         let response = await request({
