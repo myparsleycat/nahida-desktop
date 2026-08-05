@@ -27,10 +27,6 @@ type DownloadTask = {
         file: DownloadMetadata["files"][number],
         targetPath: string,
         signal: AbortSignal,
-        options?: {
-            onResumeReset?: () => void;
-            resumeFrom?: number;
-        },
     ) => Promise<void>;
 };
 
@@ -55,12 +51,12 @@ const file: DownloadMetadata["files"][number] = {
     fileId: "file-id",
     parentId: null,
     name: "file.bin",
-    size: 11,
+    size: 8,
     compAlg: null,
     url: "https://example.test/file.bin",
 };
 
-describe("FileDownloadTask resume handling", () => {
+describe("FileDownloadTask temporary file handling", () => {
     let tempDir: string;
 
     beforeEach(async () => {
@@ -72,47 +68,21 @@ describe("FileDownloadTask resume handling", () => {
         await rm(tempDir, { recursive: true, force: true });
     });
 
-    it("appends a partial temp file when the server honors Range", async () => {
+    it("overwrites an existing temporary file without sending a Range header", async () => {
         const targetPath = path.join(tempDir, "file.bin.ntmp");
-        await writeFile(targetPath, "hello");
-        mocks.request.mockResolvedValue(new Response(" world", { status: 206 }));
-
-        const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
-        await task.performDownload(file, targetPath, new AbortController().signal, {
-            resumeFrom: 5,
-        });
-
-        expect(await readFile(targetPath, "utf8")).toBe("hello world");
-        expect(mocks.request).toHaveBeenCalledWith(
-            file.url,
-            expect.objectContaining({
-                headers: expect.objectContaining({
-                    Authorization: "Bearer token",
-                    Range: "bytes=5-",
-                }),
-            }),
-        );
-    });
-
-    it("restarts from the beginning when Range is ignored", async () => {
-        const targetPath = path.join(tempDir, "file.bin.ntmp");
-        await writeFile(targetPath, "stale");
+        await writeFile(targetPath, "stale partial data");
         mocks.request.mockResolvedValue(new Response("complete", { status: 200 }));
-        const onResumeReset = vi.fn();
 
         const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
-        await task.performDownload(file, targetPath, new AbortController().signal, {
-            onResumeReset,
-            resumeFrom: 5,
-        });
+        await task.performDownload(file, targetPath, new AbortController().signal);
 
         expect(await readFile(targetPath, "utf8")).toBe("complete");
-        expect(onResumeReset).toHaveBeenCalledOnce();
         expect(mocks.request).toHaveBeenCalledWith(
             file.url,
             expect.objectContaining({
-                headers: expect.objectContaining({ Range: "bytes=5-" }),
+                headers: { Authorization: "Bearer token" },
             }),
         );
+        expect(mocks.request.mock.calls[0]?.[1]?.headers).not.toHaveProperty("Range");
     });
 });

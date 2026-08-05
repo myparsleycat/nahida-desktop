@@ -359,10 +359,7 @@ class FileDownloadTask {
         await retry(
             async () => {
                 if (signal.aborted) return;
-                await this.performDownload(file, targetPath, signal, {
-                    onProgress,
-                    resumeFrom: isSmallFile ? 0 : await this.getResumeOffset(file, targetPath),
-                });
+                await this.performDownload(file, targetPath, signal, { onProgress });
 
                 if (!isSmallFile && !signal.aborted) {
                     await this.desktop.lib.fs.rename(targetPath, filePath);
@@ -375,7 +372,7 @@ class FileDownloadTask {
                 signal,
             },
         ).catch(async (err) => {
-            if (isSmallFile || file.compAlg) await fse.remove(targetPath).catch(() => {});
+            await fse.remove(targetPath).catch(() => {});
             if (!signal.aborted) throw err;
         });
     }
@@ -389,43 +386,19 @@ class FileDownloadTask {
             onPhaseChange?: (
                 phase: Extract<SlowChunkTransferPhase, "network" | "bandwidth-wait">,
             ) => void;
-            onResumeReset?: () => void;
-            resumeFrom?: number;
         },
     ): Promise<void> {
-        const headers = await this.desktop.httpService.getHeaders(file.url);
-        const resumeFrom = options?.resumeFrom ?? 0;
-        const request = (requestHeaders: Record<string, string>) =>
-            ky(file.url, {
-                headers: requestHeaders,
-                signal,
-                throwHttpErrors: false,
-                timeout: 100000,
-            });
-
-        let response = await request({
-            ...headers,
-            ...(resumeFrom > 0 && !file.compAlg ? { Range: `bytes=${resumeFrom}-` } : {}),
+        const response = await ky(file.url, {
+            headers: await this.desktop.httpService.getHeaders(file.url),
+            signal,
+            throwHttpErrors: false,
+            timeout: 100000,
         });
-        let append = resumeFrom > 0 && !file.compAlg;
-
-        if (append && response.status !== 206) {
-            if (response.status === 416) {
-                await response.body?.cancel().catch(() => {});
-                response = await request(headers);
-            }
-
-            if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
-
-            await fse.remove(targetPath).catch(() => {});
-            options?.onResumeReset?.();
-            append = false;
-        }
 
         if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
         if (!response.body) throw new Error("No response body");
 
-        const fileStream = createWriteStream(targetPath, append ? { flags: "a" } : undefined);
+        const fileStream = createWriteStream(targetPath);
         const source = Readable.fromWeb(response.body as unknown as ReadableStream);
         const bandwidth = createBandwidthLimitTransform(
             this.desktop.service.transfer.downloadBandwidth,
@@ -453,23 +426,9 @@ class FileDownloadTask {
             }
         } catch (pipeErr) {
             fileStream.destroy();
+            await fse.remove(targetPath).catch(() => {});
             throw pipeErr;
         }
-    }
-
-    private async getResumeOffset(
-        file: DownloadMetadata["files"][0],
-        targetPath: string,
-    ): Promise<number> {
-        if (file.compAlg) {
-            await fse.remove(targetPath).catch(() => {});
-            return 0;
-        }
-
-        return await fse
-            .stat(targetPath)
-            .then(({ size }) => size)
-            .catch(() => 0);
     }
 
     public async executeWithSlowRetry({
@@ -497,9 +456,6 @@ class FileDownloadTask {
 
         let slowReconnects = 0;
         let errorRetries = 0;
-        let reportedResumeBytes = await this.getResumeOffset(file, targetPath);
-
-        if (reportedResumeBytes > 0) onProgress?.(reportedResumeBytes);
 
         while (true) {
             if (signal.aborted) return;
@@ -518,22 +474,13 @@ class FileDownloadTask {
             let attemptBytes = 0;
 
             try {
-                const resumeFrom = await this.getResumeOffset(file, targetPath);
                 await this.performDownload(file, targetPath, combinedSignal, {
-                    resumeFrom,
                     onProgress: (bytes) => {
                         attemptBytes += bytes;
-                        reportedResumeBytes += bytes;
                         monitor.recordSample(transfer.key, attemptBytes);
                         onProgress?.(bytes);
                     },
                     onPhaseChange: (phase) => monitor.setPhase(transfer.key, phase),
-                    onResumeReset: () => {
-                        if (reportedResumeBytes > 0) {
-                            onProgress?.(-reportedResumeBytes);
-                            reportedResumeBytes = 0;
-                        }
-                    },
                 });
 
                 if (!signal.aborted) {
@@ -545,10 +492,8 @@ class FileDownloadTask {
             } catch (err) {
                 if (attemptBytes > 0) {
                     onProgress?.(-attemptBytes);
-                    reportedResumeBytes = Math.max(0, reportedResumeBytes - attemptBytes);
                 }
-
-                if (file.compAlg) await fse.remove(targetPath).catch(() => {});
+                await fse.remove(targetPath).catch(() => {});
 
                 if (signal.aborted) {
                     throw err;
