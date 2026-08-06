@@ -44,6 +44,7 @@ export class BackendConnectivity {
                     "User-Agent": `Nahida Desktop/${appVersion}`,
                 },
             });
+            await resp.arrayBuffer();
             if (resp.status > 0) {
                 this.setOnline();
             } else {

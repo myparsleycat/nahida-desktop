@@ -1,3 +1,4 @@
+import path from "node:path";
 import { promisify } from "node:util";
 import { gunzip, gzip, zstdCompress, zstdDecompress } from "node:zlib";
 
@@ -15,21 +16,58 @@ import Upload, {
     type UploadParams,
 } from "@main/lib/upload";
 import type { LinkData } from "@main/server";
+import { BACKEND_URL } from "@shared/const";
 import type { DownloadSource } from "@shared/mod";
 import { toErrorMessage } from "@shared/utils";
 import { dialog } from "electron";
 import { retry } from "es-toolkit";
 import fse from "fs-extra";
+import { HTTPError } from "ky";
 import Heap from "mnemonist/heap";
 import { nanoid } from "nanoid";
 
 import type { NahidaDesktop } from "..";
 import type { LocalTransfer, TransferParams } from "./transfer";
 
+import { createDriveApiError, DriveApiError } from "./drive-errors";
+import { parseDriveSourceUrl } from "./drive-url";
 import { processChunked } from "./util";
 
 const Fn = eden.akasha.content({ id: "" }).get;
 type DriveItem = Treaty.Data<typeof Fn>;
+
+export type DriveCopyFromUrlParams = {
+    url: string;
+    destinationId: string;
+    password?: string;
+    collectionId?: string;
+    itemId?: string;
+};
+
+export type DriveCopyFromUrlResult = {
+    source: "link" | "mod";
+    copied: number;
+    destinationId: string;
+};
+
+type SharedLinkAccess = {
+    token: string;
+    parent: {
+        id: string;
+        name: string;
+    };
+};
+
+type ModCollection = {
+    id: string;
+    name: string;
+    rootId: string;
+    private?: boolean;
+};
+
+type ModOverview = {
+    collections: ModCollection[];
+};
 
 export const gzipAsync = promisify(gzip);
 export const gunzipAsync = promisify(gunzip);
@@ -368,7 +406,150 @@ export class DriveService {
             if (error) throw error.value;
             return data;
         },
+
+        copyFromUrl: async ({
+            url,
+            destinationId,
+            password = "",
+            collectionId,
+            itemId,
+        }: DriveCopyFromUrlParams): Promise<DriveCopyFromUrlResult> => {
+            const source = parseDriveSourceUrl(url);
+            if (source.type === "link") {
+                const access = await this.requestSharedLinkAccess(source.id, password);
+                await this.copyRemoteItems(
+                    [itemId ?? access.parent.id],
+                    destinationId,
+                    { "nhd-link-token": access.token },
+                    "shared link",
+                );
+                return { source: "link", copied: 1, destinationId };
+            }
+
+            const overview = await this.requestJson<ModOverview>(
+                `${BACKEND_URL}/akasha/mod/${encodeURIComponent(source.id)}`,
+                undefined,
+                "mod overview",
+            );
+            if (!isModOverview(overview)) {
+                throw new DriveApiError(
+                    "DRIVE_MOD_INVALID_RESPONSE",
+                    "The collection response was invalid.",
+                );
+            }
+            const publicCollections = overview.collections.filter(
+                (collection) => !collection.private,
+            );
+            const selectedCollections = collectionId
+                ? publicCollections.filter((collection) => collection.id === collectionId)
+                : publicCollections;
+
+            if (collectionId && selectedCollections.length === 0) {
+                throw new DriveApiError(
+                    "DRIVE_COLLECTION_NOT_FOUND",
+                    "The requested collection was not found.",
+                );
+            }
+
+            const sourceIds = itemId
+                ? [itemId]
+                : [...new Set(selectedCollections.map((collection) => collection.rootId))];
+            if (sourceIds.length === 0) {
+                throw new DriveApiError(
+                    "DRIVE_COLLECTION_EMPTY",
+                    "No public collections were found.",
+                );
+            }
+
+            await this.copyRemoteItems(sourceIds, destinationId, undefined, "mod collection");
+            return { source: "mod", copied: sourceIds.length, destinationId };
+        },
     };
+
+    private async requestSharedLinkAccess(linkId: string, password: string) {
+        try {
+            const data = await this.requestJson<unknown>(
+                `${BACKEND_URL}/akasha/link/${encodeURIComponent(linkId)}`,
+                {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ password, cftoken: "" }),
+                },
+                "shared link access",
+            );
+
+            if (!isSharedLinkAccess(data)) {
+                throw new DriveApiError(
+                    "DRIVE_LINK_INVALID_RESPONSE",
+                    "The shared link response was invalid.",
+                );
+            }
+            return data;
+        } catch (error) {
+            const message = toErrorMessage(error).toLowerCase();
+            if (message.includes("missing_password")) {
+                throw new DriveApiError(
+                    "DRIVE_LINK_PASSWORD_REQUIRED",
+                    "This shared link requires a password.",
+                    undefined,
+                    error,
+                );
+            }
+            if (message.includes("invalid_password")) {
+                throw new DriveApiError(
+                    "DRIVE_LINK_INVALID_PASSWORD",
+                    "The shared link password is incorrect.",
+                    undefined,
+                    error,
+                );
+            }
+            throw error;
+        }
+    }
+
+    private async copyRemoteItems(
+        ids: string[],
+        destinationId: string,
+        headers: Record<string, string> | undefined,
+        source: string,
+    ) {
+        if (ids.length === 0) {
+            throw new DriveApiError("DRIVE_COPY_EMPTY", "No items were selected for copying.");
+        }
+
+        await this.requestJson(
+            `${BACKEND_URL}/akasha/content/copy_many`,
+            {
+                method: "POST",
+                headers: {
+                    "content-type": "application/json",
+                    ...headers,
+                },
+                body: JSON.stringify({ uuids: ids, target: destinationId }),
+            },
+            `copy ${source}`,
+        );
+    }
+
+    private async requestJson<T>(url: string, options: RequestInit | undefined, operation: string) {
+        try {
+            const response = await this.desktop.httpService.fetcher(url, options);
+            const body = await readJsonResponse(response);
+            if (!response.ok) {
+                throw createDriveApiError(body, operation, response.status);
+            }
+            return body as T;
+        } catch (error) {
+            if (error instanceof DriveApiError) throw error;
+
+            if (error instanceof HTTPError) {
+                const body = await readJsonResponse(error.response);
+                throw createDriveApiError(body, operation, error.response.status);
+            }
+
+            throw createDriveApiError(error, operation);
+        }
+    }
 
     private async selectUploadPaths(paths?: string[]): Promise<string[] | null> {
         const window = this.desktop.window.main.window;
@@ -631,9 +812,13 @@ export class DriveService {
             }
 
             if (isSingle && isDir) {
-                const sanitized = this.desktop.lib.fs.sanitizeWindowsFilename(data.root.name);
-                const entries = await fse.readdir(savePath);
-                data.root.name = this.desktop.lib.fs.getUniqueName(sanitized, entries);
+                const resolvedName = await this.resolveDirectoryDownloadName({
+                    name: data.root.name,
+                    savePath,
+                    pid,
+                });
+                if (!resolvedName) return;
+                data.root.name = resolvedName;
             } else if (!isSingle) {
                 const usedNames = new Set(await fse.readdir(savePath));
                 for (const dir of data.dirs) {
@@ -690,6 +875,52 @@ export class DriveService {
             name,
         });
         void this.desktop.service.transfer.processQueue();
+    }
+
+    private async resolveDirectoryDownloadName({
+        name,
+        savePath,
+        pid,
+    }: {
+        name: string;
+        savePath: string;
+        pid: string;
+    }) {
+        const sanitized = this.desktop.lib.fs.sanitizeWindowsFilename(name);
+        const entries = await fse.readdir(savePath);
+        const existingName = entries.find(
+            (entry) => entry.toLowerCase() === sanitized.toLowerCase(),
+        );
+        if (!existingName) return sanitized;
+
+        const existingPath = path.join(savePath, existingName);
+        const isDirectory = await fse
+            .stat(existingPath)
+            .then((stat) => stat.isDirectory())
+            .catch(() => false);
+        if (!isDirectory) return this.desktop.lib.fs.getUniqueName(sanitized, entries);
+
+        const options = {
+            type: "question" as const,
+            title: "폴더가 이미 존재합니다",
+            message: `"${existingName}" 폴더가 이미 존재합니다.`,
+            detail: "기존 폴더에 파일을 덮어쓰시겠습니까?",
+            buttons: ["덮어쓰기", "새 이름으로 다운로드", "취소"],
+            defaultId: 1,
+            cancelId: 2,
+        };
+        const mainWindow = this.desktop.window.main.window;
+        const result = mainWindow
+            ? await dialog.showMessageBox(mainWindow, options)
+            : await dialog.showMessageBox(options);
+
+        if (result.response === 2) {
+            await this.desktop.service.transfer.cancelTransfer(pid);
+            return null;
+        }
+
+        if (result.response === 0) return existingName;
+        return this.desktop.lib.fs.getUniqueName(sanitized, entries);
     }
 
     private claimUniqueName(name: string, used: Set<string>) {
@@ -774,4 +1005,43 @@ export class DriveService {
             });
         }
     }
+}
+
+async function readJsonResponse(response: Response): Promise<unknown> {
+    const text = await response.text();
+    if (!text.trim()) return undefined;
+
+    try {
+        return JSON.parse(text) as unknown;
+    } catch {
+        return text;
+    }
+}
+
+function isSharedLinkAccess(value: unknown): value is SharedLinkAccess {
+    if (typeof value !== "object" || value === null) return false;
+    const record = value as Record<string, unknown>;
+    const parent = record.parent;
+    if (typeof record.token !== "string" || typeof parent !== "object" || parent === null) {
+        return false;
+    }
+
+    const parentRecord = parent as Record<string, unknown>;
+    return typeof parentRecord.id === "string" && typeof parentRecord.name === "string";
+}
+
+function isModOverview(value: unknown): value is ModOverview {
+    if (typeof value !== "object" || value === null) return false;
+    const collections = (value as Record<string, unknown>).collections;
+    if (!Array.isArray(collections)) return false;
+
+    return collections.every((collection) => {
+        if (typeof collection !== "object" || collection === null) return false;
+        const record = collection as Record<string, unknown>;
+        return (
+            typeof record.id === "string" &&
+            typeof record.name === "string" &&
+            typeof record.rootId === "string"
+        );
+    });
 }

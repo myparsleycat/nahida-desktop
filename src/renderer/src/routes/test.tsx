@@ -6,12 +6,5 @@ export const Route = createFileRoute("/test")({
 });
 
 function RouteComponent() {
-  throw new Error("Intentional runtime error");
-
-  // oxlint-disable-next-line no-unreachable
-  return (
-    <div>
-      <Titlebar title={{ text: "test", position: "center" }} />
-    </div>
-  );
+  return <Titlebar title={{ text: "Debug", position: "center" }} />;
 }

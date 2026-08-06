@@ -1,8 +1,7 @@
 import { createWriteStream } from "node:fs";
 import path from "node:path";
-import { Readable, Transform } from "node:stream";
+import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import type { ReadableStream } from "node:stream/web";
 import { createGunzip, createZstdDecompress } from "node:zlib";
 
 import { eden } from "@main/client";
@@ -27,6 +26,7 @@ import {
     slowReconnectDelayMs,
     type SlowChunkTransferPhase,
 } from "./slow-chunk-monitor";
+import { drainWebStream, webStreamToNodeReadable } from "./web-stream-to-readable";
 
 export type DownloadParams = {
     type: "download";
@@ -195,8 +195,6 @@ class DownloadStreamer {
 }
 
 class DownloadFileSystem {
-    constructor(private readonly desktop: NahidaDesktop) {}
-
     public resolveDirectoryPaths(
         root: DownloadMetadata["root"],
         dirs: DownloadMetadata["dirs"],
@@ -230,18 +228,6 @@ class DownloadFileSystem {
         }
 
         return pathMap;
-    }
-
-    public async checkFileCompleted(filePath: string, expectedSize: number): Promise<boolean> {
-        try {
-            if (await this.desktop.lib.fs.pathExists(filePath)) {
-                const stats = await this.desktop.lib.fs.stat(filePath);
-                return stats.size === expectedSize;
-            }
-        } catch {
-            return false;
-        }
-        return false;
     }
 
     public redistributeFilesBySize<T extends { size: number }>(files: T[]): T[] {
@@ -397,23 +383,62 @@ class FileDownloadTask {
         signal: AbortSignal,
         options?: {
             onProgress?: (bytes: number) => void;
+            onProgressAdjustment?: (bytes: number) => void;
             onPhaseChange?: (
                 phase: Extract<SlowChunkTransferPhase, "network" | "bandwidth-wait">,
             ) => void;
+            preservePartial?: boolean;
+            resumeFrom?: number;
         },
     ): Promise<void> {
-        const response = await ky(file.url, {
-            headers: await this.desktop.httpService.getHeaders(file.url),
-            signal,
-            throwHttpErrors: false,
-            timeout: 100000,
-        });
+        const requestHeaders = await this.desktop.httpService.getHeaders(file.url);
+        const requestedResumeFrom =
+            file.compAlg === null && (options?.resumeFrom ?? 0) > 0
+                ? (options?.resumeFrom ?? 0)
+                : 0;
+        const request = (rangeFrom = 0) =>
+            ky(file.url, {
+                headers: {
+                    ...requestHeaders,
+                    ...(rangeFrom > 0 ? { Range: `bytes=${rangeFrom}-` } : {}),
+                },
+                signal,
+                throwHttpErrors: false,
+                timeout: 100000,
+            });
 
-        if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
+        let response = await request(requestedResumeFrom);
+        let append = requestedResumeFrom > 0 && response.status === 206;
+        let resetPartial = requestedResumeFrom > 0 && response.status === 200;
+
+        if (requestedResumeFrom > 0 && response.status === 416) {
+            await drainWebStream(response.body, signal);
+            response = await request();
+            append = false;
+            resetPartial = true;
+        } else if (requestedResumeFrom > 0 && response.status === 206) {
+            const contentRange = response.headers.get("Content-Range");
+            const rangeStart = /^bytes (\d+)-\d+\//.exec(contentRange ?? "")?.[1];
+            if (!rangeStart || Number.parseInt(rangeStart, 10) !== requestedResumeFrom) {
+                await drainWebStream(response.body, signal);
+                response = await request();
+                append = false;
+                resetPartial = true;
+            }
+        }
+
+        if (!response.ok) {
+            await drainWebStream(response.body, signal);
+            throw new Error(`Download failed: ${response.statusText}`);
+        }
         if (!response.body) throw new Error("No response body");
 
-        const fileStream = createWriteStream(targetPath);
-        const source = Readable.fromWeb(response.body as unknown as ReadableStream);
+        if (resetPartial) {
+            options?.onProgressAdjustment?.(-requestedResumeFrom);
+        }
+
+        const fileStream = createWriteStream(targetPath, { flags: append ? "a" : "w" });
+        const source = webStreamToNodeReadable(response.body, signal);
         const bandwidth = createBandwidthLimitTransform(
             this.desktop.service.transfer.downloadBandwidth,
             {
@@ -440,7 +465,9 @@ class FileDownloadTask {
             }
         } catch (pipeErr) {
             fileStream.destroy();
-            await fse.remove(targetPath).catch(() => {});
+            if (!options?.preservePartial) {
+                await fse.remove(targetPath).catch(() => {});
+            }
             throw pipeErr;
         }
     }
@@ -464,17 +491,64 @@ class FileDownloadTask {
             return;
         }
 
-        const SMALL_FILE_THRESHOLD = 5 * 1024 * 1024;
-        const isSmallFile = file.size < SMALL_FILE_THRESHOLD;
-        const targetPath = isSmallFile ? filePath : `${filePath}.ntmp`;
-        const MAX_ERROR_RETRIES = 2;
+        const targetPath = `${filePath}.ntmp`;
+        // Compressed responses are decompressed while streaming, so local temp bytes cannot map
+        // to HTTP offsets. They are restarted safely instead of being appended.
+        const canResume = file.compAlg === null;
+        const MAX_ERROR_RETRIES = 3;
         const monitor = this.desktop.service.transfer.slowChunkMonitor;
 
         let slowReconnects = 0;
         let errorRetries = 0;
+        let reportedTempBytes = 0;
+
+        const readTempSize = async () => {
+            if (!(await fse.pathExists(targetPath))) return 0;
+
+            const stats = await fse.stat(targetPath);
+            if (stats.isFile()) return stats.size;
+
+            await fse.remove(targetPath);
+            return 0;
+        };
+
+        const reportTempProgress = (bytes: number) => {
+            reportedTempBytes = Math.max(0, reportedTempBytes + bytes);
+            onProgress?.(bytes);
+        };
+
+        const syncTempProgress = async () => {
+            if (!canResume) return 0;
+
+            const tempSize = await readTempSize();
+            if (tempSize > file.size) {
+                if (reportedTempBytes > 0) {
+                    reportTempProgress(-reportedTempBytes);
+                }
+                await fse.remove(targetPath).catch(() => {});
+                return 0;
+            }
+
+            const delta = tempSize - reportedTempBytes;
+            if (delta !== 0) reportTempProgress(delta);
+            return tempSize;
+        };
+
+        if (!canResume) {
+            await fse.remove(targetPath).catch(() => {});
+        }
 
         while (true) {
             if (signal.aborted) return;
+
+            const resumeFrom = await syncTempProgress();
+            if (resumeFrom === file.size) {
+                if (!signal.aborted) {
+                    await this.desktop.lib.fs.rename(targetPath, filePath);
+                }
+                onComplete();
+                return;
+            }
 
             const attemptController = new AbortController();
             const combinedSignal = AbortSignal.any([signal, attemptController.signal]);
@@ -494,22 +568,36 @@ class FileDownloadTask {
                     onProgress: (bytes) => {
                         attemptBytes += bytes;
                         monitor.recordSample(transfer.key, attemptBytes);
-                        onProgress?.(bytes);
+                        if (canResume) {
+                            reportTempProgress(bytes);
+                        } else {
+                            onProgress?.(bytes);
+                        }
+                    },
+                    onProgressAdjustment: (bytes) => {
+                        if (canResume) reportTempProgress(bytes);
                     },
                     onPhaseChange: (phase) => monitor.setPhase(transfer.key, phase),
+                    preservePartial: canResume,
+                    resumeFrom,
                 });
 
-                if (!isSmallFile && !signal.aborted) {
+                if (!signal.aborted) {
                     await this.desktop.lib.fs.rename(targetPath, filePath);
                 }
 
                 onComplete();
                 return;
             } catch (err) {
-                if (attemptBytes > 0) {
+                if (canResume) {
+                    await syncTempProgress();
+                } else if (attemptBytes > 0) {
                     onProgress?.(-attemptBytes);
                 }
-                await fse.remove(targetPath).catch(() => {});
+
+                if (!canResume) {
+                    await fse.remove(targetPath).catch(() => {});
+                }
 
                 if (signal.aborted) {
                     throw err;
@@ -530,7 +618,12 @@ class FileDownloadTask {
 
                 if (!isAbortError(err) && errorRetries < MAX_ERROR_RETRIES) {
                     errorRetries += 1;
-                    await sleepWithAbort(2 ** errorRetries * 1000, signal);
+                    const retryDelayMs = 2 ** errorRetries * 1000;
+                    this.desktop.logger.warn(
+                        `Retrying download for ${file.name} (${errorRetries}/${MAX_ERROR_RETRIES}) after ${toErrorMessage(err)}; waiting ${retryDelayMs}ms`,
+                        "FileDownloadTask:retry",
+                    );
+                    await sleepWithAbort(retryDelayMs, signal);
                     continue;
                 }
 
@@ -550,7 +643,7 @@ export class DownloadLib {
 
     public constructor(private readonly desktop: NahidaDesktop) {
         this.streamer = new DownloadStreamer(desktop);
-        this.fs = new DownloadFileSystem(desktop);
+        this.fs = new DownloadFileSystem();
         this.task = new FileDownloadTask(desktop);
     }
 
@@ -699,6 +792,7 @@ export class DownloadLib {
 
             let downloadedBytes = initialTransferedSize ?? 0;
             let downloadedCount = initialTransferedFiles ?? 0;
+            let hasFailedOperation = false;
 
             const throttledUpdate = throttle((bytes: number, count: number) => {
                 void this.desktop.service.transfer.updateTransfer(pid, {
@@ -722,25 +816,42 @@ export class DownloadLib {
 
                 void this.fileQueue.add(async () => {
                     if (abort.signal.aborted) return;
-                    if (!isSingleFile && parentPath && !ensuredDirs.has(parentPath)) {
-                        await this.desktop.lib.fs.ensureDir(parentPath);
-                        ensuredDirs.add(parentPath);
-                    }
 
-                    await this.processFileDownloadTask({
-                        pid,
-                        file,
-                        filePath,
-                        abort,
-                        onProgress: (bytes) => {
-                            downloadedBytes += bytes;
-                            throttledUpdate(downloadedBytes, downloadedCount);
-                        },
-                        onComplete: () => {
-                            downloadedCount++;
-                            throttledUpdate(downloadedBytes, downloadedCount);
-                        },
-                    });
+                    try {
+                        if (!isSingleFile && parentPath && !ensuredDirs.has(parentPath)) {
+                            await this.desktop.lib.fs.ensureDir(parentPath);
+                            ensuredDirs.add(parentPath);
+                        }
+
+                        const completed = await this.processFileDownloadTask({
+                            pid,
+                            file,
+                            filePath,
+                            abort,
+                            onProgress: (bytes) => {
+                                downloadedBytes += bytes;
+                                throttledUpdate(downloadedBytes, downloadedCount);
+                            },
+                            onComplete: () => {
+                                downloadedCount++;
+                                throttledUpdate(downloadedBytes, downloadedCount);
+                            },
+                        });
+
+                        if (!completed) hasFailedOperation = true;
+                    } catch (err) {
+                        if (abort.signal.aborted || isAbortError(err)) return;
+
+                        hasFailedOperation = true;
+                        this.desktop.service.transfer.markFileFailed(
+                            pid,
+                            `${file.name}: ${toErrorMessage(err)}`,
+                        );
+                        this.desktop.logger.error(
+                            err,
+                            `DownloadLib:executeDownload:${file.name}:prepare`,
+                        );
+                    }
                 });
             }
 
@@ -750,8 +861,25 @@ export class DownloadLib {
                     if (!ensuredDirs.has(dirPath)) {
                         void this.fileQueue.add(async () => {
                             if (abort.signal.aborted) return;
-                            await this.desktop.lib.fs.ensureDir(dirPath);
-                            ensuredDirs.add(dirPath);
+
+                            try {
+                                await this.desktop.lib.fs.ensureDir(dirPath);
+                                ensuredDirs.add(dirPath);
+                            } catch (err) {
+                                if (abort.signal.aborted || isAbortError(err)) return;
+
+                                hasFailedOperation = true;
+                                const errorMessage = `Directory preparation failed for ${dirPath}: ${toErrorMessage(err)}`;
+                                this.desktop.logger.error(
+                                    err,
+                                    `DownloadLib:executeDownload:directory:${dirPath}`,
+                                );
+                                await this.desktop.service.transfer.updateTransfer(pid, {
+                                    error:
+                                        this.desktop.service.transfer.getTransferByPID(pid)
+                                            ?.error ?? errorMessage,
+                                });
+                            }
                         });
                     }
                 }
@@ -761,6 +889,16 @@ export class DownloadLib {
             throttledUpdate.flush();
 
             if (abort.signal.aborted) return;
+
+            if (hasFailedOperation) {
+                await this.desktop.service.transfer.updateTransfer(pid, {
+                    status: "error",
+                    error:
+                        this.desktop.service.transfer.getTransferByPID(pid)?.error ??
+                        "One or more download operations failed.",
+                });
+                return;
+            }
 
             await this.finalizeDownload(pid, params.savePath);
         } catch (err) {
@@ -796,23 +934,19 @@ export class DownloadLib {
         abort: AbortController;
         onProgress: (bytes: number) => void;
         onComplete: () => void;
-    }) {
-        if (abort.signal.aborted) return;
+    }): Promise<boolean> {
+        if (abort.signal.aborted) return true;
 
-        let isCompleted = this.desktop.service.transfer.isFileCompleted(pid, file.id);
-        if (!isCompleted) {
-            try {
-                isCompleted = await this.fs.checkFileCompleted(filePath, file.size);
-            } catch {}
-        }
-
-        if (isCompleted) {
-            if (!this.desktop.service.transfer.isFileCompleted(pid, file.id)) {
-                this.desktop.service.transfer.markFileCompleted(pid, file.id);
+        if (await this.desktop.lib.fs.pathExists(filePath)) {
+            const stats = await this.desktop.lib.fs.stat(filePath);
+            if (!stats.isFile()) {
+                throw new Error(`Download target is not a file: ${filePath}`);
             }
+
+            this.desktop.service.transfer.markFileCompleted(pid, file.id);
             onProgress(file.size);
             onComplete();
-            return;
+            return true;
         }
 
         try {
@@ -828,11 +962,17 @@ export class DownloadLib {
             });
         } catch (err) {
             if (abort.signal.aborted || (err as Error).name === "AbortError") {
-                return;
+                return true;
             }
-            this.desktop.service.transfer.markFileFailed(pid);
+            this.desktop.service.transfer.markFileFailed(
+                pid,
+                `${file.name}: ${toErrorMessage(err)}`,
+            );
             this.desktop.logger.error(err, `DownloadLib:executeDownload:${file.name}`);
+            return false;
         }
+
+        return true;
     }
 
     private async finalizeDownload(pid: string, savePath: string) {

@@ -353,7 +353,9 @@ export class CustomDownloader {
         });
 
         const resp = await respPromise.catch((error) => {
-            throw new Error(`GAMEBANANA_DOWNLOAD_HEAD_FAILED:${toErrorMessage(error)}`);
+            throw new Error(`GAMEBANANA_DOWNLOAD_HEAD_FAILED:${toErrorMessage(error)}`, {
+                cause: error,
+            });
         });
 
         if (!resp.ok) {

@@ -81,6 +81,7 @@ export class MainWindow {
 
         const titlebarSetting = await this.desktop.setting.general.getTitlebarStyle();
         const isNativeTitlebar = titlebarSetting === "native";
+        const openConsole = await this.desktop.setting.debug.getOpenConsole();
 
         this.window = new BrowserWindow({
             title: "Nahida Desktop",
@@ -94,7 +95,7 @@ export class MainWindow {
             frame: isNativeTitlebar,
             autoHideMenuBar: true,
             webPreferences: {
-                ...getDefaultWebPreferences(),
+                ...getDefaultWebPreferences({ devTools: is.dev || openConsole }),
             },
             icon,
         });
@@ -112,10 +113,12 @@ export class MainWindow {
 
         this.window.once("ready-to-show", () => {
             void showWindow();
+            if (openConsole) this.setConsoleWindowEnabled(true);
         });
 
         this.window.webContents.once("did-finish-load", () => {
             void showWindow();
+            if (openConsole) this.setConsoleWindowEnabled(true);
         });
 
         const saveBounds = debounce(async () => {
@@ -184,8 +187,27 @@ export class MainWindow {
             this.desktop.ipc.postMessageToWindow(this.window, "window:focus");
         });
 
-        // this.window.webContents.openDevTools();
         return this.window;
+    }
+
+    public setConsoleWindowEnabled(enabled: boolean) {
+        const window = this.window;
+        if (!window || window.isDestroyed()) return;
+
+        try {
+            if (enabled) {
+                if (!window.webContents.isDevToolsOpened()) {
+                    window.webContents.openDevTools({ mode: "detach" });
+                }
+                return;
+            }
+
+            if (window.webContents.isDevToolsOpened()) {
+                window.webContents.closeDevTools();
+            }
+        } catch (error) {
+            this.desktop.logger.error(error, "MainWindow.setConsoleWindowEnabled");
+        }
     }
 }
 

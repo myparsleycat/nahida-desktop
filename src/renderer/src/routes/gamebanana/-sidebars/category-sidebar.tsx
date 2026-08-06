@@ -82,6 +82,7 @@ export function CategorySidebar({
             value={categorySearch}
             onChange={(event) => onChangeCategorySearch(event.target.value)}
             placeholder={t("page.gamebanana.search_categories")}
+            aria-label={t("page.gamebanana.search_categories")}
             className="pl-9"
           />
         </div>

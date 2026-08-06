@@ -20,10 +20,15 @@ export function registerGameBananaHandlers(d: NahidaDesktop) {
         try {
             return await d.service.gamebanana.toggleModLike(input);
         } catch (error) {
-            d.logger.error(
-                error,
-                `GameBanana:toggleModLike:${input.modelName ?? "Mod"}:${input.itemId}`,
-            );
+            const context = JSON.stringify({
+                operation: "toggleModLike",
+                stage: "ipc-handler",
+                itemId: input.itemId,
+                modelName: input.modelName ?? "Mod",
+                cacheState: "service profile cache",
+                cleanupState: "none",
+            });
+            d.logger.error(error, `GameBanana:toggleModLike:${context}`);
             throw error;
         }
     });

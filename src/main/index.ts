@@ -29,7 +29,7 @@ import Tray from "./lib/tray";
 import Utils from "./lib/utils";
 import Watcher from "./lib/watcher";
 import { registerProtocal } from "./protocals";
-import { startServer } from "./server";
+import { SERVER_PORT, startServer } from "./server";
 import ArchiveService from "./services/archive";
 import Auth from "./services/auth";
 import { BackendConnectivity } from "./services/backend-connectivity";
@@ -204,7 +204,10 @@ export class NahidaDesktop {
         try {
             await startServer();
         } catch (error) {
-            this.logger.error(`Failed to start server on port 1027: ${String(error)}`, "Server");
+            this.logger.error(
+                `Failed to start server on port ${SERVER_PORT}: ${String(error)}`,
+                "Server",
+            );
             throw error;
         }
 

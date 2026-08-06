@@ -15,6 +15,7 @@ import { Field, FieldError } from "@renderer/components/ui/field";
 import { Input } from "@renderer/components/ui/input";
 import { useDialogStore, useSelectionStore } from "@renderer/store/drive";
 import type { Content } from "@shared/types";
+import { toErrorMessage } from "@shared/utils";
 import { useForm } from "@tanstack/react-form";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation, useRouteContext } from "@tanstack/react-router";
@@ -376,8 +377,8 @@ export function DeleteItemsDialog() {
         setOpen("deleteItemsDialog", false);
         await queryClient.invalidateQueries();
       })
-      .catch((err: string) => {
-        toast.error(err);
+      .catch((err: unknown) => {
+        toast.error(toErrorMessage(err));
       });
   };
 

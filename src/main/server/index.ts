@@ -76,6 +76,15 @@ export const app = new Hono()
 
 const nodeWs = createNodeWebSocket({ app });
 
+const DEFAULT_SERVER_PORT = 1027;
+const configuredServerPort = Number.parseInt(process.env.NAHIDA_SERVER_PORT ?? "", 10);
+export const SERVER_PORT =
+    Number.isInteger(configuredServerPort) &&
+    configuredServerPort > 0 &&
+    configuredServerPort <= 65535
+        ? configuredServerPort
+        : DEFAULT_SERVER_PORT;
+
 app.get(
     "/ws",
     nodeWs.upgradeWebSocket(async (_ctx) => {
@@ -135,7 +144,7 @@ app.get(
 export async function startServer() {
     const server = serve({
         fetch: app.fetch,
-        port: 1027,
+        port: SERVER_PORT,
     });
 
     nodeWs.injectWebSocket(server);

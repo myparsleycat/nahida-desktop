@@ -9,7 +9,37 @@ export interface TextureResizeCandidate {
 }
 
 export function toErrorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
+    if (error instanceof Error) return error.message;
+    if (typeof error === "string") return error;
+    if (error === null || error === undefined) return "Unknown error";
+
+    if (typeof error === "object") {
+        const record = error as Record<string, unknown>;
+        const value = record.value;
+        if (value !== undefined && value !== error) {
+            const nestedMessage = toErrorMessage(value);
+            if (nestedMessage !== "[object Object]") return nestedMessage;
+        }
+
+        for (const key of ["message", "error", "detail", "title", "code"]) {
+            const message = record[key];
+            if (typeof message === "string" && message.trim()) return message;
+        }
+
+        try {
+            const serialized = JSON.stringify(error);
+            if (serialized) return serialized;
+        } catch {
+            // Fall through to the generic string representation.
+        }
+    }
+
+    if (typeof error === "object") return Object.prototype.toString.call(error);
+    if (typeof error === "number" || typeof error === "boolean" || typeof error === "bigint") {
+        return error.toString();
+    }
+    if (typeof error === "symbol") return error.toString();
+    return "Unknown error";
 }
 
 export function formatSize(size?: number | null, options?: FilesizeOptions) {

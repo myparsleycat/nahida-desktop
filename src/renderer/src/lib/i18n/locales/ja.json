@@ -90,8 +90,32 @@
       "toast": {
         "no_uploadable_files": "アップロード可能なファイルがありません。"
       },
+      "import": {
+        "title": "Nahida ドライブにコピー",
+        "description": "共有フォルダーまたはコレクション URL を入力し、ドライブ内のフォルダーを選択してください。",
+        "url_label": "Nahida URL",
+        "url_placeholder": "https://nahida.live/akasha/link/...",
+        "destination_label": "保存先フォルダー",
+        "choose_destination": "フォルダーを選択",
+        "destination_description": "コピー先にするドライブのルートまたはフォルダーを選択してください。",
+        "loading_folder": "フォルダーを読み込み中...",
+        "no_subfolders": "サブフォルダーなし",
+        "parent_folder": "上位フォルダー",
+        "select_folder": "このフォルダーを使用",
+        "destination_required": "保存先フォルダーを選択してください。",
+        "password_label": "パスワード",
+        "password_placeholder": "共有リンクのパスワードを入力",
+        "action": "ドライブにコピー",
+        "url_required": "Nahida URL を入力してください。",
+        "login_required": "ドライブにコピーするにはログインしてください。",
+        "password_required": "このリンクにはパスワードが必要です。",
+        "invalid_password": "共有リンクのパスワードが正しくありません。",
+        "success": "{{count}} 件をドライブにコピーしました。",
+        "failed": "コピーに失敗しました"
+      },
       "head_buttons": {
         "search_in_dir_placeholder": "このフォルダー内を検索...",
+        "import": "共有リンクをコピー",
         "dropdown_menu": {
           "download": "ダウンロード",
           "make_new": {

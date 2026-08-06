@@ -243,7 +243,11 @@ export function ModDetailPanel({
   const hiddenPreviewCount = previews.length - (maxVisiblePreviews - 1);
   const [lightboxPreviewIndex, setLightboxPreviewIndex] = useState<number | null>(null);
   const [commentSort, setCommentSort] = useState<GameBananaModPostsSort>("popular");
-  const [isLikePending, setIsLikePending] = useState(false);
+  const [pendingLikeKey, setPendingLikeKey] = useState<string | null>(null);
+  const [likeOverride, setLikeOverride] = useState<{
+    key: string;
+    liked: boolean;
+  } | null>(null);
   const commentsQuery = useGameBananaModPosts(modId, modelName, 1, commentSort, Boolean(modId));
   const modErrorPresentation = getGameBananaErrorPresentation(modOverviewQuery.error, t);
   const commentsErrorPresentation = getGameBananaErrorPresentation(commentsQuery.error, t);
@@ -251,26 +255,39 @@ export function ModDetailPanel({
     lightboxPreviewIndex === null ? null : (previews[lightboxPreviewIndex] ?? null);
   const profile = modOverviewQuery.data?.profile;
   const likeAccess = modOverviewQuery.data?.config._aAccess;
-  const isLiked = profile?._bAccessorHasLiked ?? likeAccess?.Like_Trash === true;
+  const baseIsLiked = profile?._bAccessorHasLiked ?? likeAccess?.Like_Trash === true;
+  const likeOperationKey = modId ? `${modelName}:${modId}` : null;
+  const isLikePending = pendingLikeKey === likeOperationKey;
+  const isLiked = likeOverride?.key === likeOperationKey ? likeOverride.liked : baseIsLiked;
   const canToggleLike = likeAccess?.Like_Add === true || likeAccess?.Like_Trash === true;
 
   const handleLike = async () => {
-    if (!modId || !canToggleLike || isLikePending) return;
+    if (!modId || !likeOperationKey || !canToggleLike || isLikePending) return;
 
-    setIsLikePending(true);
+    setPendingLikeKey(likeOperationKey);
     try {
-      await window.api.invoke("gamebanana:toggleModLike", {
+      const toggleResult = await window.api.invoke("gamebanana:toggleModLike", {
         itemId: modId,
         modelName,
       });
-      await modOverviewQuery.refetch();
+
+      setLikeOverride({ key: likeOperationKey, liked: toggleResult.liked });
+
+      try {
+        const refetchResult = await modOverviewQuery.refetch();
+        if (refetchResult.isError) throw refetchResult.error;
+
+        setLikeOverride((current) => (current?.key === likeOperationKey ? null : current));
+      } catch (error) {
+        Logger.error(error, "ModDetailPanel:handleLike:refetch");
+      }
     } catch (error) {
       toast.error(t("page.gamebanana.like_failed"), {
         description: String(error instanceof Error ? error.message : error),
       });
-      Logger.error(error, "ModDetailPanel:handleLike");
+      Logger.error(error, "ModDetailPanel:handleLike:toggle");
     } finally {
-      setIsLikePending(false);
+      setPendingLikeKey((current) => (current === likeOperationKey ? null : current));
     }
   };
 
@@ -283,8 +300,8 @@ export function ModDetailPanel({
   }, [modId, modelName]);
 
   useEffect(() => {
-    setIsLikePending(false);
-  }, [modId, modelName]);
+    setLikeOverride((current) => (current?.key === likeOperationKey ? current : null));
+  }, [likeOperationKey]);
 
   const comments = useMemo(() => {
     const seen = new Set<number>();

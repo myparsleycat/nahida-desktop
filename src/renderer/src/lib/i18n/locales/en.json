@@ -110,8 +110,32 @@
       "toast": {
         "no_uploadable_files": "No uploadable files found."
       },
+      "import": {
+        "title": "Copy to Nahida Drive",
+        "description": "Enter a shared folder or collection URL, then choose a folder in your drive.",
+        "url_label": "Nahida URL",
+        "url_placeholder": "https://nahida.live/akasha/link/...",
+        "destination_label": "Destination folder",
+        "choose_destination": "Choose folder",
+        "destination_description": "Choose the drive root or a folder where copied items should be placed.",
+        "loading_folder": "Loading folder...",
+        "no_subfolders": "No subfolders",
+        "parent_folder": "Parent",
+        "select_folder": "Use this folder",
+        "destination_required": "Choose a destination folder.",
+        "password_label": "Password",
+        "password_placeholder": "Enter the shared link password",
+        "action": "Copy to drive",
+        "url_required": "Enter a Nahida URL.",
+        "login_required": "Sign in to copy items to your drive.",
+        "password_required": "This link requires a password.",
+        "invalid_password": "The shared link password is incorrect.",
+        "success": "Copied {{count}} item(s) to your drive.",
+        "failed": "Copy failed"
+      },
       "head_buttons": {
         "search_in_dir_placeholder": "Search in this folder...",
+        "import": "Copy a shared link",
         "dropdown_menu": {
           "download": "Download",
           "make_new": {
