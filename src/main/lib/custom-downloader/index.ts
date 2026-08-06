@@ -352,35 +352,61 @@ export class CustomDownloader {
             rollback: {
                 stagingPathRemoved: false,
                 finalized: false,
+                cleanupError: undefined as string | undefined,
             },
         };
-        const downloadFilePayload = await this.desktop.service.gamebanana.getDownloadFilePayload({
-            itemId: props.itemId,
-            fileId: props.fileId,
-            modelName: props.modelName,
-        });
+        const logPreTransferFailure = (error: unknown) => {
+            this.desktop.logger.error(error, "GameBanana:downloadFromGB");
+            this.desktop.logger.error(
+                {
+                    ...context,
+                    error: toErrorMessage(error),
+                },
+                "GameBanana:downloadFromGB:context",
+            );
+        };
+        const downloadFilePayload = await this.desktop.service.gamebanana
+            .getDownloadFilePayload({
+                itemId: props.itemId,
+                fileId: props.fileId,
+                modelName: props.modelName,
+            })
+            .catch((error) => {
+                logPreTransferFailure(error);
+                throw error;
+            });
         const { title: _title, fileUrl, previewUrl } = downloadFilePayload;
         context.downloadUrl = fileUrl;
         context.previewUrl = previewUrl ?? undefined;
         context.stage = "head-request";
 
-        const respPromise = ky.head(fileUrl, {
-            redirect: "follow",
-            throwHttpErrors: false,
-            headers: await this.desktop.httpService.getHeaders(fileUrl),
-        });
+        const resp = await (async () => {
+            try {
+                const response = await ky.head(fileUrl, {
+                    redirect: "follow",
+                    throwHttpErrors: false,
+                    headers: await this.desktop.httpService.getHeaders(fileUrl),
+                });
 
-        const resp = await respPromise.catch((error) => {
-            throw new Error(`GAMEBANANA_DOWNLOAD_HEAD_FAILED:${toErrorMessage(error)}`, {
-                cause: error,
-            });
-        });
+                if (!response.ok) {
+                    throw new Error(
+                        `GAMEBANANA_DOWNLOAD_HEAD_FAILED:${response.status}:${response.statusText || "UNKNOWN"}`,
+                    );
+                }
 
-        if (!resp.ok) {
-            throw new Error(
-                `GAMEBANANA_DOWNLOAD_HEAD_FAILED:${resp.status}:${resp.statusText || "UNKNOWN"}`,
-            );
-        }
+                return response;
+            } catch (error) {
+                const failure =
+                    error instanceof Error &&
+                    error.message.startsWith("GAMEBANANA_DOWNLOAD_HEAD_FAILED:")
+                        ? error
+                        : new Error(`GAMEBANANA_DOWNLOAD_HEAD_FAILED:${toErrorMessage(error)}`, {
+                              cause: error,
+                          });
+                logPreTransferFailure(failure);
+                throw failure;
+            }
+        })();
 
         const realFileUrl = resp.url;
         const fileSize = parseContentLength(resp.headers.get("Content-Length"));
@@ -443,6 +469,18 @@ export class CustomDownloader {
         });
 
         this.desktop.service.transfer.registerRunner(pid, async () => {
+            let cleanupAttempted = false;
+            const cleanupStaging = async () => {
+                cleanupAttempted = true;
+                try {
+                    await fse.remove(stagingPath);
+                    context.rollback.stagingPathRemoved = true;
+                } catch (error) {
+                    context.rollback.cleanupError = toErrorMessage(error);
+                    this.desktop.logger.error(error, "GameBanana:downloadFromGB:cleanup");
+                }
+            };
+
             try {
                 context.stage = "download-file";
                 void this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
@@ -552,6 +590,7 @@ export class CustomDownloader {
                     });
                 }
             } catch (err) {
+                await cleanupStaging();
                 if (
                     abortController.signal.aborted ||
                     (err as Error).name === "AbortError" ||
@@ -559,7 +598,6 @@ export class CustomDownloader {
                 ) {
                     void this.desktop.service.transfer.updateTransfer(pid, { status: "canceled" });
                 } else {
-                    this.desktop.logger.error(err, "GameBanana:downloadFromGB");
                     this.desktop.logger.error(
                         {
                             ...context,
@@ -573,8 +611,7 @@ export class CustomDownloader {
                     });
                 }
             } finally {
-                await fse.remove(stagingPath).catch(() => {});
-                context.rollback.stagingPathRemoved = true;
+                if (!cleanupAttempted) await cleanupStaging();
             }
         });
 

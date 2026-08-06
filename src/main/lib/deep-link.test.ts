@@ -36,8 +36,20 @@ describe("parseNahidaDeepLink", () => {
             "/drive/import?url=https%3A%2F%2Fnahida.live%2Fakasha%2Flink%2Fabc123&auto=1",
         ],
         [
+            "nahida://drive/import?url=https%3A%2F%2Fnahida.live%2Fakasha%2Flink%2Fabc123",
+            "/drive/import?url=https%3A%2F%2Fnahida.live%2Fakasha%2Flink%2Fabc123&auto=1",
+        ],
+        [
+            "nahida://drive/copy?source=https%3A%2F%2Fnahida.live%2Fakasha%2Flink%2Fabc123",
+            "/drive/import?url=https%3A%2F%2Fnahida.live%2Fakasha%2Flink%2Fabc123&auto=1",
+        ],
+        [
             "nahida://drive/copy?url=https%3A%2F%2Fnahida.live%2Fakasha%2Fmod%2Fmod123&collection=collection123",
             "/drive/import?url=https%3A%2F%2Fnahida.live%2Fakasha%2Fmod%2Fmod123&auto=1&collectionId=collection123",
+        ],
+        [
+            "nahida://drive/copy?url=https%3A%2F%2Fnahida.live%2Fakasha%2Fmod%2Fmod123&collectionId=collection123&itemId=item456",
+            "/drive/import?url=https%3A%2F%2Fnahida.live%2Fakasha%2Fmod%2Fmod123&auto=1&collectionId=collection123&itemId=item456",
         ],
     ])("maps %s to the drive import route", (value, expected) => {
         expect(parseNahidaDeepLink(value)).toBe(expected);

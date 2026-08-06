@@ -1,5 +1,7 @@
 import type { NahidaDesktop } from "@main/index";
 import { rh } from "@main/ipc/helper";
+import { getGameBananaLikeFailureContext } from "@main/services/gamebanana";
+import { toErrorMessage } from "@shared/utils";
 
 export function registerGameBananaHandlers(d: NahidaDesktop) {
     rh("gamebanana:ensureAuthenticated", async () => d.service.gamebanana.ensureSession());
@@ -20,15 +22,21 @@ export function registerGameBananaHandlers(d: NahidaDesktop) {
         try {
             return await d.service.gamebanana.toggleModLike(input);
         } catch (error) {
-            const context = JSON.stringify({
-                operation: "toggleModLike",
-                stage: "ipc-handler",
-                itemId: input.itemId,
-                modelName: input.modelName ?? "Mod",
-                cacheState: "service profile cache",
-                cleanupState: "none",
-            });
-            d.logger.error(error, `GameBanana:toggleModLike:${context}`);
+            const failureContext = getGameBananaLikeFailureContext(error);
+            d.logger.error(error, "GameBanana:toggleModLike");
+            d.logger.error(
+                {
+                    channel: "gamebanana:toggleModLike",
+                    operation: "toggleModLike",
+                    itemId: input.itemId,
+                    modelName: input.modelName ?? "Mod",
+                    stage: failureContext?.stage ?? "unknown",
+                    cacheState: failureContext?.cacheState ?? "unknown",
+                    cleanupState: failureContext?.cleanupState ?? "unknown",
+                    error: toErrorMessage(error),
+                },
+                "GameBanana:toggleModLike:context",
+            );
             throw error;
         }
     });

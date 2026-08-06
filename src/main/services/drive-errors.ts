@@ -22,7 +22,9 @@ export function createDriveApiError(
 
     const message = toErrorMessage(error);
     const normalizedMessage = message === "[object Object]" ? fallback : message || fallback;
-    const code = toDriveErrorCode(error) ?? `DRIVE_${operation.toUpperCase()}_FAILED`;
+    const code =
+        toDriveErrorCode(error) ??
+        `DRIVE_${operation.replace(/[^A-Za-z0-9]+/g, "_").toUpperCase()}_FAILED`;
     return new DriveApiError(code, normalizedMessage, status, error);
 }
 

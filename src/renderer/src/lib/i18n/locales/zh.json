@@ -100,6 +100,7 @@
         "destination_description": "请选择云端硬盘根目录或用于保存复制项目的文件夹。",
         "loading_folder": "正在加载文件夹...",
         "no_subfolders": "没有子文件夹",
+        "destination_load_failed": "无法加载目标文件夹。",
         "parent_folder": "上级文件夹",
         "select_folder": "使用此文件夹",
         "destination_required": "请选择目标文件夹。",

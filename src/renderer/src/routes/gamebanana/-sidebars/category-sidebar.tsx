@@ -50,10 +50,10 @@ export function CategorySidebar({
   onResetToGameHome: () => void;
 }) {
   const categories = hasCategoryContext ? categoryChildren : rootCategories;
-  const normalizedCategorySearch = categorySearch.trim().toLocaleLowerCase();
+  const normalizedCategorySearch = categorySearch.trim().toLocaleLowerCase(language);
   const filteredCategories = normalizedCategorySearch
     ? categories.filter((category) =>
-        category._sName.toLocaleLowerCase().includes(normalizedCategorySearch),
+        category._sName.toLocaleLowerCase(language).includes(normalizedCategorySearch),
       )
     : categories;
   const isLoading = hasCategoryContext ? isCategoryOverviewLoading : isGameOverviewLoading;

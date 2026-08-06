@@ -60,6 +60,32 @@ type ManualRmcSaveResult =
           errorCode: ManualRmcErrorCode;
       };
 
+export type GameBananaLikeFailureContext = {
+    stage: "profile-cache" | "profile-fetch" | "config-fetch" | "like-mutation";
+    cacheState: "hit" | "miss";
+    cleanupState: "not-started" | "profile-cache-cleared";
+};
+
+export function getGameBananaLikeFailureContext(error: unknown) {
+    if (!(error instanceof Error)) return undefined;
+
+    const context = (error as Error & { gameBananaLikeContext?: unknown }).gameBananaLikeContext;
+    if (!context || typeof context !== "object") return undefined;
+
+    const value = context as Record<string, unknown>;
+    if (
+        !["profile-cache", "profile-fetch", "config-fetch", "like-mutation"].includes(
+            String(value.stage),
+        ) ||
+        !["hit", "miss"].includes(String(value.cacheState)) ||
+        !["not-started", "profile-cache-cleared"].includes(String(value.cleanupState))
+    ) {
+        return undefined;
+    }
+
+    return context as GameBananaLikeFailureContext;
+}
+
 export class GameBananaService {
     public readonly games = gameBananaGames;
     private readonly apiBaseUrl = "https://gamebanana.com/apiv13";
@@ -949,23 +975,44 @@ export class GameBananaService {
         itemId: number;
         modelName?: GameBananaSubmissionModel;
     }) {
-        const profile =
-            this.getLastViewedModProfile(itemId, modelName) ??
-            (await this.getModProfile(itemId, modelName));
-        const wasLiked =
-            profile._bAccessorHasLiked ??
-            (await this.getModConfig(itemId, modelName))._aAccess?.Like_Trash === true;
-        const url = this.formatUrl(`${this.apiBaseUrl}/${modelName}/{}/Like`, itemId);
+        let stage: GameBananaLikeFailureContext["stage"] = "profile-cache";
+        let cacheState: GameBananaLikeFailureContext["cacheState"] = "miss";
+        let cleanupState: GameBananaLikeFailureContext["cleanupState"] = "not-started";
 
-        await this.request(url, {
-            method: wasLiked ? "DELETE" : "POST",
-            headers: {
-                Referer: this.getSubmissionReferer(modelName, itemId),
-            },
-        });
+        try {
+            const cachedProfile = this.getLastViewedModProfile(itemId, modelName);
+            cacheState = cachedProfile ? "hit" : "miss";
 
-        this.lastViewedModProfile = null;
-        return { liked: !wasLiked };
+            stage = cachedProfile ? "profile-cache" : "profile-fetch";
+            const profile = cachedProfile ?? (await this.getModProfile(itemId, modelName));
+
+            let wasLiked = profile._bAccessorHasLiked;
+            if (wasLiked === undefined) {
+                stage = "config-fetch";
+                wasLiked =
+                    (await this.getModConfig(itemId, modelName))._aAccess?.Like_Trash === true;
+            }
+
+            stage = "like-mutation";
+            const url = this.formatUrl(`${this.apiBaseUrl}/${modelName}/{}/Like`, itemId);
+            await this.request(url, {
+                method: wasLiked ? "DELETE" : "POST",
+                headers: {
+                    Referer: this.getSubmissionReferer(modelName, itemId),
+                },
+            });
+
+            cleanupState = "profile-cache-cleared";
+            this.lastViewedModProfile = null;
+            return { liked: !wasLiked };
+        } catch (error) {
+            if (error instanceof Error) {
+                Object.assign(error, {
+                    gameBananaLikeContext: { stage, cacheState, cleanupState },
+                });
+            }
+            throw error;
+        }
     }
 
     public async getModPosts({

@@ -35,4 +35,10 @@ describe("createDriveApiError", () => {
         expect(error.code).toBe("DRIVE_COPYFROMURL_FAILED");
         expect(error.message).toBe("DRIVE_COPYFROMURL_FAILED: Unknown error");
     });
+
+    it("normalizes multiword operation names in fallback codes", () => {
+        const error = createDriveApiError({}, "shared link access");
+
+        expect(error.code).toBe("DRIVE_SHARED_LINK_ACCESS_FAILED");
+    });
 });

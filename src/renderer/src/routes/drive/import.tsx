@@ -119,13 +119,14 @@ function RouteComponent() {
       toast.success(t("page.drive.import.success", { count: result.copied }));
       void navigate({ to: "/drive/drive/$id", params: { id: destinationId } });
     } catch (error) {
+      const code = getErrorCode(error);
       const message = toErrorMessage(error);
-      if (message.includes("DRIVE_LINK_PASSWORD_REQUIRED")) {
+      if (code === "DRIVE_LINK_PASSWORD_REQUIRED") {
         setRequiresPassword(true);
         toast.warning(t("page.drive.import.password_required"));
         return;
       }
-      if (message.includes("DRIVE_LINK_INVALID_PASSWORD")) {
+      if (code === "DRIVE_LINK_INVALID_PASSWORD") {
         setRequiresPassword(true);
         toast.error(t("page.drive.import.invalid_password"));
         return;
@@ -286,7 +287,11 @@ function RouteComponent() {
           </div>
 
           <div className="max-h-72 overflow-y-auto rounded-md border">
-            {destinationQuery.isFetching ? (
+            {destinationQuery.isError ? (
+              <p className="p-6 text-center text-sm text-destructive">
+                {t("page.drive.import.destination_load_failed")}
+              </p>
+            ) : destinationQuery.isFetching ? (
               <div className="flex items-center justify-center p-6">
                 <Loader2Icon className="animate-spin" />
               </div>
@@ -313,13 +318,17 @@ function RouteComponent() {
             <Button
               type="button"
               variant="ghost"
-              disabled={!pickerParentId}
+              disabled={!pickerParentId || destinationQuery.isFetching || destinationQuery.isError}
               onClick={() => pickerParentId && setPickerId(pickerParentId)}
             >
               <ChevronLeftIcon />
               {t("page.drive.import.parent_folder")}
             </Button>
-            <Button type="button" onClick={selectPickerFolder} disabled={!pickerId}>
+            <Button
+              type="button"
+              onClick={selectPickerFolder}
+              disabled={!pickerId || !destinationQuery.isSuccess}
+            >
               <CheckIcon />
               {t("page.drive.import.select_folder")}
             </Button>
@@ -328,4 +337,11 @@ function RouteComponent() {
       </Dialog>
     </>
   );
+}
+
+function getErrorCode(error: unknown) {
+  if (!error || typeof error !== "object") return undefined;
+
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
 }

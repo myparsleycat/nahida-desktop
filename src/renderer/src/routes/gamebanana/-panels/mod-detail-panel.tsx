@@ -19,6 +19,7 @@ import {
 } from "@renderer/hooks/use-gamebanana-data";
 import { Logger } from "@renderer/lib/logger";
 import { cn } from "@renderer/lib/utils";
+import { toErrorMessage } from "@shared/utils";
 import DOMPurify from "dompurify";
 import type { TFunction } from "i18next";
 import {
@@ -283,7 +284,7 @@ export function ModDetailPanel({
       }
     } catch (error) {
       toast.error(t("page.gamebanana.like_failed"), {
-        description: String(error instanceof Error ? error.message : error),
+        description: toErrorMessage(error),
       });
       Logger.error(error, "ModDetailPanel:handleLike:toggle");
     } finally {

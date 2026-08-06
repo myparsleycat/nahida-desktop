@@ -100,6 +100,7 @@
         "destination_description": "복사한 항목을 저장할 드라이브 루트 또는 하위 폴더를 선택하세요.",
         "loading_folder": "폴더를 불러오는 중...",
         "no_subfolders": "하위 폴더가 없습니다",
+        "destination_load_failed": "대상 폴더를 불러오지 못했습니다.",
         "parent_folder": "상위 폴더",
         "select_folder": "이 폴더 사용",
         "destination_required": "대상 폴더를 선택하세요.",

@@ -101,6 +101,7 @@
         "destination_description": "コピー先にするドライブのルートまたはフォルダーを選択してください。",
         "loading_folder": "フォルダーを読み込み中...",
         "no_subfolders": "サブフォルダーなし",
+        "destination_load_failed": "保存先フォルダーを読み込めませんでした。",
         "parent_folder": "上位フォルダー",
         "select_folder": "このフォルダーを使用",
         "destination_required": "保存先フォルダーを選択してください。",

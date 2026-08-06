@@ -117,6 +117,7 @@
         "destination_description": "Choose the drive root or a folder where copied items should be placed.",
         "loading_folder": "Loading folder...",
         "no_subfolders": "No subfolders",
+        "destination_load_failed": "Failed to load the destination folder.",
         "parent_folder": "Parent",
         "select_folder": "Use this folder",
         "destination_required": "Choose a destination folder.",

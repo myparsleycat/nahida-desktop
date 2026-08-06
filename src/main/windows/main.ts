@@ -85,6 +85,11 @@ export class MainWindow {
         const isNativeTitlebar = titlebarSetting === "native";
         const openConsole = await this.desktop.setting.debug.getOpenConsole();
         this.devToolsEnabled ||= openConsole;
+        const syncConsoleSetting = async () => {
+            if (await this.desktop.setting.debug.getOpenConsole()) {
+                this.setConsoleWindowEnabled(true);
+            }
+        };
 
         this.window = new BrowserWindow({
             title: "Nahida Desktop",
@@ -98,9 +103,7 @@ export class MainWindow {
             frame: isNativeTitlebar,
             autoHideMenuBar: true,
             webPreferences: {
-                ...getDefaultWebPreferences({
-                    devTools: is.dev || openConsole || this.devToolsEnabled,
-                }),
+                ...getDefaultWebPreferences({ devTools: is.dev || this.devToolsEnabled }),
             },
             icon,
         });
@@ -119,12 +122,12 @@ export class MainWindow {
 
         this.window.once("ready-to-show", () => {
             void showWindow();
-            if (openConsole) this.setConsoleWindowEnabled(true);
+            void syncConsoleSetting();
         });
 
         this.window.webContents.once("did-finish-load", () => {
             void showWindow();
-            if (openConsole) this.setConsoleWindowEnabled(true);
+            void syncConsoleSetting();
         });
 
         const saveBounds = debounce(async () => {
@@ -228,6 +231,7 @@ export class MainWindow {
             if (window.webContents.isDevToolsOpened()) {
                 window.webContents.closeDevTools();
             }
+            this.devToolsEnabled = false;
         } catch (error) {
             this.desktop.logger.error(error, "MainWindow.setConsoleWindowEnabled");
         }
