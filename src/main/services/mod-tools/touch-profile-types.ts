@@ -99,6 +99,8 @@ export type TouchComponentAnalysis = {
     indexResourceName?: string;
     indexRelativePath?: string;
     indexPath?: string;
+    indexRelativePaths?: string[];
+    indexPaths?: string[];
     indexFormat?: string;
     indexCount: number;
     blendSectionName?: string;
