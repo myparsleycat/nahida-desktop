@@ -20,6 +20,7 @@ import {
 import { resolveTouchJiggleParams } from "./touch-profile-settings";
 import {
     DEFAULT_TOUCH_VISION_MASK_TUNING,
+    resolveIbSectionsToPatch,
     TOUCH_MASK_BANDS,
     TOUCH_OBJECT_MODE,
     TOUCH_ZONE_CHANNELS,
@@ -485,17 +486,23 @@ export function buildVertexMasks(
     indices: Uint32Array,
     component: TouchComponentAnalysis,
     zones: TouchZoneSpec[],
+    selectedIbSectionNames?: string[],
 ) {
     const masks = new Float32Array(vertexCount * TOUCH_ZONE_CHANNELS);
-    const allowed = allowedVertexMask(component, indices, vertexCount);
-    const bounds = computeBounds(positions, allowed);
-    const midX = (bounds.min[0] + bounds.max[0]) * 0.5;
-    const spanX = Math.max(bounds.max[0] - bounds.min[0], 1e-3);
-    const clipStart = spanX * 0.03;
-    const clipEnd = spanX * 0.08;
-
     for (const zone of zones) {
         if (zone.channel < 0 || zone.channel >= TOUCH_ZONE_CHANNELS) continue;
+        const allowed = allowedVertexMask(
+            component,
+            indices,
+            vertexCount,
+            zone.id,
+            selectedIbSectionNames,
+        );
+        const bounds = computeBounds(positions, allowed);
+        const midX = (bounds.min[0] + bounds.max[0]) * 0.5;
+        const spanX = Math.max(bounds.max[0] - bounds.min[0], 1e-3);
+        const clipStart = spanX * 0.03;
+        const clipEnd = spanX * 0.08;
         const maskTuning = normalizeVisionMaskTuning(zone.visionMaskTuning);
         const maskStrength = Number.isFinite(zone.settings.maskStrength)
             ? Math.max(
@@ -573,10 +580,10 @@ export function buildVertexMasks(
                     );
                 } else {
                     for (const seed of seeds) {
-                        const sx = positions[seed * 3] - px;
-                        const sy = positions[seed * 3 + 1] - py;
-                        const sz = positions[seed * 3 + 2] - pz;
-                        const d2 = sx * sx + sy * sy + sz * sz;
+                        const dx = px - positions[seed * 3];
+                        const dy = py - positions[seed * 3 + 1];
+                        const dz = pz - positions[seed * 3 + 2];
+                        const d2 = dx * dx + dy * dy + dz * dz;
                         if (d2 < nearest2) nearest2 = d2;
                     }
                 }
@@ -613,10 +620,9 @@ export function buildVertexMasks(
             const offset = vertex * TOUCH_ZONE_CHANNELS + zone.channel;
             masks[offset] = Math.max(masks[offset], weight);
         }
+        smoothMasks(masks, vertexCount, indices, allowed);
     }
 
-    // Single adjacency pass — a second pass walks along limbs and bloates breast masks.
-    smoothMasks(masks, vertexCount, indices);
     clampMasks(masks);
     return masks;
 }
@@ -723,6 +729,7 @@ export async function writeTouchComponentAssets(input: {
         input.indices,
         input.component,
         input.draft.zones,
+        input.draft.selectedIbSectionNames,
     );
 
     const maskPaths: string[] = [];
@@ -737,7 +744,11 @@ export async function writeTouchComponentAssets(input: {
     }
 
     const objectMapPaths: TouchGeneratedAssets["objectMapPaths"] = [];
-    for (const entry of resolveObjectMaps(input.component, input.draft.objectId)) {
+    for (const entry of resolveObjectMaps(
+        input.component,
+        input.draft.objectId,
+        input.draft.selectedIbSectionNames,
+    )) {
         const fileName = objectMapFileName(input.assetPrefix, entry.label);
         const absolutePath = path.join(absoluteDir, fileName);
         await fse.writeFile(absolutePath, Buffer.from(encodeObjectMap([entry]).buffer));
@@ -842,9 +853,40 @@ export function assetPrefixForComponent(component: TouchComponentAnalysis, names
 function resolveObjectMaps(
     component: TouchComponentAnalysis,
     objectId: number,
+    selectedIbSectionNames?: string[],
 ): TouchObjectMapEntry[] {
+    const selected = resolveIbSectionsToPatch(component, { selectedIbSectionNames });
+    const selectedSet = new Set(selected);
+
+    // Multi-IB: build object maps from user-selected parts only (local IB space).
+    if (component.ibParts && component.ibParts.length > 1 && selectedSet.size > 0) {
+        const parts = component.ibParts.filter((part) => selectedSet.has(part.ibSectionName));
+        const chosen = parts.length > 0 ? parts : [component.ibParts[0]];
+        return chosen.map((part) => ({
+            firstIndex: 0,
+            indexCount: part.localIndexCount,
+            objectMode: TOUCH_OBJECT_MODE,
+            objectId,
+            label:
+                chosen.length === 1
+                    ? component.kind === "legs"
+                        ? "skin"
+                        : "main"
+                    : part.ibSectionName,
+            ibSectionName: part.ibSectionName,
+            indexResourceName: part.indexResourceName,
+        }));
+    }
+
     if (component.objectMaps.length > 0) {
-        return component.objectMaps.map((entry) => ({
+        const filtered =
+            selectedSet.size > 0
+                ? component.objectMaps.filter(
+                      (entry) => !entry.ibSectionName || selectedSet.has(entry.ibSectionName),
+                  )
+                : component.objectMaps;
+        const maps = filtered.length > 0 ? filtered : component.objectMaps;
+        return maps.map((entry) => ({
             ...entry,
             objectId,
             objectMode: TOUCH_OBJECT_MODE,
@@ -1188,20 +1230,57 @@ function allowedVertexMask(
     component: TouchComponentAnalysis,
     indices: Uint32Array,
     vertexCount: number,
+    zoneId?: string,
+    selectedIbSectionNames?: string[],
 ) {
     const allowed = new Uint8Array(vertexCount);
-    // Prefer full draw ranges so body-conforming cloth (bra, tights) on the same
-    // component can receive mask weights. objectMaps are only the clothed/nude
-    // detection pair and intentionally omit accessory draw spans.
+    const isBodyZone =
+        !zoneId || /body|chest|breast|hip|butt|leg|thigh|abdomen|waist|torso/i.test(zoneId);
+
+    // Only apply IB selection when the draft explicitly chose parts (not legacy "all sections").
+    const explicitIbSelection =
+        selectedIbSectionNames &&
+        selectedIbSectionNames.length > 0 &&
+        (component.ibParts?.length ?? 0) > 1;
+    const selectedSet = explicitIbSelection
+        ? new Set(resolveIbSectionsToPatch(component, { selectedIbSectionNames }))
+        : null;
+
+    if (selectedSet && component.ibParts) {
+        for (const part of component.ibParts) {
+            if (!selectedSet.has(part.ibSectionName)) continue;
+            const end = Math.min(indices.length, part.combinedFirstIndex + part.localIndexCount);
+            for (let i = part.combinedFirstIndex; i < end; i++) {
+                const vertex = indices[i];
+                if (vertex < vertexCount) allowed[vertex] = 1;
+            }
+        }
+        if (allowed.some(Boolean)) return allowed;
+    }
+
     const ranges =
         component.drawRanges.length > 0
             ? component.drawRanges
             : component.objectMaps.map((range) => ({
                   firstIndex: range.firstIndex,
                   indexCount: range.indexCount,
+                  label: range.label,
               }));
 
     for (const range of ranges) {
+        const label = (range.label || "").toLowerCase();
+        // Body touch zones must not paint head/hair (or dress/acc on multi-IB GIMI).
+        if (
+            !selectedSet &&
+            isBodyZone &&
+            /head|hair|face|eye|brow|mouth|teeth|tongue|ear|dress|cloth|coat|skirt|acc|accessory/i.test(
+                label,
+            )
+        ) {
+            continue;
+        }
+        if (selectedSet && range.label && !selectedSet.has(range.label)) continue;
+
         const end = Math.min(indices.length, range.firstIndex + range.indexCount);
         for (let i = range.firstIndex; i < end; i++) {
             const vertex = indices[i];
@@ -1211,6 +1290,9 @@ function allowedVertexMask(
 
     if (!allowed.some(Boolean)) {
         for (const range of component.objectMaps) {
+            if (selectedSet && range.ibSectionName && !selectedSet.has(range.ibSectionName)) {
+                continue;
+            }
             const end = Math.min(indices.length, range.firstIndex + range.indexCount);
             for (let i = range.firstIndex; i < end; i++) {
                 const vertex = indices[i];
@@ -1223,12 +1305,12 @@ function allowedVertexMask(
     return allowed;
 }
 
-function smoothMasks(masks: Float32Array, vertexCount: number, indices: Uint32Array) {
-    // Build a CSR-style adjacency as flat typed arrays instead of an array of Sets.
-    // Each triangle contributes 6 directed edges (a→b, a→c, b→a, b→c, c→a, c→b),
-    // matching the original Set-based adjacency exactly. Duplicate edges are kept
-    // (Set dedup is skipped) so the smoothing average may differ by a negligible
-    // amount, but allocation / GC pressure drops sharply for large meshes.
+function smoothMasks(
+    masks: Float32Array,
+    vertexCount: number,
+    indices: Uint32Array,
+    allowed?: Uint8Array,
+) {
     const degree = new Int32Array(vertexCount);
     const triCount = (indices.length - (indices.length % 3)) / 3;
     const maxEdges = triCount * 6;
@@ -1283,6 +1365,12 @@ function smoothMasks(masks: Float32Array, vertexCount: number, indices: Uint32Ar
 
     const next = new Float32Array(masks);
     for (let vertex = 0; vertex < vertexCount; vertex++) {
+        if (allowed && !allowed[vertex]) {
+            for (let channel = 0; channel < TOUCH_ZONE_CHANNELS; channel++) {
+                next[vertex * TOUCH_ZONE_CHANNELS + channel] = 0;
+            }
+            continue;
+        }
         const start = offsets[vertex];
         const end = offsets[vertex + 1];
         if (end === start) continue;

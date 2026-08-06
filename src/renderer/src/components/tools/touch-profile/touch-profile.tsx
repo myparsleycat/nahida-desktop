@@ -110,6 +110,13 @@ type TouchDraft = {
   components: TouchProfileComponentSummary[];
 };
 
+type TouchIbPartInspection = {
+  ibSectionName: string;
+  kindHint: "head" | "body" | "dress" | "other";
+  localIndexCount: number;
+  defaultSelected: boolean;
+};
+
 type TouchModInspection = {
   sessionId: string;
   modRoot: string;
@@ -125,6 +132,7 @@ type TouchModInspection = {
     indexCount: number;
     variantKey?: string;
     variantCondition?: string;
+    ibParts?: TouchIbPartInspection[];
     hasBlend: boolean;
     bones: Array<{ id: number; vertexCount: number }>;
   }>;
@@ -165,6 +173,10 @@ export default function TouchProfileTool({
   const [inspection, setInspection] = useState<TouchModInspection | null>(null);
   const [phase, setPhase] = useState<"select" | "review">("select");
   const [selectedMeshIds, setSelectedMeshIds] = useState<Set<string>>(new Set());
+  /** Multi-IB: which TextureOverride IB sections receive touch INI injection. */
+  const [selectedIbByComponent, setSelectedIbByComponent] = useState<Record<string, Set<string>>>(
+    {},
+  );
   const [selectedMeshId, setSelectedMeshId] = useState("");
   const [meshPreview, setMeshPreview] = useState<TouchProfileMeshPreview | null>(null);
   const [meshPreviewLoading, setMeshPreviewLoading] = useState(false);
@@ -413,9 +425,24 @@ export default function TouchProfileTool({
         modPath: targetPath,
       });
       setInspection(next);
-      setSelectedMeshIds(
-        new Set(
-          next.components.filter((component) => component.interactiveCandidate).map((c) => c.id),
+      const candidateIds = next.components
+        .filter((component) => component.interactiveCandidate)
+        .map((c) => c.id);
+      setSelectedMeshIds(new Set(candidateIds));
+      setSelectedIbByComponent(
+        Object.fromEntries(
+          next.components.map((component) => {
+            const parts = component.ibParts;
+            if (!parts || parts.length <= 1) {
+              return [component.id, new Set<string>()] as const;
+            }
+            const defaults = parts
+              .filter((part) => part.defaultSelected)
+              .map((part) => part.ibSectionName);
+            const selected =
+              defaults.length > 0 ? defaults : parts.map((part) => part.ibSectionName);
+            return [component.id, new Set(selected)] as const;
+          }),
         ),
       );
       setPhase("select");
@@ -442,6 +469,15 @@ export default function TouchProfileTool({
       toast.error(t("page.tools.touch_profile.toast.no_components_selected"));
       return;
     }
+    const missingIb = inspection.components.some((component) => {
+      if (!selectedMeshIds.has(component.id)) return false;
+      if (!component.ibParts || component.ibParts.length <= 1) return false;
+      return (selectedIbByComponent[component.id]?.size ?? 0) === 0;
+    });
+    if (missingIb) {
+      toast.error(t("page.tools.touch_profile.mesh_ib_none_selected"));
+      return;
+    }
     setLoading(true);
     setInputError(null);
     try {
@@ -451,9 +487,17 @@ export default function TouchProfileTool({
               .filter(([, zones]) => zones.length > 0)
               .map(([componentId, zones]) => ({ componentId, zones }))
           : undefined;
+      const ibSelections = [...selectedMeshIds].flatMap((componentId) => {
+        const component = inspection.components.find((entry) => entry.id === componentId);
+        if (!component?.ibParts || component.ibParts.length <= 1) return [];
+        const names = [...(selectedIbByComponent[componentId] ?? [])];
+        if (names.length === 0) return [];
+        return [{ componentId, ibSectionNames: names }];
+      });
       const next = await window.api.invoke("tools:touchProfileAnalyzeComponents", {
         sessionId: inspection.sessionId,
         componentIds: [...selectedMeshIds],
+        ibSelections: ibSelections.length > 0 ? ibSelections : undefined,
         mode: analysisMode,
         boneSelections,
         weightThreshold: analysisMode === "bone" ? weightThreshold : undefined,
@@ -764,6 +808,8 @@ export default function TouchProfileTool({
     draftSessionRef.current = null;
     setDraft(null);
     setInspection(null);
+    setSelectedMeshIds(new Set());
+    setSelectedIbByComponent({});
     setPhase("select");
     setPreview(null);
     setLastValidPreview(null);
@@ -1027,7 +1073,9 @@ export default function TouchProfileTool({
                       variant="outline"
                       size="sm"
                       className="h-7 text-xs"
-                      onClick={() => setSelectedMeshIds(new Set())}
+                      onClick={() => {
+                        setSelectedMeshIds(new Set());
+                      }}
                     >
                       {t("page.tools.touch_profile.mesh_select_none")}
                     </Button>
@@ -1090,6 +1138,48 @@ export default function TouchProfileTool({
                             </div>
                           </button>
                         </div>
+                        {component.ibParts &&
+                        component.ibParts.length > 1 &&
+                        selectedMeshIds.has(component.id) ? (
+                          <div className="mt-2 ml-7 space-y-1.5 border-l border-border/50 pl-3">
+                            <div className="text-[11px] text-muted-foreground">
+                              {t("page.tools.touch_profile.mesh_ib_parts")}
+                            </div>
+                            {component.ibParts.map((part) => (
+                              <label
+                                key={part.ibSectionName}
+                                className="flex items-center gap-2 text-xs"
+                              >
+                                <Checkbox
+                                  checked={
+                                    selectedIbByComponent[component.id]?.has(part.ibSectionName) ??
+                                    false
+                                  }
+                                  onCheckedChange={(checked) => {
+                                    setSelectedIbByComponent((current) => {
+                                      const prev = new Set(current[component.id] ?? []);
+                                      if (checked) prev.add(part.ibSectionName);
+                                      else prev.delete(part.ibSectionName);
+                                      return { ...current, [component.id]: prev };
+                                    });
+                                  }}
+                                  aria-label={part.ibSectionName}
+                                />
+                                <span className="min-w-0 truncate font-medium">
+                                  {part.ibSectionName}
+                                </span>
+                                <Badge variant="outline" className="shrink-0 text-[10px]">
+                                  {part.kindHint}
+                                </Badge>
+                                <span className="shrink-0 text-muted-foreground">
+                                  {t("page.tools.touch_profile.mesh_ib_part_indices", {
+                                    count: part.localIndexCount.toLocaleString(),
+                                  })}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>

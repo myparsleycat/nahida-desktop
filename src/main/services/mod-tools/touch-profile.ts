@@ -45,6 +45,8 @@ import { assertTouchProfileInputAllowed } from "./touch-profile-detection";
 import { compileTouchIni } from "./touch-profile-ini";
 import { normalizeTouchZoneSettings } from "./touch-profile-settings";
 import {
+    defaultSelectedIbSectionNames,
+    listIbSectionNames,
     TOUCH_CONFIDENCE_AUTO_APPLY_AVG,
     TOUCH_CONFIDENCE_AUTO_APPLY_MIN,
     TOUCH_PROFILE_MANIFEST_FILE,
@@ -260,6 +262,15 @@ export class TouchProfileService {
                     variantKey: component.variantKey,
                     variantCondition: component.variantCondition,
                     objectMaps: component.objectMaps,
+                    ibParts:
+                        component.ibParts && component.ibParts.length > 1
+                            ? component.ibParts.map((part) => ({
+                                  ibSectionName: part.ibSectionName,
+                                  kindHint: part.kindHint,
+                                  localIndexCount: part.localIndexCount,
+                                  defaultSelected: part.kindHint === "body",
+                              }))
+                            : undefined,
                     hasBlend: !!component.blendPath,
                     bones: component.bones,
                 })),
@@ -331,6 +342,30 @@ export class TouchProfileService {
             (component) => !selectedIds.has(component.id),
         );
         const mode = input.mode ?? "bone";
+        const ibSelectionsByComponent = new Map(
+            (input.ibSelections ?? []).map((entry) => [entry.componentId, entry.ibSectionNames]),
+        );
+
+        const resolveIbSelection = (component: TouchComponentAnalysis) => {
+            const all = listIbSectionNames(component);
+            const requested = ibSelectionsByComponent.get(component.id);
+            if (requested && requested.length > 0) {
+                const filtered = requested.filter((name) => all.includes(name));
+                if (filtered.length > 0) return filtered;
+            }
+            return defaultSelectedIbSectionNames(component);
+        };
+
+        for (const component of selectedComponents) {
+            if (
+                resolveIbSelection(component).length === 0 &&
+                listIbSectionNames(component).length > 0
+            ) {
+                throw new Error(
+                    `No IB parts selected for touch analysis on ${component.name}; select at least one IB section`,
+                );
+            }
+        }
 
         try {
             const meshCache = new Map<string, Awaited<ReturnType<typeof loadTouchMeshBuffers>>>();
@@ -436,9 +471,14 @@ export class TouchProfileService {
             if (failed?.status === "rejected") throw failed.reason;
 
             let objectId = 1;
-            const analyzedDrafts = results.map((result) => {
+            const analyzedDrafts = results.map((result, index) => {
                 if (result.status === "rejected") throw result.reason;
-                const draft = { ...result.value, objectId };
+                const component = selectedComponents[index];
+                const draft: TouchComponentDraft = {
+                    ...result.value,
+                    objectId,
+                    selectedIbSectionNames: resolveIbSelection(component),
+                };
                 if (draft.interactive) objectId += 1;
                 return draft;
             });
@@ -450,6 +490,7 @@ export class TouchProfileService {
                     zones: [],
                     confidence: 0,
                     warnings: ["Component was not selected for touch analysis"],
+                    selectedIbSectionNames: [],
                 }),
             );
 
@@ -783,6 +824,7 @@ export class TouchProfileService {
                 mesh.indices,
                 component,
                 componentDraft.zones,
+                componentDraft.selectedIbSectionNames,
             );
             const preview: TouchProfilePreview = {
                 sessionId: input.sessionId,
@@ -818,6 +860,7 @@ export class TouchProfileService {
         indices: Uint32Array,
         component: TouchComponentAnalysis,
         zones: TouchZoneSpec[],
+        selectedIbSectionNames?: string[],
     ): Promise<Float32Array> {
         const workerInput: TouchMaskWorkerInput = {
             vertexCount,
@@ -825,6 +868,7 @@ export class TouchProfileService {
             indices,
             component,
             zones,
+            selectedIbSectionNames,
         };
         try {
             const result = await this.getMaskPool().run(workerInput);
@@ -834,7 +878,14 @@ export class TouchProfileService {
                 error,
                 `TouchProfile:computeMasks:worker-fallback:${component.id}`,
             );
-            return buildVertexMasks(vertexCount, positions, indices, component, zones);
+            return buildVertexMasks(
+                vertexCount,
+                positions,
+                indices,
+                component,
+                zones,
+                selectedIbSectionNames,
+            );
         }
     }
 

@@ -38,6 +38,7 @@ import {
     type TouchComponentAnalysis,
     type TouchComponentKind,
     type TouchDrawRange,
+    type TouchIbPart,
     type TouchModAnalysis,
     type TouchObjectMapEntry,
     type TouchSupportGrade,
@@ -124,6 +125,11 @@ export async function analyzeTouchMod(
             continue;
         }
 
+        const indexResourceCounts: Record<string, number> = {};
+        for (const entry of indexData) {
+            indexResourceCounts[entry.resource.name] = entry.indices.length;
+        }
+
         const combinedIndices = combineIndexBuffers(indexData.map((entry) => entry.indices));
         const primaryIndex = indexData[0];
         const indexPaths = indexData.map((entry) => entry.indexPath);
@@ -133,14 +139,31 @@ export async function analyzeTouchMod(
             commandLists,
             position,
             indexData.map((entry) => entry.resource),
-            combinedIndices.length,
+            indexResourceCounts,
         );
-        const drawRanges = uniqueDrawRanges(drawContext.ranges);
+        const localDrawRanges = uniqueDrawRanges(drawContext.ranges);
+        const ibParts = buildIbParts(
+            drawContext.ibSectionNames,
+            drawContext.ibResourceNames,
+            indexResourceCounts,
+            indexData.map((entry) => entry.resource.name),
+        );
+        const drawRanges =
+            ibParts.length > 1
+                ? ibParts.map((part) => ({
+                      firstIndex: part.combinedFirstIndex,
+                      indexCount: part.localIndexCount,
+                      baseVertex: 0,
+                      label: part.ibSectionName,
+                      conditionText: drawContext.variantCondition,
+                  }))
+                : localDrawRanges;
         const kind = classifyComponentKind(
             position.name,
             primaryIndex.resource.name,
             drawContext.blendSectionName,
             drawContext.ibSectionName,
+            ...drawContext.ibSectionNames,
         );
         const support = gradeComponent({
             positionStride: position.stride,
@@ -188,11 +211,14 @@ export async function analyzeTouchMod(
             }
         }
         const objectMaps = buildObjectMapCandidates(
-            drawRanges,
+            localDrawRanges,
             kind,
             components.length + 1,
             positions,
-            combinedIndices,
+            // Object-map geometry scoring must use the IB that will be bound at detect time.
+            // For multi-IB GIMI this is a single part IB, not the concatenated buffer.
+            ibParts.length > 1 ? undefined : combinedIndices,
+            ibParts,
         );
         components.push({
             id: sanitizeId(position.name),
@@ -207,6 +233,11 @@ export async function analyzeTouchMod(
             positionStride: position.stride,
             vertexCount: validation.vertexCount,
             indexResourceName: primaryIndex.resource.name,
+            indexResourceNames:
+                drawContext.ibResourceNames.length > 0
+                    ? drawContext.ibResourceNames
+                    : [primaryIndex.resource.name],
+            indexResourceCounts,
             indexRelativePath: primaryIndex.relativePath,
             indexPath: primaryIndex.indexPath,
             indexRelativePaths,
@@ -215,11 +246,18 @@ export async function analyzeTouchMod(
             indexCount: combinedIndices.length,
             blendSectionName: drawContext.blendSectionName,
             ibSectionName: drawContext.ibSectionName,
+            ibSectionNames:
+                drawContext.ibSectionNames.length > 0
+                    ? drawContext.ibSectionNames
+                    : drawContext.ibSectionName
+                      ? [drawContext.ibSectionName]
+                      : [],
             ibHash: drawContext.ibHash,
             variantKey: variantKeyForResource(position.name),
             variantCondition: drawContext.variantCondition,
             drawRanges,
             objectMaps,
+            ibParts: ibParts.length > 0 ? ibParts : undefined,
             blendRelativePath,
             blendPath,
             blendStride,
@@ -347,7 +385,26 @@ function buildObjectMapCandidates(
     defaultObjectId: number,
     positions?: Float32Array,
     indices?: Uint32Array,
+    ibParts?: TouchIbPart[],
 ): TouchObjectMapEntry[] {
+    // Multi-IB GIMI: object map must be local to the IB bound during Detect.
+    // Never emit a span equal to the concatenated IB length.
+    if (ibParts && ibParts.length > 1) {
+        const detectParts = ibParts.filter((part) => part.detect);
+        const parts =
+            detectParts.length > 0 ? detectParts : ibParts.filter((p) => p.kindHint === "body");
+        const chosen = parts.length > 0 ? parts : [ibParts[0]];
+        return chosen.map((part) => ({
+            firstIndex: 0,
+            indexCount: part.localIndexCount,
+            objectMode: TOUCH_OBJECT_MODE,
+            objectId: defaultObjectId,
+            label: chosen.length === 1 ? (kind === "legs" ? "skin" : "main") : part.ibSectionName,
+            ibSectionName: part.ibSectionName,
+            indexResourceName: part.indexResourceName,
+        }));
+    }
+
     const uniqueBySpan = new Map<string, TouchDrawRange>();
     for (const range of ranges) {
         if (range.indexCount < 300) continue;
@@ -391,6 +448,81 @@ function buildObjectMapCandidates(
             label: kind === "legs" ? "skin" : "main",
         },
     ];
+}
+
+function buildIbParts(
+    ibSectionNames: string[],
+    ibResourceNames: string[],
+    indexResourceCounts: Record<string, number>,
+    indexDataOrder: string[],
+): TouchIbPart[] {
+    if (ibSectionNames.length === 0) return [];
+
+    // Prefer the physical IB load order for combined offsets (matches combineIndexBuffers).
+    const orderedResources =
+        indexDataOrder.length > 0
+            ? indexDataOrder.filter((name, index, all) => all.indexOf(name) === index)
+            : ibResourceNames;
+
+    // Map section → resource when lengths align; otherwise match by name affinity.
+    const sectionToResource = new Map<string, string>();
+    if (ibSectionNames.length === ibResourceNames.length) {
+        for (let i = 0; i < ibSectionNames.length; i++) {
+            sectionToResource.set(ibSectionNames[i], ibResourceNames[i]);
+        }
+    } else {
+        const used = new Set<string>();
+        for (const section of ibSectionNames) {
+            const match =
+                ibResourceNames.find(
+                    (name) => !used.has(name) && sectionResourceAffinity(section, name) > 0,
+                ) ?? orderedResources.find((name) => !used.has(name));
+            if (match) {
+                used.add(match);
+                sectionToResource.set(section, match);
+            }
+        }
+    }
+
+    let combinedOffset = 0;
+    const offsetByResource = new Map<string, number>();
+    for (const resourceName of orderedResources) {
+        offsetByResource.set(resourceName, combinedOffset);
+        combinedOffset += indexResourceCounts[resourceName] ?? 0;
+    }
+
+    return ibSectionNames.map((ibSectionName) => {
+        const indexResourceName =
+            sectionToResource.get(ibSectionName) ?? ibResourceNames[0] ?? orderedResources[0] ?? "";
+        const localIndexCount = indexResourceCounts[indexResourceName] ?? 0;
+        const kindHint = classifyIbPartKind(ibSectionName, indexResourceName);
+        return {
+            ibSectionName,
+            indexResourceName,
+            localIndexCount,
+            combinedFirstIndex: offsetByResource.get(indexResourceName) ?? 0,
+            kindHint,
+            detect: kindHint === "body",
+        };
+    });
+}
+
+function sectionResourceAffinity(sectionName: string, resourceName: string) {
+    const section = sectionName.toLowerCase();
+    const resource = resourceName.toLowerCase();
+    if (section.includes("head") && resource.includes("head")) return 2;
+    if (section.includes("body") && resource.includes("body")) return 2;
+    if (section.includes("dress") && resource.includes("dress")) return 2;
+    if (section.includes("leg") && resource.includes("leg")) return 2;
+    return 0;
+}
+
+function classifyIbPartKind(...names: Array<string | undefined>): TouchIbPart["kindHint"] {
+    const text = names.filter(Boolean).join(" ").toLowerCase();
+    if (/(head|hair|face|eye|brow|mouth|teeth|tongue|ear)/.test(text)) return "head";
+    if (/(dress|cloth|coat|skirt|acc|accessory|ornament)/.test(text)) return "dress";
+    if (/(body|torso|chest|breast|leg|thigh|pelvis)/.test(text)) return "body";
+    return "other";
 }
 
 /** Prefer equal-sized draw pairs that cover the upper torso (breasts), not just the largest pair. */
@@ -503,11 +635,13 @@ function findDrawContext(
     commandLists: Map<string, IniSection>,
     position: Resource,
     indexInput: Resource | Resource[],
-    indexCount: number,
+    indexResourceCounts: Record<string, number>,
 ): {
     ranges: TouchDrawRange[];
     blendSectionName?: string;
     ibSectionName?: string;
+    ibSectionNames: string[];
+    ibResourceNames: string[];
     ibHash?: string;
     variantCondition?: string;
 } {
@@ -516,6 +650,7 @@ function findDrawContext(
     const resourcesByName = new Map(
         collectResources(sections).map((resource) => [resourceKey(resource), resource]),
     );
+    const fallbackIndexCount = Object.values(indexResourceCounts).reduce((sum, n) => sum + n, 0);
 
     const contexts = sections
         .filter((section) => section.header === "TextureOverride")
@@ -534,6 +669,8 @@ function findDrawContext(
 
     let blendSectionName: string | undefined;
     let ibSectionName: string | undefined;
+    const ibSectionNames: string[] = [];
+    const ibResourceNames: string[] = [];
     let ibHash: string | undefined;
     let variantCondition: string | undefined;
     const ranges: TouchDrawRange[] = [];
@@ -552,14 +689,29 @@ function findDrawContext(
         if (!indexAssignment) continue;
 
         ibSectionName ??= context.section.name;
+        if (!ibSectionNames.includes(context.section.name)) {
+            ibSectionNames.push(context.section.name);
+        }
+        if (!ibResourceNames.includes(indexAssignment.resource.name)) {
+            ibResourceNames.push(indexAssignment.resource.name);
+        }
         ibHash ??= context.hash;
         variantCondition ??= indexAssignment.conditionText;
         ranges.push(
-            ...context.ranges.filter((range) =>
-                rangeMatchesCondition(range.conditionText, indexAssignment.conditionText),
-            ),
+            ...context.ranges
+                .filter((range) =>
+                    rangeMatchesCondition(range.conditionText, indexAssignment.conditionText),
+                )
+                .map((range) => ({
+                    ...range,
+                    label: range.label || context.section.name,
+                })),
         );
 
+        // GIMI's shared auto draw uses the replacement IB's local range, not the
+        // concatenated multi-IB length. Detect/object-map consume this local span.
+        const localIndexCount =
+            indexResourceCounts[indexAssignment.resource.name] ?? fallbackIndexCount;
         if (
             context.autoConditions.some((condition) =>
                 sameCondition(condition, indexAssignment.conditionText),
@@ -567,9 +719,10 @@ function findDrawContext(
         ) {
             ranges.push({
                 firstIndex: 0,
-                indexCount,
+                indexCount: localIndexCount,
                 baseVertex: 0,
                 conditionText: indexAssignment.conditionText,
+                label: context.section.name,
             });
         }
     }
@@ -583,17 +736,28 @@ function findDrawContext(
                 ),
         );
         if (autoContext) {
-            // GIMI's shared auto draw uses the replacement IB's local range.
+            const primaryResource = ibResourceNames[0];
             ranges.push({
                 firstIndex: 0,
-                indexCount,
+                indexCount: primaryResource
+                    ? (indexResourceCounts[primaryResource] ?? fallbackIndexCount)
+                    : fallbackIndexCount,
                 baseVertex: 0,
                 conditionText: variantCondition,
+                label: ibSectionName,
             });
         }
     }
 
-    return { ranges, blendSectionName, ibSectionName, ibHash, variantCondition };
+    return {
+        ranges,
+        blendSectionName,
+        ibSectionName,
+        ibSectionNames,
+        ibResourceNames,
+        ibHash,
+        variantCondition,
+    };
 }
 
 function extractDrawRanges(lines: string[]): TouchDrawRange[] {

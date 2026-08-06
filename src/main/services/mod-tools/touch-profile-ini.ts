@@ -8,7 +8,11 @@ import type {
 
 import { bakeSampleOffsets, type TouchGeneratedAssets } from "./touch-profile-assets";
 import { resolveTouchJiggleParams } from "./touch-profile-settings";
-import { DEFAULT_TOUCH_JIGGLE_PARAMS, TOUCH_ZONE_CHANNELS } from "./touch-profile-types";
+import {
+    DEFAULT_TOUCH_JIGGLE_PARAMS,
+    resolveIbSectionsToPatch,
+    TOUCH_ZONE_CHANNELS,
+} from "./touch-profile-types";
 
 export type TouchIniCompileInput = {
     sourceIniPath: string;
@@ -59,11 +63,8 @@ export async function compileTouchIni(input: TouchIniCompileInput) {
         input.varPrefix,
         interactive.map((entry) => entry.component),
     );
-    text = patchIbSections(
-        text,
-        input.varPrefix,
-        interactive.map((entry) => entry.component),
-    );
+    text = patchIbSections(text, input.varPrefix, interactive);
+    text = relocateGimiSharedAutoDraw(text, input.varPrefix, interactive);
     text = appendRuntime(text, input.varPrefix, interactive);
 
     await fse.writeFile(input.targetIniPath, text.replace(/\n/g, "\r\n"), "utf8");
@@ -161,7 +162,9 @@ function ensurePresentHook(text: string, varPrefix: string) {
         body = `\nrun = CommandList${st}Present${body}`;
     }
     if (!body.includes(`post $${varPrefix}_active = 0`)) {
-        body += `post $${varPrefix}_active = 0\n`;
+        // Keep the reset inside [Present], before any trailing blank lines leak past the section.
+        const trimmed = body.replace(/\s+$/, "\n");
+        body = `${trimmed}post $${varPrefix}_active = 0\n`;
     }
     return text.replace(presentMatch[0], `[Present]${body}`);
 }
@@ -182,15 +185,16 @@ function patchBlendSections(text: string, varPrefix: string, components: TouchCo
     return next;
 }
 
-function patchIbSections(text: string, varPrefix: string, components: TouchComponentAnalysis[]) {
+function patchIbSections(text: string, varPrefix: string, entries: InteractiveEntry[]) {
     let next = text;
     const st = sectionToken(varPrefix);
-    const groups = new Map<string, TouchComponentAnalysis[]>();
-    for (const component of components) {
-        if (!component.ibSectionName) continue;
-        const group = groups.get(component.ibSectionName) ?? [];
-        group.push(component);
-        groups.set(component.ibSectionName, group);
+    const groups = new Map<string, InteractiveEntry[]>();
+    for (const entry of entries) {
+        for (const ibSectionName of resolveIbSectionsToPatch(entry.component, entry.draft)) {
+            const group = groups.get(ibSectionName) ?? [];
+            group.push(entry);
+            groups.set(ibSectionName, group);
+        }
     }
 
     for (const [ibSectionName, group] of groups) {
@@ -198,15 +202,16 @@ function patchIbSections(text: string, varPrefix: string, components: TouchCompo
         const section = matchSection(next, header);
         if (
             !section ||
-            group.some((component) =>
-                section.body.includes(`CustomShader${st}Bake${token(component.id)}`),
+            group.some((entry) =>
+                section.body.includes(`CustomShader${st}Jiggle${token(entry.component.id)}`),
             )
         ) {
             continue;
         }
 
+        // Selected IBs always get Bake/Detect + jiggle + TempVB (user chose the inject target).
         const inject = group
-            .map((component) => buildIbInjection(component, varPrefix, st))
+            .map((entry) => buildIbInjection(entry.component, varPrefix, st))
             .join("\n");
         const ibLine = section.body.match(/^\s*ib\s*=\s*.+$/im);
         if (ibLine) {
@@ -233,8 +238,9 @@ function patchIbSections(text: string, varPrefix: string, components: TouchCompo
 
 function buildIbInjection(component: TouchComponentAnalysis, varPrefix: string, st: string) {
     const id = token(component.id);
-    const lines = `
- if $${varPrefix}_detect_allowed == 1
+    // Use live vb0 (post-skin). Do NOT rebind Resource*Position from disk — that is
+    // pre-skin / wrong space and rotates the mesh (e.g. body lying on its side).
+    const lines = `if $${varPrefix}_detect_allowed == 1
 	run = CustomShader${st}Bake${id}
 	run = CustomShader${st}Detect${id}
 endif
@@ -244,14 +250,135 @@ if $${varPrefix}_mode == 1
 		$${varPrefix}_last_dispatch_${id} = time
 	endif
 	vb0 = Resource${st}TempVB${id}
-endif
-`.trim();
+endif`.trim();
 
     if (!component.variantCondition) return lines;
     return `if ${component.variantCondition}\n${lines
         .split("\n")
         .map((line) => `\t${line}`)
         .join("\n")}\nendif`;
+}
+
+/**
+ * GIMI multi-IB: shared IB override runs `drawindexed = auto` while parts only swap `ib`.
+ * Touch binds TempVB on the part override, so the shared auto-draw can fire first → flicker.
+ *
+ * mode==1: shared IB becomes skip-only (like Raiden LEWDHAND); every part draws itself after
+ * setup. Selected parts already have TempVB bound before the part-local draw.
+ */
+function relocateGimiSharedAutoDraw(text: string, varPrefix: string, entries: InteractiveEntry[]) {
+    let next = text;
+    const seenHashes = new Set<string>();
+    const modeVar = `$${varPrefix}_mode`;
+
+    for (const entry of entries) {
+        const component = entry.component;
+        const partNames = component.ibSectionNames ?? [];
+        if (partNames.length <= 1 || !component.ibHash) continue;
+        if (seenHashes.has(component.ibHash)) continue;
+
+        const shared = findSharedAutoDrawSection(next, component.ibHash, partNames);
+        if (!shared) continue;
+        seenHashes.add(component.ibHash);
+
+        if (!shared.body.includes("; nhd-touch-relocated-auto-draw")) {
+            next = next.replace(
+                shared.full,
+                wrapSharedIbForTouchMode(shared.header, shared.body, modeVar),
+            );
+        }
+
+        for (const partName of partNames) {
+            const part = component.ibParts?.find((entry) => entry.ibSectionName === partName);
+            const indexCount = part?.localIndexCount ?? 0;
+            next = ensurePartLocalDraw(next, partName, modeVar, indexCount);
+        }
+    }
+
+    return next;
+}
+
+function wrapSharedIbForTouchMode(header: string, body: string, modeVar: string) {
+    const lines = body.replace(/^\n+/, "").replace(/\n+$/, "").split("\n");
+    const leading: string[] = [];
+    const rest: string[] = [];
+    for (const line of lines) {
+        if (rest.length === 0 && /^\s*(hash|match_priority|filter_index)\s*=/i.test(line)) {
+            leading.push(line);
+            continue;
+        }
+        if (rest.length === 0 && line.trim() === "") {
+            leading.push(line);
+            continue;
+        }
+        rest.push(line);
+    }
+    const original = `${rest.join("\n").trimEnd()}\n`;
+    return `${header}
+${leading.join("\n").trimEnd()}
+; nhd-touch-relocated-auto-draw
+if ${modeVar} == 1
+	handling = skip
+else
+${indentBlock(original, 1)}endif
+`;
+}
+
+function ensurePartLocalDraw(
+    text: string,
+    partName: string,
+    modeVar: string,
+    localIndexCount: number,
+) {
+    const header = `[TextureOverride${partName}]`;
+    const section = matchSection(text, header);
+    if (!section) return text;
+    if (/drawindexed\s*=\s*/i.test(section.body)) return text;
+
+    // Part IBs are local (indices start at 0). `drawindexed = auto` would reuse the
+    // game's global first_index (match_first_index) against that local IB → wrong tris
+    // / flicker. Explicit count from 0 matches hand-authored GIMI touch mods.
+    const count = Math.max(0, Math.floor(localIndexCount));
+    if (count <= 0) return text;
+    const drawOnly = `if ${modeVar} == 1\n\tdrawindexed = ${count}, 0, 0\nendif`;
+    return text.replace(section.full, `${header}${section.body.trimEnd()}\n${drawOnly}\n`);
+}
+
+function findSharedAutoDrawSection(text: string, ibHash: string, partNames: string[]) {
+    const partSet = new Set(partNames.map((name) => name.toLowerCase()));
+    const sectionRegex = /\[TextureOverride([^\]]+)\]([^[]*)/gi;
+    let match: RegExpExecArray | null;
+    while ((match = sectionRegex.exec(text))) {
+        const name = match[1].trim();
+        if (partSet.has(name.toLowerCase())) continue;
+        const body = match[2];
+        const hash = body.match(/^\s*hash\s*=\s*([^\s;]+)/im)?.[1];
+        if (!hash || hash.toLowerCase() !== ibHash.toLowerCase()) continue;
+        if (sectionHasAutoDraw(text, body)) {
+            return { full: match[0], header: `[TextureOverride${name}]`, body, name };
+        }
+    }
+    return null;
+}
+
+function sectionHasAutoDraw(fullText: string, sectionBody: string) {
+    if (/^\s*drawindexed\s*=\s*auto\b/im.test(sectionBody)) return true;
+    const runs = [...sectionBody.matchAll(/^\s*run\s*=\s*(CommandList[^\s;]+)/gim)].map(
+        (m) => m[1],
+    );
+    for (const run of runs) {
+        const cl = matchSection(fullText, `[${run}]`);
+        if (cl && /^\s*drawindexed\s*=\s*auto\b/im.test(cl.body)) return true;
+    }
+    return false;
+}
+
+function indentBlock(block: string, tabs: number) {
+    const prefix = "\t".repeat(tabs);
+    return block
+        .split("\n")
+        .map((line) => (line.trim().length === 0 ? line : `${prefix}${line}`))
+        .join("\n");
 }
 
 function appendRuntime(text: string, varPrefix: string, entries: InteractiveEntry[]) {
@@ -505,14 +632,24 @@ function buildComponentShaders(
     const id = token(entry.component.id);
     const maskBase = maskResourceToken(entry.asset.assetPrefix);
     const paramsName = paramsResourceToken(entry.asset.assetPrefix);
+    // Bake/detect samples must stay inside the IB bound at Detect time (local space).
+    const selectedIbNames = new Set(resolveIbSectionsToPatch(entry.component, entry.draft));
+    const detectPart =
+        entry.component.ibParts?.find((part) => selectedIbNames.has(part.ibSectionName)) ??
+        entry.component.ibParts?.find((part) => part.detect) ??
+        entry.component.ibParts?.[0];
     const primaryRange =
+        entry.component.objectMaps.find(
+            (map) => map.ibSectionName && selectedIbNames.has(map.ibSectionName),
+        ) ??
         entry.component.objectMaps.find((map) => map.label === "nude") ??
-        entry.component.objectMaps[0] ??
-        entry.component.drawRanges[0];
-    const samples = bakeSampleOffsets(
-        primaryRange?.firstIndex ?? 0,
-        primaryRange?.indexCount ?? Math.max(entry.component.indexCount, 1),
-    );
+        entry.component.objectMaps[0];
+    const bakeFirstIndex = primaryRange?.firstIndex ?? 0;
+    const bakeIndexCount =
+        primaryRange?.indexCount ??
+        detectPart?.localIndexCount ??
+        Math.max(entry.component.indexCount, 1);
+    const samples = bakeSampleOffsets(bakeFirstIndex, bakeIndexCount);
 
     const lines = [
         `[CustomShader${st}Bake${id}]`,
@@ -522,11 +659,25 @@ function buildComponentShaders(
         "",
     ];
 
+    const detectIndexResource =
+        primaryRange?.indexResourceName ??
+        detectPart?.indexResourceName ??
+        entry.component.indexResourceName ??
+        "";
+    const detectIndexResources = detectIndexResource
+        ? [detectIndexResource]
+        : entry.component.indexResourceNames && entry.component.indexResourceNames.length > 0
+          ? [entry.component.indexResourceNames[0]]
+          : [];
+
     samples.forEach((sample, index) => {
+        const targetIndexResource =
+            detectIndexResources[0] ?? entry.component.indexResourceName ?? "";
+
         lines.push(
             `[CustomShader${st}Bake${id}${index}]`,
             "gs = Resources/IM/rzm_gs_probe.hlsl",
-            `gs-t1 = Resource${entry.component.indexResourceName}`,
+            `gs-t1 = Resource${targetIndexResource}`,
             "ps = Resources/IM/rzm_gs_probe.hlsl",
             "topology = point_list",
             `o0 = set_viewport no_view_cache Resource${st}BakeRT`,
@@ -772,6 +923,7 @@ function buildComponentResources(st: string, entry: InteractiveEntry) {
         "",
         `[Resource${st}TempVB${id}]`,
         "type = RWBuffer",
+        `stride = ${entry.component.positionStride || 40}`,
         "",
     );
 

@@ -27,7 +27,7 @@ import {
     assertTouchProfileDetectionAllowed,
     inspectTouchProfileInput,
 } from "./touch-profile-detection";
-import { buildTouchRuntimeZoneOverrides } from "./touch-profile-ini";
+import { buildTouchRuntimeZoneOverrides, compileTouchIni } from "./touch-profile-ini";
 import {
     buildAllViewTransforms,
     buildViewTransform,
@@ -1795,6 +1795,453 @@ describe("analyzeTouchMod", () => {
 
         const mesh = await loadTouchMeshBuffers(comp);
         assert.deepEqual([...mesh.indices], [0, 1, 2, 3, 4, 5]);
+
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    it("correctly identifies and patches multiple IB sections in GIMI mods", async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "touch-profile-gimi-multi-ib-"));
+        const count = 100;
+        const bytes = Buffer.alloc(count * 40);
+        for (let i = 0; i < count; i++) {
+            bytes.writeFloatLE(i * 0.01, i * 40);
+            bytes.writeFloatLE(i * 0.02, i * 40 + 4);
+            bytes.writeFloatLE(i * 0.03, i * 40 + 8);
+        }
+        fs.writeFileSync(path.join(root, "GanyuPosition.buf"), bytes);
+        fs.writeFileSync(
+            path.join(root, "GanyuHead.ib"),
+            Buffer.from(new Uint32Array([0, 1, 2]).buffer),
+        );
+        fs.writeFileSync(
+            path.join(root, "GanyuBody.ib"),
+            Buffer.from(new Uint32Array([3, 4, 5]).buffer),
+        );
+
+        const iniContent = `[Constants]
+global $active
+
+[TextureOverrideGanyuPosition]
+hash = 11111111
+vb0 = ResourceGanyuPosition
+
+[TextureOverrideGanyuHead]
+hash = 22222222
+match_first_index = 0
+ib = ResourceGanyuHeadIB
+
+[TextureOverrideGanyuBody]
+hash = 22222222
+match_first_index = 3
+ib = ResourceGanyuBodyIB
+
+[ResourceGanyuPosition]
+type = Buffer
+stride = 40
+filename = GanyuPosition.buf
+
+[ResourceGanyuHeadIB]
+type = Buffer
+format = DXGI_FORMAT_R32_UINT
+filename = GanyuHead.ib
+
+[ResourceGanyuBodyIB]
+type = Buffer
+format = DXGI_FORMAT_R32_UINT
+filename = GanyuBody.ib
+`;
+        fs.writeFileSync(path.join(root, "merged.ini"), iniContent, "utf8");
+
+        const analysis = await analyzeTouchMod(root);
+        assert.equal(analysis.components.length, 1);
+        const comp = analysis.components[0];
+        assert.ok(comp.ibSectionNames);
+        assert.deepEqual(comp.ibSectionNames, ["GanyuHead", "GanyuBody"]);
+        assert.ok(comp.indexResourceCounts);
+        assert.equal(comp.indexResourceCounts["GanyuHeadIB"], 3);
+        assert.equal(comp.indexResourceCounts["GanyuBodyIB"], 3);
+        assert.ok(comp.ibParts);
+        assert.equal(comp.ibParts?.length, 2);
+        assert.deepEqual(
+            comp.ibParts?.map((part) => ({
+                section: part.ibSectionName,
+                kind: part.kindHint,
+                detect: part.detect,
+                local: part.localIndexCount,
+                combined: part.combinedFirstIndex,
+            })),
+            [
+                {
+                    section: "GanyuHead",
+                    kind: "head",
+                    detect: false,
+                    local: 3,
+                    combined: 0,
+                },
+                {
+                    section: "GanyuBody",
+                    kind: "body",
+                    detect: true,
+                    local: 3,
+                    combined: 3,
+                },
+            ],
+        );
+        // Object map must be body-local, never the concatenated IB length.
+        assert.equal(comp.objectMaps.length, 1);
+        assert.equal(comp.objectMaps[0]?.firstIndex, 0);
+        assert.equal(comp.objectMaps[0]?.indexCount, 3);
+        assert.notEqual(comp.objectMaps[0]?.indexCount, 6);
+        assert.deepEqual(
+            comp.drawRanges.map((range) => ({
+                firstIndex: range.firstIndex,
+                indexCount: range.indexCount,
+                label: range.label,
+            })),
+            [
+                { firstIndex: 0, indexCount: 3, label: "GanyuHead" },
+                { firstIndex: 3, indexCount: 3, label: "GanyuBody" },
+            ],
+        );
+
+        const positions = new Float32Array(30 * 3);
+        for (let i = 0; i < 30; i++) {
+            positions[i * 3] = 0;
+            positions[i * 3 + 1] = 0;
+            positions[i * 3 + 2] = i * 0.1;
+        }
+        const indices = new Uint32Array([0, 1, 2, 3, 4, 5]);
+        const zoneSpec = {
+            id: "chest",
+            label: "Left Breast",
+            channel: 0,
+            source: "manual" as const,
+            center: [0, 0, 0] as [number, number, number],
+            radius: [1, 1, 1] as [number, number, number],
+            confidence: 1,
+            settings: createDefaultTouchZoneSettings(),
+            visionMaskTuning: {
+                radiusPadding: 1,
+                seedInfluenceScale: 1,
+                maskCutoffD2: 1,
+                maskEdgeFadeD2: 0.3,
+                sideHeightPadRatio: 0.1,
+                sideHeightPadMin: 0.05,
+            },
+        };
+        const masks = buildVertexMasks(30, positions, indices, comp, [zoneSpec]);
+        assert.equal(masks[0], 0);
+        assert.equal(masks[1 * 12], 0);
+        assert.equal(masks[2 * 12], 0);
+        assert.ok(masks[3 * 12] > 0);
+
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    it("uses per-IB local object maps and body-only detect for GIMI auto multi-IB", async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "touch-profile-gimi-auto-"));
+        const vertexCount = 30;
+        const bytes = Buffer.alloc(vertexCount * 40);
+        for (let i = 0; i < vertexCount; i++) {
+            bytes.writeFloatLE(i * 0.01, i * 40);
+            bytes.writeFloatLE(0.1, i * 40 + 4);
+            bytes.writeFloatLE(1.0, i * 40 + 8);
+            bytes.writeFloatLE(0, i * 40 + 12);
+            bytes.writeFloatLE(1, i * 40 + 16);
+            bytes.writeFloatLE(0, i * 40 + 20);
+            bytes.writeFloatLE(1, i * 40 + 24);
+            bytes.writeFloatLE(0, i * 40 + 28);
+            bytes.writeFloatLE(0, i * 40 + 32);
+            bytes.writeFloatLE(1, i * 40 + 36);
+        }
+        fs.writeFileSync(path.join(root, "GanyuPosition.buf"), bytes);
+        // Head 0-5, Body 6-17, Dress 18-29 (local IBs; combined length would be 18)
+        fs.writeFileSync(
+            path.join(root, "GanyuHead.ib"),
+            Buffer.from(new Uint32Array([0, 1, 2, 3, 4, 5]).buffer),
+        );
+        fs.writeFileSync(
+            path.join(root, "GanyuBody.ib"),
+            Buffer.from(new Uint32Array([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]).buffer),
+        );
+        fs.writeFileSync(
+            path.join(root, "GanyuDress.ib"),
+            Buffer.from(new Uint32Array([18, 19, 20, 21, 22, 23]).buffer),
+        );
+        fs.writeFileSync(
+            path.join(root, "merged.ini"),
+            [
+                "[Constants]",
+                "global persist $swapvar = 0",
+                "global $active",
+                "",
+                "[Present]",
+                "post $active = 0",
+                "",
+                "[TextureOverrideGanyuPosition]",
+                "hash = a5169f1d",
+                "run = CommandListGanyuPosition",
+                "$active = 1",
+                "",
+                "[TextureOverrideGanyuBlend]",
+                "hash = 6f47a39d",
+                "run = CommandListGanyuBlend",
+                "",
+                "[TextureOverrideGanyuIB]",
+                "hash = 1575ec63",
+                "run = CommandListGanyuIB",
+                "",
+                "[TextureOverrideGanyuHead]",
+                "hash = 1575ec63",
+                "match_first_index = 0",
+                "run = CommandListGanyuHead",
+                "",
+                "[TextureOverrideGanyuBody]",
+                "hash = 1575ec63",
+                "match_first_index = 100",
+                "run = CommandListGanyuBody",
+                "",
+                "[TextureOverrideGanyuDress]",
+                "hash = 1575ec63",
+                "match_first_index = 200",
+                "run = CommandListGanyuDress",
+                "",
+                "[CommandListGanyuPosition]",
+                "if $swapvar == 0",
+                "\tvb0 = ResourceGanyuPosition.0",
+                "endif",
+                "",
+                "[CommandListGanyuBlend]",
+                "if $swapvar == 0",
+                "\tvb1 = ResourceGanyuPosition.0",
+                "\thandling = skip",
+                "\tdraw = 30,0",
+                "endif",
+                "",
+                "[CommandListGanyuIB]",
+                "if $swapvar == 0",
+                "\thandling = skip",
+                "\tdrawindexed = auto",
+                "endif",
+                "",
+                "[CommandListGanyuHead]",
+                "if $swapvar == 0",
+                "\tib = ResourceGanyuHeadIB.0",
+                "endif",
+                "",
+                "[CommandListGanyuBody]",
+                "if $swapvar == 0",
+                "\tib = ResourceGanyuBodyIB.0",
+                "endif",
+                "",
+                "[CommandListGanyuDress]",
+                "if $swapvar == 0",
+                "\tib = ResourceGanyuDressIB.0",
+                "endif",
+                "",
+                "[ResourceGanyuPosition.0]",
+                "type = Buffer",
+                "stride = 40",
+                "filename = GanyuPosition.buf",
+                "",
+                "[ResourceGanyuHeadIB.0]",
+                "type = Buffer",
+                "format = DXGI_FORMAT_R32_UINT",
+                "filename = GanyuHead.ib",
+                "",
+                "[ResourceGanyuBodyIB.0]",
+                "type = Buffer",
+                "format = DXGI_FORMAT_R32_UINT",
+                "filename = GanyuBody.ib",
+                "",
+                "[ResourceGanyuDressIB.0]",
+                "type = Buffer",
+                "format = DXGI_FORMAT_R32_UINT",
+                "filename = GanyuDress.ib",
+            ].join("\n"),
+            "utf8",
+        );
+
+        const analysis = await analyzeTouchMod(root);
+        assert.equal(analysis.components.length, 1);
+        const comp = analysis.components[0];
+        assert.deepEqual(comp.ibSectionNames, ["GanyuHead", "GanyuBody", "GanyuDress"]);
+        assert.equal(comp.indexCount, 24);
+        assert.ok(comp.ibParts);
+        assert.deepEqual(
+            comp.ibParts?.map((part) => ({
+                section: part.ibSectionName,
+                kind: part.kindHint,
+                detect: part.detect,
+                local: part.localIndexCount,
+            })),
+            [
+                { section: "GanyuHead", kind: "head", detect: false, local: 6 },
+                { section: "GanyuBody", kind: "body", detect: true, local: 12 },
+                { section: "GanyuDress", kind: "dress", detect: false, local: 6 },
+            ],
+        );
+        assert.equal(comp.objectMaps.length, 1);
+        assert.equal(comp.objectMaps[0]?.firstIndex, 0);
+        assert.equal(comp.objectMaps[0]?.indexCount, 12);
+        assert.notEqual(comp.objectMaps[0]?.indexCount, 24);
+        assert.equal(comp.objectMaps[0]?.ibSectionName, "GanyuBody");
+
+        const encoded = encodeObjectMap(comp.objectMaps);
+        assert.equal(encoded[0], 1);
+        assert.equal(encoded[4], 0);
+        assert.equal(encoded[5], 12);
+
+        const draft: TouchComponentDraft = {
+            componentId: comp.id,
+            interactive: true,
+            objectId: 1,
+            confidence: 1,
+            selectedIbSectionNames: ["GanyuBody"],
+            zones: [
+                {
+                    id: "chest",
+                    label: "Left Breast",
+                    channel: 0,
+                    source: "manual",
+                    center: [0, 0, 1],
+                    radius: [1, 1, 1],
+                    confidence: 1,
+                    settings: createDefaultTouchZoneSettings(),
+                },
+            ],
+            warnings: [],
+        };
+        const assetsDir = path.join(root, "Resources", "IM");
+        fs.mkdirSync(assetsDir, { recursive: true });
+        const maskPath = path.join(assetsDir, "BodyMasks0.buf");
+        fs.writeFileSync(maskPath, Buffer.alloc(comp.vertexCount * 16));
+        const objectMapPath = path.join(assetsDir, "BodyObjectMap.buf");
+        fs.writeFileSync(objectMapPath, Buffer.from(encoded.buffer));
+        const paramsPath = path.join(assetsDir, "BodyParams.buf");
+        fs.writeFileSync(paramsPath, Buffer.alloc(64));
+
+        const targetIni = path.join(root, "merged.touch.ini");
+        await compileTouchIni({
+            sourceIniPath: path.join(root, "merged.ini"),
+            targetIniPath: targetIni,
+            analysis,
+            drafts: [draft],
+            assets: [
+                {
+                    componentId: comp.id,
+                    assetPrefix: "ModGanyu0V0Body",
+                    relativeDir: "Resources/IM",
+                    maskPaths: [
+                        "Resources/IM/BodyMasks0.buf",
+                        "Resources/IM/BodyMasks0.buf",
+                        "Resources/IM/BodyMasks0.buf",
+                    ],
+                    objectMapPaths: [
+                        {
+                            label: "main",
+                            relativePath: "Resources/IM/BodyObjectMap.buf",
+                            absolutePath: objectMapPath,
+                        },
+                    ],
+                    paramsRelativePath: "Resources/IM/BodyParams.buf",
+                    paramsAbsolutePath: paramsPath,
+                    previewRelativePath: "Resources/IM/preview.png",
+                    previewAbsolutePath: path.join(assetsDir, "preview.png"),
+                    masks: new Float32Array(comp.vertexCount * 12),
+                },
+            ],
+            namespaceToken: "mod",
+            varPrefix: "nhd_touch_mod",
+        });
+
+        const patched = fs.readFileSync(targetIni, "utf8");
+        const sectionBody = (name: string) => {
+            const match = patched.match(new RegExp(`\\[TextureOverride${name}\\]([^\\[]*)`, "i"));
+            assert.ok(match, `missing TextureOverride${name}`);
+            return match[1];
+        };
+        const headBody = sectionBody("GanyuHead");
+        const bodyBody = sectionBody("GanyuBody");
+        const dressBody = sectionBody("GanyuDress");
+        const sharedIb = sectionBody("GanyuIB");
+        // Default / body-only selection: inject only on Body, not Head/Dress.
+        assert.match(bodyBody, /CustomShaderNhdTouchModDetect/);
+        assert.match(bodyBody, /CustomShaderNhdTouchModBake/);
+        assert.match(bodyBody, /vb0 = ResourceNhdTouchModTempVB/);
+        // GIMI shared auto-draw is relocated so draw happens after TempVB bind.
+        assert.match(sharedIb, /nhd-touch-relocated-auto-draw/);
+        assert.match(sharedIb, /if \$nhd_touch_mod_mode == 1[\s\S]*handling = skip/);
+        assert.match(bodyBody, /vb0 = ResourceNhdTouchModTempVB/);
+        // Local IB draw from 0 (not auto — auto would use global first_index on local IB).
+        assert.match(bodyBody, /drawindexed = 12, 0, 0/);
+        assert.doesNotMatch(bodyBody, /vb0 = ResourceGanyuPosition/);
+        assert.ok(
+            bodyBody.indexOf("vb0 = ResourceNhdTouchModTempVB") <
+                bodyBody.indexOf("drawindexed = 12, 0, 0"),
+        );
+        assert.match(headBody, /drawindexed = 6, 0, 0/);
+        assert.match(dressBody, /drawindexed = 6, 0, 0/);
+        assert.doesNotMatch(headBody, /vb0 = ResourceNhdTouchModTempVB/);
+        assert.doesNotMatch(dressBody, /vb0 = ResourceNhdTouchModTempVB/);
+        assert.doesNotMatch(headBody, /CustomShaderNhdTouchModDetect/);
+        assert.doesNotMatch(dressBody, /CustomShaderNhdTouchModDetect/);
+        assert.match(patched, /gs-t1 = ResourceGanyuBodyIB\.0/);
+        assert.doesNotMatch(patched, /gs-t1 = ResourceGanyuHeadIB\.0/);
+        assert.doesNotMatch(patched, /gs-t1 = ResourceGanyuDressIB\.0/);
+        assert.match(patched, /\[ResourceNhdTouchModTempVB[^\]]*\][\s\S]*?stride = 40/);
+
+        // Explicit multi-select: Body + Dress get inject; Head still clean.
+        const multiIni = path.join(root, "merged.touch.multi.ini");
+        await compileTouchIni({
+            sourceIniPath: path.join(root, "merged.ini"),
+            targetIniPath: multiIni,
+            analysis,
+            drafts: [
+                {
+                    ...draft,
+                    selectedIbSectionNames: ["GanyuBody", "GanyuDress"],
+                },
+            ],
+            assets: [
+                {
+                    componentId: comp.id,
+                    assetPrefix: "ModGanyu0V0Body",
+                    relativeDir: "Resources/IM",
+                    maskPaths: [
+                        "Resources/IM/BodyMasks0.buf",
+                        "Resources/IM/BodyMasks0.buf",
+                        "Resources/IM/BodyMasks0.buf",
+                    ],
+                    objectMapPaths: [
+                        {
+                            label: "main",
+                            relativePath: "Resources/IM/BodyObjectMap.buf",
+                            absolutePath: objectMapPath,
+                        },
+                    ],
+                    paramsRelativePath: "Resources/IM/BodyParams.buf",
+                    paramsAbsolutePath: paramsPath,
+                    previewRelativePath: "Resources/IM/preview.png",
+                    previewAbsolutePath: path.join(assetsDir, "preview.png"),
+                    masks: new Float32Array(comp.vertexCount * 12),
+                },
+            ],
+            namespaceToken: "mod",
+            varPrefix: "nhd_touch_mod",
+        });
+        const multiPatched = fs.readFileSync(multiIni, "utf8");
+        const multiSection = (name: string) => {
+            const match = multiPatched.match(
+                new RegExp(`\\[TextureOverride${name}\\]([^\\[]*)`, "i"),
+            );
+            assert.ok(match, `missing TextureOverride${name}`);
+            return match[1];
+        };
+        assert.match(multiSection("GanyuBody"), /vb0 = ResourceNhdTouchModTempVB/);
+        assert.match(multiSection("GanyuDress"), /vb0 = ResourceNhdTouchModTempVB/);
+        assert.match(multiSection("GanyuDress"), /CustomShaderNhdTouchModDetect/);
+        assert.doesNotMatch(multiSection("GanyuHead"), /vb0 = ResourceNhdTouchModTempVB/);
 
         fs.rmSync(root, { recursive: true, force: true });
     });

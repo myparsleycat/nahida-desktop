@@ -27,6 +27,8 @@ export type TouchProfileComponentSummary = {
     confidence: number;
     zones: TouchProfileZoneMetadata[];
     warnings: string[];
+    /** IB sections that will receive touch INI injection. */
+    selectedIbSectionNames?: string[];
     currentTurn?: number;
     turnHistory?: TouchProfileTurnSummary[];
     hasBlend: boolean;
@@ -60,9 +62,20 @@ export type TouchBoneComponentSelection = {
     zones: TouchBoneZoneSelection[];
 };
 
+export type TouchIbComponentSelection = {
+    componentId: string;
+    /** TextureOverride IB section names to inject touch into (e.g. GanyuBody). */
+    ibSectionNames: string[];
+};
+
 export type TouchProfileAnalyzeComponentsInput = {
     sessionId: string;
     componentIds: string[];
+    /**
+     * Per-component IB part selection for multi-IB GIMI mods.
+     * When omitted, defaults to body-hint parts (or all sections for single-IB).
+     */
+    ibSelections?: TouchIbComponentSelection[];
     mode?: "vision" | "bone";
     boneSelections?: TouchBoneComponentSelection[];
     weightThreshold?: [number, number];

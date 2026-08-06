@@ -82,6 +82,23 @@ export type TouchObjectMapEntry = {
     objectMode: number;
     objectId: number;
     label: string;
+    /** TextureOverride section that binds this IB at draw time (multi-IB GIMI). */
+    ibSectionName?: string;
+    /** Index buffer resource used when this section draws. */
+    indexResourceName?: string;
+};
+
+/** One GIMI/part IB sharing a position VB. Ranges use two coordinate spaces. */
+export type TouchIbPart = {
+    ibSectionName: string;
+    indexResourceName: string;
+    /** Local range inside the part IB (runtime detect / object map). */
+    localIndexCount: number;
+    /** Start offset in the combined index buffer (mask / mesh analysis). */
+    combinedFirstIndex: number;
+    kindHint: "head" | "body" | "dress" | "other";
+    /** True when this part should run Bake/Detect against its local IB. */
+    detect: boolean;
 };
 
 export type TouchComponentAnalysis = {
@@ -97,6 +114,8 @@ export type TouchComponentAnalysis = {
     positionStride: number;
     vertexCount: number;
     indexResourceName?: string;
+    indexResourceNames?: string[];
+    indexResourceCounts?: Record<string, number>;
     indexRelativePath?: string;
     indexPath?: string;
     indexRelativePaths?: string[];
@@ -105,11 +124,22 @@ export type TouchComponentAnalysis = {
     indexCount: number;
     blendSectionName?: string;
     ibSectionName?: string;
+    ibSectionNames?: string[];
     ibHash?: string;
     variantKey?: string;
     variantCondition?: string;
+    /**
+     * Combined-index space for mask building / analysis.
+     * Multi-IB GIMI: one range per part with combined offsets and section labels.
+     */
     drawRanges: TouchDrawRange[];
+    /**
+     * Local-IB space for runtime object detect.
+     * Must never span past the IB bound when Detect runs.
+     */
     objectMaps: TouchObjectMapEntry[];
+    /** Per-part IB metadata for multi-IB GIMI mods (optional for single-IB). */
+    ibParts?: TouchIbPart[];
     blendRelativePath?: string;
     blendPath?: string;
     blendStride?: number;
@@ -133,6 +163,14 @@ export type TouchModAnalysis = {
     iniHash: string;
 };
 
+export type TouchIbPartInspection = {
+    ibSectionName: string;
+    kindHint: TouchIbPart["kindHint"];
+    localIndexCount: number;
+    /** Default checkbox state in the mesh-select UI (body-hint parts). */
+    defaultSelected: boolean;
+};
+
 export type TouchComponentInspection = {
     id: string;
     name: string;
@@ -144,6 +182,8 @@ export type TouchComponentInspection = {
     variantKey?: string;
     variantCondition?: string;
     objectMaps: TouchObjectMapEntry[];
+    /** Multi-IB GIMI parts sharing this position VB; empty/undefined for single-IB. */
+    ibParts?: TouchIbPartInspection[];
     hasBlend: boolean;
     bones: BlendBoneInfo[];
 };
@@ -221,6 +261,11 @@ export type TouchComponentDraft = {
     interactive: boolean;
     objectId: number;
     zones: TouchZoneSpec[];
+    /**
+     * TextureOverride IB sections to patch (jiggle + TempVB + detect).
+     * Multi-IB GIMI: user-selected parts only. Omitted on legacy drafts → all ibSectionNames.
+     */
+    selectedIbSectionNames?: string[];
     vision?: TouchVisionResult;
     visionApproved?: boolean;
     previewImageRelativePath?: string;
@@ -229,6 +274,46 @@ export type TouchComponentDraft = {
     currentTurn?: number;
     turnHistory?: TouchTurnRecord[];
 };
+
+/** IB section names available for a component (multi-IB or single). */
+export function listIbSectionNames(component: TouchComponentAnalysis): string[] {
+    if (component.ibSectionNames && component.ibSectionNames.length > 0) {
+        return component.ibSectionNames;
+    }
+    if (component.ibSectionName) return [component.ibSectionName];
+    return [];
+}
+
+/**
+ * Default IB selection for the mesh-select UI / analyze.
+ * Multi-IB: body-hint parts only (name is a hint; user can change).
+ * Single-IB / no body hint: every listed section.
+ */
+export function defaultSelectedIbSectionNames(component: TouchComponentAnalysis): string[] {
+    const all = listIbSectionNames(component);
+    if (all.length <= 1) return all;
+    const body = (component.ibParts ?? [])
+        .filter((part) => part.kindHint === "body")
+        .map((part) => part.ibSectionName)
+        .filter((name) => all.includes(name));
+    return body.length > 0 ? body : all;
+}
+
+/**
+ * IB sections that receive touch INI injection for this draft.
+ * Explicit draft selection wins; legacy drafts without the field keep prior "all parts" behavior.
+ */
+export function resolveIbSectionsToPatch(
+    component: TouchComponentAnalysis,
+    draft?: Pick<TouchComponentDraft, "selectedIbSectionNames"> | null,
+): string[] {
+    const all = listIbSectionNames(component);
+    const selected = draft?.selectedIbSectionNames;
+    if (selected && selected.length > 0) {
+        return selected.filter((name) => all.includes(name));
+    }
+    return all;
+}
 
 export type TouchDraft = {
     sessionId: string;

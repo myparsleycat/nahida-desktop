@@ -10,6 +10,7 @@ export type TouchMaskWorkerInput = {
     indices: Uint32Array;
     component: TouchComponentAnalysis;
     zones: TouchZoneSpec[];
+    selectedIbSectionNames?: string[];
 };
 
 export type TouchMaskWorkerOutput = {
@@ -23,6 +24,7 @@ export default function (input: TouchMaskWorkerInput): TouchMaskWorkerOutput {
         input.indices,
         input.component,
         input.zones,
+        input.selectedIbSectionNames,
     );
     return { masks };
 }
