@@ -15,21 +15,58 @@ import Upload, {
     type UploadParams,
 } from "@main/lib/upload";
 import type { LinkData } from "@main/server";
+import { BACKEND_URL } from "@shared/const";
 import type { DownloadSource } from "@shared/mod";
 import { toErrorMessage } from "@shared/utils";
 import { dialog } from "electron";
 import { retry } from "es-toolkit";
 import fse from "fs-extra";
+import { HTTPError } from "ky";
 import Heap from "mnemonist/heap";
 import { nanoid } from "nanoid";
 
 import type { NahidaDesktop } from "..";
 import type { LocalTransfer, TransferParams } from "./transfer";
 
+import { createDriveApiError, DriveApiError } from "./drive-errors";
+import { parseDriveSourceUrl } from "./drive-url";
 import { processChunked } from "./util";
 
 const Fn = eden.akasha.content({ id: "" }).get;
 type DriveItem = Treaty.Data<typeof Fn>;
+
+export type DriveCopyFromUrlParams = {
+    url: string;
+    destinationId: string;
+    password?: string;
+    collectionId?: string;
+    itemId?: string;
+};
+
+export type DriveCopyFromUrlResult = {
+    source: "link" | "mod";
+    copied: number;
+    destinationId: string;
+};
+
+type SharedLinkAccess = {
+    token: string;
+    parent: {
+        id: string;
+        name: string;
+    };
+};
+
+type ModCollection = {
+    id: string;
+    name: string;
+    rootId: string;
+    private?: boolean;
+};
+
+type ModOverview = {
+    collections: ModCollection[];
+};
 
 export const gzipAsync = promisify(gzip);
 export const gunzipAsync = promisify(gunzip);
@@ -59,10 +96,10 @@ export class DriveService {
         const chunkCount = Math.ceil(sortedFiles.length / maxPerChunk);
 
         type Chunk = { currentSize: number; files: T[] };
-        const chunks = Array.from(
-            { length: chunkCount },
-            (): Chunk => ({ currentSize: 0, files: [] }),
-        );
+        const chunks = Array.from({ length: chunkCount }, (): Chunk => ({
+            currentSize: 0,
+            files: [],
+        }));
         const heap = Heap.from(chunks, (a, b) => a.currentSize - b.currentSize);
 
         for (const file of sortedFiles) {
@@ -368,7 +405,150 @@ export class DriveService {
             if (error) throw error.value;
             return data;
         },
+
+        copyFromUrl: async ({
+            url,
+            destinationId,
+            password = "",
+            collectionId,
+            itemId,
+        }: DriveCopyFromUrlParams): Promise<DriveCopyFromUrlResult> => {
+            const source = parseDriveSourceUrl(url);
+            if (source.type === "link") {
+                const access = await this.requestSharedLinkAccess(source.id, password);
+                await this.copyRemoteItems(
+                    [itemId ?? access.parent.id],
+                    destinationId,
+                    { "nhd-link-token": access.token },
+                    "shared link",
+                );
+                return { source: "link", copied: 1, destinationId };
+            }
+
+            const overview = await this.requestJson<ModOverview>(
+                `${BACKEND_URL}/akasha/mod/${encodeURIComponent(source.id)}`,
+                undefined,
+                "mod overview",
+            );
+            if (!isModOverview(overview)) {
+                throw new DriveApiError(
+                    "DRIVE_MOD_INVALID_RESPONSE",
+                    "The collection response was invalid.",
+                );
+            }
+            const publicCollections = overview.collections.filter(
+                (collection) => !collection.private,
+            );
+            const selectedCollections = collectionId
+                ? publicCollections.filter((collection) => collection.id === collectionId)
+                : publicCollections;
+
+            if (collectionId && selectedCollections.length === 0) {
+                throw new DriveApiError(
+                    "DRIVE_COLLECTION_NOT_FOUND",
+                    "The requested collection was not found.",
+                );
+            }
+
+            const sourceIds = itemId
+                ? [itemId]
+                : [...new Set(selectedCollections.map((collection) => collection.rootId))];
+            if (sourceIds.length === 0) {
+                throw new DriveApiError(
+                    "DRIVE_COLLECTION_EMPTY",
+                    "No public collections were found.",
+                );
+            }
+
+            await this.copyRemoteItems(sourceIds, destinationId, undefined, "mod collection");
+            return { source: "mod", copied: sourceIds.length, destinationId };
+        },
     };
+
+    private async requestSharedLinkAccess(linkId: string, password: string) {
+        try {
+            const data = await this.requestJson<unknown>(
+                `${BACKEND_URL}/akasha/link/${encodeURIComponent(linkId)}`,
+                {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ password, cftoken: "" }),
+                },
+                "shared link access",
+            );
+
+            if (!isSharedLinkAccess(data)) {
+                throw new DriveApiError(
+                    "DRIVE_LINK_INVALID_RESPONSE",
+                    "The shared link response was invalid.",
+                );
+            }
+            return data;
+        } catch (error) {
+            const code = error instanceof DriveApiError ? error.code.toLowerCase() : "";
+            if (code === "drive_link_password_required" || code === "missing_password") {
+                throw new DriveApiError(
+                    "DRIVE_LINK_PASSWORD_REQUIRED",
+                    "This shared link requires a password.",
+                    undefined,
+                    error,
+                );
+            }
+            if (code === "drive_link_invalid_password" || code === "invalid_password") {
+                throw new DriveApiError(
+                    "DRIVE_LINK_INVALID_PASSWORD",
+                    "The shared link password is incorrect.",
+                    undefined,
+                    error,
+                );
+            }
+            throw error;
+        }
+    }
+
+    private async copyRemoteItems(
+        ids: string[],
+        destinationId: string,
+        headers: Record<string, string> | undefined,
+        source: string,
+    ) {
+        if (ids.length === 0) {
+            throw new DriveApiError("DRIVE_COPY_EMPTY", "No items were selected for copying.");
+        }
+
+        await this.requestJson(
+            `${BACKEND_URL}/akasha/content/copy_many`,
+            {
+                method: "POST",
+                headers: {
+                    "content-type": "application/json",
+                    ...headers,
+                },
+                body: JSON.stringify({ uuids: ids, target: destinationId }),
+            },
+            `copy ${source}`,
+        );
+    }
+
+    private async requestJson<T>(url: string, options: RequestInit | undefined, operation: string) {
+        try {
+            const response = await this.desktop.httpService.fetcher(url, options);
+            const body = await readJsonResponse(response);
+            if (!response.ok) {
+                throw createDriveApiError(body, operation, response.status);
+            }
+            return body as T;
+        } catch (error) {
+            if (error instanceof DriveApiError) throw error;
+
+            if (error instanceof HTTPError) {
+                const body = await readJsonResponse(error.response);
+                throw createDriveApiError(body, operation, error.response.status);
+            }
+
+            throw createDriveApiError(error, operation);
+        }
+    }
 
     private async selectUploadPaths(paths?: string[]): Promise<string[] | null> {
         const window = this.desktop.window.main.window;
@@ -774,4 +954,43 @@ export class DriveService {
             });
         }
     }
+}
+
+async function readJsonResponse(response: Response): Promise<unknown> {
+    const text = await response.text();
+    if (!text.trim()) return undefined;
+
+    try {
+        return JSON.parse(text) as unknown;
+    } catch {
+        return text;
+    }
+}
+
+function isSharedLinkAccess(value: unknown): value is SharedLinkAccess {
+    if (typeof value !== "object" || value === null) return false;
+    const record = value as Record<string, unknown>;
+    const parent = record.parent;
+    if (typeof record.token !== "string" || typeof parent !== "object" || parent === null) {
+        return false;
+    }
+
+    const parentRecord = parent as Record<string, unknown>;
+    return typeof parentRecord.id === "string" && typeof parentRecord.name === "string";
+}
+
+function isModOverview(value: unknown): value is ModOverview {
+    if (typeof value !== "object" || value === null) return false;
+    const collections = (value as Record<string, unknown>).collections;
+    if (!Array.isArray(collections)) return false;
+
+    return collections.every((collection) => {
+        if (typeof collection !== "object" || collection === null) return false;
+        const record = collection as Record<string, unknown>;
+        return (
+            typeof record.id === "string" &&
+            typeof record.name === "string" &&
+            typeof record.rootId === "string"
+        );
+    });
 }

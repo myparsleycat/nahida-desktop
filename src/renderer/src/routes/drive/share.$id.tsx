@@ -152,7 +152,7 @@ function RouteComponent() {
       <>
         <Titlebar title={{ text: "공유 드라이브", position: "center" }} />
         <Center>
-          <ServerCrash />
+          <ServerCrash message={toErrorMessage(query.error)} />
         </Center>
       </>
     );

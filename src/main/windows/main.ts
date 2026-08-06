@@ -11,6 +11,7 @@ import { focus, getDefaultWebPreferences } from "./utils";
 
 export class MainWindow {
     private readonly desktop: NahidaDesktop;
+    private devToolsEnabled = is.dev;
     public window: BrowserWindow | null;
 
     constructor(desktop: NahidaDesktop) {
@@ -49,12 +50,13 @@ export class MainWindow {
         return window;
     }
 
-    async createMainWindow(initialRoute?: string) {
+    async createMainWindow(initialRoute?: string, replaceExisting = false) {
+        const previousWindow = this.window;
         if (this.window?.isDestroyed()) {
             this.window = null;
         }
 
-        if (this.window) {
+        if (this.window && !replaceExisting) {
             focus(this.window);
             return this.window;
         }
@@ -81,6 +83,8 @@ export class MainWindow {
 
         const titlebarSetting = await this.desktop.setting.general.getTitlebarStyle();
         const isNativeTitlebar = titlebarSetting === "native";
+        const openConsole = await this.desktop.setting.debug.getOpenConsole();
+        this.devToolsEnabled ||= openConsole;
 
         this.window = new BrowserWindow({
             title: "Nahida Desktop",
@@ -94,10 +98,13 @@ export class MainWindow {
             frame: isNativeTitlebar,
             autoHideMenuBar: true,
             webPreferences: {
-                ...getDefaultWebPreferences(),
+                ...getDefaultWebPreferences({
+                    devTools: is.dev || openConsole || this.devToolsEnabled,
+                }),
             },
             icon,
         });
+        const createdWindow = this.window;
 
         let hasShownWindow = false;
         const showWindow = async () => {
@@ -112,10 +119,12 @@ export class MainWindow {
 
         this.window.once("ready-to-show", () => {
             void showWindow();
+            if (openConsole) this.setConsoleWindowEnabled(true);
         });
 
         this.window.webContents.once("did-finish-load", () => {
             void showWindow();
+            if (openConsole) this.setConsoleWindowEnabled(true);
         });
 
         const saveBounds = debounce(async () => {
@@ -149,7 +158,7 @@ export class MainWindow {
 
         this.window.on("closed", () => {
             saveBounds.cancel();
-            this.window = null;
+            if (this.window === createdWindow) this.window = null;
         });
 
         this.window.webContents.setWindowOpenHandler((details) => {
@@ -184,8 +193,44 @@ export class MainWindow {
             this.desktop.ipc.postMessageToWindow(this.window, "window:focus");
         });
 
-        // this.window.webContents.openDevTools();
+        if (replaceExisting && previousWindow && !previousWindow.isDestroyed()) {
+            previousWindow.destroy();
+        }
+
         return this.window;
+    }
+
+    public setConsoleWindowEnabled(enabled: boolean) {
+        const window = this.window;
+        if (!window || window.isDestroyed()) return;
+
+        try {
+            if (enabled) {
+                if (!this.devToolsEnabled) {
+                    this.devToolsEnabled = true;
+                    const hash = window.webContents.getURL().split("#")[1];
+                    const initialRoute = hash
+                        ? hash.startsWith("/")
+                            ? hash
+                            : `/${hash}`
+                        : undefined;
+                    void this.createMainWindow(initialRoute, true).catch((error) => {
+                        this.desktop.logger.error(error, "MainWindow.recreateForDevTools");
+                    });
+                    return;
+                }
+                if (!window.webContents.isDevToolsOpened()) {
+                    window.webContents.openDevTools({ mode: "detach" });
+                }
+                return;
+            }
+
+            if (window.webContents.isDevToolsOpened()) {
+                window.webContents.closeDevTools();
+            }
+        } catch (error) {
+            this.desktop.logger.error(error, "MainWindow.setConsoleWindowEnabled");
+        }
     }
 }
 

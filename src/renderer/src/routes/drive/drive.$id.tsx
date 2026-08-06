@@ -154,7 +154,7 @@ function RouteComponent() {
       <>
         <Titlebar title={{ text: t("page.drive.title"), position: "center" }} />
         <Center>
-          <ServerCrash />
+          <ServerCrash message={toErrorMessage(query.error)} />
         </Center>
       </>
     );

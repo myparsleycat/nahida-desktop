@@ -15,3 +15,9 @@ native/extractor/*.node
 *.gen.ts
 plans
 release_note.md
+
+# Local PDCA working documents
+docs/01-plan/
+docs/02-design/
+docs/03-analysis/
+docs/04-report/

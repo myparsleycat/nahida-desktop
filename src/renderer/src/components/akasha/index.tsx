@@ -35,6 +35,7 @@ import {
   FileIcon,
   FileTextIcon,
   FolderIcon,
+  LinkIcon,
   LayoutGridIcon,
   ListIcon,
   LoaderIcon,
@@ -181,6 +182,7 @@ export function AkashaHeadButtons() {
   const { t } = useTranslation();
   const dialog = useDialogStore();
   const { selectedItems } = useSelectionStore();
+  const navi = useNavigate();
 
   const layout = useViewStore((s) => s.layout);
   const setLayout = useViewStore((s) => s.setLayout);
@@ -209,6 +211,22 @@ export function AkashaHeadButtons() {
       </div>
 
       <div className="flex shrink-0 flex-row items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="shrink-0"
+          aria-label={t("page.drive.head_buttons.import")}
+          title={t("page.drive.head_buttons.import")}
+          onClick={() => {
+            void navi({
+              to: "/drive/import",
+              search: { auto: false, collectionId: undefined, itemId: undefined, url: "" },
+            });
+          }}
+        >
+          <LinkIcon size={20} />
+        </Button>
+
         <Button
           variant="ghost"
           size="icon"

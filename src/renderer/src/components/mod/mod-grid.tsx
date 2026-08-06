@@ -13,6 +13,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { chunk } from "es-toolkit";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+
 import { normalizeModGridLayoutSettings, resolveModGridLayout } from "./grid-layout";
 import { ModCard } from "./mod-card";
 
@@ -138,14 +139,14 @@ export function ModGrid(_props: ModGridProps) {
 
   if (!selectedGroupPath) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground h-full min-h-0">
+      <div className="flex h-full min-h-0 flex-1 flex-col items-center justify-center text-muted-foreground">
         <p>{t("page.mod.empty_selection")}</p>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 min-h-0">
+    <div className="min-h-0 flex-1">
       <ScrollArea className="h-full overflow-y-auto" viewportRef={handleViewportRef}>
         <div className="relative w-full p-3">
           {showSkeleton ? (
@@ -220,7 +221,7 @@ export function ModGrid(_props: ModGridProps) {
                     className="grid gap-3"
                   >
                     <div
-                      className="grid gap-3 w-full"
+                      className="grid w-full gap-3"
                       style={{
                         gridTemplateColumns: resolvedGridLayout.gridTemplateColumns,
                         justifyContent: resolvedGridLayout.justifyContent,
