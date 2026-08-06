@@ -49,7 +49,7 @@ export const Route = createFileRoute("/gamebanana/")({
           ? Number(search.mod)
           : undefined;
 
-    return mod && Number.isSafeInteger(mod) ? { mod } : {};
+    return mod !== undefined && mod > 0 && Number.isSafeInteger(mod) ? { mod } : {};
   },
   component: RouteComponent,
 });

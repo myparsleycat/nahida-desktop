@@ -142,7 +142,7 @@ export class ParallelDownloader {
         });
 
         if (response.status !== 206) {
-            await drainWebStream(response.body, signal).catch(() => {});
+            await drainWebStream(response.body).catch(() => {});
             throw new Error(
                 `Chunk download failed: expected 206 Partial Content, got ${response.statusText} (${response.status})`,
             );

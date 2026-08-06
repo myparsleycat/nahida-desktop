@@ -8,21 +8,26 @@ type WebReadableStream = {
     };
 };
 
-export async function drainWebStream(
-    webStream: WebReadableStream | null | undefined,
-    _signal?: AbortSignal,
-) {
+const MAX_DRAIN_BYTES = 1024 * 1024;
+
+export async function drainWebStream(webStream: WebReadableStream | null | undefined) {
     const reader = webStream?.getReader();
     if (!reader) {
         return;
     }
 
+    let drainedBytes = 0;
     try {
-        // The response must be read to EOF even when the caller is aborting.
-        // Releasing a locked reader early leaves Undici's HTTP parser paused.
         while (true) {
-            const { done } = await reader.read();
+            // Consume the body before releasing the reader so Undici's HTTP parser
+            // is not left paused. Cap hostile error bodies to bound the wait.
+            const { done, value } = await reader.read();
             if (done) {
+                return;
+            }
+            drainedBytes += value?.byteLength ?? 0;
+            if (drainedBytes > MAX_DRAIN_BYTES) {
+                await reader.cancel().catch(() => {});
                 return;
             }
         }

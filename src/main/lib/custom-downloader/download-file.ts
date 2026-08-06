@@ -99,8 +99,10 @@ export async function downloadFile(props: {
                 throwHttpErrors: false,
             });
             if (!resp.ok) {
-                await drainWebStream(resp.body, combinedSignal).catch(() => {});
-                throw new Error(`Failed to download file: ${resp.statusText}`);
+                await drainWebStream(resp.body).catch(() => {});
+                throw new Error(
+                    `Failed to download file: ${resp.statusText || "UNKNOWN"} (${resp.status})`,
+                );
             }
             if (!resp.body) {
                 throw new Error("No response body");

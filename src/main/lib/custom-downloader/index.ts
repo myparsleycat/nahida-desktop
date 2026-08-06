@@ -339,12 +339,30 @@ export class CustomDownloader {
         fileId: number;
         modelName?: string;
     }): Promise<"started" | "canceled"> {
+        const context = {
+            operation: "mod:downloadGameBananaFile",
+            stage: "resolve-download-url",
+            itemId: props.itemId,
+            fileId: props.fileId,
+            modelName: props.modelName,
+            downloadUrl: undefined as string | undefined,
+            previewUrl: undefined as string | undefined,
+            destinationPath: undefined as string | undefined,
+            stagingPath: undefined as string | undefined,
+            rollback: {
+                stagingPathRemoved: false,
+                finalized: false,
+            },
+        };
         const downloadFilePayload = await this.desktop.service.gamebanana.getDownloadFilePayload({
             itemId: props.itemId,
             fileId: props.fileId,
             modelName: props.modelName,
         });
         const { title: _title, fileUrl, previewUrl } = downloadFilePayload;
+        context.downloadUrl = fileUrl;
+        context.previewUrl = previewUrl ?? undefined;
+        context.stage = "head-request";
 
         const respPromise = ky.head(fileUrl, {
             redirect: "follow",
@@ -380,12 +398,16 @@ export class CustomDownloader {
         );
         if (!result.path) return "canceled";
         const destinationPath = result.path;
+        context.destinationPath = destinationPath;
+        context.stage = "prepare-staging";
 
         const finalFileName = result.fileName || suggestedFileName;
         const { stagingPath, stagedDownloadPath } = getStagingPaths(
             finalFileName,
             this.sanitize.bind(this),
         );
+        context.stagingPath = stagingPath;
+        context.stage = "queue-transfer";
 
         const pid = nanoid();
         const abortController = new AbortController();
@@ -422,6 +444,7 @@ export class CustomDownloader {
 
         this.desktop.service.transfer.registerRunner(pid, async () => {
             try {
+                context.stage = "download-file";
                 void this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
                 await fse.ensureDir(stagingPath);
 
@@ -453,6 +476,7 @@ export class CustomDownloader {
 
                 if (abortController.signal.aborted) throw new Error("Aborted");
 
+                context.stage = "extract-archive";
                 const shouldExtract = await isArchiveByResponseOrContent({
                     headers: resp.headers,
                     originalFileName: suggestedFileName,
@@ -472,6 +496,7 @@ export class CustomDownloader {
                     : stagedPath;
 
                 if (previewUrl) {
+                    context.stage = "download-preview";
                     const previewSavePath = path.join(
                         getPreviewTargetDir(finalStagedPath),
                         "preview.jpg",
@@ -488,7 +513,9 @@ export class CustomDownloader {
                     });
                 }
 
+                context.stage = "finalize-files";
                 const finalizedPaths = await finalizeStagedDownload(stagingPath, destinationPath);
+                context.rollback.finalized = true;
                 const metadata: ModDownloadMetadataInput = {
                     source: "gamebanana",
                     downloadedAt: new Date().toISOString(),
@@ -533,6 +560,13 @@ export class CustomDownloader {
                     void this.desktop.service.transfer.updateTransfer(pid, { status: "canceled" });
                 } else {
                     this.desktop.logger.error(err, "GameBanana:downloadFromGB");
+                    this.desktop.logger.error(
+                        {
+                            ...context,
+                            error: toErrorMessage(err),
+                        },
+                        "GameBanana:downloadFromGB:context",
+                    );
                     void this.desktop.service.transfer.updateTransfer(pid, {
                         status: "error",
                         error: toErrorMessage(err),
@@ -540,6 +574,7 @@ export class CustomDownloader {
                 }
             } finally {
                 await fse.remove(stagingPath).catch(() => {});
+                context.rollback.stagingPathRemoved = true;
             }
         });
 

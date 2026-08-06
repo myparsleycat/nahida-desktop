@@ -14,7 +14,6 @@ const settingsConfig = {
   downloadConcurrency: "transfer.downloadConcurrency",
   downloadBandwidthLimitMibps: "transfer.downloadBandwidthLimitMibps",
   uploadConcurrency: "transfer.uploadConcurrency",
-  uploadCreateManyConcurrency: "transfer.uploadCreateManyConcurrency",
   moveTransferPageWhenStartTransfer: "general.moveTransferPageWhenStartTransfer",
   powerSaveBlockInTransfer: "general.powerSaveBlockInTransfer",
 } as const;
@@ -22,7 +21,6 @@ const settingsConfig = {
 const DOWNLOAD_MIN_MAX = [16, 64];
 const DOWNLOAD_BANDWIDTH_MIN_MAX = [0, 1024];
 const UPLOAD_MIN_MAX = [4, 16];
-const UPLOAD_CREATE_MANY_MIN_MAX = [1, 4];
 
 function clamp(value: number, min: number, max: number) {
   if (!Number.isFinite(value)) {
@@ -41,11 +39,7 @@ function RouteComponent() {
   }
 
   const handleNumberBlur = async (
-    key:
-      | "downloadConcurrency"
-      | "downloadBandwidthLimitMibps"
-      | "uploadConcurrency"
-      | "uploadCreateManyConcurrency",
+    key: "downloadConcurrency" | "downloadBandwidthLimitMibps" | "uploadConcurrency",
     value: number,
   ) => {
     const nextValue =
@@ -53,9 +47,7 @@ function RouteComponent() {
         ? clamp(value, DOWNLOAD_MIN_MAX[0], DOWNLOAD_MIN_MAX[1])
         : key === "downloadBandwidthLimitMibps"
           ? clamp(value, DOWNLOAD_BANDWIDTH_MIN_MAX[0], DOWNLOAD_BANDWIDTH_MIN_MAX[1])
-          : key === "uploadConcurrency"
-            ? clamp(value, UPLOAD_MIN_MAX[0], UPLOAD_MIN_MAX[1])
-            : clamp(value, UPLOAD_CREATE_MANY_MIN_MAX[0], UPLOAD_CREATE_MANY_MIN_MAX[1]);
+          : clamp(value, UPLOAD_MIN_MAX[0], UPLOAD_MIN_MAX[1]);
 
     setSettings((prev) => ({ ...prev, [key]: nextValue }));
 
@@ -126,41 +118,6 @@ function RouteComponent() {
                 }))
               }
               onBlur={(e) => handleNumberBlur("uploadConcurrency", Number(e.target.value))}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.currentTarget.blur();
-                }
-              }}
-              className="w-28"
-            />
-          </div>
-
-          <Separator />
-
-          <div className="flex items-center justify-between gap-6">
-            <div className="space-y-0.5">
-              <span className="text-sm font-medium">
-                {t("page.setting.transfer.uploadCreateManyConcurrency.title")}
-              </span>
-              <p className="text-xs text-muted-foreground">
-                {t("page.setting.transfer.uploadCreateManyConcurrency.description")}
-              </p>
-            </div>
-            <Input
-              type="number"
-              min={UPLOAD_CREATE_MANY_MIN_MAX[0]}
-              max={UPLOAD_CREATE_MANY_MIN_MAX[1]}
-              step={1}
-              value={settings.uploadCreateManyConcurrency}
-              onChange={(e) =>
-                setSettings((prev) => ({
-                  ...prev,
-                  uploadCreateManyConcurrency: Number(e.target.value),
-                }))
-              }
-              onBlur={(e) =>
-                handleNumberBlur("uploadCreateManyConcurrency", Number(e.target.value))
-              }
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.currentTarget.blur();

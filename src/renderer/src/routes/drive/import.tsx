@@ -113,9 +113,9 @@ function RouteComponent() {
       return;
     }
 
-    setRequiresPassword(false);
     try {
       const result = await mutation.mutateAsync();
+      setRequiresPassword(false);
       toast.success(t("page.drive.import.success", { count: result.copied }));
       void navigate({ to: "/drive/drive/$id", params: { id: destinationId } });
     } catch (error) {

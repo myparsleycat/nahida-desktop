@@ -9,37 +9,47 @@ export interface TextureResizeCandidate {
 }
 
 export function toErrorMessage(error: unknown): string {
-    if (error instanceof Error) return error.message;
-    if (typeof error === "string") return error;
-    if (error === null || error === undefined) return "Unknown error";
+    return formatErrorMessage(error, new WeakSet()) ?? "Unknown error";
+}
+
+function formatErrorMessage(error: unknown, seen: WeakSet<object>): string | undefined {
+    if (error instanceof Error) {
+        const message = error.message.trim();
+        return message || undefined;
+    }
+    if (typeof error === "string") {
+        const message = error.trim();
+        return message || undefined;
+    }
+    if (error === null || error === undefined) return undefined;
 
     if (typeof error === "object") {
+        if (seen.has(error)) return undefined;
+        seen.add(error);
+
         const record = error as Record<string, unknown>;
-        const value = record.value;
-        if (value !== undefined && value !== error) {
-            const nestedMessage = toErrorMessage(value);
-            if (nestedMessage !== "[object Object]") return nestedMessage;
-        }
+        const nestedMessage = formatErrorMessage(record.value, seen);
+        if (nestedMessage) return nestedMessage;
 
         for (const key of ["message", "error", "detail", "title", "code"]) {
             const message = record[key];
-            if (typeof message === "string" && message.trim()) return message;
+            if (typeof message === "string" && message.trim()) return message.trim();
         }
 
         try {
             const serialized = JSON.stringify(error);
-            if (serialized) return serialized;
+            if (serialized && serialized !== "{}" && serialized !== "[]") return serialized;
         } catch {
-            // Fall through to the generic string representation.
+            return undefined;
         }
+        return undefined;
     }
 
-    if (typeof error === "object") return Object.prototype.toString.call(error);
     if (typeof error === "number" || typeof error === "boolean" || typeof error === "bigint") {
         return error.toString();
     }
     if (typeof error === "symbol") return error.toString();
-    return "Unknown error";
+    return undefined;
 }
 
 export function formatSize(size?: number | null, options?: FilesizeOptions) {

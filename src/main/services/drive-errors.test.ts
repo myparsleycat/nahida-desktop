@@ -17,18 +17,22 @@ describe("createDriveApiError", () => {
         );
 
         expect(error).toMatchObject({
-            code: "MISSING_PASSWORD",
+            code: "DRIVE_LINK_PASSWORD_REQUIRED",
             status: 401,
-            message: "MISSING_PASSWORD: Password required",
+            message: "DRIVE_LINK_PASSWORD_REQUIRED: Password required",
         });
+    });
+
+    it("normalizes invalid password codes", () => {
+        const error = createDriveApiError({ code: "INVALID_PASSWORD" }, "linkAccess");
+
+        expect(error.code).toBe("DRIVE_LINK_INVALID_PASSWORD");
     });
 
     it("uses an operation-specific fallback for unknown errors", () => {
         const error = createDriveApiError({}, "copyFromUrl");
 
-        expect(error).toMatchObject({
-            code: "DRIVE_COPYFROMURL_FAILED",
-            message: "DRIVE_COPYFROMURL_FAILED: {}",
-        });
+        expect(error.code).toBe("DRIVE_COPYFROMURL_FAILED");
+        expect(error.message).toBe("DRIVE_COPYFROMURL_FAILED: Unknown error");
     });
 });

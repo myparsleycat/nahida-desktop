@@ -27,19 +27,36 @@ export function createDriveApiError(
 }
 
 function toDriveErrorCode(error: unknown) {
-    if (typeof error === "string" && /^[A-Z][A-Z0-9_]+$/.test(error)) return error;
+    if (typeof error === "string" && /^[A-Z][A-Z0-9_]+$/.test(error)) {
+        return normalizeDriveErrorCode(error);
+    }
     if (typeof error !== "object" || error === null) return undefined;
 
     const record = error as Record<string, unknown>;
     const code = record.code;
-    if (typeof code === "string" && code.trim()) return code;
+    if (typeof code === "string" && code.trim()) return normalizeDriveErrorCode(code);
 
     const value = record.value;
-    if (typeof value === "string" && /^[A-Z][A-Z0-9_]+$/.test(value)) return value;
+    if (typeof value === "string" && /^[A-Z][A-Z0-9_]+$/.test(value)) {
+        return normalizeDriveErrorCode(value);
+    }
     if (typeof value === "object" && value !== null) {
         const nestedCode = (value as Record<string, unknown>).code;
-        if (typeof nestedCode === "string" && nestedCode.trim()) return nestedCode;
+        if (typeof nestedCode === "string" && nestedCode.trim()) {
+            return normalizeDriveErrorCode(nestedCode);
+        }
     }
 
     return undefined;
+}
+
+function normalizeDriveErrorCode(code: string) {
+    switch (code.trim().toUpperCase()) {
+        case "MISSING_PASSWORD":
+            return "DRIVE_LINK_PASSWORD_REQUIRED";
+        case "INVALID_PASSWORD":
+            return "DRIVE_LINK_INVALID_PASSWORD";
+        default:
+            return code.trim();
+    }
 }

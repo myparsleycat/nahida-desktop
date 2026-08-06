@@ -59,6 +59,23 @@ export interface WuwaFixerStatus {
     nextCheckAt: string | null;
 }
 
+export type TouchProfileProgressStage =
+    | "scan"
+    | "preview"
+    | "vision"
+    | "assets"
+    | "ini"
+    | "validate"
+    | "complete";
+
+export interface TouchProfileProgressEvent {
+    sessionId?: string;
+    stage: TouchProfileProgressStage;
+    progress: number;
+    message: string;
+    componentId?: string;
+}
+
 export interface FourThousandOneFixerProgressEvent {
     task: "build-dll" | "diversify-dll" | "restore-dll" | null;
     code: string;
@@ -172,6 +189,7 @@ export interface FolderGroup {
     modCount?: number;
     enabledModCount?: number;
     isManualSubGroup?: boolean;
+    hasSubGroups?: boolean;
     hasManualSubGroups?: boolean;
 }
 
@@ -299,6 +317,7 @@ export type IpcEvents = {
     "setting:xxmi:persistLogs": (logs: string[]) => void;
     "setting:xxmi:toggleViewerLogs": (logs: string[]) => void;
     "tools:4001FixerProgress": (event: FourThousandOneFixerProgressEvent) => void;
+    "tools:touchProfileProgress": (event: TouchProfileProgressEvent) => void;
     "tools:bisectState": (snapshot: BisectSnapshot) => void;
     "ftm:log": (event: FixToolLogEvent) => void;
     "updater:status-changed": (

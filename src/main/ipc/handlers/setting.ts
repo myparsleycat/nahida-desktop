@@ -252,14 +252,6 @@ export function registerSettingHandlers(d: NahidaDesktop) {
         return await d.setting.transfer.setUploadConcurrency(concurrency);
     });
 
-    rh("setting:transfer:getUploadCreateManyConcurrency", async () => {
-        return await d.setting.transfer.getUploadCreateManyConcurrency();
-    });
-
-    rh("setting:transfer:setUploadCreateManyConcurrency", async (concurrency) => {
-        return await d.setting.transfer.setUploadCreateManyConcurrency(concurrency);
-    });
-
     rh("setting:drive:getNameSortPolicy", async () => {
         return await d.setting.drive.getNameSortPolicy();
     });

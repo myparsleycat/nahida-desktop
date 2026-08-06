@@ -18,6 +18,15 @@ import {
     type SettingDefinition,
     type SettingKey,
 } from "@shared/settings";
+import {
+    DEFAULT_TOUCH_PROFILE_LLM_ENDPOINT,
+    DEFAULT_TOUCH_PROFILE_LLM_MODEL,
+    DEFAULT_TOUCH_PROFILE_LLM_PROTOCOL,
+    DEFAULT_TOUCH_PROFILE_LLM_REASONING,
+    isTouchProfileLlmProtocol,
+    isTouchProfileLlmReasoning,
+    normalizeTouchProfileLlmEndpoint,
+} from "@shared/touch-profile-llm";
 import type { AutoUpdateMode } from "@shared/updater";
 import AutoLaunch from "auto-launch";
 import { app, BrowserWindow } from "electron";
@@ -45,8 +54,6 @@ const TRANSFER_DOWNLOAD_BANDWIDTH_LIMIT_MIBPS_DEFAULT = 0;
 const TRANSFER_DOWNLOAD_BANDWIDTH_LIMIT_MIBPS_MIN_MAX = [0, 1024];
 const TRANSFER_UPLOAD_CONCURRENCY_DEFAULT = 8;
 const TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX = [4, 16];
-const TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT = 2;
-const TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX = [1, 4];
 const MOD_GRID_WIDTH_MIN = 240;
 const MOD_GRID_WIDTH_MAX = 640;
 const MOD_GRID_COLUMN_MIN = 1;
@@ -481,6 +488,35 @@ export class Setting {
                         : "space",
                 normalize: (value) => (DISABLED_PREFIX_STYLES.includes(value) ? value : "space"),
             },
+            "tools.touchProfileLlmProtocol": {
+                definition: APP_SETTINGS["tools.touchProfileLlmProtocol"],
+                getDefault: () => DEFAULT_TOUCH_PROFILE_LLM_PROTOCOL,
+                fromStored: (value) =>
+                    isTouchProfileLlmProtocol(value) ? value : DEFAULT_TOUCH_PROFILE_LLM_PROTOCOL,
+                normalize: (value) =>
+                    isTouchProfileLlmProtocol(value) ? value : DEFAULT_TOUCH_PROFILE_LLM_PROTOCOL,
+            },
+            "tools.touchProfileLlmEndpoint": {
+                definition: APP_SETTINGS["tools.touchProfileLlmEndpoint"],
+                getDefault: () =>
+                    process.env.NAHIDA_LLM_BASE_URL?.trim() || DEFAULT_TOUCH_PROFILE_LLM_ENDPOINT,
+                fromStored: (value) => normalizeTouchProfileLlmEndpoint(value ?? ""),
+                normalize: (value) => normalizeTouchProfileLlmEndpoint(value),
+            },
+            "tools.touchProfileLlmModel": {
+                definition: APP_SETTINGS["tools.touchProfileLlmModel"],
+                getDefault: () => DEFAULT_TOUCH_PROFILE_LLM_MODEL,
+                fromStored: (value) => value?.trim() || DEFAULT_TOUCH_PROFILE_LLM_MODEL,
+                normalize: (value) => value.trim() || DEFAULT_TOUCH_PROFILE_LLM_MODEL,
+            },
+            "tools.touchProfileLlmReasoning": {
+                definition: APP_SETTINGS["tools.touchProfileLlmReasoning"],
+                getDefault: () => DEFAULT_TOUCH_PROFILE_LLM_REASONING,
+                fromStored: (value) =>
+                    isTouchProfileLlmReasoning(value) ? value : DEFAULT_TOUCH_PROFILE_LLM_REASONING,
+                normalize: (value) =>
+                    isTouchProfileLlmReasoning(value) ? value : DEFAULT_TOUCH_PROFILE_LLM_REASONING,
+            },
             "transfer.downloadConcurrency": {
                 definition: APP_SETTINGS["transfer.downloadConcurrency"],
                 getDefault: () => TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT,
@@ -562,33 +598,6 @@ export class Setting {
                             TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX[0],
                             TRANSFER_UPLOAD_CONCURRENCY_MIN_MAX[1],
                             TRANSFER_UPLOAD_CONCURRENCY_DEFAULT,
-                        ),
-                    ),
-            },
-            "transfer.uploadCreateManyConcurrency": {
-                definition: APP_SETTINGS["transfer.uploadCreateManyConcurrency"],
-                getDefault: () => TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT,
-                fromStored: (value) =>
-                    clampTransferConcurrency(
-                        Number.parseInt(value ?? "", 10),
-                        TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[0],
-                        TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[1],
-                        TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT,
-                    ),
-                normalize: (value) =>
-                    clampTransferConcurrency(
-                        value,
-                        TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[0],
-                        TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[1],
-                        TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT,
-                    ),
-                toStored: (value) =>
-                    String(
-                        clampTransferConcurrency(
-                            value,
-                            TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[0],
-                            TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_MIN_MAX[1],
-                            TRANSFER_UPLOAD_CREATE_MANY_CONCURRENCY_DEFAULT,
                         ),
                     ),
             },
@@ -888,10 +897,6 @@ export class Setting {
         getUploadConcurrency: async () => await this.get("transfer.uploadConcurrency"),
         setUploadConcurrency: async (concurrency: number) =>
             await this.set("transfer.uploadConcurrency", concurrency),
-        getUploadCreateManyConcurrency: async () =>
-            await this.get("transfer.uploadCreateManyConcurrency"),
-        setUploadCreateManyConcurrency: async (concurrency: number) =>
-            await this.set("transfer.uploadCreateManyConcurrency", concurrency),
     };
 
     drive = {
@@ -956,7 +961,7 @@ export class Setting {
         getAll: async () => {
             await this.get("debug.openConsole");
             const rows = await this.desktop.lib.db.settings.list();
-            const sensitiveKeys = ["password", "token", "secret", "credentials"];
+            const sensitiveKeys = ["password", "token", "secret", "credentials", "api_key"];
 
             return rows.map((row) => {
                 const isSensitive = sensitiveKeys.some((k) => row.key.toLowerCase().includes(k));

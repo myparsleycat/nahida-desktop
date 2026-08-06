@@ -1,25 +1,38 @@
+type NahidaDeepLinkRouteHandler = (url: URL) => string | null;
+
 export function getNahidaDeepLinkRoute(commandLine: string[]) {
     return commandLine.map(parseNahidaDeepLink).find((route) => route !== null) ?? null;
 }
 
-export function parseNahidaDeepLink(value: string) {
-    try {
-        const url = new URL(value);
-        if (url.protocol !== "nahida:") return null;
+export function createNahidaDeepLinkParser(
+    handlers: Readonly<Record<string, NahidaDeepLinkRouteHandler>>,
+) {
+    return (value: string) => {
+        try {
+            const url = new URL(value);
+            if (url.protocol !== "nahida:") return null;
 
-        if (url.hostname.toLowerCase() === "drive") {
-            return parseDriveDeepLink(url);
+            return handlers[url.hostname.toLowerCase()]?.(url) ?? null;
+        } catch {
+            return null;
         }
+    };
+}
 
-        if (url.hostname.toLowerCase() !== "gamebanana") return null;
+export const parseNahidaDeepLink = createNahidaDeepLinkParser({
+    drive: parseDriveDeepLink,
+    gamebanana: parseGameBananaDeepLink,
+});
 
-        const pathMatch = /^\/(?:mods?|open)\/(\d+)\/?$/i.exec(url.pathname);
-        const modId = pathMatch?.[1] ?? url.searchParams.get("id");
-        if (modId && isValidModId(modId)) return `/gamebanana?mod=${modId}`;
+function parseGameBananaDeepLink(url: URL) {
+    const pathMatch = /^\/(?:mods?|open)\/(\d+)\/?$/i.exec(url.pathname);
+    const modId = pathMatch?.[1] ?? url.searchParams.get("id");
+    if (modId && isValidModId(modId)) return `/gamebanana?mod=${modId}`;
 
-        const sourceUrl = url.searchParams.get("url");
-        if (!sourceUrl) return null;
+    const sourceUrl = url.searchParams.get("url");
+    if (!sourceUrl) return null;
 
+    try {
         const gameBananaUrl = new URL(sourceUrl);
         if (
             !["http:", "https:"].includes(gameBananaUrl.protocol) ||
@@ -43,7 +56,7 @@ function parseDriveDeepLink(url: URL) {
     if (!source || !isNahidaSourceUrl(source)) return null;
 
     const params = new URLSearchParams({ url: source, auto: "1" });
-    for (const key of ["collection", "collectionId", "item", "itemId"]) {
+    ["collection", "collectionId", "item", "itemId"].forEach((key) => {
         const value = url.searchParams.get(key);
         if (value && /^[A-Za-z0-9_-]+$/.test(value)) {
             params.set(
@@ -51,7 +64,7 @@ function parseDriveDeepLink(url: URL) {
                 value,
             );
         }
-    }
+    });
 
     return `/drive/import?${params.toString()}`;
 }

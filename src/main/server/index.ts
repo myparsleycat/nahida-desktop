@@ -77,7 +77,7 @@ export const app = new Hono()
 const nodeWs = createNodeWebSocket({ app });
 
 const DEFAULT_SERVER_PORT = 1027;
-const configuredServerPort = Number.parseInt(process.env.NAHIDA_SERVER_PORT ?? "", 10);
+const configuredServerPort = Number(process.env.NAHIDA_SERVER_PORT ?? "");
 export const SERVER_PORT =
     Number.isInteger(configuredServerPort) &&
     configuredServerPort > 0 &&

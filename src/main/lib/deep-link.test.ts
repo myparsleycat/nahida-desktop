@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { getNahidaDeepLinkRoute, parseNahidaDeepLink } from "./deep-link";
+import {
+    createNahidaDeepLinkParser,
+    getNahidaDeepLinkRoute,
+    parseNahidaDeepLink,
+} from "./deep-link";
+
+describe("createNahidaDeepLinkParser", () => {
+    it("routes a host through its registered handler", () => {
+        const parseDeepLink = createNahidaDeepLinkParser({
+            auth: () => "/auth",
+        });
+
+        expect(parseDeepLink("nahida://auth")).toBe("/auth");
+        expect(parseDeepLink("nahida://gamebanana/mods/123")).toBeNull();
+    });
+});
 
 describe("parseNahidaDeepLink", () => {
     it.each([
@@ -30,6 +45,7 @@ describe("parseNahidaDeepLink", () => {
 
     it.each([
         "https://gamebanana.com/mods/123",
+        "nahida://auth",
         "nahida://gamebanana/mods/not-a-number",
         "nahida://gamebanana?id=0",
         "nahida://gamebanana/open?url=https%3A%2F%2Fexample.com%2Fmods%2F123",

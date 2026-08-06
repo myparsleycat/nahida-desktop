@@ -38,6 +38,7 @@ export interface FolderGroup {
     modCount?: number;
     enabledModCount?: number;
     isManualSubGroup?: boolean;
+    hasSubGroups?: boolean;
     hasManualSubGroups?: boolean;
 }
 

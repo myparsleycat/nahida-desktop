@@ -4,6 +4,7 @@ import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -88,16 +89,18 @@ export function CategoryPanel({
                 </SelectValue>
               </SelectTrigger>
               <SelectContent align="start">
-                {[
-                  "Generic_Newest",
-                  "Generic_MostLiked",
-                  "Generic_MostDownloaded",
-                  "Generic_MostViewed",
-                ].map((sort) => (
-                  <SelectItem key={sort} value={sort}>
-                    {t(`page.gamebanana.mod_sort.${sort}`)}
-                  </SelectItem>
-                ))}
+                <SelectGroup>
+                  {[
+                    "Generic_Newest",
+                    "Generic_MostLiked",
+                    "Generic_MostDownloaded",
+                    "Generic_MostViewed",
+                  ].map((sort) => (
+                    <SelectItem key={sort} value={sort}>
+                      {t(`page.gamebanana.mod_sort.${sort}`)}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
             <div className="relative w-full sm:w-64">

@@ -25,7 +25,7 @@ function createWebStream(chunks: Uint8Array[]) {
     };
 }
 
-describe("webStreamToNodeReadable", () => {
+describe("drainWebStream", () => {
     it("drains an unsuccessful response without cancelling it", async () => {
         const source = createWebStream([new TextEncoder().encode("error")]);
 
@@ -35,16 +35,17 @@ describe("webStreamToNodeReadable", () => {
         expect(source.releaseLock).toHaveBeenCalledOnce();
     });
 
-    it("drains an aborted response before releasing its reader", async () => {
-        const source = createWebStream([new TextEncoder().encode("error")]);
-        const signal = AbortSignal.abort();
+    it("cancels an oversized response body while draining", async () => {
+        const source = createWebStream([new Uint8Array(1024 * 1024 + 1)]);
 
-        await drainWebStream(source.stream, signal);
+        await drainWebStream(source.stream);
 
-        expect(source.cancel).not.toHaveBeenCalled();
+        expect(source.cancel).toHaveBeenCalledOnce();
         expect(source.releaseLock).toHaveBeenCalledOnce();
     });
+});
 
+describe("webStreamToNodeReadable", () => {
     it("releases a completed response without cancelling it", async () => {
         const source = createWebStream([new TextEncoder().encode("hello")]);
         const readable = webStreamToNodeReadable(source.stream);
@@ -66,5 +67,47 @@ describe("webStreamToNodeReadable", () => {
         await once(readable, "close");
 
         expect(source.cancel).toHaveBeenCalledOnce();
+    });
+
+    it("propagates an abort signal to the node stream", async () => {
+        const cancel = vi.fn(async () => {});
+        const releaseLock = vi.fn();
+        const controller = new AbortController();
+        const readable = webStreamToNodeReadable(
+            {
+                getReader: () => ({
+                    read: () => new Promise<never>(() => {}),
+                    cancel,
+                    releaseLock,
+                }),
+            },
+            controller.signal,
+        );
+        const errorPromise = once(readable, "error");
+
+        readable.resume();
+        controller.abort();
+
+        const [error] = await errorPromise;
+        expect((error as Error).name).toBe("AbortError");
+        expect(cancel).toHaveBeenCalledOnce();
+    });
+
+    it("propagates reader errors to the node stream", async () => {
+        const readable = webStreamToNodeReadable({
+            getReader: () => ({
+                read: async () => {
+                    throw new Error("boom");
+                },
+                cancel: async () => {},
+                releaseLock: () => {},
+            }),
+        });
+        const errorPromise = once(readable, "error");
+
+        readable.resume();
+
+        const [error] = await errorPromise;
+        expect((error as Error).message).toBe("boom");
     });
 });

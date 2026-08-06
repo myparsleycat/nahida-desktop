@@ -36,6 +36,33 @@ import { processChunked } from "./util";
 const Fn = eden.akasha.content({ id: "" }).get;
 type DriveItem = Treaty.Data<typeof Fn>;
 
+const DIRECTORY_CONFLICT_MESSAGES = {
+    ko: {
+        title: "폴더가 이미 존재합니다",
+        message: (name: string) => `"${name}" 폴더가 이미 존재합니다.`,
+        detail: "기존 폴더에 파일을 덮어쓰시겠습니까?",
+        buttons: ["덮어쓰기", "새 이름으로 다운로드", "취소"],
+    },
+    en: {
+        title: "Folder already exists",
+        message: (name: string) => `The folder "${name}" already exists.`,
+        detail: "Do you want to overwrite files in the existing folder?",
+        buttons: ["Overwrite", "Download with a new name", "Cancel"],
+    },
+    ja: {
+        title: "フォルダーはすでに存在します",
+        message: (name: string) => `「${name}」フォルダーはすでに存在します。`,
+        detail: "既存のフォルダーにファイルを上書きしますか？",
+        buttons: ["上書き", "新しい名前でダウンロード", "キャンセル"],
+    },
+    zh: {
+        title: "文件夹已存在",
+        message: (name: string) => `文件夹“${name}”已存在。`,
+        detail: "要覆盖现有文件夹中的文件吗？",
+        buttons: ["覆盖", "使用新名称下载", "取消"],
+    },
+} as const;
+
 export type DriveCopyFromUrlParams = {
     url: string;
     destinationId: string;
@@ -97,10 +124,10 @@ export class DriveService {
         const chunkCount = Math.ceil(sortedFiles.length / maxPerChunk);
 
         type Chunk = { currentSize: number; files: T[] };
-        const chunks = Array.from(
-            { length: chunkCount },
-            (): Chunk => ({ currentSize: 0, files: [] }),
-        );
+        const chunks = Array.from({ length: chunkCount }, (): Chunk => ({
+            currentSize: 0,
+            files: [],
+        }));
         const heap = Heap.from(chunks, (a, b) => a.currentSize - b.currentSize);
 
         for (const file of sortedFiles) {
@@ -486,8 +513,8 @@ export class DriveService {
             }
             return data;
         } catch (error) {
-            const message = toErrorMessage(error).toLowerCase();
-            if (message.includes("missing_password")) {
+            const code = error instanceof DriveApiError ? error.code.toLowerCase() : "";
+            if (code === "drive_link_password_required" || code === "missing_password") {
                 throw new DriveApiError(
                     "DRIVE_LINK_PASSWORD_REQUIRED",
                     "This shared link requires a password.",
@@ -495,7 +522,7 @@ export class DriveService {
                     error,
                 );
             }
-            if (message.includes("invalid_password")) {
+            if (code === "drive_link_invalid_password" || code === "invalid_password") {
                 throw new DriveApiError(
                     "DRIVE_LINK_INVALID_PASSWORD",
                     "The shared link password is incorrect.",
@@ -900,12 +927,16 @@ export class DriveService {
             .catch(() => false);
         if (!isDirectory) return this.desktop.lib.fs.getUniqueName(sanitized, entries);
 
+        const language = await this.desktop.setting.general.getLanguage();
+        const messages =
+            DIRECTORY_CONFLICT_MESSAGES[language as keyof typeof DIRECTORY_CONFLICT_MESSAGES] ??
+            DIRECTORY_CONFLICT_MESSAGES.en;
         const options = {
             type: "question" as const,
-            title: "폴더가 이미 존재합니다",
-            message: `"${existingName}" 폴더가 이미 존재합니다.`,
-            detail: "기존 폴더에 파일을 덮어쓰시겠습니까?",
-            buttons: ["덮어쓰기", "새 이름으로 다운로드", "취소"],
+            title: messages.title,
+            message: messages.message(existingName),
+            detail: messages.detail,
+            buttons: [...messages.buttons],
             defaultId: 1,
             cancelId: 2,
         };

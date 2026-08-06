@@ -75,6 +75,19 @@ export type ModelViewerHandle = {
     setDoubleSided: (doubleSided: boolean) => Promise<void> | void;
 };
 
+export type ModelViewerBodyShapeOverride = {
+    meshNames: string[];
+    positions: Float32Array;
+    /** When set, enables vertexColors and writes RGB colors (vertexCount * 3). */
+    vertexColors?: Float32Array;
+    /**
+     * When false, positions are unchanged since the last apply — callers should skip
+     * position writeback, normal recomputation, and bounding volume updates, only
+     * refreshing vertex colors. Defaults to true (treat as changed when unknown).
+     */
+    positionsChanged?: boolean;
+};
+
 export type ModelViewerSurfaceProps = {
     className?: string;
     orientation: string;
@@ -83,6 +96,8 @@ export type ModelViewerSurfaceProps = {
     shapeKeys?: ModelViewerRealtimeShapeKey[];
     animationClip?: ModelViewerAnimationClip;
     animationFrame?: number;
+    /** Live position overrides for body-shape editing (skips shape keys / animation). */
+    bodyShapeOverrides?: ModelViewerBodyShapeOverride[];
     threeToneMapping?: ModelViewerThreeToneMapping;
     threeEnvironment?: ModelViewerThreeEnvironment;
     threeExposure?: number;

@@ -412,7 +412,7 @@ class FileDownloadTask {
         let resetPartial = requestedResumeFrom > 0 && response.status === 200;
 
         if (requestedResumeFrom > 0 && response.status === 416) {
-            await drainWebStream(response.body, signal);
+            await drainWebStream(response.body);
             response = await request();
             append = false;
             resetPartial = true;
@@ -420,7 +420,7 @@ class FileDownloadTask {
             const contentRange = response.headers.get("Content-Range");
             const rangeStart = /^bytes (\d+)-\d+\//.exec(contentRange ?? "")?.[1];
             if (!rangeStart || Number.parseInt(rangeStart, 10) !== requestedResumeFrom) {
-                await drainWebStream(response.body, signal);
+                await drainWebStream(response.body);
                 response = await request();
                 append = false;
                 resetPartial = true;
@@ -428,7 +428,7 @@ class FileDownloadTask {
         }
 
         if (!response.ok) {
-            await drainWebStream(response.body, signal);
+            await drainWebStream(response.body);
             throw new Error(`Download failed: ${response.statusText}`);
         }
         if (!response.body) throw new Error("No response body");
@@ -513,8 +513,10 @@ class FileDownloadTask {
         };
 
         const reportTempProgress = (bytes: number) => {
-            reportedTempBytes = Math.max(0, reportedTempBytes + bytes);
-            onProgress?.(bytes);
+            const next = Math.max(0, reportedTempBytes + bytes);
+            const applied = next - reportedTempBytes;
+            reportedTempBytes = next;
+            if (applied !== 0) onProgress?.(applied);
         };
 
         const syncTempProgress = async () => {
@@ -543,9 +545,8 @@ class FileDownloadTask {
 
             const resumeFrom = await syncTempProgress();
             if (resumeFrom === file.size) {
-                if (!signal.aborted) {
-                    await this.desktop.lib.fs.rename(targetPath, filePath);
-                }
+                if (signal.aborted) return;
+                await this.desktop.lib.fs.rename(targetPath, filePath);
                 onComplete();
                 return;
             }
@@ -582,10 +583,9 @@ class FileDownloadTask {
                     resumeFrom,
                 });
 
-                if (!signal.aborted) {
-                    await this.desktop.lib.fs.rename(targetPath, filePath);
-                }
+                if (signal.aborted) return;
 
+                await this.desktop.lib.fs.rename(targetPath, filePath);
                 onComplete();
                 return;
             } catch (err) {

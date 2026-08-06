@@ -156,7 +156,7 @@ export function Sidebar({ className }: { className?: string }) {
                   aria-current={isGameBananaPage ? "page" : undefined}
                   onPointerDown={handlePointerDown}
                   onClick={() => {
-                    if (isModPage && !gameBananaStore.getState().selectedGame) {
+                    if (isModPage) {
                       gameBananaStore.getState().requestModGameSync();
                     }
                     void navi({ to: "/gamebanana" });
