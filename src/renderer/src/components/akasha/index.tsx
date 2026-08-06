@@ -220,7 +220,7 @@ export function AkashaHeadButtons() {
           onClick={() => {
             void navi({
               to: "/drive/import",
-              search: { auto: false, collectionId: undefined, itemId: undefined, url: "" },
+              search: { collectionId: undefined, itemId: undefined, url: "" },
             });
           }}
         >

@@ -14,6 +14,7 @@ describe("parseDriveSourceUrl", () => {
     it.each([
         "",
         "nahida://link/abc",
+        "http://nahida.live/akasha/link/abc",
         "https://example.com/akasha/link/abc",
         "https://nahida.live/akasha/link/",
         "https://nahida.live/akasha/unknown/abc",

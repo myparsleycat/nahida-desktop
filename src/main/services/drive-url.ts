@@ -8,7 +8,7 @@ export type DriveSource = {
 export function parseDriveSourceUrl(value: string): DriveSource {
     try {
         const url = new URL(value.trim());
-        if (!["http:", "https:"].includes(url.protocol)) throw new Error("unsupported protocol");
+        if (url.protocol !== "https:") throw new Error("unsupported protocol");
         if (!["nahida.live", "www.nahida.live"].includes(url.hostname.toLowerCase())) {
             throw new Error("unsupported host");
         }
