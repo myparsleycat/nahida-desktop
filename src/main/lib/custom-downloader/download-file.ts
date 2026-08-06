@@ -1,6 +1,5 @@
-import { Readable, Transform } from "node:stream";
+import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import type { ReadableStream } from "node:stream/web";
 
 import fse from "fs-extra";
 import ky from "ky";
@@ -16,6 +15,7 @@ import {
     slowReconnectDelayMs,
     type SlowChunkMonitor,
 } from "../slow-chunk-monitor";
+import { drainWebStream, webStreamToNodeReadable } from "../web-stream-to-readable";
 
 interface HttpServiceLike {
     getHeaders: (url: string) => Promise<Record<string, string>>;
@@ -96,15 +96,17 @@ export async function downloadFile(props: {
             const resp = await ky.get(url, {
                 signal: combinedSignal,
                 headers: await httpService.getHeaders(url),
+                throwHttpErrors: false,
             });
             if (!resp.ok) {
+                await drainWebStream(resp.body, combinedSignal).catch(() => {});
                 throw new Error(`Failed to download file: ${resp.statusText}`);
             }
             if (!resp.body) {
                 throw new Error("No response body");
             }
 
-            const source = Readable.fromWeb(resp.body as unknown as ReadableStream);
+            const source = webStreamToNodeReadable(resp.body, combinedSignal);
             const progressStream = new Transform({
                 transform(chunk: Buffer, _encoding, callback) {
                     attemptBytes += chunk.byteLength;

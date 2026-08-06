@@ -15,7 +15,7 @@ import {
     slowReconnectDelayMs,
     type SlowChunkMonitor,
 } from "./slow-chunk-monitor";
-import { webStreamToNodeReadable } from "./web-stream-to-readable";
+import { drainWebStream, webStreamToNodeReadable } from "./web-stream-to-readable";
 
 export interface ParallelDownloadOptions {
     url: string;
@@ -142,7 +142,7 @@ export class ParallelDownloader {
         });
 
         if (response.status !== 206) {
-            await response.body?.cancel().catch(() => {});
+            await drainWebStream(response.body, signal).catch(() => {});
             throw new Error(
                 `Chunk download failed: expected 206 Partial Content, got ${response.statusText} (${response.status})`,
             );
