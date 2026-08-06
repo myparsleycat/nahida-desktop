@@ -1,4 +1,5 @@
 import pathModule from "node:path";
+
 import { is } from "@electron-toolkit/utils";
 import { app } from "electron";
 import fse from "fs-extra";
@@ -18,6 +19,10 @@ export async function nahidaLogsPath(): Promise<string> {
 }
 
 export type LogLevel = "info" | "debug" | "warn" | "error" | "trace" | "fatal";
+
+function isBrokenPipeError(error: unknown) {
+    return typeof error === "object" && error !== null && "code" in error && error.code === "EPIPE";
+}
 
 export class Logger {
     private logger: PinoLogger | null = null;
@@ -72,7 +77,7 @@ export class Logger {
                     }),
                 );
             } catch (e) {
-                console.error(e);
+                this.writeToConsole("error", e);
             }
         })();
 
@@ -90,6 +95,22 @@ export class Logger {
         };
 
         return priorities[level] >= priorities[this.currentLevel];
+    }
+
+    private writeToConsole(level: LogLevel, ...consoleArgs: Parameters<typeof console.log>) {
+        try {
+            if (level === "error" || level === "fatal") {
+                console.error(...consoleArgs);
+            } else if (level === "warn") {
+                console.warn(...consoleArgs);
+            } else if (level === "debug" || level === "trace") {
+                console.debug(...consoleArgs);
+            } else {
+                console.log(...consoleArgs);
+            }
+        } catch (error) {
+            if (!isBrokenPipeError(error)) throw error;
+        }
     }
 
     private async writeFallback(
@@ -128,15 +149,7 @@ export class Logger {
 
         if (is.dev) {
             const consoleArgs = where ? [`[${where}]`, object] : [object];
-            if (level === "error" || level === "fatal") {
-                console.error(...consoleArgs);
-            } else if (level === "warn") {
-                console.warn(...consoleArgs);
-            } else if (level === "debug" || level === "trace") {
-                console.debug(...consoleArgs);
-            } else {
-                console.log(...consoleArgs);
-            }
+            this.writeToConsole(level, ...consoleArgs);
             return;
         }
 
@@ -177,7 +190,7 @@ export class Logger {
                     this.logger.info(logContent);
                 }
             } catch (e) {
-                console.error(e);
+                this.writeToConsole("error", e);
             }
         })();
     }

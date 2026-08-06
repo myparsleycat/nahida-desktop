@@ -1,3 +1,4 @@
+import path from "node:path";
 import { promisify } from "node:util";
 import { gunzip, gzip, zstdCompress, zstdDecompress } from "node:zlib";
 
@@ -631,9 +632,13 @@ export class DriveService {
             }
 
             if (isSingle && isDir) {
-                const sanitized = this.desktop.lib.fs.sanitizeWindowsFilename(data.root.name);
-                const entries = await fse.readdir(savePath);
-                data.root.name = this.desktop.lib.fs.getUniqueName(sanitized, entries);
+                const resolvedName = await this.resolveDirectoryDownloadName({
+                    name: data.root.name,
+                    savePath,
+                    pid,
+                });
+                if (!resolvedName) return;
+                data.root.name = resolvedName;
             } else if (!isSingle) {
                 const usedNames = new Set(await fse.readdir(savePath));
                 for (const dir of data.dirs) {
@@ -690,6 +695,52 @@ export class DriveService {
             name,
         });
         void this.desktop.service.transfer.processQueue();
+    }
+
+    private async resolveDirectoryDownloadName({
+        name,
+        savePath,
+        pid,
+    }: {
+        name: string;
+        savePath: string;
+        pid: string;
+    }) {
+        const sanitized = this.desktop.lib.fs.sanitizeWindowsFilename(name);
+        const entries = await fse.readdir(savePath);
+        const existingName = entries.find(
+            (entry) => entry.toLowerCase() === sanitized.toLowerCase(),
+        );
+        if (!existingName) return sanitized;
+
+        const existingPath = path.join(savePath, existingName);
+        const isDirectory = await fse
+            .stat(existingPath)
+            .then((stat) => stat.isDirectory())
+            .catch(() => false);
+        if (!isDirectory) return this.desktop.lib.fs.getUniqueName(sanitized, entries);
+
+        const options = {
+            type: "question" as const,
+            title: "폴더가 이미 존재합니다",
+            message: `"${existingName}" 폴더가 이미 존재합니다.`,
+            detail: "기존 폴더에 파일을 덮어쓰시겠습니까?",
+            buttons: ["덮어쓰기", "새 이름으로 다운로드", "취소"],
+            defaultId: 1,
+            cancelId: 2,
+        };
+        const mainWindow = this.desktop.window.main.window;
+        const result = mainWindow
+            ? await dialog.showMessageBox(mainWindow, options)
+            : await dialog.showMessageBox(options);
+
+        if (result.response === 2) {
+            await this.desktop.service.transfer.cancelTransfer(pid);
+            return null;
+        }
+
+        if (result.response === 0) return existingName;
+        return this.desktop.lib.fs.getUniqueName(sanitized, entries);
     }
 
     private claimUniqueName(name: string, used: Set<string>) {

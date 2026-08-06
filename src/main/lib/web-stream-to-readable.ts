@@ -2,50 +2,110 @@ import { Readable } from "node:stream";
 
 type WebReadableStream = {
     getReader(): {
-        read(): Promise<{ done: boolean; value?: Uint8Array<ArrayBuffer> }>;
+        read(): Promise<{ done: boolean; value?: Uint8Array<ArrayBufferLike> }>;
         cancel(reason?: unknown): Promise<void>;
+        releaseLock?(): void;
     };
 };
+
+export async function drainWebStream(
+    webStream: WebReadableStream | null | undefined,
+    _signal?: AbortSignal,
+) {
+    const reader = webStream?.getReader();
+    if (!reader) {
+        return;
+    }
+
+    try {
+        // Always consume the response before releasing the reader. Releasing a
+        // locked reader early can leave Undici's HTTP parser paused.
+        while (true) {
+            const { done } = await reader.read();
+            if (done) {
+                return;
+            }
+        }
+    } catch {
+        // The request may already have been aborted while draining.
+    } finally {
+        reader.releaseLock?.();
+    }
+}
 
 export function webStreamToNodeReadable(
     webStream: WebReadableStream,
     signal?: AbortSignal,
 ): Readable {
     const reader = webStream.getReader();
+    let ended = false;
+    let lockReleased = false;
+    let cancelPromise: Promise<void> | undefined;
 
-    const readable = new Readable({
-        async read() {
-            try {
+    const releaseReader = () => {
+        if (lockReleased) {
+            return;
+        }
+        lockReleased = true;
+        reader.releaseLock?.();
+    };
+
+    const cancelReader = (reason?: unknown): Promise<void> => {
+        if (ended) {
+            releaseReader();
+            return Promise.resolve();
+        }
+        if (!cancelPromise) {
+            cancelPromise = reader
+                .cancel(reason)
+                .catch(() => {})
+                .then(() => {
+                    releaseReader();
+                });
+        }
+        return cancelPromise;
+    };
+
+    const pull = async (target: Readable) => {
+        try {
+            while (!target.destroyed) {
                 const { done, value } = await reader.read();
                 if (done) {
-                    this.push(null);
+                    ended = true;
+                    releaseReader();
+                    target.push(null);
                     return;
                 }
-                if (value) {
-                    this.push(Buffer.from(value));
+                if (value && value.byteLength > 0) {
+                    target.push(Buffer.from(value));
+                    return;
                 }
-            } catch (err) {
-                this.destroy(err instanceof Error ? err : new Error(String(err)));
             }
+        } catch (err) {
+            target.destroy(err instanceof Error ? err : new Error(String(err)));
+        }
+    };
+
+    const readable = new Readable({
+        read() {
+            void pull(this);
+        },
+        destroy(err, callback) {
+            void cancelReader(err).then(
+                () => callback(err),
+                () => callback(err),
+            );
         },
     });
 
-    const cleanup = () => {
-        void reader.cancel().catch(() => {});
-    };
-
     if (signal) {
         const onAbort = () => {
-            cleanup();
             readable.destroy(new DOMException("The operation was aborted.", "AbortError"));
         };
         signal.addEventListener("abort", onAbort, { once: true });
         readable.once("close", () => {
             signal.removeEventListener("abort", onAbort);
-            cleanup();
         });
-    } else {
-        readable.once("close", cleanup);
     }
 
     return readable;
