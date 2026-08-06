@@ -7,6 +7,7 @@ import ky from "ky";
 import type { BandwidthLimiter } from "../bandwidth-limiter";
 import type { ParallelDownloader } from "../parallel-downloader";
 
+import { networkFetch } from "../../internal/network-fetch";
 import { createBandwidthLimitTransform } from "../bandwidth-limit-stream";
 import {
     isAbortError,
@@ -96,6 +97,7 @@ export async function downloadFile(props: {
             const resp = await ky.get(url, {
                 signal: combinedSignal,
                 headers: await httpService.getHeaders(url),
+                fetch: networkFetch,
                 throwHttpErrors: false,
             });
             if (!resp.ok) {

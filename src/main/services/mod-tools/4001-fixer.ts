@@ -15,6 +15,7 @@ import { nanoid } from "nanoid";
 
 import type { NahidaDesktop } from "@/main";
 
+import { networkFetch } from "@/main/internal/network-fetch";
 import {
     copyFilesElevated,
     isFsPermissionError,
@@ -826,6 +827,7 @@ export class FourThousandOneFixer {
         const zipPath = path.join(targetDir, "repo.zip");
 
         const resp = await ky.get(url, {
+            fetch: networkFetch,
             headers: {
                 "User-Agent":
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",

@@ -16,6 +16,7 @@ import PQueue from "p-queue";
 
 import type { NahidaDesktop } from "..";
 
+import { networkFetch } from "../internal/network-fetch";
 import { createBandwidthLimitTransform } from "./bandwidth-limit-stream";
 import { zstdDecompressAsync } from "./compressor";
 import { ParallelDownloader } from "./parallel-downloader";
@@ -403,6 +404,7 @@ class FileDownloadTask {
                     ...(rangeFrom > 0 ? { Range: `bytes=${rangeFrom}-` } : {}),
                 },
                 signal,
+                fetch: networkFetch,
                 throwHttpErrors: false,
                 timeout: 100000,
             });

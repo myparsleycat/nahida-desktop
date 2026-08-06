@@ -59,6 +59,21 @@ describe("webStreamToNodeReadable", () => {
         expect(source.releaseLock).toHaveBeenCalledOnce();
     });
 
+    it("serializes reads while forwarding every chunk", async () => {
+        const source = createWebStream([
+            new TextEncoder().encode("one"),
+            new TextEncoder().encode("two"),
+            new TextEncoder().encode("three"),
+        ]);
+        const readable = webStreamToNodeReadable(source.stream);
+        const chunks: Buffer[] = [];
+
+        readable.on("data", (chunk: Buffer) => chunks.push(chunk));
+        await once(readable, "end");
+
+        expect(Buffer.concat(chunks).toString()).toBe("onetwothree");
+    });
+
     it("cancels an incomplete response when the node stream is destroyed", async () => {
         const source = createWebStream([]);
         const readable = webStreamToNodeReadable(source.stream);
@@ -90,7 +105,7 @@ describe("webStreamToNodeReadable", () => {
 
         const [error] = await errorPromise;
         expect((error as Error).name).toBe("AbortError");
-        expect(cancel).toHaveBeenCalledOnce();
+        expect(cancel).not.toHaveBeenCalled();
     });
 
     it("propagates reader errors to the node stream", async () => {

@@ -46,6 +46,8 @@ export function webStreamToNodeReadable(
     let ended = false;
     let lockReleased = false;
     let cancelPromise: Promise<void> | undefined;
+    let pullPromise: Promise<void> | undefined;
+    let signalAborted = signal?.aborted ?? false;
 
     const releaseReader = () => {
         if (lockReleased) {
@@ -56,7 +58,7 @@ export function webStreamToNodeReadable(
     };
 
     const cancelReader = (reason?: unknown): Promise<void> => {
-        if (ended) {
+        if (ended || lockReleased) {
             releaseReader();
             return Promise.resolve();
         }
@@ -87,15 +89,33 @@ export function webStreamToNodeReadable(
                 }
             }
         } catch (err) {
+            releaseReader();
+            if (target.destroyed) {
+                return;
+            }
             target.destroy(err instanceof Error ? err : new Error(String(err)));
         }
     };
 
     const readable = new Readable({
         read() {
-            void pull(this);
+            if (pullPromise) {
+                return;
+            }
+
+            pullPromise = pull(this).finally(() => {
+                pullPromise = undefined;
+            });
         },
         destroy(err, callback) {
+            // The request signal already closes the underlying response. A
+            // second reader.cancel() at this point races the socket end.
+            if (signalAborted || signal?.aborted) {
+                signalAborted = true;
+                callback(err);
+                return;
+            }
+
             void cancelReader(err).then(
                 () => callback(err),
                 () => callback(err),
@@ -105,12 +125,17 @@ export function webStreamToNodeReadable(
 
     if (signal) {
         const onAbort = () => {
+            signalAborted = true;
             readable.destroy(new DOMException("The operation was aborted.", "AbortError"));
         };
         signal.addEventListener("abort", onAbort, { once: true });
         readable.once("close", () => {
             signal.removeEventListener("abort", onAbort);
         });
+
+        if (signal.aborted) {
+            onAbort();
+        }
     }
 
     return readable;

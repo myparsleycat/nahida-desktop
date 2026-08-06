@@ -7,6 +7,7 @@ import ky from "ky";
 
 import type { BandwidthLimiter } from "./bandwidth-limiter";
 
+import { networkFetch } from "../internal/network-fetch";
 import { createBandwidthLimitTransform } from "./bandwidth-limit-stream";
 import {
     isAbortError,
@@ -70,6 +71,7 @@ export class ParallelDownloader {
         try {
             const response = await ky.head(url, {
                 headers: await this.options.getHeaders(url),
+                fetch: networkFetch,
                 timeout: 10000,
                 throwHttpErrors: false,
             });
@@ -137,6 +139,7 @@ export class ParallelDownloader {
                 ...requestHeaders,
             },
             signal,
+            fetch: networkFetch,
             throwHttpErrors: false,
             timeout: 100000,
         });
