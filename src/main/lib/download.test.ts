@@ -62,11 +62,14 @@ function createDesktop() {
             transfer: {
                 downloadBandwidth: new BandwidthLimiter(),
                 slowChunkMonitor,
+                markFileCompleted: vi.fn(),
             },
         },
         lib: {
             fs: {
                 rename: vi.fn(async (_from: string, _to: string) => {}),
+                pathExists: vi.fn().mockResolvedValue(false),
+                stat: vi.fn(),
             },
         },
     } as unknown as NahidaDesktop;
@@ -297,4 +300,50 @@ describe("FileDownloadTask executeWithSlowRetry progress correction", () => {
         expect(mocks.request).toHaveBeenCalledTimes(3);
         expect(progressCalls.reduce((sum, bytes) => sum + bytes, 0)).toBe(11);
     }, 15000);
+});
+
+describe("DownloadLib existing file handling", () => {
+    beforeEach(() => {
+        mocks.request.mockReset();
+    });
+
+    it("skips an existing file without comparing its size", async () => {
+        const desktop = createDesktop();
+        desktop.lib.fs.pathExists = vi
+            .fn()
+            .mockResolvedValue(true) as typeof desktop.lib.fs.pathExists;
+        desktop.lib.fs.stat = vi
+            .fn()
+            .mockResolvedValue({ isFile: () => true }) as typeof desktop.lib.fs.stat;
+        const onProgress = vi.fn();
+        const onComplete = vi.fn();
+        const downloadLib = new DownloadLib(desktop);
+        const processFileDownloadTask = (
+            downloadLib as unknown as {
+                processFileDownloadTask: (input: {
+                    pid: string;
+                    file: DownloadMetadata["files"][number];
+                    filePath: string;
+                    abort: AbortController;
+                    onProgress: (bytes: number) => void;
+                    onComplete: () => void;
+                }) => Promise<boolean>;
+            }
+        ).processFileDownloadTask;
+
+        await expect(
+            processFileDownloadTask.call(downloadLib, {
+                pid: "transfer-id",
+                file,
+                filePath: path.join(os.tmpdir(), "existing-file.bin"),
+                abort: new AbortController(),
+                onProgress,
+                onComplete,
+            }),
+        ).resolves.toBe(true);
+
+        expect(onProgress).toHaveBeenCalledWith(file.size);
+        expect(onComplete).toHaveBeenCalledOnce();
+        expect(mocks.request).not.toHaveBeenCalled();
+    });
 });

@@ -26,7 +26,7 @@ import {
     slowReconnectDelayMs,
     type SlowChunkTransferPhase,
 } from "./slow-chunk-monitor";
-import { webStreamToNodeReadable } from "./web-stream-to-readable";
+import { drainWebStream, webStreamToNodeReadable } from "./web-stream-to-readable";
 
 export type DownloadParams = {
     type: "download";
@@ -56,21 +56,6 @@ export type DownloadMetadata = {
 
 export const BATCH_ROOT_ID = "batch-root";
 const FILE_ID_BATCH_LIMIT = 100;
-
-async function drainResponseBody(response: Response, signal?: AbortSignal) {
-    const reader = response.body?.getReader();
-    if (!reader) return;
-
-    try {
-        while (true) {
-            if (signal?.aborted) return;
-            const { done } = await reader.read();
-            if (done) return;
-        }
-    } finally {
-        reader.releaseLock();
-    }
-}
 
 function isExpectedContentRange(value: string | null, resumeFrom: number, fileSize: number) {
     const match = /^bytes\s+(\d+)-(\d+)\/(\d+)$/i.exec(value ?? "");
@@ -442,7 +427,7 @@ class FileDownloadTask {
         let append = resumeFrom > 0 && !file.compAlg;
 
         if (append && response.status === 416) {
-            await drainResponseBody(response, signal).catch(() => {});
+            await drainWebStream(response.body, signal);
             if (resumeFrom === file.size) return;
             await fse.remove(targetPath).catch(() => {});
             options?.onResumeReset?.();
@@ -451,7 +436,7 @@ class FileDownloadTask {
         }
 
         if (!response.ok) {
-            await drainResponseBody(response, signal).catch(() => {});
+            await drainWebStream(response.body, signal);
             throw new Error(`Download failed: ${response.statusText}`);
         }
 
@@ -465,14 +450,14 @@ class FileDownloadTask {
             append &&
             !isExpectedContentRange(response.headers.get("Content-Range"), resumeFrom, file.size)
         ) {
-            await drainResponseBody(response, signal).catch(() => {});
+            await drainWebStream(response.body, signal);
             await fse.remove(targetPath).catch(() => {});
             options?.onResumeReset?.();
             response = await request(headers);
             append = false;
 
             if (!response.ok) {
-                await drainResponseBody(response, signal).catch(() => {});
+                await drainWebStream(response.body, signal);
                 throw new Error(`Download failed: ${response.statusText}`);
             }
         }
@@ -965,12 +950,13 @@ export class DownloadLib {
     }): Promise<boolean> {
         if (abort.signal.aborted) return true;
 
-        const isCompleted = this.desktop.service.transfer.isFileCompleted(pid, file.id);
-
-        if (isCompleted) {
-            if (!this.desktop.service.transfer.isFileCompleted(pid, file.id)) {
-                this.desktop.service.transfer.markFileCompleted(pid, file.id);
+        if (await this.desktop.lib.fs.pathExists(filePath)) {
+            const stats = await this.desktop.lib.fs.stat(filePath);
+            if (!stats.isFile()) {
+                throw new Error(`Download target is not a file: ${filePath}`);
             }
+
+            this.desktop.service.transfer.markFileCompleted(pid, file.id);
             onProgress(file.size);
             onComplete();
             return true;
