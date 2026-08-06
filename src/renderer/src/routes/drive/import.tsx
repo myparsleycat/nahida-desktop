@@ -30,13 +30,12 @@ import {
   FolderIcon,
   Loader2Icon,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/drive/import")({
   validateSearch: (search: Record<string, unknown>) => ({
-    auto: search.auto === "1" || search.auto === true,
     collectionId: typeof search.collectionId === "string" ? search.collectionId : undefined,
     itemId: typeof search.itemId === "string" ? search.itemId : undefined,
     url: typeof search.url === "string" ? search.url : "",
@@ -57,13 +56,10 @@ function RouteComponent() {
   const [destinationName, setDestinationName] = useState(t("page.drive.import.choose_destination"));
   const [pickerId, setPickerId] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
-  const autoStarted = useRef(false);
-
   useEffect(() => {
     setUrl(search.url);
     setPassword("");
     setRequiresPassword(false);
-    autoStarted.current = false;
   }, [search.url]);
 
   useEffect(() => {
@@ -144,12 +140,6 @@ function RouteComponent() {
     url,
   ]);
 
-  useEffect(() => {
-    if (!search.auto || !search.url || !session || !destinationId || autoStarted.current) return;
-    autoStarted.current = true;
-    void copyToDrive();
-  }, [copyToDrive, destinationId, search.auto, search.url, session]);
-
   const pickerContent = destinationQuery.data?.content;
   const pickerChildren = destinationQuery.data?.children?.filter((item) => item.isDir) ?? [];
   const pickerParentId = destinationQuery.data?.parent?.id ?? pickerContent?.parentId ?? null;
@@ -193,7 +183,7 @@ function RouteComponent() {
                   value={url}
                   onChange={(event) => setUrl(event.target.value)}
                   placeholder={t("page.drive.import.url_placeholder")}
-                  autoFocus={!search.auto}
+                  autoFocus
                   required
                 />
               </div>
