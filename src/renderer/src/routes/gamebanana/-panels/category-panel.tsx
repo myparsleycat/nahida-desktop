@@ -72,7 +72,7 @@ export function CategoryPanel({
   };
 
   return (
-    <div className="h-full min-h-0 min-w-0 p-4">
+    <div className="h-full min-h-0 min-w-0 p-2">
       <Card className="flex h-full min-h-0 flex-col">
         <CardHeader className="shrink-0">
           <div className="flex flex-wrap items-center justify-end gap-2">

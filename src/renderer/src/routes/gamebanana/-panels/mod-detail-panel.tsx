@@ -286,7 +286,7 @@ export function ModDetailPanel({
         className="h-full min-h-0 min-w-0"
         viewportClassName="overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!w-full [&>div]:max-w-full"
       >
-        <div className="max-w-full min-w-0 space-y-4 p-4">
+        <div className="max-w-full min-w-0 space-y-4 p-2 pr-4">
           <Card>
             <CardContent>
               {modOverviewQuery.isLoading ? (
