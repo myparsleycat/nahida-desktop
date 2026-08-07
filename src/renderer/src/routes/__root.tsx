@@ -172,7 +172,7 @@ function RootComponent() {
             <Button
               type="button"
               size="xs"
-              variant="outline"
+              variant="ghost"
               className="h-6 px-2 text-[11.5px]"
               isLoading={isUpdateActionPending || updaterDownloading}
               onClick={async () => {
