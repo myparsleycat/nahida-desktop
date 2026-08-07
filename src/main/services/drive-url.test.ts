@@ -6,6 +6,29 @@ import { encodeNahidaPassword, NAHIDA_SOURCE_HOSTNAMES, parseDriveSourceUrl } fr
 const sourceUrl = (hostname: string, pathname: string, protocol = "https:") =>
     new URL(pathname, `${protocol}//${hostname}`).toString();
 
+const testSourceUrls = [
+    {
+        label: "public folder",
+        url: "https://nahida.live/akasha/link/qjsEdvLpcAxr",
+        expected: { type: "link", id: "qjsEdvLpcAxr" },
+    },
+    {
+        label: "private folder",
+        url: "https://nahida.live/akasha/link/ZwgSTtFUXZGu",
+        expected: { type: "link", id: "ZwgSTtFUXZGu" },
+    },
+    {
+        label: "public collection",
+        url: "https://nahida.live/akasha/mod/WmVWMjAzthuFpKZiE-AKj",
+        expected: { type: "mod", id: "WmVWMjAzthuFpKZiE-AKj" },
+    },
+    {
+        label: "private collection",
+        url: "https://nahida.live/akasha/mod/-fpnEyi_nPNB-Mf97p5_k",
+        expected: { type: "mod", id: "-fpnEyi_nPNB-Mf97p5_k" },
+    },
+] as const;
+
 describe("encodeNahidaPassword", () => {
     it("matches the web client's URL-safe Base64 encoding", () => {
         expect(encodeNahidaPassword("gayshin")).toBe("Z2F5c2hpbg");
@@ -14,6 +37,10 @@ describe("encodeNahidaPassword", () => {
 });
 
 describe("parseDriveSourceUrl", () => {
+    it.each(testSourceUrls)("parses $label fixture", ({ url, expected }) => {
+        expect(parseDriveSourceUrl(url)).toEqual(expected);
+    });
+
     it.each([
         [
             sourceUrl(NAHIDA_SOURCE_HOSTNAMES[0], "/akasha/link/link_123"),
