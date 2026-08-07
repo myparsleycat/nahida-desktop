@@ -179,6 +179,7 @@ export class CustomDownloader {
         const resp = await ky.head(trimmedUrl, {
             redirect: "follow",
             throwHttpErrors: false,
+            retry: 0,
             headers: await this.desktop.httpService.getHeaders(trimmedUrl),
         });
 
@@ -385,6 +386,7 @@ export class CustomDownloader {
                 const response = await ky.head(fileUrl, {
                     redirect: "follow",
                     throwHttpErrors: false,
+                    retry: 0,
                     headers: await this.desktop.httpService.getHeaders(fileUrl),
                 });
 
@@ -639,6 +641,7 @@ export class CustomDownloader {
         const resp = await ky.head(fileUrl, {
             redirect: "follow",
             throwHttpErrors: false,
+            retry: 0,
             headers: await this.desktop.httpService.getHeaders(fileUrl),
         });
         if (!resp.ok) {

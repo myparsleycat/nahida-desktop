@@ -97,6 +97,7 @@ export async function downloadFile(props: {
                 signal: combinedSignal,
                 headers: await httpService.getHeaders(url),
                 throwHttpErrors: false,
+                retry: 0,
             });
             if (!resp.ok) {
                 await drainWebStream(resp.body, combinedSignal).catch(() => {});

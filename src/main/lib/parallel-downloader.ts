@@ -9,6 +9,7 @@ import type { BandwidthLimiter } from "./bandwidth-limiter";
 
 import { networkFetch } from "../internal/network-fetch";
 import { createBandwidthLimitTransform } from "./bandwidth-limit-stream";
+import { downloadRequestLimiter, type DownloadRequestLimiter } from "./download-request-limiter";
 import {
     isAbortError,
     SLOW_CHUNK_MAX_RECONNECTS,
@@ -34,6 +35,8 @@ export interface ParallelDownloadOptions {
     cohortKey?: string;
 }
 
+const RANGE_SUPPORT_CACHE_TTL_MS = 5 * 60 * 1000;
+
 type SegmentStatus = "pending" | "running" | "completed";
 
 type Segment = {
@@ -56,6 +59,11 @@ const createAbortError = (message = "Aborted") => {
 
 export class ParallelDownloader {
     private readonly minSegmentSize = 4 * 1024 * 1024;
+    private readonly requestLimiter: DownloadRequestLimiter;
+    private readonly rangeSupportCache = new Map<
+        string,
+        { expiresAt: number; value: Promise<boolean> }
+    >();
 
     constructor(
         private options: {
@@ -64,27 +72,59 @@ export class ParallelDownloader {
                 warn: (msg: string, ...args: any[]) => void;
             };
             getHeaders: (url: string) => Promise<Record<string, string>>;
+            requestLimiter?: DownloadRequestLimiter;
         },
-    ) {}
+    ) {
+        this.requestLimiter = options.requestLimiter ?? downloadRequestLimiter;
+    }
 
     public async checkRangeSupport(
         url: string,
         headers?: Record<string, string>,
+        signal?: AbortSignal,
     ): Promise<boolean> {
+        const cacheKey = getRangeSupportCacheKey(url);
+        const cached = this.rangeSupportCache.get(cacheKey);
+        if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+        const value = this.requestRangeSupport(url, headers, signal);
+        this.rangeSupportCache.set(cacheKey, {
+            expiresAt: Date.now() + RANGE_SUPPORT_CACHE_TTL_MS,
+            value,
+        });
+        void value.catch(() => {
+            if (this.rangeSupportCache.get(cacheKey)?.value === value) {
+                this.rangeSupportCache.delete(cacheKey);
+            }
+        });
+        return value;
+    }
+
+    private async requestRangeSupport(
+        url: string,
+        headers?: Record<string, string>,
+        signal?: AbortSignal,
+    ) {
         try {
-            const response = await ky.head(url, {
-                headers: {
-                    ...(await this.options.getHeaders(url)),
-                    ...headers,
-                },
-                fetch: networkFetch,
-                timeout: 10000,
-                throwHttpErrors: false,
-            });
+            const response = await this.requestLimiter.run(
+                async () =>
+                    ky.head(url, {
+                        headers: {
+                            ...(await this.options.getHeaders(url)),
+                            ...headers,
+                        },
+                        fetch: networkFetch,
+                        timeout: 10000,
+                        throwHttpErrors: false,
+                        retry: 0,
+                    }),
+                signal,
+            );
 
             const acceptRanges = response.headers.get("Accept-Ranges");
             return acceptRanges === "bytes";
-        } catch {
+        } catch (error) {
+            if (signal?.aborted) throw error;
             return false;
         }
     }
@@ -134,63 +174,63 @@ export class ParallelDownloader {
         bandwidthLimiter?: BandwidthLimiter;
         onPhaseChange?: (phase: "network" | "bandwidth-wait") => void;
     }): Promise<void> {
-        const requestHeaders: Record<string, string> = {
-            Range: `bytes=${start}-${end}`,
-            ...headers,
-        };
+        return this.requestLimiter.run(async () => {
+            const requestHeaders: Record<string, string> = {
+                Range: `bytes=${start}-${end}`,
+                ...headers,
+            };
 
-        const response = await ky(url, {
-            headers: {
-                ...(await this.options.getHeaders(url)),
-                ...requestHeaders,
-            },
-            signal,
-            throwHttpErrors: false,
-            timeout: 100000,
-        });
+            const response = await ky(url, {
+                headers: requestHeaders,
+                signal,
+                throwHttpErrors: false,
+                timeout: 100000,
+                retry: 0,
+            });
 
-        if (response.status !== 206) {
-            await drainWebStream(response.body, signal).catch(() => {});
-            throw new Error(
-                `Chunk download failed: expected 206 Partial Content, got ${response.statusText} (${response.status})`,
-            );
-        }
-
-        if (!response.body) throw new Error("No response body");
-
-        const fileStream = fse.createWriteStream(chunkPath);
-        let transferredBytes = 0;
-        const source = webStreamToNodeReadable(response.body, signal);
-        const progressStream = new Transform({
-            transform(chunk: Buffer, _encoding, callback) {
-                transferredBytes += chunk.byteLength;
-                onProgress?.(transferredBytes, chunk.byteLength);
-                callback(null, chunk);
-            },
-        });
-
-        try {
-            if (bandwidthLimiter) {
-                await pipeline(
-                    source,
-                    createBandwidthLimitTransform(bandwidthLimiter, {
-                        signal,
-                        onPhaseChange,
-                    }),
-                    progressStream,
-                    fileStream,
-                    { signal },
+            if (response.status !== 206) {
+                await drainWebStream(response.body, signal).catch(() => {});
+                throw new Error(
+                    `Chunk download failed: expected 206 Partial Content, got ${response.statusText} (${response.status})`,
                 );
-            } else {
-                await pipeline(source, progressStream, fileStream, { signal });
             }
-        } catch (pipeErr) {
-            fileStream.destroy();
-            if (!preservePartialOnAbort?.()) {
-                await fse.remove(chunkPath).catch(() => {});
+
+            if (!response.body) throw new Error("No response body");
+
+            const fileStream = fse.createWriteStream(chunkPath);
+            let transferredBytes = 0;
+            const source = webStreamToNodeReadable(response.body, signal);
+            const progressStream = new Transform({
+                transform(chunk: Buffer, _encoding, callback) {
+                    transferredBytes += chunk.byteLength;
+                    onProgress?.(transferredBytes, chunk.byteLength);
+                    callback(null, chunk);
+                },
+            });
+
+            try {
+                if (bandwidthLimiter) {
+                    await pipeline(
+                        source,
+                        createBandwidthLimitTransform(bandwidthLimiter, {
+                            signal,
+                            onPhaseChange,
+                        }),
+                        progressStream,
+                        fileStream,
+                        { signal },
+                    );
+                } else {
+                    await pipeline(source, progressStream, fileStream, { signal });
+                }
+            } catch (pipeErr) {
+                fileStream.destroy();
+                if (!preservePartialOnAbort?.()) {
+                    await fse.remove(chunkPath).catch(() => {});
+                }
+                throw pipeErr;
             }
-            throw pipeErr;
-        }
+        }, signal);
     }
 
     private async combineChunks({
@@ -392,6 +432,10 @@ export class ParallelDownloader {
             cohortKey = "parallel",
         } = options;
         const targetPath = `${savePath}.ntmp`;
+        const requestHeaders = {
+            ...(await this.options.getHeaders(url)),
+            ...headers,
+        };
 
         let concurrency =
             maxChunks && maxChunks > 0 ? maxChunks : this.calculateChunkCount(fileSize, maxChunks);
@@ -529,7 +573,7 @@ export class ParallelDownloader {
                     try {
                         await this.downloadChunk({
                             url,
-                            headers,
+                            headers: requestHeaders,
                             start: segment.start,
                             end: segment.end,
                             chunkPath: segment.chunkPath,
@@ -654,5 +698,14 @@ export class ParallelDownloader {
             await fse.remove(targetPath).catch(() => {});
             throw err;
         }
+    }
+}
+
+function getRangeSupportCacheKey(url: string) {
+    try {
+        const parsed = new URL(url);
+        return `${parsed.origin}${parsed.pathname}`;
+    } catch {
+        return url;
     }
 }

@@ -22,6 +22,7 @@ import { networkFetch } from "../internal/network-fetch";
 import { createDriveApiError, isBackendUnavailableStatus } from "../services/drive-errors";
 import { createBandwidthLimitTransform } from "./bandwidth-limit-stream";
 import { zstdDecompressAsync } from "./compressor";
+import { downloadRequestLimiter, type DownloadRequestLimiter } from "./download-request-limiter";
 import { ParallelDownloader } from "./parallel-downloader";
 import {
     isAbortError,
@@ -329,10 +330,14 @@ class DownloadFileSystem {
 class FileDownloadTask {
     private parallelDownloader: ParallelDownloader;
 
-    constructor(private readonly desktop: NahidaDesktop) {
+    constructor(
+        private readonly desktop: NahidaDesktop,
+        private readonly requestLimiter: DownloadRequestLimiter = downloadRequestLimiter,
+    ) {
         this.parallelDownloader = new ParallelDownloader({
             logger: this.desktop.logger,
             getHeaders: (url: string) => this.desktop.httpService.getHeaders(url),
+            requestLimiter: this.requestLimiter,
         });
     }
 
@@ -360,13 +365,13 @@ class FileDownloadTask {
         const isSmallFile = file.size < 1024 * 1024;
         const targetPath = isSmallFile ? filePath : `${filePath}.ntmp`;
 
-        const parallelResult = await this.tryParallelDownload(
-            file,
-            filePath,
-            signal,
-            onProgress,
-            link,
-        );
+        const hasResumeState = await fse
+            .stat(targetPath)
+            .then(({ size }) => size > 0)
+            .catch(() => false);
+        const parallelResult = hasResumeState
+            ? false
+            : await this.tryParallelDownload(file, filePath, signal, onProgress, link);
         if (parallelResult) {
             onComplete();
             return;
@@ -400,6 +405,7 @@ class FileDownloadTask {
         const supportsRange = await this.parallelDownloader.checkRangeSupport(
             file.url,
             linkHeaders,
+            signal,
         );
         if (!supportsRange) return false;
 
@@ -476,95 +482,111 @@ class FileDownloadTask {
             resumeFrom?: number;
         },
     ): Promise<void> {
-        const baseHeaders = await this.desktop.httpService.getHeaders(file.url);
-        const linkHeaders: Record<string, string> = options?.link
-            ? { "nhd-link-token": options.link.token }
-            : {};
-        const headers = { ...baseHeaders, ...linkHeaders } as Record<string, string>;
-        const resumeFrom = options?.resumeFrom ?? 0;
-        const request = async (requestHeaders: Record<string, string>) =>
-            await ky(file.url, {
-                headers: requestHeaders,
-                signal,
-                fetch: networkFetch,
-                throwHttpErrors: false,
-                timeout: 100000,
+        return this.requestLimiter.run(async () => {
+            const baseHeaders = await this.desktop.httpService.getHeaders(file.url);
+            const linkHeaders: Record<string, string> = options?.link
+                ? { "nhd-link-token": options.link.token }
+                : {};
+            const headers = { ...baseHeaders, ...linkHeaders } as Record<string, string>;
+            const resumeFrom = options?.resumeFrom ?? 0;
+            const request = async (requestHeaders: Record<string, string>) =>
+                await ky(file.url, {
+                    headers: requestHeaders,
+                    signal,
+                    fetch: networkFetch,
+                    throwHttpErrors: false,
+                    timeout: 100000,
+                    retry: 0,
+                });
+
+            let response = await request({
+                ...headers,
+                ...(resumeFrom > 0 && !file.compAlg ? { Range: `bytes=${resumeFrom}-` } : {}),
             });
+            let append = resumeFrom > 0 && !file.compAlg;
 
-        let response = await request({
-            ...headers,
-            ...(resumeFrom > 0 && !file.compAlg ? { Range: `bytes=${resumeFrom}-` } : {}),
-        });
-        let append = resumeFrom > 0 && !file.compAlg;
-
-        if (append && response.status === 416) {
-            await drainWebStream(response.body, signal);
-            if (resumeFrom === file.size) return;
-            await fse.remove(targetPath).catch(() => {});
-            options?.onResumeReset?.();
-            response = await request(headers);
-            append = false;
-        }
-
-        if (!response.ok) {
-            await drainWebStream(response.body, signal);
-            throw new Error(`Download failed: ${response.statusText}`);
-        }
-
-        if (append && response.status !== 206) {
-            await fse.remove(targetPath).catch(() => {});
-            options?.onResumeReset?.();
-            append = false;
-        }
-
-        if (
-            append &&
-            !isExpectedContentRange(response.headers.get("Content-Range"), resumeFrom, file.size)
-        ) {
-            await drainWebStream(response.body, signal);
-            await fse.remove(targetPath).catch(() => {});
-            options?.onResumeReset?.();
-            response = await request(headers);
-            append = false;
+            if (append && response.status === 416) {
+                await drainWebStream(response.body, signal);
+                if (resumeFrom === file.size) return;
+                await fse.remove(targetPath).catch(() => {});
+                options?.onResumeReset?.();
+                response = await request(headers);
+                append = false;
+            }
 
             if (!response.ok) {
                 await drainWebStream(response.body, signal);
                 throw new Error(`Download failed: ${response.statusText}`);
             }
-        }
 
-        if (!response.body) throw new Error("No response body");
-
-        const fileStream = createWriteStream(targetPath, append ? { flags: "a" } : undefined);
-        const source = webStreamToNodeReadable(response.body, signal);
-        const bandwidth = createBandwidthLimitTransform(
-            this.desktop.service.transfer.downloadBandwidth,
-            {
-                signal,
-                onPhaseChange: options?.onPhaseChange,
-            },
-        );
-        const progress = new Transform({
-            transform(chunk: Buffer, _encoding, callback) {
-                options?.onProgress?.(chunk.byteLength);
-                callback(null, chunk);
-            },
-        });
-
-        try {
-            if (file.compAlg === "gzip") {
-                await pipeline(source, bandwidth, progress, createGunzip(), fileStream, { signal });
-            } else if (file.compAlg === "zstd") {
-                await pipeline(source, bandwidth, progress, createZstdDecompress(), fileStream, {
-                    signal,
-                });
-            } else {
-                await pipeline(source, bandwidth, progress, fileStream, { signal });
+            if (append && response.status !== 206) {
+                await fse.remove(targetPath).catch(() => {});
+                options?.onResumeReset?.();
+                append = false;
             }
-        } catch (pipeErr) {
-            fileStream.destroy();
-            throw pipeErr;
-        }
+
+            if (
+                append &&
+                !isExpectedContentRange(
+                    response.headers.get("Content-Range"),
+                    resumeFrom,
+                    file.size,
+                )
+            ) {
+                await drainWebStream(response.body, signal);
+                await fse.remove(targetPath).catch(() => {});
+                options?.onResumeReset?.();
+                response = await request(headers);
+                append = false;
+
+                if (!response.ok) {
+                    await drainWebStream(response.body, signal);
+                    throw new Error(`Download failed: ${response.statusText}`);
+                }
+            }
+
+            if (!response.body) throw new Error("No response body");
+
+            const fileStream = createWriteStream(targetPath, append ? { flags: "a" } : undefined);
+            const source = webStreamToNodeReadable(response.body, signal);
+            const bandwidth = createBandwidthLimitTransform(
+                this.desktop.service.transfer.downloadBandwidth,
+                {
+                    signal,
+                    onPhaseChange: options?.onPhaseChange,
+                },
+            );
+            const progress = new Transform({
+                transform(chunk: Buffer, _encoding, callback) {
+                    options?.onProgress?.(chunk.byteLength);
+                    callback(null, chunk);
+                },
+            });
+
+            try {
+                if (file.compAlg === "gzip") {
+                    await pipeline(source, bandwidth, progress, createGunzip(), fileStream, {
+                        signal,
+                    });
+                } else if (file.compAlg === "zstd") {
+                    await pipeline(
+                        source,
+                        bandwidth,
+                        progress,
+                        createZstdDecompress(),
+                        fileStream,
+                        {
+                            signal,
+                        },
+                    );
+                } else {
+                    await pipeline(source, bandwidth, progress, fileStream, { signal });
+                }
+            } catch (pipeErr) {
+                fileStream.destroy();
+                throw pipeErr;
+            }
+        }, signal);
     }
 
     private async getResumeOffset(
@@ -793,8 +815,16 @@ export class DownloadLib {
         link?: LinkData;
         signal: AbortSignal;
     }): Promise<DownloadMetadata> {
-        const folders = items.filter((item) => item.isDir);
-        const files = items.filter((item) => !item.isDir);
+        const folders = Array.from(
+            new Map(
+                items.filter((item) => item.isDir).map((item) => [item.id, item] as const),
+            ).values(),
+        );
+        const files = Array.from(
+            new Map(
+                items.filter((item) => !item.isDir).map((item) => [item.id, item] as const),
+            ).values(),
+        );
 
         const mergedDirs: DownloadMetadata["dirs"] = [];
         const mergedFiles: DownloadMetadata["files"] = [];
