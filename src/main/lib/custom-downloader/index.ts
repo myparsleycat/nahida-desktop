@@ -31,6 +31,44 @@ import {
     parseDownloadFileName,
 } from "./utils";
 
+export type GBDownloaderFailureContext = {
+    operation: string;
+    stage: string;
+    itemId: number;
+    fileId: number;
+    modelName?: string;
+    downloadUrl?: string;
+    previewUrl?: string;
+    destinationPath?: string;
+    stagingPath?: string;
+    rollback: {
+        stagingPathRemoved: boolean;
+        finalized: boolean;
+        cleanupError?: string;
+    };
+};
+
+export type GBDownloaderError = Error & { context: GBDownloaderFailureContext };
+
+export function isGBDownloaderError(error: unknown): error is GBDownloaderError {
+    return (
+        error instanceof Error &&
+        typeof (error as GBDownloaderError).context === "object" &&
+        (error as GBDownloaderError).context !== null &&
+        typeof (error as GBDownloaderError).context.stage === "string"
+    );
+}
+
+function attachGBDownloaderContext(error: unknown, context: GBDownloaderFailureContext): Error {
+    const normalized =
+        error instanceof Error ? error : new Error(toErrorMessage(error), { cause: error });
+    (normalized as GBDownloaderError).context = {
+        ...context,
+        rollback: { ...context.rollback },
+    };
+    return normalized;
+}
+
 export class CustomDownloader {
     public desktop: NahidaDesktop;
     private readonly downloader: ParallelDownloader;
@@ -339,31 +377,33 @@ export class CustomDownloader {
         fileId: number;
         modelName?: string;
     }): Promise<"started" | "canceled"> {
-        const context = {
+        const context: GBDownloaderFailureContext = {
             operation: "mod:downloadGameBananaFile",
             stage: "resolve-download-url",
             itemId: props.itemId,
             fileId: props.fileId,
             modelName: props.modelName,
-            downloadUrl: undefined as string | undefined,
-            previewUrl: undefined as string | undefined,
-            destinationPath: undefined as string | undefined,
-            stagingPath: undefined as string | undefined,
+            downloadUrl: undefined,
+            previewUrl: undefined,
+            destinationPath: undefined,
+            stagingPath: undefined,
             rollback: {
                 stagingPathRemoved: false,
                 finalized: false,
-                cleanupError: undefined as string | undefined,
+                cleanupError: undefined,
             },
         };
-        const logPreTransferFailure = (error: unknown) => {
-            this.desktop.logger.error(error, "GameBanana:downloadFromGB");
+        const logPreTransferFailure = (error: unknown): Error => {
+            const enriched = attachGBDownloaderContext(error, context);
+            this.desktop.logger.error(enriched, "GameBanana:downloadFromGB");
             this.desktop.logger.error(
                 {
                     ...context,
-                    error: toErrorMessage(error),
+                    error: toErrorMessage(enriched),
                 },
                 "GameBanana:downloadFromGB:context",
             );
+            return enriched;
         };
         const downloadFilePayload = await this.desktop.service.gamebanana
             .getDownloadFilePayload({
@@ -372,250 +412,261 @@ export class CustomDownloader {
                 modelName: props.modelName,
             })
             .catch((error) => {
-                logPreTransferFailure(error);
-                throw error;
+                throw logPreTransferFailure(error);
             });
-        const { title: _title, fileUrl, previewUrl } = downloadFilePayload;
-        context.downloadUrl = fileUrl;
-        context.previewUrl = previewUrl ?? undefined;
-        context.stage = "head-request";
+        try {
+            const { title: _title, fileUrl, previewUrl } = downloadFilePayload;
+            context.downloadUrl = fileUrl;
+            context.previewUrl = previewUrl ?? undefined;
+            context.stage = "head-request";
 
-        const resp = await (async () => {
-            try {
-                const response = await ky.head(fileUrl, {
-                    redirect: "follow",
-                    throwHttpErrors: false,
-                    headers: await this.desktop.httpService.getHeaders(fileUrl),
-                });
-
-                if (!response.ok) {
-                    throw new Error(
-                        `GAMEBANANA_DOWNLOAD_HEAD_FAILED:${response.status}:${response.statusText || "UNKNOWN"}`,
-                    );
-                }
-
-                return response;
-            } catch (error) {
-                const failure =
-                    error instanceof Error &&
-                    error.message.startsWith("GAMEBANANA_DOWNLOAD_HEAD_FAILED:")
-                        ? error
-                        : new Error(`GAMEBANANA_DOWNLOAD_HEAD_FAILED:${toErrorMessage(error)}`, {
-                              cause: error,
-                          });
-                logPreTransferFailure(failure);
-                throw failure;
-            }
-        })();
-
-        const realFileUrl = resp.url;
-        const fileSize = parseContentLength(resp.headers.get("Content-Length"));
-        const suggestedFileName = parseDownloadFileName(
-            realFileUrl,
-            this.sanitize.bind(this),
-            resp.headers.get("Content-Disposition"),
-        );
-
-        const result = await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(
-            suggestedFileName,
-            downloadFilePayload.categoryName,
-            downloadFilePayload.importerKey ?? undefined,
-            "gamebanana",
-        );
-        if (!result.path) return "canceled";
-        const destinationPath = result.path;
-        context.destinationPath = destinationPath;
-        context.stage = "prepare-staging";
-
-        const finalFileName = result.fileName || suggestedFileName;
-        const { stagingPath, stagedDownloadPath } = getStagingPaths(
-            finalFileName,
-            this.sanitize.bind(this),
-        );
-        context.stagingPath = stagingPath;
-        context.stage = "queue-transfer";
-
-        const pid = nanoid();
-        const abortController = new AbortController();
-
-        const transferData: TransferData = {
-            root: {
-                id: pid,
-                parentId: null,
-                name: finalFileName,
-            },
-            files: [
-                {
-                    id: pid,
-                    fileId: pid,
-                    parentId: pid,
-                    name: finalFileName,
-                    size: fileSize ?? 0,
-                    compAlg: null,
-                    url: realFileUrl,
-                },
-            ],
-            dirs: [],
-        };
-
-        await this.desktop.service.transfer.createTransfer({
-            pid,
-            type: "download",
-            data: transferData,
-            abortController,
-            name: finalFileName,
-            initialStatus: "pending",
-            path: destinationPath,
-        });
-
-        this.desktop.service.transfer.registerRunner(pid, async () => {
-            let cleanupAttempted = false;
-            const cleanupStaging = async () => {
-                cleanupAttempted = true;
+            const resp = await (async () => {
                 try {
-                    await fse.remove(stagingPath);
-                    context.rollback.stagingPathRemoved = true;
+                    const response = await ky.head(fileUrl, {
+                        redirect: "follow",
+                        throwHttpErrors: false,
+                        headers: await this.desktop.httpService.getHeaders(fileUrl),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(
+                            `GAMEBANANA_DOWNLOAD_HEAD_FAILED:${response.status}:${response.statusText || "UNKNOWN"}`,
+                        );
+                    }
+
+                    return response;
                 } catch (error) {
-                    context.rollback.cleanupError = toErrorMessage(error);
-                    this.desktop.logger.error(error, "GameBanana:downloadFromGB:cleanup");
+                    const failure =
+                        error instanceof Error &&
+                        error.message.startsWith("GAMEBANANA_DOWNLOAD_HEAD_FAILED:")
+                            ? error
+                            : new Error(
+                                  `GAMEBANANA_DOWNLOAD_HEAD_FAILED:${toErrorMessage(error)}`,
+                                  {
+                                      cause: error,
+                                  },
+                              );
+                    throw logPreTransferFailure(failure);
                 }
+            })();
+
+            const realFileUrl = resp.url;
+            const fileSize = parseContentLength(resp.headers.get("Content-Length"));
+            const suggestedFileName = parseDownloadFileName(
+                realFileUrl,
+                this.sanitize.bind(this),
+                resp.headers.get("Content-Disposition"),
+            );
+
+            const result = await this.desktop.lib.pathSelector.getSelectedPathWithModeModal(
+                suggestedFileName,
+                downloadFilePayload.categoryName,
+                downloadFilePayload.importerKey ?? undefined,
+                "gamebanana",
+            );
+            if (!result.path) return "canceled";
+            const destinationPath = result.path;
+            context.destinationPath = destinationPath;
+            context.stage = "prepare-staging";
+
+            const finalFileName = result.fileName || suggestedFileName;
+            const { stagingPath, stagedDownloadPath } = getStagingPaths(
+                finalFileName,
+                this.sanitize.bind(this),
+            );
+            context.stagingPath = stagingPath;
+            context.stage = "queue-transfer";
+
+            const pid = nanoid();
+            const abortController = new AbortController();
+
+            const transferData: TransferData = {
+                root: {
+                    id: pid,
+                    parentId: null,
+                    name: finalFileName,
+                },
+                files: [
+                    {
+                        id: pid,
+                        fileId: pid,
+                        parentId: pid,
+                        name: finalFileName,
+                        size: fileSize ?? 0,
+                        compAlg: null,
+                        url: realFileUrl,
+                    },
+                ],
+                dirs: [],
             };
 
-            try {
-                context.stage = "download-file";
-                void this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
-                await fse.ensureDir(stagingPath);
+            await this.desktop.service.transfer.createTransfer({
+                pid,
+                type: "download",
+                data: transferData,
+                abortController,
+                name: finalFileName,
+                initialStatus: "pending",
+                path: destinationPath,
+            });
 
-                let downloadedBytes = 0;
-                const throttledUpdate = throttle((bytes: number) => {
-                    void this.desktop.service.transfer.updateTransfer(pid, {
-                        transferedSize: bytes,
-                    });
-                }, 100);
+            this.desktop.service.transfer.registerRunner(pid, async () => {
+                let cleanupAttempted = false;
+                const cleanupStaging = async () => {
+                    cleanupAttempted = true;
+                    try {
+                        await fse.remove(stagingPath);
+                        context.rollback.stagingPathRemoved = true;
+                    } catch (error) {
+                        context.rollback.cleanupError = toErrorMessage(error);
+                        this.desktop.logger.error(error, "GameBanana:downloadFromGB:cleanup");
+                    }
+                };
 
-                await downloadFile({
-                    url: realFileUrl,
-                    savePath: stagedDownloadPath,
-                    fileSize,
-                    signal: abortController.signal,
-                    onProgress: (bytes) => {
-                        downloadedBytes += bytes;
-                        throttledUpdate(downloadedBytes);
-                    },
-                    downloader: this.downloader,
-                    httpService: this.desktop.httpService,
-                    bandwidthLimiter: this.desktop.service.transfer.downloadBandwidth,
-                    slowChunkMonitor: this.desktop.service.transfer.slowChunkMonitor,
-                    fileId: pid,
-                    cohortKey: "gamebanana",
-                });
+                try {
+                    context.stage = "download-file";
+                    void this.desktop.service.transfer.updateTransfer(pid, { status: "progress" });
+                    await fse.ensureDir(stagingPath);
 
-                throttledUpdate.flush();
+                    let downloadedBytes = 0;
+                    const throttledUpdate = throttle((bytes: number) => {
+                        void this.desktop.service.transfer.updateTransfer(pid, {
+                            transferedSize: bytes,
+                        });
+                    }, 100);
 
-                if (abortController.signal.aborted) throw new Error("Aborted");
-
-                context.stage = "extract-archive";
-                const shouldExtract = await isArchiveByResponseOrContent({
-                    headers: resp.headers,
-                    originalFileName: suggestedFileName,
-                    filePath: stagedDownloadPath,
-                });
-                const stagedPath = shouldExtract
-                    ? await this.extractGBArchive(stagedDownloadPath)
-                    : stagedDownloadPath;
-                const finalStagedPath = shouldExtract
-                    ? await applySelectedExtractedName({
-                          extractedPath: stagedPath,
-                          stagingPath,
-                          requestedFileName: finalFileName,
-                          originalSuggestedFileName: suggestedFileName,
-                          sanitizeWindowsFilename: this.sanitize.bind(this),
-                      })
-                    : stagedPath;
-
-                if (previewUrl) {
-                    context.stage = "download-preview";
-                    const previewSavePath = path.join(
-                        getPreviewTargetDir(finalStagedPath),
-                        "preview.jpg",
-                    );
                     await downloadFile({
-                        url: previewUrl,
-                        savePath: previewSavePath,
+                        url: realFileUrl,
+                        savePath: stagedDownloadPath,
+                        fileSize,
+                        signal: abortController.signal,
+                        onProgress: (bytes) => {
+                            downloadedBytes += bytes;
+                            throttledUpdate(downloadedBytes);
+                        },
                         downloader: this.downloader,
                         httpService: this.desktop.httpService,
                         bandwidthLimiter: this.desktop.service.transfer.downloadBandwidth,
                         slowChunkMonitor: this.desktop.service.transfer.slowChunkMonitor,
-                        fileId: `${pid}:preview`,
-                        cohortKey: "gamebanana-preview",
+                        fileId: pid,
+                        cohortKey: "gamebanana",
                     });
-                }
 
-                context.stage = "finalize-files";
-                const finalizedPaths = await finalizeStagedDownload(stagingPath, destinationPath);
-                context.rollback.finalized = true;
-                const metadata: ModDownloadMetadataInput = {
-                    source: "gamebanana",
-                    downloadedAt: new Date().toISOString(),
-                    mod: {
-                        id: downloadFilePayload.modId,
-                        pageUrl: downloadFilePayload.modPageUrl,
-                        version: downloadFilePayload.version,
-                    },
-                    author: {
-                        name: downloadFilePayload.authorName,
-                        url: downloadFilePayload.authorUrl,
-                    },
-                    file: {
-                        downloadUrl: downloadFilePayload.fileUrl,
-                        md5: downloadFilePayload.fileMd5,
-                    },
-                };
-                await writeModDownloadMetadataToDirectories(finalizedPaths, metadata);
+                    throttledUpdate.flush();
 
-                this.desktop.service.transfer.markFileCompleted(pid, pid);
+                    if (abortController.signal.aborted) throw new Error("Aborted");
 
-                void this.desktop.service.transfer.updateTransfer(pid, {
-                    status: "completed",
-                    progress: 100,
-                    transferedSize: fileSize ?? downloadedBytes,
-                    transferedFiles: 1,
-                });
-
-                const mainWindow = this.desktop.window.main.window;
-                if (mainWindow) {
-                    this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
-                        path: destinationPath,
-                        name: finalFileName,
+                    context.stage = "extract-archive";
+                    const shouldExtract = await isArchiveByResponseOrContent({
+                        headers: resp.headers,
+                        originalFileName: suggestedFileName,
+                        filePath: stagedDownloadPath,
                     });
-                }
-            } catch (err) {
-                await cleanupStaging();
-                if (
-                    abortController.signal.aborted ||
-                    (err as Error).name === "AbortError" ||
-                    (err as Error).message === "Aborted"
-                ) {
-                    void this.desktop.service.transfer.updateTransfer(pid, { status: "canceled" });
-                } else {
-                    this.desktop.logger.error(
-                        {
-                            ...context,
-                            error: toErrorMessage(err),
-                        },
-                        "GameBanana:downloadFromGB:context",
+                    const stagedPath = shouldExtract
+                        ? await this.extractGBArchive(stagedDownloadPath)
+                        : stagedDownloadPath;
+                    const finalStagedPath = shouldExtract
+                        ? await applySelectedExtractedName({
+                              extractedPath: stagedPath,
+                              stagingPath,
+                              requestedFileName: finalFileName,
+                              originalSuggestedFileName: suggestedFileName,
+                              sanitizeWindowsFilename: this.sanitize.bind(this),
+                          })
+                        : stagedPath;
+
+                    if (previewUrl) {
+                        context.stage = "download-preview";
+                        const previewSavePath = path.join(
+                            getPreviewTargetDir(finalStagedPath),
+                            "preview.jpg",
+                        );
+                        await downloadFile({
+                            url: previewUrl,
+                            savePath: previewSavePath,
+                            downloader: this.downloader,
+                            httpService: this.desktop.httpService,
+                            bandwidthLimiter: this.desktop.service.transfer.downloadBandwidth,
+                            slowChunkMonitor: this.desktop.service.transfer.slowChunkMonitor,
+                            fileId: `${pid}:preview`,
+                            cohortKey: "gamebanana-preview",
+                        });
+                    }
+
+                    context.stage = "finalize-files";
+                    const finalizedPaths = await finalizeStagedDownload(
+                        stagingPath,
+                        destinationPath,
                     );
-                    void this.desktop.service.transfer.updateTransfer(pid, {
-                        status: "error",
-                        error: toErrorMessage(err),
-                    });
-                }
-            } finally {
-                if (!cleanupAttempted) await cleanupStaging();
-            }
-        });
+                    context.rollback.finalized = true;
+                    const metadata: ModDownloadMetadataInput = {
+                        source: "gamebanana",
+                        downloadedAt: new Date().toISOString(),
+                        mod: {
+                            id: downloadFilePayload.modId,
+                            pageUrl: downloadFilePayload.modPageUrl,
+                            version: downloadFilePayload.version,
+                        },
+                        author: {
+                            name: downloadFilePayload.authorName,
+                            url: downloadFilePayload.authorUrl,
+                        },
+                        file: {
+                            downloadUrl: downloadFilePayload.fileUrl,
+                            md5: downloadFilePayload.fileMd5,
+                        },
+                    };
+                    await writeModDownloadMetadataToDirectories(finalizedPaths, metadata);
 
-        return "started";
+                    this.desktop.service.transfer.markFileCompleted(pid, pid);
+
+                    void this.desktop.service.transfer.updateTransfer(pid, {
+                        status: "completed",
+                        progress: 100,
+                        transferedSize: fileSize ?? downloadedBytes,
+                        transferedFiles: 1,
+                    });
+
+                    const mainWindow = this.desktop.window.main.window;
+                    if (mainWindow) {
+                        this.desktop.ipc.postMessageToWindow(mainWindow, "download:completed", {
+                            path: destinationPath,
+                            name: finalFileName,
+                        });
+                    }
+                } catch (err) {
+                    await cleanupStaging();
+                    if (
+                        abortController.signal.aborted ||
+                        (err as Error).name === "AbortError" ||
+                        (err as Error).message === "Aborted"
+                    ) {
+                        void this.desktop.service.transfer.updateTransfer(pid, {
+                            status: "canceled",
+                        });
+                    } else {
+                        this.desktop.logger.error(
+                            {
+                                ...context,
+                                error: toErrorMessage(err),
+                            },
+                            "GameBanana:downloadFromGB:context",
+                        );
+                        void this.desktop.service.transfer.updateTransfer(pid, {
+                            status: "error",
+                            error: toErrorMessage(err),
+                        });
+                    }
+                } finally {
+                    if (!cleanupAttempted) await cleanupStaging();
+                }
+            });
+
+            return "started";
+        } catch (error) {
+            if (isGBDownloaderError(error)) throw error;
+            throw logPreTransferFailure(error);
+        }
     }
 
     public async HuiDownloader(props: {
