@@ -1176,14 +1176,18 @@ export class DriveService {
                 type: "download",
                 currentId: destinationId,
                 data: { files: [], dirs: [] },
-                abortController: new AbortController(),
+                abortController:
+                    this.copyOperations.get(operationId)?.controller ?? new AbortController(),
                 name: `가져오기: ${displayName}`,
                 initialStatus: "preparing",
                 path: undefined,
             });
             transferCreated = true;
-        } catch {
-            // ignore if already exists
+        } catch (error) {
+            this.desktop.logger.warn(
+                { operationId, error: toErrorMessage(error) },
+                "Drive:CopyFromUrl:TransferCreateSkipped",
+            );
         }
 
         this.desktop.logger.info(
