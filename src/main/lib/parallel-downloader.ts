@@ -144,6 +144,7 @@ export class ParallelDownloader {
                 ...(await this.options.getHeaders(url)),
                 ...requestHeaders,
             },
+            fetch: networkFetch,
             signal,
             throwHttpErrors: false,
             timeout: 100000,
