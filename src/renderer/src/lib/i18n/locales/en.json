@@ -246,6 +246,7 @@
           "descending": "Descending"
         },
         "hide-empty-folders": "Hide empty folders",
+        "toggle-layout": "Switch to {{mode}}",
         "active-mod-count": "{{enabled}} active / {{total}} total",
         "collapse-subgroups": "Collapse subgroups",
         "expand-subgroups": "Expand subgroups",
@@ -1150,7 +1151,6 @@
         "brush_reach_through": "Through",
         "brush_reach_surface_hint": "Follows the mesh surface and prefers front-facing vertices.",
         "brush_reach_through_hint": "Selects all vertices inside a 3D radius, including opposite sides.",
-
         "import_bones_placeholder": "Import bone weights…",
         "select_regions": "Body regions",
         "select_regions_placeholder": "Select regions…",
@@ -1321,12 +1321,6 @@
         "startPage": {
           "title": "Start Page",
           "select": "Select start page"
-        },
-        "titlebarStyle": {
-          "title": "Titlebar Style",
-          "select": "Select Style",
-          "modern": "Modern",
-          "native": "Native"
         },
         "logLevel": {
           "title": "Log Level",

@@ -15,7 +15,6 @@ export interface AppSettings {
     "general.autoUpdateMode": AutoUpdateMode;
     "general.runInBackground": boolean;
     "general.defaultStartPage": string;
-    "general.titlebarStyle": string;
     "general.logLevel": string;
     "general.moveTransferPageWhenStartTransfer": boolean;
     "general.powerSaveBlockInTransfer": boolean;
@@ -101,11 +100,6 @@ export const APP_SETTINGS = {
         publicKey: "general.defaultStartPage",
         scope: "general",
         storageKey: "defaultStartPage",
-    },
-    "general.titlebarStyle": {
-        publicKey: "general.titlebarStyle",
-        scope: "general",
-        storageKey: "titlebarStyle",
     },
     "general.logLevel": {
         publicKey: "general.logLevel",

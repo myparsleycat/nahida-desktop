@@ -5,6 +5,10 @@ import type { Session } from "./schemas/auth";
 export type { IpcHandlers } from "./types.gen";
 export type { BackendStatus } from "./backend";
 
+export interface TitleBarOverlaySyncOptions {
+    symbolColor: string;
+}
+
 export interface AppStatus {
     version: string;
     isPackaged: boolean;

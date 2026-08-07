@@ -21,7 +21,6 @@ import { useDrag } from "@renderer/hooks/drive";
 import { useAuth } from "@renderer/hooks/use-auth";
 import { useDriveUploadRefresh } from "@renderer/hooks/use-drive-upload-refresh";
 import { useDriveNameSortPolicy } from "@renderer/hooks/use-settings";
-import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { getSearchScore } from "@renderer/lib/sejong";
 import { commonSort } from "@renderer/lib/utils";
 import { useViewStore, viewStore } from "@renderer/store/drive";
@@ -41,7 +40,6 @@ export const Route = createFileRoute("/drive/drive/$id")({
 
 function RouteComponent() {
   const { t } = useTranslation();
-  const { Titlebar } = useTitlebar();
   const { id } = Route.useParams();
   const { session } = useAuth();
   const location = useLocation();
@@ -142,29 +140,21 @@ function RouteComponent() {
 
   if (!query.data && query.isFetching) {
     return (
-      <>
-        <Titlebar title={{ text: t("page.drive.title"), position: "center" }} />
-        <Center>
-          <AliceLoader />
-        </Center>
-      </>
+      <Center>
+        <AliceLoader />
+      </Center>
     );
   } else if (query.isError) {
     return (
-      <>
-        <Titlebar title={{ text: t("page.drive.title"), position: "center" }} />
-        <Center>
-          <ServerCrash />
-        </Center>
-      </>
+      <Center>
+        <ServerCrash />
+      </Center>
     );
   }
 
   if (query.data) {
     return (
       <>
-        <Titlebar title={{ text: t("page.drive.title"), position: "center" }} />
-
         <div className="flex h-full w-full flex-col select-none">
           <div className="flex h-12 w-full flex-row items-center border-b p-2 select-none">
             {location.pathname !== "/drive/share" ? (

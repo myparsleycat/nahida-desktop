@@ -7,6 +7,7 @@ import { BrowserWindow, screen } from "electron";
 import { debounce } from "es-toolkit";
 
 import icon from "../../../resources/nahida.png?asset";
+import { createTitleBarOverlay, TRAFFIC_LIGHT_Y } from "./titleBar";
 import { focus, getDefaultWebPreferences } from "./utils";
 
 export class MainWindow {
@@ -79,9 +80,6 @@ export class MainWindow {
             }
         }
 
-        const titlebarSetting = await this.desktop.setting.general.getTitlebarStyle();
-        const isNativeTitlebar = titlebarSetting === "native";
-
         this.window = new BrowserWindow({
             title: "Nahida Desktop",
             x: bounds?.x || undefined,
@@ -90,8 +88,16 @@ export class MainWindow {
             height: bounds?.height || 800,
             minWidth: 800,
             minHeight: 600,
+            titleBarStyle: "hidden",
+            ...(process.platform === "darwin"
+                ? {
+                      trafficLightPosition: {
+                          x: 12,
+                          y: TRAFFIC_LIGHT_Y,
+                      },
+                  }
+                : { titleBarOverlay: createTitleBarOverlay() }),
             show: false,
-            frame: isNativeTitlebar,
             autoHideMenuBar: true,
             webPreferences: {
                 ...getDefaultWebPreferences(),

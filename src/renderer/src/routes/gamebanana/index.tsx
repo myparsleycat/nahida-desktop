@@ -1,4 +1,3 @@
-import { Titlebar } from "@renderer/components/titlebar";
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -385,240 +384,231 @@ function RouteComponent() {
 
   if (authStatus === "checking") {
     return (
-      <>
-        <Titlebar title={{ text: "GameBanana", position: "center" }} />
-        <main className="flex h-full flex-1 flex-col overflow-hidden bg-background p-4">
-          <GameBananaAuthState
-            title={t("page.gamebanana.auth.checking_title")}
-            description={t("page.gamebanana.auth.checking_description")}
-            pending={true}
-          />
-        </main>
-      </>
+      <main className="flex h-full flex-1 flex-col overflow-hidden bg-background p-4">
+        <GameBananaAuthState
+          title={t("page.gamebanana.auth.checking_title")}
+          description={t("page.gamebanana.auth.checking_description")}
+          pending={true}
+        />
+      </main>
     );
   }
 
   if (authStatus === "error") {
     const isCancelled = authErrorCode === "GAMEBANANA_LOGIN_CANCELLED";
     return (
-      <>
-        <Titlebar title={{ text: "GameBanana", position: "center" }} />
-        <main className="flex h-full flex-1 flex-col overflow-hidden bg-background p-4">
-          <GameBananaAuthState
-            title={
-              isCancelled
-                ? t("page.gamebanana.auth.cancelled_title")
-                : t("page.gamebanana.auth.required_title")
+      <main className="flex h-full flex-1 flex-col overflow-hidden bg-background p-4">
+        <GameBananaAuthState
+          title={
+            isCancelled
+              ? t("page.gamebanana.auth.cancelled_title")
+              : t("page.gamebanana.auth.required_title")
+          }
+          description={
+            isCancelled
+              ? t("page.gamebanana.auth.cancelled_description")
+              : t("page.gamebanana.auth.required_description")
+          }
+          actionLabel={t("page.gamebanana.auth.retry")}
+          onAction={handleRetryAuth}
+          extraAction={
+            <Button
+              variant="outline"
+              onClick={handleOpenManualRmcDialog}
+              disabled={isSavingManualRmc}
+            >
+              {t("page.gamebanana.auth.manual_rmc.button")}
+            </Button>
+          }
+        />
+        <Dialog
+          open={isManualRmcDialogOpen}
+          onOpenChange={(open) => {
+            setIsManualRmcDialogOpen(open);
+            if (!open) {
+              setManualRmcError(null);
             }
-            description={
-              isCancelled
-                ? t("page.gamebanana.auth.cancelled_description")
-                : t("page.gamebanana.auth.required_description")
-            }
-            actionLabel={t("page.gamebanana.auth.retry")}
-            onAction={handleRetryAuth}
-            extraAction={
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("page.gamebanana.auth.manual_rmc.title")}</DialogTitle>
+              <DialogDescription>
+                {t("page.gamebanana.auth.manual_rmc.description")}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Input
+                value={manualRmcValue}
+                onChange={(event) => setManualRmcValue(event.target.value)}
+                disabled={isSavingManualRmc}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    handleSaveManualRmc();
+                  }
+                }}
+              />
+              {manualRmcError && <p className="text-sm text-destructive">{manualRmcError}</p>}
+            </div>
+            <DialogFooter>
               <Button
                 variant="outline"
-                onClick={handleOpenManualRmcDialog}
+                onClick={() => setIsManualRmcDialogOpen(false)}
                 disabled={isSavingManualRmc}
               >
-                {t("page.gamebanana.auth.manual_rmc.button")}
+                {t("g.cancel")}
               </Button>
-            }
-          />
-          <Dialog
-            open={isManualRmcDialogOpen}
-            onOpenChange={(open) => {
-              setIsManualRmcDialogOpen(open);
-              if (!open) {
-                setManualRmcError(null);
-              }
-            }}
-          >
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>{t("page.gamebanana.auth.manual_rmc.title")}</DialogTitle>
-                <DialogDescription>
-                  {t("page.gamebanana.auth.manual_rmc.description")}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-2">
-                <Input
-                  value={manualRmcValue}
-                  onChange={(event) => setManualRmcValue(event.target.value)}
-                  disabled={isSavingManualRmc}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      handleSaveManualRmc();
-                    }
-                  }}
-                />
-                {manualRmcError && <p className="text-sm text-destructive">{manualRmcError}</p>}
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsManualRmcDialogOpen(false)}
-                  disabled={isSavingManualRmc}
-                >
-                  {t("g.cancel")}
-                </Button>
-                <Button onClick={handleSaveManualRmc} disabled={isSavingManualRmc}>
-                  {isSavingManualRmc ? <Loader2Icon className="size-4 animate-spin" /> : null}
-                  {t("g.save")}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </main>
-      </>
+              <Button onClick={handleSaveManualRmc} disabled={isSavingManualRmc}>
+                {isSavingManualRmc ? <Loader2Icon className="size-4 animate-spin" /> : null}
+                {t("g.save")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </main>
     );
   }
 
   return (
-    <>
-      <Titlebar title={{ text: "GameBanana", position: "center" }} />
-      <main className="flex h-full flex-1 flex-col overflow-hidden bg-background">
-        <div className="flex h-full items-center justify-center p-4 lg:hidden">
-          <div className="w-full max-w-md rounded-xl border border-dashed p-6 text-center">
-            <div className="text-base font-medium">{t("page.gamebanana.narrow_window.title")}</div>
-            <div className="mt-2 text-sm text-muted-foreground">
-              {t("page.gamebanana.narrow_window.description")}
-            </div>
+    <main className="flex h-full flex-1 flex-col overflow-hidden bg-background">
+      <div className="flex h-full items-center justify-center p-4 lg:hidden">
+        <div className="w-full max-w-md rounded-xl border border-dashed p-6 text-center">
+          <div className="text-base font-medium">{t("page.gamebanana.narrow_window.title")}</div>
+          <div className="mt-2 text-sm text-muted-foreground">
+            {t("page.gamebanana.narrow_window.description")}
           </div>
         </div>
+      </div>
 
-        <div className="hidden lg:flex lg:flex-1 lg:flex-col lg:overflow-hidden">
-          <div className="border-b px-4 py-3">
-            <GameBananaToolbar
-              games={games}
-              selectedGame={selectedGame?.key}
-              selectedGameLabel={selectedGameLabel}
-              stageLabel={
-                isViewingMod
-                  ? t("page.gamebanana.stage.mod")
-                  : hasCategoryContext
-                    ? t("page.gamebanana.stage.category")
-                    : t("page.gamebanana.stage.game")
-              }
-              breadcrumbCategories={resolvedCategoryBreadcrumbs}
-              breadcrumbMod={selectedModName}
-              isGamesLoading={isGamesLoading}
-              gamesError={Boolean(gamesError)}
-              onSelectGame={setSelectedGame}
-              isModUrlOpen={isModUrlOpen}
-              onToggleModUrl={handleToggleModUrl}
-              onOpenGameProfile={handleOpenGameProfile}
-              isLoggingOut={isLoggingOut}
-              onLogout={handleLogout}
-              canGoBack={canGoBack}
-              onGoBack={handleGoBack}
-              onBackToCategory={clearSelectedMod}
-              onSelectBreadcrumbCategory={selectBreadcrumbCategory}
-              canOpenProfile={Boolean(currentProfileUrl)}
-              onResetToGameHome={resetToGameHome}
-            />
-            {isModUrlOpen && (
-              <form
-                className="mt-3 flex items-start gap-2 border-t pt-3"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  handleOpenModUrl();
-                }}
-              >
-                <div className="min-w-0 flex-1 space-y-1">
-                  <Input
-                    value={modUrlValue}
-                    placeholder={t("page.gamebanana.open_mod_url.placeholder")}
-                    onChange={(event) => setModUrlValue(event.target.value)}
-                    aria-label={t("page.gamebanana.open_mod_url.title")}
-                    autoFocus
-                  />
-                  {modUrlError && <p className="text-sm text-destructive">{modUrlError}</p>}
-                </div>
-                <Button type="submit">{t("page.gamebanana.open_mod_url.confirm")}</Button>
-              </form>
+      <div className="hidden lg:flex lg:flex-1 lg:flex-col lg:overflow-hidden">
+        <div className="border-b px-4 py-3">
+          <GameBananaToolbar
+            games={games}
+            selectedGame={selectedGame?.key}
+            selectedGameLabel={selectedGameLabel}
+            stageLabel={
+              isViewingMod
+                ? t("page.gamebanana.stage.mod")
+                : hasCategoryContext
+                  ? t("page.gamebanana.stage.category")
+                  : t("page.gamebanana.stage.game")
+            }
+            breadcrumbCategories={resolvedCategoryBreadcrumbs}
+            breadcrumbMod={selectedModName}
+            isGamesLoading={isGamesLoading}
+            gamesError={Boolean(gamesError)}
+            onSelectGame={setSelectedGame}
+            isModUrlOpen={isModUrlOpen}
+            onToggleModUrl={handleToggleModUrl}
+            onOpenGameProfile={handleOpenGameProfile}
+            isLoggingOut={isLoggingOut}
+            onLogout={handleLogout}
+            canGoBack={canGoBack}
+            onGoBack={handleGoBack}
+            onBackToCategory={clearSelectedMod}
+            onSelectBreadcrumbCategory={selectBreadcrumbCategory}
+            canOpenProfile={Boolean(currentProfileUrl)}
+            onResetToGameHome={resetToGameHome}
+          />
+          {isModUrlOpen && (
+            <form
+              className="mt-3 flex items-start gap-2 border-t pt-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleOpenModUrl();
+              }}
+            >
+              <div className="min-w-0 flex-1 space-y-1">
+                <Input
+                  value={modUrlValue}
+                  placeholder={t("page.gamebanana.open_mod_url.placeholder")}
+                  onChange={(event) => setModUrlValue(event.target.value)}
+                  aria-label={t("page.gamebanana.open_mod_url.title")}
+                  autoFocus
+                />
+                {modUrlError && <p className="text-sm text-destructive">{modUrlError}</p>}
+              </div>
+              <Button type="submit">{t("page.gamebanana.open_mod_url.confirm")}</Button>
+            </form>
+          )}
+        </div>
+
+        <div
+          className={cn(
+            "grid min-h-0 flex-1 gap-2 overflow-hidden",
+            showCategorySidebar && "lg:grid-cols-[minmax(0,1fr)_320px]",
+          )}
+        >
+          <div className="min-h-0 min-w-0">
+            {!hasCategoryContext && !isViewingMod && (
+              <GameHomePanel
+                t={t}
+                language={i18n.language}
+                subfeedQuery={subfeedQuery}
+                subfeedPage={subfeedPage}
+                onSubfeedPage={setSubfeedPage}
+                onSelectMod={selectMod}
+              />
+            )}
+
+            {hasCategoryContext && !isViewingMod && (
+              <CategoryPanel
+                t={t}
+                language={i18n.language}
+                categoryOverviewQuery={categoryOverviewQuery}
+                filteredMods={filteredMods}
+                modSearch={modSearch}
+                modsPage={modsPage}
+                modsSort={modsSort}
+                hasSidebar={showCategorySidebar}
+                onChangeModSearch={setModSearch}
+                onSelectMod={selectMod}
+                onModsPage={setModsPage}
+                onModsSort={setModsSort}
+              />
+            )}
+
+            {isViewingMod && (
+              <ModDetailPanel
+                t={t}
+                language={i18n.language}
+                selection={selectedMod}
+                modOverviewQuery={modOverviewQuery}
+              />
             )}
           </div>
 
-          <div
-            className={cn(
-              "grid min-h-0 flex-1 gap-2 overflow-hidden",
-              showCategorySidebar && "lg:grid-cols-[minmax(0,1fr)_320px]",
-            )}
-          >
-            <div className="min-h-0 min-w-0">
-              {!hasCategoryContext && !isViewingMod && (
-                <GameHomePanel
+          {showCategorySidebar && (
+            <div className="min-h-0 min-w-0 py-4 pr-4">
+              {isViewingMod ? (
+                <ModFilesSidebar
                   t={t}
                   language={i18n.language}
-                  subfeedQuery={subfeedQuery}
-                  subfeedPage={subfeedPage}
-                  onSubfeedPage={setSubfeedPage}
-                  onSelectMod={selectMod}
-                />
-              )}
-
-              {hasCategoryContext && !isViewingMod && (
-                <CategoryPanel
-                  t={t}
-                  language={i18n.language}
-                  categoryOverviewQuery={categoryOverviewQuery}
-                  filteredMods={filteredMods}
-                  modSearch={modSearch}
-                  modsPage={modsPage}
-                  modsSort={modsSort}
-                  hasSidebar={showCategorySidebar}
-                  onChangeModSearch={setModSearch}
-                  onSelectMod={selectMod}
-                  onModsPage={setModsPage}
-                  onModsSort={setModsSort}
-                />
-              )}
-
-              {isViewingMod && (
-                <ModDetailPanel
-                  t={t}
-                  language={i18n.language}
-                  selection={selectedMod}
                   modOverviewQuery={modOverviewQuery}
                 />
+              ) : (
+                <CategorySidebar
+                  t={t}
+                  language={i18n.language}
+                  hasCategoryContext={hasCategoryContext}
+                  isGameOverviewLoading={gameOverviewQuery.isLoading}
+                  isCategoryOverviewLoading={categoryOverviewQuery.isLoading}
+                  gameOverviewError={Boolean(gameOverviewQuery.error)}
+                  gameOverviewErrorObject={gameOverviewQuery.error}
+                  categoryOverviewError={Boolean(categoryOverviewQuery.error)}
+                  categoryOverviewErrorObject={categoryOverviewQuery.error}
+                  rootCategories={rootCategories}
+                  categoryChildren={categoryChildren}
+                  selectedCategoryId={selectedCategoryId}
+                  onSelectCategory={selectCategory}
+                  onResetToGameHome={resetToGameHome}
+                />
               )}
             </div>
-
-            {showCategorySidebar && (
-              <div className="min-h-0 min-w-0 py-4 pr-4">
-                {isViewingMod ? (
-                  <ModFilesSidebar
-                    t={t}
-                    language={i18n.language}
-                    modOverviewQuery={modOverviewQuery}
-                  />
-                ) : (
-                  <CategorySidebar
-                    t={t}
-                    language={i18n.language}
-                    hasCategoryContext={hasCategoryContext}
-                    isGameOverviewLoading={gameOverviewQuery.isLoading}
-                    isCategoryOverviewLoading={categoryOverviewQuery.isLoading}
-                    gameOverviewError={Boolean(gameOverviewQuery.error)}
-                    gameOverviewErrorObject={gameOverviewQuery.error}
-                    categoryOverviewError={Boolean(categoryOverviewQuery.error)}
-                    categoryOverviewErrorObject={categoryOverviewQuery.error}
-                    rootCategories={rootCategories}
-                    categoryChildren={categoryChildren}
-                    selectedCategoryId={selectedCategoryId}
-                    onSelectCategory={selectCategory}
-                    onResetToGameHome={resetToGameHome}
-                  />
-                )}
-              </div>
-            )}
-          </div>
+          )}
         </div>
-      </main>
-    </>
+      </div>
+    </main>
   );
 }

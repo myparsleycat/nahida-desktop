@@ -230,6 +230,7 @@
           "descending": "降順"
         },
         "hide-empty-folders": "空のフォルダーを非表示",
+        "toggle-layout": "{{mode}}に切り替え",
         "active-mod-count": "有効 {{enabled}} 件 / 全 {{total}} 件",
         "collapse-subgroups": "サブフォルダーを折りたたむ",
         "expand-subgroups": "サブフォルダーを探索",
@@ -1034,7 +1035,6 @@
         "mesh_next": "次へ",
         "mesh_back": "メッシュ選択に戻る",
         "mesh_non_candidate": "候補外",
-        "preview_title": "タッチ影響範囲プレビュー",
         "llm_summary": "分析 LLM",
         "component": "メッシュコンポーネント",
         "component_placeholder": "コンポーネントを選択",
@@ -1288,12 +1288,6 @@
         "startPage": {
           "title": "開始ページ",
           "select": "開始ページ選択"
-        },
-        "titlebarStyle": {
-          "title": "タイトルバースタイル",
-          "select": "スタイル選択",
-          "modern": "モダン",
-          "native": "ネイティブ"
         },
         "logLevel": {
           "title": "ログレベル",

@@ -229,6 +229,7 @@
           "descending": "내림차순"
         },
         "hide-empty-folders": "빈 폴더 숨기기",
+        "toggle-layout": "{{mode}}(으)로 전환",
         "active-mod-count": "활성 {{enabled}}개 / 전체 {{total}}개",
         "collapse-subgroups": "서브폴더 접기",
         "expand-subgroups": "서브폴더로 탐색",
@@ -1136,7 +1137,6 @@
         "brush_reach_through": "관통",
         "brush_reach_surface_hint": "메시 표면을 따라가며 앞면 정점을 우선 선택합니다.",
         "brush_reach_through_hint": "3D 반경 안의 모든 정점을 선택합니다. 반대편 면도 포함됩니다.",
-
         "import_bones_placeholder": "본 웨이트 가져오기…",
         "select_regions": "신체 부위",
         "select_regions_placeholder": "부위 선택…",
@@ -1307,12 +1307,6 @@
         "startPage": {
           "title": "시작 페이지",
           "select": "시작 페이지 선택"
-        },
-        "titlebarStyle": {
-          "title": "타이틀바 스타일",
-          "select": "스타일 선택",
-          "modern": "모던",
-          "native": "네이티브"
         },
         "logLevel": {
           "title": "로그 레벨",
