@@ -5,6 +5,8 @@ export type DriveSource = {
     id: string;
 };
 
+export const NAHIDA_SOURCE_HOSTNAMES = ["nahida.live", "www.nahida.live"] as const;
+
 /** Match the web client's URL-safe Base64 password encoding. */
 export function encodeNahidaPassword(value: string) {
     const binary = encodeURIComponent(value).replace(/%([0-9A-F]{2})/g, (_, hex: string) =>
@@ -21,7 +23,7 @@ export function parseDriveSourceUrl(value: string): DriveSource {
     try {
         const url = new URL(value.trim());
         if (url.protocol !== "https:") throw new Error("unsupported protocol");
-        if (!["nahida.live", "www.nahida.live"].includes(url.hostname.toLowerCase())) {
+        if (!NAHIDA_SOURCE_HOSTNAMES.some((hostname) => hostname === url.hostname.toLowerCase())) {
             throw new Error("unsupported host");
         }
 

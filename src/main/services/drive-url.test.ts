@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { DriveApiError } from "./drive-errors";
-import { encodeNahidaPassword, parseDriveSourceUrl } from "./drive-url";
+import { encodeNahidaPassword, NAHIDA_SOURCE_HOSTNAMES, parseDriveSourceUrl } from "./drive-url";
+
+const sourceUrl = (hostname: string, pathname: string, protocol = "https:") =>
+    new URL(pathname, `${protocol}//${hostname}`).toString();
 
 describe("encodeNahidaPassword", () => {
     it("matches the web client's URL-safe Base64 encoding", () => {
@@ -12,8 +15,14 @@ describe("encodeNahidaPassword", () => {
 
 describe("parseDriveSourceUrl", () => {
     it.each([
-        ["https://nahida.live/akasha/link/link_123", { type: "link", id: "link_123" }],
-        ["https://www.nahida.live/akasha/mod/mod-456/", { type: "mod", id: "mod-456" }],
+        [
+            sourceUrl(NAHIDA_SOURCE_HOSTNAMES[0], "/akasha/link/link_123"),
+            { type: "link", id: "link_123" },
+        ],
+        [
+            sourceUrl(NAHIDA_SOURCE_HOSTNAMES[1], "/akasha/mod/mod-456/"),
+            { type: "mod", id: "mod-456" },
+        ],
     ])("parses %s", (value, expected) => {
         expect(parseDriveSourceUrl(value)).toEqual(expected);
     });
@@ -21,11 +30,11 @@ describe("parseDriveSourceUrl", () => {
     it.each([
         "",
         "nahida://link/abc",
-        "http://nahida.live/akasha/link/abc",
-        "https://example.com/akasha/link/abc",
-        "https://nahida.live/akasha/link/",
-        "https://nahida.live/akasha/unknown/abc",
-        "https://nahida.live/akasha/mod/abc/extra",
+        sourceUrl(NAHIDA_SOURCE_HOSTNAMES[0], "/akasha/link/abc", "http:"),
+        sourceUrl("example.invalid", "/akasha/link/abc"),
+        sourceUrl(NAHIDA_SOURCE_HOSTNAMES[0], "/akasha/link/"),
+        sourceUrl(NAHIDA_SOURCE_HOSTNAMES[0], "/akasha/unknown/abc"),
+        sourceUrl(NAHIDA_SOURCE_HOSTNAMES[0], "/akasha/mod/abc/extra"),
     ])("rejects unsupported source %s", (value) => {
         expect(() => parseDriveSourceUrl(value)).toThrowError(DriveApiError);
         expect(() => parseDriveSourceUrl(value)).toThrow("DRIVE_INVALID_SOURCE_URL");
