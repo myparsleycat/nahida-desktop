@@ -8,6 +8,7 @@ import type { BandwidthLimiter } from "../bandwidth-limiter";
 import type { ParallelDownloader } from "../parallel-downloader";
 
 import { createBandwidthLimitTransform } from "../bandwidth-limit-stream";
+import { downloadRequestLimiter } from "../download-request-limiter";
 import {
     isAbortError,
     SLOW_CHUNK_MAX_RECONNECTS,
@@ -25,6 +26,7 @@ export async function downloadFile(props: {
     url: string;
     savePath: string;
     fileSize?: number;
+    supportsRange?: boolean;
     signal?: AbortSignal;
     onProgress?: (bytes: number) => void;
     downloader: ParallelDownloader;
@@ -38,6 +40,7 @@ export async function downloadFile(props: {
         url,
         savePath,
         fileSize,
+        supportsRange,
         signal,
         onProgress,
         downloader,
@@ -47,9 +50,9 @@ export async function downloadFile(props: {
         fileId = savePath,
         cohortKey = "custom",
     } = props;
-    const supportsRange = await downloader.checkRangeSupport(url);
+    const rangeSupported = supportsRange ?? (await downloader.checkRangeSupport(url));
 
-    if (supportsRange && fileSize) {
+    if (rangeSupported && fileSize) {
         await downloader.download({
             url,
             savePath,
@@ -93,50 +96,54 @@ export async function downloadFile(props: {
         const fileStream = fse.createWriteStream(savePath);
 
         try {
-            const resp = await ky.get(url, {
-                signal: combinedSignal,
-                headers: await httpService.getHeaders(url),
-                throwHttpErrors: false,
-                retry: 0,
-            });
-            if (!resp.ok) {
-                await drainWebStream(resp.body, combinedSignal).catch(() => {});
-                throw new Error(`Failed to download file: ${resp.statusText}`);
-            }
-            if (!resp.body) {
-                throw new Error("No response body");
-            }
+            await downloadRequestLimiter.run(async () => {
+                const resp = await ky.get(url, {
+                    signal: combinedSignal,
+                    headers: await httpService.getHeaders(url),
+                    throwHttpErrors: false,
+                    retry: 0,
+                });
+                if (!resp.ok) {
+                    await drainWebStream(resp.body, combinedSignal).catch(() => {});
+                    throw new Error(`Failed to download file: ${resp.statusText}`);
+                }
+                if (!resp.body) {
+                    throw new Error("No response body");
+                }
 
-            const source = webStreamToNodeReadable(resp.body, combinedSignal);
-            const progressStream = new Transform({
-                transform(chunk: Buffer, _encoding, callback) {
-                    attemptBytes += chunk.byteLength;
-                    if (inFlight) {
-                        slowChunkMonitor?.recordSample(inFlight.key, attemptBytes);
-                    }
-                    onProgress?.(chunk.byteLength);
-                    callback(null, chunk);
-                },
-            });
+                const source = webStreamToNodeReadable(resp.body, combinedSignal);
+                const progressStream = new Transform({
+                    transform(chunk: Buffer, _encoding, callback) {
+                        attemptBytes += chunk.byteLength;
+                        if (inFlight) {
+                            slowChunkMonitor?.recordSample(inFlight.key, attemptBytes);
+                        }
+                        onProgress?.(chunk.byteLength);
+                        callback(null, chunk);
+                    },
+                });
 
-            if (bandwidthLimiter) {
-                await pipeline(
-                    source,
-                    createBandwidthLimitTransform(bandwidthLimiter, {
+                if (bandwidthLimiter) {
+                    await pipeline(
+                        source,
+                        createBandwidthLimitTransform(bandwidthLimiter, {
+                            signal: combinedSignal,
+                            onPhaseChange: (phase) => {
+                                if (inFlight) {
+                                    slowChunkMonitor?.setPhase(inFlight.key, phase);
+                                }
+                            },
+                        }),
+                        progressStream,
+                        fileStream,
+                        { signal: combinedSignal },
+                    );
+                } else {
+                    await pipeline(source, progressStream, fileStream, {
                         signal: combinedSignal,
-                        onPhaseChange: (phase) => {
-                            if (inFlight) {
-                                slowChunkMonitor?.setPhase(inFlight.key, phase);
-                            }
-                        },
-                    }),
-                    progressStream,
-                    fileStream,
-                    { signal: combinedSignal },
-                );
-            } else {
-                await pipeline(source, progressStream, fileStream, { signal: combinedSignal });
-            }
+                    });
+                }
+            }, combinedSignal);
             return;
         } catch (err) {
             fileStream.destroy();

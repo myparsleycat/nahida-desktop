@@ -185,6 +185,7 @@ export class CustomDownloader {
 
         const realFileUrl = resp.ok ? resp.url : trimmedUrl;
         const fileSize = parseContentLength(resp.headers.get("Content-Length"));
+        const supportsRange = resp.headers.get("Accept-Ranges")?.toLowerCase() === "bytes";
         const suggestedFileName = parseDownloadFileName(
             realFileUrl,
             this.sanitize.bind(this),
@@ -249,6 +250,7 @@ export class CustomDownloader {
                     url: realFileUrl,
                     savePath,
                     fileSize,
+                    supportsRange,
                     signal: abortController.signal,
                     onProgress: (bytes) => {
                         downloadedBytes += bytes;
@@ -412,6 +414,7 @@ export class CustomDownloader {
 
         const realFileUrl = resp.url;
         const fileSize = parseContentLength(resp.headers.get("Content-Length"));
+        const supportsRange = resp.headers.get("Accept-Ranges")?.toLowerCase() === "bytes";
         const suggestedFileName = parseDownloadFileName(
             realFileUrl,
             this.sanitize.bind(this),
@@ -499,6 +502,7 @@ export class CustomDownloader {
                     url: realFileUrl,
                     savePath: stagedDownloadPath,
                     fileSize,
+                    supportsRange,
                     signal: abortController.signal,
                     onProgress: (bytes) => {
                         downloadedBytes += bytes;
@@ -654,6 +658,7 @@ export class CustomDownloader {
             this.sanitize.bind(this),
         );
         const fileSize = parseContentLength(resp.headers.get("Content-Length"));
+        const supportsRange = resp.headers.get("Accept-Ranges")?.toLowerCase() === "bytes";
 
         const pid = nanoid();
         const abortController = new AbortController();
@@ -704,6 +709,7 @@ export class CustomDownloader {
                     url: fileUrl,
                     savePath: stagedDownloadPath,
                     fileSize,
+                    supportsRange,
                     signal: abortController.signal,
                     onProgress: (bytes) => {
                         downloadedBytes += bytes;
