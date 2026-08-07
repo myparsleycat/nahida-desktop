@@ -182,6 +182,25 @@ function parseDownloadSources(value: string | null | undefined): DownloadSource[
     }
 }
 
+const DRIVE_PASSWORD_LIST_MAX = 10;
+
+function normalizePasswordList(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value
+        .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        .map((item) => item.trim())
+        .slice(0, DRIVE_PASSWORD_LIST_MAX);
+}
+
+function parsePasswordList(value: string | null | undefined): string[] {
+    if (!value) return [];
+    try {
+        return normalizePasswordList(JSON.parse(value));
+    } catch {
+        return [];
+    }
+}
+
 export class Setting {
     private desktop: NahidaDesktop;
     private settingSpecs: MainSettingSpecMap | null = null;
@@ -601,6 +620,19 @@ export class Setting {
                 getDefault: () => normalizeDriveNameSortPolicy(null),
                 fromStored: (value) => normalizeDriveNameSortPolicy(value),
                 normalize: (value) => normalizeDriveNameSortPolicy(value),
+            },
+            "drive.autoTryPasswords": {
+                definition: APP_SETTINGS["drive.autoTryPasswords"],
+                getDefault: () => false,
+                fromStored: (value) => parseBooleanSetting(value, false),
+                toStored: (value) => String(value),
+            },
+            "drive.passwordList": {
+                definition: APP_SETTINGS["drive.passwordList"],
+                getDefault: () => [],
+                fromStored: (value) => parsePasswordList(value),
+                normalize: (value) => normalizePasswordList(value),
+                toStored: (value) => JSON.stringify(value),
             },
             "debug.openConsole": {
                 definition: APP_SETTINGS["debug.openConsole"],

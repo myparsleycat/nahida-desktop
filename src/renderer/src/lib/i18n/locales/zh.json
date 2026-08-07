@@ -91,13 +91,13 @@
         "no_uploadable_files": "没有可上传的文件。"
       },
       "import": {
-        "title": "复制到 Nahida 云端硬盘",
+        "title": "导入到云端硬盘",
         "description": "输入共享文件夹或收藏集 URL，然后选择云端硬盘中的文件夹。",
         "url_label": "Nahida URL",
         "url_placeholder": "https://nahida.live/akasha/link/...",
         "destination_label": "目标文件夹",
         "choose_destination": "选择文件夹",
-        "destination_description": "请选择云端硬盘根目录或用于保存复制项目的文件夹。",
+        "destination_description": "请选择云端硬盘根目录或用于保存导入项目的文件夹。",
         "loading_folder": "正在加载文件夹...",
         "no_subfolders": "没有子文件夹",
         "destination_load_failed": "无法加载目标文件夹。",
@@ -106,27 +106,29 @@
         "destination_required": "请选择目标文件夹。",
         "password_label": "密码",
         "password_placeholder": "输入共享链接密码",
-        "action": "复制到云端硬盘",
+        "authenticate": "验证密码",
+        "retry": "重试",
+        "action": "导入到云端硬盘",
         "url_required": "请输入 Nahida URL。",
-        "login_required": "登录后才能复制到你的云端硬盘。",
+        "login_required": "登录后才能导入到你的云端硬盘。",
         "password_required": "此链接需要密码。",
         "invalid_password": "共享链接密码不正确。",
-        "success": "已将 {{count}} 个项目复制到云端硬盘。",
-        "failed": "复制失败",
+        "success": "已将 {{count}} 个项目导入到云端硬盘。",
+        "failed": "导入失败",
         "progress": {
-          "preparing": "正在准备复制…",
-          "copying": "正在由服务器复制到云端硬盘…",
+          "preparing": "正在准备导入…",
+          "copying": "正在由服务器导入到云端硬盘…",
           "downloading": "正在下载项目…",
           "uploading": "正在上传到云端硬盘…",
-          "completed": "复制完成。",
-          "canceled": "复制已停止。",
-          "cancel": "停止复制",
-          "error": "传输过程中复制失败。"
+          "completed": "导入完成。",
+          "canceled": "导入已停止。",
+          "cancel": "停止导入",
+          "error": "传输过程中导入失败。"
         }
       },
       "head_buttons": {
         "search_in_dir_placeholder": "在此文件夹中搜索...",
-        "import": "复制共享链接",
+        "import": "导入共享链接",
         "dropdown_menu": {
           "download": "下载",
           "make_new": {
@@ -1495,6 +1497,19 @@
             "natural_ignore_spacing": "自然排序 + 忽略空格",
             "natural": "默认自然排序"
           }
+        },
+        "import": {
+          "title": "导入"
+        },
+        "autoTryPasswords": {
+          "title": "自动尝试密码",
+          "description": "解析需要密码的链接时，自动尝试已保存的密码列表。"
+        },
+        "passwordList": {
+          "title": "密码列表",
+          "description": "自动尝试的密码列表。最多可保存 {{max}} 个。",
+          "placeholder": "输入密码",
+          "add": "添加"
         }
       }
     },

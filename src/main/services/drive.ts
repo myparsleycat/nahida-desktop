@@ -1,3 +1,4 @@
+// oxlint-disable typescript/no-base-to-string
 import path from "node:path";
 
 import type { Treaty } from "@elysiajs/eden";
@@ -43,12 +44,66 @@ export type DriveCopyFromUrlParams = {
     collectionId?: string;
     itemId?: string;
     operationId?: string;
+    selectedIds?: string[];
 };
 
 export type DriveCopyFromUrlResult = {
     source: "link" | "mod";
     copied: number;
     destinationId: string;
+};
+
+export type DriveResolveImportSourceParams = {
+    url: string;
+    password?: string;
+};
+
+export type DriveResolveImportSourceResult =
+    | {
+          source: "link";
+          linkId: string;
+          token: string;
+          parent: { id: string; name: string };
+      }
+    | {
+          source: "mod";
+          modId: string;
+          modData: ModOverview;
+          token?: string;
+          sig?: string;
+      };
+
+export type DriveListLinkChildrenParams = {
+    linkId: string;
+    linkToken: string;
+    itemId: string;
+};
+
+export type DriveListModChildrenParams = {
+    itemId: string;
+    modToken?: string;
+    modSig?: string;
+};
+
+export type DriveImportContent = {
+    id: string;
+    name: string;
+    isDir: boolean;
+    size: number | null;
+    mimeType: string | null;
+    parentId: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+};
+
+export type DriveListChildrenResult = {
+    content: DriveImportContent;
+    children: DriveImportContent[];
+    ancestors: { id: string; parentId: string | null; name: string; depth: number }[];
+};
+
+export type DriveCopyFromUrlManyParams = DriveCopyFromUrlParams & {
+    selectedIds?: string[];
 };
 
 type SharedLinkAccess = {
@@ -420,6 +475,7 @@ export class DriveService {
             collectionId,
             itemId,
             operationId: requestedOperationId,
+            selectedIds,
         }: DriveCopyFromUrlParams): Promise<DriveCopyFromUrlResult> => {
             const source = parseDriveSourceUrl(url);
             const operationId = requestedOperationId?.trim() || nanoid();
@@ -432,6 +488,38 @@ export class DriveService {
 
             try {
                 if (source.type === "link") {
+                    if (selectedIds && selectedIds.length > 0) {
+                        this.emitCopyProgress(operationId, {
+                            source: "link",
+                            phase: "preparing",
+                            current: 0,
+                            total: selectedIds.length,
+                            copiedFiles: 0,
+                        });
+                        const access = await this.requestSharedLinkAccess(
+                            source.id,
+                            password,
+                            operation.controller.signal,
+                        );
+                        const copied = await this.copyRemoteImportMany({
+                            mode: "link",
+                            srcIds: selectedIds,
+                            sourceNames: selectedIds,
+                            destinationId,
+                            linkId: source.id,
+                            linkToken: access.token,
+                            operationId,
+                            signal: operation.controller.signal,
+                        });
+                        this.emitCopyProgress(operationId, {
+                            source: "link",
+                            phase: "completed",
+                            current: selectedIds.length,
+                            total: selectedIds.length,
+                            copiedFiles: copied,
+                        });
+                        return { source: "link", copied, destinationId };
+                    }
                     this.emitCopyProgress(operationId, {
                         source: "link",
                         phase: "preparing",
@@ -467,6 +555,39 @@ export class DriveService {
                     return { source: "link", copied, destinationId };
                 }
 
+                if (selectedIds && selectedIds.length > 0) {
+                    this.emitCopyProgress(operationId, {
+                        source: "mod",
+                        phase: "preparing",
+                        current: 0,
+                        total: selectedIds.length,
+                        copiedFiles: 0,
+                    });
+                    const modAccess = await this.requestModOverview(
+                        source.id,
+                        operation.controller.signal,
+                        password || undefined,
+                    );
+                    const copied = await this.copyRemoteImportMany({
+                        mode: "mod",
+                        srcIds: selectedIds,
+                        sourceNames: selectedIds,
+                        destinationId,
+                        modToken: modAccess.token,
+                        modSig: modAccess.sig,
+                        operationId,
+                        signal: operation.controller.signal,
+                    });
+                    this.emitCopyProgress(operationId, {
+                        source: "mod",
+                        phase: "completed",
+                        current: selectedIds.length,
+                        total: selectedIds.length,
+                        copiedFiles: copied,
+                    });
+                    return { source: "mod", copied, destinationId };
+                }
+
                 this.emitCopyProgress(operationId, {
                     source: "mod",
                     phase: "preparing",
@@ -477,6 +598,7 @@ export class DriveService {
                 const modAccess = await this.requestModOverview(
                     source.id,
                     operation.controller.signal,
+                    password || undefined,
                 );
                 const overview = modAccess.data;
                 if (!isModOverview(overview)) {
@@ -538,6 +660,9 @@ export class DriveService {
             } catch (error) {
                 if (operation.controller.signal.aborted) {
                     this.emitCopyCanceledProgress(operationId, operation);
+                    void this.desktop.service.transfer
+                        .updateTransfer(operationId, { status: "canceled" })
+                        .catch(() => {});
                     throw this.createCopyCanceledError();
                 }
                 this.emitCopyProgress(operationId, {
@@ -549,6 +674,9 @@ export class DriveService {
                     copiedFiles: operation.lastProgress?.copiedFiles ?? 0,
                     message: toErrorMessage(error),
                 });
+                void this.desktop.service.transfer
+                    .updateTransfer(operationId, { status: "error", error: toErrorMessage(error) })
+                    .catch(() => {});
                 throw error;
             } finally {
                 this.copyOperations.delete(operationId);
@@ -575,6 +703,164 @@ export class DriveService {
             operation.controller.abort();
             this.emitCopyCanceledProgress(operationId, operation);
             return true;
+        },
+
+        resolveImportSource: async ({
+            url,
+            password = "",
+        }: DriveResolveImportSourceParams): Promise<DriveResolveImportSourceResult> => {
+            const source = parseDriveSourceUrl(url);
+            if (source.type === "link") {
+                const access = await this.requestSharedLinkAccess(
+                    source.id,
+                    password,
+                    new AbortController().signal,
+                );
+                return {
+                    source: "link",
+                    linkId: source.id,
+                    token: access.token,
+                    parent: access.parent,
+                };
+            }
+            const modAccess = await this.requestModOverview(
+                source.id,
+                new AbortController().signal,
+                password || undefined,
+            );
+            const overview = modAccess.data;
+            if (!isModOverview(overview)) {
+                throw new DriveApiError(
+                    "DRIVE_MOD_INVALID_RESPONSE",
+                    "The collection response was invalid.",
+                );
+            }
+            return {
+                source: "mod",
+                modId: source.id,
+                modData: overview,
+                token: modAccess.token,
+                sig: modAccess.sig,
+            };
+        },
+
+        listLinkChildren: async ({
+            linkId,
+            linkToken,
+            itemId,
+        }: DriveListLinkChildrenParams): Promise<DriveListChildrenResult> => {
+            return await this.requestLinkContent(linkId, linkToken, itemId);
+        },
+
+        listModChildren: async ({
+            itemId,
+            modToken,
+            modSig,
+        }: DriveListModChildrenParams): Promise<DriveListChildrenResult> => {
+            return await this.requestModContent(itemId, modToken, modSig);
+        },
+
+        copyFromUrlMany: async (
+            params: DriveCopyFromUrlParams,
+        ): Promise<DriveCopyFromUrlResult> => {
+            if (!params.selectedIds || params.selectedIds.length === 0) {
+                return await this.fn.copyFromUrl(params);
+            }
+            const source = parseDriveSourceUrl(params.url);
+            const operationId = params.operationId?.trim() || nanoid();
+            const operation: CopyOperation = {
+                controller: new AbortController(),
+                source: source.type,
+                cancelRequested: false,
+            };
+            this.copyOperations.set(operationId, operation);
+            try {
+                if (source.type === "link") {
+                    this.emitCopyProgress(operationId, {
+                        source: "link",
+                        phase: "preparing",
+                        current: 0,
+                        total: params.selectedIds.length,
+                        copiedFiles: 0,
+                    });
+                    const access = await this.requestSharedLinkAccess(
+                        source.id,
+                        params.password ?? "",
+                        operation.controller.signal,
+                    );
+                    const copied = await this.copyRemoteImportMany({
+                        mode: "link",
+                        srcIds: params.selectedIds,
+                        sourceNames: params.selectedIds,
+                        destinationId: params.destinationId,
+                        linkId: source.id,
+                        linkToken: access.token,
+                        operationId,
+                        signal: operation.controller.signal,
+                    });
+                    this.emitCopyProgress(operationId, {
+                        source: "link",
+                        phase: "completed",
+                        current: params.selectedIds.length,
+                        total: params.selectedIds.length,
+                        copiedFiles: copied,
+                    });
+                    return { source: "link", copied, destinationId: params.destinationId };
+                }
+                const modAccess = await this.requestModOverview(
+                    source.id,
+                    operation.controller.signal,
+                    params.password || undefined,
+                );
+                this.emitCopyProgress(operationId, {
+                    source: "mod",
+                    phase: "preparing",
+                    current: 0,
+                    total: params.selectedIds.length,
+                    copiedFiles: 0,
+                });
+                const copied = await this.copyRemoteImportMany({
+                    mode: "mod",
+                    srcIds: params.selectedIds,
+                    sourceNames: params.selectedIds,
+                    destinationId: params.destinationId,
+                    modToken: modAccess.token,
+                    modSig: modAccess.sig,
+                    operationId,
+                    signal: operation.controller.signal,
+                });
+                this.emitCopyProgress(operationId, {
+                    source: "mod",
+                    phase: "completed",
+                    current: params.selectedIds.length,
+                    total: params.selectedIds.length,
+                    copiedFiles: copied,
+                });
+                return { source: "mod", copied, destinationId: params.destinationId };
+            } catch (error) {
+                if (operation.controller.signal.aborted) {
+                    this.emitCopyCanceledProgress(operationId, operation);
+                    void this.desktop.service.transfer
+                        .updateTransfer(operationId, { status: "canceled" })
+                        .catch(() => {});
+                    throw this.createCopyCanceledError();
+                }
+                this.emitCopyProgress(operationId, {
+                    source: operation.source,
+                    phase: "error",
+                    current: operation.lastProgress?.current ?? 0,
+                    total: operation.lastProgress?.total ?? 1,
+                    itemName: operation.lastProgress?.itemName,
+                    copiedFiles: operation.lastProgress?.copiedFiles ?? 0,
+                    message: toErrorMessage(error),
+                });
+                void this.desktop.service.transfer
+                    .updateTransfer(operationId, { status: "error", error: toErrorMessage(error) })
+                    .catch(() => {});
+                throw error;
+            } finally {
+                this.copyOperations.delete(operationId);
+            }
         },
     };
 
@@ -648,24 +934,92 @@ export class DriveService {
         }
     }
 
-    private async requestModOverview(modId: string, signal: AbortSignal) {
-        const response = await this.requestJsonWithHeaders<unknown>(
-            `${BACKEND_URL}/akasha/mod/${encodeURIComponent(modId)}`,
-            { signal },
-            "mod overview",
-        );
-        if (!isModOverview(response.data)) {
-            throw new DriveApiError(
-                "DRIVE_MOD_INVALID_RESPONSE",
-                "The collection response was invalid.",
-            );
+    private async requestModOverview(modId: string, signal: AbortSignal, password?: string) {
+        let url = `${BACKEND_URL}/akasha/mod/${encodeURIComponent(modId)}`;
+        if (password) {
+            const encoded = Buffer.from(password, "utf8").toString("base64url");
+            url += `?password=${encodeURIComponent(encoded)}`;
         }
+        try {
+            const response = await this.requestJsonWithHeaders<unknown>(
+                url,
+                { signal },
+                "mod overview",
+            );
+            if (!isModOverview(response.data)) {
+                throw new DriveApiError(
+                    "DRIVE_MOD_INVALID_RESPONSE",
+                    "The collection response was invalid.",
+                );
+            }
 
-        return {
-            data: response.data,
-            token: response.headers.get("x-token") ?? undefined,
-            sig: response.headers.get("x-sig") ?? undefined,
-        };
+            return {
+                data: response.data,
+                token: response.headers.get("x-token") ?? undefined,
+                sig: response.headers.get("x-sig") ?? undefined,
+            };
+        } catch (error) {
+            const code = error instanceof DriveApiError ? error.code.toLowerCase() : "";
+            const message = toErrorMessage(error).toLowerCase();
+            if (
+                code === "drive_mod_password_required" ||
+                message.includes("password required") ||
+                message.includes("missing_password")
+            ) {
+                throw new DriveApiError(
+                    "DRIVE_MOD_PASSWORD_REQUIRED",
+                    "This mod requires a password.",
+                    undefined,
+                    error,
+                );
+            }
+            if (
+                code === "drive_mod_invalid_password" ||
+                message.includes("invalid password") ||
+                message.includes("invalid_password")
+            ) {
+                throw new DriveApiError(
+                    "DRIVE_MOD_INVALID_PASSWORD",
+                    "The mod password is incorrect.",
+                    undefined,
+                    error,
+                );
+            }
+            throw error;
+        }
+    }
+
+    private async requestLinkContent(
+        linkId: string,
+        linkToken: string,
+        itemId: string,
+        signal?: AbortSignal,
+    ): Promise<DriveListChildrenResult> {
+        const url = `${BACKEND_URL}/akasha/link/${encodeURIComponent(linkId)}/content/${encodeURIComponent(itemId)}`;
+        const headers = await this.desktop.httpService.getHeaders(url);
+        headers["nhd-link-token"] = linkToken;
+        const data = await this.requestJson<unknown>(url, { headers, signal }, "link content");
+        if (!isLinkContentData(data)) {
+            throw new DriveApiError("DRIVE_LINK_CONTENT_INVALID", "Invalid link content response.");
+        }
+        return normalizeLinkContentData(data);
+    }
+
+    private async requestModContent(
+        itemId: string,
+        modToken?: string,
+        modSig?: string,
+        signal?: AbortSignal,
+    ): Promise<DriveListChildrenResult> {
+        const url = `${BACKEND_URL}/akasha/mod/item/${encodeURIComponent(itemId)}`;
+        const headers = await this.desktop.httpService.getHeaders(url);
+        if (modToken) headers["x-token"] = modToken;
+        if (modSig) headers["x-sig"] = modSig;
+        const data = await this.requestJson<unknown>(url, { headers, signal }, "mod content");
+        if (!isModContentData(data)) {
+            throw new DriveApiError("DRIVE_MOD_CONTENT_INVALID", "Invalid mod content response.");
+        }
+        return normalizeModContentData(data);
     }
 
     private async copyRemoteImport({
@@ -801,6 +1155,224 @@ export class DriveService {
         }
 
         return 1;
+    }
+
+    private async copyRemoteImportMany({
+        mode,
+        srcIds,
+        sourceNames,
+        destinationId,
+        linkId,
+        linkToken,
+        modToken,
+        modSig,
+        operationId,
+        signal,
+    }: {
+        mode: RemoteImportMode;
+        srcIds: string[];
+        sourceNames: string[];
+        destinationId: string;
+        linkId?: string;
+        linkToken?: string;
+        modToken?: string;
+        modSig?: string;
+        operationId: string;
+        signal: AbortSignal;
+    }) {
+        if (signal.aborted) throw this.createCopyCanceledError();
+        if (srcIds.length === 0) return 0;
+
+        const url = `${BACKEND_URL}/akasha/common/sse/import-many`;
+        const headers = await this.desktop.httpService.getHeaders(url);
+        headers["content-type"] = "application/json";
+        if (mode === "mod") {
+            if (modSig) headers["x-sig"] = modSig;
+            if (modToken) headers["x-token"] = modToken;
+        }
+
+        const displayName =
+            sourceNames.length === 1
+                ? sourceNames[0]
+                : `${sourceNames[0]} +${sourceNames.length - 1}개`;
+        const pid = operationId;
+        let transferCreated = false;
+        try {
+            await this.desktop.service.transfer.createTransfer({
+                pid,
+                type: "download",
+                currentId: destinationId,
+                data: { files: [], dirs: [] },
+                abortController: new AbortController(),
+                name: `가져오기: ${displayName}`,
+                initialStatus: "preparing",
+                path: undefined,
+            });
+            transferCreated = true;
+        } catch {
+            // ignore if already exists
+        }
+
+        this.desktop.logger.info(
+            { operationId, mode, srcIds, destinationId, stage: "server-copy-many" },
+            "Drive:CopyFromUrl:ServerImportMany",
+        );
+
+        this.emitCopyProgress(operationId, {
+            source: mode,
+            phase: "copying",
+            current: 0,
+            total: srcIds.length,
+            copiedFiles: 0,
+        });
+        if (transferCreated) {
+            void this.desktop.service.transfer.updateTransfer(pid, {
+                status: "progress",
+                transferedSize: 0,
+                totalSize: 1,
+            });
+        }
+
+        const body = JSON.stringify({
+            mode,
+            src: srcIds,
+            dest: destinationId,
+            ...(mode === "link" && linkId && linkToken ? { linkId, linkToken } : {}),
+        });
+
+        const response = await networkFetch(url, {
+            method: "POST",
+            headers,
+            body,
+            signal,
+        });
+
+        if (!response.ok) {
+            if (isBackendUnavailableStatus(response.status)) {
+                this.desktop.service.backendConnectivity.setOffline();
+            }
+            const text = await response.text().catch(() => response.statusText);
+            if (transferCreated) {
+                void this.desktop.service.transfer.updateTransfer(pid, {
+                    status: "error",
+                    error: text || "Import failed",
+                });
+            }
+            throw createDriveApiError(
+                parseRemoteImportData(text),
+                `import-many ${mode}`,
+                response.status,
+            );
+        }
+        if (!response.body) {
+            if (transferCreated) {
+                void this.desktop.service.transfer.updateTransfer(pid, {
+                    status: "error",
+                    error: "Empty import stream",
+                });
+            }
+            throw new DriveApiError(
+                "DRIVE_IMPORT_INVALID_RESPONSE",
+                "The server import stream was empty.",
+            );
+        }
+
+        let completed = false;
+        let totalExpectedSize = 0;
+        let lastProcessedFiles = 0;
+        for await (const event of parseServerSentEvents(response)) {
+            if (signal.aborted) throw this.createCopyCanceledError();
+            const data = parseRemoteImportData(event.data);
+            this.desktop.logger.info(
+                { operationId, mode, event: event.type, data },
+                "Drive:CopyFromUrl:ServerImportManyEvent",
+            );
+            if (event.type === "error") {
+                if (transferCreated) {
+                    void this.desktop.service.transfer.updateTransfer(pid, {
+                        status: "error",
+                        error: remoteImportErrorMessage(data),
+                    });
+                }
+                throw createDriveApiError(remoteImportErrorMessage(data), `import-many ${mode}`);
+            }
+            if (event.type === "metadata") {
+                const parsed = data as Record<string, unknown>;
+                totalExpectedSize =
+                    typeof parsed.totalExpectedSize === "number" ? parsed.totalExpectedSize : 0;
+                if (transferCreated && totalExpectedSize > 0) {
+                    void this.desktop.service.transfer.updateTransfer(pid, {
+                        totalSize: totalExpectedSize,
+                        transferedSize: 0,
+                    });
+                }
+                continue;
+            }
+            if (event.type === "complete") {
+                completed = true;
+                this.emitCopyProgress(operationId, {
+                    source: mode,
+                    phase: "copying",
+                    current: srcIds.length,
+                    total: srcIds.length,
+                    copiedFiles: srcIds.length,
+                });
+                if (transferCreated) {
+                    const completeData = data as Record<string, unknown>;
+                    const totalSize =
+                        typeof completeData.totalSize === "number"
+                            ? completeData.totalSize
+                            : totalExpectedSize;
+                    void this.desktop.service.transfer.updateTransfer(pid, {
+                        status: "completed",
+                        transferedSize: totalSize || totalExpectedSize,
+                        totalSize: totalSize || totalExpectedSize || 1,
+                        progress: 100,
+                    });
+                }
+                continue;
+            }
+            const processedFiles = getRemoteImportProcessedFiles(data) ?? lastProcessedFiles;
+            lastProcessedFiles = processedFiles;
+            const currentTotalSize = getRemoteImportCurrentSize(data) ?? 0;
+            this.emitCopyProgress(operationId, {
+                source: mode,
+                phase: "copying",
+                current: Math.min(processedFiles, srcIds.length),
+                total: srcIds.length,
+                copiedFiles: processedFiles,
+                message: event.type === "status" ? remoteImportStatusMessage(data) : undefined,
+            });
+            if (transferCreated) {
+                if (currentTotalSize > 0 && totalExpectedSize > 0) {
+                    void this.desktop.service.transfer.updateTransfer(pid, {
+                        status: "progress",
+                        transferedSize: Math.min(currentTotalSize, totalExpectedSize),
+                        transferedFiles: processedFiles,
+                    });
+                } else if (processedFiles > 0) {
+                    void this.desktop.service.transfer.updateTransfer(pid, {
+                        status: "progress",
+                        transferedFiles: processedFiles,
+                    });
+                }
+            }
+        }
+
+        if (!completed) {
+            if (transferCreated) {
+                void this.desktop.service.transfer.updateTransfer(pid, {
+                    status: "error",
+                    error: "Import did not complete",
+                });
+            }
+            throw new DriveApiError(
+                "DRIVE_IMPORT_INVALID_RESPONSE",
+                "The server import did not complete.",
+            );
+        }
+
+        return srcIds.length;
     }
 
     private createCopyCanceledError() {
@@ -1381,4 +1953,79 @@ function isModOverview(value: unknown): value is ModOverview {
             typeof record.rootId === "string"
         );
     });
+}
+
+function getRemoteImportCurrentSize(value: unknown) {
+    if (typeof value !== "object" || value === null) return undefined;
+    const currentTotalSize = (value as Record<string, unknown>).currentTotalSize;
+    return typeof currentTotalSize === "number" ? currentTotalSize : undefined;
+}
+
+function isLinkContentData(value: unknown): boolean {
+    if (typeof value !== "object" || value === null) return false;
+    const record = value as Record<string, unknown>;
+    return (
+        typeof record.content === "object" &&
+        record.content !== null &&
+        Array.isArray(record.children) &&
+        Array.isArray(record.ancestors)
+    );
+}
+
+function normalizeLinkContentData(value: unknown): DriveListChildrenResult {
+    const record = value as Record<string, unknown>;
+    const content = record.content as Record<string, unknown>;
+    const children = record.children as Array<Record<string, unknown>>;
+    const ancestors = record.ancestors as Array<Record<string, unknown>>;
+    return {
+        content: normalizeContentItem(content),
+        children: children.map(normalizeContentItem),
+        ancestors: ancestors.map((a) => ({
+            id: String(a.id),
+            parentId: a.parentId == null ? null : String(a.parentId),
+            name: String(a.name),
+            depth: typeof a.depth === "number" ? a.depth : 0,
+        })),
+    };
+}
+
+function isModContentData(value: unknown): boolean {
+    if (typeof value !== "object" || value === null) return false;
+    const record = value as Record<string, unknown>;
+    return (
+        typeof record.content === "object" &&
+        record.content !== null &&
+        Array.isArray(record.children)
+    );
+}
+
+function normalizeModContentData(value: unknown): DriveListChildrenResult {
+    const record = value as Record<string, unknown>;
+    const content = record.content as Record<string, unknown>;
+    const children = (record.children as Array<Record<string, unknown>>) ?? [];
+    const ancestors = (record.ancestors as Array<Record<string, unknown>>) ?? [];
+    return {
+        content: normalizeContentItem(content),
+        children: children.map(normalizeContentItem),
+        ancestors: ancestors.map((a) => ({
+            id: String(a.id),
+            parentId: a.parentId == null ? null : String(a.parentId),
+            name: String(a.name),
+            depth: typeof a.depth === "number" ? a.depth : 0,
+        })),
+    };
+}
+
+function normalizeContentItem(raw: Record<string, unknown>): DriveImportContent {
+    return {
+        id: String(raw.id),
+        name: String(raw.name),
+        isDir: Boolean(raw.isDir),
+        size: raw.size == null ? null : Number(raw.size),
+        mimeType:
+            raw.mimeType != null ? String(raw.mimeType) : ((raw.mime as string | null) ?? null),
+        parentId: raw.parentId == null ? null : String(raw.parentId),
+        createdAt: raw.createdAt ? new Date(String(raw.createdAt)) : new Date(),
+        updatedAt: raw.updatedAt ? new Date(String(raw.updatedAt)) : new Date(),
+    };
 }

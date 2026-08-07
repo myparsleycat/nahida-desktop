@@ -381,6 +381,45 @@ export type Content = {
     } | null;
 };
 
+export type DriveImportContent = {
+    id: string;
+    name: string;
+    isDir: boolean;
+    size: number | null;
+    mimeType: string | null;
+    parentId: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+};
+
+export type DriveListChildrenResult = {
+    content: DriveImportContent;
+    children: DriveImportContent[];
+    ancestors: { id: string; parentId: string | null; name: string; depth: number }[];
+};
+
+export type DriveResolveLinkResult = {
+    source: "link";
+    linkId: string;
+    token: string;
+    parent: { id: string; name: string };
+};
+
+export type DriveResolveModResult = {
+    source: "mod";
+    modId: string;
+    modData: {
+        id: string;
+        title: string;
+        collections: { id: string; name: string; private: boolean; rootId: string | null }[];
+        [key: string]: unknown;
+    };
+    token?: string;
+    sig?: string;
+};
+
+export type DriveResolveImportSourceResult = DriveResolveLinkResult | DriveResolveModResult;
+
 export type TransferStatus =
     | "pending"
     | "preparing"
