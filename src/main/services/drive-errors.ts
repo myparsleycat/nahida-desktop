@@ -1,5 +1,11 @@
 import { toErrorMessage } from "@shared/utils";
 
+const BACKEND_UNAVAILABLE_STATUS_CODES = new Set([502, 503, 504]);
+
+export function isBackendUnavailableStatus(status?: number) {
+    return status !== undefined && BACKEND_UNAVAILABLE_STATUS_CODES.has(status);
+}
+
 export class DriveApiError extends Error {
     public readonly code: string;
     public readonly status?: number;
@@ -20,12 +26,37 @@ export function createDriveApiError(
 ) {
     if (error instanceof DriveApiError) return error;
 
+    const resolvedStatus = status ?? getErrorStatus(error);
+    if (isBackendUnavailableStatus(resolvedStatus)) {
+        return new DriveApiError(
+            "DRIVE_BACKEND_UNAVAILABLE",
+            "The Nahida server is temporarily unavailable. Please try again shortly.",
+            resolvedStatus,
+            error,
+        );
+    }
+
     const message = toErrorMessage(error);
     const normalizedMessage = message === "[object Object]" ? fallback : message || fallback;
     const code =
         toDriveErrorCode(error) ??
         `DRIVE_${operation.replace(/[^A-Za-z0-9]+/g, "_").toUpperCase()}_FAILED`;
-    return new DriveApiError(code, normalizedMessage, status, error);
+    return new DriveApiError(code, normalizedMessage, resolvedStatus, error);
+}
+
+function getErrorStatus(error: unknown) {
+    if (typeof error !== "object" || error === null) return undefined;
+
+    const record = error as Record<string, unknown>;
+    if (typeof record.status === "number") return record.status;
+
+    const response = record.response;
+    if (typeof response === "object" && response !== null) {
+        const responseStatus = (response as Record<string, unknown>).status;
+        if (typeof responseStatus === "number") return responseStatus;
+    }
+
+    return undefined;
 }
 
 function toDriveErrorCode(error: unknown) {

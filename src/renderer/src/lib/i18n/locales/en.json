@@ -129,7 +129,17 @@
         "password_required": "This link requires a password.",
         "invalid_password": "The shared link password is incorrect.",
         "success": "Copied {{count}} item(s) to your drive.",
-        "failed": "Copy failed"
+        "failed": "Copy failed",
+        "progress": {
+          "preparing": "Preparing the copy...",
+          "copying": "Copying to your drive on the server...",
+          "downloading": "Downloading item...",
+          "uploading": "Uploading to your drive...",
+          "completed": "Copy completed.",
+          "canceled": "Copy stopped.",
+          "cancel": "Stop copy",
+          "error": "Copy failed during transfer."
+        }
       },
       "head_buttons": {
         "search_in_dir_placeholder": "Search in this folder...",

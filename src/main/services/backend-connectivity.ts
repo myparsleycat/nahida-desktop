@@ -4,6 +4,8 @@ import type { BackendStatus } from "@shared/backend";
 import { BACKEND_URL } from "@shared/const";
 import ky from "ky";
 
+import { isBackendUnavailableStatus } from "./drive-errors";
+
 const PROBE_TIMEOUT_MS = 5000;
 const OFFLINE_PROBE_INTERVAL_MS = 30_000;
 const ONLINE_PROBE_INTERVAL_MS = 120_000;
@@ -45,7 +47,7 @@ export class BackendConnectivity {
                 },
             });
             await resp.arrayBuffer();
-            if (resp.status > 0) {
+            if (resp.status > 0 && !isBackendUnavailableStatus(resp.status)) {
                 this.setOnline();
             } else {
                 this.setOffline();

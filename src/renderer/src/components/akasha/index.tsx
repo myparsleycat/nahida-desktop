@@ -178,7 +178,7 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
   );
 }
 
-export function AkashaHeadButtons() {
+export function AkashaHeadButtons({ currentId }: { currentId?: string }) {
   const { t } = useTranslation();
   const dialog = useDialogStore();
   const { selectedItems } = useSelectionStore();
@@ -220,7 +220,12 @@ export function AkashaHeadButtons() {
           onClick={() => {
             void navi({
               to: "/drive/import",
-              search: { collectionId: undefined, itemId: undefined, url: "" },
+              search: {
+                collectionId: undefined,
+                destinationId: currentId,
+                itemId: undefined,
+                url: "",
+              },
             });
           }}
         >

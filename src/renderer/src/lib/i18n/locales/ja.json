@@ -113,7 +113,17 @@
         "password_required": "このリンクにはパスワードが必要です。",
         "invalid_password": "共有リンクのパスワードが正しくありません。",
         "success": "{{count}} 件をドライブにコピーしました。",
-        "failed": "コピーに失敗しました"
+        "failed": "コピーに失敗しました",
+        "progress": {
+          "preparing": "コピーを準備中…",
+          "copying": "サーバーからドライブにコピー中…",
+          "downloading": "項目をダウンロード中…",
+          "uploading": "ドライブにアップロード中…",
+          "completed": "コピーが完了しました。",
+          "canceled": "コピーを停止しました。",
+          "cancel": "コピーを停止",
+          "error": "転送中にコピーに失敗しました。"
+        }
       },
       "head_buttons": {
         "search_in_dir_placeholder": "このフォルダー内を検索...",

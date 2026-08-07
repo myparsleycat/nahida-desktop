@@ -17,11 +17,13 @@ import {
 } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
 import { Label } from "@renderer/components/ui/label";
+import { Progress } from "@renderer/components/ui/progress";
 import { useAuth } from "@renderer/hooks/use-auth";
 import { useTitlebar } from "@renderer/hooks/use-titlebar";
+import type { DriveCopyProgress } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouteContext } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
   CheckIcon,
@@ -30,13 +32,14 @@ import {
   FolderIcon,
   Loader2Icon,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/drive/import")({
   validateSearch: (search: Record<string, unknown>) => ({
     collectionId: typeof search.collectionId === "string" ? search.collectionId : undefined,
+    destinationId: typeof search.destinationId === "string" ? search.destinationId : undefined,
     itemId: typeof search.itemId === "string" ? search.itemId : undefined,
     url: typeof search.url === "string" ? search.url : "",
   }),
@@ -47,20 +50,31 @@ function RouteComponent() {
   const { t } = useTranslation();
   const { Titlebar } = useTitlebar();
   const { session, sessionInitialized, startLogin } = useAuth();
+  const { queryClient } = useRouteContext({ from: "__root__" });
   const navigate = Route.useNavigate();
   const search = Route.useSearch();
   const [url, setUrl] = useState(search.url);
   const [password, setPassword] = useState("");
   const [requiresPassword, setRequiresPassword] = useState(false);
-  const [destinationId, setDestinationId] = useState("");
+  const [destinationId, setDestinationId] = useState(search.destinationId ?? "");
   const [destinationName, setDestinationName] = useState(t("page.drive.import.choose_destination"));
-  const [pickerId, setPickerId] = useState("");
+  const [pickerId, setPickerId] = useState(search.destinationId ?? "");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [copyProgress, setCopyProgress] = useState<DriveCopyProgress | null>(null);
+  const copyOperationIdRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     setUrl(search.url);
     setPassword("");
     setRequiresPassword(false);
-  }, [search.url]);
+    if (search.destinationId) {
+      setDestinationId(search.destinationId);
+      setPickerId(search.destinationId);
+    } else {
+      setDestinationId("");
+      setPickerId("");
+      setDestinationName(t("page.drive.import.choose_destination"));
+    }
+  }, [search.destinationId, search.url, t]);
 
   useEffect(() => {
     if (!session?.drive.rootId || destinationId) return;
@@ -71,14 +85,28 @@ function RouteComponent() {
 
   const destinationQuery = useQuery({
     queryKey: ["drive", "import-destination", pickerId],
-    enabled: pickerOpen && !!pickerId,
+    enabled: !!pickerId,
     queryFn: async () => await window.api.invoke("drive:get:item", pickerId),
   });
+
+  useEffect(() => {
+    if (destinationQuery.data?.content?.id !== destinationId) return;
+    setDestinationName(destinationQuery.data.content.name);
+  }, [destinationId, destinationQuery.data?.content]);
+
+  useEffect(() => {
+    return window.api.on("drive:copy-progress", (progress) => {
+      if (progress.operationId !== copyOperationIdRef.current) return;
+      setCopyProgress(progress);
+    });
+  }, []);
 
   const mutation = useMutation({
     mutationKey: ["drive", "copy-from-url"],
     mutationFn: async () => {
       if (!session) throw new Error("DRIVE_AUTH_REQUIRED");
+      const operationId = crypto.randomUUID();
+      copyOperationIdRef.current = operationId;
 
       return await window.api.invoke("drive:fn:copyFromUrl", {
         url: url.trim(),
@@ -86,6 +114,7 @@ function RouteComponent() {
         destinationId,
         collectionId: search.collectionId,
         itemId: search.itemId,
+        operationId,
       });
     },
   });
@@ -110,8 +139,13 @@ function RouteComponent() {
     }
 
     setRequiresPassword(false);
+    setCopyProgress(null);
     try {
       const result = await mutation.mutateAsync();
+      await queryClient.invalidateQueries({
+        queryKey: ["drive", "drive", destinationId],
+        exact: true,
+      });
       toast.success(t("page.drive.import.success", { count: result.copied }));
       void navigate({ to: "/drive/drive/$id", params: { id: destinationId } });
     } catch (error) {
@@ -127,6 +161,7 @@ function RouteComponent() {
         toast.error(t("page.drive.import.invalid_password"));
         return;
       }
+      if (message.includes("DRIVE_COPY_CANCELED")) return;
       toast.error(t("page.drive.import.failed"), { description: message });
     }
   }, [
@@ -134,6 +169,7 @@ function RouteComponent() {
     mutation,
     navigate,
     password,
+    queryClient,
     session,
     sessionInitialized,
     startLogin,
@@ -226,6 +262,32 @@ function RouteComponent() {
                     autoFocus
                     required
                   />
+                </div>
+              )}
+
+              {mutation.isPending && copyProgress && (
+                <div className="space-y-2 rounded-md border p-3" aria-live="polite">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <span className="truncate">
+                      {copyProgress.itemName ??
+                        t(`page.drive.import.progress.${copyProgress.phase}`)}
+                    </span>
+                    <span className="shrink-0 text-muted-foreground">
+                      {copyProgress.current}/{copyProgress.total}
+                    </span>
+                  </div>
+                  <Progress
+                    value={
+                      copyProgress.phase === "downloading"
+                        ? null
+                        : copyProgress.total > 0
+                          ? (copyProgress.current / copyProgress.total) * 100
+                          : null
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t(`page.drive.import.progress.${copyProgress.phase}`)}
+                  </p>
                 </div>
               )}
 

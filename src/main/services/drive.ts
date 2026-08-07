@@ -1,8 +1,6 @@
-import { promisify } from "node:util";
-import { gunzip, gzip, zstdCompress, zstdDecompress } from "node:zlib";
-
 import type { Treaty } from "@elysiajs/eden";
 import { eden } from "@main/client";
+import { networkFetch } from "@main/internal/network-fetch";
 import Download, {
     BATCH_ROOT_ID,
     type DownloadMetadata,
@@ -17,18 +15,19 @@ import Upload, {
 import type { LinkData } from "@main/server";
 import { BACKEND_URL } from "@shared/const";
 import type { DownloadSource } from "@shared/mod";
+import type { DriveCopyProgress } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import { dialog } from "electron";
 import { retry } from "es-toolkit";
 import fse from "fs-extra";
-import { HTTPError } from "ky";
 import Heap from "mnemonist/heap";
 import { nanoid } from "nanoid";
+import { parseServerSentEvents } from "parse-sse";
 
 import type { NahidaDesktop } from "..";
 import type { LocalTransfer, TransferParams } from "./transfer";
 
-import { createDriveApiError, DriveApiError } from "./drive-errors";
+import { createDriveApiError, DriveApiError, isBackendUnavailableStatus } from "./drive-errors";
 import { parseDriveSourceUrl } from "./drive-url";
 import { processChunked } from "./util";
 
@@ -41,6 +40,7 @@ export type DriveCopyFromUrlParams = {
     password?: string;
     collectionId?: string;
     itemId?: string;
+    operationId?: string;
 };
 
 export type DriveCopyFromUrlResult = {
@@ -68,15 +68,20 @@ type ModOverview = {
     collections: ModCollection[];
 };
 
-export const gzipAsync = promisify(gzip);
-export const gunzipAsync = promisify(gunzip);
-export const zstdCompressAsync = promisify(zstdCompress);
-export const zstdDecompressAsync = promisify(zstdDecompress);
+type CopyOperation = {
+    controller: AbortController;
+    source: DriveCopyProgress["source"];
+    lastProgress?: Omit<DriveCopyProgress, "operationId">;
+    cancelRequested: boolean;
+};
+
+type RemoteImportMode = "link" | "mod";
 
 export class DriveService {
     private readonly desktop: NahidaDesktop;
     private readonly download: Download;
     private readonly upload: Upload;
+    private readonly copyOperations = new Map<string, CopyOperation>();
 
     public constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
@@ -286,7 +291,7 @@ export class DriveService {
             data,
             source = "nahidaLive",
         }: {
-            items: Array<{ id: string; isDir: boolean; name: string }>;
+            items: Array<{ id: string; isDir: boolean; name: string; size?: number | null }>;
             targetPath?: string;
             link?: LinkData;
             data?: DownloadMetadata;
@@ -412,60 +417,193 @@ export class DriveService {
             password = "",
             collectionId,
             itemId,
+            operationId: requestedOperationId,
         }: DriveCopyFromUrlParams): Promise<DriveCopyFromUrlResult> => {
             const source = parseDriveSourceUrl(url);
-            if (source.type === "link") {
-                const access = await this.requestSharedLinkAccess(source.id, password);
-                await this.copyRemoteItems(
-                    [itemId ?? access.parent.id],
-                    destinationId,
-                    { "nhd-link-token": access.token },
-                    "shared link",
+            const operationId = requestedOperationId?.trim() || nanoid();
+            const operation: CopyOperation = {
+                controller: new AbortController(),
+                source: source.type,
+                cancelRequested: false,
+            };
+            this.copyOperations.set(operationId, operation);
+
+            try {
+                if (source.type === "link") {
+                    this.emitCopyProgress(operationId, {
+                        source: "link",
+                        phase: "preparing",
+                        current: 0,
+                        total: 1,
+                        copiedFiles: 0,
+                    });
+                    const access = await this.requestSharedLinkAccess(
+                        source.id,
+                        password,
+                        operation.controller.signal,
+                    );
+                    const copied = await this.copyRemoteImport({
+                        mode: "link",
+                        sourceId: itemId ?? access.parent.id,
+                        sourceName: access.parent.name,
+                        destinationId,
+                        linkId: source.id,
+                        linkToken: access.token,
+                        operationId,
+                        itemIndex: 0,
+                        totalItems: 1,
+                        signal: operation.controller.signal,
+                    });
+                    this.emitCopyProgress(operationId, {
+                        source: "link",
+                        phase: "completed",
+                        current: 1,
+                        total: 1,
+                        itemName: access.parent.name,
+                        copiedFiles: copied,
+                    });
+                    return { source: "link", copied, destinationId };
+                }
+
+                this.emitCopyProgress(operationId, {
+                    source: "mod",
+                    phase: "preparing",
+                    current: 0,
+                    total: 1,
+                    copiedFiles: 0,
+                });
+                const modAccess = await this.requestModOverview(
+                    source.id,
+                    operation.controller.signal,
                 );
-                return { source: "link", copied: 1, destinationId };
+                const overview = modAccess.data;
+                if (!isModOverview(overview)) {
+                    throw new DriveApiError(
+                        "DRIVE_MOD_INVALID_RESPONSE",
+                        "The collection response was invalid.",
+                    );
+                }
+                const publicCollections = overview.collections.filter(
+                    (collection) => !collection.private,
+                );
+                const selectedCollections = collectionId
+                    ? publicCollections.filter((collection) => collection.id === collectionId)
+                    : publicCollections;
+
+                if (collectionId && selectedCollections.length === 0) {
+                    throw new DriveApiError(
+                        "DRIVE_COLLECTION_NOT_FOUND",
+                        "The requested collection was not found.",
+                    );
+                }
+
+                const sources = itemId
+                    ? [{ id: itemId, name: itemId }]
+                    : selectedCollections.map((collection) => ({
+                          id: collection.rootId,
+                          name: collection.name,
+                      }));
+                if (sources.length === 0) {
+                    throw new DriveApiError(
+                        "DRIVE_COLLECTION_EMPTY",
+                        "No public collections were found.",
+                    );
+                }
+
+                let copied = 0;
+                for (const [itemIndex, item] of sources.entries()) {
+                    copied += await this.copyRemoteImport({
+                        mode: "mod",
+                        sourceId: item.id,
+                        sourceName: item.name,
+                        destinationId,
+                        modToken: modAccess.token,
+                        modSig: modAccess.sig,
+                        operationId,
+                        itemIndex,
+                        totalItems: sources.length,
+                        signal: operation.controller.signal,
+                    });
+                }
+                this.emitCopyProgress(operationId, {
+                    source: "mod",
+                    phase: "completed",
+                    current: sources.length,
+                    total: sources.length,
+                    copiedFiles: copied,
+                });
+                return { source: "mod", copied, destinationId };
+            } catch (error) {
+                if (operation.controller.signal.aborted) {
+                    this.emitCopyCanceledProgress(operationId, operation);
+                    throw this.createCopyCanceledError();
+                }
+                this.emitCopyProgress(operationId, {
+                    source: operation.source,
+                    phase: "error",
+                    current: operation.lastProgress?.current ?? 0,
+                    total: operation.lastProgress?.total ?? 1,
+                    itemName: operation.lastProgress?.itemName,
+                    copiedFiles: operation.lastProgress?.copiedFiles ?? 0,
+                    message: toErrorMessage(error),
+                });
+                throw error;
+            } finally {
+                this.copyOperations.delete(operationId);
+            }
+        },
+
+        cancelCopyFromUrl: async (operationId: string) => {
+            const operation = this.copyOperations.get(operationId);
+            if (!operation) {
+                this.desktop.logger.warn(
+                    { operationId },
+                    "Drive:CopyFromUrl:CancelOperationNotFound",
+                );
+                return false;
             }
 
-            const overview = await this.requestJson<ModOverview>(
-                `${BACKEND_URL}/akasha/mod/${encodeURIComponent(source.id)}`,
-                undefined,
-                "mod overview",
+            this.desktop.logger.info(
+                {
+                    operationId,
+                    source: operation.source,
+                },
+                "Drive:CopyFromUrl:CancelRequested",
             );
-            if (!isModOverview(overview)) {
-                throw new DriveApiError(
-                    "DRIVE_MOD_INVALID_RESPONSE",
-                    "The collection response was invalid.",
-                );
-            }
-            const publicCollections = overview.collections.filter(
-                (collection) => !collection.private,
-            );
-            const selectedCollections = collectionId
-                ? publicCollections.filter((collection) => collection.id === collectionId)
-                : publicCollections;
-
-            if (collectionId && selectedCollections.length === 0) {
-                throw new DriveApiError(
-                    "DRIVE_COLLECTION_NOT_FOUND",
-                    "The requested collection was not found.",
-                );
-            }
-
-            const sourceIds = itemId
-                ? [itemId]
-                : [...new Set(selectedCollections.map((collection) => collection.rootId))];
-            if (sourceIds.length === 0) {
-                throw new DriveApiError(
-                    "DRIVE_COLLECTION_EMPTY",
-                    "No public collections were found.",
-                );
-            }
-
-            await this.copyRemoteItems(sourceIds, destinationId, undefined, "mod collection");
-            return { source: "mod", copied: sourceIds.length, destinationId };
+            operation.controller.abort();
+            this.emitCopyCanceledProgress(operationId, operation);
+            return true;
         },
     };
 
-    private async requestSharedLinkAccess(linkId: string, password: string) {
+    private emitCopyProgress(
+        operationId: string,
+        progress: Omit<DriveCopyProgress, "operationId">,
+    ) {
+        const operation = this.copyOperations.get(operationId);
+        if (operation) operation.lastProgress = progress;
+        this.desktop.logger.info({ operationId, ...progress }, "Drive:CopyFromUrl:Progress");
+        this.desktop.window.main.window?.webContents.send("drive:copy-progress", {
+            operationId,
+            ...progress,
+        });
+    }
+
+    private emitCopyCanceledProgress(operationId: string, operation: CopyOperation) {
+        if (operation.cancelRequested) return;
+        operation.cancelRequested = true;
+        const lastProgress = operation.lastProgress;
+        this.emitCopyProgress(operationId, {
+            source: operation.source,
+            phase: "canceled",
+            current: lastProgress?.current ?? 0,
+            total: lastProgress?.total ?? 1,
+            itemName: lastProgress?.itemName,
+            copiedFiles: lastProgress?.copiedFiles ?? 0,
+        });
+    }
+
+    private async requestSharedLinkAccess(linkId: string, password: string, signal: AbortSignal) {
         try {
             const data = await this.requestJson<unknown>(
                 `${BACKEND_URL}/akasha/link/${encodeURIComponent(linkId)}`,
@@ -473,6 +611,7 @@ export class DriveService {
                     method: "POST",
                     headers: { "content-type": "application/json" },
                     body: JSON.stringify({ password, cftoken: "" }),
+                    signal,
                 },
                 "shared link access",
             );
@@ -486,7 +625,8 @@ export class DriveService {
             return data;
         } catch (error) {
             const code = error instanceof DriveApiError ? error.code.toLowerCase() : "";
-            if (code === "drive_link_password_required" || code === "missing_password") {
+            const message = toErrorMessage(error).toLowerCase();
+            if (code === "drive_link_password_required" || message.includes("missing_password")) {
                 throw new DriveApiError(
                     "DRIVE_LINK_PASSWORD_REQUIRED",
                     "This shared link requires a password.",
@@ -494,7 +634,7 @@ export class DriveService {
                     error,
                 );
             }
-            if (code === "drive_link_invalid_password" || code === "invalid_password") {
+            if (code === "drive_link_invalid_password" || message.includes("invalid_password")) {
                 throw new DriveApiError(
                     "DRIVE_LINK_INVALID_PASSWORD",
                     "The shared link password is incorrect.",
@@ -506,46 +646,187 @@ export class DriveService {
         }
     }
 
-    private async copyRemoteItems(
-        ids: string[],
-        destinationId: string,
-        headers: Record<string, string> | undefined,
-        source: string,
-    ) {
-        if (ids.length === 0) {
-            throw new DriveApiError("DRIVE_COPY_EMPTY", "No items were selected for copying.");
+    private async requestModOverview(modId: string, signal: AbortSignal) {
+        const response = await this.requestJsonWithHeaders<unknown>(
+            `${BACKEND_URL}/akasha/mod/${encodeURIComponent(modId)}`,
+            { signal },
+            "mod overview",
+        );
+        if (!isModOverview(response.data)) {
+            throw new DriveApiError(
+                "DRIVE_MOD_INVALID_RESPONSE",
+                "The collection response was invalid.",
+            );
         }
 
-        await this.requestJson(
-            `${BACKEND_URL}/akasha/content/copy_many`,
+        return {
+            data: response.data,
+            token: response.headers.get("x-token") ?? undefined,
+            sig: response.headers.get("x-sig") ?? undefined,
+        };
+    }
+
+    private async copyRemoteImport({
+        mode,
+        sourceId,
+        sourceName,
+        destinationId,
+        linkId,
+        linkToken,
+        modToken,
+        modSig,
+        operationId,
+        itemIndex,
+        totalItems,
+        signal,
+    }: {
+        mode: RemoteImportMode;
+        sourceId: string;
+        sourceName: string;
+        destinationId: string;
+        linkId?: string;
+        linkToken?: string;
+        modToken?: string;
+        modSig?: string;
+        operationId: string;
+        itemIndex: number;
+        totalItems: number;
+        signal: AbortSignal;
+    }) {
+        if (signal.aborted) throw this.createCopyCanceledError();
+
+        const requestUrl = new URL(`${BACKEND_URL}/akasha/common/sse/import`);
+        requestUrl.searchParams.set("mode", mode);
+        requestUrl.searchParams.set("src", sourceId);
+        requestUrl.searchParams.set("dest", destinationId);
+        if (mode === "link" && linkId && linkToken) {
+            requestUrl.searchParams.set("linkId", linkId);
+            requestUrl.searchParams.set("linkToken", linkToken);
+        }
+
+        const url = requestUrl.toString();
+        const headers = await this.desktop.httpService.getHeaders(url);
+        if (mode === "mod") {
+            if (modSig) headers["x-sig"] = modSig;
+            if (modToken) headers["x-token"] = modToken;
+        }
+
+        this.desktop.logger.info(
             {
-                method: "POST",
-                headers: {
-                    "content-type": "application/json",
-                    ...headers,
-                },
-                body: JSON.stringify({ uuids: ids, target: destinationId }),
+                operationId,
+                mode,
+                sourceId,
+                destinationId,
+                itemIndex,
+                totalItems,
+                stage: "server-copy",
             },
-            `copy ${source}`,
+            "Drive:CopyFromUrl:ServerImport",
         );
+        this.emitCopyProgress(operationId, {
+            source: mode,
+            phase: "copying",
+            current: itemIndex,
+            total: totalItems,
+            itemName: sourceName,
+            copiedFiles: itemIndex,
+        });
+
+        const response = await networkFetch(requestUrl, { headers, signal });
+        if (!response.ok) {
+            if (isBackendUnavailableStatus(response.status)) {
+                this.desktop.service.backendConnectivity.setOffline();
+            }
+            const body = await response.text().catch(() => response.statusText);
+            throw createDriveApiError(
+                parseRemoteImportData(body),
+                `import ${mode} source ${sourceId}`,
+                response.status,
+            );
+        }
+        if (!response.body) {
+            throw new DriveApiError(
+                "DRIVE_IMPORT_INVALID_RESPONSE",
+                `The server import stream for ${sourceId} was empty.`,
+            );
+        }
+
+        let completed = false;
+        for await (const event of parseServerSentEvents(response)) {
+            if (signal.aborted) throw this.createCopyCanceledError();
+
+            const data = parseRemoteImportData(event.data);
+            this.desktop.logger.info(
+                { operationId, mode, sourceId, event: event.type, data },
+                "Drive:CopyFromUrl:ServerImportEvent",
+            );
+
+            if (event.type === "error") {
+                throw createDriveApiError(
+                    remoteImportErrorMessage(data),
+                    `import ${mode} source ${sourceId}`,
+                );
+            }
+            if (event.type === "complete") {
+                completed = true;
+                this.emitCopyProgress(operationId, {
+                    source: mode,
+                    phase: "copying",
+                    current: itemIndex + 1,
+                    total: totalItems,
+                    itemName: sourceName,
+                    copiedFiles: itemIndex + 1,
+                });
+                continue;
+            }
+
+            this.emitCopyProgress(operationId, {
+                source: mode,
+                phase: "copying",
+                current: itemIndex,
+                total: totalItems,
+                itemName: sourceName,
+                copiedFiles: getRemoteImportProcessedFiles(data) ?? itemIndex,
+                message: event.type === "status" ? remoteImportStatusMessage(data) : undefined,
+            });
+        }
+
+        if (!completed) {
+            throw new DriveApiError(
+                "DRIVE_IMPORT_INVALID_RESPONSE",
+                `The server import for ${sourceId} ended before completion.`,
+            );
+        }
+
+        return 1;
+    }
+
+    private createCopyCanceledError() {
+        return new DriveApiError("DRIVE_COPY_CANCELED", "The copy operation was canceled.");
     }
 
     private async requestJson<T>(url: string, options: RequestInit | undefined, operation: string) {
+        const response = await this.requestJsonWithHeaders<T>(url, options, operation);
+        return response.data;
+    }
+
+    private async requestJsonWithHeaders<T>(
+        url: string,
+        options: RequestInit | undefined,
+        operation: string,
+    ) {
         try {
-            const response = await this.desktop.httpService.fetcher(url, options);
+            const response = await this.desktop.httpService.fetcher(url, {
+                ...options,
+                throwHttpErrors: false,
+            });
             const body = await readJsonResponse(response);
             if (!response.ok) {
                 throw createDriveApiError(body, operation, response.status);
             }
-            return body as T;
+            return { data: body as T, headers: response.headers };
         } catch (error) {
             if (error instanceof DriveApiError) throw error;
-
-            if (error instanceof HTTPError) {
-                const body = await readJsonResponse(error.response);
-                throw createDriveApiError(body, operation, error.response.status);
-            }
-
             throw createDriveApiError(error, operation);
         }
     }
@@ -582,6 +863,7 @@ export class DriveService {
         paths,
         conflictStrategy,
         preparation,
+        abortController: providedAbortController,
     }: {
         destId: string;
         paths: string[];
@@ -593,10 +875,11 @@ export class DriveService {
             totalSize: number;
             processName: string;
         };
+        abortController?: AbortController;
     }) {
         const { pid, files, directories, processName } = preparation;
         const restartParams: UploadParams = { type: "upload", destId, paths, conflictStrategy };
-        const abortController = new AbortController();
+        const abortController = providedAbortController ?? new AbortController();
 
         await this.desktop.service.transfer.createTransfer({
             pid,
@@ -769,7 +1052,7 @@ export class DriveService {
         suggestedName,
         savePath,
     }: {
-        items: Array<{ id: string; isDir: boolean; name: string }>;
+        items: Array<{ id: string; isDir: boolean; name: string; size?: number | null }>;
         isSingle: boolean;
         pid: string;
         restartParams: DownloadParams;
@@ -799,6 +1082,26 @@ export class DriveService {
                       link,
                       signal: abortController.signal,
                   });
+        }
+
+        const listedContentBytes = items.every((item) => typeof item.size === "number")
+            ? items.reduce((total, item) => total + (item.size ?? 0), 0)
+            : undefined;
+        if (listedContentBytes !== undefined && listedContentBytes !== data.totalBytes) {
+            this.desktop.logger.warn(
+                {
+                    itemIds: items.map((item) => item.id),
+                    itemNames: items.map((item) => item.name),
+                    listedContentBytes,
+                    downloadMetadataBytes: data.totalBytes,
+                    deltaBytes: listedContentBytes - data.totalBytes,
+                    fileCount: data.files.length,
+                    directoryCount: data.dirs.length,
+                    savePath,
+                    linkId: link?.linkId,
+                },
+                "Drive:Download:ContentSizeMismatch",
+            );
         }
 
         if (data.root) {
@@ -965,6 +1268,39 @@ async function readJsonResponse(response: Response): Promise<unknown> {
     } catch {
         return text;
     }
+}
+
+function parseRemoteImportData(value: string): unknown {
+    if (!value.trim()) return undefined;
+    try {
+        return JSON.parse(value) as unknown;
+    } catch {
+        return value;
+    }
+}
+
+function getRemoteImportProcessedFiles(value: unknown) {
+    if (typeof value !== "object" || value === null) return undefined;
+    const processedFiles = (value as Record<string, unknown>).processedFiles;
+    return typeof processedFiles === "number" ? processedFiles : undefined;
+}
+
+function remoteImportStatusMessage(value: unknown) {
+    if (typeof value === "string") return value;
+    if (typeof value !== "object" || value === null) return undefined;
+    const status = (value as Record<string, unknown>).status;
+    return typeof status === "string" ? status : undefined;
+}
+
+function remoteImportErrorMessage(value: unknown) {
+    if (typeof value === "string") return value;
+    if (typeof value !== "object" || value === null) return "The server import failed.";
+    const record = value as Record<string, unknown>;
+    for (const key of ["message", "error", "code"]) {
+        const message = record[key];
+        if (typeof message === "string" && message.trim()) return message;
+    }
+    return "The server import failed.";
 }
 
 function isSharedLinkAccess(value: unknown): value is SharedLinkAccess {

@@ -112,7 +112,17 @@
         "password_required": "이 링크는 비밀번호가 필요합니다.",
         "invalid_password": "공유 링크 비밀번호가 올바르지 않습니다.",
         "success": "{{count}}개 항목을 내 드라이브로 복사했습니다.",
-        "failed": "복사에 실패했습니다"
+        "failed": "복사에 실패했습니다",
+        "progress": {
+          "preparing": "복사를 준비하는 중...",
+          "copying": "서버에서 드라이브로 복사하는 중...",
+          "downloading": "항목을 다운로드하는 중...",
+          "uploading": "드라이브에 업로드하는 중...",
+          "completed": "복사가 완료되었습니다.",
+          "canceled": "복사가 중지되었습니다.",
+          "cancel": "복사 중지",
+          "error": "복사 중 오류가 발생했습니다."
+        }
       },
       "head_buttons": {
         "search_in_dir_placeholder": "이 폴더에서 검색...",

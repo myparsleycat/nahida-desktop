@@ -173,7 +173,7 @@ function RouteComponent() {
               <div className="flex-1"></div>
             )}
 
-            <AkashaHeadButtons />
+            <AkashaHeadButtons currentId={effectiveId} />
           </div>
 
           <div

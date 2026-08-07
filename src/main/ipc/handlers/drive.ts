@@ -159,6 +159,12 @@ export function registerDriveHandlers(d: NahidaDesktop) {
             () => d.service.drive.fn.copyFromUrl(params),
         );
     });
+
+    rh("drive:fn:cancelCopyFromUrl", async (operationId) => {
+        return await safeDriveCall(d, "fn:cancelCopyFromUrl", `operationId=${operationId}`, () =>
+            d.service.drive.fn.cancelCopyFromUrl(operationId),
+        );
+    });
 }
 
 async function safeDriveCall<T>(

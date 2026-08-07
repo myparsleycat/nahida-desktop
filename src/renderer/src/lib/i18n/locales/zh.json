@@ -112,7 +112,17 @@
         "password_required": "此链接需要密码。",
         "invalid_password": "共享链接密码不正确。",
         "success": "已将 {{count}} 个项目复制到云端硬盘。",
-        "failed": "复制失败"
+        "failed": "复制失败",
+        "progress": {
+          "preparing": "正在准备复制…",
+          "copying": "正在由服务器复制到云端硬盘…",
+          "downloading": "正在下载项目…",
+          "uploading": "正在上传到云端硬盘…",
+          "completed": "复制完成。",
+          "canceled": "复制已停止。",
+          "cancel": "停止复制",
+          "error": "传输过程中复制失败。"
+        }
       },
       "head_buttons": {
         "search_in_dir_placeholder": "在此文件夹中搜索...",
