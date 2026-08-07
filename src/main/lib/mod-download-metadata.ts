@@ -89,11 +89,25 @@ export async function writeModDownloadMetadataToDirectories(
         directories.add(stat.isDirectory() ? targetPath : path.dirname(targetPath));
     }
 
-    await Promise.all(
-        Array.from(directories).map((directoryPath) =>
-            writeModDownloadMetadata(directoryPath, metadata),
-        ),
-    );
+    const written: string[] = [];
+    try {
+        await Promise.all(
+            Array.from(directories).map(async (directoryPath) => {
+                await writeModDownloadMetadata(directoryPath, metadata);
+                written.push(directoryPath);
+            }),
+        );
+    } catch (error) {
+        (error as Error & { writtenDirectories?: string[] }).writtenDirectories = [...written];
+        await Promise.all(
+            written.map(async (dir) => {
+                try {
+                    await fse.remove(path.join(dir, MOD_DOWNLOAD_METADATA_FILE_NAME));
+                } catch {}
+            }),
+        );
+        throw error;
+    }
 }
 
 async function hideFile(filePath: string) {

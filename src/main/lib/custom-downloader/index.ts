@@ -44,6 +44,7 @@ export type GBDownloaderFailureContext = {
     rollback: {
         stagingPathRemoved: boolean;
         finalized: boolean;
+        finalizedPaths: string[];
         cleanupError?: string;
     };
 };
@@ -64,7 +65,10 @@ function attachGBDownloaderContext(error: unknown, context: GBDownloaderFailureC
         error instanceof Error ? error : new Error(toErrorMessage(error), { cause: error });
     (normalized as GBDownloaderError).context = {
         ...context,
-        rollback: { ...context.rollback },
+        rollback: {
+            ...context.rollback,
+            finalizedPaths: [...context.rollback.finalizedPaths],
+        },
     };
     return normalized;
 }
@@ -390,6 +394,7 @@ export class CustomDownloader {
             rollback: {
                 stagingPathRemoved: false,
                 finalized: false,
+                finalizedPaths: [],
                 cleanupError: undefined,
             },
         };
@@ -522,6 +527,21 @@ export class CustomDownloader {
                         this.desktop.logger.error(error, "GameBanana:downloadFromGB:cleanup");
                     }
                 };
+                const cleanupDestinationEntries = async () => {
+                    const entries = context.rollback.finalizedPaths;
+                    if (entries.length === 0) return;
+                    for (const entry of entries) {
+                        try {
+                            await fse.remove(entry);
+                        } catch (error) {
+                            context.rollback.cleanupError = toErrorMessage(error);
+                            this.desktop.logger.error(
+                                error,
+                                "GameBanana:downloadFromGB:cleanup:destination",
+                            );
+                        }
+                    }
+                };
 
                 try {
                     context.stage = "download-file";
@@ -594,11 +614,17 @@ export class CustomDownloader {
                     }
 
                     context.stage = "finalize-files";
-                    const finalizedPaths = await finalizeStagedDownload(
-                        stagingPath,
-                        destinationPath,
-                    );
-                    context.rollback.finalized = true;
+                    let finalizedPaths: string[] = [];
+                    try {
+                        finalizedPaths = await finalizeStagedDownload(stagingPath, destinationPath);
+                        context.rollback.finalized = true;
+                        context.rollback.finalizedPaths = [...finalizedPaths];
+                    } catch (error) {
+                        const partial = (error as Error & { partialDestinationPaths?: string[] })
+                            .partialDestinationPaths;
+                        if (partial?.length) context.rollback.finalizedPaths = [...partial];
+                        throw error;
+                    }
                     const metadata: ModDownloadMetadataInput = {
                         source: "gamebanana",
                         downloadedAt: new Date().toISOString(),
@@ -616,7 +642,19 @@ export class CustomDownloader {
                             md5: downloadFilePayload.fileMd5,
                         },
                     };
-                    await writeModDownloadMetadataToDirectories(finalizedPaths, metadata);
+                    try {
+                        await writeModDownloadMetadataToDirectories(finalizedPaths, metadata);
+                    } catch (error) {
+                        const written = (error as Error & { writtenDirectories?: string[] })
+                            .writtenDirectories;
+                        if (written?.length) {
+                            this.desktop.logger.error(
+                                { writtenDirectories: written, error: toErrorMessage(error) },
+                                "GameBanana:downloadFromGB:metadataCleanup",
+                            );
+                        }
+                        throw error;
+                    }
 
                     this.desktop.service.transfer.markFileCompleted(pid, pid);
 
@@ -636,6 +674,7 @@ export class CustomDownloader {
                     }
                 } catch (err) {
                     await cleanupStaging();
+                    await cleanupDestinationEntries();
                     if (
                         abortController.signal.aborted ||
                         (err as Error).name === "AbortError" ||
@@ -648,6 +687,10 @@ export class CustomDownloader {
                         this.desktop.logger.error(
                             {
                                 ...context,
+                                rollback: {
+                                    ...context.rollback,
+                                    finalizedPaths: [...context.rollback.finalizedPaths],
+                                },
                                 error: toErrorMessage(err),
                             },
                             "GameBanana:downloadFromGB:context",

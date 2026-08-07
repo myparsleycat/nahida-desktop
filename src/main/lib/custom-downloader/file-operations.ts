@@ -1,5 +1,7 @@
 import path from "node:path";
+
 import fse from "fs-extra";
+
 import { getArchiveRootName } from "./utils";
 
 export async function moveWithOverwrite(sourcePath: string, destinationPath: string) {
@@ -20,11 +22,18 @@ export async function finalizeStagedDownload(stagingPath: string, destinationDir
 
     const destinationPaths: string[] = [];
 
-    for (const entry of stagedEntries) {
-        const sourcePath = path.join(stagingPath, entry);
-        const destinationPath = path.join(destinationDir, entry);
-        await moveWithOverwrite(sourcePath, destinationPath);
-        destinationPaths.push(destinationPath);
+    try {
+        for (const entry of stagedEntries) {
+            const sourcePath = path.join(stagingPath, entry);
+            const destinationPath = path.join(destinationDir, entry);
+            await moveWithOverwrite(sourcePath, destinationPath);
+            destinationPaths.push(destinationPath);
+        }
+    } catch (error) {
+        (error as Error & { partialDestinationPaths?: string[] }).partialDestinationPaths = [
+            ...destinationPaths,
+        ];
+        throw error;
     }
 
     return destinationPaths;
