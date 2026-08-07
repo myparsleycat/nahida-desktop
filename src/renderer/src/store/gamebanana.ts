@@ -3,6 +3,7 @@ import type {
     GameBananaModIndexSort,
 } from "@renderer/hooks/use-gamebanana-data";
 import { createStore, useStore } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 
 const DEFAULT_SUBFEED_PAGE = 1;
 const DEFAULT_MODS_PAGE = 1;
@@ -46,21 +47,11 @@ interface GameBananaState {
     toggleModUrl: () => void;
 }
 
-export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
-    selectedGame: "",
-    pendingModGameSync: false,
-    selectedCategoryId: undefined,
-    categoryBreadcrumbs: [],
-    categorySearch: "",
-    selectedMod: undefined,
-    subfeedPage: DEFAULT_SUBFEED_PAGE,
-    modsPage: DEFAULT_MODS_PAGE,
-    modSearch: "",
-    modsSort: "Generic_Newest",
-    isModUrlOpen: false,
-    setSelectedGame: (selectedGame) =>
-        set({
-            selectedGame,
+export const gameBananaStore = createStore<GameBananaState>()(
+    persist(
+        (set, get) => ({
+            selectedGame: "",
+            pendingModGameSync: false,
             selectedCategoryId: undefined,
             categoryBreadcrumbs: [],
             categorySearch: "",
@@ -68,72 +59,106 @@ export const gameBananaStore = createStore<GameBananaState>((set, get) => ({
             subfeedPage: DEFAULT_SUBFEED_PAGE,
             modsPage: DEFAULT_MODS_PAGE,
             modSearch: "",
-        }),
-    setInitialGame: (selectedGame) => {
-        if (!get().selectedGame) {
-            set({ selectedGame });
-        }
-    },
-    requestModGameSync: () => set({ pendingModGameSync: true }),
-    consumeModGameSync: () => {
-        const pendingModGameSync = get().pendingModGameSync;
-        if (pendingModGameSync) {
-            set({ pendingModGameSync: false });
-        }
-        return pendingModGameSync;
-    },
-    selectCategory: (categoryId, categoryName) =>
-        set((state) => {
-            const nextBreadcrumbs =
-                state.selectedCategoryId === undefined
-                    ? [{ id: categoryId, name: categoryName }]
-                    : [...state.categoryBreadcrumbs, { id: categoryId, name: categoryName }];
+            modsSort: "Generic_Newest",
+            isModUrlOpen: false,
+            setSelectedGame: (selectedGame) =>
+                set({
+                    selectedGame,
+                    selectedCategoryId: undefined,
+                    categoryBreadcrumbs: [],
+                    categorySearch: "",
+                    selectedMod: undefined,
+                    subfeedPage: DEFAULT_SUBFEED_PAGE,
+                    modsPage: DEFAULT_MODS_PAGE,
+                    modSearch: "",
+                }),
+            setInitialGame: (selectedGame) => {
+                if (!get().selectedGame) {
+                    set({ selectedGame });
+                }
+            },
+            requestModGameSync: () => set({ pendingModGameSync: true }),
+            consumeModGameSync: () => {
+                const pendingModGameSync = get().pendingModGameSync;
+                if (pendingModGameSync) {
+                    set({ pendingModGameSync: false });
+                }
+                return pendingModGameSync;
+            },
+            selectCategory: (categoryId, categoryName) =>
+                set((state) => {
+                    const nextBreadcrumbs =
+                        state.selectedCategoryId === undefined
+                            ? [{ id: categoryId, name: categoryName }]
+                            : [
+                                  ...state.categoryBreadcrumbs,
+                                  { id: categoryId, name: categoryName },
+                              ];
 
-            return {
-                selectedCategoryId: categoryId,
-                categoryBreadcrumbs: nextBreadcrumbs,
-                categorySearch: "",
-                selectedMod: undefined,
-                modsPage: DEFAULT_MODS_PAGE,
-                modSearch: "",
-            };
-        }),
-    selectMod: (selectedMod) => set({ selectedMod }),
-    clearSelectedMod: () => set({ selectedMod: undefined }),
-    selectBreadcrumbCategory: (index) =>
-        set((state) => {
-            const nextBreadcrumbs = state.categoryBreadcrumbs.slice(0, index + 1);
-            const nextCategory = nextBreadcrumbs.at(-1);
-            if (!nextCategory) {
-                return state;
-            }
+                    return {
+                        selectedCategoryId: categoryId,
+                        categoryBreadcrumbs: nextBreadcrumbs,
+                        categorySearch: "",
+                        selectedMod: undefined,
+                        modsPage: DEFAULT_MODS_PAGE,
+                        modSearch: "",
+                    };
+                }),
+            selectMod: (selectedMod) => set({ selectedMod }),
+            clearSelectedMod: () => set({ selectedMod: undefined }),
+            selectBreadcrumbCategory: (index) =>
+                set((state) => {
+                    const nextBreadcrumbs = state.categoryBreadcrumbs.slice(0, index + 1);
+                    const nextCategory = nextBreadcrumbs.at(-1);
+                    if (!nextCategory) {
+                        return state;
+                    }
 
-            return {
-                selectedCategoryId: nextCategory.id,
-                categoryBreadcrumbs: nextBreadcrumbs,
-                categorySearch: "",
-                selectedMod: undefined,
-                modsPage: DEFAULT_MODS_PAGE,
-                modSearch: "",
-            };
+                    return {
+                        selectedCategoryId: nextCategory.id,
+                        categoryBreadcrumbs: nextBreadcrumbs,
+                        categorySearch: "",
+                        selectedMod: undefined,
+                        modsPage: DEFAULT_MODS_PAGE,
+                        modSearch: "",
+                    };
+                }),
+            resetToGameHome: () =>
+                set({
+                    selectedCategoryId: undefined,
+                    categoryBreadcrumbs: [],
+                    categorySearch: "",
+                    selectedMod: undefined,
+                    subfeedPage: DEFAULT_SUBFEED_PAGE,
+                    modsPage: DEFAULT_MODS_PAGE,
+                    modSearch: "",
+                }),
+            setSubfeedPage: (subfeedPage) => set({ subfeedPage: Math.max(1, subfeedPage) }),
+            setModsPage: (modsPage) => set({ modsPage: Math.max(1, modsPage) }),
+            setModSearch: (modSearch) => set({ modSearch }),
+            setCategorySearch: (categorySearch) => set({ categorySearch }),
+            setModsSort: (modsSort) => set({ modsSort, modsPage: DEFAULT_MODS_PAGE }),
+            toggleModUrl: () => set((state) => ({ isModUrlOpen: !state.isModUrlOpen })),
         }),
-    resetToGameHome: () =>
-        set({
-            selectedCategoryId: undefined,
-            categoryBreadcrumbs: [],
-            categorySearch: "",
-            selectedMod: undefined,
-            subfeedPage: DEFAULT_SUBFEED_PAGE,
-            modsPage: DEFAULT_MODS_PAGE,
-            modSearch: "",
-        }),
-    setSubfeedPage: (subfeedPage) => set({ subfeedPage: Math.max(1, subfeedPage) }),
-    setModsPage: (modsPage) => set({ modsPage: Math.max(1, modsPage) }),
-    setModSearch: (modSearch) => set({ modSearch }),
-    setCategorySearch: (categorySearch) => set({ categorySearch }),
-    setModsSort: (modsSort) => set({ modsSort, modsPage: DEFAULT_MODS_PAGE }),
-    toggleModUrl: () => set((state) => ({ isModUrlOpen: !state.isModUrlOpen })),
-}));
+        {
+            name: "nahida.gamebanana.view",
+            storage: createJSONStorage(() => localStorage),
+            partialize: (state) => ({
+                selectedGame: state.selectedGame,
+                selectedCategoryId: state.selectedCategoryId,
+                categoryBreadcrumbs: state.categoryBreadcrumbs,
+                categorySearch: state.categorySearch,
+                selectedMod: state.selectedMod,
+                subfeedPage: state.subfeedPage,
+                modsPage: state.modsPage,
+                modSearch: state.modSearch,
+                modsSort: state.modsSort,
+                isModUrlOpen: state.isModUrlOpen,
+            }),
+            version: 1,
+        },
+    ),
+);
 
 export function useGameBananaStore<T>(selector: (state: GameBananaState) => T): T {
     return useStore(gameBananaStore, selector);
