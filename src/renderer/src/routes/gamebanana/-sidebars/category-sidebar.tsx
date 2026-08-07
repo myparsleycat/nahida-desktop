@@ -50,10 +50,10 @@ export function CategorySidebar({
   onResetToGameHome: () => void;
 }) {
   const categories = hasCategoryContext ? categoryChildren : rootCategories;
-  const normalizedCategorySearch = categorySearch.trim().toLocaleLowerCase();
+  const normalizedCategorySearch = categorySearch.trim().toLocaleLowerCase(language);
   const filteredCategories = normalizedCategorySearch
     ? categories.filter((category) =>
-        category._sName.toLocaleLowerCase().includes(normalizedCategorySearch),
+        category._sName.toLocaleLowerCase(language).includes(normalizedCategorySearch),
       )
     : categories;
   const isLoading = hasCategoryContext ? isCategoryOverviewLoading : isGameOverviewLoading;
@@ -82,6 +82,7 @@ export function CategorySidebar({
             value={categorySearch}
             onChange={(event) => onChangeCategorySearch(event.target.value)}
             placeholder={t("page.gamebanana.search_categories")}
+            aria-label={t("page.gamebanana.search_categories")}
             className="pl-9"
           />
         </div>

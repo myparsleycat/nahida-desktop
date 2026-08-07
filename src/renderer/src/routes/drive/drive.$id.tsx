@@ -15,6 +15,7 @@ import {
 } from "@renderer/components/akasha/dialogs";
 import { Center, ServerCrash } from "@renderer/components/common";
 import { ContextMenuProvider } from "@renderer/components/drive/context-menu";
+import { DriveImportOverlay } from "@renderer/components/drive/drive-import-overlay";
 import { AliceLoader } from "@renderer/components/loaders";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { useDrag } from "@renderer/hooks/drive";
@@ -147,7 +148,7 @@ function RouteComponent() {
   } else if (query.isError) {
     return (
       <Center>
-        <ServerCrash />
+        <ServerCrash message={toErrorMessage(query.error)} />
       </Center>
     );
   }
@@ -163,7 +164,7 @@ function RouteComponent() {
               <div className="flex-1"></div>
             )}
 
-            <AkashaHeadButtons />
+            <AkashaHeadButtons currentId={effectiveId} />
           </div>
 
           <div
@@ -222,6 +223,8 @@ function RouteComponent() {
         <ConflictNameDialog />
         <NewDirectoryDialog contents={sortedContents} />
         {/* <PubLinkDialog /> */}
+
+        <DriveImportOverlay destinationId={effectiveId} />
       </>
     );
   } else {

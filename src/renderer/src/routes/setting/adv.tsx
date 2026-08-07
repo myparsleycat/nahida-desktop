@@ -64,6 +64,7 @@ function RouteComponent() {
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
           placeholder={t("page.setting.adv.search_placeholder")}
+          aria-label={t("page.setting.adv.search_placeholder")}
           className="pl-9"
         />
       </div>
@@ -84,7 +85,7 @@ function RouteComponent() {
           ))}
         </div>
       </div>
-      {filteredSettings?.length === 0 && (
+      {searchQuery.trim().length > 0 && filteredSettings?.length === 0 && (
         <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
           {t("page.setting.adv.no_results")}
         </div>

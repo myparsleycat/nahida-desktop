@@ -477,6 +477,12 @@ export class Setting {
                         : "space",
                 normalize: (value) => (DISABLED_PREFIX_STYLES.includes(value) ? value : "space"),
             },
+            "mod.returnToGamebananaAfterDownload": {
+                definition: APP_SETTINGS["mod.returnToGamebananaAfterDownload"],
+                getDefault: () => false,
+                fromStored: (value) => parseBooleanSetting(value, false),
+                toStored: (value) => String(value),
+            },
             "tools.touchProfileLlmProtocol": {
                 definition: APP_SETTINGS["tools.touchProfileLlmProtocol"],
                 getDefault: () => DEFAULT_TOUCH_PROFILE_LLM_PROTOCOL,
@@ -595,6 +601,15 @@ export class Setting {
                 getDefault: () => normalizeDriveNameSortPolicy(null),
                 fromStored: (value) => normalizeDriveNameSortPolicy(value),
                 normalize: (value) => normalizeDriveNameSortPolicy(value),
+            },
+            "debug.openConsole": {
+                definition: APP_SETTINGS["debug.openConsole"],
+                getDefault: () => false,
+                fromStored: (value) => parseBooleanSetting(value, false),
+                toStored: (value) => String(value),
+                afterSet: (enabled) => {
+                    this.desktop.window.main.setConsoleWindowEnabled(enabled);
+                },
             },
             "modelViewer.toneMapping": {
                 definition: APP_SETTINGS["modelViewer.toneMapping"],
@@ -885,6 +900,11 @@ export class Setting {
         },
     };
 
+    debug = {
+        getOpenConsole: async () => await this.get("debug.openConsole"),
+        setOpenConsole: async (enabled: boolean) => await this.set("debug.openConsole", enabled),
+    };
+
     modelViewer = {
         getToneMapping: async () => await this.get("modelViewer.toneMapping"),
         setToneMapping: async (toneMapping: string) =>
@@ -932,6 +952,7 @@ export class Setting {
 
     advanced = {
         getAll: async () => {
+            await this.get("debug.openConsole");
             const rows = await this.desktop.lib.db.settings.list();
             const sensitiveKeys = ["password", "token", "secret", "credentials", "api_key"];
 
@@ -951,8 +972,16 @@ export class Setting {
                 throw new Error(`Setting key "${key}" not found.`);
             }
 
-            await this.desktop.lib.db.settings.updateValue(key, value);
-            this.desktop.ipc.broadcast("setting:update", { key, value });
+            const storedValue =
+                key === APP_SETTINGS["debug.openConsole"].storageKey
+                    ? String(parseBooleanSetting(value, false))
+                    : value;
+
+            await this.desktop.lib.db.settings.updateValue(key, storedValue);
+            if (key === APP_SETTINGS["debug.openConsole"].storageKey) {
+                this.desktop.window.main.setConsoleWindowEnabled(storedValue === "true");
+            }
+            this.desktop.ipc.broadcast("setting:update", { key, value: storedValue });
             this.desktop.ipc.broadcast("renderer:reload");
         },
     };

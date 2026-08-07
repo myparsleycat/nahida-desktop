@@ -24,6 +24,17 @@ function isBrokenPipeError(error: unknown) {
     return typeof error === "object" && error !== null && "code" in error && error.code === "EPIPE";
 }
 
+export function installOutputStreamErrorGuards() {
+    const ignoreOutputStreamError = (error: unknown) => {
+        if (isBrokenPipeError(error)) return;
+
+        // Console output is diagnostic only; never let its stream failure terminate the app.
+    };
+
+    process.stdout.on("error", ignoreOutputStreamError);
+    process.stderr.on("error", ignoreOutputStreamError);
+}
+
 export class Logger {
     private logger: PinoLogger | null = null;
     private dest: string | null = null;

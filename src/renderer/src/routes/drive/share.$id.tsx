@@ -145,7 +145,7 @@ function RouteComponent() {
   } else if (query.isError) {
     return (
       <Center>
-        <ServerCrash />
+        <ServerCrash message={toErrorMessage(query.error)} />
       </Center>
     );
   }

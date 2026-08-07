@@ -33,7 +33,7 @@ export function GameHomePanel({
   const disableNext = subfeedQuery.data == null || Boolean(metadata?._bIsComplete);
 
   return (
-    <div className="h-full min-h-0 min-w-0 p-4">
+    <div className="h-full min-h-0 min-w-0 p-2">
       <Card className="flex h-full min-h-0 flex-col p-0">
         <CardHeader className="shrink-0">
           <div className="flex items-center justify-between gap-3 pt-3">

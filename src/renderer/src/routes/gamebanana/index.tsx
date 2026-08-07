@@ -484,7 +484,7 @@ function RouteComponent() {
       </div>
 
       <div className="hidden lg:flex lg:flex-1 lg:flex-col lg:overflow-hidden">
-        <div className="border-b px-4 py-3">
+        <div className="border-b p-2">
           <GameBananaToolbar
             games={games}
             selectedGame={selectedGame?.key}
@@ -515,7 +515,7 @@ function RouteComponent() {
           />
           {isModUrlOpen && (
             <form
-              className="mt-3 flex items-start gap-2 border-t pt-3"
+              className="mt-2 flex items-start gap-2 border-t pt-2"
               onSubmit={(event) => {
                 event.preventDefault();
                 handleOpenModUrl();
@@ -582,7 +582,7 @@ function RouteComponent() {
           </div>
 
           {showCategorySidebar && (
-            <div className="min-h-0 min-w-0 py-4 pr-4">
+            <div className="min-h-0 min-w-0 py-2 pr-2">
               {isViewingMod ? (
                 <ModFilesSidebar
                   t={t}

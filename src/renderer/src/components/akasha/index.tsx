@@ -35,6 +35,7 @@ import {
   FileIcon,
   FileTextIcon,
   FolderIcon,
+  LinkIcon,
   LayoutGridIcon,
   ListIcon,
   LoaderIcon,
@@ -177,20 +178,34 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
   );
 }
 
-export function AkashaHeadButtons() {
+export function AkashaHeadButtons({ currentId }: { currentId?: string }) {
   const { t } = useTranslation();
   const dialog = useDialogStore();
   const { selectedItems } = useSelectionStore();
+  const navi = useNavigate();
+  const { session } = useAuth();
 
   const layout = useViewStore((s) => s.layout);
   const setLayout = useViewStore((s) => s.setLayout);
   const searchInDirQuery = useViewStore((s) => s.searchInDirQuery);
   const setSearchInDirQuery = useViewStore((s) => s.setSearchInDirQuery);
   const setFocusSearchInputState = useViewStore((s) => s.setFocusSearchInputState);
+  const setImportOverlay = useViewStore((s) => s.setImportOverlay);
 
   const handleDownload = () => {
     if (selectedItems.length === 0) return;
     void downloadItems(selectedItems);
+  };
+
+  const handleImportClick = async () => {
+    if (currentId) {
+      setImportOverlay({ url: "" });
+      return;
+    }
+    const rootId = session?.drive.rootId;
+    if (!rootId) return;
+    await navi({ to: "/drive/drive/$id", params: { id: rootId } });
+    setImportOverlay({ url: "" });
   };
 
   return (
@@ -209,6 +224,19 @@ export function AkashaHeadButtons() {
       </div>
 
       <div className="flex shrink-0 flex-row items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="shrink-0"
+          aria-label={t("page.drive.head_buttons.import")}
+          title={t("page.drive.head_buttons.import")}
+          onClick={() => {
+            void handleImportClick();
+          }}
+        >
+          <LinkIcon size={20} />
+        </Button>
+
         <Button
           variant="ghost"
           size="icon"
@@ -540,6 +568,7 @@ export function HandlerProvider<T>(props: HandlerProviderProps<T>) {
   const { selectedItems, setSelectedItems, setLastSelectedIdx, setCopyOrCuts } =
     useSelectionStore();
   const isfocusSearchInput = useViewStore((s) => s.isfocusSearchInput);
+  const importOverlay = useViewStore((s) => s.importOverlay);
   const setSearchInDirQuery = useViewStore((s) => s.setSearchInDirQuery);
   const pendingDriveRevealId = useViewStore((s) => s.pendingDriveRevealId);
   const setPendingDriveRevealId = useViewStore((s) => s.setPendingDriveRevealId);
@@ -619,6 +648,7 @@ export function HandlerProvider<T>(props: HandlerProviderProps<T>) {
 
       if (isfocusSearchInput) return;
       if (dialog.anyDialogOpen()) return;
+      if (importOverlay) return;
 
       const currentIndex = selectedItems.length
         ? sortedContents.findIndex((item) => item.id === selectedItems[0]?.id)
@@ -766,6 +796,7 @@ export function HandlerProvider<T>(props: HandlerProviderProps<T>) {
       sortedContents,
       selectedItems,
       isfocusSearchInput,
+      importOverlay,
       data,
       navi,
       dialog,

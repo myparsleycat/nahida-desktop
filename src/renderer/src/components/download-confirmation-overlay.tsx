@@ -1,6 +1,9 @@
 import { Button } from "@renderer/components/ui/button";
+import { Checkbox } from "@renderer/components/ui/checkbox";
 import { Input } from "@renderer/components/ui/input";
+import { useSetting } from "@renderer/hooks/use-settings";
 import { Logger } from "@renderer/lib/logger";
+import { setSetting } from "@renderer/lib/settings";
 import { useModStore } from "@renderer/store/mod";
 import { useNavigate } from "@tanstack/react-router";
 import { Download } from "lucide-react";
@@ -17,15 +20,22 @@ export function DownloadConfirmationOverlay() {
   const resetUserSelectedDuringDownload = useModStore((s) => s.resetUserSelectedDuringDownload);
   const selectedGroup = useModStore((s) => s.selectedGroup);
 
+  const { data: returnToGamebanana = false } = useSetting("mod.returnToGamebananaAfterDownload");
+
   const selectedPath = selectedGroup?.path || null;
   const selectedGroupName = selectedGroup?.name;
   const suggestedName = downloadMode?.suggestedName;
 
   const [fileName, setFileName] = useState(suggestedName || "");
+  const [shouldReturnToGamebanana, setShouldReturnToGamebanana] = useState(returnToGamebanana);
 
   useEffect(() => {
     setFileName(suggestedName || "");
   }, [suggestedName]);
+
+  useEffect(() => {
+    setShouldReturnToGamebanana(returnToGamebanana);
+  }, [returnToGamebanana]);
 
   const handleConfirm = async () => {
     if (!downloadMode || !selectedGroup) return;
@@ -40,7 +50,7 @@ export function DownloadConfirmationOverlay() {
 
       setDownloadMode(null);
       resetUserSelectedDuringDownload();
-      if (downloadMode.downloadSource === "gamebanana") {
+      if (downloadMode.downloadSource === "gamebanana" && shouldReturnToGamebanana) {
         void navigate({ to: "/gamebanana" });
       }
     } catch (error) {
@@ -120,6 +130,19 @@ export function DownloadConfirmationOverlay() {
             />
           </div>
 
+          {downloadMode.downloadSource === "gamebanana" && (
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox
+                checked={shouldReturnToGamebanana}
+                onCheckedChange={(checked) => {
+                  setShouldReturnToGamebanana(checked);
+                  void setSetting("mod.returnToGamebananaAfterDownload", checked);
+                }}
+              />
+              {t("components.download-confirmation-overlay.return_to_gamebanana")}
+            </label>
+          )}
+
           <div className="flex gap-2 pt-2">
             <Button variant="outline" onClick={handleCancel} className="flex-1">
               {t("g.cancel")}
@@ -130,9 +153,7 @@ export function DownloadConfirmationOverlay() {
               className="flex-1"
             >
               <Download className="mr-2 size-4" />
-              {downloadMode.downloadSource === "gamebanana"
-                ? t("components.download-confirmation-overlay.download_and_return")
-                : t("g.select")}
+              {t("g.select")}
             </Button>
           </div>
         </div>

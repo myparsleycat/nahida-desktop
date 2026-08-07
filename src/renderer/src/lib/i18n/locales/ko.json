@@ -90,8 +90,43 @@
       "toast": {
         "no_uploadable_files": "업로드 가능한 파일이 없습니다."
       },
+      "import": {
+        "title": "나히다 드라이브로 복사",
+        "description": "공유 폴더 또는 컬렉션 URL을 입력한 뒤 내 드라이브의 폴더를 선택하세요.",
+        "url_label": "나히다 URL",
+        "url_placeholder": "https://nahida.live/akasha/link/...",
+        "destination_label": "대상 폴더",
+        "choose_destination": "폴더 선택",
+        "destination_description": "복사한 항목을 저장할 드라이브 루트 또는 하위 폴더를 선택하세요.",
+        "loading_folder": "폴더를 불러오는 중...",
+        "no_subfolders": "하위 폴더가 없습니다",
+        "destination_load_failed": "대상 폴더를 불러오지 못했습니다.",
+        "parent_folder": "상위 폴더",
+        "select_folder": "이 폴더 사용",
+        "destination_required": "대상 폴더를 선택하세요.",
+        "password_label": "비밀번호",
+        "password_placeholder": "공유 링크 비밀번호를 입력하세요",
+        "action": "드라이브로 복사",
+        "url_required": "나히다 URL을 입력하세요.",
+        "login_required": "내 드라이브로 복사하려면 로그인하세요.",
+        "password_required": "이 링크는 비밀번호가 필요합니다.",
+        "invalid_password": "공유 링크 비밀번호가 올바르지 않습니다.",
+        "success": "{{count}}개 항목을 내 드라이브로 복사했습니다.",
+        "failed": "복사에 실패했습니다",
+        "progress": {
+          "preparing": "복사를 준비하는 중...",
+          "copying": "서버에서 드라이브로 복사하는 중...",
+          "downloading": "항목을 다운로드하는 중...",
+          "uploading": "드라이브에 업로드하는 중...",
+          "completed": "복사가 완료되었습니다.",
+          "canceled": "복사가 중지되었습니다.",
+          "cancel": "복사 중지",
+          "error": "복사 중 오류가 발생했습니다."
+        }
+      },
       "head_buttons": {
         "search_in_dir_placeholder": "이 폴더에서 검색...",
+        "import": "공유 링크 복사",
         "dropdown_menu": {
           "download": "다운로드",
           "make_new": {
@@ -1515,7 +1550,7 @@
       "download_location": "다운로드 위치",
       "need_select_character_folder": "좌측에서 캐릭터 폴더를 선택하세요",
       "select_path_failed": "경로 선택에 실패했습니다.",
-      "download_and_return": "다운로드 후 GameBanana로 돌아가기"
+      "return_to_gamebanana": "다운로드 추가 후 GameBanana로 돌아가기"
     }
   },
   "updater": {

@@ -37,6 +37,9 @@ describe("parseNahidaDeepLink", () => {
         "nahida://gamebanana?id=0",
         "nahida://gamebanana/open?url=https%3A%2F%2Fexample.com%2Fmods%2F123",
         "nahida://gamebanana/open?url=file%3A%2F%2Fgamebanana.com%2Fmods%2F123",
+        "nahida://drive/import?url=https%3A%2F%2Fnahida.live%2Fakasha%2Flink%2Fabc123",
+        "nahida://drive/copy?url=https%3A%2F%2Fexample.com%2Fakasha%2Flink%2Fabc123",
+        "nahida://drive/copy?url=https%3A%2F%2Fnahida.live%2Fakasha%2Funknown%2Fabc123",
     ])("rejects unsupported deep links", (value) => {
         expect(parseNahidaDeepLink(value)).toBeNull();
     });

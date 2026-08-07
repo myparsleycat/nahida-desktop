@@ -282,11 +282,30 @@ export interface BisectSnapshot {
     error: string | null;
 }
 
+export interface DriveCopyProgress {
+    operationId: string;
+    source: "link" | "mod";
+    phase:
+        | "preparing"
+        | "copying"
+        | "downloading"
+        | "uploading"
+        | "completed"
+        | "canceled"
+        | "error";
+    current: number;
+    total: number;
+    itemName?: string;
+    copiedFiles?: number;
+    message?: string;
+}
+
 export type IpcEvents = {
     "window:blur": () => void;
     "window:focus": () => void;
 
     "transfer:update": (transfers: TransferWithoutData[]) => void;
+    "drive:copy-progress": (progress: DriveCopyProgress) => void;
 
     "fn:toast": (message: string, data?: ToastData) => void;
     "fn:navi": (path: string) => void;
