@@ -3,6 +3,10 @@ import type { Content } from "@shared/types";
 import { useNavigate } from "@tanstack/react-router";
 import { createStore, useStore } from "zustand";
 
+interface ImportOverlayState {
+    url: string;
+}
+
 interface ViewState {
     layout: "list" | "grid";
     setLayout: (layout: "list" | "grid") => void;
@@ -22,6 +26,8 @@ interface ViewState {
     setPendingDriveRevealId: (id: string | null) => void;
     pendingShareRevealId: string | null;
     setPendingShareRevealId: (id: string | null) => void;
+    importOverlay: ImportOverlayState | null;
+    setImportOverlay: (overlay: ImportOverlayState | null) => void;
 }
 
 export const viewStore = createStore<ViewState>((set) => ({
@@ -41,6 +47,8 @@ export const viewStore = createStore<ViewState>((set) => ({
     setPendingDriveRevealId: (pendingDriveRevealId) => set({ pendingDriveRevealId }),
     pendingShareRevealId: null,
     setPendingShareRevealId: (pendingShareRevealId) => set({ pendingShareRevealId }),
+    importOverlay: null,
+    setImportOverlay: (importOverlay) => set({ importOverlay }),
 }));
 
 export function useViewStore<T>(selector: (state: ViewState) => T): T {
