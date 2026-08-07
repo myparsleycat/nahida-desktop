@@ -15,17 +15,17 @@ importers:
         specifier: ^4.0.29
         version: 4.0.29(zod@4.4.3)
       '@ai-sdk/openai-compatible':
-        specifier: ^3.0.22
-        version: 3.0.22(zod@4.4.3)
+        specifier: ^3.0.25
+        version: 3.0.25(zod@4.4.3)
       '@borewit/text-codec':
         specifier: ^0.2.2
         version: 0.2.2
       '@electron-toolkit/preload':
         specifier: ^3.0.2
-        version: 3.0.2(electron@43.2.0(supports-color@10.2.2))
+        version: 3.0.2(electron@43.3.0(supports-color@10.2.2))
       '@electron-toolkit/utils':
         specifier: ^4.0.0
-        version: 4.0.0(electron@43.2.0(supports-color@10.2.2))
+        version: 4.0.0(electron@43.3.0(supports-color@10.2.2))
       '@hono/node-server':
         specifier: ^2.1.0
         version: 2.1.0(hono@4.13.0)
@@ -151,17 +151,17 @@ importers:
         specifier: ^3.8.2
         version: 3.8.2(@emnapi/core@1.11.1)(@emnapi/runtime@2.0.0-alpha.3)(@types/node@26.1.1)(supports-color@10.2.2)
       '@react-three/drei':
-        specifier: ^10.7.7
-        version: 10.7.7(@react-three/fiber@9.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1))(@types/react@19.2.18)(@types/three@0.185.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1)
+        specifier: ^10.7.8
+        version: 10.7.8(@react-three/fiber@9.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1))(@types/react@19.2.18)(@types/three@0.185.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1)
       '@react-three/fiber':
         specifier: ^9.7.0
         version: 9.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1)
       '@rolldown/plugin-babel':
         specifier: ^0.2.3
-        version: 0.2.3(@babel/core@7.29.7(supports-color@10.2.2))(@babel/runtime@7.29.7)(rolldown@1.2.1)(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
+        version: 0.2.3(@babel/core@7.29.7(supports-color@10.2.2))(@babel/runtime@7.29.7)(rolldown@1.2.1)(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
       '@tailwindcss/vite':
         specifier: ^4.3.3
-        version: 4.3.3(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
+        version: 4.3.3(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
       '@tanstack/react-form':
         specifier: ^1.33.3
         version: 1.33.3(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -176,7 +176,7 @@ importers:
         version: 3.14.9(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@tanstack/router-plugin':
         specifier: ^1.168.23
-        version: 1.168.23(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.2)(supports-color@10.2.2)(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
+        version: 1.168.23(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.2)(supports-color@10.2.2)(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
       '@types/auto-launch':
         specifier: ^5.0.5
         version: 5.0.5
@@ -212,7 +212,7 @@ importers:
         version: 4.0.3
       '@vitejs/plugin-react':
         specifier: ^6.0.5
-        version: 6.0.5(@rolldown/plugin-babel@0.2.3(@babel/core@7.29.7(supports-color@10.2.2))(@babel/runtime@7.29.7)(rolldown@1.2.1)(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)))(babel-plugin-react-compiler@1.0.0)(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
+        version: 6.0.5(@rolldown/plugin-babel@0.2.3(@babel/core@7.29.7(supports-color@10.2.2))(@babel/runtime@7.29.7)(rolldown@1.2.1)(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)))(babel-plugin-react-compiler@1.0.0)(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
       babel-plugin-react-compiler:
         specifier: ^1.0.0
         version: 1.0.0
@@ -226,8 +226,8 @@ importers:
         specifier: ^17.4.2
         version: 17.4.2
       electron:
-        specifier: ^43.2.0
-        version: 43.2.0(supports-color@10.2.2)
+        specifier: ^43.3.0
+        version: 43.3.0(supports-color@10.2.2)
       electron-builder:
         specifier: ^26.15.3
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)(supports-color@10.2.2)
@@ -236,7 +236,7 @@ importers:
         version: 3.2.9(bluebird@3.7.2)(supports-color@10.2.2)
       electron-vite:
         specifier: ^5.0.0
-        version: 5.0.0(supports-color@10.2.2)(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
+        version: 5.0.0(supports-color@10.2.2)(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
       lucide-react:
         specifier: ^1.28.0
         version: 1.28.0(react@19.2.8)
@@ -292,14 +292,14 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
       vite:
-        specifier: ^8.2.0
-        version: 8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)
+        specifier: ^8.2.1
+        version: 8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)
       vitepress:
         specifier: 2.0.0-alpha.17
         version: 2.0.0-alpha.17(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.33.0)(postcss@8.5.25)(typescript@7.0.2)
       vitest:
         specifier: ^4.1.10
-        version: 4.1.10(@types/node@26.1.1)(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
+        version: 4.1.10(@types/node@26.1.1)(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
       wrangler:
         specifier: ^4.118.0
         version: 4.118.0
@@ -321,8 +321,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/openai-compatible@3.0.22':
-    resolution: {integrity: sha512-KHohs5/BZWEw1q16sXdxr/jvG+DsoPlB5j98yQd+GFWfYIqB2qGtxnbvzpvGXLaNH9zZPUzF+qH6AiWvkjNjAQ==}
+  '@ai-sdk/openai-compatible@3.0.25':
+    resolution: {integrity: sha512-6NMHwYsjF8QQ8sKEnC6tt9w1z87Z0XwKgOGe1ZB48SwH+HvFEHsn8nCEvKML3MUwRtVu0mxRG08FTjXmew/ELA==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -339,8 +339,18 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
+  '@ai-sdk/provider-utils@5.0.23':
+    resolution: {integrity: sha512-mFvAAszenK8Xny3v+4Vntke5IcUkyzjss3gTBOxVWNrSIWmt/FhQ5gCgoJXW7IK11cklRaicMPwOXTnnBtaqFQ==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
   '@ai-sdk/provider@4.0.5':
     resolution: {integrity: sha512-9WAerTaPU2jcVi8dh8x27tySEuLur1Kfg7Go74GuCmsC/2MDSvrTkrK8ZrXWjryEevKfcPPmO1enveE7eqlzoA==}
+    engines: {node: '>=22'}
+
+  '@ai-sdk/provider@4.0.6':
+    resolution: {integrity: sha512-YYXjvs8F3q/BdEn9tBDoDuQACotfR7c5foGw/ADsM6iAVC1JabqEjQSkwHv/Kg2vNIr1c2AVHcQb+JYsYk76Qw==}
     engines: {node: '>=22'}
 
   '@babel/code-frame@7.29.7':
@@ -2336,8 +2346,8 @@ packages:
   '@poppinss/exception@1.2.3':
     resolution: {integrity: sha512-dCED+QRChTVatE9ibtoaxc+WkdzOSjYTKi/+uacHWIsfodVfpsueo3+DKpgU5Px8qXjgmXkSvhXvSCz3fnP9lw==}
 
-  '@react-three/drei@10.7.7':
-    resolution: {integrity: sha512-ff+J5iloR0k4tC++QtD/j9u3w5fzfgFAWDtAGQah9pF2B1YgOq/5JxqY0/aVoQG5r3xSZz0cv5tk2YuBob4xEQ==}
+  '@react-three/drei@10.7.8':
+    resolution: {integrity: sha512-rJXyuzLm2Xq0kafHuR47ajDGbOe/pEhzIr4m8E8zwzQs0iNjloFDqBwRhrXmP/w+onLeYyN3EYPFW/cwWK/4yA==}
     peerDependencies:
       '@react-three/fiber': ^9.0.0
       react: ^19
@@ -3815,8 +3825,8 @@ packages:
     resolution: {integrity: sha512-bO3y10YikuUwUuDUQRM4KfwNkKhnpVO7IPdbsrejwN9/AABJzzTQ4GeHwyzNSrVO+tEH3/Np255a3sVZpZDjvg==}
     engines: {node: '>=8.0.0'}
 
-  electron@43.2.0:
-    resolution: {integrity: sha512-80zvrgG7ZRXD+tD0IyLvrnN9n+veSxadMRsMaC9wKKP3iUbtC7rGM8+dVuCmOb0Rrwwv8ESW4awnUZh9Hbp1fA==}
+  electron@43.3.0:
+    resolution: {integrity: sha512-nLlvu0WFjftWsSaTkV2B/c4NDuJBspTyXu8vKSQ6vLvFt8uG3NgN49LLKcXddwX0GqVvAQDhciWp+4xOdTdhew==}
     engines: {node: '>= 22.12.0'}
     hasBin: true
 
@@ -5016,10 +5026,6 @@ packages:
     resolution: {integrity: sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow==}
     engines: {node: '>=14.19.0'}
 
-  postcss@8.5.19:
-    resolution: {integrity: sha512-Mz8SaolMd8nB+G13WkORcxQKHZ/NE4xXevtkJHVuG+guo9/wYKlIMTKAqGdEmYOXR2ijPjTYNHssizdaVSUNdQ==}
-    engines: {node: ^10 || ^12 || >=14}
-
   postcss@8.5.25:
     resolution: {integrity: sha512-DTPx3RWSSnWyzLxQnlH0rJP+EW5ekl16ZU4/psbIhA0e53kJfdgaN5vKM+xP7yJtXVu+nfdVFmlgFDEKAe4Pyw==}
     engines: {node: ^10 || ^12 || >=14}
@@ -5757,8 +5763,8 @@ packages:
       yaml:
         optional: true
 
-  vite@8.2.0:
-    resolution: {integrity: sha512-pn+CFpM0lwDeKwmOq1ZaBK/9sjorZcgqxki6MbY/jPEVd9vichIlmlD4HmQ5wdP5EgqQCFRaACBxMC7uEGc6lQ==}
+  vite@8.2.1:
+    resolution: {integrity: sha512-EU/eS7BH3XROHh2YnBefjM6DBKA6ZeMZEYQbj7NLWg5wHYlhB8B/Mayd5XsgWq+NFYccDOTemRpdETWR6Ka/lw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
     peerDependencies:
@@ -6040,10 +6046,10 @@ snapshots:
       '@vercel/oidc': 3.2.0
       zod: 4.4.3
 
-  '@ai-sdk/openai-compatible@3.0.22(zod@4.4.3)':
+  '@ai-sdk/openai-compatible@3.0.25(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/provider': 4.0.5
-      '@ai-sdk/provider-utils': 5.0.20(zod@4.4.3)
+      '@ai-sdk/provider': 4.0.6
+      '@ai-sdk/provider-utils': 5.0.23(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/openai@4.0.29(zod@4.4.3)':
@@ -6061,7 +6067,20 @@ snapshots:
       undici: 7.28.0
       zod: 4.4.3
 
+  '@ai-sdk/provider-utils@5.0.23(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.6
+      '@standard-schema/spec': 1.1.0
+      '@workflow/serde': 4.1.0
+      eventsource-parser: 3.1.0
+      undici: 7.28.0
+      zod: 4.4.3
+
   '@ai-sdk/provider@4.0.5':
+    dependencies:
+      json-schema: 0.4.0
+
+  '@ai-sdk/provider@4.0.6':
     dependencies:
       json-schema: 0.4.0
 
@@ -6258,17 +6277,17 @@ snapshots:
 
   '@electron-internal/extract-zip@1.0.4': {}
 
-  '@electron-toolkit/preload@3.0.2(electron@43.2.0(supports-color@10.2.2))':
+  '@electron-toolkit/preload@3.0.2(electron@43.3.0(supports-color@10.2.2))':
     dependencies:
-      electron: 43.2.0(supports-color@10.2.2)
+      electron: 43.3.0(supports-color@10.2.2)
 
   '@electron-toolkit/tsconfig@2.0.0(@types/node@26.1.1)':
     dependencies:
       '@types/node': 26.1.1
 
-  '@electron-toolkit/utils@4.0.0(electron@43.2.0(supports-color@10.2.2))':
+  '@electron-toolkit/utils@4.0.0(electron@43.3.0(supports-color@10.2.2))':
     dependencies:
-      electron: 43.2.0(supports-color@10.2.2)
+      electron: 43.3.0(supports-color@10.2.2)
 
   '@electron/asar@3.4.1':
     dependencies:
@@ -7581,7 +7600,7 @@ snapshots:
 
   '@poppinss/exception@1.2.3': {}
 
-  '@react-three/drei@10.7.7(@react-three/fiber@9.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1))(@types/react@19.2.18)(@types/three@0.185.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1)':
+  '@react-three/drei@10.7.8(@react-three/fiber@9.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1))(@types/react@19.2.18)(@types/three@0.185.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(three@0.185.1)':
     dependencies:
       '@babel/runtime': 7.29.7
       '@mediapipe/tasks-vision': 0.10.17
@@ -7683,14 +7702,14 @@ snapshots:
   '@rolldown/binding-win32-x64-msvc@1.2.1':
     optional: true
 
-  '@rolldown/plugin-babel@0.2.3(@babel/core@7.29.7(supports-color@10.2.2))(@babel/runtime@7.29.7)(rolldown@1.2.1)(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))':
+  '@rolldown/plugin-babel@0.2.3(@babel/core@7.29.7(supports-color@10.2.2))(@babel/runtime@7.29.7)(rolldown@1.2.1)(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))':
     dependencies:
       '@babel/core': 7.29.7(supports-color@10.2.2)
       picomatch: 4.0.5
       rolldown: 1.2.1
     optionalDependencies:
       '@babel/runtime': 7.29.7
-      vite: 8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)
+      vite: 8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)
 
   '@rolldown/pluginutils@1.0.1': {}
 
@@ -7888,12 +7907,12 @@ snapshots:
       '@tailwindcss/oxide-win32-arm64-msvc': 4.3.3
       '@tailwindcss/oxide-win32-x64-msvc': 4.3.3
 
-  '@tailwindcss/vite@4.3.3(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))':
+  '@tailwindcss/vite@4.3.3(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))':
     dependencies:
       '@tailwindcss/node': 4.3.3
       '@tailwindcss/oxide': 4.3.3
       tailwindcss: 4.3.3
-      vite: 8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)
+      vite: 8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)
 
   '@tanstack/devtools-event-client@0.4.4': {}
 
@@ -7971,7 +7990,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@tanstack/router-plugin@1.168.23(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.2)(supports-color@10.2.2)(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))':
+  '@tanstack/router-plugin@1.168.23(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.2)(supports-color@10.2.2)(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))':
     dependencies:
       '@babel/core': 7.29.7(supports-color@10.2.2)
       '@babel/template': 7.29.7
@@ -7980,11 +7999,11 @@ snapshots:
       '@tanstack/router-generator': 1.167.21(supports-color@10.2.2)
       '@tanstack/router-utils': 1.162.2(supports-color@10.2.2)
       chokidar: 5.0.0
-      unplugin: 3.3.0(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.2)(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
+      unplugin: 3.3.0(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.2)(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
       zod: 4.4.3
     optionalDependencies:
       '@tanstack/react-router': 1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      vite: 8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)
+      vite: 8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)
     transitivePeerDependencies:
       - '@farmfe/core'
       - '@rspack/core'
@@ -8058,7 +8077,7 @@ snapshots:
 
   '@types/electron-progressbar@2.2.0(supports-color@10.2.2)':
     dependencies:
-      electron: 43.2.0(supports-color@10.2.2)
+      electron: 43.3.0(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
 
@@ -8226,12 +8245,12 @@ snapshots:
 
   '@vercel/oidc@3.2.0': {}
 
-  '@vitejs/plugin-react@6.0.5(@rolldown/plugin-babel@0.2.3(@babel/core@7.29.7(supports-color@10.2.2))(@babel/runtime@7.29.7)(rolldown@1.2.1)(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)))(babel-plugin-react-compiler@1.0.0)(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))':
+  '@vitejs/plugin-react@6.0.5(@rolldown/plugin-babel@0.2.3(@babel/core@7.29.7(supports-color@10.2.2))(@babel/runtime@7.29.7)(rolldown@1.2.1)(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)))(babel-plugin-react-compiler@1.0.0)(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))':
     dependencies:
       '@rolldown/pluginutils': 1.0.1
-      vite: 8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)
+      vite: 8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)
     optionalDependencies:
-      '@rolldown/plugin-babel': 0.2.3(@babel/core@7.29.7(supports-color@10.2.2))(@babel/runtime@7.29.7)(rolldown@1.2.1)(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
+      '@rolldown/plugin-babel': 0.2.3(@babel/core@7.29.7(supports-color@10.2.2))(@babel/runtime@7.29.7)(rolldown@1.2.1)(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
       babel-plugin-react-compiler: 1.0.0
 
   '@vitejs/plugin-vue@6.0.7(vite@7.3.6(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.33.0))(vue@3.5.39(typescript@7.0.2))':
@@ -8249,13 +8268,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.10(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))':
+  '@vitest/mocker@4.1.10(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))':
     dependencies:
       '@vitest/spy': 4.1.10
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)
+      vite: 8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)
 
   '@vitest/pretty-format@4.1.10':
     dependencies:
@@ -8303,7 +8322,7 @@ snapshots:
       '@vue/shared': 3.5.39
       estree-walker: 2.0.2
       magic-string: 0.30.21
-      postcss: 8.5.19
+      postcss: 8.5.25
       source-map-js: 1.2.1
 
   '@vue/compiler-ssr@3.5.39':
@@ -8985,7 +9004,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron-vite@5.0.0(supports-color@10.2.2)(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)):
+  electron-vite@5.0.0(supports-color@10.2.2)(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)):
     dependencies:
       '@babel/core': 7.29.7(supports-color@10.2.2)
       '@babel/plugin-transform-arrow-functions': 7.29.7(@babel/core@7.29.7(supports-color@10.2.2))
@@ -8993,7 +9012,7 @@ snapshots:
       esbuild: 0.25.12
       magic-string: 0.30.21
       picocolors: 1.1.1
-      vite: 8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)
+      vite: 8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -9009,7 +9028,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron@43.2.0(supports-color@10.2.2):
+  electron@43.3.0(supports-color@10.2.2):
     dependencies:
       '@electron-internal/extract-zip': 1.0.4
       '@electron/get': 5.0.0(supports-color@10.2.2)
@@ -10236,12 +10255,6 @@ snapshots:
 
   pngjs@7.0.0: {}
 
-  postcss@8.5.19:
-    dependencies:
-      nanoid: 3.3.16
-      picocolors: 1.1.1
-      source-map-js: 1.2.1
-
   postcss@8.5.25:
     dependencies:
       nanoid: 3.3.16
@@ -10928,7 +10941,7 @@ snapshots:
 
   universalify@2.0.1: {}
 
-  unplugin@3.3.0(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.2)(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)):
+  unplugin@3.3.0(esbuild@0.28.1)(rolldown@1.2.1)(rollup@4.62.2)(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)):
     dependencies:
       '@jridgewell/remapping': 2.3.5
       picomatch: 4.0.5
@@ -10937,7 +10950,7 @@ snapshots:
       esbuild: 0.28.1
       rolldown: 1.2.1
       rollup: 4.62.2
-      vite: 8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)
+      vite: 8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)
 
   untildify@3.0.3: {}
 
@@ -10990,7 +11003,7 @@ snapshots:
       esbuild: 0.28.1
       fdir: 6.5.0(picomatch@4.0.5)
       picomatch: 4.0.5
-      postcss: 8.5.19
+      postcss: 8.5.25
       rollup: 4.62.2
       tinyglobby: 0.2.17
     optionalDependencies:
@@ -10999,7 +11012,7 @@ snapshots:
       jiti: 2.7.0
       lightningcss: 1.33.0
 
-  vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0):
+  vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.5
@@ -11060,10 +11073,10 @@ snapshots:
       - universal-cookie
       - yaml
 
-  vitest@4.1.10(@types/node@26.1.1)(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)):
+  vitest@4.1.10(@types/node@26.1.1)(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)):
     dependencies:
       '@vitest/expect': 4.1.10
-      '@vitest/mocker': 4.1.10(vite@8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
+      '@vitest/mocker': 4.1.10(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
       '@vitest/pretty-format': 4.1.10
       '@vitest/runner': 4.1.10
       '@vitest/snapshot': 4.1.10
@@ -11080,7 +11093,7 @@ snapshots:
       tinyexec: 1.2.4
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
-      vite: 8.2.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)
+      vite: 8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 26.1.1
