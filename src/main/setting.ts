@@ -477,6 +477,12 @@ export class Setting {
                         : "space",
                 normalize: (value) => (DISABLED_PREFIX_STYLES.includes(value) ? value : "space"),
             },
+            "mod.returnToGamebananaAfterDownload": {
+                definition: APP_SETTINGS["mod.returnToGamebananaAfterDownload"],
+                getDefault: () => false,
+                fromStored: (value) => parseBooleanSetting(value, false),
+                toStored: (value) => String(value),
+            },
             "tools.touchProfileLlmProtocol": {
                 definition: APP_SETTINGS["tools.touchProfileLlmProtocol"],
                 getDefault: () => DEFAULT_TOUCH_PROFILE_LLM_PROTOCOL,

@@ -36,6 +36,7 @@ export interface AppSettings {
     "mod.gridFixedCardWidth": number;
     "mod.gridFixedColumnCount": number;
     "mod.disabledPrefixStyle": DisabledPrefixStyle;
+    "mod.returnToGamebananaAfterDownload": boolean;
 
     "tools.touchProfileLlmProtocol": TouchProfileLlmProtocol;
     "tools.touchProfileLlmEndpoint": string;
@@ -201,6 +202,11 @@ export const APP_SETTINGS = {
         publicKey: "mod.disabledPrefixStyle",
         scope: "mod",
         storageKey: "mod_disabled_prefix_style",
+    },
+    "mod.returnToGamebananaAfterDownload": {
+        publicKey: "mod.returnToGamebananaAfterDownload",
+        scope: "mod",
+        storageKey: "mod_return_to_gamebanana_after_download",
     },
 
     "tools.touchProfileLlmProtocol": {

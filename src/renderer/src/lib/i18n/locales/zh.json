@@ -1485,7 +1485,7 @@
       "download_location": "下载位置",
       "need_select_character_folder": "请在左侧选择角色文件夹",
       "select_path_failed": "选择路径失败。",
-      "download_and_return": "下载并返回 GameBanana"
+      "return_to_gamebanana": "添加下载后返回 GameBanana"
     }
   },
   "updater": {

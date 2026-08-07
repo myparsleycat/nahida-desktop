@@ -1486,7 +1486,7 @@
       "download_location": "ダウンロード先",
       "need_select_character_folder": "左側でキャラクターフォルダーを選択してください",
       "select_path_failed": "パスの選択に失敗しました。",
-      "download_and_return": "ダウンロードして GameBanana に戻る"
+      "return_to_gamebanana": "ダウンロード追加後、GameBanana に戻る"
     }
   },
   "updater": {

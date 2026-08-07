@@ -1505,7 +1505,7 @@
       "download_location": "다운로드 위치",
       "need_select_character_folder": "좌측에서 캐릭터 폴더를 선택하세요",
       "select_path_failed": "경로 선택에 실패했습니다.",
-      "download_and_return": "다운로드 후 GameBanana로 돌아가기"
+      "return_to_gamebanana": "다운로드 추가 후 GameBanana로 돌아가기"
     }
   },
   "updater": {

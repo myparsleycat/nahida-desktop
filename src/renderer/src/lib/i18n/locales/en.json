@@ -1519,7 +1519,7 @@
       "download_location": "Download Location",
       "need_select_character_folder": "Select a character folder on the left",
       "select_path_failed": "Failed to select path.",
-      "download_and_return": "Download and return to GameBanana"
+      "return_to_gamebanana": "Return to GameBanana after adding the download"
     }
   },
   "updater": {
