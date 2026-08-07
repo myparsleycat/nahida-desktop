@@ -12,6 +12,7 @@ import {
   BookOpenIcon,
   BugIcon,
   BugPlayIcon,
+  ExternalLinkIcon,
   GamepadIcon,
   HardDriveIcon,
   SettingsIcon,
@@ -36,6 +37,8 @@ function getDocumentationUrl(language: string) {
       return "https://desktop.nahida.live";
   }
 }
+
+const creatorSiteUrl = "https://nhl.fanbox.cc/";
 
 export function Sidebar({ className }: { className?: string }) {
   const navi = useNavigate();
@@ -385,6 +388,25 @@ export function Sidebar({ className }: { className?: string }) {
               <TooltipContent side="right">{t("page.setting.title")}</TooltipContent>
             </Tooltip>
           )}
+
+          <Tooltip disableHoverablePopup>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-lg"
+                  aria-label={t("page.creator_site.title")}
+                  onPointerDown={handlePointerDown}
+                  onClick={() => {
+                    void window.api.invoke("util:openExternal", creatorSiteUrl);
+                  }}
+                />
+              }
+            >
+              <ExternalLinkIcon className={cn(iconSize)} />
+            </TooltipTrigger>
+            <TooltipContent side="right">{t("page.creator_site.title")}</TooltipContent>
+          </Tooltip>
         </div>
       </div>
     </div>

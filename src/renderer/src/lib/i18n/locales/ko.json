@@ -1520,6 +1520,9 @@
     },
     "docs": {
       "title": "사용 방법"
+    },
+    "creator_site": {
+      "title": "제작자 사이트"
     }
   },
   "components": {

@@ -1534,6 +1534,9 @@
     },
     "docs": {
       "title": "Documentation"
+    },
+    "creator_site": {
+      "title": "Creator website"
     }
   },
   "components": {

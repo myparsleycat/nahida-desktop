@@ -1500,6 +1500,9 @@
     },
     "docs": {
       "title": "使用说明"
+    },
+    "creator_site": {
+      "title": "作者网站"
     }
   },
   "components": {

@@ -1501,6 +1501,9 @@
     },
     "docs": {
       "title": "使い方"
+    },
+    "creator_site": {
+      "title": "作者のサイト"
     }
   },
   "components": {
