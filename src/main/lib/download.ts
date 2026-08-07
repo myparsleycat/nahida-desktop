@@ -6,6 +6,7 @@ import { createGunzip, createZstdDecompress } from "node:zlib";
 
 import { eden } from "@main/client";
 import type { LinkData } from "@main/server";
+import { BACKEND_URL } from "@shared/const";
 import type { TransferData } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import { decode } from "cbor-x";
@@ -13,9 +14,12 @@ import { chunk, retry, throttle } from "es-toolkit";
 import fse from "fs-extra";
 import ky from "ky";
 import PQueue from "p-queue";
+import { parseServerSentEvents } from "parse-sse";
 
 import type { NahidaDesktop } from "..";
 
+import { networkFetch } from "../internal/network-fetch";
+import { createDriveApiError, isBackendUnavailableStatus } from "../services/drive-errors";
 import { createBandwidthLimitTransform } from "./bandwidth-limit-stream";
 import { zstdDecompressAsync } from "./compressor";
 import { ParallelDownloader } from "./parallel-downloader";
@@ -104,16 +108,29 @@ class DownloadStreamer {
         link?: LinkData;
         signal: AbortSignal;
     }): Promise<DownloadMetadata> {
-        const { data: stream, error } = await eden.akasha.dir.download.get({
-            query: {
-                uuid: id,
-                ...(link && { linkId: link.linkId }),
-            },
+        const requestUrl = new URL(`${BACKEND_URL}/akasha/dir/download`);
+        requestUrl.searchParams.set("uuid", id);
+        if (link) requestUrl.searchParams.set("linkId", link.linkId);
+
+        const response = await networkFetch(requestUrl, {
             headers: {
+                ...(await this.desktop.httpService.getHeaders(requestUrl.toString())),
                 ...(link && { "nhd-link-token": link.token }),
             },
+            signal,
         });
-        if (error) throw error;
+        if (!response.ok) {
+            if (isBackendUnavailableStatus(response.status)) {
+                this.desktop.service.backendConnectivity.setOffline();
+            }
+            const errorText = await response.text().catch(() => response.statusText);
+            throw createDriveApiError(
+                errorText || response.statusText,
+                "download metadata",
+                response.status,
+            );
+        }
+        if (!response.body) throw new Error("Download metadata stream is empty.");
 
         const downloadData: Omit<DownloadMetadata, "root"> = {
             totalBytes: 0,
@@ -121,38 +138,62 @@ class DownloadStreamer {
             dirs: [],
         };
         let rootDir: DownloadMetadata["root"] | null = null;
+        let metadataTotalBytes: number | undefined;
 
-        if (!stream || typeof stream !== "object" || !(Symbol.asyncIterator in stream)) {
-            throw new Error("Invalid stream");
-        }
-
-        for await (const chunk of stream) {
+        for await (const chunk of parseServerSentEvents(response)) {
             if (signal.aborted) {
                 throw new Error("Download cancelled");
             }
 
-            switch (chunk.event) {
+            if (chunk.type === "complete") break;
+
+            switch (chunk.type) {
                 case "dirs": {
-                    const dirsChunk = await this.parseStreamedData(chunk.data);
+                    const dirsChunk = await this.parseStreamedData(JSON.parse(chunk.data));
                     downloadData.dirs.push(...dirsChunk);
                     break;
                 }
                 case "files": {
-                    const filesChunk = await this.parseStreamedData(chunk.data);
+                    const filesChunk = await this.parseStreamedData(JSON.parse(chunk.data));
                     downloadData.files.push(...filesChunk);
                     break;
                 }
                 case "metadata": {
-                    const metadata = chunk.data as unknown as DownloadMetadata;
+                    const metadata = JSON.parse(chunk.data) as DownloadMetadata;
                     downloadData.totalBytes = metadata.totalBytes;
+                    metadataTotalBytes = metadata.totalBytes;
                     rootDir = metadata.root;
                     break;
                 }
+                case "error":
+                    throw new Error(chunk.data || "Download metadata stream failed.");
             }
         }
 
         if (!rootDir) {
             throw new Error("Root directory information was not received.");
+        }
+
+        const listedFileBytes = downloadData.files.reduce((total, file) => total + file.size, 0);
+        if (
+            metadataTotalBytes !== undefined &&
+            Number.isFinite(metadataTotalBytes) &&
+            metadataTotalBytes !== listedFileBytes
+        ) {
+            this.desktop.logger.warn(
+                {
+                    itemId: id,
+                    rootId: rootDir.id,
+                    rootName: rootDir.name,
+                    metadataTotalBytes,
+                    listedFileBytes,
+                    deltaBytes: metadataTotalBytes - listedFileBytes,
+                    fileCount: downloadData.files.length,
+                    directoryCount: downloadData.dirs.length,
+                    linkId: link?.linkId,
+                },
+                "Download:MetadataMismatch",
+            );
         }
 
         return {
@@ -299,12 +340,14 @@ class FileDownloadTask {
         file,
         filePath,
         signal,
+        link,
         onComplete,
         onProgress,
     }: {
         file: DownloadMetadata["files"][0];
         filePath: string;
         signal: AbortSignal;
+        link?: LinkData;
         onComplete: () => void;
         onProgress?: (bytes: number) => void;
     }): Promise<void> {
@@ -317,13 +360,27 @@ class FileDownloadTask {
         const isSmallFile = file.size < 1024 * 1024;
         const targetPath = isSmallFile ? filePath : `${filePath}.ntmp`;
 
-        const parallelResult = await this.tryParallelDownload(file, filePath, signal, onProgress);
+        const parallelResult = await this.tryParallelDownload(
+            file,
+            filePath,
+            signal,
+            onProgress,
+            link,
+        );
         if (parallelResult) {
             onComplete();
             return;
         }
 
-        await this.downloadWithRetry(file, targetPath, filePath, isSmallFile, signal, onProgress);
+        await this.downloadWithRetry(
+            file,
+            targetPath,
+            filePath,
+            isSmallFile,
+            signal,
+            onProgress,
+            link,
+        );
         onComplete();
     }
 
@@ -332,13 +389,18 @@ class FileDownloadTask {
         filePath: string,
         signal: AbortSignal,
         onProgress?: (bytes: number) => void,
+        link?: LinkData,
     ): Promise<boolean> {
         const PARALLEL_DOWNLOAD_THRESHOLD = 20 * 1024 * 1024; // 20MB
         if (file.size < PARALLEL_DOWNLOAD_THRESHOLD || !!file.compAlg) {
             return false;
         }
 
-        const supportsRange = await this.parallelDownloader.checkRangeSupport(file.url);
+        const linkHeaders = link ? { "nhd-link-token": link.token } : undefined;
+        const supportsRange = await this.parallelDownloader.checkRangeSupport(
+            file.url,
+            linkHeaders,
+        );
         if (!supportsRange) return false;
 
         try {
@@ -347,6 +409,7 @@ class FileDownloadTask {
                 savePath: filePath,
                 fileSize: file.size,
                 signal,
+                headers: linkHeaders,
                 maxChunks: 8,
                 onProgress,
                 bandwidthLimiter: this.desktop.service.transfer.downloadBandwidth,
@@ -372,12 +435,14 @@ class FileDownloadTask {
         isSmallFile: boolean,
         signal: AbortSignal,
         onProgress?: (bytes: number) => void,
+        link?: LinkData,
     ): Promise<void> {
         await retry(
             async () => {
                 if (signal.aborted) return;
                 await this.performDownload(file, targetPath, signal, {
                     onProgress,
+                    link,
                     resumeFrom: isSmallFile ? 0 : await this.getResumeOffset(file, targetPath),
                 });
 
@@ -406,16 +471,22 @@ class FileDownloadTask {
             onPhaseChange?: (
                 phase: Extract<SlowChunkTransferPhase, "network" | "bandwidth-wait">,
             ) => void;
+            link?: LinkData;
             onResumeReset?: () => void;
             resumeFrom?: number;
         },
     ): Promise<void> {
-        const headers = await this.desktop.httpService.getHeaders(file.url);
+        const baseHeaders = await this.desktop.httpService.getHeaders(file.url);
+        const linkHeaders: Record<string, string> = options?.link
+            ? { "nhd-link-token": options.link.token }
+            : {};
+        const headers = { ...baseHeaders, ...linkHeaders } as Record<string, string>;
         const resumeFrom = options?.resumeFrom ?? 0;
         const request = async (requestHeaders: Record<string, string>) =>
             await ky(file.url, {
                 headers: requestHeaders,
                 signal,
+                fetch: networkFetch,
                 throwHttpErrors: false,
                 timeout: 100000,
             });
@@ -515,12 +586,14 @@ class FileDownloadTask {
         file,
         filePath,
         signal,
+        link,
         onComplete,
         onProgress,
     }: {
         file: DownloadMetadata["files"][0];
         filePath: string;
         signal: AbortSignal;
+        link?: LinkData;
         onComplete: () => void;
         onProgress?: (bytes: number) => void;
     }): Promise<void> {
@@ -564,6 +637,7 @@ class FileDownloadTask {
                 reportedResumeBytes = resumeFrom;
 
                 await this.performDownload(file, targetPath, combinedSignal, {
+                    link,
                     resumeFrom,
                     onProgress: (bytes) => {
                         attemptBytes += bytes;
@@ -688,6 +762,26 @@ export class DownloadLib {
         link?: LinkData;
     }): Promise<DownloadMetadata> {
         return this.streamer.fetchFileDownloads({ id, link });
+    }
+
+    public async downloadFileToPath({
+        file,
+        filePath,
+        signal,
+        link,
+    }: {
+        file: DownloadMetadata["files"][number];
+        filePath: string;
+        signal: AbortSignal;
+        link?: LinkData;
+    }) {
+        await this.task.executeWithSlowRetry({
+            file,
+            filePath,
+            signal,
+            link,
+            onComplete: () => {},
+        });
     }
 
     public async fetchMergedMetadata({

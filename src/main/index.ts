@@ -15,7 +15,7 @@ import { DB_FILE_NAME } from "./internal/const";
 import { DatabaseClient } from "./internal/db/client";
 import { GitHubRateCoordinator } from "./internal/github-rate";
 import { DesktopHttpService } from "./internal/http";
-import Logger from "./internal/logger";
+import Logger, { installOutputStreamErrorGuards } from "./internal/logger";
 import { NahidaProtocolHandler } from "./internal/protocol";
 import Updater from "./internal/updater";
 import { IPC } from "./ipc";
@@ -49,6 +49,8 @@ if (IS_ELECTRON) {
     app?.commandLine.appendSwitch("disable-pinch-zoom");
     app?.commandLine.appendSwitch("disable-pinch");
 }
+
+installOutputStreamErrorGuards();
 
 crashReporter.start({
     productName: "NahidaDesktop",

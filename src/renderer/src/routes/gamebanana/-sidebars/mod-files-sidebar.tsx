@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/u
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { Logger } from "@renderer/lib/logger";
+import { toErrorMessage } from "@shared/utils";
 import type { TFunction } from "i18next";
 import {
   FileArchiveIcon,
@@ -13,9 +14,11 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+
+import type { ModOverviewQuery } from "../-types";
+
 import { ErrorState, StatCard } from "../-shared/common";
 import { getGameBananaErrorPresentation } from "../-shared/errors";
-import type { ModOverviewQuery } from "../-types";
 import { formatEpoch, formatNumber } from "../-utils";
 
 export function ModFilesSidebar({
@@ -46,7 +49,9 @@ export function ModFilesSidebar({
         modelName: "Mod",
       });
     } catch (error) {
-      toast.error("다운로드를 시작하지 못했습니다.");
+      toast.error(t("page.gamebanana.download_failed"), {
+        description: toErrorMessage(error),
+      });
       Logger.error(error, "ModFilesSidebar:handleDownload");
     } finally {
       setPendingFileId(null);
@@ -147,10 +152,10 @@ export function ModFilesSidebar({
                           <Loader2Icon className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
                         )}
                         <div className="min-w-0 flex-1">
-                          <div className="line-clamp-2 break-all text-sm font-medium">
+                          <div className="line-clamp-2 text-sm font-medium break-all">
                             {file._sFile}
                           </div>
-                          <div className="mt-2 min-w-0 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          <div className="mt-2 flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                             <span>
                               {t("page.gamebanana.file_downloads", {
                                 count: formatNumber(file._nDownloadCount, language),

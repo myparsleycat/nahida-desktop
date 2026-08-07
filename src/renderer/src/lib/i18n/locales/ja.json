@@ -91,8 +91,43 @@
       "toast": {
         "no_uploadable_files": "アップロード可能なファイルがありません。"
       },
+      "import": {
+        "title": "Nahida ドライブにコピー",
+        "description": "共有フォルダーまたはコレクション URL を入力し、ドライブ内のフォルダーを選択してください。",
+        "url_label": "Nahida URL",
+        "url_placeholder": "https://nahida.live/akasha/link/...",
+        "destination_label": "保存先フォルダー",
+        "choose_destination": "フォルダーを選択",
+        "destination_description": "コピー先にするドライブのルートまたはフォルダーを選択してください。",
+        "loading_folder": "フォルダーを読み込み中...",
+        "no_subfolders": "サブフォルダーなし",
+        "destination_load_failed": "保存先フォルダーを読み込めませんでした。",
+        "parent_folder": "上位フォルダー",
+        "select_folder": "このフォルダーを使用",
+        "destination_required": "保存先フォルダーを選択してください。",
+        "password_label": "パスワード",
+        "password_placeholder": "共有リンクのパスワードを入力",
+        "action": "ドライブにコピー",
+        "url_required": "Nahida URL を入力してください。",
+        "login_required": "ドライブにコピーするにはログインしてください。",
+        "password_required": "このリンクにはパスワードが必要です。",
+        "invalid_password": "共有リンクのパスワードが正しくありません。",
+        "success": "{{count}} 件をドライブにコピーしました。",
+        "failed": "コピーに失敗しました",
+        "progress": {
+          "preparing": "コピーを準備中…",
+          "copying": "サーバーからドライブにコピー中…",
+          "downloading": "項目をダウンロード中…",
+          "uploading": "ドライブにアップロード中…",
+          "completed": "コピーが完了しました。",
+          "canceled": "コピーを停止しました。",
+          "cancel": "コピーを停止",
+          "error": "転送中にコピーに失敗しました。"
+        }
+      },
       "head_buttons": {
         "search_in_dir_placeholder": "このフォルダー内を検索...",
+        "import": "共有リンクをコピー",
         "dropdown_menu": {
           "download": "ダウンロード",
           "make_new": {
@@ -562,6 +597,8 @@
       "category_panel_description_nested": "現在のカテゴリのサブカテゴリを探索します。",
       "category_panel_description_selected": "\"{{name}}\" のサブカテゴリを探索します。",
       "no_categories": "表示できるカテゴリがありません。",
+      "search_categories": "カテゴリを検索...",
+      "no_category_results": "一致するカテゴリはありません。",
       "stage": {
         "game": "ゲーム",
         "category": "カテゴリ",
@@ -591,6 +628,12 @@
         "views": "閲覧数",
         "downloads": "ダウンロード"
       },
+      "like": "いいね",
+      "liked": "いいね済み",
+      "unlike": "いいねを取り消す",
+      "like_unavailable": "この MOD ではいいねを利用できません。",
+      "like_failed": "いいねの更新に失敗しました。",
+      "download_failed": "GameBanana のダウンロードに失敗しました。",
       "top_submissions": "注目投稿",
       "latest_feed": "最新フィード",
       "latest_feed_description": "選択したゲームの最近の投稿です。",
@@ -1412,7 +1455,9 @@
       "adv": {
         "title": "詳細設定",
         "warning_title": "注意",
-        "warning_description": "ここでの設定を変更すると、アプリの動作に影響を与える可能性があります。"
+        "warning_description": "ここでの設定を変更すると、アプリの動作に影響を与える可能性があります。",
+        "search_placeholder": "設定キーを検索...",
+        "no_results": "一致する設定キーはありません。"
       },
       "transfer": {
         "title": "転送",

@@ -147,7 +147,7 @@ function RouteComponent() {
   } else if (query.isError) {
     return (
       <Center>
-        <ServerCrash />
+        <ServerCrash message={toErrorMessage(query.error)} />
       </Center>
     );
   }
@@ -163,7 +163,7 @@ function RouteComponent() {
               <div className="flex-1"></div>
             )}
 
-            <AkashaHeadButtons />
+            <AkashaHeadButtons currentId={effectiveId} />
           </div>
 
           <div

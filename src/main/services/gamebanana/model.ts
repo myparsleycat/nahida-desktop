@@ -187,6 +187,8 @@ export const ModProfileSchema = z
         _sText: z.string().optional(),
         _nLikeCount: z.number().optional(),
         _nViewCount: z.number().optional(),
+        _bAccessorHasLiked: z.boolean().optional(),
+        _bAccessorHasUnliked: z.boolean().optional(),
         _aSubmitter: MemberSchema,
         _aGame: GameSchema,
         _aCategory: NestedCategorySchema,

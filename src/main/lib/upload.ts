@@ -72,6 +72,7 @@ export class UploadLib {
     private async collect(
         paths: string[],
         additionalExt: string[] = [],
+        allowAllFiles = false,
     ): Promise<{ files: FilesComponent[]; directories: DirectoriesComponent[] }> {
         const defaultAllowedExt = [
             ".buf",
@@ -126,7 +127,9 @@ export class UploadLib {
                 const name = path.basename(normalizedFullPath);
                 const loweredName = name.toLowerCase();
                 const isAllowed =
-                    allowedExt.length === 0 || allowedExt.some((ext) => loweredName.endsWith(ext));
+                    allowAllFiles ||
+                    allowedExt.length === 0 ||
+                    allowedExt.some((ext) => loweredName.endsWith(ext));
 
                 if (!isAllowed) {
                     continue;
@@ -145,7 +148,9 @@ export class UploadLib {
         }
 
         const collected =
-            directoryPaths.length > 0 ? await collectFiles(directoryPaths, allowedExt) : null;
+            directoryPaths.length > 0
+                ? await collectFiles(directoryPaths, allowAllFiles ? [] : allowedExt)
+                : null;
         const files: FilesComponent[] = [...(collected?.files ?? []), ...rootFiles].map((f) => ({
             ...f,
             FID: nanoid(),
@@ -549,8 +554,13 @@ export class UploadLib {
         paths: string[],
         children: Content[],
         conflictStrategy: UploadConflictStrategy,
+        options?: { additionalExt?: string[]; allowAllFiles?: boolean },
     ) {
-        const { files, directories } = await this.collect(paths);
+        const { files, directories } = await this.collect(
+            paths,
+            options?.additionalExt,
+            options?.allowAllFiles,
+        );
         return this.prepareUploadWithStrategy(
             files,
             directories,

@@ -49,6 +49,8 @@ export interface AppSettings {
 
     "drive.nameSortPolicy": DriveNameSortPolicy;
 
+    "debug.openConsole": boolean;
+
     "modelViewer.toneMapping": "neutral" | "aces" | "none";
     "modelViewer.environment": "studio" | "soft" | "none";
     "modelViewer.exposure": number;
@@ -66,6 +68,7 @@ export type SettingScope =
     | "tools"
     | "transfer"
     | "drive"
+    | "debug"
     | "modelViewer"
     | "xxmi";
 
@@ -249,6 +252,12 @@ export const APP_SETTINGS = {
         publicKey: "drive.nameSortPolicy",
         scope: "drive",
         storageKey: "drive_name_sort_policy",
+    },
+
+    "debug.openConsole": {
+        publicKey: "debug.openConsole",
+        scope: "debug",
+        storageKey: "debug_open_console",
     },
 
     "modelViewer.toneMapping": {

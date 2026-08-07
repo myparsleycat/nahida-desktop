@@ -1,15 +1,16 @@
 import path from "node:path";
+
 import isDev from "@main/internal/isDev";
 import type { BrowserWindow } from "electron";
 
-export function getDefaultWebPreferences() {
+export function getDefaultWebPreferences(options?: { devTools?: boolean }) {
     return {
         backgroundThrottling: false,
         autoplayPolicy: "no-user-gesture-required" as const,
         contextIsolation: true,
         nodeIntegration: false,
         experimentalFeatures: false,
-        devTools: isDev,
+        devTools: options?.devTools ?? isDev,
         zoomFactor: 1,
         sandbox: true as const,
         // cjs
