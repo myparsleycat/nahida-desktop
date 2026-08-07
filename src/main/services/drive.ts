@@ -1086,30 +1086,17 @@ export class DriveService {
                   });
         }
 
-        const metadataTotalBytes = data.totalBytes;
-        const manifestTotalBytes = data.files.reduce((total, file) => total + file.size, 0);
-        const effectiveTotalBytes =
-            manifestTotalBytes > 0 ? manifestTotalBytes : metadataTotalBytes;
         const listedContentBytes = items.every((item) => typeof item.size === "number")
             ? items.reduce((total, item) => total + (item.size ?? 0), 0)
             : undefined;
-        if (
-            effectiveTotalBytes !== metadataTotalBytes ||
-            (listedContentBytes !== undefined && listedContentBytes !== effectiveTotalBytes)
-        ) {
+        if (listedContentBytes !== undefined && listedContentBytes !== data.totalBytes) {
             this.desktop.logger.warn(
                 {
                     itemIds: items.map((item) => item.id),
                     itemNames: items.map((item) => item.name),
                     listedContentBytes,
-                    downloadMetadataBytes: metadataTotalBytes,
-                    manifestTotalBytes,
-                    effectiveTotalBytes,
-                    metadataDeltaBytes: manifestTotalBytes - metadataTotalBytes,
-                    listedContentDeltaBytes:
-                        listedContentBytes === undefined
-                            ? undefined
-                            : listedContentBytes - manifestTotalBytes,
+                    downloadMetadataBytes: data.totalBytes,
+                    deltaBytes: listedContentBytes - data.totalBytes,
                     fileCount: data.files.length,
                     directoryCount: data.dirs.length,
                     savePath,
@@ -1118,7 +1105,6 @@ export class DriveService {
                 "Drive:Download:ContentSizeMismatch",
             );
         }
-        data.totalBytes = effectiveTotalBytes;
 
         if (data.root) {
             if (suggestedName && isSingle) {

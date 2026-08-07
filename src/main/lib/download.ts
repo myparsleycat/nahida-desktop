@@ -175,7 +175,6 @@ class DownloadStreamer {
         }
 
         const listedFileBytes = downloadData.files.reduce((total, file) => total + file.size, 0);
-        const effectiveTotalBytes = listedFileBytes > 0 ? listedFileBytes : downloadData.totalBytes;
         if (
             metadataTotalBytes !== undefined &&
             Number.isFinite(metadataTotalBytes) &&
@@ -192,8 +191,6 @@ class DownloadStreamer {
                     fileCount: downloadData.files.length,
                     directoryCount: downloadData.dirs.length,
                     linkId: link?.linkId,
-                    effectiveTotalBytes,
-                    totalBytesSource: listedFileBytes > 0 ? "file-manifest" : "metadata",
                 },
                 "Download:MetadataMismatch",
             );
@@ -202,7 +199,6 @@ class DownloadStreamer {
         return {
             root: rootDir,
             ...downloadData,
-            totalBytes: effectiveTotalBytes,
         };
     }
 
@@ -840,25 +836,9 @@ export class DownloadLib {
             }),
         );
 
-        const listedFileBytes = mergedFiles.reduce((total, file) => total + file.size, 0);
-        const effectiveTotalBytes = listedFileBytes > 0 ? listedFileBytes : totalBytes;
-        if (effectiveTotalBytes !== totalBytes) {
-            this.desktop.logger.warn(
-                {
-                    itemIds: items.map((item) => item.id),
-                    metadataTotalBytes: totalBytes,
-                    listedFileBytes,
-                    deltaBytes: totalBytes - listedFileBytes,
-                    fileCount: mergedFiles.length,
-                    directoryCount: mergedDirs.length,
-                },
-                "Download:MergedMetadataMismatch",
-            );
-        }
-
         return {
             root: { id: BATCH_ROOT_ID, parentId: null, name: "" },
-            totalBytes: effectiveTotalBytes,
+            totalBytes,
             files: mergedFiles,
             dirs: mergedDirs,
         };
