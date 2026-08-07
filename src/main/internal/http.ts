@@ -32,6 +32,7 @@ export class DesktopHttpService {
 
     public async fetcher(url: string, options?: FetcherOptions) {
         const isNHD = this.isNHD(url);
+        const isSessionRequest = new URL(url).pathname === "/api/auth/get-session";
         const headers = {
             ...(options?.headers instanceof Headers
                 ? Object.fromEntries(options.headers.entries())
@@ -50,8 +51,37 @@ export class DesktopHttpService {
                 hooks: {
                     afterResponse: [
                         async ({ response }) => {
-                            if (response.status === 401 && isNHD) {
-                                await this.desktop.service.auth.getSession();
+                            if (response.status === 401 && isNHD && !isSessionRequest) {
+                                const responseBody = await response
+                                    .clone()
+                                    .text()
+                                    .catch(() => "");
+                                const normalizedResponseBody = responseBody
+                                    .toLowerCase()
+                                    .replace(/[_-]+/g, " ");
+                                if (
+                                    normalizedResponseBody.includes("password required") ||
+                                    normalizedResponseBody.includes("missing password")
+                                ) {
+                                    return;
+                                }
+
+                                try {
+                                    await this.desktop.service.auth.getSession();
+                                } catch (error) {
+                                    this.desktop.logger.warn(
+                                        {
+                                            url,
+                                            status: response.status,
+                                            stage: "refresh-session",
+                                            error:
+                                                error instanceof Error
+                                                    ? error.message
+                                                    : String(error),
+                                        },
+                                        "Http:AuthRefreshFailed",
+                                    );
+                                }
                             }
                         },
 

@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
+import { Input } from "@renderer/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -10,6 +11,7 @@ import {
 import { useSettings } from "@renderer/hooks/use-settings";
 import type { DriveNameSortPolicy } from "@shared/drive";
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/setting/drive")({
@@ -18,11 +20,17 @@ export const Route = createFileRoute("/setting/drive")({
 
 const settingsConfig = {
   nameSortPolicy: "drive.nameSortPolicy",
+  importPassword: "drive.importPassword",
 } as const;
 
 function RouteComponent() {
   const { t } = useTranslation();
   const { settings, update, isLoading } = useSettings(settingsConfig);
+  const [importPassword, setImportPassword] = useState("");
+
+  useEffect(() => {
+    if (!isLoading) setImportPassword(settings.importPassword);
+  }, [isLoading, settings.importPassword]);
 
   if (isLoading) {
     return null;
@@ -72,6 +80,31 @@ function RouteComponent() {
               </SelectContent>
             </Select>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">
+            {t("page.setting.drive.importPassword.title")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            {t("page.setting.drive.importPassword.description")}
+          </p>
+          <Input
+            id="drive-import-password"
+            type="password"
+            autoComplete="new-password"
+            value={importPassword}
+            onChange={(event) => setImportPassword(event.target.value)}
+            onBlur={() => void update("importPassword", importPassword)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+            }}
+            placeholder={t("page.setting.drive.importPassword.placeholder")}
+          />
         </CardContent>
       </Card>
     </div>

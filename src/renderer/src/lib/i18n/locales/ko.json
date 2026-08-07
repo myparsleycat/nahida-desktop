@@ -106,6 +106,7 @@
         "destination_required": "대상 폴더를 선택하세요.",
         "password_label": "비밀번호",
         "password_placeholder": "공유 링크 비밀번호를 입력하세요",
+        "create_collection_folder": "컬렉션 이름으로 폴더 만들기",
         "action": "드라이브로 복사",
         "url_required": "나히다 URL을 입력하세요.",
         "login_required": "내 드라이브로 복사하려면 로그인하세요.",
@@ -1515,6 +1516,11 @@
             "natural_ignore_spacing": "자연 정렬 + 공백 무시",
             "natural": "기본 자연 정렬"
           }
+        },
+        "importPassword": {
+          "title": "공유 링크 자동 비밀번호",
+          "description": "비밀번호가 필요한 공유 링크나 컬렉션에 자동으로 사용할 비밀번호입니다. 비워 두면 매번 입력합니다.",
+          "placeholder": "자동 입력할 비밀번호"
         }
       }
     },

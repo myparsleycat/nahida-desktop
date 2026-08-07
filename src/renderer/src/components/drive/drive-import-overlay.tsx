@@ -1,8 +1,10 @@
 import { Button } from "@renderer/components/ui/button";
+import { Checkbox } from "@renderer/components/ui/checkbox";
 import { Input } from "@renderer/components/ui/input";
 import { Label } from "@renderer/components/ui/label";
 import { Progress } from "@renderer/components/ui/progress";
 import { useAuth } from "@renderer/hooks/use-auth";
+import { useSetting } from "@renderer/hooks/use-settings";
 import { useViewStore } from "@renderer/store/drive";
 import type { DriveCopyProgress } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
@@ -16,16 +18,22 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
   const { t } = useTranslation();
   const { session, sessionInitialized, startLogin } = useAuth();
   const queryClient = useQueryClient();
+  const { data: savedImportPassword } = useSetting("drive.importPassword");
 
   const importOverlay = useViewStore((s) => s.importOverlay);
   const setImportOverlay = useViewStore((s) => s.setImportOverlay);
 
   const [url, setUrl] = useState("");
   const [password, setPassword] = useState("");
+  const [createCollectionFolders, setCreateCollectionFolders] = useState(true);
   const [requiresPassword, setRequiresPassword] = useState(false);
   const [copyProgress, setCopyProgress] = useState<DriveCopyProgress | null>(null);
   const copyOperationIdRef = useRef<string | undefined>(undefined);
   const isPendingRef = useRef(false);
+  const showPasswordInput =
+    requiresPassword ||
+    /^https:\/\/(?:www\.)?nahida\.live\/akasha\/(?:link|mod)\//i.test(url.trim());
+  const isModUrl = /^https:\/\/(?:www\.)?nahida\.live\/akasha\/mod\//i.test(url.trim());
 
   const destinationQuery = useQuery({
     queryKey: ["drive", "import-destination", destinationId],
@@ -36,10 +44,11 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
   useEffect(() => {
     if (!importOverlay) return;
     setUrl(importOverlay.url);
-    setPassword("");
+    setPassword(savedImportPassword ?? "");
+    setCreateCollectionFolders(true);
     setRequiresPassword(false);
     setCopyProgress(null);
-  }, [importOverlay]);
+  }, [importOverlay, savedImportPassword]);
 
   useEffect(() => {
     if (!importOverlay) return;
@@ -71,6 +80,7 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
         url: url.trim(),
         password,
         destinationId,
+        createCollectionFolders,
         operationId,
       });
     },
@@ -90,7 +100,6 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
       return;
     }
 
-    setRequiresPassword(false);
     setCopyProgress(null);
     try {
       const result = await mutation.mutateAsync();
@@ -189,7 +198,7 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
             </div>
           </div>
 
-          {requiresPassword && (
+          {showPasswordInput && (
             <div className="space-y-1">
               <Label htmlFor="drive-import-password">{t("page.drive.import.password_label")}</Label>
               <Input
@@ -202,6 +211,16 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
                 className="w-full"
               />
             </div>
+          )}
+
+          {isModUrl && (
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox
+                checked={createCollectionFolders}
+                onCheckedChange={(checked) => setCreateCollectionFolders(checked === true)}
+              />
+              {t("page.drive.import.create_collection_folder")}
+            </label>
           )}
 
           {mutation.isPending && copyProgress && (

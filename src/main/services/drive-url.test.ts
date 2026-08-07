@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { DriveApiError } from "./drive-errors";
-import { parseDriveSourceUrl } from "./drive-url";
+import { encodeNahidaPassword, parseDriveSourceUrl } from "./drive-url";
+
+describe("encodeNahidaPassword", () => {
+    it("matches the web client's URL-safe Base64 encoding", () => {
+        expect(encodeNahidaPassword("gayshin")).toBe("Z2F5c2hpbg");
+        expect(encodeNahidaPassword("비밀번호")).toBe("67mE67CA67KI7Zi4");
+    });
+});
 
 describe("parseDriveSourceUrl", () => {
     it.each([

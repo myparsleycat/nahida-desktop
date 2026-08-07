@@ -5,6 +5,18 @@ export type DriveSource = {
     id: string;
 };
 
+/** Match the web client's URL-safe Base64 password encoding. */
+export function encodeNahidaPassword(value: string) {
+    const binary = encodeURIComponent(value).replace(/%([0-9A-F]{2})/g, (_, hex: string) =>
+        String.fromCharCode(Number.parseInt(hex, 16)),
+    );
+    return Buffer.from(binary, "latin1")
+        .toString("base64")
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+}
+
 export function parseDriveSourceUrl(value: string): DriveSource {
     try {
         const url = new URL(value.trim());
