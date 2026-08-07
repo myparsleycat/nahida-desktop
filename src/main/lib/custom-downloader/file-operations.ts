@@ -1,6 +1,8 @@
 import path from "node:path";
 
+import { toErrorMessage } from "@shared/utils";
 import fse from "fs-extra";
+import { nanoid } from "nanoid";
 
 import { getArchiveRootName } from "./utils";
 
@@ -21,19 +23,58 @@ export async function finalizeStagedDownload(stagingPath: string, destinationDir
     }
 
     const destinationPaths: string[] = [];
+    const backups: Array<{ destinationPath: string; backupPath: string | null }> = [];
 
     try {
         for (const entry of stagedEntries) {
             const sourcePath = path.join(stagingPath, entry);
             const destinationPath = path.join(destinationDir, entry);
-            await moveWithOverwrite(sourcePath, destinationPath);
+            let backupPath: string | null = null;
+            if (await fse.pathExists(destinationPath)) {
+                backupPath = `${destinationPath}.nhd-backup-${nanoid()}`;
+                await fse.move(destinationPath, backupPath, { overwrite: true });
+            }
+            backups.push({ destinationPath, backupPath });
+            await fse.move(sourcePath, destinationPath, { overwrite: true });
             destinationPaths.push(destinationPath);
         }
     } catch (error) {
         (error as Error & { partialDestinationPaths?: string[] }).partialDestinationPaths = [
             ...destinationPaths,
         ];
+        const restoreErrors: unknown[] = [];
+        for (const { destinationPath, backupPath } of backups) {
+            const wasMoved = destinationPaths.includes(destinationPath);
+            const isFailedEntry = !wasMoved && backupPath !== null;
+            try {
+                if (wasMoved || isFailedEntry) {
+                    if (await fse.pathExists(destinationPath)) {
+                        await fse.remove(destinationPath);
+                    }
+                }
+                if (backupPath && (await fse.pathExists(backupPath))) {
+                    await fse.move(backupPath, destinationPath, { overwrite: true });
+                }
+            } catch (restoreError) {
+                restoreErrors.push(restoreError);
+            }
+        }
+        if (restoreErrors.length > 0) {
+            (error as Error & { cleanupError?: string }).cleanupError = restoreErrors
+                .map((e) => toErrorMessage(e))
+                .join("; ");
+            (error as Error & { cleanupErrors?: unknown[] }).cleanupErrors = restoreErrors;
+        }
+        (error as Error & { restoreCompleted?: boolean }).restoreCompleted = true;
         throw error;
+    }
+
+    for (const { backupPath } of backups) {
+        if (backupPath) {
+            try {
+                await fse.remove(backupPath);
+            } catch {}
+        }
     }
 
     return destinationPaths;

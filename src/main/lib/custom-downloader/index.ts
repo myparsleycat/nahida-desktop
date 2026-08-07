@@ -674,7 +674,9 @@ export class CustomDownloader {
                     }
                 } catch (err) {
                     await cleanupStaging();
-                    await cleanupDestinationEntries();
+                    if (!(err as Error & { restoreCompleted?: boolean }).restoreCompleted) {
+                        await cleanupDestinationEntries();
+                    }
                     if (
                         abortController.signal.aborted ||
                         (err as Error).name === "AbortError" ||
