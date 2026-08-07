@@ -18,7 +18,12 @@ import Upload, {
 import type { LinkData } from "@main/server";
 import { BACKEND_URL } from "@shared/const";
 import type { DownloadSource } from "@shared/mod";
-import type { DriveCopyProgress } from "@shared/types";
+import type {
+    DriveCopyProgress,
+    DriveImportContent,
+    DriveListChildrenResult,
+    DriveResolveImportSourceResult,
+} from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import { dialog } from "electron";
 import { retry } from "es-toolkit";
@@ -58,21 +63,6 @@ export type DriveResolveImportSourceParams = {
     password?: string;
 };
 
-export type DriveResolveImportSourceResult =
-    | {
-          source: "link";
-          linkId: string;
-          token: string;
-          parent: { id: string; name: string };
-      }
-    | {
-          source: "mod";
-          modId: string;
-          modData: ModOverview;
-          token?: string;
-          sig?: string;
-      };
-
 export type DriveListLinkChildrenParams = {
     linkId: string;
     linkToken: string;
@@ -83,23 +73,6 @@ export type DriveListModChildrenParams = {
     itemId: string;
     modToken?: string;
     modSig?: string;
-};
-
-export type DriveImportContent = {
-    id: string;
-    name: string;
-    isDir: boolean;
-    size: number | null;
-    mimeType: string | null;
-    parentId: string | null;
-    createdAt: Date;
-    updatedAt: Date;
-};
-
-export type DriveListChildrenResult = {
-    content: DriveImportContent;
-    children: DriveImportContent[];
-    ancestors: { id: string; parentId: string | null; name: string; depth: number }[];
 };
 
 export type DriveCopyFromUrlManyParams = DriveCopyFromUrlParams & {

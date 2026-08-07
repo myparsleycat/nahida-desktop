@@ -409,10 +409,7 @@ export type DriveResolveModResult = {
     source: "mod";
     modId: string;
     modData: {
-        id: string;
-        title: string;
-        collections: { id: string; name: string; private: boolean; rootId: string | null }[];
-        [key: string]: unknown;
+        collections: { id: string; name: string; private?: boolean; rootId: string }[];
     };
     token?: string;
     sig?: string;
