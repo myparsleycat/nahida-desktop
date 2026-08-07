@@ -128,6 +128,7 @@ export async function analyzeTouchMod(
         const primaryIndex = indexData[0];
         const indexPaths = indexData.map((entry) => entry.indexPath);
         const indexRelativePaths = indexData.map((entry) => entry.relativePath);
+        const indexFormats = indexData.map((entry) => entry.resource.format);
         let combinedOffset = 0;
         const indexInfos = indexData.map((entry) => {
             const info = {
@@ -221,6 +222,7 @@ export async function analyzeTouchMod(
             indexPath: primaryIndex.indexPath,
             indexRelativePaths,
             indexPaths,
+            indexFormats,
             indexFormat: primaryIndex.resource.format,
             indexCount: combinedIndices.length,
             blendSectionName: drawContext.blendSectionName,
@@ -281,13 +283,19 @@ export async function loadTouchMeshBuffers(component: TouchComponentAnalysis) {
     const indices = component.indexPaths?.length
         ? combineIndexBuffers(
               await Promise.all(
-                  component.indexPaths.map((indexPath) =>
-                      readIndexBuffer(indexPath, component.indexFormat),
+                  component.indexPaths.map((indexPath, index) =>
+                      readIndexBuffer(
+                          indexPath,
+                          component.indexFormats?.[index] ?? component.indexFormat,
+                      ),
                   ),
               ),
           )
         : component.indexPath
-          ? await readIndexBuffer(component.indexPath, component.indexFormat)
+          ? await readIndexBuffer(
+                component.indexPath,
+                component.indexFormats?.[0] ?? component.indexFormat,
+            )
           : new Uint32Array();
     let blendBytes: Uint8Array | undefined;
     let bones: BlendBoneInfo[] = component.bones;
