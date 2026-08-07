@@ -293,18 +293,10 @@ export function AkashaHeadButtons({ currentId }: { currentId?: string }) {
   );
 }
 
-function ListHead() {
+export function ListHead() {
   const sortType = useViewStore((s) => s.sortType);
   const setSortType = useViewStore((s) => s.setSortType);
   const { t } = useTranslation();
-
-  const handleSortButtonClick = (
-    e: React.MouseEvent<HTMLButtonElement>,
-    field: "NAME" | "SIZE" | "DATE",
-  ) => {
-    handleSort(field);
-    e.currentTarget.blur();
-  };
 
   const handleSort = (field: "NAME" | "SIZE" | "DATE") => {
     if (!sortType.startsWith(field)) {
@@ -323,7 +315,7 @@ function ListHead() {
         <th className="w-full pl-3 text-left align-middle font-normal">
           <button
             className="flex w-full flex-row items-center justify-start"
-            onClick={(e) => handleSortButtonClick(e, "NAME")}
+            onClick={() => handleSort("NAME")}
           >
             <div
               className={cn(
@@ -343,7 +335,7 @@ function ListHead() {
         <th className="w-[1%] px-2 align-middle font-normal whitespace-nowrap">
           <button
             className="flex w-full flex-row items-center justify-end"
-            onClick={(e) => handleSortButtonClick(e, "SIZE")}
+            onClick={() => handleSort("SIZE")}
           >
             <div
               className={cn(
@@ -363,7 +355,7 @@ function ListHead() {
         <th className="w-[1%] pr-3 align-middle font-normal whitespace-nowrap">
           <button
             className="flex w-full flex-row items-center justify-end"
-            onClick={(e) => handleSortButtonClick(e, "DATE")}
+            onClick={() => handleSort("DATE")}
           >
             <div
               className={cn(
@@ -431,7 +423,7 @@ export function ContentMenuList(props: ContentMenuProps) {
               )}
               onContextMenu={(e) => handleItemRightClick(e, item)}
             >
-              <td className="w-full max-w-0 p-2 pl-3  text-left align-middle">
+              <td className="w-full max-w-0 p-2 pl-3 text-left align-middle">
                 <div className="flex flex-row items-center gap-3">
                   <div className="flex size-11 shrink-0 items-center justify-center text-muted-foreground">
                     {isFetching && itemId === item.id ? (

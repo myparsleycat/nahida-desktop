@@ -1,4 +1,5 @@
 import "@renderer/lib/i18n";
+import { TITLE_BAR_HEIGHT } from "@shared/const";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createHashHistory, createRouter, RouterProvider } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -6,6 +7,8 @@ import ReactDOM from "react-dom/client";
 
 import "./index.css";
 import { routeTree } from "./routeTree.gen";
+
+document.documentElement.style.setProperty("--app-titlebar-height", `${TITLE_BAR_HEIGHT}px`);
 
 const hashHistory = createHashHistory();
 const queryClient = new QueryClient();

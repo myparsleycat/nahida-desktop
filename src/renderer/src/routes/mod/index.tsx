@@ -27,7 +27,6 @@ import {
 } from "@renderer/hooks/use-mod-events";
 import { useModFixRunner } from "@renderer/hooks/use-mod-fix-runner";
 import { useSettings } from "@renderer/hooks/use-settings";
-import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { modStore, useModStore } from "@renderer/store/mod";
 import { findGameByImporter, type ResolvedArchiveExtractPathMode } from "@shared/mod";
 import type { FolderGroup } from "@shared/types";
@@ -56,7 +55,6 @@ function getParentGroupPath(groupPath: string) {
 
 function ModRouteContent() {
   const { t } = useTranslation();
-  const { Titlebar } = useTitlebar();
   const { queryClient } = Route.useRouteContext();
 
   const selectedGame = useModStore((s) => s.selectedGame);
@@ -358,8 +356,6 @@ function ModRouteContent() {
 
   return (
     <>
-      <Titlebar title={{ text: t("page.mod.title"), position: "center" }} />
-
       <div className="flex h-full flex-1 overflow-hidden">
         <ModSidebar
           showWuwaFixer={runner.showWuwaFixer}

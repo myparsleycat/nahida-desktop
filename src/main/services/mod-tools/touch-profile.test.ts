@@ -10,7 +10,7 @@ import {
 import { describe, it } from "vitest";
 
 import { replaceTouchOutput, touchFolderBaseName } from "./touch-profile";
-import { analyzeTouchMod, hashTouchFiles } from "./touch-profile-analyzer";
+import { analyzeTouchMod, hashTouchFiles, loadTouchMeshBuffers } from "./touch-profile-analyzer";
 import {
     bakeSampleOffsets,
     buildVertexMasks,
@@ -1737,6 +1737,65 @@ describe("analyzeTouchMod", () => {
         assert.equal(analysis.modRootRelativeToSource, "body");
         assert.equal(path.resolve(analysis.sourceRoot, analysis.modRootRelativeToSource), bodyRoot);
         assert.ok(analysis.components.length > 0);
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    it("combines multiple matched index buffers for a single position buffer (GIMI style)", async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "touch-profile-gimi-multi-ib-"));
+
+        fs.writeFileSync(
+            path.join(root, "mod.ini"),
+            [
+                "[TextureOverrideChioriPosition]",
+                "vb0 = ResourceChioriPosition",
+                "[TextureOverrideChioriHead]",
+                "ib = ResourceChioriHeadIB",
+                "drawindexed = 3, 0, 0",
+                "[TextureOverrideChioriBody]",
+                "ib = ResourceChioriBodyIB",
+                "drawindexed = 3, 3, 0",
+                "[ResourceChioriPosition]",
+                "type = Buffer",
+                "stride = 40",
+                "filename = ChioriPosition.buf",
+                "[ResourceChioriHeadIB]",
+                "type = Buffer",
+                "format = DXGI_FORMAT_R32_UINT",
+                "filename = ChioriHead.ib",
+                "[ResourceChioriBodyIB]",
+                "type = Buffer",
+                "format = DXGI_FORMAT_R32_UINT",
+                "filename = ChioriBody.ib",
+            ].join("\n"),
+            "utf8",
+        );
+
+        const posBytes = Buffer.alloc(6 * 40);
+        for (let i = 0; i < 6; i++) {
+            posBytes.writeFloatLE(i * 0.1, i * 40);
+            posBytes.writeFloatLE(0.5, i * 40 + 4);
+            posBytes.writeFloatLE(1.0, i * 40 + 8);
+        }
+        fs.writeFileSync(path.join(root, "ChioriPosition.buf"), posBytes);
+        fs.writeFileSync(
+            path.join(root, "ChioriHead.ib"),
+            Buffer.from(new Uint32Array([0, 1, 2]).buffer),
+        );
+        fs.writeFileSync(
+            path.join(root, "ChioriBody.ib"),
+            Buffer.from(new Uint32Array([3, 4, 5]).buffer),
+        );
+
+        const analysis = await analyzeTouchMod(root);
+        assert.equal(analysis.components.length, 1);
+        const comp = analysis.components[0];
+        assert.equal(comp.indexCount, 6);
+        assert.ok(comp.indexPaths);
+        assert.equal(comp.indexPaths.length, 2);
+
+        const mesh = await loadTouchMeshBuffers(comp);
+        assert.deepEqual([...mesh.indices], [0, 1, 2, 3, 4, 5]);
+
         fs.rmSync(root, { recursive: true, force: true });
     });
 });

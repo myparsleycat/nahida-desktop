@@ -19,7 +19,6 @@ import { Input } from "@renderer/components/ui/input";
 import { Label } from "@renderer/components/ui/label";
 import { Progress } from "@renderer/components/ui/progress";
 import { useAuth } from "@renderer/hooks/use-auth";
-import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import type { DriveCopyProgress } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -48,7 +47,6 @@ export const Route = createFileRoute("/drive/import")({
 
 function RouteComponent() {
   const { t } = useTranslation();
-  const { Titlebar } = useTitlebar();
   const { session, sessionInitialized, startLogin } = useAuth();
   const { queryClient } = useRouteContext({ from: "__root__" });
   const navigate = Route.useNavigate();
@@ -197,7 +195,6 @@ function RouteComponent() {
 
   return (
     <>
-      <Titlebar title={{ text: t("page.drive.import.title"), position: "center" }} />
       <Center>
         <Card className="w-full max-w-xl">
           <CardHeader>

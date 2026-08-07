@@ -5,13 +5,11 @@ import { TransferStats } from "@renderer/components/transfer/transfer-stats";
 import { TransferToolbar } from "@renderer/components/transfer/transfer-toolbar";
 import type { TransferItemProps } from "@renderer/components/transfer/types";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
-import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { useGlobalStore } from "@renderer/store/global";
 import type { Transfer } from "@shared/types";
 import { formatSize, formatTime } from "@shared/utils";
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback } from "react";
-import { useTranslation } from "react-i18next";
 
 export const Route = createFileRoute("/transfer")({
   component: RouteComponent,
@@ -42,8 +40,6 @@ function mapStatus(
 }
 
 function RouteComponent() {
-  const { t } = useTranslation();
-  const { Titlebar } = useTitlebar();
   const transfers = useGlobalStore((state) => state.transfers);
 
   const handleCancel = useCallback((id: string) => {
@@ -126,8 +122,6 @@ function RouteComponent() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-background">
-      <Titlebar title={{ text: t("page.transfer.title"), position: "center" }} />
-
       <div className="flex-none border-b px-4 pt-4 pb-4">
         <div className="flex flex-col gap-6">
           <TransferStats

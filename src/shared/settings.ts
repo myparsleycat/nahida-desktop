@@ -15,7 +15,6 @@ export interface AppSettings {
     "general.autoUpdateMode": AutoUpdateMode;
     "general.runInBackground": boolean;
     "general.defaultStartPage": string;
-    "general.titlebarStyle": string;
     "general.logLevel": string;
     "general.moveTransferPageWhenStartTransfer": boolean;
     "general.powerSaveBlockInTransfer": boolean;
@@ -37,6 +36,7 @@ export interface AppSettings {
     "mod.gridFixedCardWidth": number;
     "mod.gridFixedColumnCount": number;
     "mod.disabledPrefixStyle": DisabledPrefixStyle;
+    "mod.returnToGamebananaAfterDownload": boolean;
 
     "tools.touchProfileLlmProtocol": TouchProfileLlmProtocol;
     "tools.touchProfileLlmEndpoint": string;
@@ -104,11 +104,6 @@ export const APP_SETTINGS = {
         publicKey: "general.defaultStartPage",
         scope: "general",
         storageKey: "defaultStartPage",
-    },
-    "general.titlebarStyle": {
-        publicKey: "general.titlebarStyle",
-        scope: "general",
-        storageKey: "titlebarStyle",
     },
     "general.logLevel": {
         publicKey: "general.logLevel",
@@ -210,6 +205,11 @@ export const APP_SETTINGS = {
         publicKey: "mod.disabledPrefixStyle",
         scope: "mod",
         storageKey: "mod_disabled_prefix_style",
+    },
+    "mod.returnToGamebananaAfterDownload": {
+        publicKey: "mod.returnToGamebananaAfterDownload",
+        scope: "mod",
+        storageKey: "mod_return_to_gamebanana_after_download",
     },
 
     "tools.touchProfileLlmProtocol": {

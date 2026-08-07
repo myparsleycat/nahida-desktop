@@ -4,6 +4,7 @@ import { SlowChunkMonitor } from "@main/lib/slow-chunk-monitor";
 import type { UploadParams } from "@main/lib/upload";
 import { getAggregateTransferProgress, isOpenTransferQueueStatus } from "@shared/transfer-progress";
 import type { Transfer, TransferData, TransferStatus, TransferWithoutData } from "@shared/types";
+import { toErrorMessage } from "@shared/utils";
 import { throttle } from "es-toolkit";
 
 import type { NahidaDesktop } from "..";
@@ -322,9 +323,34 @@ export class TransferService {
 
         try {
             await runner();
+        } catch (error) {
+            const errorMessage = toErrorMessage(error);
+            this.desktop.logger.error(error, `Transfer:processQueue:${nextTransfer.pid}`);
+
+            const transfer = this.getTransferByPID(nextTransfer.pid);
+            if (
+                transfer &&
+                transfer.status !== "error" &&
+                transfer.status !== "canceled" &&
+                transfer.status !== "completed"
+            ) {
+                try {
+                    await this.updateTransfer(nextTransfer.pid, {
+                        status: "error",
+                        error: errorMessage,
+                    });
+                } catch (updateError) {
+                    this.desktop.logger.error(
+                        updateError,
+                        `Transfer:processQueue:update:${nextTransfer.pid}`,
+                    );
+                }
+            }
         } finally {
             this.isQueueRunning = false;
-            void this.processQueue();
+            void this.processQueue().catch((error) => {
+                this.desktop.logger.error(error, "Transfer:processQueue:next");
+            });
         }
     }
 

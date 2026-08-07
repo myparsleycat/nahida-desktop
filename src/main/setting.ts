@@ -29,7 +29,7 @@ import {
 } from "@shared/touch-profile-llm";
 import type { AutoUpdateMode } from "@shared/updater";
 import AutoLaunch from "auto-launch";
-import { app, BrowserWindow } from "electron";
+import { app } from "electron";
 
 import { LogLevel } from "./internal/logger";
 
@@ -255,17 +255,6 @@ export class Setting {
                 fromStored: (value) => sanitizeDefaultStartPage(value),
                 normalize: (value) => sanitizeDefaultStartPage(value),
             },
-            "general.titlebarStyle": {
-                definition: APP_SETTINGS["general.titlebarStyle"],
-                getDefault: () => "modern",
-                fromStored: (value) => value || "modern",
-                afterSet: async () => {
-                    for (const window of BrowserWindow.getAllWindows()) {
-                        window.close();
-                    }
-                    await this.desktop.window.main.focusAndNavigate("/setting/gen");
-                },
-            },
             "general.logLevel": {
                 definition: APP_SETTINGS["general.logLevel"],
                 getDefault: () => "error",
@@ -487,6 +476,12 @@ export class Setting {
                         ? (value as DisabledPrefixStyle)
                         : "space",
                 normalize: (value) => (DISABLED_PREFIX_STYLES.includes(value) ? value : "space"),
+            },
+            "mod.returnToGamebananaAfterDownload": {
+                definition: APP_SETTINGS["mod.returnToGamebananaAfterDownload"],
+                getDefault: () => false,
+                fromStored: (value) => parseBooleanSetting(value, false),
+                toStored: (value) => String(value),
             },
             "tools.touchProfileLlmProtocol": {
                 definition: APP_SETTINGS["tools.touchProfileLlmProtocol"],
@@ -806,8 +801,6 @@ export class Setting {
         getDefaultStartPage: async () => await this.get("general.defaultStartPage"),
         setDefaultStartPage: async (page: string | null) =>
             await this.set("general.defaultStartPage", page ?? ""),
-        getTitlebarStyle: async () => await this.get("general.titlebarStyle"),
-        setTitlebarStyle: async (style: string) => await this.set("general.titlebarStyle", style),
         getAutoUpdateMode: async (): Promise<AutoUpdateMode> =>
             await this.get("general.autoUpdateMode"),
         setAutoUpdateMode: async (mode: AutoUpdateMode) =>

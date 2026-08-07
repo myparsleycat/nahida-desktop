@@ -6,7 +6,6 @@ import TextureResizer from "@renderer/components/tools/texture-resizer";
 import TogglePersistence from "@renderer/components/tools/toggle-persistence";
 import ToggleViewerGenerator from "@renderer/components/tools/toggle-viewer-generator";
 import TouchProfileTool from "@renderer/components/tools/touch-profile/touch-profile";
-import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { cn } from "@renderer/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, ExternalLink, Menu, Wrench, X } from "lucide-react";
@@ -82,7 +81,6 @@ const toolPages: ToolPage[] = [
 ];
 
 export default function ToolsPage() {
-  const { screenHeight } = useTitlebar();
   const { t } = useTranslation();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -100,7 +98,6 @@ export default function ToolsPage() {
         className={cn(
           "flex shrink-0 flex-col border-r border-border bg-sidebar md:w-56",
           sidebarOpen ? "w-56" : "w-0 overflow-hidden",
-          screenHeight,
         )}
       >
         <div className="flex items-center gap-2.5 border-b border-sidebar-border px-4 py-4">
@@ -173,7 +170,7 @@ export default function ToolsPage() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-10 shrink-0 items-center gap-3 border-b border-border px-4">
+        <header className="flex h-11 shrink-0 items-center gap-3 border-b border-border px-4">
           <button
             onClick={() => setSidebarOpen((v) => !v)}
             className="rounded p-1.5 transition-colors hover:bg-secondary md:hidden"

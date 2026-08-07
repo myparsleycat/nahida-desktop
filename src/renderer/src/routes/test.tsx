@@ -1,4 +1,3 @@
-import { Titlebar } from "@renderer/components/titlebar";
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/test")({
@@ -6,5 +5,8 @@ export const Route = createFileRoute("/test")({
 });
 
 function RouteComponent() {
-  return <Titlebar title={{ text: "Debug", position: "center" }} />;
+  throw new Error("Intentional runtime error");
+
+  // oxlint-disable-next-line no-unreachable
+  return <div />;
 }

@@ -1,6 +1,5 @@
 import { Center } from "@renderer/components/common";
 import { Button } from "@renderer/components/ui/button";
-import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { Logger } from "@renderer/lib/logger";
 import { createFileRoute } from "@tanstack/react-router";
 import { Loader2Icon, LogInIcon } from "lucide-react";
@@ -11,7 +10,6 @@ export const Route = createFileRoute("/auth")({
 });
 
 function RouteComponent() {
-  const { Titlebar } = useTitlebar();
   const [loading, setLoading] = useState(false);
   const [showStopBtn, setShowStopBtn] = useState(false);
 
@@ -44,9 +42,7 @@ function RouteComponent() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <Titlebar title={{ text: "로그인", position: "center" }} />
-
+    <div className="flex h-full flex-col">
       <Center>
         <div className="flex flex-col gap-2 items-center space-y-4">
           {loading ? (
