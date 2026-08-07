@@ -1753,7 +1753,7 @@ describe("analyzeTouchMod", () => {
                 "drawindexed = 3, 0, 0",
                 "[TextureOverrideChioriBody]",
                 "ib = ResourceChioriBodyIB",
-                "drawindexed = 3, 3, 0",
+                "drawindexed = 3, 0, 0",
                 "[ResourceChioriPosition]",
                 "type = Buffer",
                 "stride = 40",
@@ -1792,6 +1792,13 @@ describe("analyzeTouchMod", () => {
         assert.equal(comp.indexCount, 6);
         assert.ok(comp.indexPaths);
         assert.equal(comp.indexPaths.length, 2);
+        assert.deepEqual(
+            comp.drawRanges.map((range) => [range.firstIndex, range.indexCount]),
+            [
+                [0, 3],
+                [3, 3],
+            ],
+        );
 
         const mesh = await loadTouchMeshBuffers(comp);
         assert.deepEqual([...mesh.indices], [0, 1, 2, 3, 4, 5]);
