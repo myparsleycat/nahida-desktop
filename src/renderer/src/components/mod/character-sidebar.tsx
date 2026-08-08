@@ -83,16 +83,13 @@ function getGroupName(groupPath: string) {
   return groupPath.slice(separatorIndex + 1);
 }
 
-function getParentGroup(
-  parentGroupPath: string | null,
-  itemRefs: React.MutableRefObject<Map<string, { element: HTMLElement; group: FolderGroup }>>,
-) {
+function getParentGroup(parentGroupPath: string | null, groupsByPath: Map<string, FolderGroup>) {
   if (!parentGroupPath) {
     return null;
   }
 
   return (
-    itemRefs.current.get(parentGroupPath)?.group ?? {
+    groupsByPath.get(parentGroupPath) ?? {
       name: getGroupName(parentGroupPath),
       path: parentGroupPath,
       mods: [],
@@ -135,6 +132,9 @@ export const CharacterSidebar = memo(function CharacterSidebar({
   } | null>(null);
   const [previewCacheKey, setPreviewCacheKey] = useState(0);
   const itemRefs = useRef<Map<string, { element: HTMLElement; group: FolderGroup }>>(new Map());
+  const groupsByPathRef = useRef<Map<string, FolderGroup>>(new Map());
+  const scrollToPathRef = useRef<((path: string) => void) | null>(null);
+  const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
   const showSkeleton = useDelayedSkeleton(isLoading);
   const { confirmTrash, confirmTrashDialog } = useConfirmTrash();
   const { data: sidebarLayout = "row" } = useSidebarLayoutSetting();
@@ -209,13 +209,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
         }
 
         setTimeout(() => {
-          const item = itemRefs.current.get(group.path);
-          if (item?.element) {
-            item.element.scrollIntoView({
-              behavior: "auto",
-              block: "center",
-            });
-          }
+          scrollToPathRef.current?.(group.path);
         }, 100);
       }
     },
@@ -232,22 +226,31 @@ export const CharacterSidebar = memo(function CharacterSidebar({
     [markUserSelectedDuringDownload],
   );
 
+  const handleVisibleRowsChange = useCallback((rows: { path: string; group: FolderGroup }[]) => {
+    groupsByPathRef.current = new Map(rows.map((row) => [row.path, row.group]));
+  }, []);
+
   useEffect(() => {
     let timer: NodeJS.Timeout;
     const normalizedSearch = searchTerm.trim().toLowerCase();
     if (normalizedSearch) {
       timer = setTimeout(() => {
-        const matches = Array.from(itemRefs.current.values()).filter((item) =>
-          item.group.name.toLowerCase().includes(normalizedSearch),
-        );
+        const matches =
+          sidebarLayout === "row"
+            ? Array.from(groupsByPathRef.current.values()).filter((group) =>
+                group.name.toLowerCase().includes(normalizedSearch),
+              )
+            : Array.from(itemRefs.current.values())
+                .map((item) => item.group)
+                .filter((group) => group.name.toLowerCase().includes(normalizedSearch));
+
         if (matches.length === 1) {
-          const match = matches[0];
-          handleSelect(match.group, false);
+          handleSelect(matches[0], false);
         }
       }, 300);
     }
     return () => clearTimeout(timer);
-  }, [searchTerm, handleSelect]);
+  }, [searchTerm, handleSelect, sidebarLayout]);
 
   const handleItemClick = useCallback(
     (group: FolderGroup, _e: React.MouseEvent) => {
@@ -366,7 +369,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
   const handleManualSubGroupChange = useCallback(
     async (group: FolderGroup, enabled: boolean) => {
       const parentGroupPath = getParentGroupPath(group.path);
-      const parentGroup = getParentGroup(parentGroupPath, itemRefs);
+      const parentGroup = getParentGroup(parentGroupPath, groupsByPathRef.current);
 
       await window.api
         .invoke("mod:setManualSubGroup", group.path, enabled)
@@ -521,11 +524,16 @@ export const CharacterSidebar = memo(function CharacterSidebar({
           </DropdownMenu>
         </div>
 
-        <ScrollArea className="flex-1 overflow-hidden">
+        <ScrollArea className="flex-1 overflow-hidden" viewportRef={setViewport}>
           {sidebarLayout === "grid" ? (
             <CharacterSidebarGrid {...contentProps} />
           ) : (
-            <CharacterSidebarRow {...contentProps} />
+            <CharacterSidebarRow
+              {...contentProps}
+              viewport={viewport}
+              scrollToPathRef={scrollToPathRef}
+              onVisibleRowsChange={handleVisibleRowsChange}
+            />
           )}
         </ScrollArea>
       </div>

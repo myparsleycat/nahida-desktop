@@ -56,6 +56,7 @@ interface CharacterSidebarItemProps {
   showWuwaFixer?: boolean;
   onOpenWuwaFixer?: (path: string) => Promise<void>;
   forceSelectOnClick?: boolean;
+  autoScrollOnSelect?: boolean;
 }
 
 export const CharacterSidebarItem = memo(function CharacterSidebarItem({
@@ -77,6 +78,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   showWuwaFixer,
   onOpenWuwaFixer,
   forceSelectOnClick,
+  autoScrollOnSelect = true,
 }: CharacterSidebarItemProps) {
   const { t } = useTranslation();
   const isSelected = useModStore((s) => s.selectedGroup?.path === group.path);
@@ -92,6 +94,9 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
   const userClickedRef = useRef(false);
 
   useEffect(() => {
+    if (!autoScrollOnSelect) {
+      return;
+    }
     if (isSelected && ref.current && lastScrolledPathRef.current !== group.path) {
       lastScrolledPathRef.current = group.path;
       if (userClickedRef.current) {
@@ -102,7 +107,7 @@ export const CharacterSidebarItem = memo(function CharacterSidebarItem({
         ref.current?.scrollIntoView({ behavior: "auto", block: "center" });
       });
     }
-  }, [isSelected, group.path]);
+  }, [autoScrollOnSelect, isSelected, group.path]);
 
   useEffect(() => {
     if (ref.current) {
