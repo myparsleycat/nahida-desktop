@@ -128,11 +128,22 @@ export async function analyzeTouchMod(
         const primaryIndex = indexData[0];
         const indexPaths = indexData.map((entry) => entry.indexPath);
         const indexRelativePaths = indexData.map((entry) => entry.relativePath);
+        const indexFormats = indexData.map((entry) => entry.resource.format);
+        let combinedOffset = 0;
+        const indexInfos = indexData.map((entry) => {
+            const info = {
+                resource: entry.resource,
+                offset: combinedOffset,
+                count: entry.indices.length,
+            };
+            combinedOffset += entry.indices.length;
+            return info;
+        });
         const drawContext = findDrawContext(
             sections,
             commandLists,
             position,
-            indexData.map((entry) => entry.resource),
+            indexInfos,
             combinedIndices.length,
         );
         const drawRanges = uniqueDrawRanges(drawContext.ranges);
@@ -211,6 +222,7 @@ export async function analyzeTouchMod(
             indexPath: primaryIndex.indexPath,
             indexRelativePaths,
             indexPaths,
+            indexFormats,
             indexFormat: primaryIndex.resource.format,
             indexCount: combinedIndices.length,
             blendSectionName: drawContext.blendSectionName,
@@ -271,13 +283,19 @@ export async function loadTouchMeshBuffers(component: TouchComponentAnalysis) {
     const indices = component.indexPaths?.length
         ? combineIndexBuffers(
               await Promise.all(
-                  component.indexPaths.map((indexPath) =>
-                      readIndexBuffer(indexPath, component.indexFormat),
+                  component.indexPaths.map((indexPath, index) =>
+                      readIndexBuffer(
+                          indexPath,
+                          component.indexFormats?.[index] ?? component.indexFormat,
+                      ),
                   ),
               ),
           )
         : component.indexPath
-          ? await readIndexBuffer(component.indexPath, component.indexFormat)
+          ? await readIndexBuffer(
+                component.indexPath,
+                component.indexFormats?.[0] ?? component.indexFormat,
+            )
           : new Uint32Array();
     let blendBytes: Uint8Array | undefined;
     let bones: BlendBoneInfo[] = component.bones;
@@ -502,7 +520,10 @@ function findDrawContext(
     sections: IniSection[],
     commandLists: Map<string, IniSection>,
     position: Resource,
-    indexInput: Resource | Resource[],
+    indexInput:
+        | Resource
+        | Resource[]
+        | Array<{ resource: Resource; offset: number; count: number }>,
     indexCount: number,
 ): {
     ranges: TouchDrawRange[];
@@ -511,8 +532,14 @@ function findDrawContext(
     ibHash?: string;
     variantCondition?: string;
 } {
-    const indexResources = Array.isArray(indexInput) ? indexInput : [indexInput];
-    const indexKeys = new Set(indexResources.map((item) => resourceKey(item)));
+    const normalizedInput = Array.isArray(indexInput) ? indexInput : [indexInput];
+    const indexInfos = normalizedInput.map((item) =>
+        (item as { resource: Resource }).resource
+            ? (item as { resource: Resource; offset: number; count: number })
+            : { resource: item as Resource, offset: 0, count: indexCount },
+    );
+    const indexMap = new Map(indexInfos.map((info) => [resourceKey(info.resource), info]));
+    const indexKeys = new Set(indexMap.keys());
     const resourcesByName = new Map(
         collectResources(sections).map((resource) => [resourceKey(resource), resource]),
     );
@@ -551,13 +578,19 @@ function findDrawContext(
         );
         if (!indexAssignment) continue;
 
+        const matched = indexMap.get(resourceKey(indexAssignment.resource));
+        const resourceOffset = matched?.offset ?? 0;
+        const resourceCount = matched?.count ?? indexCount;
+
         ibSectionName ??= context.section.name;
         ibHash ??= context.hash;
         variantCondition ??= indexAssignment.conditionText;
         ranges.push(
-            ...context.ranges.filter((range) =>
-                rangeMatchesCondition(range.conditionText, indexAssignment.conditionText),
-            ),
+            ...context.ranges
+                .filter((range) =>
+                    rangeMatchesCondition(range.conditionText, indexAssignment.conditionText),
+                )
+                .map((range) => ({ ...range, firstIndex: range.firstIndex + resourceOffset })),
         );
 
         if (
@@ -566,8 +599,8 @@ function findDrawContext(
             )
         ) {
             ranges.push({
-                firstIndex: 0,
-                indexCount,
+                firstIndex: resourceOffset,
+                indexCount: resourceCount,
                 baseVertex: 0,
                 conditionText: indexAssignment.conditionText,
             });

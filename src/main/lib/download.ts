@@ -10,7 +10,7 @@ import { BACKEND_URL } from "@shared/const";
 import type { TransferData } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import { decode } from "cbor-x";
-import { chunk, retry, throttle } from "es-toolkit";
+import { chunk, retry, throttle, uniqBy } from "es-toolkit";
 import fse from "fs-extra";
 import ky from "ky";
 import PQueue from "p-queue";
@@ -815,15 +815,13 @@ export class DownloadLib {
         link?: LinkData;
         signal: AbortSignal;
     }): Promise<DownloadMetadata> {
-        const folders = Array.from(
-            new Map(
-                items.filter((item) => item.isDir).map((item) => [item.id, item] as const),
-            ).values(),
+        const folders = uniqBy(
+            items.filter((item) => item.isDir),
+            (item) => item.id,
         );
-        const files = Array.from(
-            new Map(
-                items.filter((item) => !item.isDir).map((item) => [item.id, item] as const),
-            ).values(),
+        const files = uniqBy(
+            items.filter((item) => !item.isDir),
+            (item) => item.id,
         );
 
         const mergedDirs: DownloadMetadata["dirs"] = [];

@@ -28,4 +28,27 @@ describe("downloadFile", () => {
             }),
         );
     });
+
+    it("skips the range probe when range support is explicitly false", async () => {
+        const checkRangeSupport = vi.fn();
+        const download = vi.fn();
+        const downloader = { checkRangeSupport, download } as unknown as ParallelDownloader;
+        const controller = new AbortController();
+        controller.abort();
+
+        await expect(
+            downloadFile({
+                url: "https://example.test/file.bin",
+                savePath: "file.bin",
+                fileSize: 1024,
+                supportsRange: false,
+                signal: controller.signal,
+                downloader,
+                httpService: { getHeaders: vi.fn() },
+            }),
+        ).rejects.toMatchObject({ name: "AbortError" });
+
+        expect(checkRangeSupport).not.toHaveBeenCalled();
+        expect(download).not.toHaveBeenCalled();
+    });
 });

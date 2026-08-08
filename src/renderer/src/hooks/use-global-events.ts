@@ -1,7 +1,6 @@
-import { CollectionCopyToast } from "@renderer/components/drive/collection-copy-toast";
 import type { DownloadSource } from "@shared/mod";
 import { useNavigate } from "@tanstack/react-router";
-import { createElement, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -38,34 +37,6 @@ export function useGlobalEvents(
             });
         });
         setListeners(new Map(listeners.set("fn:toast", removeToastListener)));
-
-        const removeCollectionCopyProgressListener = window.api.on(
-            "drive:copy-progress",
-            (progress) => {
-                const isFinished =
-                    progress.phase === "completed" ||
-                    progress.phase === "canceled" ||
-                    progress.phase === "error";
-                toast.custom(
-                    () =>
-                        createElement(CollectionCopyToast, {
-                            progress,
-                            onCancel: () =>
-                                window.api.invoke(
-                                    "drive:fn:cancelCopyFromUrl",
-                                    progress.operationId,
-                                ),
-                        }),
-                    {
-                        id: progress.operationId,
-                        duration: isFinished ? 4000 : Infinity,
-                    },
-                );
-            },
-        );
-        setListeners(
-            new Map(listeners.set("drive:copy-progress", removeCollectionCopyProgressListener)),
-        );
 
         const removeNaviListener = window.api.on("fn:navi", (path) => {
             void navi({ to: path });

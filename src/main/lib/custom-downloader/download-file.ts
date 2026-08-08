@@ -50,7 +50,8 @@ export async function downloadFile(props: {
         fileId = savePath,
         cohortKey = "custom",
     } = props;
-    const rangeSupported = supportsRange ?? (await downloader.checkRangeSupport(url));
+    const rangeSupported =
+        supportsRange ?? (await downloader.checkRangeSupport(url, undefined, signal));
 
     if (rangeSupported && fileSize) {
         await downloader.download({
@@ -93,7 +94,7 @@ export async function downloadFile(props: {
         });
 
         let attemptBytes = 0;
-        const fileStream = fse.createWriteStream(savePath);
+        let fileStream: ReturnType<typeof fse.createWriteStream> | undefined;
 
         try {
             await downloadRequestLimiter.run(async () => {
@@ -110,6 +111,8 @@ export async function downloadFile(props: {
                 if (!resp.body) {
                     throw new Error("No response body");
                 }
+
+                fileStream = fse.createWriteStream(savePath);
 
                 const source = webStreamToNodeReadable(resp.body, combinedSignal);
                 const progressStream = new Transform({
@@ -146,8 +149,10 @@ export async function downloadFile(props: {
             }, combinedSignal);
             return;
         } catch (err) {
-            fileStream.destroy();
-            await fse.remove(savePath).catch(() => {});
+            fileStream?.destroy();
+            if (fileStream) {
+                await fse.remove(savePath).catch(() => {});
+            }
 
             if (attemptBytes > 0) {
                 onProgress?.(-attemptBytes);

@@ -60,10 +60,7 @@ const createAbortError = (message = "Aborted") => {
 export class ParallelDownloader {
     private readonly minSegmentSize = 4 * 1024 * 1024;
     private readonly requestLimiter: DownloadRequestLimiter;
-    private readonly rangeSupportCache = new Map<
-        string,
-        { expiresAt: number; value: Promise<boolean> }
-    >();
+    private readonly rangeSupportCache = new Map<string, { expiresAt: number; value: boolean }>();
 
     constructor(
         private options: {
@@ -87,17 +84,14 @@ export class ParallelDownloader {
         const cached = this.rangeSupportCache.get(cacheKey);
         if (cached && cached.expiresAt > Date.now()) return cached.value;
 
-        const value = this.requestRangeSupport(url, headers, signal);
-        this.rangeSupportCache.set(cacheKey, {
-            expiresAt: Date.now() + RANGE_SUPPORT_CACHE_TTL_MS,
-            value,
-        });
-        void value.catch(() => {
-            if (this.rangeSupportCache.get(cacheKey)?.value === value) {
-                this.rangeSupportCache.delete(cacheKey);
-            }
-        });
-        return value;
+        const rangeSupported = await this.requestRangeSupport(url, headers, signal);
+        if (rangeSupported) {
+            this.rangeSupportCache.set(cacheKey, {
+                expiresAt: Date.now() + RANGE_SUPPORT_CACHE_TTL_MS,
+                value: true,
+            });
+        }
+        return rangeSupported;
     }
 
     private async requestRangeSupport(
@@ -176,12 +170,14 @@ export class ParallelDownloader {
     }): Promise<void> {
         return this.requestLimiter.run(async () => {
             const requestHeaders: Record<string, string> = {
-                Range: `bytes=${start}-${end}`,
+                ...(await this.options.getHeaders(url)),
                 ...headers,
+                Range: `bytes=${start}-${end}`,
             };
 
             const response = await ky(url, {
                 headers: requestHeaders,
+                fetch: networkFetch,
                 signal,
                 throwHttpErrors: false,
                 timeout: 100000,
@@ -432,10 +428,6 @@ export class ParallelDownloader {
             cohortKey = "parallel",
         } = options;
         const targetPath = `${savePath}.ntmp`;
-        const requestHeaders = {
-            ...(await this.options.getHeaders(url)),
-            ...headers,
-        };
 
         let concurrency =
             maxChunks && maxChunks > 0 ? maxChunks : this.calculateChunkCount(fileSize, maxChunks);
@@ -573,7 +565,7 @@ export class ParallelDownloader {
                     try {
                         await this.downloadChunk({
                             url,
-                            headers: requestHeaders,
+                            headers,
                             start: segment.start,
                             end: segment.end,
                             chunkPath: segment.chunkPath,

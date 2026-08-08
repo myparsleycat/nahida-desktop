@@ -108,13 +108,13 @@
         "no_uploadable_files": "No uploadable files found."
       },
       "import": {
-        "title": "Copy to Nahida Drive",
+        "title": "Import to drive",
         "description": "Enter a shared folder or collection URL, then choose a folder in your drive.",
         "url_label": "Nahida URL",
         "url_placeholder": "https://nahida.live/akasha/link/...",
         "destination_label": "Destination folder",
         "choose_destination": "Choose folder",
-        "destination_description": "Choose the drive root or a folder where copied items should be placed.",
+        "destination_description": "Choose the drive root or a folder where imported items should be placed.",
         "loading_folder": "Loading folder...",
         "no_subfolders": "No subfolders",
         "destination_load_failed": "Failed to load the destination folder.",
@@ -123,27 +123,29 @@
         "destination_required": "Choose a destination folder.",
         "password_label": "Password",
         "password_placeholder": "Enter the shared link password",
-        "action": "Copy to drive",
+        "authenticate": "Verify password",
+        "retry": "Retry",
+        "action": "Import to drive",
         "url_required": "Enter a Nahida URL.",
-        "login_required": "Sign in to copy items to your drive.",
+        "login_required": "Sign in to import items to your drive.",
         "password_required": "This link requires a password.",
         "invalid_password": "The shared link password is incorrect.",
-        "success": "Copied {{count}} item(s) to your drive.",
-        "failed": "Copy failed",
+        "success": "Imported {{count}} item(s) to your drive.",
+        "failed": "Import failed",
         "progress": {
-          "preparing": "Preparing the copy...",
-          "copying": "Copying to your drive on the server...",
+          "preparing": "Preparing the import...",
+          "copying": "Importing to your drive on the server...",
           "downloading": "Downloading item...",
           "uploading": "Uploading to your drive...",
-          "completed": "Copy completed.",
-          "canceled": "Copy stopped.",
-          "cancel": "Stop copy",
-          "error": "Copy failed during transfer."
+          "completed": "Import completed.",
+          "canceled": "Import stopped.",
+          "cancel": "Stop import",
+          "error": "Import failed during transfer."
         }
       },
       "head_buttons": {
         "search_in_dir_placeholder": "Search in this folder...",
-        "import": "Copy a shared link",
+        "import": "Import a shared link",
         "dropdown_menu": {
           "download": "Download",
           "make_new": {
@@ -1491,6 +1493,19 @@
             "natural_ignore_spacing": "Natural sort + ignore spaces",
             "natural": "Default natural sort"
           }
+        },
+        "import": {
+          "title": "Import"
+        },
+        "autoTryPasswords": {
+          "title": "Auto-try passwords",
+          "description": "Automatically try the saved password list when resolving a link that requires a password."
+        },
+        "passwordList": {
+          "title": "Password list",
+          "description": "Passwords to try automatically. Up to {{max}} can be stored.",
+          "placeholder": "Enter password",
+          "add": "Add"
         }
       },
       "xxmi": {
