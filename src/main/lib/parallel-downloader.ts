@@ -9,7 +9,11 @@ import type { BandwidthLimiter } from "./bandwidth-limiter";
 
 import { networkFetch } from "../internal/network-fetch";
 import { createBandwidthLimitTransform } from "./bandwidth-limit-stream";
-import { downloadRequestLimiter, type DownloadRequestLimiter } from "./download-request-limiter";
+import {
+    downloadRequestLimiter,
+    rangeProbeLimiter,
+    type DownloadRequestLimiter,
+} from "./download-request-limiter";
 import {
     isAbortError,
     SLOW_CHUNK_MAX_RECONNECTS,
@@ -60,6 +64,7 @@ const createAbortError = (message = "Aborted") => {
 export class ParallelDownloader {
     private readonly minSegmentSize = 4 * 1024 * 1024;
     private readonly requestLimiter: DownloadRequestLimiter;
+    private readonly rangeProbeLimiter: DownloadRequestLimiter;
     private readonly rangeSupportCache = new Map<string, { expiresAt: number; value: boolean }>();
 
     constructor(
@@ -70,9 +75,11 @@ export class ParallelDownloader {
             };
             getHeaders: (url: string) => Promise<Record<string, string>>;
             requestLimiter?: DownloadRequestLimiter;
+            rangeProbeLimiter?: DownloadRequestLimiter;
         },
     ) {
         this.requestLimiter = options.requestLimiter ?? downloadRequestLimiter;
+        this.rangeProbeLimiter = options.rangeProbeLimiter ?? rangeProbeLimiter;
     }
 
     public async checkRangeSupport(
@@ -100,7 +107,7 @@ export class ParallelDownloader {
         signal?: AbortSignal,
     ) {
         try {
-            const response = await this.requestLimiter.run(
+            const response = await this.rangeProbeLimiter.run(
                 async () =>
                     ky.head(url, {
                         headers: {
@@ -108,6 +115,7 @@ export class ParallelDownloader {
                             ...headers,
                         },
                         fetch: networkFetch,
+                        signal,
                         timeout: 10000,
                         throwHttpErrors: false,
                         retry: 0,
@@ -168,65 +176,67 @@ export class ParallelDownloader {
         bandwidthLimiter?: BandwidthLimiter;
         onPhaseChange?: (phase: "network" | "bandwidth-wait") => void;
     }): Promise<void> {
-        return this.requestLimiter.run(async () => {
-            const requestHeaders: Record<string, string> = {
-                ...(await this.options.getHeaders(url)),
-                ...headers,
-                Range: `bytes=${start}-${end}`,
-            };
+        const requestHeaders: Record<string, string> = {
+            ...(await this.options.getHeaders(url)),
+            ...headers,
+            Range: `bytes=${start}-${end}`,
+        };
 
-            const response = await ky(url, {
-                headers: requestHeaders,
-                fetch: networkFetch,
-                signal,
-                throwHttpErrors: false,
-                timeout: 100000,
-                retry: 0,
-            });
+        const response = await this.requestLimiter.run(
+            () =>
+                ky(url, {
+                    headers: requestHeaders,
+                    fetch: networkFetch,
+                    signal,
+                    throwHttpErrors: false,
+                    timeout: 100000,
+                    retry: 0,
+                }),
+            signal,
+        );
 
-            if (response.status !== 206) {
-                await drainWebStream(response.body, signal).catch(() => {});
-                throw new Error(
-                    `Chunk download failed: expected 206 Partial Content, got ${response.statusText} (${response.status})`,
+        if (response.status !== 206) {
+            await drainWebStream(response.body, signal).catch(() => {});
+            throw new Error(
+                `Chunk download failed: expected 206 Partial Content, got ${response.statusText} (${response.status})`,
+            );
+        }
+
+        if (!response.body) throw new Error("No response body");
+
+        const fileStream = fse.createWriteStream(chunkPath);
+        let transferredBytes = 0;
+        const source = webStreamToNodeReadable(response.body, signal);
+        const progressStream = new Transform({
+            transform(chunk: Buffer, _encoding, callback) {
+                transferredBytes += chunk.byteLength;
+                onProgress?.(transferredBytes, chunk.byteLength);
+                callback(null, chunk);
+            },
+        });
+
+        try {
+            if (bandwidthLimiter) {
+                await pipeline(
+                    source,
+                    createBandwidthLimitTransform(bandwidthLimiter, {
+                        signal,
+                        onPhaseChange,
+                    }),
+                    progressStream,
+                    fileStream,
+                    { signal },
                 );
+            } else {
+                await pipeline(source, progressStream, fileStream, { signal });
             }
-
-            if (!response.body) throw new Error("No response body");
-
-            const fileStream = fse.createWriteStream(chunkPath);
-            let transferredBytes = 0;
-            const source = webStreamToNodeReadable(response.body, signal);
-            const progressStream = new Transform({
-                transform(chunk: Buffer, _encoding, callback) {
-                    transferredBytes += chunk.byteLength;
-                    onProgress?.(transferredBytes, chunk.byteLength);
-                    callback(null, chunk);
-                },
-            });
-
-            try {
-                if (bandwidthLimiter) {
-                    await pipeline(
-                        source,
-                        createBandwidthLimitTransform(bandwidthLimiter, {
-                            signal,
-                            onPhaseChange,
-                        }),
-                        progressStream,
-                        fileStream,
-                        { signal },
-                    );
-                } else {
-                    await pipeline(source, progressStream, fileStream, { signal });
-                }
-            } catch (pipeErr) {
-                fileStream.destroy();
-                if (!preservePartialOnAbort?.()) {
-                    await fse.remove(chunkPath).catch(() => {});
-                }
-                throw pipeErr;
+        } catch (pipeErr) {
+            fileStream.destroy();
+            if (!preservePartialOnAbort?.()) {
+                await fse.remove(chunkPath).catch(() => {});
             }
-        }, signal);
+            throw pipeErr;
+        }
     }
 
     private async combineChunks({

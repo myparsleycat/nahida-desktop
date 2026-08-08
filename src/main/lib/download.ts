@@ -61,6 +61,7 @@ export type DownloadMetadata = {
 
 export const BATCH_ROOT_ID = "batch-root";
 const FILE_ID_BATCH_LIMIT = 100;
+const PARALLEL_DOWNLOAD_THRESHOLD = 20 * 1024 * 1024;
 
 function isExpectedContentRange(value: string | null, resumeFrom: number, fileSize: number) {
     const match = /^bytes\s+(\d+)-(\d+)\/(\d+)$/i.exec(value ?? "");
@@ -365,13 +366,18 @@ class FileDownloadTask {
         const isSmallFile = file.size < 1024 * 1024;
         const targetPath = isSmallFile ? filePath : `${filePath}.ntmp`;
 
-        const hasResumeState = await fse
+        const resumeSize = await fse
             .stat(targetPath)
-            .then(({ size }) => size > 0)
-            .catch(() => false);
-        const parallelResult = hasResumeState
-            ? false
-            : await this.tryParallelDownload(file, filePath, signal, onProgress, link);
+            .then(({ size }) => size)
+            .catch(() => 0);
+        const canUseParallel = file.size >= PARALLEL_DOWNLOAD_THRESHOLD && !file.compAlg;
+        const hasResumeState = resumeSize > 0;
+
+        // Keep meaningful resume work, but let a tiny stale partial use parallel download.
+        const parallelResult =
+            hasResumeState && (!canUseParallel || resumeSize >= PARALLEL_DOWNLOAD_THRESHOLD)
+                ? false
+                : await this.tryParallelDownload(file, filePath, signal, onProgress, link);
         if (parallelResult) {
             onComplete();
             return;
@@ -396,7 +402,6 @@ class FileDownloadTask {
         onProgress?: (bytes: number) => void,
         link?: LinkData,
     ): Promise<boolean> {
-        const PARALLEL_DOWNLOAD_THRESHOLD = 20 * 1024 * 1024; // 20MB
         if (file.size < PARALLEL_DOWNLOAD_THRESHOLD || !!file.compAlg) {
             return false;
         }
@@ -410,6 +415,16 @@ class FileDownloadTask {
         if (!supportsRange) return false;
 
         try {
+            const partialPath = `${filePath}.ntmp`;
+            const partialSize = await fse
+                .stat(partialPath)
+                .then(({ size }) => size)
+                .catch(() => 0);
+            // Range support is confirmed, so a tiny partial can be discarded before restarting in parallel.
+            if (partialSize > 0 && partialSize < PARALLEL_DOWNLOAD_THRESHOLD) {
+                await fse.remove(partialPath).catch(() => {});
+            }
+
             await this.parallelDownloader.download({
                 url: file.url,
                 savePath: filePath,
@@ -482,111 +497,102 @@ class FileDownloadTask {
             resumeFrom?: number;
         },
     ): Promise<void> {
-        return this.requestLimiter.run(async () => {
-            const baseHeaders = await this.desktop.httpService.getHeaders(file.url);
-            const linkHeaders: Record<string, string> = options?.link
-                ? { "nhd-link-token": options.link.token }
-                : {};
-            const headers = { ...baseHeaders, ...linkHeaders } as Record<string, string>;
-            const resumeFrom = options?.resumeFrom ?? 0;
-            const request = async (requestHeaders: Record<string, string>) =>
-                await ky(file.url, {
-                    headers: requestHeaders,
-                    signal,
-                    fetch: networkFetch,
-                    throwHttpErrors: false,
-                    timeout: 100000,
-                    retry: 0,
-                });
+        const baseHeaders = await this.desktop.httpService.getHeaders(file.url);
+        const linkHeaders: Record<string, string> = options?.link
+            ? { "nhd-link-token": options.link.token }
+            : {};
+        const headers = { ...baseHeaders, ...linkHeaders } as Record<string, string>;
+        const resumeFrom = options?.resumeFrom ?? 0;
+        const request = (requestHeaders: Record<string, string>) =>
+            this.requestLimiter.run(
+                () =>
+                    ky(file.url, {
+                        headers: requestHeaders,
+                        signal,
+                        fetch: networkFetch,
+                        throwHttpErrors: false,
+                        timeout: 100000,
+                        retry: 0,
+                    }),
+                signal,
+            );
 
-            let response = await request({
-                ...headers,
-                ...(resumeFrom > 0 && !file.compAlg ? { Range: `bytes=${resumeFrom}-` } : {}),
-            });
-            let append = resumeFrom > 0 && !file.compAlg;
+        let response = await request({
+            ...headers,
+            ...(resumeFrom > 0 && !file.compAlg ? { Range: `bytes=${resumeFrom}-` } : {}),
+        });
+        let append = resumeFrom > 0 && !file.compAlg;
 
-            if (append && response.status === 416) {
-                await drainWebStream(response.body, signal);
-                if (resumeFrom === file.size) return;
-                await fse.remove(targetPath).catch(() => {});
-                options?.onResumeReset?.();
-                response = await request(headers);
-                append = false;
-            }
+        if (append && response.status === 416) {
+            await drainWebStream(response.body, signal);
+            if (resumeFrom === file.size) return;
+            await fse.remove(targetPath).catch(() => {});
+            options?.onResumeReset?.();
+            response = await request(headers);
+            append = false;
+        }
+
+        if (!response.ok) {
+            await drainWebStream(response.body, signal);
+            throw new Error(`Download failed: ${response.statusText}`);
+        }
+
+        if (append && response.status !== 206) {
+            await fse.remove(targetPath).catch(() => {});
+            options?.onResumeReset?.();
+            append = false;
+        }
+
+        if (
+            append &&
+            !isExpectedContentRange(response.headers.get("Content-Range"), resumeFrom, file.size)
+        ) {
+            await drainWebStream(response.body, signal);
+            await fse.remove(targetPath).catch(() => {});
+            options?.onResumeReset?.();
+            response = await request(headers);
+            append = false;
 
             if (!response.ok) {
                 await drainWebStream(response.body, signal);
                 throw new Error(`Download failed: ${response.statusText}`);
             }
+        }
 
-            if (append && response.status !== 206) {
-                await fse.remove(targetPath).catch(() => {});
-                options?.onResumeReset?.();
-                append = false;
-            }
+        if (!response.body) throw new Error("No response body");
 
-            if (
-                append &&
-                !isExpectedContentRange(
-                    response.headers.get("Content-Range"),
-                    resumeFrom,
-                    file.size,
-                )
-            ) {
-                await drainWebStream(response.body, signal);
-                await fse.remove(targetPath).catch(() => {});
-                options?.onResumeReset?.();
-                response = await request(headers);
-                append = false;
+        const fileStream = createWriteStream(targetPath, append ? { flags: "a" } : undefined);
+        const source = webStreamToNodeReadable(response.body, signal);
+        const bandwidth = createBandwidthLimitTransform(
+            this.desktop.service.transfer.downloadBandwidth,
+            {
+                signal,
+                onPhaseChange: options?.onPhaseChange,
+            },
+        );
+        const progress = new Transform({
+            transform(chunk: Buffer, _encoding, callback) {
+                options?.onProgress?.(chunk.byteLength);
+                callback(null, chunk);
+            },
+        });
 
-                if (!response.ok) {
-                    await drainWebStream(response.body, signal);
-                    throw new Error(`Download failed: ${response.statusText}`);
-                }
-            }
-
-            if (!response.body) throw new Error("No response body");
-
-            const fileStream = createWriteStream(targetPath, append ? { flags: "a" } : undefined);
-            const source = webStreamToNodeReadable(response.body, signal);
-            const bandwidth = createBandwidthLimitTransform(
-                this.desktop.service.transfer.downloadBandwidth,
-                {
+        try {
+            if (file.compAlg === "gzip") {
+                await pipeline(source, bandwidth, progress, createGunzip(), fileStream, {
                     signal,
-                    onPhaseChange: options?.onPhaseChange,
-                },
-            );
-            const progress = new Transform({
-                transform(chunk: Buffer, _encoding, callback) {
-                    options?.onProgress?.(chunk.byteLength);
-                    callback(null, chunk);
-                },
-            });
-
-            try {
-                if (file.compAlg === "gzip") {
-                    await pipeline(source, bandwidth, progress, createGunzip(), fileStream, {
-                        signal,
-                    });
-                } else if (file.compAlg === "zstd") {
-                    await pipeline(
-                        source,
-                        bandwidth,
-                        progress,
-                        createZstdDecompress(),
-                        fileStream,
-                        {
-                            signal,
-                        },
-                    );
-                } else {
-                    await pipeline(source, bandwidth, progress, fileStream, { signal });
-                }
-            } catch (pipeErr) {
-                fileStream.destroy();
-                throw pipeErr;
+                });
+            } else if (file.compAlg === "zstd") {
+                await pipeline(source, bandwidth, progress, createZstdDecompress(), fileStream, {
+                    signal,
+                });
+            } else {
+                await pipeline(source, bandwidth, progress, fileStream, { signal });
             }
-        }, signal);
+        } catch (pipeErr) {
+            fileStream.destroy();
+            throw pipeErr;
+        }
     }
 
     private async getResumeOffset(
@@ -739,7 +745,9 @@ export class DownloadLib {
     }
 
     private async syncQueueConcurrency() {
-        this.fileQueue.concurrency = await this.desktop.setting.transfer.getDownloadConcurrency();
+        const concurrency = await this.desktop.setting.transfer.getDownloadConcurrency();
+        this.fileQueue.concurrency = concurrency;
+        downloadRequestLimiter.setConcurrency(concurrency);
     }
 
     private clearPendingFileQueue() {
@@ -797,6 +805,7 @@ export class DownloadLib {
         signal: AbortSignal;
         link?: LinkData;
     }) {
+        await this.syncQueueConcurrency();
         await this.task.executeWithSlowRetry({
             file,
             filePath,

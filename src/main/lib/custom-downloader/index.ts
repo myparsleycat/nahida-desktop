@@ -10,6 +10,7 @@ import { nanoid } from "nanoid";
 
 import type { NahidaDesktop } from "../..";
 
+import { customDownloadRequestLimiter } from "../download-request-limiter";
 import {
     type ModDownloadMetadataInput,
     writeModDownloadMetadataToDirectories,
@@ -89,6 +90,7 @@ export class CustomDownloader {
         this.downloader = new ParallelDownloader({
             logger: desktop.logger,
             getHeaders: (url: string) => this.desktop.httpService.getHeaders(url),
+            requestLimiter: customDownloadRequestLimiter,
         });
     }
 
