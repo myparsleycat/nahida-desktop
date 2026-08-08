@@ -32,7 +32,12 @@ export async function finalizeStagedDownload(
     }
 
     const destinationPaths: string[] = [];
-    const backups: Array<{ destinationPath: string; backupPath: string | null }> = [];
+    const backups: Array<{
+        destinationPath: string;
+        backupPath: string | null;
+        restored: boolean;
+    }> = [];
+    let committed = false;
 
     try {
         for (const entry of stagedEntries) {
@@ -43,7 +48,7 @@ export async function finalizeStagedDownload(
                 backupPath = `${destinationPath}.nhd-backup-${nanoid()}`;
                 await fse.move(destinationPath, backupPath, { overwrite: true });
             }
-            backups.push({ destinationPath, backupPath });
+            backups.push({ destinationPath, backupPath, restored: false });
             await fse.move(sourcePath, destinationPath, { overwrite: true });
             destinationPaths.push(destinationPath);
         }
@@ -81,6 +86,7 @@ export async function finalizeStagedDownload(
     return {
         destinationPaths,
         async commit() {
+            committed = true;
             for (const { backupPath } of backups) {
                 if (backupPath) {
                     try {
@@ -90,15 +96,21 @@ export async function finalizeStagedDownload(
             }
         },
         async restore() {
+            if (committed) return;
+
             const restoreErrors: unknown[] = [];
-            for (const { destinationPath, backupPath } of backups) {
+            for (const entry of backups) {
+                if (entry.restored) continue;
                 try {
-                    if (await fse.pathExists(destinationPath)) {
-                        await fse.remove(destinationPath);
+                    if (await fse.pathExists(entry.destinationPath)) {
+                        await fse.remove(entry.destinationPath);
                     }
-                    if (backupPath && (await fse.pathExists(backupPath))) {
-                        await fse.move(backupPath, destinationPath, { overwrite: true });
+                    if (entry.backupPath && (await fse.pathExists(entry.backupPath))) {
+                        await fse.move(entry.backupPath, entry.destinationPath, {
+                            overwrite: true,
+                        });
                     }
+                    entry.restored = true;
                 } catch (restoreError) {
                     restoreErrors.push(restoreError);
                 }

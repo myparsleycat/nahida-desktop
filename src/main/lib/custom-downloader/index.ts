@@ -663,14 +663,18 @@ export class CustomDownloader {
                                 "GameBanana:downloadFromGB:metadataCleanup",
                             );
                         }
+                        // restore owns destination rollback — skip raw cleanup even on partial failure
+                        (error as Error & { restoreCompleted?: boolean }).restoreCompleted = true;
                         try {
                             await finalized.restore();
-                            (error as Error & { restoreCompleted?: boolean }).restoreCompleted =
-                                true;
                         } catch (restoreError) {
                             context.rollback.cleanupError = toErrorMessage(restoreError);
                             this.desktop.logger.error(
-                                restoreError,
+                                {
+                                    restoreError: toErrorMessage(restoreError),
+                                    finalizedPaths: [...context.rollback.finalizedPaths],
+                                    incompleteRestoration: true,
+                                },
                                 "GameBanana:downloadFromGB:cleanup:destination",
                             );
                         }
