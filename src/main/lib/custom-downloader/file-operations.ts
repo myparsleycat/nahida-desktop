@@ -14,7 +14,16 @@ export async function moveWithOverwrite(sourcePath: string, destinationPath: str
     await fse.move(sourcePath, destinationPath, { overwrite: true });
 }
 
-export async function finalizeStagedDownload(stagingPath: string, destinationDir: string) {
+export type FinalizeStagedDownloadHandle = {
+    destinationPaths: string[];
+    commit: () => Promise<void>;
+    restore: () => Promise<void>;
+};
+
+export async function finalizeStagedDownload(
+    stagingPath: string,
+    destinationDir: string,
+): Promise<FinalizeStagedDownloadHandle> {
     await fse.ensureDir(destinationDir);
 
     const stagedEntries = await fse.readdir(stagingPath);
@@ -69,15 +78,36 @@ export async function finalizeStagedDownload(stagingPath: string, destinationDir
         throw error;
     }
 
-    for (const { backupPath } of backups) {
-        if (backupPath) {
-            try {
-                await fse.remove(backupPath);
-            } catch {}
-        }
-    }
-
-    return destinationPaths;
+    return {
+        destinationPaths,
+        async commit() {
+            for (const { backupPath } of backups) {
+                if (backupPath) {
+                    try {
+                        await fse.remove(backupPath);
+                    } catch {}
+                }
+            }
+        },
+        async restore() {
+            const restoreErrors: unknown[] = [];
+            for (const { destinationPath, backupPath } of backups) {
+                try {
+                    if (await fse.pathExists(destinationPath)) {
+                        await fse.remove(destinationPath);
+                    }
+                    if (backupPath && (await fse.pathExists(backupPath))) {
+                        await fse.move(backupPath, destinationPath, { overwrite: true });
+                    }
+                } catch (restoreError) {
+                    restoreErrors.push(restoreError);
+                }
+            }
+            if (restoreErrors.length > 0) {
+                throw new Error(restoreErrors.map((e) => toErrorMessage(e)).join("; "));
+            }
+        },
+    };
 }
 
 export async function applySelectedExtractedName(props: {

@@ -130,15 +130,40 @@ export async function writeModDownloadMetadataToDirectories(
     const dirArray = Array.from(directories);
     const backups = new Map<string, string | null>();
 
-    for (const directoryPath of dirArray) {
-        const metadataPath = path.join(directoryPath, MOD_DOWNLOAD_METADATA_FILE_NAME);
-        if (await fse.pathExists(metadataPath)) {
-            const backupPath = `${metadataPath}.backup-${crypto.randomUUID()}`;
-            await fse.move(metadataPath, backupPath, { overwrite: true });
-            backups.set(directoryPath, backupPath);
-        } else {
-            backups.set(directoryPath, null);
+    try {
+        for (const directoryPath of dirArray) {
+            const metadataPath = path.join(directoryPath, MOD_DOWNLOAD_METADATA_FILE_NAME);
+            if (await fse.pathExists(metadataPath)) {
+                const backupPath = `${metadataPath}.backup-${crypto.randomUUID()}`;
+                await fse.move(metadataPath, backupPath, { overwrite: true });
+                backups.set(directoryPath, backupPath);
+            } else {
+                backups.set(directoryPath, null);
+            }
         }
+    } catch (error) {
+        const cleanupErrors: unknown[] = [];
+        for (const [directoryPath, backupPath] of backups) {
+            if (!backupPath) continue;
+            const metadataPath = path.join(directoryPath, MOD_DOWNLOAD_METADATA_FILE_NAME);
+            try {
+                if (await fse.pathExists(metadataPath)) {
+                    await fse.remove(metadataPath);
+                }
+                if (await fse.pathExists(backupPath)) {
+                    await fse.move(backupPath, metadataPath, { overwrite: true });
+                }
+            } catch (e) {
+                cleanupErrors.push(e);
+            }
+        }
+        if (cleanupErrors.length > 0) {
+            (error as Error & { cleanupError?: string }).cleanupError = cleanupErrors
+                .map((e) => toErrorMessage(e))
+                .join("; ");
+            (error as Error & { cleanupErrors?: unknown[] }).cleanupErrors = cleanupErrors;
+        }
+        throw error;
     }
 
     const results = await Promise.allSettled(

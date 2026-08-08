@@ -335,11 +335,17 @@ export class CustomDownloader {
                     throw new Error("Downloaded file did not produce staged content.");
                 }
 
-                const finalizedPaths = await finalizeStagedDownload(stagingPath, groupPath);
-                await writeModDownloadMetadataToDirectories(finalizedPaths, {
-                    source: "mod",
-                    downloadedAt: new Date().toISOString(),
-                });
+                const finalized = await finalizeStagedDownload(stagingPath, groupPath);
+                try {
+                    await writeModDownloadMetadataToDirectories(finalized.destinationPaths, {
+                        source: "mod",
+                        downloadedAt: new Date().toISOString(),
+                    });
+                    await finalized.commit();
+                } catch (error) {
+                    await finalized.restore().catch(() => {});
+                    throw error;
+                }
 
                 this.desktop.service.transfer.markFileCompleted(pid, pid);
                 void this.desktop.service.transfer.updateTransfer(pid, {
@@ -614,11 +620,11 @@ export class CustomDownloader {
                     }
 
                     context.stage = "finalize-files";
-                    let finalizedPaths: string[] = [];
+                    let finalized: Awaited<ReturnType<typeof finalizeStagedDownload>> | null = null;
                     try {
-                        finalizedPaths = await finalizeStagedDownload(stagingPath, destinationPath);
+                        finalized = await finalizeStagedDownload(stagingPath, destinationPath);
                         context.rollback.finalized = true;
-                        context.rollback.finalizedPaths = [...finalizedPaths];
+                        context.rollback.finalizedPaths = [...finalized.destinationPaths];
                     } catch (error) {
                         const partial = (error as Error & { partialDestinationPaths?: string[] })
                             .partialDestinationPaths;
@@ -643,7 +649,11 @@ export class CustomDownloader {
                         },
                     };
                     try {
-                        await writeModDownloadMetadataToDirectories(finalizedPaths, metadata);
+                        await writeModDownloadMetadataToDirectories(
+                            finalized.destinationPaths,
+                            metadata,
+                        );
+                        await finalized.commit();
                     } catch (error) {
                         const written = (error as Error & { writtenDirectories?: string[] })
                             .writtenDirectories;
@@ -651,6 +661,17 @@ export class CustomDownloader {
                             this.desktop.logger.error(
                                 { writtenDirectories: written, error: toErrorMessage(error) },
                                 "GameBanana:downloadFromGB:metadataCleanup",
+                            );
+                        }
+                        try {
+                            await finalized.restore();
+                            (error as Error & { restoreCompleted?: boolean }).restoreCompleted =
+                                true;
+                        } catch (restoreError) {
+                            context.rollback.cleanupError = toErrorMessage(restoreError);
+                            this.desktop.logger.error(
+                                restoreError,
+                                "GameBanana:downloadFromGB:cleanup:destination",
                             );
                         }
                         throw error;
@@ -839,7 +860,8 @@ export class CustomDownloader {
                     await fse.rm(stagedDownloadPath, { force: true });
                 }
 
-                await finalizeStagedDownload(stagingPath, destinationPath);
+                const finalized = await finalizeStagedDownload(stagingPath, destinationPath);
+                await finalized.commit();
 
                 this.desktop.service.transfer.markFileCompleted(pid, pid);
 
