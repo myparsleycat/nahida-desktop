@@ -55,7 +55,11 @@ export class Auth {
         if (!token) return null;
 
         const url = `${BACKEND_URL}/api/auth/get-session`;
-        const resp = await this.desktop.httpService.fetcher(url);
+        const resp = await this.desktop.httpService.fetcher(url, { throwHttpErrors: false });
+        if (!resp.ok) {
+            if (resp.status === 401) await this.startLogout();
+            return null;
+        }
         const data = await resp.text();
         if (data === "null") {
             await this.startLogout();

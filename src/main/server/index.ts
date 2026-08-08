@@ -135,6 +135,8 @@ app.get(
 export async function startServer() {
     const server = serve({
         fetch: app.fetch,
+        // Tailscale may reserve the IPv4 wildcard port; localhost also resolves to ::1.
+        hostname: "::1",
         port: 1027,
     });
 

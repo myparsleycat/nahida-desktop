@@ -1,4 +1,5 @@
 import { Button } from "@renderer/components/ui/button";
+import { Checkbox } from "@renderer/components/ui/checkbox";
 import { Input } from "@renderer/components/ui/input";
 import {
   InputGroup,
@@ -10,6 +11,7 @@ import { Label } from "@renderer/components/ui/label";
 import { Progress } from "@renderer/components/ui/progress";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { useAuth } from "@renderer/hooks/use-auth";
+import { useSetting } from "@renderer/hooks/use-settings";
 import { getSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
 import { useViewStore } from "@renderer/store/drive";
@@ -84,15 +86,17 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
   const { t } = useTranslation();
   const { session, sessionInitialized, startLogin } = useAuth();
   const queryClient = useQueryClient();
+  const { data: savedImportPassword } = useSetting("drive.importPassword");
 
   const importOverlay = useViewStore((s) => s.importOverlay);
   const setImportOverlay = useViewStore((s) => s.setImportOverlay);
 
   const [url, setUrl] = useState("");
   const [password, setPassword] = useState("");
+  const [createCollectionFolders, setCreateCollectionFolders] = useState(true);
   const [requiresPassword, setRequiresPassword] = useState(false);
   const [passwordInvalid, setPasswordInvalid] = useState(false);
-  const [resolveFailed, setResolveFailed] = useState(false);
+  const [, setResolveFailed] = useState(false);
   const [step, setStep] = useState<WizardStep>(1);
   const [resolving, setResolving] = useState(false);
   const [sourceInfo, setSourceInfo] = useState<DriveResolveImportSourceResult | null>(null);
@@ -106,6 +110,7 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
 
   const copyOperationIdRef = useRef<string | undefined>(undefined);
   const isPendingRef = useRef(false);
+  const isModUrl = /^https:\/\/(?:www\.)?nahida\.live\/akasha\/mod\//i.test(url.trim());
   const urlInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
   const loadSeqRef = useRef(0);
@@ -121,7 +126,8 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
   useEffect(() => {
     if (!importOverlay) return;
     setUrl(importOverlay.url);
-    setPassword("");
+    setPassword(savedImportPassword ?? "");
+    setCreateCollectionFolders(true);
     setRequiresPassword(false);
     setPasswordInvalid(false);
     setResolveFailed(false);
@@ -140,7 +146,7 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
     loadSeqRef.current = 0;
     lastResolvedUrlRef.current = "";
     requestAnimationFrame(() => urlInputRef.current?.focus());
-  }, [importOverlay]);
+  }, [importOverlay, savedImportPassword]);
 
   useEffect(() => {
     if (!importOverlay) return;
@@ -677,6 +683,7 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
         url: url.trim(),
         password: password || undefined,
         destinationId,
+        createCollectionFolders,
         operationId,
         selectedIds,
       });
@@ -905,6 +912,16 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
                     </span>
                   </div>
                 </div>
+
+                {isModUrl && (
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={createCollectionFolders}
+                      onCheckedChange={(checked) => setCreateCollectionFolders(checked === true)}
+                    />
+                    {t("page.drive.import.create_collection_folder")}
+                  </label>
+                )}
 
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">선택된 폴더</span>

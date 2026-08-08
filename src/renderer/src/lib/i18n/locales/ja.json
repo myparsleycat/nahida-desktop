@@ -107,6 +107,7 @@
         "destination_required": "保存先フォルダーを選択してください。",
         "password_label": "パスワード",
         "password_placeholder": "共有リンクのパスワードを入力",
+        "create_collection_folder": "コレクション名でフォルダーを作成",
         "authenticate": "パスワード確認",
         "retry": "再試行",
         "action": "ドライブにインポート",
@@ -1498,6 +1499,11 @@
             "natural_ignore_spacing": "自然順 + 空白を無視",
             "natural": "標準の自然順"
           }
+        },
+        "importPassword": {
+          "title": "共有リンクの自動パスワード",
+          "description": "パスワードが必要な共有リンクやコレクションに自動で使用します。空欄の場合は毎回入力します。",
+          "placeholder": "自動入力するパスワード"
         },
         "import": {
           "title": "インポート"

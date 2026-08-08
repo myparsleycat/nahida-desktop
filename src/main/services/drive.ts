@@ -36,7 +36,7 @@ import type { NahidaDesktop } from "..";
 import type { LocalTransfer, TransferParams } from "./transfer";
 
 import { createDriveApiError, DriveApiError, isBackendUnavailableStatus } from "./drive-errors";
-import { parseDriveSourceUrl } from "./drive-url";
+import { encodeNahidaPassword, parseDriveSourceUrl } from "./drive-url";
 import { processChunked } from "./util";
 
 const Fn = eden.akasha.content({ id: "" }).get;
@@ -48,6 +48,7 @@ export type DriveCopyFromUrlParams = {
     password?: string;
     collectionId?: string;
     itemId?: string;
+    createCollectionFolders?: boolean;
     operationId?: string;
     selectedIds?: string[];
 };
@@ -96,6 +97,10 @@ type ModCollection = {
 
 type ModOverview = {
     collections: ModCollection[];
+};
+
+type ModItem = {
+    children: Array<{ id: string; name: string; isDir: boolean }>;
 };
 
 type CopyOperation = {
@@ -447,6 +452,7 @@ export class DriveService {
             password = "",
             collectionId,
             itemId,
+            createCollectionFolders = true,
             operationId: requestedOperationId,
             selectedIds,
         }: DriveCopyFromUrlParams): Promise<DriveCopyFromUrlResult> => {
@@ -460,6 +466,8 @@ export class DriveService {
             this.copyOperations.set(operationId, operation);
 
             try {
+                const effectivePassword =
+                    password || (await this.desktop.setting.get("drive.importPassword"));
                 if (source.type === "link") {
                     if (selectedIds && selectedIds.length > 0) {
                         this.emitCopyProgress(operationId, {
@@ -471,7 +479,7 @@ export class DriveService {
                         });
                         const access = await this.requestSharedLinkAccess(
                             source.id,
-                            password,
+                            effectivePassword,
                             operation.controller.signal,
                         );
                         const copied = await this.copyRemoteImportMany({
@@ -502,7 +510,7 @@ export class DriveService {
                     });
                     const access = await this.requestSharedLinkAccess(
                         source.id,
-                        password,
+                        effectivePassword,
                         operation.controller.signal,
                     );
                     const copied = await this.copyRemoteImport({
@@ -539,7 +547,7 @@ export class DriveService {
                     const modAccess = await this.requestModOverview(
                         source.id,
                         operation.controller.signal,
-                        password || undefined,
+                        effectivePassword || undefined,
                     );
                     const copied = await this.copyRemoteImportMany({
                         mode: "mod",
@@ -571,7 +579,7 @@ export class DriveService {
                 const modAccess = await this.requestModOverview(
                     source.id,
                     operation.controller.signal,
-                    password || undefined,
+                    effectivePassword || undefined,
                 );
                 const overview = modAccess.data;
                 if (!isModOverview(overview)) {
@@ -595,17 +603,54 @@ export class DriveService {
                 }
 
                 const sources = itemId
-                    ? [{ id: itemId, name: itemId }]
-                    : selectedCollections.map((collection) => ({
-                          id: collection.rootId,
-                          name: collection.name,
-                      }));
+                    ? [{ id: itemId, name: itemId, destinationId }]
+                    : (
+                          await Promise.all(
+                              selectedCollections.map(async (collection) => {
+                                  const root = await this.requestModItem(
+                                      collection.rootId,
+                                      modAccess.token,
+                                      modAccess.sig,
+                                      operation.controller.signal,
+                                  );
+                                  const children = root.children
+                                      .filter((child) => child.isDir)
+                                      .map((child) => ({ id: child.id, name: child.name }));
+                                  const collectionDestinationId = createCollectionFolders
+                                      ? await this.getOrCreateCollectionFolder(
+                                            destinationId,
+                                            collection.name,
+                                            operation.controller.signal,
+                                        )
+                                      : destinationId;
+                                  return children.length > 0
+                                      ? children.map((child) => ({
+                                            ...child,
+                                            destinationId: collectionDestinationId,
+                                        }))
+                                      : [
+                                            {
+                                                id: collection.rootId,
+                                                name: collection.name,
+                                                destinationId: collectionDestinationId,
+                                            },
+                                        ];
+                              }),
+                          )
+                      ).flat();
                 if (sources.length === 0) {
                     throw new DriveApiError(
                         "DRIVE_COLLECTION_EMPTY",
                         "No public collections were found.",
                     );
                 }
+                this.emitCopyProgress(operationId, {
+                    source: "mod",
+                    phase: "preparing",
+                    current: 0,
+                    total: sources.length,
+                    copiedFiles: 0,
+                });
 
                 let copied = 0;
                 for (const [itemIndex, item] of sources.entries()) {
@@ -613,7 +658,7 @@ export class DriveService {
                         mode: "mod",
                         sourceId: item.id,
                         sourceName: item.name,
-                        destinationId,
+                        destinationId: item.destinationId,
                         modToken: modAccess.token,
                         modSig: modAccess.sig,
                         operationId,
@@ -748,6 +793,8 @@ export class DriveService {
             };
             this.copyOperations.set(operationId, operation);
             try {
+                const effectivePassword =
+                    params.password || (await this.desktop.setting.get("drive.importPassword"));
                 if (source.type === "link") {
                     this.emitCopyProgress(operationId, {
                         source: "link",
@@ -758,7 +805,7 @@ export class DriveService {
                     });
                     const access = await this.requestSharedLinkAccess(
                         source.id,
-                        params.password ?? "",
+                        effectivePassword,
                         operation.controller.signal,
                     );
                     const copied = await this.copyRemoteImportMany({
@@ -783,7 +830,7 @@ export class DriveService {
                 const modAccess = await this.requestModOverview(
                     source.id,
                     operation.controller.signal,
-                    params.password || undefined,
+                    effectivePassword || undefined,
                 );
                 this.emitCopyProgress(operationId, {
                     source: "mod",
@@ -908,14 +955,14 @@ export class DriveService {
     }
 
     private async requestModOverview(modId: string, signal: AbortSignal, password?: string) {
-        let url = `${BACKEND_URL}/akasha/mod/${encodeURIComponent(modId)}`;
-        if (password) {
-            const encoded = Buffer.from(password, "utf8").toString("base64url");
-            url += `?password=${encodeURIComponent(encoded)}`;
+        const normalizedPassword = password?.trim() ?? "";
+        const requestUrl = new URL(`${BACKEND_URL}/akasha/mod/${encodeURIComponent(modId)}`);
+        if (normalizedPassword) {
+            requestUrl.searchParams.set("password", encodeNahidaPassword(normalizedPassword));
         }
         try {
             const response = await this.requestJsonWithHeaders<unknown>(
-                url,
+                requestUrl.toString(),
                 { signal },
                 "mod overview",
             );
@@ -958,8 +1005,66 @@ export class DriveService {
                     error,
                 );
             }
+            if (
+                normalizedPassword &&
+                error instanceof DriveApiError &&
+                error.status === 500 &&
+                message.includes("internal server error")
+            ) {
+                throw new DriveApiError(
+                    "DRIVE_MOD_INVALID_PASSWORD",
+                    "The collection password is incorrect.",
+                    error.status,
+                    error,
+                );
+            }
             throw error;
         }
+    }
+
+    private async requestModItem(
+        itemId: string,
+        token: string | undefined,
+        sig: string | undefined,
+        signal: AbortSignal,
+    ) {
+        const headers: Record<string, string> = {};
+        if (token) headers["x-token"] = token;
+        if (sig) headers["x-sig"] = sig;
+        const response = await this.requestJsonWithHeaders<unknown>(
+            `${BACKEND_URL}/akasha/mod/item/${encodeURIComponent(itemId)}`,
+            { headers, signal },
+            "mod item",
+        );
+        if (!isModItem(response.data)) {
+            throw new DriveApiError(
+                "DRIVE_MOD_INVALID_RESPONSE",
+                "The collection item response was invalid.",
+            );
+        }
+        return response.data;
+    }
+
+    private async getOrCreateCollectionFolder(parentId: string, name: string, signal: AbortSignal) {
+        if (signal.aborted) throw this.createCopyCanceledError();
+        const current = await this.get.item(parentId);
+        const existing = (current.children ?? []).find(
+            (child) => child.isDir && child.name === name,
+        );
+        if (existing) return existing.id;
+
+        await this.post.dir(parentId, name, signal);
+        if (signal.aborted) throw this.createCopyCanceledError();
+        const updated = await this.get.item(parentId);
+        const created = (updated.children ?? []).find(
+            (child) => child.isDir && child.name === name,
+        );
+        if (created) return created.id;
+
+        throw new DriveApiError(
+            "DRIVE_COLLECTION_FOLDER_CREATE_FAILED",
+            `The collection folder "${name}" could not be created.`,
+        );
     }
 
     private async requestLinkContent(
@@ -1081,6 +1186,7 @@ export class DriveService {
         }
 
         let completed = false;
+        let expectedSize: number | undefined;
         for await (const event of parseServerSentEvents(response)) {
             if (signal.aborted) throw this.createCopyCanceledError();
 
@@ -1090,11 +1196,40 @@ export class DriveService {
                 "Drive:CopyFromUrl:ServerImportEvent",
             );
 
+            if (event.type === "metadata") {
+                expectedSize = getRemoteImportExpectedSize(data);
+            }
             if (event.type === "error") {
-                throw createDriveApiError(
-                    remoteImportErrorMessage(data),
-                    `import ${mode} source ${sourceId}`,
-                );
+                const serverMessage = remoteImportErrorMessage(data);
+                if (
+                    expectedSize !== undefined &&
+                    (await this.hasRemoteImportResult(destinationId, expectedSize, signal))
+                ) {
+                    this.desktop.logger.warn(
+                        {
+                            operationId,
+                            mode,
+                            sourceId,
+                            destinationId,
+                            expectedSize,
+                            serverMessage,
+                            stage: "server-copy-verified-after-error",
+                        },
+                        "Drive:CopyFromUrl:ServerImportVerifiedAfterError",
+                    );
+                    completed = true;
+                    this.emitCopyProgress(operationId, {
+                        source: mode,
+                        phase: "copying",
+                        current: itemIndex + 1,
+                        total: totalItems,
+                        itemName: sourceName,
+                        copiedFiles: itemIndex + 1,
+                        message: "Server reported an error after the files were copied.",
+                    });
+                    break;
+                }
+                throw createDriveApiError(serverMessage, `import ${mode} source ${sourceId}`);
             }
             if (event.type === "complete") {
                 completed = true;
@@ -1128,6 +1263,51 @@ export class DriveService {
         }
 
         return 1;
+    }
+
+    private async hasRemoteImportResult(
+        destinationId: string,
+        expectedSize: number,
+        signal: AbortSignal,
+    ) {
+        const pendingIds = [destinationId];
+        const visitedIds = new Set<string>();
+
+        while (pendingIds.length > 0 && visitedIds.size < 128) {
+            if (signal.aborted) throw this.createCopyCanceledError();
+            const itemId = pendingIds.pop();
+            if (!itemId || visitedIds.has(itemId)) continue;
+            visitedIds.add(itemId);
+
+            let item: DriveItem;
+            try {
+                item = await this.get.item(itemId);
+            } catch (error) {
+                this.desktop.logger.warn(
+                    {
+                        destinationId,
+                        itemId,
+                        expectedSize,
+                        error: toErrorMessage(error),
+                        stage: "verify-server-copy",
+                    },
+                    "Drive:CopyFromUrl:ServerImportVerificationFailed",
+                );
+                return false;
+            }
+            if (signal.aborted) throw this.createCopyCanceledError();
+
+            const directories = (item.children ?? []).filter((child) => child.isDir);
+            if (directories.some((child) => Number(child.size) === expectedSize)) return true;
+
+            pendingIds.push(
+                ...directories
+                    .filter((child) => Number(child.size) > expectedSize)
+                    .map((child) => child.id),
+            );
+        }
+
+        return false;
     }
 
     private async copyRemoteImportMany({
@@ -1893,6 +2073,14 @@ function remoteImportStatusMessage(value: unknown) {
     return typeof status === "string" ? status : undefined;
 }
 
+function getRemoteImportExpectedSize(value: unknown) {
+    if (typeof value !== "object" || value === null) return undefined;
+    const totalExpectedSize = (value as Record<string, unknown>).totalExpectedSize;
+    return typeof totalExpectedSize === "number" && Number.isFinite(totalExpectedSize)
+        ? totalExpectedSize
+        : undefined;
+}
+
 function remoteImportErrorMessage(value: unknown) {
     if (typeof value === "string") return value;
     if (typeof value !== "object" || value === null) return "The server import failed.";
@@ -1928,6 +2116,22 @@ function isModOverview(value: unknown): value is ModOverview {
             typeof record.id === "string" &&
             typeof record.name === "string" &&
             typeof record.rootId === "string"
+        );
+    });
+}
+
+function isModItem(value: unknown): value is ModItem {
+    if (typeof value !== "object" || value === null) return false;
+    const children = (value as Record<string, unknown>).children;
+    if (!Array.isArray(children)) return false;
+
+    return children.every((child) => {
+        if (typeof child !== "object" || child === null) return false;
+        const record = child as Record<string, unknown>;
+        return (
+            typeof record.id === "string" &&
+            typeof record.name === "string" &&
+            typeof record.isDir === "boolean"
         );
     });
 }

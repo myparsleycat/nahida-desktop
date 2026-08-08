@@ -106,6 +106,7 @@
         "destination_required": "请选择目标文件夹。",
         "password_label": "密码",
         "password_placeholder": "输入共享链接密码",
+        "create_collection_folder": "按收藏集名称创建文件夹",
         "authenticate": "验证密码",
         "retry": "重试",
         "action": "导入到云端硬盘",
@@ -1497,6 +1498,11 @@
             "natural_ignore_spacing": "自然排序 + 忽略空格",
             "natural": "默认自然排序"
           }
+        },
+        "importPassword": {
+          "title": "共享链接自动密码",
+          "description": "自动将此密码用于受保护的共享链接和集合。留空则每次手动输入。",
+          "placeholder": "自动输入的密码"
         },
         "import": {
           "title": "导入"

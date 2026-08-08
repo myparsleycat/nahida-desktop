@@ -123,6 +123,7 @@
         "destination_required": "Choose a destination folder.",
         "password_label": "Password",
         "password_placeholder": "Enter the shared link password",
+        "create_collection_folder": "Create a folder for each collection",
         "authenticate": "Verify password",
         "retry": "Retry",
         "action": "Import to drive",
@@ -1493,6 +1494,11 @@
             "natural_ignore_spacing": "Natural sort + ignore spaces",
             "natural": "Default natural sort"
           }
+        },
+        "importPassword": {
+          "title": "Shared link password",
+          "description": "Automatically use this password for protected shared links and collections. Leave it empty to enter a password each time.",
+          "placeholder": "Password for automatic entry"
         },
         "import": {
           "title": "Import"
