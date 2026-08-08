@@ -15,7 +15,6 @@ export interface AppSettings {
     "general.autoUpdateMode": AutoUpdateMode;
     "general.runInBackground": boolean;
     "general.defaultStartPage": string;
-    "general.titlebarStyle": string;
     "general.logLevel": string;
     "general.moveTransferPageWhenStartTransfer": boolean;
     "general.powerSaveBlockInTransfer": boolean;
@@ -37,6 +36,7 @@ export interface AppSettings {
     "mod.gridFixedCardWidth": number;
     "mod.gridFixedColumnCount": number;
     "mod.disabledPrefixStyle": DisabledPrefixStyle;
+    "mod.returnToGamebananaAfterDownload": boolean;
 
     "tools.touchProfileLlmProtocol": TouchProfileLlmProtocol;
     "tools.touchProfileLlmEndpoint": string;
@@ -48,6 +48,10 @@ export interface AppSettings {
     "transfer.uploadConcurrency": number;
 
     "drive.nameSortPolicy": DriveNameSortPolicy;
+    "drive.autoTryPasswords": boolean;
+    "drive.passwordList": string[];
+
+    "debug.openConsole": boolean;
 
     "modelViewer.toneMapping": "neutral" | "aces" | "none";
     "modelViewer.environment": "studio" | "soft" | "none";
@@ -66,6 +70,7 @@ export type SettingScope =
     | "tools"
     | "transfer"
     | "drive"
+    | "debug"
     | "modelViewer"
     | "xxmi";
 
@@ -101,11 +106,6 @@ export const APP_SETTINGS = {
         publicKey: "general.defaultStartPage",
         scope: "general",
         storageKey: "defaultStartPage",
-    },
-    "general.titlebarStyle": {
-        publicKey: "general.titlebarStyle",
-        scope: "general",
-        storageKey: "titlebarStyle",
     },
     "general.logLevel": {
         publicKey: "general.logLevel",
@@ -208,6 +208,11 @@ export const APP_SETTINGS = {
         scope: "mod",
         storageKey: "mod_disabled_prefix_style",
     },
+    "mod.returnToGamebananaAfterDownload": {
+        publicKey: "mod.returnToGamebananaAfterDownload",
+        scope: "mod",
+        storageKey: "mod_return_to_gamebanana_after_download",
+    },
 
     "tools.touchProfileLlmProtocol": {
         publicKey: "tools.touchProfileLlmProtocol",
@@ -249,6 +254,22 @@ export const APP_SETTINGS = {
         publicKey: "drive.nameSortPolicy",
         scope: "drive",
         storageKey: "drive_name_sort_policy",
+    },
+    "drive.autoTryPasswords": {
+        publicKey: "drive.autoTryPasswords",
+        scope: "drive",
+        storageKey: "drive_auto_try_passwords",
+    },
+    "drive.passwordList": {
+        publicKey: "drive.passwordList",
+        scope: "drive",
+        storageKey: "drive_password_list",
+    },
+
+    "debug.openConsole": {
+        publicKey: "debug.openConsole",
+        scope: "debug",
+        storageKey: "debug_open_console",
     },
 
     "modelViewer.toneMapping": {

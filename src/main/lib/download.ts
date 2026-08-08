@@ -6,6 +6,7 @@ import { createGunzip, createZstdDecompress } from "node:zlib";
 
 import { eden } from "@main/client";
 import type { LinkData } from "@main/server";
+import { BACKEND_URL } from "@shared/const";
 import type { TransferData } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import { decode } from "cbor-x";
@@ -13,9 +14,12 @@ import { chunk, retry, throttle } from "es-toolkit";
 import fse from "fs-extra";
 import ky from "ky";
 import PQueue from "p-queue";
+import { parseServerSentEvents } from "parse-sse";
 
 import type { NahidaDesktop } from "..";
 
+import { networkFetch } from "../internal/network-fetch";
+import { createDriveApiError, isBackendUnavailableStatus } from "../services/drive-errors";
 import { createBandwidthLimitTransform } from "./bandwidth-limit-stream";
 import { zstdDecompressAsync } from "./compressor";
 import { ParallelDownloader } from "./parallel-downloader";
@@ -26,7 +30,7 @@ import {
     slowReconnectDelayMs,
     type SlowChunkTransferPhase,
 } from "./slow-chunk-monitor";
-import { webStreamToNodeReadable } from "./web-stream-to-readable";
+import { drainWebStream, webStreamToNodeReadable } from "./web-stream-to-readable";
 
 export type DownloadParams = {
     type: "download";
@@ -56,6 +60,23 @@ export type DownloadMetadata = {
 
 export const BATCH_ROOT_ID = "batch-root";
 const FILE_ID_BATCH_LIMIT = 100;
+
+function isExpectedContentRange(value: string | null, resumeFrom: number, fileSize: number) {
+    const match = /^bytes\s+(\d+)-(\d+)\/(\d+)$/i.exec(value ?? "");
+    if (!match) return false;
+
+    const start = Number(match[1]);
+    const end = Number(match[2]);
+    const total = Number(match[3]);
+    return (
+        Number.isSafeInteger(start) &&
+        Number.isSafeInteger(end) &&
+        Number.isSafeInteger(total) &&
+        start === resumeFrom &&
+        end === fileSize - 1 &&
+        total === fileSize
+    );
+}
 
 class DownloadStreamer {
     constructor(private readonly desktop: NahidaDesktop) {}
@@ -87,16 +108,29 @@ class DownloadStreamer {
         link?: LinkData;
         signal: AbortSignal;
     }): Promise<DownloadMetadata> {
-        const { data: stream, error } = await eden.akasha.dir.download.get({
-            query: {
-                uuid: id,
-                ...(link && { linkId: link.linkId }),
-            },
+        const requestUrl = new URL(`${BACKEND_URL}/akasha/dir/download`);
+        requestUrl.searchParams.set("uuid", id);
+        if (link) requestUrl.searchParams.set("linkId", link.linkId);
+
+        const response = await networkFetch(requestUrl, {
             headers: {
+                ...(await this.desktop.httpService.getHeaders(requestUrl.toString())),
                 ...(link && { "nhd-link-token": link.token }),
             },
+            signal,
         });
-        if (error) throw error;
+        if (!response.ok) {
+            if (isBackendUnavailableStatus(response.status)) {
+                this.desktop.service.backendConnectivity.setOffline();
+            }
+            const errorText = await response.text().catch(() => response.statusText);
+            throw createDriveApiError(
+                errorText || response.statusText,
+                "download metadata",
+                response.status,
+            );
+        }
+        if (!response.body) throw new Error("Download metadata stream is empty.");
 
         const downloadData: Omit<DownloadMetadata, "root"> = {
             totalBytes: 0,
@@ -104,38 +138,62 @@ class DownloadStreamer {
             dirs: [],
         };
         let rootDir: DownloadMetadata["root"] | null = null;
+        let metadataTotalBytes: number | undefined;
 
-        if (!stream || typeof stream !== "object" || !(Symbol.asyncIterator in stream)) {
-            throw new Error("Invalid stream");
-        }
-
-        for await (const chunk of stream) {
+        for await (const chunk of parseServerSentEvents(response)) {
             if (signal.aborted) {
                 throw new Error("Download cancelled");
             }
 
-            switch (chunk.event) {
+            if (chunk.type === "complete") break;
+
+            switch (chunk.type) {
                 case "dirs": {
-                    const dirsChunk = await this.parseStreamedData(chunk.data);
+                    const dirsChunk = await this.parseStreamedData(JSON.parse(chunk.data));
                     downloadData.dirs.push(...dirsChunk);
                     break;
                 }
                 case "files": {
-                    const filesChunk = await this.parseStreamedData(chunk.data);
+                    const filesChunk = await this.parseStreamedData(JSON.parse(chunk.data));
                     downloadData.files.push(...filesChunk);
                     break;
                 }
                 case "metadata": {
-                    const metadata = chunk.data as unknown as DownloadMetadata;
+                    const metadata = JSON.parse(chunk.data) as DownloadMetadata;
                     downloadData.totalBytes = metadata.totalBytes;
+                    metadataTotalBytes = metadata.totalBytes;
                     rootDir = metadata.root;
                     break;
                 }
+                case "error":
+                    throw new Error(chunk.data || "Download metadata stream failed.");
             }
         }
 
         if (!rootDir) {
             throw new Error("Root directory information was not received.");
+        }
+
+        const listedFileBytes = downloadData.files.reduce((total, file) => total + file.size, 0);
+        if (
+            metadataTotalBytes !== undefined &&
+            Number.isFinite(metadataTotalBytes) &&
+            metadataTotalBytes !== listedFileBytes
+        ) {
+            this.desktop.logger.warn(
+                {
+                    itemId: id,
+                    rootId: rootDir.id,
+                    rootName: rootDir.name,
+                    metadataTotalBytes,
+                    listedFileBytes,
+                    deltaBytes: metadataTotalBytes - listedFileBytes,
+                    fileCount: downloadData.files.length,
+                    directoryCount: downloadData.dirs.length,
+                    linkId: link?.linkId,
+                },
+                "Download:MetadataMismatch",
+            );
         }
 
         return {
@@ -282,12 +340,14 @@ class FileDownloadTask {
         file,
         filePath,
         signal,
+        link,
         onComplete,
         onProgress,
     }: {
         file: DownloadMetadata["files"][0];
         filePath: string;
         signal: AbortSignal;
+        link?: LinkData;
         onComplete: () => void;
         onProgress?: (bytes: number) => void;
     }): Promise<void> {
@@ -300,13 +360,27 @@ class FileDownloadTask {
         const isSmallFile = file.size < 1024 * 1024;
         const targetPath = isSmallFile ? filePath : `${filePath}.ntmp`;
 
-        const parallelResult = await this.tryParallelDownload(file, filePath, signal, onProgress);
+        const parallelResult = await this.tryParallelDownload(
+            file,
+            filePath,
+            signal,
+            onProgress,
+            link,
+        );
         if (parallelResult) {
             onComplete();
             return;
         }
 
-        await this.downloadWithRetry(file, targetPath, filePath, isSmallFile, signal, onProgress);
+        await this.downloadWithRetry(
+            file,
+            targetPath,
+            filePath,
+            isSmallFile,
+            signal,
+            onProgress,
+            link,
+        );
         onComplete();
     }
 
@@ -315,13 +389,18 @@ class FileDownloadTask {
         filePath: string,
         signal: AbortSignal,
         onProgress?: (bytes: number) => void,
+        link?: LinkData,
     ): Promise<boolean> {
         const PARALLEL_DOWNLOAD_THRESHOLD = 20 * 1024 * 1024; // 20MB
         if (file.size < PARALLEL_DOWNLOAD_THRESHOLD || !!file.compAlg) {
             return false;
         }
 
-        const supportsRange = await this.parallelDownloader.checkRangeSupport(file.url);
+        const linkHeaders = link ? { "nhd-link-token": link.token } : undefined;
+        const supportsRange = await this.parallelDownloader.checkRangeSupport(
+            file.url,
+            linkHeaders,
+        );
         if (!supportsRange) return false;
 
         try {
@@ -330,6 +409,7 @@ class FileDownloadTask {
                 savePath: filePath,
                 fileSize: file.size,
                 signal,
+                headers: linkHeaders,
                 maxChunks: 8,
                 onProgress,
                 bandwidthLimiter: this.desktop.service.transfer.downloadBandwidth,
@@ -355,11 +435,16 @@ class FileDownloadTask {
         isSmallFile: boolean,
         signal: AbortSignal,
         onProgress?: (bytes: number) => void,
+        link?: LinkData,
     ): Promise<void> {
         await retry(
             async () => {
                 if (signal.aborted) return;
-                await this.performDownload(file, targetPath, signal, { onProgress });
+                await this.performDownload(file, targetPath, signal, {
+                    onProgress,
+                    link,
+                    resumeFrom: isSmallFile ? 0 : await this.getResumeOffset(file, targetPath),
+                });
 
                 if (!isSmallFile && !signal.aborted) {
                     await this.desktop.lib.fs.rename(targetPath, filePath);
@@ -386,19 +471,71 @@ class FileDownloadTask {
             onPhaseChange?: (
                 phase: Extract<SlowChunkTransferPhase, "network" | "bandwidth-wait">,
             ) => void;
+            link?: LinkData;
+            onResumeReset?: () => void;
+            resumeFrom?: number;
         },
     ): Promise<void> {
-        const response = await ky(file.url, {
-            headers: await this.desktop.httpService.getHeaders(file.url),
-            signal,
-            throwHttpErrors: false,
-            timeout: 100000,
-        });
+        const baseHeaders = await this.desktop.httpService.getHeaders(file.url);
+        const linkHeaders: Record<string, string> = options?.link
+            ? { "nhd-link-token": options.link.token }
+            : {};
+        const headers = { ...baseHeaders, ...linkHeaders } as Record<string, string>;
+        const resumeFrom = options?.resumeFrom ?? 0;
+        const request = async (requestHeaders: Record<string, string>) =>
+            await ky(file.url, {
+                headers: requestHeaders,
+                signal,
+                fetch: networkFetch,
+                throwHttpErrors: false,
+                timeout: 100000,
+            });
 
-        if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
+        let response = await request({
+            ...headers,
+            ...(resumeFrom > 0 && !file.compAlg ? { Range: `bytes=${resumeFrom}-` } : {}),
+        });
+        let append = resumeFrom > 0 && !file.compAlg;
+
+        if (append && response.status === 416) {
+            await drainWebStream(response.body, signal);
+            if (resumeFrom === file.size) return;
+            await fse.remove(targetPath).catch(() => {});
+            options?.onResumeReset?.();
+            response = await request(headers);
+            append = false;
+        }
+
+        if (!response.ok) {
+            await drainWebStream(response.body, signal);
+            throw new Error(`Download failed: ${response.statusText}`);
+        }
+
+        if (append && response.status !== 206) {
+            await fse.remove(targetPath).catch(() => {});
+            options?.onResumeReset?.();
+            append = false;
+        }
+
+        if (
+            append &&
+            !isExpectedContentRange(response.headers.get("Content-Range"), resumeFrom, file.size)
+        ) {
+            await drainWebStream(response.body, signal);
+            await fse.remove(targetPath).catch(() => {});
+            options?.onResumeReset?.();
+            response = await request(headers);
+            append = false;
+
+            if (!response.ok) {
+                await drainWebStream(response.body, signal);
+                throw new Error(`Download failed: ${response.statusText}`);
+            }
+        }
+
         if (!response.body) throw new Error("No response body");
 
-        const fileStream = createWriteStream(targetPath);
+        const fileStream = createWriteStream(targetPath, append ? { flags: "a" } : undefined);
         const source = webStreamToNodeReadable(response.body, signal);
         const bandwidth = createBandwidthLimitTransform(
             this.desktop.service.transfer.downloadBandwidth,
@@ -426,21 +563,37 @@ class FileDownloadTask {
             }
         } catch (pipeErr) {
             fileStream.destroy();
-            await fse.remove(targetPath).catch(() => {});
             throw pipeErr;
         }
+    }
+
+    private async getResumeOffset(
+        file: DownloadMetadata["files"][0],
+        targetPath: string,
+    ): Promise<number> {
+        if (file.compAlg) {
+            await fse.remove(targetPath).catch(() => {});
+            return 0;
+        }
+
+        return await fse
+            .stat(targetPath)
+            .then(({ size }) => size)
+            .catch(() => 0);
     }
 
     public async executeWithSlowRetry({
         file,
         filePath,
         signal,
+        link,
         onComplete,
         onProgress,
     }: {
         file: DownloadMetadata["files"][0];
         filePath: string;
         signal: AbortSignal;
+        link?: LinkData;
         onComplete: () => void;
         onProgress?: (bytes: number) => void;
     }): Promise<void> {
@@ -456,6 +609,9 @@ class FileDownloadTask {
 
         let slowReconnects = 0;
         let errorRetries = 0;
+        let reportedResumeBytes = await this.getResumeOffset(file, targetPath);
+
+        if (reportedResumeBytes > 0) onProgress?.(reportedResumeBytes);
 
         while (true) {
             if (signal.aborted) return;
@@ -469,18 +625,33 @@ class FileDownloadTask {
                 cohortKey: "drive",
                 attemptController,
                 slowReconnects,
+                initialTransferredBytes: reportedResumeBytes,
             });
 
             let attemptBytes = 0;
 
             try {
+                const resumeFrom = await this.getResumeOffset(file, targetPath);
+                const resumeDelta = resumeFrom - reportedResumeBytes;
+                if (resumeDelta !== 0) onProgress?.(resumeDelta);
+                reportedResumeBytes = resumeFrom;
+
                 await this.performDownload(file, targetPath, combinedSignal, {
+                    link,
+                    resumeFrom,
                     onProgress: (bytes) => {
                         attemptBytes += bytes;
+                        reportedResumeBytes += bytes;
                         monitor.recordSample(transfer.key, attemptBytes);
                         onProgress?.(bytes);
                     },
                     onPhaseChange: (phase) => monitor.setPhase(transfer.key, phase),
+                    onResumeReset: () => {
+                        if (reportedResumeBytes > 0) {
+                            onProgress?.(-reportedResumeBytes);
+                            reportedResumeBytes = 0;
+                        }
+                    },
                 });
 
                 if (!signal.aborted) {
@@ -492,8 +663,10 @@ class FileDownloadTask {
             } catch (err) {
                 if (attemptBytes > 0) {
                     onProgress?.(-attemptBytes);
+                    reportedResumeBytes = Math.max(0, reportedResumeBytes - attemptBytes);
                 }
-                await fse.remove(targetPath).catch(() => {});
+
+                if (file.compAlg) await fse.remove(targetPath).catch(() => {});
 
                 if (signal.aborted) {
                     throw err;
@@ -589,6 +762,26 @@ export class DownloadLib {
         link?: LinkData;
     }): Promise<DownloadMetadata> {
         return this.streamer.fetchFileDownloads({ id, link });
+    }
+
+    public async downloadFileToPath({
+        file,
+        filePath,
+        signal,
+        link,
+    }: {
+        file: DownloadMetadata["files"][number];
+        filePath: string;
+        signal: AbortSignal;
+        link?: LinkData;
+    }) {
+        await this.task.executeWithSlowRetry({
+            file,
+            filePath,
+            signal,
+            link,
+            onComplete: () => {},
+        });
     }
 
     public async fetchMergedMetadata({
@@ -690,6 +883,13 @@ export class DownloadLib {
             let downloadedCount = initialTransferedFiles ?? 0;
             let hasFailedOperation = false;
 
+            const handleQueuedFailure = (error: unknown, where: string) => {
+                if (abort.signal.aborted || isAbortError(error)) return;
+
+                hasFailedOperation = true;
+                this.desktop.logger.error(error, where);
+            };
+
             const throttledUpdate = throttle((bytes: number, count: number) => {
                 void this.desktop.service.transfer.updateTransfer(pid, {
                     transferedSize: bytes,
@@ -710,73 +910,84 @@ export class DownloadLib {
 
                 const filePath = path.join(parentPath, file.name);
 
-                void this.fileQueue.add(async () => {
-                    if (abort.signal.aborted) return;
+                void this.fileQueue
+                    .add(async () => {
+                        if (abort.signal.aborted) return;
 
-                    try {
-                        if (!isSingleFile && parentPath && !ensuredDirs.has(parentPath)) {
-                            await this.desktop.lib.fs.ensureDir(parentPath);
-                            ensuredDirs.add(parentPath);
+                        try {
+                            if (!isSingleFile && parentPath && !ensuredDirs.has(parentPath)) {
+                                await this.desktop.lib.fs.ensureDir(parentPath);
+                                ensuredDirs.add(parentPath);
+                            }
+
+                            const completed = await this.processFileDownloadTask({
+                                pid,
+                                file,
+                                filePath,
+                                abort,
+                                onProgress: (bytes) => {
+                                    downloadedBytes += bytes;
+                                    throttledUpdate(downloadedBytes, downloadedCount);
+                                },
+                                onComplete: () => {
+                                    downloadedCount++;
+                                    throttledUpdate(downloadedBytes, downloadedCount);
+                                },
+                            });
+
+                            if (!completed) hasFailedOperation = true;
+                        } catch (err) {
+                            if (abort.signal.aborted || isAbortError(err)) return;
+
+                            hasFailedOperation = true;
+                            this.desktop.service.transfer.markFileFailed(
+                                pid,
+                                `${file.name}: ${toErrorMessage(err)}`,
+                            );
+                            this.desktop.logger.error(
+                                err,
+                                `DownloadLib:executeDownload:${file.name}:prepare`,
+                            );
                         }
-
-                        const completed = await this.processFileDownloadTask({
-                            pid,
-                            file,
-                            filePath,
-                            abort,
-                            onProgress: (bytes) => {
-                                downloadedBytes += bytes;
-                                throttledUpdate(downloadedBytes, downloadedCount);
-                            },
-                            onComplete: () => {
-                                downloadedCount++;
-                                throttledUpdate(downloadedBytes, downloadedCount);
-                            },
-                        });
-
-                        if (!completed) hasFailedOperation = true;
-                    } catch (err) {
-                        if (abort.signal.aborted || isAbortError(err)) return;
-
-                        hasFailedOperation = true;
-                        this.desktop.service.transfer.markFileFailed(
-                            pid,
-                            `${file.name}: ${toErrorMessage(err)}`,
-                        );
-                        this.desktop.logger.error(
-                            err,
-                            `DownloadLib:executeDownload:${file.name}:prepare`,
-                        );
-                    }
-                });
+                    })
+                    .catch((err) => {
+                        handleQueuedFailure(err, `DownloadLib:executeDownload:${file.name}:queue`);
+                    });
             }
 
             if (!isSingleFile) {
                 for (const dirPath of pathMap.values()) {
                     if (abort.signal.aborted) break;
                     if (!ensuredDirs.has(dirPath)) {
-                        void this.fileQueue.add(async () => {
-                            if (abort.signal.aborted) return;
+                        void this.fileQueue
+                            .add(async () => {
+                                if (abort.signal.aborted) return;
 
-                            try {
-                                await this.desktop.lib.fs.ensureDir(dirPath);
-                                ensuredDirs.add(dirPath);
-                            } catch (err) {
-                                if (abort.signal.aborted || isAbortError(err)) return;
+                                try {
+                                    await this.desktop.lib.fs.ensureDir(dirPath);
+                                    ensuredDirs.add(dirPath);
+                                } catch (err) {
+                                    if (abort.signal.aborted || isAbortError(err)) return;
 
-                                hasFailedOperation = true;
-                                const errorMessage = `Directory preparation failed for ${dirPath}: ${toErrorMessage(err)}`;
-                                this.desktop.logger.error(
+                                    hasFailedOperation = true;
+                                    const errorMessage = `Directory preparation failed for ${dirPath}: ${toErrorMessage(err)}`;
+                                    this.desktop.logger.error(
+                                        err,
+                                        `DownloadLib:executeDownload:directory:${dirPath}`,
+                                    );
+                                    await this.desktop.service.transfer.updateTransfer(pid, {
+                                        error:
+                                            this.desktop.service.transfer.getTransferByPID(pid)
+                                                ?.error ?? errorMessage,
+                                    });
+                                }
+                            })
+                            .catch((err) => {
+                                handleQueuedFailure(
                                     err,
-                                    `DownloadLib:executeDownload:directory:${dirPath}`,
+                                    `DownloadLib:executeDownload:directory:${dirPath}:queue`,
                                 );
-                                await this.desktop.service.transfer.updateTransfer(pid, {
-                                    error:
-                                        this.desktop.service.transfer.getTransferByPID(pid)
-                                            ?.error ?? errorMessage,
-                                });
-                            }
-                        });
+                            });
                     }
                 }
             }
@@ -833,12 +1044,13 @@ export class DownloadLib {
     }): Promise<boolean> {
         if (abort.signal.aborted) return true;
 
-        const isCompleted = this.desktop.service.transfer.isFileCompleted(pid, file.id);
-
-        if (isCompleted) {
-            if (!this.desktop.service.transfer.isFileCompleted(pid, file.id)) {
-                this.desktop.service.transfer.markFileCompleted(pid, file.id);
+        if (await this.desktop.lib.fs.pathExists(filePath)) {
+            const stats = await this.desktop.lib.fs.stat(filePath);
+            if (!stats.isFile()) {
+                throw new Error(`Download target is not a file: ${filePath}`);
             }
+
+            this.desktop.service.transfer.markFileCompleted(pid, file.id);
             onProgress(file.size);
             onComplete();
             return true;

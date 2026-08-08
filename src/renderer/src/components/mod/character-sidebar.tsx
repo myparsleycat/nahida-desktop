@@ -21,11 +21,16 @@ import {
 } from "@renderer/components/ui/dialog";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
 import { Field, FieldError } from "@renderer/components/ui/field";
@@ -44,11 +49,12 @@ import {
   ArrowDownIcon,
   ArrowUpDownIcon,
   ArrowUpIcon,
+  FolderXIcon,
   LayoutGridIcon,
-  ListFilterIcon,
   ListIcon,
   Loader2Icon,
   Search,
+  SlidersHorizontalIcon,
 } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -436,7 +442,7 @@ export const CharacterSidebar = memo(function CharacterSidebar({
                     render={
                       <Button
                         type="button"
-                        size="icon-sm"
+                        size="icon"
                         variant="ghost"
                         aria-label={t("page.mod.character-sidebar.sort.label")}
                       />
@@ -444,88 +450,75 @@ export const CharacterSidebar = memo(function CharacterSidebar({
                   />
                 }
               >
-                <ArrowUpDownIcon />
+                <SlidersHorizontalIcon />
               </TooltipTrigger>
               <TooltipContent side="bottom">
                 {t("page.mod.character-sidebar.sort.label")}
               </TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="end" className="w-56" finalFocus={false}>
-              <DropdownMenuRadioGroup value={sortKey}>
-                <DropdownMenuLabel>{t("page.mod.character-sidebar.sort.field")}</DropdownMenuLabel>
-                {(["name", "mod-count", "enabled-mod-count"] as const).map((value) => (
-                  <DropdownMenuRadioItem
-                    key={value}
-                    value={value}
-                    onClick={() => setSortKey(value)}
-                  >
-                    {t(`page.mod.character-sidebar.sort.${value}`)}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <ArrowUpDownIcon />
+                  {t("page.mod.character-sidebar.sort.label")}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-48">
+                  <DropdownMenuRadioGroup value={sortKey}>
+                    <DropdownMenuLabel>
+                      {t("page.mod.character-sidebar.sort.field")}
+                    </DropdownMenuLabel>
+                    {(["name", "mod-count", "enabled-mod-count"] as const).map((value) => (
+                      <DropdownMenuRadioItem
+                        key={value}
+                        value={value}
+                        onClick={() => setSortKey(value)}
+                      >
+                        {t(`page.mod.character-sidebar.sort.${value}`)}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuRadioGroup value={sortDirection}>
+                    <DropdownMenuLabel>
+                      {t("page.mod.character-sidebar.sort.direction")}
+                    </DropdownMenuLabel>
+                    <DropdownMenuRadioItem
+                      value="ascending"
+                      onClick={() => setSortDirection("ascending")}
+                    >
+                      <ArrowUpIcon />
+                      {t("page.mod.character-sidebar.sort.ascending")}
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem
+                      value="descending"
+                      onClick={() => setSortDirection("descending")}
+                    >
+                      <ArrowDownIcon />
+                      {t("page.mod.character-sidebar.sort.descending")}
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
               <DropdownMenuSeparator />
-              <DropdownMenuRadioGroup value={sortDirection}>
-                <DropdownMenuLabel>
-                  {t("page.mod.character-sidebar.sort.direction")}
-                </DropdownMenuLabel>
-                <DropdownMenuRadioItem
-                  value="ascending"
-                  onClick={() => setSortDirection("ascending")}
-                >
-                  <ArrowUpIcon />
-                  {t("page.mod.character-sidebar.sort.ascending")}
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem
-                  value="descending"
-                  onClick={() => setSortDirection("descending")}
-                >
-                  <ArrowDownIcon />
-                  {t("page.mod.character-sidebar.sort.descending")}
-                </DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
+              <DropdownMenuCheckboxItem
+                checked={hideEmptyGroups}
+                onCheckedChange={() => setHideEmptyGroups((value) => !value)}
+              >
+                <FolderXIcon />
+                {t("page.mod.character-sidebar.hide-empty-folders")}
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  setSetting("mod.sidebarLayout", nextSidebarLayout).catch((error) => {
+                    toast.error(toErrorMessage(error));
+                  });
+                }}
+              >
+                {sidebarLayout === "grid" ? <ListIcon /> : <LayoutGridIcon />}
+                {t("page.mod.character-sidebar.toggle-layout", { mode: nextSidebarLayoutLabel })}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant={hideEmptyGroups ? "secondary" : "ghost"}
-                  aria-pressed={hideEmptyGroups}
-                  onClick={() => setHideEmptyGroups((value) => !value)}
-                />
-              }
-            >
-              <ListFilterIcon />
-              <span className="sr-only">{t("page.mod.character-sidebar.hide-empty-folders")}</span>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {t("page.mod.character-sidebar.hide-empty-folders")}
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label={nextSidebarLayoutLabel}
-                  onClickPromise={async () => {
-                    try {
-                      await setSetting("mod.sidebarLayout", nextSidebarLayout);
-                    } catch (error) {
-                      toast.error(toErrorMessage(error));
-                    }
-                  }}
-                />
-              }
-            >
-              {sidebarLayout === "grid" ? <ListIcon /> : <LayoutGridIcon />}
-            </TooltipTrigger>
-            <TooltipContent side="bottom">{nextSidebarLayoutLabel}</TooltipContent>
-          </Tooltip>
         </div>
 
         <ScrollArea className="flex-1 overflow-hidden">

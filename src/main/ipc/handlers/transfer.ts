@@ -7,6 +7,9 @@ export function registerTransferHandlers(d: NahidaDesktop) {
     });
 
     rh("transfer:cancel", async (pid) => {
+        try {
+            await d.service.drive.fn.cancelCopyFromUrl(pid);
+        } catch {}
         return d.service.transfer.cancelTransfer(pid);
     });
 

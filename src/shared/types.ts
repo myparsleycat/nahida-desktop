@@ -5,6 +5,10 @@ import type { Session } from "./schemas/auth";
 export type { IpcHandlers } from "./types.gen";
 export type { BackendStatus } from "./backend";
 
+export interface TitleBarOverlaySyncOptions {
+    symbolColor: string;
+}
+
 export interface AppStatus {
     version: string;
     isPackaged: boolean;
@@ -278,11 +282,30 @@ export interface BisectSnapshot {
     error: string | null;
 }
 
+export interface DriveCopyProgress {
+    operationId: string;
+    source: "link" | "mod";
+    phase:
+        | "preparing"
+        | "copying"
+        | "downloading"
+        | "uploading"
+        | "completed"
+        | "canceled"
+        | "error";
+    current: number;
+    total: number;
+    itemName?: string;
+    copiedFiles?: number;
+    message?: string;
+}
+
 export type IpcEvents = {
     "window:blur": () => void;
     "window:focus": () => void;
 
     "transfer:update": (transfers: TransferWithoutData[]) => void;
+    "drive:copy-progress": (progress: DriveCopyProgress) => void;
 
     "fn:toast": (message: string, data?: ToastData) => void;
     "fn:navi": (path: string) => void;
@@ -358,6 +381,42 @@ export type Content = {
     } | null;
 };
 
+export type DriveImportContent = {
+    id: string;
+    name: string;
+    isDir: boolean;
+    size: number | null;
+    mimeType: string | null;
+    parentId: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+};
+
+export type DriveListChildrenResult = {
+    content: DriveImportContent;
+    children: DriveImportContent[];
+    ancestors: { id: string; parentId: string | null; name: string; depth: number }[];
+};
+
+export type DriveResolveLinkResult = {
+    source: "link";
+    linkId: string;
+    token: string;
+    parent: { id: string; name: string };
+};
+
+export type DriveResolveModResult = {
+    source: "mod";
+    modId: string;
+    modData: {
+        collections: { id: string; name: string; private?: boolean; rootId: string }[];
+    };
+    token?: string;
+    sig?: string;
+};
+
+export type DriveResolveImportSourceResult = DriveResolveLinkResult | DriveResolveModResult;
+
 export type TransferStatus =
     | "pending"
     | "preparing"
@@ -407,6 +466,7 @@ export interface Transfer {
     transferedFiles: number;
     failedFiles: number;
     path?: string;
+    error?: string;
 }
 
 export type TransferWithoutData = Omit<Transfer, "data">;

@@ -41,7 +41,6 @@ const settingsConfig = {
   autoUpdateMode: "general.autoUpdateMode",
   runInBackground: "general.runInBackground",
   defaultStartPage: "general.defaultStartPage",
-  titlebarStyle: "general.titlebarStyle",
   logLevel: "general.logLevel",
 } as const;
 
@@ -129,11 +128,6 @@ function RouteComponent() {
     { value: "system", label: t("page.setting.gen.theme.system") },
     { value: "light", label: t("page.setting.gen.theme.light") },
     { value: "dark", label: t("page.setting.gen.theme.dark") },
-  ] as const;
-
-  const titlebarStyleOptions = [
-    { value: "modern", label: t("page.setting.gen.titlebarStyle.modern") },
-    { value: "native", label: t("page.setting.gen.titlebarStyle.native") },
   ] as const;
 
   const logLevelOptions = [
@@ -342,7 +336,7 @@ function RouteComponent() {
 
       <Card>
         <CardContent>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-3">
               <label className="text-sm font-medium" htmlFor="language">
                 {t("page.setting.gen.language.title")}
@@ -418,33 +412,6 @@ function RouteComponent() {
                         value={option.value}
                         disabled={option.disabled}
                       >
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-3">
-              <label className="text-sm font-medium" htmlFor="titlebarStyle">
-                {t("page.setting.gen.titlebarStyle.title")}
-              </label>
-              <Select
-                name="titlebarStyle"
-                value={settings.titlebarStyle}
-                items={titlebarStyleOptions}
-                onValueChange={(val) => {
-                  if (val === null) return;
-                  void update("titlebarStyle", val);
-                }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder={t("page.setting.gen.titlebarStyle.select")} />
-                </SelectTrigger>
-                <SelectContent finalFocus={false}>
-                  <SelectGroup>
-                    {titlebarStyleOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
                         {option.label}
                       </SelectItem>
                     ))}

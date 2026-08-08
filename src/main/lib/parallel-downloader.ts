@@ -7,6 +7,7 @@ import ky from "ky";
 
 import type { BandwidthLimiter } from "./bandwidth-limiter";
 
+import { networkFetch } from "../internal/network-fetch";
 import { createBandwidthLimitTransform } from "./bandwidth-limit-stream";
 import {
     isAbortError,
@@ -15,7 +16,7 @@ import {
     slowReconnectDelayMs,
     type SlowChunkMonitor,
 } from "./slow-chunk-monitor";
-import { webStreamToNodeReadable } from "./web-stream-to-readable";
+import { drainWebStream, webStreamToNodeReadable } from "./web-stream-to-readable";
 
 export interface ParallelDownloadOptions {
     url: string;
@@ -66,10 +67,17 @@ export class ParallelDownloader {
         },
     ) {}
 
-    public async checkRangeSupport(url: string): Promise<boolean> {
+    public async checkRangeSupport(
+        url: string,
+        headers?: Record<string, string>,
+    ): Promise<boolean> {
         try {
             const response = await ky.head(url, {
-                headers: await this.options.getHeaders(url),
+                headers: {
+                    ...(await this.options.getHeaders(url)),
+                    ...headers,
+                },
+                fetch: networkFetch,
                 timeout: 10000,
                 throwHttpErrors: false,
             });
@@ -136,13 +144,14 @@ export class ParallelDownloader {
                 ...(await this.options.getHeaders(url)),
                 ...requestHeaders,
             },
+            fetch: networkFetch,
             signal,
             throwHttpErrors: false,
             timeout: 100000,
         });
 
         if (response.status !== 206) {
-            await response.body?.cancel().catch(() => {});
+            await drainWebStream(response.body, signal).catch(() => {});
             throw new Error(
                 `Chunk download failed: expected 206 Partial Content, got ${response.statusText} (${response.status})`,
             );

@@ -45,7 +45,8 @@
 }
 
 :root {
-    --app-titlebar-height: 32px;
+    --app-titlebar-height: 36px;
+    --titlebar-overlay-symbol-color: #252525;
     --radius: 0.625rem;
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
@@ -81,6 +82,7 @@
 }
 
 .dark {
+    --titlebar-overlay-symbol-color: #fafafa;
     --background: oklch(0.18 0 0);
     --foreground: oklch(0.985 0 0);
     --card: oklch(0.205 0 0);
@@ -196,16 +198,18 @@ body {
 }
 
 .titlebar {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    box-sizing: border-box;
+    margin-left: env(titlebar-area-x, 0);
+    width: env(titlebar-area-width, 100%);
+    height: env(titlebar-area-height, var(--app-titlebar-height));
     -webkit-app-region: drag;
-    pointer-events: auto !important;
 }
 
-.titlebar-action,
-.titlebar button,
-.titlebar a,
-.titlebar input,
-.titlebar select,
-.titlebar textarea {
+.titlebar .no-drag,
+.titlebar :is(button, a, input, label, select, textarea, [role="tablist"], [role="tab"]) {
     -webkit-app-region: no-drag;
 }
 

@@ -20,6 +20,7 @@ import {
     isFsPermissionError,
     removeFilesElevated,
 } from "@/main/lib/elevated-fs";
+import { drainWebStream, webStreamToNodeReadable } from "@/main/lib/web-stream-to-readable";
 
 const execAsync = promisify(exec);
 
@@ -833,10 +834,14 @@ export class FourThousandOneFixer {
         });
 
         if (!resp.ok) {
+            await drainWebStream(resp.body).catch(() => {});
             throw new Error(`Failed to download repo: ${resp.statusText}`);
         }
+        if (!resp.body) {
+            throw new Error("No response body");
+        }
 
-        await pipeline(resp.body as ReadableStream, fse.createWriteStream(zipPath));
+        await pipeline(webStreamToNodeReadable(resp.body), fse.createWriteStream(zipPath));
 
         return zipPath;
     }

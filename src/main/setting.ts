@@ -29,7 +29,7 @@ import {
 } from "@shared/touch-profile-llm";
 import type { AutoUpdateMode } from "@shared/updater";
 import AutoLaunch from "auto-launch";
-import { app, BrowserWindow } from "electron";
+import { app } from "electron";
 
 import { LogLevel } from "./internal/logger";
 
@@ -182,6 +182,25 @@ function parseDownloadSources(value: string | null | undefined): DownloadSource[
     }
 }
 
+const DRIVE_PASSWORD_LIST_MAX = 10;
+
+function normalizePasswordList(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value
+        .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        .map((item) => item.trim())
+        .slice(0, DRIVE_PASSWORD_LIST_MAX);
+}
+
+function parsePasswordList(value: string | null | undefined): string[] {
+    if (!value) return [];
+    try {
+        return normalizePasswordList(JSON.parse(value));
+    } catch {
+        return [];
+    }
+}
+
 export class Setting {
     private desktop: NahidaDesktop;
     private settingSpecs: MainSettingSpecMap | null = null;
@@ -254,17 +273,6 @@ export class Setting {
                 getDefault: () => getDefaultStartPage(),
                 fromStored: (value) => sanitizeDefaultStartPage(value),
                 normalize: (value) => sanitizeDefaultStartPage(value),
-            },
-            "general.titlebarStyle": {
-                definition: APP_SETTINGS["general.titlebarStyle"],
-                getDefault: () => "modern",
-                fromStored: (value) => value || "modern",
-                afterSet: async () => {
-                    for (const window of BrowserWindow.getAllWindows()) {
-                        window.close();
-                    }
-                    await this.desktop.window.main.focusAndNavigate("/setting/gen");
-                },
             },
             "general.logLevel": {
                 definition: APP_SETTINGS["general.logLevel"],
@@ -488,6 +496,12 @@ export class Setting {
                         : "space",
                 normalize: (value) => (DISABLED_PREFIX_STYLES.includes(value) ? value : "space"),
             },
+            "mod.returnToGamebananaAfterDownload": {
+                definition: APP_SETTINGS["mod.returnToGamebananaAfterDownload"],
+                getDefault: () => false,
+                fromStored: (value) => parseBooleanSetting(value, false),
+                toStored: (value) => String(value),
+            },
             "tools.touchProfileLlmProtocol": {
                 definition: APP_SETTINGS["tools.touchProfileLlmProtocol"],
                 getDefault: () => DEFAULT_TOUCH_PROFILE_LLM_PROTOCOL,
@@ -606,6 +620,28 @@ export class Setting {
                 getDefault: () => normalizeDriveNameSortPolicy(null),
                 fromStored: (value) => normalizeDriveNameSortPolicy(value),
                 normalize: (value) => normalizeDriveNameSortPolicy(value),
+            },
+            "drive.autoTryPasswords": {
+                definition: APP_SETTINGS["drive.autoTryPasswords"],
+                getDefault: () => false,
+                fromStored: (value) => parseBooleanSetting(value, false),
+                toStored: (value) => String(value),
+            },
+            "drive.passwordList": {
+                definition: APP_SETTINGS["drive.passwordList"],
+                getDefault: () => [],
+                fromStored: (value) => parsePasswordList(value),
+                normalize: (value) => normalizePasswordList(value),
+                toStored: (value) => JSON.stringify(value),
+            },
+            "debug.openConsole": {
+                definition: APP_SETTINGS["debug.openConsole"],
+                getDefault: () => false,
+                fromStored: (value) => parseBooleanSetting(value, false),
+                toStored: (value) => String(value),
+                afterSet: (enabled) => {
+                    this.desktop.window.main.setConsoleWindowEnabled(enabled);
+                },
             },
             "modelViewer.toneMapping": {
                 definition: APP_SETTINGS["modelViewer.toneMapping"],
@@ -797,8 +833,6 @@ export class Setting {
         getDefaultStartPage: async () => await this.get("general.defaultStartPage"),
         setDefaultStartPage: async (page: string | null) =>
             await this.set("general.defaultStartPage", page ?? ""),
-        getTitlebarStyle: async () => await this.get("general.titlebarStyle"),
-        setTitlebarStyle: async (style: string) => await this.set("general.titlebarStyle", style),
         getAutoUpdateMode: async (): Promise<AutoUpdateMode> =>
             await this.get("general.autoUpdateMode"),
         setAutoUpdateMode: async (mode: AutoUpdateMode) =>
@@ -898,6 +932,11 @@ export class Setting {
         },
     };
 
+    debug = {
+        getOpenConsole: async () => await this.get("debug.openConsole"),
+        setOpenConsole: async (enabled: boolean) => await this.set("debug.openConsole", enabled),
+    };
+
     modelViewer = {
         getToneMapping: async () => await this.get("modelViewer.toneMapping"),
         setToneMapping: async (toneMapping: string) =>
@@ -945,6 +984,7 @@ export class Setting {
 
     advanced = {
         getAll: async () => {
+            await this.get("debug.openConsole");
             const rows = await this.desktop.lib.db.settings.list();
             const sensitiveKeys = ["password", "token", "secret", "credentials", "api_key"];
 
@@ -964,8 +1004,16 @@ export class Setting {
                 throw new Error(`Setting key "${key}" not found.`);
             }
 
-            await this.desktop.lib.db.settings.updateValue(key, value);
-            this.desktop.ipc.broadcast("setting:update", { key, value });
+            const storedValue =
+                key === APP_SETTINGS["debug.openConsole"].storageKey
+                    ? String(parseBooleanSetting(value, false))
+                    : value;
+
+            await this.desktop.lib.db.settings.updateValue(key, storedValue);
+            if (key === APP_SETTINGS["debug.openConsole"].storageKey) {
+                this.desktop.window.main.setConsoleWindowEnabled(storedValue === "true");
+            }
+            this.desktop.ipc.broadcast("setting:update", { key, value: storedValue });
             this.desktop.ipc.broadcast("renderer:reload");
         },
     };

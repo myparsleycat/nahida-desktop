@@ -17,12 +17,15 @@ import {
   type GameBananaModPostsSort,
   type GameBananaSubmissionSelection,
 } from "@renderer/hooks/use-gamebanana-data";
+import { Logger } from "@renderer/lib/logger";
 import { cn } from "@renderer/lib/utils";
+import { toErrorMessage } from "@shared/utils";
 import DOMPurify from "dompurify";
 import type { TFunction } from "i18next";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
+  HeartIcon,
   ImageIcon,
   Loader2Icon,
   MessageSquareIcon,
@@ -30,6 +33,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { toast } from "sonner";
 
 import type { ModOverviewQuery } from "../-types";
 
@@ -240,11 +244,53 @@ export function ModDetailPanel({
   const hiddenPreviewCount = previews.length - (maxVisiblePreviews - 1);
   const [lightboxPreviewIndex, setLightboxPreviewIndex] = useState<number | null>(null);
   const [commentSort, setCommentSort] = useState<GameBananaModPostsSort>("popular");
+  const [pendingLikeKey, setPendingLikeKey] = useState<string | null>(null);
+  const [likeOverride, setLikeOverride] = useState<{
+    key: string;
+    liked: boolean;
+  } | null>(null);
   const commentsQuery = useGameBananaModPosts(modId, modelName, 1, commentSort, Boolean(modId));
   const modErrorPresentation = getGameBananaErrorPresentation(modOverviewQuery.error, t);
   const commentsErrorPresentation = getGameBananaErrorPresentation(commentsQuery.error, t);
   const lightboxPreview =
     lightboxPreviewIndex === null ? null : (previews[lightboxPreviewIndex] ?? null);
+  const profile = modOverviewQuery.data?.profile;
+  const likeAccess = modOverviewQuery.data?.config._aAccess;
+  const baseIsLiked = profile?._bAccessorHasLiked ?? likeAccess?.Like_Trash === true;
+  const likeOperationKey = modId ? `${modelName}:${modId}` : null;
+  const isLikePending = pendingLikeKey === likeOperationKey;
+  const isLiked = likeOverride?.key === likeOperationKey ? likeOverride.liked : baseIsLiked;
+  const canToggleLike = likeAccess?.Like_Add === true || likeAccess?.Like_Trash === true;
+
+  const handleLike = async () => {
+    if (!modId || !likeOperationKey || !canToggleLike || isLikePending) return;
+
+    setPendingLikeKey(likeOperationKey);
+    try {
+      const toggleResult = await window.api.invoke("gamebanana:toggleModLike", {
+        itemId: modId,
+        modelName,
+      });
+
+      setLikeOverride({ key: likeOperationKey, liked: toggleResult.liked });
+
+      try {
+        const refetchResult = await modOverviewQuery.refetch();
+        if (refetchResult.isError) throw refetchResult.error;
+
+        setLikeOverride((current) => (current?.key === likeOperationKey ? null : current));
+      } catch (error) {
+        Logger.error(error, "ModDetailPanel:handleLike:refetch");
+      }
+    } catch (error) {
+      toast.error(t("page.gamebanana.like_failed"), {
+        description: toErrorMessage(error),
+      });
+      Logger.error(error, "ModDetailPanel:handleLike:toggle");
+    } finally {
+      setPendingLikeKey((current) => (current === likeOperationKey ? null : current));
+    }
+  };
 
   useEffect(() => {
     setLightboxPreviewIndex(null);
@@ -253,6 +299,10 @@ export function ModDetailPanel({
   useEffect(() => {
     setCommentSort("popular");
   }, [modId, modelName]);
+
+  useEffect(() => {
+    setLikeOverride((current) => (current?.key === likeOperationKey ? current : null));
+  }, [likeOperationKey]);
 
   const comments = useMemo(() => {
     const seen = new Set<number>();
@@ -286,7 +336,7 @@ export function ModDetailPanel({
         className="h-full min-h-0 min-w-0"
         viewportClassName="overflow-x-hidden [&>div]:!block [&>div]:!min-w-0 [&>div]:!w-full [&>div]:max-w-full"
       >
-        <div className="max-w-full min-w-0 space-y-4 p-4">
+        <div className="max-w-full min-w-0 space-y-4 p-2 pr-4">
           <Card>
             <CardContent>
               {modOverviewQuery.isLoading ? (
@@ -314,8 +364,37 @@ export function ModDetailPanel({
                     </Badge>
                     <Badge variant="outline">{modOverviewQuery.data.profile._aGame._sName}</Badge>
                   </div>
-                  <div className="text-2xl font-semibold">
-                    {modOverviewQuery.data.profile._sName}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0 text-2xl font-semibold">
+                      {modOverviewQuery.data.profile._sName}
+                    </div>
+                    <Button
+                      type="button"
+                      variant={isLiked ? "default" : "outline"}
+                      size="sm"
+                      disabled={!canToggleLike || isLikePending}
+                      aria-pressed={isLiked}
+                      title={
+                        canToggleLike
+                          ? isLiked
+                            ? t("page.gamebanana.unlike")
+                            : t("page.gamebanana.like")
+                          : t("page.gamebanana.like_unavailable")
+                      }
+                      onClick={() => void handleLike()}
+                    >
+                      {isLikePending ? (
+                        <Loader2Icon className="size-4 animate-spin" />
+                      ) : (
+                        <HeartIcon className={cn("size-4", isLiked && "fill-current")} />
+                      )}
+                      <span>
+                        {formatNumber(modOverviewQuery.data.profile._nLikeCount ?? 0, language)}
+                      </span>
+                      <span className="sr-only">
+                        {isLiked ? t("page.gamebanana.liked") : t("page.gamebanana.like")}
+                      </span>
+                    </Button>
                   </div>
                 </div>
               ) : null}

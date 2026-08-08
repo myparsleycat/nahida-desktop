@@ -90,8 +90,45 @@
       "toast": {
         "no_uploadable_files": "没有可上传的文件。"
       },
+      "import": {
+        "title": "导入到云端硬盘",
+        "description": "输入共享文件夹或收藏集 URL，然后选择云端硬盘中的文件夹。",
+        "url_label": "Nahida URL",
+        "url_placeholder": "https://nahida.live/akasha/link/...",
+        "destination_label": "目标文件夹",
+        "choose_destination": "选择文件夹",
+        "destination_description": "请选择云端硬盘根目录或用于保存导入项目的文件夹。",
+        "loading_folder": "正在加载文件夹...",
+        "no_subfolders": "没有子文件夹",
+        "destination_load_failed": "无法加载目标文件夹。",
+        "parent_folder": "上级文件夹",
+        "select_folder": "使用此文件夹",
+        "destination_required": "请选择目标文件夹。",
+        "password_label": "密码",
+        "password_placeholder": "输入共享链接密码",
+        "authenticate": "验证密码",
+        "retry": "重试",
+        "action": "导入到云端硬盘",
+        "url_required": "请输入 Nahida URL。",
+        "login_required": "登录后才能导入到你的云端硬盘。",
+        "password_required": "此链接需要密码。",
+        "invalid_password": "共享链接密码不正确。",
+        "success": "已将 {{count}} 个项目导入到云端硬盘。",
+        "failed": "导入失败",
+        "progress": {
+          "preparing": "正在准备导入…",
+          "copying": "正在由服务器导入到云端硬盘…",
+          "downloading": "正在下载项目…",
+          "uploading": "正在上传到云端硬盘…",
+          "completed": "导入完成。",
+          "canceled": "导入已停止。",
+          "cancel": "停止导入",
+          "error": "传输过程中导入失败。"
+        }
+      },
       "head_buttons": {
         "search_in_dir_placeholder": "在此文件夹中搜索...",
+        "import": "导入共享链接",
         "dropdown_menu": {
           "download": "下载",
           "make_new": {
@@ -119,10 +156,10 @@
         "paste": "粘贴"
       },
       "clipboard": {
-        "cut_single": "\u201c{{name}}\u201d 已设置为剪切状态",
-        "cut_multiple": "\u201c{{name}}\u201d 及其他 {{count}} 项已设置为剪切状态",
-        "copy_single": "\u201c{{name}}\u201d 已设置为复制状态",
-        "copy_multiple": "\u201c{{name}}\u201d 及其他 {{count}} 项已设置为复制状态",
+        "cut_single": "“{{name}}” 已设置为剪切状态",
+        "cut_multiple": "“{{name}}” 及其他 {{count}} 项已设置为剪切状态",
+        "copy_single": "“{{name}}” 已设置为复制状态",
+        "copy_multiple": "“{{name}}” 及其他 {{count}} 项已设置为复制状态",
         "move_loading": "正在移动文件...",
         "move_success": "文件移动成功",
         "move_error": "文件移动失败：{{message}}",
@@ -229,6 +266,7 @@
           "descending": "降序"
         },
         "hide-empty-folders": "隐藏空文件夹",
+        "toggle-layout": "切换到{{mode}}",
         "active-mod-count": "已启用 {{enabled}} 个 / 共 {{total}} 个",
         "collapse-subgroups": "折叠子文件夹",
         "expand-subgroups": "探索子文件夹",
@@ -560,6 +598,8 @@
       "category_panel_description_nested": "浏览当前分类下的子分类。",
       "category_panel_description_selected": "浏览“{{name}}”下的子分类。",
       "no_categories": "没有可显示的分类。",
+      "search_categories": "搜索分类...",
+      "no_category_results": "没有匹配的分类。",
       "stage": {
         "game": "游戏",
         "category": "分类",
@@ -589,6 +629,12 @@
         "views": "浏览量",
         "downloads": "下载量"
       },
+      "like": "点赞",
+      "liked": "已点赞",
+      "unlike": "取消点赞",
+      "like_unavailable": "此模组无法点赞。",
+      "like_failed": "更新点赞状态失败。",
+      "download_failed": "GameBanana 下载失败。",
       "top_submissions": "热门投稿",
       "latest_feed": "最新动态",
       "latest_feed_description": "所选游戏的最新投稿。",
@@ -1287,12 +1333,6 @@
           "title": "起始页",
           "select": "选择起始页"
         },
-        "titlebarStyle": {
-          "title": "标题栏样式",
-          "select": "选择样式",
-          "modern": "现代",
-          "native": "原生 "
-        },
         "logLevel": {
           "title": "日志级别",
           "select": "选择级别"
@@ -1416,7 +1456,9 @@
       "adv": {
         "title": "高级设置",
         "warning_title": "注意",
-        "warning_description": "更改此处的设置可能会影响应用行为。"
+        "warning_description": "更改此处的设置可能会影响应用行为。",
+        "search_placeholder": "搜索设置键...",
+        "no_results": "没有匹配的设置键。"
       },
       "transfer": {
         "title": "传输",
@@ -1455,6 +1497,19 @@
             "natural_ignore_spacing": "自然排序 + 忽略空格",
             "natural": "默认自然排序"
           }
+        },
+        "import": {
+          "title": "导入"
+        },
+        "autoTryPasswords": {
+          "title": "自动尝试密码",
+          "description": "解析需要密码的链接时，自动尝试已保存的密码列表。"
+        },
+        "passwordList": {
+          "title": "密码列表",
+          "description": "自动尝试的密码列表。最多可保存 {{max}} 个。",
+          "placeholder": "输入密码",
+          "add": "添加"
         }
       }
     },
@@ -1490,7 +1545,7 @@
       "download_location": "下载位置",
       "need_select_character_folder": "请在左侧选择角色文件夹",
       "select_path_failed": "选择路径失败。",
-      "download_and_return": "下载并返回 GameBanana"
+      "return_to_gamebanana": "添加下载后返回 GameBanana"
     }
   },
   "updater": {

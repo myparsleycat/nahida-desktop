@@ -91,8 +91,45 @@
       "toast": {
         "no_uploadable_files": "アップロード可能なファイルがありません。"
       },
+      "import": {
+        "title": "ドライブにインポート",
+        "description": "共有フォルダーまたはコレクション URL を入力し、ドライブ内のフォルダーを選択してください。",
+        "url_label": "Nahida URL",
+        "url_placeholder": "https://nahida.live/akasha/link/...",
+        "destination_label": "保存先フォルダー",
+        "choose_destination": "フォルダーを選択",
+        "destination_description": "インポート先にするドライブのルートまたはフォルダーを選択してください。",
+        "loading_folder": "フォルダーを読み込み中...",
+        "no_subfolders": "サブフォルダーなし",
+        "destination_load_failed": "保存先フォルダーを読み込めませんでした。",
+        "parent_folder": "上位フォルダー",
+        "select_folder": "このフォルダーを使用",
+        "destination_required": "保存先フォルダーを選択してください。",
+        "password_label": "パスワード",
+        "password_placeholder": "共有リンクのパスワードを入力",
+        "authenticate": "パスワード確認",
+        "retry": "再試行",
+        "action": "ドライブにインポート",
+        "url_required": "Nahida URL を入力してください。",
+        "login_required": "ドライブにインポートするにはログインしてください。",
+        "password_required": "このリンクにはパスワードが必要です。",
+        "invalid_password": "共有リンクのパスワードが正しくありません。",
+        "success": "{{count}} 件をドライブにインポートしました。",
+        "failed": "インポートに失敗しました",
+        "progress": {
+          "preparing": "インポートを準備中…",
+          "copying": "サーバーからドライブにインポート中…",
+          "downloading": "項目をダウンロード中…",
+          "uploading": "ドライブにアップロード中…",
+          "completed": "インポートが完了しました。",
+          "canceled": "インポートを停止しました。",
+          "cancel": "インポートを停止",
+          "error": "転送中にインポートに失敗しました。"
+        }
+      },
       "head_buttons": {
         "search_in_dir_placeholder": "このフォルダー内を検索...",
+        "import": "共有リンクをインポート",
         "dropdown_menu": {
           "download": "ダウンロード",
           "make_new": {
@@ -230,6 +267,7 @@
           "descending": "降順"
         },
         "hide-empty-folders": "空のフォルダーを非表示",
+        "toggle-layout": "{{mode}}に切り替え",
         "active-mod-count": "有効 {{enabled}} 件 / 全 {{total}} 件",
         "collapse-subgroups": "サブフォルダーを折りたたむ",
         "expand-subgroups": "サブフォルダーを探索",
@@ -561,6 +599,8 @@
       "category_panel_description_nested": "現在のカテゴリのサブカテゴリを探索します。",
       "category_panel_description_selected": "\"{{name}}\" のサブカテゴリを探索します。",
       "no_categories": "表示できるカテゴリがありません。",
+      "search_categories": "カテゴリを検索...",
+      "no_category_results": "一致するカテゴリはありません。",
       "stage": {
         "game": "ゲーム",
         "category": "カテゴリ",
@@ -590,6 +630,12 @@
         "views": "閲覧数",
         "downloads": "ダウンロード"
       },
+      "like": "いいね",
+      "liked": "いいね済み",
+      "unlike": "いいねを取り消す",
+      "like_unavailable": "この MOD ではいいねを利用できません。",
+      "like_failed": "いいねの更新に失敗しました。",
+      "download_failed": "GameBanana のダウンロードに失敗しました。",
       "top_submissions": "注目投稿",
       "latest_feed": "最新フィード",
       "latest_feed_description": "選択したゲームの最近の投稿です。",
@@ -1034,7 +1080,6 @@
         "mesh_next": "次へ",
         "mesh_back": "メッシュ選択に戻る",
         "mesh_non_candidate": "候補外",
-        "preview_title": "タッチ影響範囲プレビュー",
         "llm_summary": "分析 LLM",
         "component": "メッシュコンポーネント",
         "component_placeholder": "コンポーネントを選択",
@@ -1289,12 +1334,6 @@
           "title": "開始ページ",
           "select": "開始ページ選択"
         },
-        "titlebarStyle": {
-          "title": "タイトルバースタイル",
-          "select": "スタイル選択",
-          "modern": "モダン",
-          "native": "ネイティブ"
-        },
         "logLevel": {
           "title": "ログレベル",
           "select": "レベルを選択"
@@ -1418,7 +1457,9 @@
       "adv": {
         "title": "詳細設定",
         "warning_title": "注意",
-        "warning_description": "ここでの設定を変更すると、アプリの動作に影響を与える可能性があります。"
+        "warning_description": "ここでの設定を変更すると、アプリの動作に影響を与える可能性があります。",
+        "search_placeholder": "設定キーを検索...",
+        "no_results": "一致する設定キーはありません。"
       },
       "transfer": {
         "title": "転送",
@@ -1457,6 +1498,19 @@
             "natural_ignore_spacing": "自然順 + 空白を無視",
             "natural": "標準の自然順"
           }
+        },
+        "import": {
+          "title": "インポート"
+        },
+        "autoTryPasswords": {
+          "title": "パスワード自動試行",
+          "description": "パスワードが必要なリンクの解決時に、保存済みのパスワードを自動的に試します。"
+        },
+        "passwordList": {
+          "title": "パスワード一覧",
+          "description": "自動試行するパスワードの一覧です。最大 {{max}}件まで保存できます。",
+          "placeholder": "パスワードを入力",
+          "add": "追加"
         }
       }
     },
@@ -1492,7 +1546,7 @@
       "download_location": "ダウンロード先",
       "need_select_character_folder": "左側でキャラクターフォルダーを選択してください",
       "select_path_failed": "パスの選択に失敗しました。",
-      "download_and_return": "ダウンロードして GameBanana に戻る"
+      "return_to_gamebanana": "ダウンロード追加後、GameBanana に戻る"
     }
   },
   "updater": {

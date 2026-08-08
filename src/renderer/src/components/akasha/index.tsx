@@ -35,6 +35,7 @@ import {
   FileIcon,
   FileTextIcon,
   FolderIcon,
+  LinkIcon,
   LayoutGridIcon,
   ListIcon,
   LoaderIcon,
@@ -177,20 +178,34 @@ export function AkashaBreadcrumb(props: AkashaBreadcrumbProps) {
   );
 }
 
-export function AkashaHeadButtons() {
+export function AkashaHeadButtons({ currentId }: { currentId?: string }) {
   const { t } = useTranslation();
   const dialog = useDialogStore();
   const { selectedItems } = useSelectionStore();
+  const navi = useNavigate();
+  const { session } = useAuth();
 
   const layout = useViewStore((s) => s.layout);
   const setLayout = useViewStore((s) => s.setLayout);
   const searchInDirQuery = useViewStore((s) => s.searchInDirQuery);
   const setSearchInDirQuery = useViewStore((s) => s.setSearchInDirQuery);
   const setFocusSearchInputState = useViewStore((s) => s.setFocusSearchInputState);
+  const setImportOverlay = useViewStore((s) => s.setImportOverlay);
 
   const handleDownload = () => {
     if (selectedItems.length === 0) return;
     void downloadItems(selectedItems);
+  };
+
+  const handleImportClick = async () => {
+    if (currentId) {
+      setImportOverlay({ url: "" });
+      return;
+    }
+    const rootId = session?.drive.rootId;
+    if (!rootId) return;
+    await navi({ to: "/drive/drive/$id", params: { id: rootId } });
+    setImportOverlay({ url: "" });
   };
 
   return (
@@ -209,6 +224,19 @@ export function AkashaHeadButtons() {
       </div>
 
       <div className="flex shrink-0 flex-row items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="shrink-0"
+          aria-label={t("page.drive.head_buttons.import")}
+          title={t("page.drive.head_buttons.import")}
+          onClick={() => {
+            void handleImportClick();
+          }}
+        >
+          <LinkIcon size={20} />
+        </Button>
+
         <Button
           variant="ghost"
           size="icon"
@@ -270,18 +298,10 @@ export function AkashaHeadButtons() {
   );
 }
 
-function ListHead() {
+export function ListHead() {
   const sortType = useViewStore((s) => s.sortType);
   const setSortType = useViewStore((s) => s.setSortType);
   const { t } = useTranslation();
-
-  const handleSortButtonClick = (
-    e: React.MouseEvent<HTMLButtonElement>,
-    field: "NAME" | "SIZE" | "DATE",
-  ) => {
-    handleSort(field);
-    e.currentTarget.blur();
-  };
 
   const handleSort = (field: "NAME" | "SIZE" | "DATE") => {
     if (!sortType.startsWith(field)) {
@@ -300,7 +320,7 @@ function ListHead() {
         <th className="w-full pl-3 text-left align-middle font-normal">
           <button
             className="flex w-full flex-row items-center justify-start"
-            onClick={(e) => handleSortButtonClick(e, "NAME")}
+            onClick={() => handleSort("NAME")}
           >
             <div
               className={cn(
@@ -320,7 +340,7 @@ function ListHead() {
         <th className="w-[1%] px-2 align-middle font-normal whitespace-nowrap">
           <button
             className="flex w-full flex-row items-center justify-end"
-            onClick={(e) => handleSortButtonClick(e, "SIZE")}
+            onClick={() => handleSort("SIZE")}
           >
             <div
               className={cn(
@@ -340,7 +360,7 @@ function ListHead() {
         <th className="w-[1%] pr-3 align-middle font-normal whitespace-nowrap">
           <button
             className="flex w-full flex-row items-center justify-end"
-            onClick={(e) => handleSortButtonClick(e, "DATE")}
+            onClick={() => handleSort("DATE")}
           >
             <div
               className={cn(
@@ -408,7 +428,7 @@ export function ContentMenuList(props: ContentMenuProps) {
               )}
               onContextMenu={(e) => handleItemRightClick(e, item)}
             >
-              <td className="w-full max-w-0 p-2 pl-3  text-left align-middle">
+              <td className="w-full max-w-0 p-2 pl-3 text-left align-middle">
                 <div className="flex flex-row items-center gap-3">
                   <div className="flex size-11 shrink-0 items-center justify-center text-muted-foreground">
                     {isFetching && itemId === item.id ? (
@@ -548,6 +568,7 @@ export function HandlerProvider<T>(props: HandlerProviderProps<T>) {
   const { selectedItems, setSelectedItems, setLastSelectedIdx, setCopyOrCuts } =
     useSelectionStore();
   const isfocusSearchInput = useViewStore((s) => s.isfocusSearchInput);
+  const importOverlay = useViewStore((s) => s.importOverlay);
   const setSearchInDirQuery = useViewStore((s) => s.setSearchInDirQuery);
   const pendingDriveRevealId = useViewStore((s) => s.pendingDriveRevealId);
   const setPendingDriveRevealId = useViewStore((s) => s.setPendingDriveRevealId);
@@ -627,6 +648,7 @@ export function HandlerProvider<T>(props: HandlerProviderProps<T>) {
 
       if (isfocusSearchInput) return;
       if (dialog.anyDialogOpen()) return;
+      if (importOverlay) return;
 
       const currentIndex = selectedItems.length
         ? sortedContents.findIndex((item) => item.id === selectedItems[0]?.id)
@@ -774,6 +796,7 @@ export function HandlerProvider<T>(props: HandlerProviderProps<T>) {
       sortedContents,
       selectedItems,
       isfocusSearchInput,
+      importOverlay,
       data,
       navi,
       dialog,

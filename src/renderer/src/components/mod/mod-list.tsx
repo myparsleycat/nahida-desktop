@@ -10,6 +10,7 @@ import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
+
 import { ListHead } from "./mod-list-head";
 import { ModListRow } from "./mod-list-row";
 
@@ -49,17 +50,17 @@ export function ModList(_props: ModListProps) {
 
   if (!selectedGroupPath) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground h-full min-h-0">
+      <div className="flex h-full min-h-0 flex-1 flex-col items-center justify-center text-muted-foreground">
         <p>{t("page.mod.empty_selection")}</p>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {showSkeleton ? (
-        <ScrollArea className="flex-1 min-h-0 overflow-y-auto">
-          <div className="p-3 grid gap-2">
+        <ScrollArea className="min-h-0 flex-1 overflow-y-auto">
+          <div className="grid gap-2 p-3">
             {Array.from({ length: 15 }).map((_, i) => (
               <Skeleton key={i.toString()} className="h-12 w-full" />
             ))}
@@ -67,12 +68,12 @@ export function ModList(_props: ModListProps) {
         </ScrollArea>
       ) : (
         <>
-          <table className="w-full border-collapse table-auto text-sm shrink-0">
+          <table className="w-full shrink-0 table-auto border-collapse text-sm">
             <ListHead />
           </table>
-          <ScrollArea className="flex-1 min-h-0 overflow-y-auto">
-            <div className="w-full relative">
-              <table className="w-full border-collapse table-auto relative text-sm">
+          <ScrollArea className="min-h-0 flex-1 overflow-y-auto">
+            <div className="relative w-full">
+              <table className="relative w-full table-auto border-collapse text-sm">
                 <tbody>
                   {mods.map((mod) => (
                     <ModListRow

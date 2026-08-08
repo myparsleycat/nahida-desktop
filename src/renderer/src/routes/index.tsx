@@ -1,4 +1,3 @@
-import { useTitlebar } from "@renderer/hooks/use-titlebar";
 import { getSetting } from "@renderer/lib/settings";
 import { resolveStartPage } from "@renderer/lib/start-page";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -10,7 +9,6 @@ export const Route = createFileRoute("/")({
 
 function RouteComponent() {
   const navi = useNavigate();
-  const { Titlebar } = useTitlebar();
 
   useEffect(() => {
     Promise.all([
@@ -37,9 +35,5 @@ function RouteComponent() {
       });
   }, [navi]);
 
-  return (
-    <div className="flex min-h-screen flex-col">
-      <Titlebar />
-    </div>
-  );
+  return <div className="flex min-h-screen flex-col" />;
 }

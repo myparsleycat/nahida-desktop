@@ -157,6 +157,18 @@ export async function readIndexBuffer(filePath: string, format?: string): Promis
     return new Uint32Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 4));
 }
 
+export function combineIndexBuffers(buffers: Uint32Array[]): Uint32Array {
+    if (buffers.length === 0) return new Uint32Array();
+    if (buffers.length === 1) return buffers[0];
+
+    const indices = new Uint32Array(buffers.reduce((length, buffer) => length + buffer.length, 0));
+    buffers.reduce((offset, buffer) => {
+        indices.set(buffer, offset);
+        return offset + buffer.length;
+    }, 0);
+    return indices;
+}
+
 function addIndexMatch(matches: Map<string, Resource[]>, position: Resource, index: Resource) {
     const key = resourceKey(position);
     const matched = matches.get(key) ?? [];

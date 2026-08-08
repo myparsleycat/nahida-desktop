@@ -107,8 +107,45 @@
       "toast": {
         "no_uploadable_files": "No uploadable files found."
       },
+      "import": {
+        "title": "Import to drive",
+        "description": "Enter a shared folder or collection URL, then choose a folder in your drive.",
+        "url_label": "Nahida URL",
+        "url_placeholder": "https://nahida.live/akasha/link/...",
+        "destination_label": "Destination folder",
+        "choose_destination": "Choose folder",
+        "destination_description": "Choose the drive root or a folder where imported items should be placed.",
+        "loading_folder": "Loading folder...",
+        "no_subfolders": "No subfolders",
+        "destination_load_failed": "Failed to load the destination folder.",
+        "parent_folder": "Parent",
+        "select_folder": "Use this folder",
+        "destination_required": "Choose a destination folder.",
+        "password_label": "Password",
+        "password_placeholder": "Enter the shared link password",
+        "authenticate": "Verify password",
+        "retry": "Retry",
+        "action": "Import to drive",
+        "url_required": "Enter a Nahida URL.",
+        "login_required": "Sign in to import items to your drive.",
+        "password_required": "This link requires a password.",
+        "invalid_password": "The shared link password is incorrect.",
+        "success": "Imported {{count}} item(s) to your drive.",
+        "failed": "Import failed",
+        "progress": {
+          "preparing": "Preparing the import...",
+          "copying": "Importing to your drive on the server...",
+          "downloading": "Downloading item...",
+          "uploading": "Uploading to your drive...",
+          "completed": "Import completed.",
+          "canceled": "Import stopped.",
+          "cancel": "Stop import",
+          "error": "Import failed during transfer."
+        }
+      },
       "head_buttons": {
         "search_in_dir_placeholder": "Search in this folder...",
+        "import": "Import a shared link",
         "dropdown_menu": {
           "download": "Download",
           "make_new": {
@@ -246,6 +283,7 @@
           "descending": "Descending"
         },
         "hide-empty-folders": "Hide empty folders",
+        "toggle-layout": "Switch to {{mode}}",
         "active-mod-count": "{{enabled}} active / {{total}} total",
         "collapse-subgroups": "Collapse subgroups",
         "expand-subgroups": "Expand subgroups",
@@ -583,6 +621,8 @@
       "category_panel_description_nested": "Browse subcategories in the current category.",
       "category_panel_description_selected": "Browse subcategories in \"{{name}}\".",
       "no_categories": "There are no categories to display.",
+      "search_categories": "Search categories...",
+      "no_category_results": "No matching categories found.",
       "stage": {
         "game": "Game",
         "category": "Category",
@@ -612,6 +652,12 @@
         "views": "Views",
         "downloads": "Downloads"
       },
+      "like": "Like",
+      "liked": "Liked",
+      "unlike": "Unlike",
+      "like_unavailable": "Like is unavailable for this mod.",
+      "like_failed": "Failed to update the like.",
+      "download_failed": "GameBanana download failed.",
       "top_submissions": "Top Submissions",
       "latest_feed": "Latest Feed",
       "latest_feed_description": "Recent submissions for the selected game.",
@@ -1150,7 +1196,6 @@
         "brush_reach_through": "Through",
         "brush_reach_surface_hint": "Follows the mesh surface and prefers front-facing vertices.",
         "brush_reach_through_hint": "Selects all vertices inside a 3D radius, including opposite sides.",
-
         "import_bones_placeholder": "Import bone weights…",
         "select_regions": "Body regions",
         "select_regions_placeholder": "Select regions…",
@@ -1322,12 +1367,6 @@
           "title": "Start Page",
           "select": "Select start page"
         },
-        "titlebarStyle": {
-          "title": "Titlebar Style",
-          "select": "Select Style",
-          "modern": "Modern",
-          "native": "Native"
-        },
         "logLevel": {
           "title": "Log Level",
           "select": "Select Level"
@@ -1454,6 +1493,19 @@
             "natural_ignore_spacing": "Natural sort + ignore spaces",
             "natural": "Default natural sort"
           }
+        },
+        "import": {
+          "title": "Import"
+        },
+        "autoTryPasswords": {
+          "title": "Auto-try passwords",
+          "description": "Automatically try the saved password list when resolving a link that requires a password."
+        },
+        "passwordList": {
+          "title": "Password list",
+          "description": "Passwords to try automatically. Up to {{max}} can be stored.",
+          "placeholder": "Enter password",
+          "add": "Add"
         }
       },
       "xxmi": {
@@ -1490,7 +1542,9 @@
       "adv": {
         "title": "Advanced",
         "warning_title": "Caution",
-        "warning_description": "Changing settings here may affect app behavior."
+        "warning_description": "Changing settings here may affect app behavior.",
+        "search_placeholder": "Search setting keys...",
+        "no_results": "No matching setting keys found."
       }
     },
     "docs": {
@@ -1525,7 +1579,7 @@
       "download_location": "Download Location",
       "need_select_character_folder": "Select a character folder on the left",
       "select_path_failed": "Failed to select path.",
-      "download_and_return": "Download and return to GameBanana"
+      "return_to_gamebanana": "Return to GameBanana after adding the download"
     }
   },
   "updater": {

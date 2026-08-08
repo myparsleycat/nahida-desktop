@@ -23,16 +23,12 @@ export class LoginWindow {
             return;
         }
 
-        const titlebarSetting = await this.desktop.setting.general.getTitlebarStyle();
-        const isNativeTitlebar = titlebarSetting === "native";
-
         this.window = new BrowserWindow({
             title: "로그인",
             width: 350,
             height: 350,
             resizable: false,
             show: false,
-            frame: isNativeTitlebar,
             maximizable: false,
             autoHideMenuBar: true,
             webPreferences: {

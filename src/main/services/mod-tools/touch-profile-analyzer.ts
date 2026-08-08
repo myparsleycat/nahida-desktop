@@ -19,6 +19,7 @@ import {
     collectIndexResources,
     collectPositionResources,
     collectResources,
+    combineIndexBuffers,
     expandCommandListLines,
     matchCompanionResource,
     matchIndexResources,
@@ -123,13 +124,27 @@ export async function analyzeTouchMod(
             continue;
         }
 
+        const combinedIndices = combineIndexBuffers(indexData.map((entry) => entry.indices));
         const primaryIndex = indexData[0];
+        const indexPaths = indexData.map((entry) => entry.indexPath);
+        const indexRelativePaths = indexData.map((entry) => entry.relativePath);
+        const indexFormats = indexData.map((entry) => entry.resource.format);
+        let combinedOffset = 0;
+        const indexInfos = indexData.map((entry) => {
+            const info = {
+                resource: entry.resource,
+                offset: combinedOffset,
+                count: entry.indices.length,
+            };
+            combinedOffset += entry.indices.length;
+            return info;
+        });
         const drawContext = findDrawContext(
             sections,
             commandLists,
             position,
-            primaryIndex.resource,
-            primaryIndex.indices.length,
+            indexInfos,
+            combinedIndices.length,
         );
         const drawRanges = uniqueDrawRanges(drawContext.ranges);
         const kind = classifyComponentKind(
@@ -142,14 +157,14 @@ export async function analyzeTouchMod(
             positionStride: position.stride,
             positionBytes,
             vertexCount: validation.vertexCount,
-            indices: primaryIndex.indices,
+            indices: combinedIndices,
             drawRanges,
             kind,
         });
         const interactiveCandidate = isInteractiveCandidate(
             kind,
             validation.vertexCount,
-            primaryIndex.indices.length,
+            combinedIndices.length,
             position.name,
         );
 
@@ -188,7 +203,7 @@ export async function analyzeTouchMod(
             kind,
             components.length + 1,
             positions,
-            primaryIndex.indices,
+            combinedIndices,
         );
         components.push({
             id: sanitizeId(position.name),
@@ -205,8 +220,11 @@ export async function analyzeTouchMod(
             indexResourceName: primaryIndex.resource.name,
             indexRelativePath: primaryIndex.relativePath,
             indexPath: primaryIndex.indexPath,
+            indexRelativePaths,
+            indexPaths,
+            indexFormats,
             indexFormat: primaryIndex.resource.format,
-            indexCount: primaryIndex.indices.length,
+            indexCount: combinedIndices.length,
             blendSectionName: drawContext.blendSectionName,
             ibSectionName: drawContext.ibSectionName,
             ibHash: drawContext.ibHash,
@@ -231,9 +249,11 @@ export async function analyzeTouchMod(
     ];
     const meshHash = await hashTouchFiles(
         components.flatMap((component) =>
-            [component.positionPath, component.indexPath, component.blendPath].filter(
-                (entry): entry is string => !!entry,
-            ),
+            [
+                component.positionPath,
+                ...(component.indexPaths ?? (component.indexPath ? [component.indexPath] : [])),
+                component.blendPath,
+            ].filter((entry): entry is string => !!entry),
         ),
         modRoot,
     );
@@ -260,9 +280,23 @@ export async function loadTouchMeshBuffers(component: TouchComponentAnalysis) {
     const positionBytes = await fse.readFile(component.positionPath);
     const positions = extractPositions(new Uint8Array(positionBytes), component.positionStride);
     const normals = extractNormals(new Uint8Array(positionBytes), component.positionStride);
-    const indices = component.indexPath
-        ? await readIndexBuffer(component.indexPath, component.indexFormat)
-        : new Uint32Array();
+    const indices = component.indexPaths?.length
+        ? combineIndexBuffers(
+              await Promise.all(
+                  component.indexPaths.map((indexPath, index) =>
+                      readIndexBuffer(
+                          indexPath,
+                          component.indexFormats?.[index] ?? component.indexFormat,
+                      ),
+                  ),
+              ),
+          )
+        : component.indexPath
+          ? await readIndexBuffer(
+                component.indexPath,
+                component.indexFormats?.[0] ?? component.indexFormat,
+            )
+          : new Uint32Array();
     let blendBytes: Uint8Array | undefined;
     let bones: BlendBoneInfo[] = component.bones;
     if (component.blendPath && component.blendStride) {
@@ -486,7 +520,10 @@ function findDrawContext(
     sections: IniSection[],
     commandLists: Map<string, IniSection>,
     position: Resource,
-    index: Resource,
+    indexInput:
+        | Resource
+        | Resource[]
+        | Array<{ resource: Resource; offset: number; count: number }>,
     indexCount: number,
 ): {
     ranges: TouchDrawRange[];
@@ -495,6 +532,14 @@ function findDrawContext(
     ibHash?: string;
     variantCondition?: string;
 } {
+    const normalizedInput = Array.isArray(indexInput) ? indexInput : [indexInput];
+    const indexInfos = normalizedInput.map((item) =>
+        (item as { resource: Resource }).resource
+            ? (item as { resource: Resource; offset: number; count: number })
+            : { resource: item as Resource, offset: 0, count: indexCount },
+    );
+    const indexMap = new Map(indexInfos.map((info) => [resourceKey(info.resource), info]));
+    const indexKeys = new Set(indexMap.keys());
     const resourcesByName = new Map(
         collectResources(sections).map((resource) => [resourceKey(resource), resource]),
     );
@@ -528,18 +573,24 @@ function findDrawContext(
             blendSectionName ??= context.section.name;
         }
 
-        const indexAssignment = context.indexAssignments.find(
-            (assignment) => resourceKey(assignment.resource) === resourceKey(index),
+        const indexAssignment = context.indexAssignments.find((assignment) =>
+            indexKeys.has(resourceKey(assignment.resource)),
         );
         if (!indexAssignment) continue;
+
+        const matched = indexMap.get(resourceKey(indexAssignment.resource));
+        const resourceOffset = matched?.offset ?? 0;
+        const resourceCount = matched?.count ?? indexCount;
 
         ibSectionName ??= context.section.name;
         ibHash ??= context.hash;
         variantCondition ??= indexAssignment.conditionText;
         ranges.push(
-            ...context.ranges.filter((range) =>
-                rangeMatchesCondition(range.conditionText, indexAssignment.conditionText),
-            ),
+            ...context.ranges
+                .filter((range) =>
+                    rangeMatchesCondition(range.conditionText, indexAssignment.conditionText),
+                )
+                .map((range) => ({ ...range, firstIndex: range.firstIndex + resourceOffset })),
         );
 
         if (
@@ -548,8 +599,8 @@ function findDrawContext(
             )
         ) {
             ranges.push({
-                firstIndex: 0,
-                indexCount,
+                firstIndex: resourceOffset,
+                indexCount: resourceCount,
                 baseVertex: 0,
                 conditionText: indexAssignment.conditionText,
             });

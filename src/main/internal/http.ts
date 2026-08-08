@@ -3,10 +3,13 @@ import ky, { isNetworkError, isTimeoutError } from "ky";
 import type { NahidaDesktop } from "../index";
 
 import { appVersion } from "../const";
+import { isBackendUnavailableStatus } from "../services/drive-errors";
 
 const NHD_PREFIXES = ["http://localhost", "https://api.nahida.live"];
 
-interface FetcherOptions extends RequestInit {}
+interface FetcherOptions extends RequestInit {
+    throwHttpErrors?: boolean;
+}
 
 function isUnreachableError(error: unknown) {
     return isTimeoutError(error) || isNetworkError(error);
@@ -76,7 +79,13 @@ export class DesktopHttpService {
                 },
             });
 
-            if (isNHD) this.desktop.service.backendConnectivity.setOnline();
+            if (isNHD) {
+                if (isBackendUnavailableStatus(resp.status)) {
+                    this.desktop.service.backendConnectivity.setOffline();
+                } else {
+                    this.desktop.service.backendConnectivity.setOnline();
+                }
+            }
             return resp;
         } catch (error) {
             if (isNHD && isUnreachableError(error)) {

@@ -1,10 +1,12 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@renderer/components/ui/avatar";
 import { Button } from "@renderer/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
+import { Input } from "@renderer/components/ui/input";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { Skeleton } from "@renderer/components/ui/skeleton";
 import { cn } from "@renderer/lib/utils";
 import type { TFunction } from "i18next";
+import { SearchIcon } from "lucide-react";
 
 import type { CategoryChildItem, RootCategoryItem } from "../-types";
 
@@ -25,7 +27,9 @@ export function CategorySidebar({
   rootCategories,
   categoryChildren,
   selectedCategoryId,
+  categorySearch,
   onSelectCategory,
+  onChangeCategorySearch,
   onResetToGameHome,
 }: {
   t: TFunction;
@@ -40,10 +44,18 @@ export function CategorySidebar({
   rootCategories: RootCategoryItem[];
   categoryChildren: CategoryChildItem[];
   selectedCategoryId?: number;
+  categorySearch: string;
   onSelectCategory: (categoryId: number, categoryName: string) => void;
+  onChangeCategorySearch: (value: string) => void;
   onResetToGameHome: () => void;
 }) {
   const categories = hasCategoryContext ? categoryChildren : rootCategories;
+  const normalizedCategorySearch = categorySearch.trim().toLocaleLowerCase(language);
+  const filteredCategories = normalizedCategorySearch
+    ? categories.filter((category) =>
+        category._sName.toLocaleLowerCase(language).includes(normalizedCategorySearch),
+      )
+    : categories;
   const isLoading = hasCategoryContext ? isCategoryOverviewLoading : isGameOverviewLoading;
   const hasError = hasCategoryContext ? categoryOverviewError : gameOverviewError;
   const errorPresentation = getGameBananaErrorPresentation(
@@ -64,6 +76,16 @@ export function CategorySidebar({
             </Button>
           )}
         </div>
+        <div className="relative mt-3">
+          <SearchIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-muted-foreground" />
+          <Input
+            value={categorySearch}
+            onChange={(event) => onChangeCategorySearch(event.target.value)}
+            placeholder={t("page.gamebanana.search_categories")}
+            aria-label={t("page.gamebanana.search_categories")}
+            className="pl-9"
+          />
+        </div>
       </CardHeader>
       <CardContent className="min-h-0 flex-1 p-0">
         <ScrollArea className="h-full min-h-0">
@@ -82,14 +104,16 @@ export function CategorySidebar({
                 details={errorPresentation.details}
               />
             )}
-            {!isLoading && !hasError && categories.length === 0 && (
+            {!isLoading && !hasError && filteredCategories.length === 0 && (
               <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                {t("page.gamebanana.no_categories")}
+                {categorySearch.trim()
+                  ? t("page.gamebanana.no_category_results")
+                  : t("page.gamebanana.no_categories")}
               </div>
             )}
             {!isLoading &&
               !hasError &&
-              categories.map((category) => {
+              filteredCategories.map((category) => {
                 const isActive = selectedCategoryId === category._idRow;
 
                 return (

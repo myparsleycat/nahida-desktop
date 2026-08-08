@@ -2,8 +2,27 @@ import path from "node:path";
 
 import type { NahidaDesktop } from "@main/index";
 import { rh } from "@main/ipc/helper";
+import { isGBDownloaderError } from "@main/lib/custom-downloader";
 import { readGameBananaModId } from "@main/lib/mod-download-metadata";
+import { toErrorMessage } from "@shared/utils";
 import { dialog } from "electron";
+
+function isGameBananaDownloadProps(
+    value: unknown,
+): value is { itemId: number; fileId: number; modelName?: string } {
+    if (!value || typeof value !== "object") return false;
+
+    const props = value as Record<string, unknown>;
+    return (
+        typeof props.itemId === "number" &&
+        Number.isSafeInteger(props.itemId) &&
+        props.itemId > 0 &&
+        typeof props.fileId === "number" &&
+        Number.isSafeInteger(props.fileId) &&
+        props.fileId > 0 &&
+        (typeof props.modelName === "undefined" || typeof props.modelName === "string")
+    );
+}
 
 export function registerModHandlers(desktop: NahidaDesktop) {
     rh("mod:selectFolder", async (game: string) => {
@@ -159,12 +178,41 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return await readGameBananaModId(modPath);
     });
 
-    rh(
-        "mod:downloadGameBananaFile",
-        async (props: { itemId: number; fileId: number; modelName?: string }) => {
-            return await desktop.lib.customDownloader.GBDownloader(props);
-        },
-    );
+    rh("mod:downloadGameBananaFile", async (props: unknown) => {
+        const validProps = isGameBananaDownloadProps(props) ? props : null;
+        try {
+            if (!validProps) throw new TypeError("Invalid GameBanana download payload");
+            return await desktop.lib.customDownloader.GBDownloader(validProps);
+        } catch (error) {
+            desktop.logger.error(error, "Mod:downloadGameBananaFile");
+            if (isGBDownloaderError(error)) {
+                desktop.logger.error(
+                    {
+                        ...error.context,
+                        error: toErrorMessage(error),
+                    },
+                    "Mod:downloadGameBananaFile:context",
+                );
+            } else {
+                desktop.logger.error(
+                    {
+                        operation: "mod:downloadGameBananaFile",
+                        stage: "validate-payload",
+                        modelName: validProps?.modelName,
+                        itemId: validProps?.itemId,
+                        fileId: validProps?.fileId,
+                        error: toErrorMessage(error),
+                        rollback: {
+                            stagingPathRemoved: false,
+                            finalized: false,
+                        },
+                    },
+                    "Mod:downloadGameBananaFile:context",
+                );
+            }
+            throw error;
+        }
+    });
 
     rh("mod:resolveDownloadArchiveExtractPrompt", async (requestId: string, mode) => {
         desktop.lib.customDownloader.resolveArchiveExtractPrompt(requestId, mode);
