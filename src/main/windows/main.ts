@@ -239,6 +239,11 @@ export class MainWindow {
                 window.webContents.closeDevTools();
             }
             this.devToolsEnabled = false;
+            const hash = window.webContents.getURL().split("#")[1];
+            const initialRoute = hash ? (hash.startsWith("/") ? hash : `/${hash}`) : undefined;
+            void this.createMainWindow(initialRoute, true).catch((error) => {
+                this.desktop.logger.error(error, "MainWindow.recreateForDevTools");
+            });
         } catch (error) {
             this.desktop.logger.error(error, "MainWindow.setConsoleWindowEnabled");
         }

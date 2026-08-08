@@ -92,13 +92,13 @@
         "no_uploadable_files": "アップロード可能なファイルがありません。"
       },
       "import": {
-        "title": "Nahida ドライブにコピー",
+        "title": "ドライブにインポート",
         "description": "共有フォルダーまたはコレクション URL を入力し、ドライブ内のフォルダーを選択してください。",
         "url_label": "Nahida URL",
         "url_placeholder": "https://nahida.live/akasha/link/...",
         "destination_label": "保存先フォルダー",
         "choose_destination": "フォルダーを選択",
-        "destination_description": "コピー先にするドライブのルートまたはフォルダーを選択してください。",
+        "destination_description": "インポート先にするドライブのルートまたはフォルダーを選択してください。",
         "loading_folder": "フォルダーを読み込み中...",
         "no_subfolders": "サブフォルダーなし",
         "destination_load_failed": "保存先フォルダーを読み込めませんでした。",
@@ -108,27 +108,29 @@
         "password_label": "パスワード",
         "password_placeholder": "共有リンクのパスワードを入力",
         "create_collection_folder": "コレクション名でフォルダーを作成",
-        "action": "ドライブにコピー",
+        "authenticate": "パスワード確認",
+        "retry": "再試行",
+        "action": "ドライブにインポート",
         "url_required": "Nahida URL を入力してください。",
-        "login_required": "ドライブにコピーするにはログインしてください。",
+        "login_required": "ドライブにインポートするにはログインしてください。",
         "password_required": "このリンクにはパスワードが必要です。",
         "invalid_password": "共有リンクのパスワードが正しくありません。",
-        "success": "{{count}} 件をドライブにコピーしました。",
-        "failed": "コピーに失敗しました",
+        "success": "{{count}} 件をドライブにインポートしました。",
+        "failed": "インポートに失敗しました",
         "progress": {
-          "preparing": "コピーを準備中…",
-          "copying": "サーバーからドライブにコピー中…",
+          "preparing": "インポートを準備中…",
+          "copying": "サーバーからドライブにインポート中…",
           "downloading": "項目をダウンロード中…",
           "uploading": "ドライブにアップロード中…",
-          "completed": "コピーが完了しました。",
-          "canceled": "コピーを停止しました。",
-          "cancel": "コピーを停止",
-          "error": "転送中にコピーに失敗しました。"
+          "completed": "インポートが完了しました。",
+          "canceled": "インポートを停止しました。",
+          "cancel": "インポートを停止",
+          "error": "転送中にインポートに失敗しました。"
         }
       },
       "head_buttons": {
         "search_in_dir_placeholder": "このフォルダー内を検索...",
-        "import": "共有リンクをコピー",
+        "import": "共有リンクをインポート",
         "dropdown_menu": {
           "download": "ダウンロード",
           "make_new": {
@@ -1502,6 +1504,19 @@
           "title": "共有リンクの自動パスワード",
           "description": "パスワードが必要な共有リンクやコレクションに自動で使用します。空欄の場合は毎回入力します。",
           "placeholder": "自動入力するパスワード"
+        },
+        "import": {
+          "title": "インポート"
+        },
+        "autoTryPasswords": {
+          "title": "パスワード自動試行",
+          "description": "パスワードが必要なリンクの解決時に、保存済みのパスワードを自動的に試します。"
+        },
+        "passwordList": {
+          "title": "パスワード一覧",
+          "description": "自動試行するパスワードの一覧です。最大 {{max}}件まで保存できます。",
+          "placeholder": "パスワードを入力",
+          "add": "追加"
         }
       }
     },

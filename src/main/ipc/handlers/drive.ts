@@ -167,24 +167,80 @@ export function registerDriveHandlers(d: NahidaDesktop) {
             d.service.drive.fn.cancelCopyFromUrl(operationId),
         );
     });
+
+    rh("drive:fn:resolveImportSource", async (params) => {
+        return await safeDriveCall(
+            d,
+            "fn:resolveImportSource",
+            {
+                entity: "shared Drive URL",
+                stage: "resolve-import-source",
+                url: params.url,
+            },
+            () => d.service.drive.fn.resolveImportSource(params),
+        );
+    });
+
+    rh("drive:fn:listLinkChildren", async (params) => {
+        return await safeDriveCall(
+            d,
+            "fn:listLinkChildren",
+            {
+                entity: "shared Drive URL",
+                stage: "list-link-children",
+                url: params.linkId,
+                itemId: params.itemId,
+            },
+            () => d.service.drive.fn.listLinkChildren(params),
+        );
+    });
+
+    rh("drive:fn:listModChildren", async (params) => {
+        return await safeDriveCall(
+            d,
+            "fn:listModChildren",
+            {
+                entity: "shared Drive URL",
+                stage: "list-mod-children",
+                itemId: params.itemId,
+            },
+            () => d.service.drive.fn.listModChildren(params),
+        );
+    });
+
+    rh("drive:fn:copyFromUrlMany", async (params) => {
+        return await safeDriveCall(
+            d,
+            "fn:copyFromUrlMany",
+            {
+                entity: "shared Drive URL",
+                stage: "import-many",
+                url: params.url,
+                destinationId: params.destinationId,
+                ids: params.selectedIds,
+            },
+            () => d.service.drive.fn.copyFromUrlMany(params),
+        );
+    });
 }
 
 async function safeDriveCall<T>(
     d: NahidaDesktop,
     operation: string,
-    context: DriveIpcContext,
+    context: DriveIpcContext | string,
     callback: () => Promise<T>,
 ) {
     try {
         return await callback();
     } catch (error) {
         const normalizedError = createDriveApiError(error, operation);
+        const contextData = typeof context === "string" ? { context } : context;
         d.logger.error(error, `Drive:${operation}`);
         d.logger.error(
             {
                 channel: `drive:${operation}`,
                 operation,
-                ...context,
+                ...contextData,
                 errorCode: normalizedError.code,
                 error: toErrorMessage(error),
             },

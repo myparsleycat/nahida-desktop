@@ -91,13 +91,13 @@
         "no_uploadable_files": "업로드 가능한 파일이 없습니다."
       },
       "import": {
-        "title": "나히다 드라이브로 복사",
+        "title": "드라이브로 가져오기",
         "description": "공유 폴더 또는 컬렉션 URL을 입력한 뒤 내 드라이브의 폴더를 선택하세요.",
         "url_label": "나히다 URL",
         "url_placeholder": "https://nahida.live/akasha/link/...",
         "destination_label": "대상 폴더",
         "choose_destination": "폴더 선택",
-        "destination_description": "복사한 항목을 저장할 드라이브 루트 또는 하위 폴더를 선택하세요.",
+        "destination_description": "가져온 항목을 저장할 드라이브 루트 또는 하위 폴더를 선택하세요.",
         "loading_folder": "폴더를 불러오는 중...",
         "no_subfolders": "하위 폴더가 없습니다",
         "destination_load_failed": "대상 폴더를 불러오지 못했습니다.",
@@ -107,27 +107,29 @@
         "password_label": "비밀번호",
         "password_placeholder": "공유 링크 비밀번호를 입력하세요",
         "create_collection_folder": "컬렉션 이름으로 폴더 만들기",
-        "action": "드라이브로 복사",
+        "authenticate": "비밀번호 확인",
+        "retry": "다시 시도",
+        "action": "드라이브로 가져오기",
         "url_required": "나히다 URL을 입력하세요.",
-        "login_required": "내 드라이브로 복사하려면 로그인하세요.",
+        "login_required": "내 드라이브로 가져오려면 로그인하세요.",
         "password_required": "이 링크는 비밀번호가 필요합니다.",
         "invalid_password": "공유 링크 비밀번호가 올바르지 않습니다.",
-        "success": "{{count}}개 항목을 내 드라이브로 복사했습니다.",
-        "failed": "복사에 실패했습니다",
+        "success": "{{count}}개 항목을 내 드라이브로 가져왔습니다.",
+        "failed": "가져오기에 실패했습니다",
         "progress": {
-          "preparing": "복사를 준비하는 중...",
-          "copying": "서버에서 드라이브로 복사하는 중...",
+          "preparing": "가져오기를 준비하는 중...",
+          "copying": "서버에서 드라이브로 가져오는 중...",
           "downloading": "항목을 다운로드하는 중...",
           "uploading": "드라이브에 업로드하는 중...",
-          "completed": "복사가 완료되었습니다.",
-          "canceled": "복사가 중지되었습니다.",
-          "cancel": "복사 중지",
-          "error": "복사 중 오류가 발생했습니다."
+          "completed": "가져오기가 완료되었습니다.",
+          "canceled": "가져오기가 중지되었습니다.",
+          "cancel": "가져오기 중지",
+          "error": "가져오기 중 오류가 발생했습니다."
         }
       },
       "head_buttons": {
         "search_in_dir_placeholder": "이 폴더에서 검색...",
-        "import": "공유 링크 복사",
+        "import": "공유 링크 가져오기",
         "dropdown_menu": {
           "download": "다운로드",
           "make_new": {
@@ -1521,6 +1523,19 @@
           "title": "공유 링크 자동 비밀번호",
           "description": "비밀번호가 필요한 공유 링크나 컬렉션에 자동으로 사용할 비밀번호입니다. 비워 두면 매번 입력합니다.",
           "placeholder": "자동 입력할 비밀번호"
+        },
+        "import": {
+          "title": "가져오기"
+        },
+        "autoTryPasswords": {
+          "title": "비밀번호 자동 시도",
+          "description": "비밀번호가 필요한 링크 조회 시 저장된 비밀번호 목록을 자동으로 시도합니다."
+        },
+        "passwordList": {
+          "title": "비밀번호 목록",
+          "description": "자동 시도할 비밀번호 목록입니다. 최대 {{max}}개까지 저장할 수 있습니다.",
+          "placeholder": "비밀번호 입력",
+          "add": "추가"
         }
       }
     },

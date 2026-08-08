@@ -49,6 +49,8 @@ export interface AppSettings {
 
     "drive.nameSortPolicy": DriveNameSortPolicy;
     "drive.importPassword": string;
+    "drive.autoTryPasswords": boolean;
+    "drive.passwordList": string[];
 
     "debug.openConsole": boolean;
 
@@ -259,6 +261,16 @@ export const APP_SETTINGS = {
         scope: "drive",
         storageKey: "drive_import_password",
         sensitive: true,
+    },
+    "drive.autoTryPasswords": {
+        publicKey: "drive.autoTryPasswords",
+        scope: "drive",
+        storageKey: "drive_auto_try_passwords",
+    },
+    "drive.passwordList": {
+        publicKey: "drive.passwordList",
+        scope: "drive",
+        storageKey: "drive_password_list",
     },
 
     "debug.openConsole": {

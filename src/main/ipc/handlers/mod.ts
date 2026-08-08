@@ -2,6 +2,7 @@ import path from "node:path";
 
 import type { NahidaDesktop } from "@main/index";
 import { rh } from "@main/ipc/helper";
+import { isGBDownloaderError } from "@main/lib/custom-downloader";
 import { readGameBananaModId } from "@main/lib/mod-download-metadata";
 import { toErrorMessage } from "@shared/utils";
 import { dialog } from "electron";
@@ -184,20 +185,31 @@ export function registerModHandlers(desktop: NahidaDesktop) {
             return await desktop.lib.customDownloader.GBDownloader(validProps);
         } catch (error) {
             desktop.logger.error(error, "Mod:downloadGameBananaFile");
-            desktop.logger.error(
-                {
-                    operation: "mod:downloadGameBananaFile",
-                    stage: validProps ? "start" : "validate-payload",
-                    modelName: validProps?.modelName,
-                    itemId: validProps?.itemId,
-                    fileId: validProps?.fileId,
-                    downloadUrl: undefined,
-                    destinationPath: undefined,
-                    rollback: "not-started",
-                    error: toErrorMessage(error),
-                },
-                "Mod:downloadGameBananaFile:context",
-            );
+            if (isGBDownloaderError(error)) {
+                desktop.logger.error(
+                    {
+                        ...error.context,
+                        error: toErrorMessage(error),
+                    },
+                    "Mod:downloadGameBananaFile:context",
+                );
+            } else {
+                desktop.logger.error(
+                    {
+                        operation: "mod:downloadGameBananaFile",
+                        stage: "validate-payload",
+                        modelName: validProps?.modelName,
+                        itemId: validProps?.itemId,
+                        fileId: validProps?.fileId,
+                        error: toErrorMessage(error),
+                        rollback: {
+                            stagingPathRemoved: false,
+                            finalized: false,
+                        },
+                    },
+                    "Mod:downloadGameBananaFile:context",
+                );
+            }
             throw error;
         }
     });

@@ -1753,7 +1753,7 @@ describe("analyzeTouchMod", () => {
                 "drawindexed = 3, 0, 0",
                 "[TextureOverrideChioriBody]",
                 "ib = ResourceChioriBodyIB",
-                "drawindexed = 3, 3, 0",
+                "drawindexed = 3, 0, 0",
                 "[ResourceChioriPosition]",
                 "type = Buffer",
                 "stride = 40",
@@ -1792,9 +1792,93 @@ describe("analyzeTouchMod", () => {
         assert.equal(comp.indexCount, 6);
         assert.ok(comp.indexPaths);
         assert.equal(comp.indexPaths.length, 2);
+        assert.deepEqual(
+            comp.drawRanges.map((range) => [range.firstIndex, range.indexCount]),
+            [
+                [0, 3],
+                [3, 3],
+            ],
+        );
 
         const mesh = await loadTouchMeshBuffers(comp);
         assert.deepEqual([...mesh.indices], [0, 1, 2, 3, 4, 5]);
+
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    it("reloads mixed R16/R32 index buffers with per-resource formats", async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "touch-profile-mixed-ib-"));
+
+        fs.writeFileSync(
+            path.join(root, "mod.ini"),
+            [
+                "[TextureOverrideChioriPosition]",
+                "vb0 = ResourceChioriPosition",
+                "[TextureOverrideChioriHead]",
+                "ib = ResourceChioriHeadIB",
+                "drawindexed = 6, 0, 0",
+                "[TextureOverrideChioriBody]",
+                "ib = ResourceChioriBodyIB",
+                "drawindexed = 6, 0, 0",
+                "[ResourceChioriPosition]",
+                "type = Buffer",
+                "stride = 40",
+                "filename = ChioriPosition.buf",
+                "[ResourceChioriHeadIB]",
+                "type = Buffer",
+                "format = DXGI_FORMAT_R32_UINT",
+                "filename = ChioriHead.ib",
+                "[ResourceChioriBodyIB]",
+                "type = Buffer",
+                "format = DXGI_FORMAT_R16_UINT",
+                "filename = ChioriBody.ib",
+            ].join("\n"),
+            "utf8",
+        );
+
+        const posBytes = Buffer.alloc(6 * 40);
+        for (let i = 0; i < 6; i++) {
+            posBytes.writeFloatLE(i * 0.1, i * 40);
+            posBytes.writeFloatLE(0.5, i * 40 + 4);
+            posBytes.writeFloatLE(1.0, i * 40 + 8);
+            posBytes.writeFloatLE(0, i * 40 + 12);
+            posBytes.writeFloatLE(1, i * 40 + 16);
+            posBytes.writeFloatLE(0, i * 40 + 20);
+            posBytes.writeFloatLE(1, i * 40 + 24);
+            posBytes.writeFloatLE(0, i * 40 + 28);
+            posBytes.writeFloatLE(0, i * 40 + 32);
+            posBytes.writeFloatLE(1, i * 40 + 36);
+        }
+        fs.writeFileSync(path.join(root, "ChioriPosition.buf"), posBytes);
+        // R32 buffer: 6 indices -> 24 bytes (divisible by 4)
+        fs.writeFileSync(
+            path.join(root, "ChioriHead.ib"),
+            Buffer.from(new Uint32Array([0, 1, 2, 0, 1, 2]).buffer),
+        );
+        // R16 buffer: 6 indices -> 12 bytes (divisible by 4, would be misread as R32 without per-format storage)
+        fs.writeFileSync(
+            path.join(root, "ChioriBody.ib"),
+            Buffer.from(new Uint16Array([3, 4, 5, 3, 4, 5]).buffer),
+        );
+
+        const analysis = await analyzeTouchMod(root);
+        assert.equal(analysis.components.length, 1);
+        const comp = analysis.components[0];
+        assert.equal(comp.indexCount, 12);
+        assert.ok(comp.indexPaths);
+        assert.equal(comp.indexPaths.length, 2);
+        assert.ok(comp.indexFormats);
+        assert.deepEqual(comp.indexFormats, ["DXGI_FORMAT_R32_UINT", "DXGI_FORMAT_R16_UINT"]);
+        assert.deepEqual(
+            comp.drawRanges.map((range) => [range.firstIndex, range.indexCount]),
+            [
+                [0, 6],
+                [6, 6],
+            ],
+        );
+
+        const mesh = await loadTouchMeshBuffers(comp);
+        assert.deepEqual([...mesh.indices], [0, 1, 2, 0, 1, 2, 3, 4, 5, 3, 4, 5]);
 
         fs.rmSync(root, { recursive: true, force: true });
     });
