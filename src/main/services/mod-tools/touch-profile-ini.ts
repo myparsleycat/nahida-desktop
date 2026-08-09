@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import fse from "fs-extra";
 
 import type {
@@ -30,13 +32,16 @@ export async function compileTouchIni(input: TouchIniCompileInput) {
     const original = await fse.readFile(input.sourceIniPath, "utf8");
     const backupPath = `${input.targetIniPath}.bak-before-touch`;
     await fse.writeFile(backupPath, original, "utf8");
+    const assets = input.assets.map((asset) =>
+        rebaseAssetPaths(asset, path.dirname(input.targetIniPath)),
+    );
 
     const interactive = input.drafts
         .map((draft) => {
             const component = input.analysis.components.find(
                 (entry) => entry.id === draft.componentId,
             );
-            const asset = input.assets.find((entry) => entry.componentId === draft.componentId);
+            const asset = assets.find((entry) => entry.componentId === draft.componentId);
             if (!component || !asset || !draft.interactive || draft.zones.length === 0) return null;
             return { draft, component, asset };
         })
@@ -64,10 +69,32 @@ export async function compileTouchIni(input: TouchIniCompileInput) {
         input.varPrefix,
         interactive.map((entry) => entry.component),
     );
-    text = appendRuntime(text, input.varPrefix, interactive);
+    text = appendRuntime(text, input.varPrefix, interactive, interactive[0].asset.relativeDir);
 
     await fse.writeFile(input.targetIniPath, text.replace(/\n/g, "\r\n"), "utf8");
     return { backupPath, interactiveCount: interactive.length };
+}
+
+function rebaseAssetPaths(asset: TouchGeneratedAssets, iniDir: string): TouchGeneratedAssets {
+    const resourceDir = path.dirname(asset.paramsAbsolutePath);
+    const relativeDir = iniRelativePath(iniDir, resourceDir);
+    return {
+        ...asset,
+        relativeDir,
+        maskPaths: asset.maskPaths.map((maskPath) =>
+            path.posix.join(relativeDir, path.basename(maskPath)),
+        ),
+        objectMapPaths: asset.objectMapPaths.map((objectMap) => ({
+            ...objectMap,
+            relativePath: iniRelativePath(iniDir, objectMap.absolutePath),
+        })),
+        paramsRelativePath: iniRelativePath(iniDir, asset.paramsAbsolutePath),
+        previewRelativePath: iniRelativePath(iniDir, asset.previewAbsolutePath),
+    };
+}
+
+function iniRelativePath(iniDir: string, targetPath: string) {
+    return path.relative(iniDir, targetPath).replaceAll("\\", "/") || ".";
 }
 
 function ensureConstants(text: string, varPrefix: string, components: TouchComponentAnalysis[]) {
@@ -254,7 +281,12 @@ endif
         .join("\n")}\nendif`;
 }
 
-function appendRuntime(text: string, varPrefix: string, entries: InteractiveEntry[]) {
+function appendRuntime(
+    text: string,
+    varPrefix: string,
+    entries: InteractiveEntry[],
+    runtimeRelativeDir: string,
+) {
     const st = sectionToken(varPrefix);
     if (text.includes(`[CommandList${st}Present]`)) return text;
     const zoneOverrides = buildTouchRuntimeZoneOverrides(entries.map((entry) => entry.draft));
@@ -264,8 +296,10 @@ function appendRuntime(text: string, varPrefix: string, entries: InteractiveEntr
         `; ---- Nahida Touch Profile runtime (${varPrefix}) ----`,
         "",
         ...buildCursorAndPresent(varPrefix, st, entries),
-        ...buildSharedShaders(varPrefix, st, entries, zoneOverrides),
-        ...entries.flatMap((entry) => buildComponentShaders(varPrefix, st, entry, zoneOverrides)),
+        ...buildSharedShaders(varPrefix, st, entries, zoneOverrides, runtimeRelativeDir),
+        ...entries.flatMap((entry) =>
+            buildComponentShaders(varPrefix, st, entry, zoneOverrides, runtimeRelativeDir),
+        ),
         ...buildSharedResources(st),
         ...entries.flatMap((entry) => buildComponentResources(st, entry)),
     ];
@@ -396,10 +430,11 @@ function buildSharedShaders(
     st: string,
     entries: InteractiveEntry[],
     zoneOverrides: TouchRuntimeZoneOverrides,
+    runtimeRelativeDir: string,
 ) {
     const lines = [
         `[CustomShader${st}PinDetected]`,
-        "cs = Resources/IM/rzm_pin_detected.hlsl",
+        `cs = ${runtimeRelativeDir}/rzm_pin_detected.hlsl`,
         `x24 = $${varPrefix}_cursor_x`,
         `y24 = $${varPrefix}_cursor_y`,
         `z24 = $${varPrefix}_screen_w`,
@@ -418,7 +453,7 @@ function buildSharedShaders(
         const id = token(entry.component.id);
         lines.push(
             `[CustomShader${st}Pin${id}]`,
-            "cs = Resources/IM/rzm_pin_detected.hlsl",
+            `cs = ${runtimeRelativeDir}/rzm_pin_detected.hlsl`,
             `cs-u0 = Resource${st}ComponentDetect${id}`,
             `cs-u1 = Resource${st}PinnedComponentID${id}`,
             `cs-u2 = Resource${st}PinnedComponentInfo${id}`,
@@ -448,7 +483,7 @@ function buildSharedShaders(
         "\t$cursor_y_past = 0",
         "\tw67 = 0",
         "endif",
-        "cs = Resources/IM/rzm_jiggle_screen_state.hlsl",
+        `cs = ${runtimeRelativeDir}/rzm_jiggle_screen_state.hlsl`,
         "x67 = $cursor_x_past",
         "y67 = $cursor_y_past",
         ...buildBasePhysicsLines(),
@@ -501,6 +536,7 @@ function buildComponentShaders(
     st: string,
     entry: InteractiveEntry,
     zoneOverrides: TouchRuntimeZoneOverrides,
+    runtimeRelativeDir: string,
 ) {
     const id = token(entry.component.id);
     const maskBase = maskResourceToken(entry.asset.assetPrefix);
@@ -525,9 +561,9 @@ function buildComponentShaders(
     samples.forEach((sample, index) => {
         lines.push(
             `[CustomShader${st}Bake${id}${index}]`,
-            "gs = Resources/IM/rzm_gs_probe.hlsl",
+            `gs = ${runtimeRelativeDir}/rzm_gs_probe.hlsl`,
             `gs-t1 = Resource${entry.component.indexResourceName}`,
-            "ps = Resources/IM/rzm_gs_probe.hlsl",
+            `ps = ${runtimeRelativeDir}/rzm_gs_probe.hlsl`,
             "topology = point_list",
             `o0 = set_viewport no_view_cache Resource${st}BakeRT`,
             `x26 = ${index}`,
@@ -539,7 +575,7 @@ function buildComponentShaders(
 
     lines.push(
         `[CustomShader${st}Detect${id}]`,
-        "cs = Resources/IM/rzm_object_detect.hlsl",
+        `cs = ${runtimeRelativeDir}/rzm_object_detect.hlsl`,
         `x28 = ${entry.draft.objectId}`,
         "cs-t0 = vb0",
         "cs-t1 = ib",
@@ -613,7 +649,7 @@ function buildComponentShaders(
         "\t$cursor_y_past = 0",
         "\tw67 = 0",
         "endif",
-        "cs = Resources/IM/rzm_jiggle_interaction.hlsl",
+        `cs = ${runtimeRelativeDir}/rzm_jiggle_interaction.hlsl`,
         "x67 = $cursor_x_past",
         "y67 = $cursor_y_past",
         ...buildBasePhysicsLines(),
@@ -657,7 +693,9 @@ function buildComponentShaders(
         `dispatch = (${entry.component.vertexCount} + 255) // 256, 1, 1`,
         "vb0 = null",
         `Resource${st}TempVB${id} = copy cs-u5`,
-        "post cs-u5 = null",
+        // The output is rebound as vb0 by the caller immediately after this shader.
+        // D3D11 rejects a resource that is still bound as both a UAV and vertex buffer.
+        "cs-u5 = null",
         "post cs-u6 = null",
         "post cs-t71 = null",
         "",

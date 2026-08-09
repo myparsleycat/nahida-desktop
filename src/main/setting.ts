@@ -621,6 +621,13 @@ export class Setting {
                 fromStored: (value) => normalizeDriveNameSortPolicy(value),
                 normalize: (value) => normalizeDriveNameSortPolicy(value),
             },
+            "drive.importPassword": {
+                definition: APP_SETTINGS["drive.importPassword"],
+                getDefault: () => "",
+                fromStored: (value) => value ?? "",
+                normalize: (value) => value,
+                toStored: (value) => value,
+            },
             "drive.autoTryPasswords": {
                 definition: APP_SETTINGS["drive.autoTryPasswords"],
                 getDefault: () => false,
@@ -929,6 +936,10 @@ export class Setting {
             await this.get("drive.nameSortPolicy"),
         setNameSortPolicy: async (policy: DriveNameSortPolicy) => {
             await this.set("drive.nameSortPolicy", policy);
+        },
+        getImportPassword: async () => await this.get("drive.importPassword"),
+        setImportPassword: async (password: string) => {
+            await this.set("drive.importPassword", password);
         },
     };
 

@@ -16,6 +16,7 @@ type DriveIpcContext = {
     url?: string;
     collectionId?: string;
     cleanupState?: string;
+    createCollectionFolders?: boolean;
 };
 
 export function registerDriveHandlers(d: NahidaDesktop) {
@@ -154,6 +155,7 @@ export function registerDriveHandlers(d: NahidaDesktop) {
                 destinationId: params.destinationId,
                 collectionId: params.collectionId,
                 itemId: params.itemId,
+                createCollectionFolders: params.createCollectionFolders,
                 cleanupState: "service-managed",
             },
             () => d.service.drive.fn.copyFromUrl(params),

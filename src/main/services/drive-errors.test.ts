@@ -29,6 +29,15 @@ describe("createDriveApiError", () => {
         expect(error.code).toBe("DRIVE_LINK_INVALID_PASSWORD");
     });
 
+    it("normalizes password messages from collection responses", () => {
+        expect(createDriveApiError("password required", "mod overview", 401).code).toBe(
+            "DRIVE_LINK_PASSWORD_REQUIRED",
+        );
+        expect(createDriveApiError({ error: "incorrect password" }, "mod overview", 500).code).toBe(
+            "DRIVE_LINK_INVALID_PASSWORD",
+        );
+    });
+
     it("uses an operation-specific fallback for unknown errors", () => {
         const error = createDriveApiError({}, "copyFromUrl");
 

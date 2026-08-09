@@ -5,6 +5,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { memo, useCallback, useMemo } from "react";
 
 import { CharacterSidebarItem, CharacterSidebarItemSkeleton } from "./character-sidebar-item";
+import { getVisibleGroups } from "./character-sidebar-visible-rows";
 
 export interface CharacterSidebarContentProps {
   groups: FolderGroup[];
@@ -288,31 +289,4 @@ export function CharacterSidebarContent({
           ))}
     </div>
   );
-}
-
-function getVisibleGroups(
-  groups: FolderGroup[],
-  sortKey: FolderSortKey,
-  sortDirection: FolderSortDirection,
-  hideEmptyGroups: boolean,
-) {
-  return groups
-    .filter(
-      (group) =>
-        !hideEmptyGroups ||
-        (group.modCount ?? group.mods.length) > 0 ||
-        group.hasSubGroups ||
-        group.hasManualSubGroups,
-    )
-    .toSorted((a, b) => {
-      const comparison =
-        sortKey === "name"
-          ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
-          : sortKey === "mod-count"
-            ? (a.modCount ?? a.mods.length) - (b.modCount ?? b.mods.length)
-            : (a.enabledModCount ?? a.mods.filter((mod) => mod.isEnabled).length) -
-              (b.enabledModCount ?? b.mods.filter((mod) => mod.isEnabled).length);
-
-      return sortDirection === "ascending" ? comparison : -comparison;
-    });
 }

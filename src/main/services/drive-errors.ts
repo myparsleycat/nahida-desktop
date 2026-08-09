@@ -40,8 +40,26 @@ export function createDriveApiError(
     const normalizedMessage = message === "[object Object]" ? fallback : message || fallback;
     const code =
         toDriveErrorCode(error) ??
+        inferDriveErrorCode(normalizedMessage) ??
         `DRIVE_${operation.replace(/[^A-Za-z0-9]+/g, "_").toUpperCase()}_FAILED`;
     return new DriveApiError(code, normalizedMessage, resolvedStatus, error);
+}
+
+function inferDriveErrorCode(message: string) {
+    const normalizedMessage = message.toLowerCase().replace(/[_-]+/g, " ");
+    if (normalizedMessage.includes("password required")) {
+        return "DRIVE_LINK_PASSWORD_REQUIRED";
+    }
+    if (normalizedMessage.includes("missing password")) {
+        return "DRIVE_LINK_PASSWORD_REQUIRED";
+    }
+    if (
+        normalizedMessage.includes("invalid password") ||
+        normalizedMessage.includes("incorrect password")
+    ) {
+        return "DRIVE_LINK_INVALID_PASSWORD";
+    }
+    return undefined;
 }
 
 function getErrorStatus(error: unknown) {
