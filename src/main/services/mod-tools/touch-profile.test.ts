@@ -9,6 +9,8 @@ import {
 } from "@shared/touch-profile-settings";
 import { describe, it } from "vitest";
 
+import type { TouchGeneratedAssets } from "./touch-profile-assets";
+
 import { replaceTouchOutput, touchFolderBaseName } from "./touch-profile";
 import { analyzeTouchMod, hashTouchFiles, loadTouchMeshBuffers } from "./touch-profile-analyzer";
 import {
@@ -27,7 +29,7 @@ import {
     assertTouchProfileDetectionAllowed,
     inspectTouchProfileInput,
 } from "./touch-profile-detection";
-import { buildTouchRuntimeZoneOverrides } from "./touch-profile-ini";
+import { buildTouchRuntimeZoneOverrides, compileTouchIni } from "./touch-profile-ini";
 import {
     buildAllViewTransforms,
     buildViewTransform,
@@ -243,6 +245,74 @@ describe("touch profile regeneration helpers", () => {
             fs.readdirSync(root).filter((entry) => entry.includes("backup-")),
             [],
         );
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+});
+
+describe("touch profile INI generation", () => {
+    it("rebases nested INI resources and unbinds the output UAV", async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "touch-profile-ini-"));
+        const sourceIniPath = path.join(root, "source.ini");
+        const targetIniPath = path.join(root, "Body", "target.ini");
+        const resourceDir = path.join(root, "Resources", "IM");
+        const component = makeTouchComponent(3);
+        fs.mkdirSync(path.dirname(targetIniPath));
+        fs.mkdirSync(resourceDir, { recursive: true });
+        fs.writeFileSync(sourceIniPath, "[Constants]\n\n[Present]\n");
+
+        await compileTouchIni({
+            sourceIniPath,
+            targetIniPath,
+            analysis: {
+                modRoot: root,
+                sourceRoot: root,
+                modRootRelativeToSource: "",
+                iniPath: sourceIniPath,
+                iniRelativePath: "source.ini",
+                sourceFilesRelativePaths: ["source.ini"],
+                supportGrade: "A",
+                supportReasons: [],
+                components: [component],
+                meshHash: "mesh",
+                iniHash: "ini",
+            },
+            drafts: [
+                {
+                    ...createSettingsDraft(0, "normal"),
+                    componentId: component.id,
+                },
+            ],
+            assets: [
+                {
+                    componentId: component.id,
+                    assetPrefix: "Body",
+                    relativeDir: "Resources/IM",
+                    maskPaths: ["mask0.buf", "mask1.buf", "mask2.buf"],
+                    objectMapPaths: [
+                        {
+                            label: "main",
+                            relativePath: "object-map.buf",
+                            absolutePath: path.join(resourceDir, "object-map.buf"),
+                        },
+                    ],
+                    paramsRelativePath: "params.buf",
+                    paramsAbsolutePath: path.join(resourceDir, "params.buf"),
+                    previewRelativePath: "preview.png",
+                    previewAbsolutePath: path.join(resourceDir, "preview.png"),
+                    masks: new Float32Array(),
+                } satisfies TouchGeneratedAssets,
+            ],
+            namespaceToken: "test",
+            varPrefix: "nhd_touch_test",
+        });
+
+        const ini = fs.readFileSync(targetIniPath, "utf8");
+        assert.match(ini, /ResourceNhdTouchTestTempVBbodyPosition = copy cs-u5\r?\ncs-u5 = null/);
+        assert.doesNotMatch(ini, /post cs-u5 = null/);
+        assert.match(ini, /cs = \.\.\/Resources\/IM\/rzm_jiggle_interaction\.hlsl/);
+        assert.match(ini, /filename = \.\.\/Resources\/IM\/mask0\.buf/);
+        assert.match(ini, /filename = \.\.\/Resources\/IM\/object-map\.buf/);
+        assert.match(ini, /filename = \.\.\/Resources\/IM\/params\.buf/);
         fs.rmSync(root, { recursive: true, force: true });
     });
 });
