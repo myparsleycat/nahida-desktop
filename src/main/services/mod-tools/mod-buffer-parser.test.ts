@@ -47,4 +47,46 @@ describe("matchIndexResources", () => {
             ["_LOD0.785b21f5_57612_0_Index"],
         );
     });
+
+    it("matches index resources when named variants follow the buffer kind", () => {
+        const positions = [
+            {
+                name: "ZhaoBodyPosition_Default",
+                filename: ".\\1Default\\ZhaoBodyPosition.buf",
+                stride: 40,
+                values: {},
+            },
+            {
+                name: "ZhaoBodyPosition_Bodysuit",
+                filename: ".\\2Bodysuit\\ZhaoBodyPosition.buf",
+                stride: 40,
+                values: {},
+            },
+        ] satisfies Resource[];
+        const indices = [
+            {
+                name: "ZhaoBodyAIB_Default",
+                filename: ".\\1Default\\ZhaoBodyA.ib",
+                format: "DXGI_FORMAT_R32_UINT",
+                values: {},
+            },
+            {
+                name: "ZhaoBodyAIB_Bodysuit",
+                filename: ".\\2Bodysuit\\ZhaoBodyA.ib",
+                format: "DXGI_FORMAT_R32_UINT",
+                values: {},
+            },
+        ] satisfies Resource[];
+
+        const matches = matchIndexResources(positions, indices, []);
+
+        assert.deepEqual(
+            matches.get("zhaobodyposition_default")?.map((resource) => resource.name),
+            ["ZhaoBodyAIB_Default"],
+        );
+        assert.deepEqual(
+            matches.get("zhaobodyposition_bodysuit")?.map((resource) => resource.name),
+            ["ZhaoBodyAIB_Bodysuit"],
+        );
+    });
 });
