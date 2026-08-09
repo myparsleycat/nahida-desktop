@@ -1,0 +1,96 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: en-US
+early_access: false
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  changed_files_summary: true
+  sequence_diagrams: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+
+  auto_review:
+    enabled: true
+    drafts: false
+    ignore_title_keywords:
+      - WIP
+      - DO NOT MERGE
+
+  pre_merge_checks:
+    description:
+      mode: warning
+    docstrings:
+      mode: off
+
+  path_filters:
+    - "!**/node_modules/**"
+    - "!**/dist/**"
+    - "!**/out/**"
+    - "!**/build/**"
+    - "!**/target/**"
+    - "!**/.pnpm-store/**"
+    - "!**/.tanstack/**"
+    - "!**/*.gen.ts"
+    - "!**/*.lock"
+    - "!**/pnpm-lock.yaml"
+    - "!**/*.db*"
+    - "!**/*.{png,gif,ttf,zst,exe,node}"
+
+  path_instructions:
+    - path: "**/*"
+      instructions: |
+        Prioritize actionable issues with a concrete impact on correctness, security, data integrity, reliability, performance, or maintainability.
+        Do not comment on formatting, naming preferences, subjective style, minor simplifications, harmless redundancy, or other nitpicks.
+        Avoid feedback already enforced by oxfmt or oxlint. Only raise a maintainability concern when it creates meaningful risk or makes the changed code substantially harder to understand or modify.
+
+    - path: "src/main/**/*.{ts,tsx}"
+      instructions: |
+        Electron main-process review priorities:
+        - Check IPC handlers for authorization, input validation, path traversal, command injection, and unsafe renderer-controlled arguments.
+        - New IPC handlers must use rh() from src/main/ipc/helper.ts so generated channel typing and runtime whitelisting remain intact.
+        - For IPC-backed user actions, require the original error to be logged with actionable structured context before a generic error reaches the renderer.
+        - Check cleanup, rollback, process lifecycle, filesystem atomicity, and Windows-specific path behavior.
+        - Flag secrets, tokens, or sensitive user data written to logs.
+
+    - path: "src/preload/**/*.{ts,tsx}"
+      instructions: |
+        Review the Electron security boundary carefully. Expose only narrow, typed APIs through contextBridge, preserve context isolation, and do not expose raw ipcRenderer or unrestricted channels to renderer code.
+
+    - path: "src/renderer/**/*.{ts,tsx}"
+      instructions: |
+        React and renderer review priorities:
+        - Check hook dependencies, stale closures, cleanup of listeners and timers, accessibility, loading/error/empty states, and user-visible text localization.
+        - Keep React state for values that affect rendered UI. For high-frequency visual-only updates, prefer refs and imperative methods to avoid expensive component and Three.js rerenders.
+        - Flag unsafe HTML, untrusted external URLs, and assumptions that renderer input is trusted.
+
+    - path: "**/*.{ts,tsx,mjs,js}"
+      instructions: |
+        Focus on bugs and material risks involving type safety, resource cleanup, concurrency, cancellation, error propagation, and boundary validation.
+        Do not report style-only deviations such as destructuring choices, loop versus array-method preferences, variable inlining, helper extraction, or equivalent utility choices unless they cause a concrete defect or significant maintenance risk.
+
+    - path: "src/main/ipc/handlers/**/*.ts"
+      instructions: |
+        Verify that handlers use rh(), validate all renderer-controlled inputs, preserve domain-specific error messages/codes, and log the original failure with channel, operation stage, identifiers, relevant paths or URLs, and cleanup state.
+
+    - path: "native/**/*.{rs,go}"
+      instructions: |
+        Review memory and thread safety, FFI boundaries, integer and buffer bounds, filesystem/process operations, error propagation, cleanup, and Windows API assumptions. Treat all paths and data originating outside the native module as untrusted.
+
+    - path: "**/*.{test,spec}.{ts,tsx}"
+      instructions: |
+        Check that tests cover observable behavior, failure paths, boundary cases, cleanup, and regressions. Avoid assertions coupled to implementation details or timing-sensitive tests without deterministic synchronization.
+
+    - path: "**/*.{yml,yaml,json,jsonc,toml}"
+      instructions: |
+        Check schema validity, duplicated or conflicting settings, secret leakage, unsafe permissions, and consistency with package scripts and repository paths.
+
+    - path: "docs/**/*.md"
+      instructions: |
+        Check technical accuracy, clarity, command correctness, broken internal references, and consistency with the current application behavior.
+
+chat:
+  auto_reply: true
