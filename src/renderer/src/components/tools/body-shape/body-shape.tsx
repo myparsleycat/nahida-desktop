@@ -875,6 +875,10 @@ export default function BodyShapeTool({
                     <FieldLabel>{t("page.tools.body_shape.mesh")}</FieldLabel>
                     <Select
                       value={selectedMesh.id}
+                      items={loaded.meshes.map((mesh) => ({
+                        value: mesh.id,
+                        label: `${mesh.name} (${mesh.vertexCount})`,
+                      }))}
                       onValueChange={(value) => {
                         if (value) {
                           setSelectedMeshId(value);
@@ -962,6 +966,13 @@ export default function BodyShapeTool({
                     <FieldLabel>{t("page.tools.body_shape.selection_tool")}</FieldLabel>
                     <Select
                       value={selectionToolMode}
+                      items={[
+                        { value: "brush", label: t("page.tools.body_shape.tool_mode_brush") },
+                        {
+                          value: "component",
+                          label: t("page.tools.body_shape.tool_mode_component"),
+                        },
+                      ]}
                       onValueChange={(value) => {
                         if (value === "brush" || value === "component") {
                           setSelectionToolMode(value);
@@ -989,6 +1000,16 @@ export default function BodyShapeTool({
                       <FieldLabel>{t("page.tools.body_shape.brush_reach")}</FieldLabel>
                       <Select
                         value={brushReachMode}
+                        items={[
+                          {
+                            value: "surface",
+                            label: t("page.tools.body_shape.brush_reach_surface"),
+                          },
+                          {
+                            value: "through",
+                            label: t("page.tools.body_shape.brush_reach_through"),
+                          },
+                        ]}
                         onValueChange={(value) => {
                           if (value === "surface" || value === "through") {
                             setBrushReachMode(value);
@@ -1042,6 +1063,22 @@ export default function BodyShapeTool({
                         <FieldLabel>{t("page.tools.body_shape.deform_operation")}</FieldLabel>
                         <Select
                           value={deformOperation}
+                          items={[
+                            { value: "scale", label: t("page.tools.body_shape.deform_scale") },
+                            ...(selectedMesh.originalNormals
+                              ? [
+                                  {
+                                    value: "inflate",
+                                    label: t("page.tools.body_shape.deform_inflate"),
+                                  },
+                                ]
+                              : []),
+                            {
+                              value: "translate",
+                              label: t("page.tools.body_shape.deform_translate"),
+                            },
+                            { value: "taper", label: t("page.tools.body_shape.deform_taper") },
+                          ]}
                           onValueChange={(value) => {
                             if (
                               value !== "scale" &&

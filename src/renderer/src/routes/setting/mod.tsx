@@ -300,6 +300,7 @@ function ModSettingsRouteContent() {
               </div>
               <Select
                 value={settings.disabledPrefixStyle}
+                items={disabledPrefixStyleOptions}
                 onValueChange={(val) => update("disabledPrefixStyle", val as DisabledPrefixStyle)}
               >
                 <SelectTrigger className="w-[180px]">

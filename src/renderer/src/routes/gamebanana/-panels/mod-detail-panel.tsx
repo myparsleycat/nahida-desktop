@@ -516,12 +516,14 @@ export function ModDetailPanel({
                   <Badge variant="outline">{formatNumber(totalCommentCount, language)}</Badge>
                   <Select
                     value={commentSort}
+                    items={[
+                      { value: "popular", label: t("page.gamebanana.comment_sort.popular") },
+                      { value: "newest", label: t("page.gamebanana.comment_sort.newest") },
+                    ]}
                     onValueChange={(value) => setCommentSort(value as GameBananaModPostsSort)}
                   >
                     <SelectTrigger className="h-7">
-                      <SelectValue>
-                        {(value) => t(`page.gamebanana.comment_sort.${value}`)}
-                      </SelectValue>
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>

@@ -45,11 +45,17 @@ function joinPath(dir: string, name: string) {
 export default function StaticGlbConverter() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const textureFormatLabels: Record<string, string> = {
-    png: t("page.tools.static_glb_converter.texture_format_options.png"),
-    "jpeg-safe": t("page.tools.static_glb_converter.texture_format_options.jpeg_safe"),
-    "jpeg-force": t("page.tools.static_glb_converter.texture_format_options.jpeg_force"),
-  };
+  const textureFormatOptions = [
+    { value: "png", label: t("page.tools.static_glb_converter.texture_format_options.png") },
+    {
+      value: "jpeg-safe",
+      label: t("page.tools.static_glb_converter.texture_format_options.jpeg_safe"),
+    },
+    {
+      value: "jpeg-force",
+      label: t("page.tools.static_glb_converter.texture_format_options.jpeg_force"),
+    },
+  ] as const;
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<{
     mode: "single" | "variant-set";
@@ -324,30 +330,21 @@ export default function StaticGlbConverter() {
                           </FieldLabel>
                           <Select
                             value={field.state.value}
+                            items={textureFormatOptions}
                             onValueChange={(value) =>
                               void handleTextureFormatChange(value as TextureFormat)
                             }
                           >
                             <SelectTrigger disabled={isRunning}>
-                              <SelectValue>
-                                {(value) => textureFormatLabels[value] ?? value}
-                              </SelectValue>
+                              <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectGroup>
-                                <SelectItem value="png">
-                                  {t("page.tools.static_glb_converter.texture_format_options.png")}
-                                </SelectItem>
-                                <SelectItem value="jpeg-safe">
-                                  {t(
-                                    "page.tools.static_glb_converter.texture_format_options.jpeg_safe",
-                                  )}
-                                </SelectItem>
-                                <SelectItem value="jpeg-force">
-                                  {t(
-                                    "page.tools.static_glb_converter.texture_format_options.jpeg_force",
-                                  )}
-                                </SelectItem>
+                                {textureFormatOptions.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
                               </SelectGroup>
                             </SelectContent>
                           </Select>

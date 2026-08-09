@@ -50,11 +50,6 @@ function RouteComponent() {
     return null;
   }
 
-  const nameSortPolicyLabels: Record<string, string> = {
-    natural_ignore_spacing: t("page.setting.drive.nameSortPolicy.options.natural_ignore_spacing"),
-    natural: t("page.setting.drive.nameSortPolicy.options.natural"),
-  };
-
   return (
     <div className="space-y-6 p-4">
       <Card>
@@ -75,12 +70,20 @@ function RouteComponent() {
             </div>
             <Select
               value={settings.nameSortPolicy}
+              items={[
+                {
+                  value: "natural_ignore_spacing",
+                  label: t("page.setting.drive.nameSortPolicy.options.natural_ignore_spacing"),
+                },
+                {
+                  value: "natural",
+                  label: t("page.setting.drive.nameSortPolicy.options.natural"),
+                },
+              ]}
               onValueChange={(value) => update("nameSortPolicy", value as DriveNameSortPolicy)}
             >
               <SelectTrigger className="w-52">
-                <SelectValue placeholder={t("page.setting.drive.nameSortPolicy.select")}>
-                  {(value) => nameSortPolicyLabels[value] ?? value}
-                </SelectValue>
+                <SelectValue placeholder={t("page.setting.drive.nameSortPolicy.select")} />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
