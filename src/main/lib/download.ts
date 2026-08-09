@@ -503,9 +503,10 @@ class FileDownloadTask {
             : {};
         const headers = { ...baseHeaders, ...linkHeaders } as Record<string, string>;
         const resumeFrom = options?.resumeFrom ?? 0;
-        const request = (requestHeaders: Record<string, string>) =>
-            this.requestLimiter.run(
-                () =>
+
+        await this.requestLimiter.run(
+            async () => {
+                const request = (requestHeaders: Record<string, string>) =>
                     ky(file.url, {
                         headers: requestHeaders,
                         signal,
@@ -513,86 +514,98 @@ class FileDownloadTask {
                         throwHttpErrors: false,
                         timeout: 100000,
                         retry: 0,
-                    }),
-                signal,
-            );
+                    });
 
-        let response = await request({
-            ...headers,
-            ...(resumeFrom > 0 && !file.compAlg ? { Range: `bytes=${resumeFrom}-` } : {}),
-        });
-        let append = resumeFrom > 0 && !file.compAlg;
+                let response = await request({
+                    ...headers,
+                    ...(resumeFrom > 0 && !file.compAlg ? { Range: `bytes=${resumeFrom}-` } : {}),
+                });
+                let append = resumeFrom > 0 && !file.compAlg;
 
-        if (append && response.status === 416) {
-            await drainWebStream(response.body, signal);
-            if (resumeFrom === file.size) return;
-            await fse.remove(targetPath).catch(() => {});
-            options?.onResumeReset?.();
-            response = await request(headers);
-            append = false;
-        }
+                if (append && response.status === 416) {
+                    await drainWebStream(response.body, signal);
+                    if (resumeFrom === file.size) return;
+                    await fse.remove(targetPath).catch(() => {});
+                    options?.onResumeReset?.();
+                    response = await request(headers);
+                    append = false;
+                }
 
-        if (!response.ok) {
-            await drainWebStream(response.body, signal);
-            throw new Error(`Download failed: ${response.statusText}`);
-        }
+                if (!response.ok) {
+                    await drainWebStream(response.body, signal);
+                    throw new Error(`Download failed: ${response.statusText}`);
+                }
 
-        if (append && response.status !== 206) {
-            await fse.remove(targetPath).catch(() => {});
-            options?.onResumeReset?.();
-            append = false;
-        }
+                if (append && response.status !== 206) {
+                    await fse.remove(targetPath).catch(() => {});
+                    options?.onResumeReset?.();
+                    append = false;
+                }
 
-        if (
-            append &&
-            !isExpectedContentRange(response.headers.get("Content-Range"), resumeFrom, file.size)
-        ) {
-            await drainWebStream(response.body, signal);
-            await fse.remove(targetPath).catch(() => {});
-            options?.onResumeReset?.();
-            response = await request(headers);
-            append = false;
+                if (
+                    append &&
+                    !isExpectedContentRange(
+                        response.headers.get("Content-Range"),
+                        resumeFrom,
+                        file.size,
+                    )
+                ) {
+                    await drainWebStream(response.body, signal);
+                    await fse.remove(targetPath).catch(() => {});
+                    options?.onResumeReset?.();
+                    response = await request(headers);
+                    append = false;
 
-            if (!response.ok) {
-                await drainWebStream(response.body, signal);
-                throw new Error(`Download failed: ${response.statusText}`);
-            }
-        }
+                    if (!response.ok) {
+                        await drainWebStream(response.body, signal);
+                        throw new Error(`Download failed: ${response.statusText}`);
+                    }
+                }
 
-        if (!response.body) throw new Error("No response body");
+                if (!response.body) throw new Error("No response body");
 
-        const fileStream = createWriteStream(targetPath, append ? { flags: "a" } : undefined);
-        const source = webStreamToNodeReadable(response.body, signal);
-        const bandwidth = createBandwidthLimitTransform(
-            this.desktop.service.transfer.downloadBandwidth,
-            {
-                signal,
-                onPhaseChange: options?.onPhaseChange,
+                const fileStream = createWriteStream(targetPath, append ? { flags: "a" } : undefined);
+                const source = webStreamToNodeReadable(response.body, signal);
+                const bandwidth = createBandwidthLimitTransform(
+                    this.desktop.service.transfer.downloadBandwidth,
+                    {
+                        signal,
+                        onPhaseChange: options?.onPhaseChange,
+                    },
+                );
+                const progress = new Transform({
+                    transform(chunk: Buffer, _encoding, callback) {
+                        options?.onProgress?.(chunk.byteLength);
+                        callback(null, chunk);
+                    },
+                });
+
+                try {
+                    if (file.compAlg === "gzip") {
+                        await pipeline(source, bandwidth, progress, createGunzip(), fileStream, {
+                            signal,
+                        });
+                    } else if (file.compAlg === "zstd") {
+                        await pipeline(
+                            source,
+                            bandwidth,
+                            progress,
+                            createZstdDecompress(),
+                            fileStream,
+                            {
+                                signal,
+                            },
+                        );
+                    } else {
+                        await pipeline(source, bandwidth, progress, fileStream, { signal });
+                    }
+                } catch (pipeErr) {
+                    fileStream.destroy();
+                    throw pipeErr;
+                }
             },
+            signal,
         );
-        const progress = new Transform({
-            transform(chunk: Buffer, _encoding, callback) {
-                options?.onProgress?.(chunk.byteLength);
-                callback(null, chunk);
-            },
-        });
-
-        try {
-            if (file.compAlg === "gzip") {
-                await pipeline(source, bandwidth, progress, createGunzip(), fileStream, {
-                    signal,
-                });
-            } else if (file.compAlg === "zstd") {
-                await pipeline(source, bandwidth, progress, createZstdDecompress(), fileStream, {
-                    signal,
-                });
-            } else {
-                await pipeline(source, bandwidth, progress, fileStream, { signal });
-            }
-        } catch (pipeErr) {
-            fileStream.destroy();
-            throw pipeErr;
-        }
     }
 
     private async getResumeOffset(

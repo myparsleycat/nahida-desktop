@@ -182,61 +182,62 @@ export class ParallelDownloader {
             Range: `bytes=${start}-${end}`,
         };
 
-        const response = await this.requestLimiter.run(
-            () =>
-                ky(url, {
+        await this.requestLimiter.run(
+            async () => {
+                const response = await ky(url, {
                     headers: requestHeaders,
                     fetch: networkFetch,
                     signal,
                     throwHttpErrors: false,
                     timeout: 100000,
                     retry: 0,
-                }),
+                });
+
+                if (response.status !== 206) {
+                    await drainWebStream(response.body, signal).catch(() => {});
+                    throw new Error(
+                        `Chunk download failed: expected 206 Partial Content, got ${response.statusText} (${response.status})`,
+                    );
+                }
+
+                if (!response.body) throw new Error("No response body");
+
+                const fileStream = fse.createWriteStream(chunkPath);
+                let transferredBytes = 0;
+                const source = webStreamToNodeReadable(response.body, signal);
+                const progressStream = new Transform({
+                    transform(chunk: Buffer, _encoding, callback) {
+                        transferredBytes += chunk.byteLength;
+                        onProgress?.(transferredBytes, chunk.byteLength);
+                        callback(null, chunk);
+                    },
+                });
+
+                try {
+                    if (bandwidthLimiter) {
+                        await pipeline(
+                            source,
+                            createBandwidthLimitTransform(bandwidthLimiter, {
+                                signal,
+                                onPhaseChange,
+                            }),
+                            progressStream,
+                            fileStream,
+                            { signal },
+                        );
+                    } else {
+                        await pipeline(source, progressStream, fileStream, { signal });
+                    }
+                } catch (pipeErr) {
+                    fileStream.destroy();
+                    if (!preservePartialOnAbort?.()) {
+                        await fse.remove(chunkPath).catch(() => {});
+                    }
+                    throw pipeErr;
+                }
+            },
             signal,
         );
-
-        if (response.status !== 206) {
-            await drainWebStream(response.body, signal).catch(() => {});
-            throw new Error(
-                `Chunk download failed: expected 206 Partial Content, got ${response.statusText} (${response.status})`,
-            );
-        }
-
-        if (!response.body) throw new Error("No response body");
-
-        const fileStream = fse.createWriteStream(chunkPath);
-        let transferredBytes = 0;
-        const source = webStreamToNodeReadable(response.body, signal);
-        const progressStream = new Transform({
-            transform(chunk: Buffer, _encoding, callback) {
-                transferredBytes += chunk.byteLength;
-                onProgress?.(transferredBytes, chunk.byteLength);
-                callback(null, chunk);
-            },
-        });
-
-        try {
-            if (bandwidthLimiter) {
-                await pipeline(
-                    source,
-                    createBandwidthLimitTransform(bandwidthLimiter, {
-                        signal,
-                        onPhaseChange,
-                    }),
-                    progressStream,
-                    fileStream,
-                    { signal },
-                );
-            } else {
-                await pipeline(source, progressStream, fileStream, { signal });
-            }
-        } catch (pipeErr) {
-            fileStream.destroy();
-            if (!preservePartialOnAbort?.()) {
-                await fse.remove(chunkPath).catch(() => {});
-            }
-            throw pipeErr;
-        }
     }
 
     private async combineChunks({
