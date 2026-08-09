@@ -433,9 +433,12 @@
             "continue_without_update": "不更新继续",
             "action": "更新"
           },
+          "tabs": {
+            "fix": "修复模组",
+            "rollback": "回滚"
+          },
           "options": {
             "title": "Wuwa Mod Fixer",
-            "rollback": "回滚最近的 Fix",
             "derived_hashes": {
               "label": "添加 Derived Hash",
               "description": "添加缺失的纹理状态哈希（例如：LOD Bias High/Medium、坎特蕾拉 wet、千咲 Enhanced E、爱弥斯 Charged），让角色模组纹理能够正确显示。部分角色可能尚未包含在内。"
@@ -448,6 +451,11 @@
               "label": "修复爱弥斯机甲形态",
               "description": "如果爱弥斯机甲模组本身已经正常，请不要启用此选项。不要重复应用同一个修复。"
             },
+            "rendering_33": {
+              "label": "模组破洞/部位缺失修复",
+              "description": "修复在游戏 3.3 版本后因为旧Mod中Color1的脏数据导致身体部位未显示或破洞的问题。",
+              "warning": "仅在模组存在身体部位缺失或网格破洞时启用！"
+            },
             "aero_fix": {
               "label": "Aero 女性漂泊者眼部 Fix",
               "description": "当共鸣能量充满时，如果眼部出现异常，可使用此选项。",
@@ -456,9 +464,35 @@
                 "texcoord_override": "TexCoord Override",
                 "texture_mirror_flip": "Texture Mirror Flip"
               },
-              "warning": "仅在模组确实存在这个问题时才启用。"
+              "warning": "仅在模组确实存在这个问题时才启用。",
+              "tip": "如果问题未解决，请回滚后再尝试其他方式。"
             },
             "run": "运行"
+          },
+          "rollback": {
+            "refresh": "同步",
+            "scanning": "正在扫描备份记录...",
+            "no_backups": "未找到备份文件（.BAK）",
+            "no_backups_short": "无备份",
+            "file_count": "已备份 {{n}} 个文件",
+            "latest_state": "最新还原点",
+            "restore": "回滚",
+            "confirm_restore": "执行回滚",
+            "warn_restore": "要将模组文件还原到此状态吗？",
+            "warn_clean_newer": "（将清除之后的 {{n}} 个较新备份）",
+            "backup_size_label": "备份大小：",
+            "success": "回滚已完成。",
+            "advanced": "高级",
+            "advanced_hint": "破坏性操作",
+            "restore_all": "还原到最早备份",
+            "restore_all_desc": "将所有文件还原到最早记录状态，并移除所有中间备份。",
+            "restore_all_action": "还原...",
+            "warn_delete_all": "全部 {{n}} 个备份将被移除",
+            "clean_backups": "删除所有备份文件",
+            "clean_backups_desc": "永久删除目标文件夹中的所有 .BAK 文件。此操作无法撤销。",
+            "clean_action": "删除...",
+            "warn_clean": "输入 WIPE 以确认：",
+            "clean_success": "已成功清除全部备份！"
           },
           "log": {
             "input_placeholder": "输入..."

@@ -1,14 +1,21 @@
 import crypto from "node:crypto";
 import path from "node:path";
+
 import type {
     GitHubRateState,
+    WuwaBackupGroup,
+    WuwaBackupSize,
     WuwaFixerOptions,
     WuwaFixerPrepareResult,
     WuwaFixerStatus,
 } from "@shared/types";
 import { app } from "electron";
+import fg from "fast-glob";
 import fse from "fs-extra";
+
 import type { NahidaDesktop } from "@/main";
+
+const BAK_RE = /^(.*)_(\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}(?:\.\d{3})?)\.BAK$/i;
 
 const WUWA_RELEASES_LATEST_URL =
     "https://api.github.com/repos/Moonholder/Wuwa_Mod_Fixer/releases/latest";
@@ -186,17 +193,115 @@ export class WuwaModFixer {
         });
     }
 
+    public async scanBackups(modPath: string): Promise<WuwaBackupGroup[]> {
+        await this.requireModPath(modPath, "wuwaFixer:scanBackups");
+
+        try {
+            return await this.collectBackupGroups(modPath);
+        } catch (error) {
+            this.desktop.logger.error(error, `wuwaFixer:scanBackups:${modPath}`);
+            throw error;
+        }
+    }
+
+    public async getBackupSize(modPath: string): Promise<WuwaBackupSize> {
+        await this.requireModPath(modPath, "wuwaFixer:getBackupSize");
+
+        try {
+            const bakPaths = await this.listBakFiles(modPath);
+            let bytes = 0;
+
+            for (const bakPath of bakPaths) {
+                const stats = await fse.stat(bakPath).catch(() => null);
+                if (!stats) {
+                    continue;
+                }
+
+                if (stats.size > 0) {
+                    bytes += stats.size;
+                    continue;
+                }
+
+                const match = BAK_RE.exec(path.basename(bakPath));
+                if (!match) {
+                    continue;
+                }
+
+                const originalStats = await fse
+                    .stat(path.join(path.dirname(bakPath), match[1]))
+                    .catch(() => null);
+                if (originalStats) {
+                    bytes += originalStats.size;
+                }
+            }
+
+            return { bytes, count: bakPaths.length };
+        } catch (error) {
+            this.desktop.logger.error(error, `wuwaFixer:getBackupSize:${modPath}`);
+            throw error;
+        }
+    }
+
+    public async rollbackToGroup(modPath: string, groupKey: string) {
+        await this.requireModPath(modPath, "wuwaFixer:rollbackToGroup");
+
+        try {
+            const groups = await this.collectBackupGroups(modPath);
+            const targetExists = groups.some((group) => group.groupKey === groupKey);
+            if (!targetExists) {
+                throw new Error(`Backup group not found: ${groupKey}`);
+            }
+
+            const candidates = groups
+                .filter((group) => group.groupKey >= groupKey)
+                .flatMap((group) => group.files);
+            const filesToDelete = candidates.map((file) => file.currentPath);
+            const earliestByOriginal = new Map<string, (typeof candidates)[number]>();
+
+            for (const file of candidates) {
+                const existing = earliestByOriginal.get(file.originalPath);
+                if (!existing || file.timestamp < existing.timestamp) {
+                    earliestByOriginal.set(file.originalPath, file);
+                }
+            }
+
+            for (const [originalPath, bak] of earliestByOriginal) {
+                const bakStats = await fse.stat(bak.currentPath).catch(() => null);
+                if (bakStats && bakStats.size === 0) {
+                    if (await fse.pathExists(originalPath)) {
+                        await fse.remove(originalPath);
+                    }
+                    continue;
+                }
+
+                await fse.copy(bak.currentPath, originalPath, { overwrite: true });
+            }
+
+            await Promise.all(filesToDelete.map((bakPath) => fse.remove(bakPath).catch(() => {})));
+        } catch (error) {
+            this.desktop.logger.error(error, `wuwaFixer:rollbackToGroup:${modPath}:${groupKey}`);
+            throw error;
+        }
+    }
+
+    public async cleanBackups(modPath: string) {
+        await this.requireModPath(modPath, "wuwaFixer:cleanBackups");
+
+        try {
+            const bakPaths = await this.listBakFiles(modPath);
+            await Promise.all(bakPaths.map((bakPath) => fse.remove(bakPath)));
+        } catch (error) {
+            this.desktop.logger.error(error, `wuwaFixer:cleanBackups:${modPath}`);
+            throw error;
+        }
+    }
+
     private buildCliArgs(modPath: string, configPath: string, options: WuwaFixerOptions) {
         if (options.derivedHashes && options.stableTexture) {
             throw new Error("Derived hashes and stable texture cannot be enabled together");
         }
 
         const args = ["--cli", "--path", modPath, "--config", configPath];
-
-        if (options.rollback) {
-            args.push("--rollback");
-            return args;
-        }
 
         if (options.derivedHashes) {
             args.push("--derived-hashes");
@@ -207,10 +312,60 @@ export class WuwaModFixer {
         if (options.aemeathMech) {
             args.push("--aemeath-mech");
         }
+        if (options.rendering33) {
+            args.push("--rendering-33");
+        }
         if (options.aeroFix !== "none") {
             args.push("--aero-fix", options.aeroFix);
         }
         return args;
+    }
+
+    private async requireModPath(modPath: string, action: string) {
+        if (!(await fse.pathExists(modPath))) {
+            const error = new Error("Destination path does not exist");
+            this.desktop.logger.error(error, `${action}:${modPath}`);
+            throw error;
+        }
+    }
+
+    private async listBakFiles(modPath: string) {
+        return await fg("**/*.BAK", {
+            cwd: modPath,
+            absolute: true,
+            onlyFiles: true,
+            caseSensitiveMatch: false,
+            dot: true,
+            suppressErrors: true,
+        });
+    }
+
+    private async collectBackupGroups(modPath: string): Promise<WuwaBackupGroup[]> {
+        const bakPaths = await this.listBakFiles(modPath);
+        const filesByGroup = new Map<string, WuwaBackupGroup["files"]>();
+
+        for (const bakPath of bakPaths) {
+            const match = BAK_RE.exec(path.basename(bakPath));
+            if (!match) {
+                continue;
+            }
+
+            const originalName = match[1];
+            const fullTimestamp = match[2];
+            const groupKey = fullTimestamp.slice(0, 16);
+            const files = filesByGroup.get(groupKey) ?? [];
+            files.push({
+                currentPath: bakPath,
+                originalPath: path.join(path.dirname(bakPath), originalName),
+                timestamp: fullTimestamp,
+                groupKey,
+            });
+            filesByGroup.set(groupKey, files);
+        }
+
+        return [...filesByGroup.entries()]
+            .map(([groupKey, files]) => ({ groupKey, files }))
+            .sort((left, right) => right.groupKey.localeCompare(left.groupKey));
     }
 
     private async ensureLatestConfig() {

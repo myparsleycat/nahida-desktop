@@ -436,9 +436,12 @@
             "continue_without_update": "업데이트 없이 계속",
             "action": "업데이트"
           },
+          "tabs": {
+            "fix": "모드 수정",
+            "rollback": "롤백"
+          },
           "options": {
             "title": "Wuwa Mod Fixer",
-            "rollback": "최근 픽스 롤백",
             "derived_hashes": {
               "label": "Derived Hash 추가",
               "description": "누락된 텍스처 상태 해시(예: LOD Bias High/Medium, 칸타렐라 wet, 치사 Enhanced E, 에이메스 Charged)를 추가해 캐릭터 모드 텍스처가 올바르게 표시되도록 합니다. 일부 캐릭터는 아직 포함되지 않을 수 있습니다."
@@ -451,6 +454,11 @@
               "label": "에이메스 메카 폼 수정",
               "description": "이미 정상인 에이메스 메카 모드에는 이 옵션을 켜지 마세요. 같은 수정을 다시 적용하면 안 됩니다."
             },
+            "rendering_33": {
+              "label": "3.3 버전 이후 모드 수정 (메쉬 구멍/부위 누락)",
+              "description": "게임 3.3+ 이후 구 WWMI 내보내기 데이터의 Color1 더티데이터로 인해 신체 부위가 표시되지 않거나 파손되는 문제를 수정합니다.",
+              "warning": "신체 부위 누락이나 메쉬 구멍이 있는 모드에서만 활성화하세요!"
+            },
             "aero_fix": {
               "label": "Aero 여성 방랑자 눈 Fix",
               "description": "공명 에너지가 가득 찼을 때 눈이 깨지는 문제가 있는 경우 사용합니다.",
@@ -459,9 +467,35 @@
                 "texcoord_override": "TexCoord Override",
                 "texture_mirror_flip": "Texture Mirror Flip"
               },
-              "warning": "해당 문제가 실제로 있는 모드에서만 활성화하세요."
+              "warning": "해당 문제가 실제로 있는 모드에서만 활성화하세요.",
+              "tip": "문제가 해결되지 않으면 롤백한 뒤 다른 방식으로 시도해보세요."
             },
             "run": "실행"
+          },
+          "rollback": {
+            "refresh": "동기화",
+            "scanning": "백업 기록을 스캔하는 중...",
+            "no_backups": "백업 파일(.BAK)을 찾을 수 없습니다",
+            "no_backups_short": "백업 없음",
+            "file_count": "백업 파일 {{n}}개",
+            "latest_state": "최신 복원 지점",
+            "restore": "롤백",
+            "confirm_restore": "롤백 실행",
+            "warn_restore": "모드 파일을 이 상태로 되돌릴까요?",
+            "warn_clean_newer": "(이후 백업 {{n}}개가 삭제됩니다)",
+            "backup_size_label": "백업 용량:",
+            "success": "롤백이 완료되었습니다.",
+            "advanced": "고급",
+            "advanced_hint": "파괴적 작업",
+            "restore_all": "가장 오래된 백업으로 복원",
+            "restore_all_desc": "모든 파일을 가장 오래된 기록 상태로 되돌리고 중간 백업을 모두 제거합니다.",
+            "restore_all_action": "복원...",
+            "warn_delete_all": "백업 {{n}}개가 모두 제거됩니다",
+            "clean_backups": "모든 백업 파일 삭제",
+            "clean_backups_desc": "대상 폴더의 모든 .BAK 파일을 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.",
+            "clean_action": "삭제...",
+            "warn_clean": "확인하려면 WIPE를 입력하세요:",
+            "clean_success": "백업 파일을 모두 삭제했습니다!"
           },
           "log": {
             "input_placeholder": "입력..."
