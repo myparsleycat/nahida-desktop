@@ -83,13 +83,18 @@ function getGroupName(groupPath: string) {
   return groupPath.slice(separatorIndex + 1);
 }
 
-function getParentGroup(parentGroupPath: string | null, groupsByPath: Map<string, FolderGroup>) {
+function getParentGroup(
+  parentGroupPath: string | null,
+  groupsByPath: Map<string, FolderGroup>,
+  itemRefs: Map<string, { element: HTMLElement; group: FolderGroup }>,
+) {
   if (!parentGroupPath) {
     return null;
   }
 
   return (
-    groupsByPath.get(parentGroupPath) ?? {
+    groupsByPath.get(parentGroupPath) ??
+    itemRefs.get(parentGroupPath)?.group ?? {
       name: getGroupName(parentGroupPath),
       path: parentGroupPath,
       mods: [],
@@ -369,7 +374,11 @@ export const CharacterSidebar = memo(function CharacterSidebar({
   const handleManualSubGroupChange = useCallback(
     async (group: FolderGroup, enabled: boolean) => {
       const parentGroupPath = getParentGroupPath(group.path);
-      const parentGroup = getParentGroup(parentGroupPath, groupsByPathRef.current);
+      const parentGroup = getParentGroup(
+        parentGroupPath,
+        groupsByPathRef.current,
+        itemRefs.current,
+      );
 
       await window.api
         .invoke("mod:setManualSubGroup", group.path, enabled)

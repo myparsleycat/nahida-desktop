@@ -122,8 +122,12 @@ export function collectManualSubGroupPaths(
 ) {
     const paths: string[] = [];
     const seen = new Set<string>();
+    const visited = new Set<string>();
 
     const visit = (group: FolderGroup) => {
+        if (visited.has(group.path)) return;
+        visited.add(group.path);
+
         const shouldFetchSubGroups =
             options.expandedGroups.has(group.path) ||
             (options.isSearching && options.persistentGroups.has(group.path));

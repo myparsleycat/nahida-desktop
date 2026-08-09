@@ -32,7 +32,7 @@ export class DesktopHttpService {
 
     public async fetcher(url: string, options?: FetcherOptions) {
         const isNHD = this.isNHD(url);
-        const isSessionRequest = new URL(url).pathname === "/api/auth/get-session";
+        const isSessionRequest = URL.parse(url)?.pathname === "/api/auth/get-session";
         const headers = {
             ...(options?.headers instanceof Headers
                 ? Object.fromEntries(options.headers.entries())

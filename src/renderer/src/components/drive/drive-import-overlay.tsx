@@ -110,7 +110,7 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
 
   const copyOperationIdRef = useRef<string | undefined>(undefined);
   const isPendingRef = useRef(false);
-  const isModUrl = /^https:\/\/(?:www\.)?nahida\.live\/akasha\/mod\//i.test(url.trim());
+  const isModSource = sourceInfo?.source === "mod";
   const urlInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
   const loadSeqRef = useRef(0);
@@ -913,7 +913,7 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
                   </div>
                 </div>
 
-                {isModUrl && (
+                {isModSource && (
                   <label className="flex cursor-pointer items-center gap-2 text-sm">
                     <Checkbox
                       checked={createCollectionFolders}

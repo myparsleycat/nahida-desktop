@@ -139,11 +139,12 @@ export function CharacterSidebarRow({
       lastScrolledPathRef.current = selectedGroupPath;
       return;
     }
-    requestAnimationFrame(() => {
+    const frame = requestAnimationFrame(() => {
       if (scrollToPath(selectedGroupPath)) {
         lastScrolledPathRef.current = selectedGroupPath;
       }
     });
+    return () => cancelAnimationFrame(frame);
   }, [pathToIndex, scrollToPath, selectedGroupPath]);
 
   const handleItemClick = useCallback(

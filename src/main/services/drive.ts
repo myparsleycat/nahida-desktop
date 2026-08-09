@@ -117,6 +117,7 @@ export class DriveService {
     private readonly download: Download;
     private readonly upload: Upload;
     private readonly copyOperations = new Map<string, CopyOperation>();
+    private readonly collectionFolderCreates = new Map<string, Promise<string>>();
 
     public constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
@@ -955,10 +956,10 @@ export class DriveService {
     }
 
     private async requestModOverview(modId: string, signal: AbortSignal, password?: string) {
-        const normalizedPassword = password?.trim() ?? "";
+        const hasPassword = Boolean(password?.trim());
         const requestUrl = new URL(`${BACKEND_URL}/akasha/mod/${encodeURIComponent(modId)}`);
-        if (normalizedPassword) {
-            requestUrl.searchParams.set("password", encodeNahidaPassword(normalizedPassword));
+        if (hasPassword && password) {
+            requestUrl.searchParams.set("password", encodeNahidaPassword(password));
         }
         try {
             const response = await this.requestJsonWithHeaders<unknown>(
@@ -1006,7 +1007,7 @@ export class DriveService {
                 );
             }
             if (
-                normalizedPassword &&
+                hasPassword &&
                 error instanceof DriveApiError &&
                 error.status === 500 &&
                 message.includes("internal server error")
@@ -1046,19 +1047,42 @@ export class DriveService {
     }
 
     private async getOrCreateCollectionFolder(parentId: string, name: string, signal: AbortSignal) {
+        const sanitized = this.desktop.lib.fs.sanitizeWindowsFilename(name);
+        const key = `${parentId}\0${sanitized.toLowerCase()}`;
+        const previous = this.collectionFolderCreates.get(key) ?? Promise.resolve();
+        const createPromise = previous
+            .catch(() => {})
+            .then(() => this.createCollectionFolder(parentId, sanitized, signal));
+        this.collectionFolderCreates.set(key, createPromise);
+        try {
+            return await createPromise;
+        } finally {
+            if (this.collectionFolderCreates.get(key) === createPromise) {
+                this.collectionFolderCreates.delete(key);
+            }
+        }
+    }
+
+    private async createCollectionFolder(parentId: string, name: string, signal: AbortSignal) {
         if (signal.aborted) throw this.createCopyCanceledError();
         const current = await this.get.item(parentId);
-        const existing = (current.children ?? []).find(
-            (child) => child.isDir && child.name === name,
-        );
+        const existing = findCollectionFolder(current.children ?? [], name);
         if (existing) return existing.id;
 
+        const beforeIds = new Set(
+            (current.children ?? []).flatMap((child) => (child.isDir ? [child.id] : [])),
+        );
         await this.post.dir(parentId, name, signal);
         if (signal.aborted) throw this.createCopyCanceledError();
         const updated = await this.get.item(parentId);
-        const created = (updated.children ?? []).find(
-            (child) => child.isDir && child.name === name,
-        );
+        const children = updated.children ?? [];
+        const created =
+            children.find(
+                (child) =>
+                    child.isDir &&
+                    !beforeIds.has(child.id) &&
+                    isCollectionFolderName(child.name, name),
+            ) ?? findCollectionFolder(children, name);
         if (created) return created.id;
 
         throw new DriveApiError(
@@ -1166,6 +1190,7 @@ export class DriveService {
             copiedFiles: itemIndex,
         });
 
+        const preexistingChildIds = await this.listDestinationChildIds(destinationId, signal);
         const response = await networkFetch(requestUrl, { headers, signal });
         if (!response.ok) {
             if (isBackendUnavailableStatus(response.status)) {
@@ -1203,7 +1228,13 @@ export class DriveService {
                 const serverMessage = remoteImportErrorMessage(data);
                 if (
                     expectedSize !== undefined &&
-                    (await this.hasRemoteImportResult(destinationId, expectedSize, signal))
+                    (await this.hasRemoteImportResult(
+                        destinationId,
+                        expectedSize,
+                        signal,
+                        preexistingChildIds,
+                        sourceName,
+                    ))
                 ) {
                     this.desktop.logger.warn(
                         {
@@ -1265,13 +1296,62 @@ export class DriveService {
         return 1;
     }
 
+    private async listDestinationChildIds(destinationId: string, signal: AbortSignal) {
+        if (signal.aborted) throw this.createCopyCanceledError();
+        try {
+            const item = await this.get.item(destinationId);
+            return new Set((item.children ?? []).map((child) => child.id));
+        } catch (error) {
+            this.desktop.logger.warn(
+                {
+                    destinationId,
+                    error: toErrorMessage(error),
+                    stage: "list-destination-children",
+                },
+                "Drive:CopyFromUrl:ListDestinationChildrenFailed",
+            );
+            return new Set<string>();
+        }
+    }
+
     private async hasRemoteImportResult(
         destinationId: string,
         expectedSize: number,
         signal: AbortSignal,
+        preexistingChildIds: Set<string>,
+        sourceName: string,
     ) {
-        const pendingIds = [destinationId];
-        const visitedIds = new Set<string>();
+        if (signal.aborted) throw this.createCopyCanceledError();
+
+        let destination: DriveItem;
+        try {
+            destination = await this.get.item(destinationId);
+        } catch (error) {
+            this.desktop.logger.warn(
+                {
+                    destinationId,
+                    expectedSize,
+                    error: toErrorMessage(error),
+                    stage: "verify-server-copy",
+                },
+                "Drive:CopyFromUrl:ServerImportVerificationFailed",
+            );
+            return false;
+        }
+        if (signal.aborted) throw this.createCopyCanceledError();
+
+        const newDirectories = (destination.children ?? []).filter(
+            (child) =>
+                child.isDir &&
+                !preexistingChildIds.has(child.id) &&
+                isCollectionFolderName(child.name, sourceName),
+        );
+        if (newDirectories.some((child) => Number(child.size) === expectedSize)) return true;
+
+        const pendingIds = newDirectories
+            .filter((child) => Number(child.size) > expectedSize)
+            .map((child) => child.id);
+        const visitedIds = new Set<string>([destinationId]);
 
         while (pendingIds.length > 0 && visitedIds.size < 128) {
             if (signal.aborted) throw this.createCopyCanceledError();
@@ -2209,4 +2289,16 @@ function normalizeContentItem(raw: Record<string, unknown>): DriveImportContent 
         createdAt: raw.createdAt ? new Date(String(raw.createdAt)) : new Date(),
         updatedAt: raw.updatedAt ? new Date(String(raw.updatedAt)) : new Date(),
     };
+}
+
+function isCollectionFolderName(actual: string, expected: string) {
+    if (actual === expected) return true;
+    return actual.startsWith(`${expected} (`) && /^ \(\d+\)$/.test(actual.slice(expected.length));
+}
+
+function findCollectionFolder(
+    children: Array<{ id: string; name: string; isDir: boolean }>,
+    name: string,
+) {
+    return children.find((child) => child.isDir && child.name === name);
 }
