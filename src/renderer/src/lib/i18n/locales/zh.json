@@ -1284,6 +1284,13 @@
       },
       "tools": {
         "title": "工具",
+        "wuwaFixer": {
+          "title": "Wuwa Mod Fixer",
+          "autoUpdateNotification": {
+            "title": "更新通知",
+            "description": "有 Wuwa Mod Fixer 更新时显示通知。即使关闭通知，每小时一次的后台自动更新仍会继续进行。"
+          }
+        },
         "touch_profile": {
           "title": "触摸配置",
           "llm": {

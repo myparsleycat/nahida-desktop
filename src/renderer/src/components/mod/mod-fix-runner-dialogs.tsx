@@ -757,7 +757,7 @@ function BackupGroupCard({
 }
 
 function formatGroupKey(key: string) {
-  return key.replace(/(\d{2})-(\d{2})-(\d{2})$/, "$1:$2:$3");
+  return key.replace(/ (\d{2})-(\d{2})$/, " $1:$2");
 }
 
 function formatBackupSize(bytes: number) {

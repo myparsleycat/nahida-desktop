@@ -531,6 +531,12 @@ export class Setting {
                 normalize: (value) =>
                     isTouchProfileLlmReasoning(value) ? value : DEFAULT_TOUCH_PROFILE_LLM_REASONING,
             },
+            "tools.wuwaFixerUpdateNotification": {
+                definition: APP_SETTINGS["tools.wuwaFixerUpdateNotification"],
+                getDefault: () => true,
+                fromStored: (value) => parseBooleanSetting(value, true),
+                toStored: (value) => String(value),
+            },
             "transfer.downloadConcurrency": {
                 definition: APP_SETTINGS["transfer.downloadConcurrency"],
                 getDefault: () => TRANSFER_DOWNLOAD_CONCURRENCY_DEFAULT,

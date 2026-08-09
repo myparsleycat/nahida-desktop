@@ -42,6 +42,7 @@ export interface AppSettings {
     "tools.touchProfileLlmEndpoint": string;
     "tools.touchProfileLlmModel": string;
     "tools.touchProfileLlmReasoning": TouchProfileLlmReasoning;
+    "tools.wuwaFixerUpdateNotification": boolean;
 
     "transfer.downloadConcurrency": number;
     "transfer.downloadBandwidthLimitMibps": number;
@@ -234,6 +235,11 @@ export const APP_SETTINGS = {
         publicKey: "tools.touchProfileLlmReasoning",
         scope: "tools",
         storageKey: "tools_touch_profile_llm_reasoning",
+    },
+    "tools.wuwaFixerUpdateNotification": {
+        publicKey: "tools.wuwaFixerUpdateNotification",
+        scope: "tools",
+        storageKey: "tools_wuwa_fixer_update_notification",
     },
 
     "transfer.downloadConcurrency": {

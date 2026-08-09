@@ -1304,6 +1304,13 @@
       },
       "tools": {
         "title": "도구",
+        "wuwaFixer": {
+          "title": "Wuwa Mod Fixer",
+          "autoUpdateNotification": {
+            "title": "업데이트 알림",
+            "description": "Wuwa Mod Fixer 업데이트가 있을 때 알림을 표시합니다. 알림을 꺼도 1시간마다 백그라운드 자동 업데이트는 계속 진행됩니다."
+          }
+        },
         "touch_profile": {
           "title": "터치 프로필",
           "llm": {

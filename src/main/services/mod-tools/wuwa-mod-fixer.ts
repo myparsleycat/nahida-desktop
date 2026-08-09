@@ -9,7 +9,7 @@ import type {
     WuwaFixerPrepareResult,
     WuwaFixerStatus,
 } from "@shared/types";
-import { app } from "electron";
+import { app, Notification } from "electron";
 import fg from "fast-glob";
 import fse from "fs-extra";
 
@@ -23,6 +23,7 @@ const WUWA_CONFIG_URL =
     "https://raw.githubusercontent.com/Moonholder/Wuwa_Mod_Fixer/refs/heads/main/config.json";
 const WUWA_FIXER_DIR_NAME = "wuwa-mod-fixer";
 const WUWA_CHECK_COOLDOWN_MS = 2 * 60 * 1000;
+const WUWA_AUTO_UPDATE_INTERVAL_MS = 60 * 60 * 1000;
 const LAST_CHECK_KEY = "github:wuwa-mod-fixer:last-check";
 const INSTALLED_VERSION_KEY = "mod_tools:wuwa-mod-fixer:installed-version";
 const BINARY_PATH_KEY = "mod_tools:wuwa-mod-fixer:binary-path";
@@ -50,10 +51,60 @@ type WuwaReleaseResponse = {
 };
 
 export class WuwaModFixer {
+    private autoUpdateInterval: ReturnType<typeof setInterval> | undefined;
+
     constructor(private readonly desktop: NahidaDesktop) {}
 
     public async getRateStatus() {
         return await this.desktop.githubRate.getRateState();
+    }
+
+    public startAutoUpdateCheck(): void {
+        this.stopAutoUpdateCheck();
+        void this.runAutomaticUpdateCheck();
+        this.autoUpdateInterval = setInterval(
+            () => void this.runAutomaticUpdateCheck(),
+            WUWA_AUTO_UPDATE_INTERVAL_MS,
+        );
+    }
+
+    public stopAutoUpdateCheck(): void {
+        clearInterval(this.autoUpdateInterval);
+        this.autoUpdateInterval = undefined;
+    }
+
+    private async runAutomaticUpdateCheck(): Promise<void> {
+        try {
+            const installed = await this.getInstalledBinaryInfo();
+            if (!installed.exists) return;
+
+            const remoteResult = await this.refreshLatestReleaseIfNeeded({ force: true });
+            const latestVersion = remoteResult.latestRelease?.version;
+            if (
+                !latestVersion ||
+                !installed.version ||
+                this.compareVersions(latestVersion, installed.version) <= 0
+            ) {
+                return;
+            }
+
+            await this.installOrUpdate();
+
+            const notify = await this.desktop.setting.get("tools.wuwaFixerUpdateNotification");
+            if (!notify) return;
+
+            const description = `v${installed.version} → v${latestVersion}`;
+            this.desktop.ipc.broadcast("fn:toast", "Wuwa Mod Fixer updated", { description });
+            new Notification({
+                title: "Wuwa Mod Fixer updated",
+                body: description,
+            }).show();
+        } catch (error) {
+            this.desktop.logger.warn(
+                `Automatic Wuwa Mod Fixer update check failed: ${String(error)}`,
+                "WuwaModFixer",
+            );
+        }
     }
 
     public async getStatus(importer: string | null = null): Promise<WuwaFixerStatus> {

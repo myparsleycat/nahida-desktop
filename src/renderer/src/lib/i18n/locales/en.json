@@ -1318,6 +1318,13 @@
       },
       "tools": {
         "title": "Tools",
+        "wuwaFixer": {
+          "title": "Wuwa Mod Fixer",
+          "autoUpdateNotification": {
+            "title": "Update Notifications",
+            "description": "Show a notification when a Wuwa Mod Fixer update is available. Background auto-update runs every hour regardless of this setting."
+          }
+        },
         "touch_profile": {
           "title": "Touch Profile",
           "llm": {

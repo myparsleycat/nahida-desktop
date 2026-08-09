@@ -1285,6 +1285,13 @@
       },
       "tools": {
         "title": "ツール",
+        "wuwaFixer": {
+          "title": "Wuwa Mod Fixer",
+          "autoUpdateNotification": {
+            "title": "更新通知",
+            "description": "Wuwa Mod Fixer の更新がある際に通知を表示します。通知をオフにしても、1時間ごとのバックグラウンド自動更新は継続されます。"
+          }
+        },
         "touch_profile": {
           "title": "タッチプロファイル",
           "llm": {

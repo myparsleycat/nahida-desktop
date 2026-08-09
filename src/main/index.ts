@@ -221,6 +221,7 @@ export class NahidaDesktop {
         this.updater.initialize();
         await this.service.xxmi.init();
         this.service.backendConnectivity.start();
+        this.service.modTools.wuwaModFixer.startAutoUpdateCheck();
 
         const logLevel = await this.setting.general.getLogLevel();
         this.logger.setLevel(logLevel);
