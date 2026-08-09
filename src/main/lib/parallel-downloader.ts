@@ -10,6 +10,11 @@ import type { BandwidthLimiter } from "./bandwidth-limiter";
 import { networkFetch } from "../internal/network-fetch";
 import { createBandwidthLimitTransform } from "./bandwidth-limit-stream";
 import {
+    downloadRequestLimiter,
+    rangeProbeLimiter,
+    type DownloadRequestLimiter,
+} from "./download-request-limiter";
+import {
     isAbortError,
     SLOW_CHUNK_MAX_RECONNECTS,
     sleepWithAbort,
@@ -34,6 +39,8 @@ export interface ParallelDownloadOptions {
     cohortKey?: string;
 }
 
+const RANGE_SUPPORT_CACHE_TTL_MS = 5 * 60 * 1000;
+
 type SegmentStatus = "pending" | "running" | "completed";
 
 type Segment = {
@@ -56,6 +63,9 @@ const createAbortError = (message = "Aborted") => {
 
 export class ParallelDownloader {
     private readonly minSegmentSize = 4 * 1024 * 1024;
+    private readonly requestLimiter: DownloadRequestLimiter;
+    private readonly rangeProbeLimiter: DownloadRequestLimiter;
+    private readonly rangeSupportCache = new Map<string, { expiresAt: number; value: boolean }>();
 
     constructor(
         private options: {
@@ -64,27 +74,59 @@ export class ParallelDownloader {
                 warn: (msg: string, ...args: any[]) => void;
             };
             getHeaders: (url: string) => Promise<Record<string, string>>;
+            requestLimiter?: DownloadRequestLimiter;
+            rangeProbeLimiter?: DownloadRequestLimiter;
         },
-    ) {}
+    ) {
+        this.requestLimiter = options.requestLimiter ?? downloadRequestLimiter;
+        this.rangeProbeLimiter = options.rangeProbeLimiter ?? rangeProbeLimiter;
+    }
 
     public async checkRangeSupport(
         url: string,
         headers?: Record<string, string>,
+        signal?: AbortSignal,
     ): Promise<boolean> {
-        try {
-            const response = await ky.head(url, {
-                headers: {
-                    ...(await this.options.getHeaders(url)),
-                    ...headers,
-                },
-                fetch: networkFetch,
-                timeout: 10000,
-                throwHttpErrors: false,
+        const cacheKey = getRangeSupportCacheKey(url);
+        const cached = this.rangeSupportCache.get(cacheKey);
+        if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+        const rangeSupported = await this.requestRangeSupport(url, headers, signal);
+        if (rangeSupported) {
+            this.rangeSupportCache.set(cacheKey, {
+                expiresAt: Date.now() + RANGE_SUPPORT_CACHE_TTL_MS,
+                value: true,
             });
+        }
+        return rangeSupported;
+    }
+
+    private async requestRangeSupport(
+        url: string,
+        headers?: Record<string, string>,
+        signal?: AbortSignal,
+    ) {
+        try {
+            const response = await this.rangeProbeLimiter.run(
+                async () =>
+                    ky.head(url, {
+                        headers: {
+                            ...(await this.options.getHeaders(url)),
+                            ...headers,
+                        },
+                        fetch: networkFetch,
+                        signal,
+                        timeout: 10000,
+                        throwHttpErrors: false,
+                        retry: 0,
+                    }),
+                signal,
+            );
 
             const acceptRanges = response.headers.get("Accept-Ranges");
             return acceptRanges === "bytes";
-        } catch {
+        } catch (error) {
+            if (signal?.aborted) throw error;
             return false;
         }
     }
@@ -135,20 +177,23 @@ export class ParallelDownloader {
         onPhaseChange?: (phase: "network" | "bandwidth-wait") => void;
     }): Promise<void> {
         const requestHeaders: Record<string, string> = {
-            Range: `bytes=${start}-${end}`,
+            ...(await this.options.getHeaders(url)),
             ...headers,
+            Range: `bytes=${start}-${end}`,
         };
 
-        const response = await ky(url, {
-            headers: {
-                ...(await this.options.getHeaders(url)),
-                ...requestHeaders,
-            },
-            fetch: networkFetch,
+        const response = await this.requestLimiter.run(
+            () =>
+                ky(url, {
+                    headers: requestHeaders,
+                    fetch: networkFetch,
+                    signal,
+                    throwHttpErrors: false,
+                    timeout: 100000,
+                    retry: 0,
+                }),
             signal,
-            throwHttpErrors: false,
-            timeout: 100000,
-        });
+        );
 
         if (response.status !== 206) {
             await drainWebStream(response.body, signal).catch(() => {});
@@ -655,5 +700,14 @@ export class ParallelDownloader {
             await fse.remove(targetPath).catch(() => {});
             throw err;
         }
+    }
+}
+
+function getRangeSupportCacheKey(url: string) {
+    try {
+        const parsed = new URL(url);
+        return `${parsed.origin}${parsed.pathname}`;
+    } catch {
+        return url;
     }
 }

@@ -10,6 +10,7 @@ import { nanoid } from "nanoid";
 
 import type { NahidaDesktop } from "../..";
 
+import { customDownloadRequestLimiter } from "../download-request-limiter";
 import {
     type ModDownloadMetadataInput,
     writeModDownloadMetadataToDirectories,
@@ -89,6 +90,7 @@ export class CustomDownloader {
         this.downloader = new ParallelDownloader({
             logger: desktop.logger,
             getHeaders: (url: string) => this.desktop.httpService.getHeaders(url),
+            requestLimiter: customDownloadRequestLimiter,
         });
     }
 
@@ -221,11 +223,15 @@ export class CustomDownloader {
         const resp = await ky.head(trimmedUrl, {
             redirect: "follow",
             throwHttpErrors: false,
+            retry: { limit: 2 },
             headers: await this.desktop.httpService.getHeaders(trimmedUrl),
         });
 
         const realFileUrl = resp.ok ? resp.url : trimmedUrl;
         const fileSize = parseContentLength(resp.headers.get("Content-Length"));
+        const supportsRange = resp.ok
+            ? resp.headers.get("Accept-Ranges")?.toLowerCase() === "bytes"
+            : undefined;
         const suggestedFileName = parseDownloadFileName(
             realFileUrl,
             this.sanitize.bind(this),
@@ -290,6 +296,7 @@ export class CustomDownloader {
                     url: realFileUrl,
                     savePath,
                     fileSize,
+                    supportsRange,
                     signal: abortController.signal,
                     onProgress: (bytes) => {
                         downloadedBytes += bytes;
@@ -436,6 +443,7 @@ export class CustomDownloader {
                     const response = await ky.head(fileUrl, {
                         redirect: "follow",
                         throwHttpErrors: false,
+                        retry: { limit: 2 },
                         headers: await this.desktop.httpService.getHeaders(fileUrl),
                     });
 
@@ -463,6 +471,7 @@ export class CustomDownloader {
 
             const realFileUrl = resp.url;
             const fileSize = parseContentLength(resp.headers.get("Content-Length"));
+            const supportsRange = resp.headers.get("Accept-Ranges")?.toLowerCase() === "bytes";
             const suggestedFileName = parseDownloadFileName(
                 realFileUrl,
                 this.sanitize.bind(this),
@@ -565,6 +574,7 @@ export class CustomDownloader {
                         url: realFileUrl,
                         savePath: stagedDownloadPath,
                         fileSize,
+                        supportsRange,
                         signal: abortController.signal,
                         onProgress: (bytes) => {
                             downloadedBytes += bytes;
@@ -760,6 +770,7 @@ export class CustomDownloader {
         const resp = await ky.head(fileUrl, {
             redirect: "follow",
             throwHttpErrors: false,
+            retry: { limit: 2 },
             headers: await this.desktop.httpService.getHeaders(fileUrl),
         });
         if (!resp.ok) {
@@ -772,6 +783,7 @@ export class CustomDownloader {
             this.sanitize.bind(this),
         );
         const fileSize = parseContentLength(resp.headers.get("Content-Length"));
+        const supportsRange = resp.headers.get("Accept-Ranges")?.toLowerCase() === "bytes";
 
         const pid = nanoid();
         const abortController = new AbortController();
@@ -822,6 +834,7 @@ export class CustomDownloader {
                     url: fileUrl,
                     savePath: stagedDownloadPath,
                     fileSize,
+                    supportsRange,
                     signal: abortController.signal,
                     onProgress: (bytes) => {
                         downloadedBytes += bytes;

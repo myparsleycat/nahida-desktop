@@ -10,7 +10,7 @@ import { BACKEND_URL } from "@shared/const";
 import type { TransferData } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import { decode } from "cbor-x";
-import { chunk, retry, throttle } from "es-toolkit";
+import { chunk, retry, throttle, uniqBy } from "es-toolkit";
 import fse from "fs-extra";
 import ky from "ky";
 import PQueue from "p-queue";
@@ -22,6 +22,7 @@ import { networkFetch } from "../internal/network-fetch";
 import { createDriveApiError, isBackendUnavailableStatus } from "../services/drive-errors";
 import { createBandwidthLimitTransform } from "./bandwidth-limit-stream";
 import { zstdDecompressAsync } from "./compressor";
+import { downloadRequestLimiter, type DownloadRequestLimiter } from "./download-request-limiter";
 import { ParallelDownloader } from "./parallel-downloader";
 import {
     isAbortError,
@@ -60,6 +61,7 @@ export type DownloadMetadata = {
 
 export const BATCH_ROOT_ID = "batch-root";
 const FILE_ID_BATCH_LIMIT = 100;
+const PARALLEL_DOWNLOAD_THRESHOLD = 20 * 1024 * 1024;
 
 function isExpectedContentRange(value: string | null, resumeFrom: number, fileSize: number) {
     const match = /^bytes\s+(\d+)-(\d+)\/(\d+)$/i.exec(value ?? "");
@@ -329,10 +331,14 @@ class DownloadFileSystem {
 class FileDownloadTask {
     private parallelDownloader: ParallelDownloader;
 
-    constructor(private readonly desktop: NahidaDesktop) {
+    constructor(
+        private readonly desktop: NahidaDesktop,
+        private readonly requestLimiter: DownloadRequestLimiter = downloadRequestLimiter,
+    ) {
         this.parallelDownloader = new ParallelDownloader({
             logger: this.desktop.logger,
             getHeaders: (url: string) => this.desktop.httpService.getHeaders(url),
+            requestLimiter: this.requestLimiter,
         });
     }
 
@@ -360,13 +366,18 @@ class FileDownloadTask {
         const isSmallFile = file.size < 1024 * 1024;
         const targetPath = isSmallFile ? filePath : `${filePath}.ntmp`;
 
-        const parallelResult = await this.tryParallelDownload(
-            file,
-            filePath,
-            signal,
-            onProgress,
-            link,
-        );
+        const resumeSize = await fse
+            .stat(targetPath)
+            .then(({ size }) => size)
+            .catch(() => 0);
+        const canUseParallel = file.size >= PARALLEL_DOWNLOAD_THRESHOLD && !file.compAlg;
+        const hasResumeState = resumeSize > 0;
+
+        // Keep meaningful resume work, but let a tiny stale partial use parallel download.
+        const parallelResult =
+            hasResumeState && (!canUseParallel || resumeSize >= PARALLEL_DOWNLOAD_THRESHOLD)
+                ? false
+                : await this.tryParallelDownload(file, filePath, signal, onProgress, link);
         if (parallelResult) {
             onComplete();
             return;
@@ -391,7 +402,6 @@ class FileDownloadTask {
         onProgress?: (bytes: number) => void,
         link?: LinkData,
     ): Promise<boolean> {
-        const PARALLEL_DOWNLOAD_THRESHOLD = 20 * 1024 * 1024; // 20MB
         if (file.size < PARALLEL_DOWNLOAD_THRESHOLD || !!file.compAlg) {
             return false;
         }
@@ -400,10 +410,21 @@ class FileDownloadTask {
         const supportsRange = await this.parallelDownloader.checkRangeSupport(
             file.url,
             linkHeaders,
+            signal,
         );
         if (!supportsRange) return false;
 
         try {
+            const partialPath = `${filePath}.ntmp`;
+            const partialSize = await fse
+                .stat(partialPath)
+                .then(({ size }) => size)
+                .catch(() => 0);
+            // Range support is confirmed, so a tiny partial can be discarded before restarting in parallel.
+            if (partialSize > 0 && partialSize < PARALLEL_DOWNLOAD_THRESHOLD) {
+                await fse.remove(partialPath).catch(() => {});
+            }
+
             await this.parallelDownloader.download({
                 url: file.url,
                 savePath: filePath,
@@ -482,14 +503,19 @@ class FileDownloadTask {
             : {};
         const headers = { ...baseHeaders, ...linkHeaders } as Record<string, string>;
         const resumeFrom = options?.resumeFrom ?? 0;
-        const request = async (requestHeaders: Record<string, string>) =>
-            await ky(file.url, {
-                headers: requestHeaders,
+        const request = (requestHeaders: Record<string, string>) =>
+            this.requestLimiter.run(
+                () =>
+                    ky(file.url, {
+                        headers: requestHeaders,
+                        signal,
+                        fetch: networkFetch,
+                        throwHttpErrors: false,
+                        timeout: 100000,
+                        retry: 0,
+                    }),
                 signal,
-                fetch: networkFetch,
-                throwHttpErrors: false,
-                timeout: 100000,
-            });
+            );
 
         let response = await request({
             ...headers,
@@ -553,7 +579,9 @@ class FileDownloadTask {
 
         try {
             if (file.compAlg === "gzip") {
-                await pipeline(source, bandwidth, progress, createGunzip(), fileStream, { signal });
+                await pipeline(source, bandwidth, progress, createGunzip(), fileStream, {
+                    signal,
+                });
             } else if (file.compAlg === "zstd") {
                 await pipeline(source, bandwidth, progress, createZstdDecompress(), fileStream, {
                     signal,
@@ -717,7 +745,9 @@ export class DownloadLib {
     }
 
     private async syncQueueConcurrency() {
-        this.fileQueue.concurrency = await this.desktop.setting.transfer.getDownloadConcurrency();
+        const concurrency = await this.desktop.setting.transfer.getDownloadConcurrency();
+        this.fileQueue.concurrency = concurrency;
+        downloadRequestLimiter.setConcurrency(concurrency);
     }
 
     private clearPendingFileQueue() {
@@ -775,6 +805,7 @@ export class DownloadLib {
         signal: AbortSignal;
         link?: LinkData;
     }) {
+        await this.syncQueueConcurrency();
         await this.task.executeWithSlowRetry({
             file,
             filePath,
@@ -793,8 +824,14 @@ export class DownloadLib {
         link?: LinkData;
         signal: AbortSignal;
     }): Promise<DownloadMetadata> {
-        const folders = items.filter((item) => item.isDir);
-        const files = items.filter((item) => !item.isDir);
+        const folders = uniqBy(
+            items.filter((item) => item.isDir),
+            (item) => item.id,
+        );
+        const files = uniqBy(
+            items.filter((item) => !item.isDir),
+            (item) => item.id,
+        );
 
         const mergedDirs: DownloadMetadata["dirs"] = [];
         const mergedFiles: DownloadMetadata["files"] = [];
