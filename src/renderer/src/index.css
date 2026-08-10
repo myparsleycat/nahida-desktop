@@ -222,7 +222,6 @@ body:has(.titlebar) [data-slot="dialog-content"],
 body:has(.titlebar) [data-slot="alert-dialog-content"] {
     top: calc(var(--app-titlebar-height) + (100vh - var(--app-titlebar-height)) / 2);
     max-height: calc(100vh - var(--app-titlebar-height) - 2rem);
-    overflow-y: auto;
 }
 
 .scroll-area::-webkit-scrollbar {

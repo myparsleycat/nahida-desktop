@@ -1,14 +1,23 @@
 import crypto from "node:crypto";
 import path from "node:path";
+
 import type {
     GitHubRateState,
+    WuwaBackupGroup,
+    WuwaBackupSize,
     WuwaFixerOptions,
     WuwaFixerPrepareResult,
     WuwaFixerStatus,
 } from "@shared/types";
-import { app } from "electron";
+import { app, Notification } from "electron";
+import fg from "fast-glob";
 import fse from "fs-extra";
+
 import type { NahidaDesktop } from "@/main";
+
+import { isSameOrChildPath } from "../mod-manager/path-utils";
+
+const BAK_RE = /^(.*)_(\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}(?:\.\d{3})?)\.BAK$/i;
 
 const WUWA_RELEASES_LATEST_URL =
     "https://api.github.com/repos/Moonholder/Wuwa_Mod_Fixer/releases/latest";
@@ -16,6 +25,7 @@ const WUWA_CONFIG_URL =
     "https://raw.githubusercontent.com/Moonholder/Wuwa_Mod_Fixer/refs/heads/main/config.json";
 const WUWA_FIXER_DIR_NAME = "wuwa-mod-fixer";
 const WUWA_CHECK_COOLDOWN_MS = 2 * 60 * 1000;
+const WUWA_AUTO_UPDATE_INTERVAL_MS = 60 * 60 * 1000;
 const LAST_CHECK_KEY = "github:wuwa-mod-fixer:last-check";
 const INSTALLED_VERSION_KEY = "mod_tools:wuwa-mod-fixer:installed-version";
 const BINARY_PATH_KEY = "mod_tools:wuwa-mod-fixer:binary-path";
@@ -43,10 +53,60 @@ type WuwaReleaseResponse = {
 };
 
 export class WuwaModFixer {
+    private autoUpdateInterval: ReturnType<typeof setInterval> | undefined;
+
     constructor(private readonly desktop: NahidaDesktop) {}
 
     public async getRateStatus() {
         return await this.desktop.githubRate.getRateState();
+    }
+
+    public startAutoUpdateCheck(): void {
+        this.stopAutoUpdateCheck();
+        void this.runAutomaticUpdateCheck();
+        this.autoUpdateInterval = setInterval(
+            () => void this.runAutomaticUpdateCheck(),
+            WUWA_AUTO_UPDATE_INTERVAL_MS,
+        );
+    }
+
+    public stopAutoUpdateCheck(): void {
+        clearInterval(this.autoUpdateInterval);
+        this.autoUpdateInterval = undefined;
+    }
+
+    private async runAutomaticUpdateCheck(): Promise<void> {
+        try {
+            const installed = await this.getInstalledBinaryInfo();
+            if (!installed.exists) return;
+
+            const remoteResult = await this.refreshLatestReleaseIfNeeded({ force: true });
+            const latestVersion = remoteResult.latestRelease?.version;
+            if (
+                !latestVersion ||
+                !installed.version ||
+                this.compareVersions(latestVersion, installed.version) <= 0
+            ) {
+                return;
+            }
+
+            await this.installOrUpdate();
+
+            const notify = await this.desktop.setting.get("tools.wuwaFixerUpdateNotification");
+            if (!notify) return;
+
+            const description = `v${installed.version} → v${latestVersion}`;
+            this.desktop.ipc.broadcast("fn:toast", "Wuwa Mod Fixer updated", { description });
+            new Notification({
+                title: "Wuwa Mod Fixer updated",
+                body: description,
+            }).show();
+        } catch (error) {
+            this.desktop.logger.warn(
+                `Automatic Wuwa Mod Fixer update check failed: ${String(error)}`,
+                "WuwaModFixer",
+            );
+        }
     }
 
     public async getStatus(importer: string | null = null): Promise<WuwaFixerStatus> {
@@ -186,17 +246,115 @@ export class WuwaModFixer {
         });
     }
 
+    public async scanBackups(modPath: string): Promise<WuwaBackupGroup[]> {
+        await this.requireModPath(modPath, "wuwaFixer:scanBackups");
+
+        try {
+            return await this.collectBackupGroups(modPath);
+        } catch (error) {
+            this.desktop.logger.error(error, `wuwaFixer:scanBackups:${modPath}`);
+            throw error;
+        }
+    }
+
+    public async getBackupSize(modPath: string): Promise<WuwaBackupSize> {
+        await this.requireModPath(modPath, "wuwaFixer:getBackupSize");
+
+        try {
+            const bakPaths = await this.listBakFiles(modPath);
+            let bytes = 0;
+
+            for (const bakPath of bakPaths) {
+                const stats = await fse.stat(bakPath).catch(() => null);
+                if (!stats) {
+                    continue;
+                }
+
+                if (stats.size > 0) {
+                    bytes += stats.size;
+                    continue;
+                }
+
+                const match = BAK_RE.exec(path.basename(bakPath));
+                if (!match) {
+                    continue;
+                }
+
+                const originalStats = await fse
+                    .stat(path.join(path.dirname(bakPath), match[1]))
+                    .catch(() => null);
+                if (originalStats) {
+                    bytes += originalStats.size;
+                }
+            }
+
+            return { bytes, count: bakPaths.length };
+        } catch (error) {
+            this.desktop.logger.error(error, `wuwaFixer:getBackupSize:${modPath}`);
+            throw error;
+        }
+    }
+
+    public async rollbackToGroup(modPath: string, groupKey: string) {
+        await this.requireModPath(modPath, "wuwaFixer:rollbackToGroup");
+
+        try {
+            const groups = await this.collectBackupGroups(modPath);
+            const targetExists = groups.some((group) => group.groupKey === groupKey);
+            if (!targetExists) {
+                throw new Error(`Backup group not found: ${groupKey}`);
+            }
+
+            const candidates = groups
+                .filter((group) => group.groupKey >= groupKey)
+                .flatMap((group) => group.files);
+            const filesToDelete = candidates.map((file) => file.currentPath);
+            const earliestByOriginal = new Map<string, (typeof candidates)[number]>();
+
+            for (const file of candidates) {
+                const existing = earliestByOriginal.get(file.originalPath);
+                if (!existing || file.timestamp < existing.timestamp) {
+                    earliestByOriginal.set(file.originalPath, file);
+                }
+            }
+
+            for (const [originalPath, bak] of earliestByOriginal) {
+                const bakStats = await fse.stat(bak.currentPath).catch(() => null);
+                if (bakStats && bakStats.size === 0) {
+                    if (await fse.pathExists(originalPath)) {
+                        await fse.remove(originalPath);
+                    }
+                    continue;
+                }
+
+                await fse.copy(bak.currentPath, originalPath, { overwrite: true });
+            }
+
+            await Promise.all(filesToDelete.map((bakPath) => fse.remove(bakPath).catch(() => {})));
+        } catch (error) {
+            this.desktop.logger.error(error, `wuwaFixer:rollbackToGroup:${modPath}:${groupKey}`);
+            throw error;
+        }
+    }
+
+    public async cleanBackups(modPath: string) {
+        await this.requireModPath(modPath, "wuwaFixer:cleanBackups");
+
+        try {
+            const bakPaths = await this.listBakFiles(modPath);
+            await Promise.all(bakPaths.map((bakPath) => fse.remove(bakPath)));
+        } catch (error) {
+            this.desktop.logger.error(error, `wuwaFixer:cleanBackups:${modPath}`);
+            throw error;
+        }
+    }
+
     private buildCliArgs(modPath: string, configPath: string, options: WuwaFixerOptions) {
         if (options.derivedHashes && options.stableTexture) {
             throw new Error("Derived hashes and stable texture cannot be enabled together");
         }
 
         const args = ["--cli", "--path", modPath, "--config", configPath];
-
-        if (options.rollback) {
-            args.push("--rollback");
-            return args;
-        }
 
         if (options.derivedHashes) {
             args.push("--derived-hashes");
@@ -207,10 +365,83 @@ export class WuwaModFixer {
         if (options.aemeathMech) {
             args.push("--aemeath-mech");
         }
+        if (options.rendering33) {
+            args.push("--rendering-33");
+        }
         if (options.aeroFix !== "none") {
             args.push("--aero-fix", options.aeroFix);
         }
         return args;
+    }
+
+    private async requireModPath(modPath: string, action: string) {
+        if (!(await this.isUnderManagedModRoot(modPath))) {
+            const error = new Error("Path is outside the managed mod folder");
+            this.desktop.logger.error(error, `${action}:${modPath}`);
+            throw error;
+        }
+        if (!(await fse.pathExists(modPath))) {
+            const error = new Error("Destination path does not exist");
+            this.desktop.logger.error(error, `${action}:${modPath}`);
+            throw error;
+        }
+    }
+
+    private async isUnderManagedModRoot(modPath: string) {
+        const games = await this.desktop.service.mod.get.games();
+        const roots = games.map((game) => game.modFolderPath).filter(Boolean);
+        if (roots.length === 0) return false;
+
+        const resolvedTarget = (await fse.pathExists(modPath))
+            ? await fse.realpath(modPath).catch(() => null)
+            : path.resolve(modPath);
+        if (!resolvedTarget) return false;
+
+        for (const root of roots) {
+            if (!(await fse.pathExists(root))) continue;
+            const realRoot = await fse.realpath(root).catch(() => null);
+            if (realRoot && isSameOrChildPath(realRoot, resolvedTarget)) return true;
+        }
+        return false;
+    }
+
+    private async listBakFiles(modPath: string) {
+        return await fg("**/*.BAK", {
+            cwd: modPath,
+            absolute: true,
+            onlyFiles: true,
+            caseSensitiveMatch: false,
+            dot: true,
+            suppressErrors: true,
+        });
+    }
+
+    private async collectBackupGroups(modPath: string): Promise<WuwaBackupGroup[]> {
+        const bakPaths = await this.listBakFiles(modPath);
+        const filesByGroup = new Map<string, WuwaBackupGroup["files"]>();
+
+        for (const bakPath of bakPaths) {
+            const match = BAK_RE.exec(path.basename(bakPath));
+            if (!match) {
+                continue;
+            }
+
+            const originalName = match[1];
+            const fullTimestamp = match[2];
+            const groupKey = fullTimestamp.slice(0, 16);
+            const files = filesByGroup.get(groupKey) ?? [];
+            files.push({
+                currentPath: bakPath,
+                originalPath: path.join(path.dirname(bakPath), originalName),
+                timestamp: fullTimestamp,
+                groupKey,
+            });
+            filesByGroup.set(groupKey, files);
+        }
+
+        return [...filesByGroup.entries()]
+            .map(([groupKey, files]) => ({ groupKey, files }))
+            .sort((left, right) => right.groupKey.localeCompare(left.groupKey));
     }
 
     private async ensureLatestConfig() {

@@ -359,7 +359,7 @@ export function DeleteItemsDialog() {
   const deleteMutation = useMutation({
     mutationKey: ["akasha", "drive", "delete-items", "delete"],
     mutationFn: async (ids: string[]) => {
-      await window.api.invoke("drive:delete:items", ids, "delete");
+      return window.api.invoke("drive:delete:items", ids, "delete");
     },
   });
 
@@ -371,14 +371,35 @@ export function DeleteItemsDialog() {
 
     await deleteMutation
       .mutateAsync(selectedItems.map((item) => item.id))
-      .then(async () => {
-        toast.success(t("page.drive.dialog.delete_items.#.toast.success"));
+      .then(async (outcome) => {
+        if (outcome.acceptedIds.length === 0) {
+          throw new Error(
+            outcome.errorMessage || t("page.drive.dialog.delete_items.#.toast.error"),
+          );
+        }
+        if (outcome.errorMessage) {
+          toast.warning(
+            t("page.drive.dialog.delete_items.#.toast.partial", {
+              accepted: outcome.acceptedIds.length,
+              failed: outcome.requestedIds.length - outcome.acceptedIds.length,
+            }),
+            { description: outcome.errorMessage },
+          );
+        } else {
+          toast.success(
+            t("page.drive.dialog.delete_items.#.toast.success", {
+              count: outcome.acceptedIds.length,
+            }),
+          );
+        }
         setSelectedItems([]);
         setOpen("deleteItemsDialog", false);
         await queryClient.invalidateQueries();
       })
       .catch((err: unknown) => {
-        toast.error(toErrorMessage(err));
+        toast.error(t("page.drive.dialog.delete_items.#.toast.error"), {
+          description: toErrorMessage(err),
+        });
       });
   };
 

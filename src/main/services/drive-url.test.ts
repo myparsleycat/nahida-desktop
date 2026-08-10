@@ -5,6 +5,11 @@ import { encodeNahidaPassword, NAHIDA_SOURCE_HOSTNAMES, parseDriveSourceUrl } fr
 
 const sourceUrl = (hostname: string, pathname: string, protocol = "https:") =>
     new URL(pathname, `${protocol}//${hostname}`).toString();
+const base64 = (value: string) => Buffer.from(value).toString("base64");
+const base64Url = (value: string) =>
+    base64(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const encodeBase64Layers = (value: string, layers: number) =>
+    Array.from({ length: layers }).reduce<string>((encoded) => base64(encoded), value);
 
 const testSourceUrls = [
     {
@@ -27,6 +32,26 @@ const testSourceUrls = [
         url: "https://nahida.live/akasha/mod/-fpnEyi_nPNB-Mf97p5_k",
         expected: { type: "mod", id: "-fpnEyi_nPNB-Mf97p5_k" },
     },
+    {
+        label: "Base64-encoded public folder",
+        url: "aHR0cHM6Ly9uYWhpZGEubGl2ZS9ha2FzaGEvbGluay9xanNFZHZMcGNBeHI=",
+        expected: { type: "link", id: "qjsEdvLpcAxr" },
+    },
+    {
+        label: "multi-encoded public folder",
+        url: base64(base64("https://nahida.live/akasha/link/qjsEdvLpcAxr")),
+        expected: { type: "link", id: "qjsEdvLpcAxr" },
+    },
+    {
+        label: "Base64-encoded Nahida host",
+        url: base64("nahida.live/akasha/link/qjsEdvLpcAxr"),
+        expected: { type: "link", id: "qjsEdvLpcAxr" },
+    },
+    {
+        label: "Base64-encoded www Nahida host",
+        url: base64("www.nahida.live/akasha/link/qjsEdvLpcAxr"),
+        expected: { type: "link", id: "qjsEdvLpcAxr" },
+    },
 ] as const;
 
 describe("encodeNahidaPassword", () => {
@@ -39,6 +64,49 @@ describe("encodeNahidaPassword", () => {
 describe("parseDriveSourceUrl", () => {
     it.each(testSourceUrls)("parses $label fixture", ({ url, expected }) => {
         expect(parseDriveSourceUrl(url)).toEqual(expected);
+    });
+
+    it("adds HTTPS to a Nahida host without a protocol", () => {
+        expect(parseDriveSourceUrl("nahida.live/akasha/link/qjsEdvLpcAxr")).toEqual({
+            type: "link",
+            id: "qjsEdvLpcAxr",
+        });
+        expect(parseDriveSourceUrl("www.nahida.live/akasha/link/qjsEdvLpcAxr")).toEqual({
+            type: "link",
+            id: "qjsEdvLpcAxr",
+        });
+    });
+
+    it.each([
+        "https://www.nahida.live/akasha/link/abc?x=😀",
+        "https://www.nahida.live/akasha/link/abc#😀",
+    ])("parses unpadded URL-safe Base64 source %s", (value) => {
+        expect(base64(value)).toMatch(/[+/]/);
+        expect(parseDriveSourceUrl(base64Url(value))).toEqual({ type: "link", id: "abc" });
+    });
+
+    it("ignores whitespace around an unpadded URL-safe Base64 source", () => {
+        const value = "https://nahida.live/akasha/link/qjsEdvLpcAxr";
+        expect(parseDriveSourceUrl(`  \n${base64Url(value)}\t `)).toEqual({
+            type: "link",
+            id: "qjsEdvLpcAxr",
+        });
+    });
+
+    it("decodes exactly ten Base64 layers", () => {
+        expect(
+            parseDriveSourceUrl(
+                encodeBase64Layers("https://nahida.live/akasha/link/qjsEdvLpcAxr", 10),
+            ),
+        ).toEqual({ type: "link", id: "qjsEdvLpcAxr" });
+    });
+
+    it("rejects an eleventh Base64 layer", () => {
+        expect(() =>
+            parseDriveSourceUrl(
+                encodeBase64Layers("https://nahida.live/akasha/link/qjsEdvLpcAxr", 11),
+            ),
+        ).toThrow("DRIVE_INVALID_SOURCE_URL");
     });
 
     it.each([
@@ -62,6 +130,9 @@ describe("parseDriveSourceUrl", () => {
         sourceUrl(NAHIDA_SOURCE_HOSTNAMES[0], "/akasha/link/"),
         sourceUrl(NAHIDA_SOURCE_HOSTNAMES[0], "/akasha/unknown/abc"),
         sourceUrl(NAHIDA_SOURCE_HOSTNAMES[0], "/akasha/mod/abc/extra"),
+        "invalid-base64*",
+        null,
+        42,
     ])("rejects unsupported source %s", (value) => {
         expect(() => parseDriveSourceUrl(value)).toThrowError(DriveApiError);
         expect(() => parseDriveSourceUrl(value)).toThrow("DRIVE_INVALID_SOURCE_URL");

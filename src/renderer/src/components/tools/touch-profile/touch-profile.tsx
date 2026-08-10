@@ -1251,6 +1251,13 @@ export default function TouchProfileTool({
                                                   ? null
                                                   : String(assignment.channel)
                                               }
+                                              items={Array.from(
+                                                { length: TOUCH_ZONE_CHANNEL_COUNT },
+                                                (_, ch) => ({
+                                                  value: String(ch),
+                                                  label: CHANNEL_LABELS[ch],
+                                                }),
+                                              )}
                                               onValueChange={(value) => {
                                                 const channel =
                                                   value === null ? null : Number(value);
@@ -1388,6 +1395,10 @@ export default function TouchProfileTool({
                     <FieldLabel>{t("page.tools.touch_profile.component")}</FieldLabel>
                     <Select
                       value={selectedComponentId}
+                      items={interactiveComponents.map((component) => ({
+                        value: component.componentId,
+                        label: `${component.componentId} (${component.zones.length})`,
+                      }))}
                       onValueChange={(value) => {
                         if (value) setSelectedComponentId(value);
                       }}
@@ -1414,6 +1425,13 @@ export default function TouchProfileTool({
                     <FieldLabel>{t("page.tools.touch_profile.zone")}</FieldLabel>
                     <Select
                       value={selectedZoneId}
+                      items={[
+                        { value: ALL_ZONES, label: t("page.tools.touch_profile.all_zones") },
+                        ...(activePreview?.zones ?? []).map((zone) => ({
+                          value: zone.id,
+                          label: zone.label || zone.id,
+                        })),
+                      ]}
                       onValueChange={(value) => {
                         if (value) setSelectedZoneId(value);
                       }}
@@ -1567,6 +1585,20 @@ export default function TouchProfileTool({
                                   </FieldLabel>
                                   <Select
                                     value={zone.settings.strengthPreset}
+                                    items={[
+                                      {
+                                        value: "light",
+                                        label: t("page.tools.touch_profile.strength_light"),
+                                      },
+                                      {
+                                        value: "normal",
+                                        label: t("page.tools.touch_profile.strength_normal"),
+                                      },
+                                      {
+                                        value: "strong",
+                                        label: t("page.tools.touch_profile.strength_strong"),
+                                      },
+                                    ]}
                                     onValueChange={(value) => {
                                       if (
                                         typeof value === "string" &&
@@ -1608,6 +1640,28 @@ export default function TouchProfileTool({
                                   </FieldLabel>
                                   <Select
                                     value={zone.settings.physicsPreset}
+                                    items={[
+                                      {
+                                        value: "soft",
+                                        label: t("page.tools.touch_profile.physics_soft"),
+                                      },
+                                      {
+                                        value: "normal",
+                                        label: t("page.tools.touch_profile.physics_normal"),
+                                      },
+                                      {
+                                        value: "firm",
+                                        label: t("page.tools.touch_profile.physics_firm"),
+                                      },
+                                      ...(zone.settings.physicsPreset === "custom"
+                                        ? [
+                                            {
+                                              value: "custom",
+                                              label: t("page.tools.touch_profile.physics_custom"),
+                                            },
+                                          ]
+                                        : []),
+                                    ]}
                                     onValueChange={(value) => {
                                       if (
                                         typeof value === "string" &&
@@ -1726,6 +1780,32 @@ export default function TouchProfileTool({
                                     zone.settings.maskCoreAttenuation ??
                                     DEFAULT_MASK_CORE_ATTENUATION
                                   }
+                                  items={[
+                                    {
+                                      value: "off",
+                                      label: t(
+                                        "page.tools.touch_profile.mask_core_attenuation_off",
+                                      ),
+                                    },
+                                    {
+                                      value: "linear",
+                                      label: t(
+                                        "page.tools.touch_profile.mask_core_attenuation_linear",
+                                      ),
+                                    },
+                                    {
+                                      value: "sqrt",
+                                      label: t(
+                                        "page.tools.touch_profile.mask_core_attenuation_sqrt",
+                                      ),
+                                    },
+                                    {
+                                      value: "pow",
+                                      label: t(
+                                        "page.tools.touch_profile.mask_core_attenuation_pow",
+                                      ),
+                                    },
+                                  ]}
                                   onValueChange={(value) => {
                                     if (isTouchMaskCoreAttenuation(value)) {
                                       updateZoneSettings(

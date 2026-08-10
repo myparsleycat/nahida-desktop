@@ -1,51 +1,34 @@
 import path from "node:path";
 
 import { formatDate } from "@shared/utils";
-import { debounce, retry } from "es-toolkit";
+import { retry } from "es-toolkit";
 import fse from "fs-extra";
 
 import type { NahidaDesktop } from "@/main";
 
-export class TogglePersist {
-    private static readonly modifierTokens = new Set([
-        "ctrl",
-        "shift",
-        "alt",
-        "no_ctrl",
-        "no_shift",
-        "no_alt",
-    ]);
-    private static readonly xboxTokens = new Set([
-        "xb_left_trigger",
-        "xb_right_trigger",
-        "xb_left_shoulder",
-        "xb_right_shoulder",
-        "xb_left_thumb",
-        "xb_right_thumb",
-        "xb_dpad_up",
-        "xb_dpad_down",
-        "xb_dpad_left",
-        "xb_dpad_right",
-        "xb_a",
-        "xb_b",
-        "xb_x",
-        "xb_y",
-        "xb_start",
-        "xb_back",
-        "xb_guide",
-    ]);
+import {
+    createEmptyTogglePersistProfile,
+    fingerprintTogglePersistIni,
+    parseTogglePersistProfile,
+    TogglePersistLearner,
+    type TogglePersistLearnedVariable,
+    type TogglePersistProfile,
+    togglePersistProfilePath,
+} from "./toggle-persist-learning";
 
+export class TogglePersist {
     private persistWatchers: string[] = [];
     private cachedD3dxUserIni: Map<string, Record<string, string>> = new Map();
     private persistLogs: string[] = [];
-    private persistUpdateDebouncers: Map<string, () => void> = new Map();
+    private persistLearner = new TogglePersistLearner();
+    private persistFlushTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
     private persistFileUpdateLocks: Map<string, Promise<unknown>> = new Map();
+    private persistProfileUpdateLocks: Map<string, Promise<unknown>> = new Map();
+    private persistProfileLoaders: Map<string, Promise<void>> = new Map();
+    private persistProfileErrorsLogged: Set<string> = new Set();
     private d3dxUserIniChangeLocks: Map<string, Promise<void>> = new Map();
+    private persistRevisions: Map<string, number> = new Map();
     private persistGeneration = 0;
-    private pendingPersistUpdates: Map<
-        string,
-        { targetIniPath: string; updates: Map<string, string> }
-    > = new Map();
 
     constructor(private readonly desktop: NahidaDesktop) {}
 
@@ -98,11 +81,15 @@ export class TogglePersist {
         for (const id of this.persistWatchers) {
             await this.desktop.lib.watcher.remove(id);
         }
+        this.persistFlushTimers.forEach((timer) => clearTimeout(timer));
         this.persistWatchers = [];
         this.cachedD3dxUserIni.clear();
-        this.persistUpdateDebouncers.clear();
+        this.persistLearner.clear();
+        this.persistFlushTimers.clear();
+        this.persistProfileLoaders.clear();
+        this.persistProfileErrorsLogged.clear();
         this.d3dxUserIniChangeLocks.clear();
-        this.pendingPersistUpdates.clear();
+        this.persistRevisions.clear();
         if (watcherCount > 0) {
             this.logInfo(`Stopped persist watcher (${watcherCount})`);
         }
@@ -209,6 +196,17 @@ export class TogglePersist {
 
             const newParsed = this.parseD3dxUserIni(content);
             const oldParsed = this.cachedD3dxUserIni.get(importer.key) || {};
+            const revision = (this.persistRevisions.get(importer.key) ?? 0) + 1;
+            const observedAt = Date.now();
+            const suppressedByFile = new Map<
+                string,
+                { targetIniPath: string; variables: Set<string> }
+            >();
+            const learnedByFile = new Map<
+                string,
+                { targetIniPath: string; variables: Map<string, TogglePersistLearnedVariable> }
+            >();
+            this.persistRevisions.set(importer.key, revision);
 
             for (const [key, newValue] of Object.entries(newParsed)) {
                 if (!this.isActivePersistGeneration(generation)) return;
@@ -217,18 +215,65 @@ export class TogglePersist {
                 if (newValue !== oldValue) {
                     const target = await this.resolvePersistTarget(importer.importerFolder, key);
                     if (target) {
-                        this.queuePersistUpdate(
+                        await this.loadPersistProfile(target.targetIniPath, generation);
+                        if (!this.isActivePersistGeneration(generation)) return;
+                        const result = this.persistLearner.observe({
+                            targetIniPath: target.targetIniPath,
+                            varName: target.varName,
+                            value: newValue,
+                            revision,
+                            at: observedAt,
+                        });
+                        this.schedulePersistFlush(
                             target.targetIniPath,
-                            target.varName,
-                            newValue,
+                            result.nextDueAt,
                             generation,
                         );
+
+                        if (result.newlySuppressed.length > 0) {
+                            const fileKey = target.targetIniPath.toLowerCase();
+                            const pending = suppressedByFile.get(fileKey) ?? {
+                                targetIniPath: target.targetIniPath,
+                                variables: new Set<string>(),
+                            };
+                            result.newlySuppressed.forEach((name) => pending.variables.add(name));
+                            suppressedByFile.set(fileKey, pending);
+                        }
+
+                        if (result.newlyLearned.length > 0) {
+                            const fileKey = target.targetIniPath.toLowerCase();
+                            const pending = learnedByFile.get(fileKey) ?? {
+                                targetIniPath: target.targetIniPath,
+                                variables: new Map<string, TogglePersistLearnedVariable>(),
+                            };
+                            result.newlyLearned.forEach((variable) =>
+                                pending.variables.set(variable.name.toLowerCase(), variable),
+                            );
+                            learnedByFile.set(fileKey, pending);
+                        }
                     }
                 }
             }
 
             if (!this.isActivePersistGeneration(generation)) return;
             this.cachedD3dxUserIni.set(importer.key, newParsed);
+
+            suppressedByFile.forEach((entry) => {
+                this.logInfo(
+                    `Suppressed continuously changing persist variables ${[...entry.variables]
+                        .map((name) => `$${name}`)
+                        .join(", ")} in ${entry.targetIniPath}`,
+                );
+            });
+            await Promise.all(
+                [...learnedByFile.values()].map((entry) =>
+                    this.savePersistProfile(
+                        entry.targetIniPath,
+                        [...entry.variables.values()],
+                        generation,
+                    ),
+                ),
+            );
         } catch (error) {
             this.logError(`Error handling d3dx_user.ini change: ${String(error)}`);
         }
@@ -256,42 +301,162 @@ export class TogglePersist {
         return { targetIniPath, varName: match[2] };
     }
 
-    private queuePersistUpdate(
+    private async loadPersistProfile(targetIniPath: string, generation: number) {
+        const targetKey = targetIniPath.toLowerCase();
+        const existing = this.persistProfileLoaders.get(targetKey);
+        if (existing) {
+            await existing;
+            return;
+        }
+
+        const loading = this.readAndRegisterPersistProfile(targetIniPath, generation);
+        this.persistProfileLoaders.set(targetKey, loading);
+        await loading;
+    }
+
+    private async readAndRegisterPersistProfile(targetIniPath: string, generation: number) {
+        const profilePath = togglePersistProfilePath(targetIniPath);
+        try {
+            if (!(await fse.pathExists(profilePath))) return;
+            const [profileContent, targetContent] = await Promise.all([
+                fse.readFile(profilePath, "utf-8"),
+                fse.readFile(targetIniPath, "utf-8"),
+            ]);
+            if (!this.isActivePersistGeneration(generation)) return;
+            const profile = parseTogglePersistProfile(JSON.parse(profileContent) as unknown);
+            const fileName = Object.keys(profile.files).find(
+                (candidate) =>
+                    candidate.toLowerCase() === path.basename(targetIniPath).toLowerCase(),
+            );
+            if (!fileName) return;
+            const file = profile.files[fileName];
+            if (file.fingerprint !== fingerprintTogglePersistIni(targetContent)) return;
+            this.persistLearner.registerLearnedVariables(targetIniPath, file.variables);
+        } catch (error) {
+            this.logPersistProfileError("load", targetIniPath, profilePath, error);
+        }
+    }
+
+    private async savePersistProfile(
         targetIniPath: string,
-        varName: string,
-        newValue: string,
+        variables: TogglePersistLearnedVariable[],
+        generation: number,
+    ) {
+        if (variables.length === 0 || !this.isActivePersistGeneration(generation)) return;
+        const profilePath = togglePersistProfilePath(targetIniPath);
+        await this.withPersistProfileLock(profilePath, async () => {
+            if (!this.isActivePersistGeneration(generation)) return;
+            try {
+                const targetContent = await fse.readFile(targetIniPath, "utf-8");
+                const profile = await this.readPersistProfileForUpdate(profilePath, targetIniPath);
+                const actualFileName = path.basename(targetIniPath);
+                const existingFileName = Object.keys(profile.files).find(
+                    (candidate) => candidate.toLowerCase() === actualFileName.toLowerCase(),
+                );
+                const fingerprint = fingerprintTogglePersistIni(targetContent);
+                const existingFile = existingFileName ? profile.files[existingFileName] : undefined;
+                const file =
+                    existingFile?.fingerprint === fingerprint
+                        ? existingFile
+                        : { fingerprint, variables: {} };
+
+                variables.forEach((variable) => {
+                    file.variables[variable.name.toLowerCase()] = variable;
+                });
+                if (existingFileName && existingFileName !== actualFileName) {
+                    delete profile.files[existingFileName];
+                }
+                profile.files[actualFileName] = file;
+
+                const written = await this.writeFileAtomic(
+                    profilePath,
+                    `${JSON.stringify(profile, null, 2)}\n`,
+                    generation,
+                );
+                if (written) this.persistProfileLoaders.delete(targetIniPath.toLowerCase());
+            } catch (error) {
+                this.logPersistProfileError("save", targetIniPath, profilePath, error);
+            }
+        });
+    }
+
+    private async readPersistProfileForUpdate(
+        profilePath: string,
+        targetIniPath: string,
+    ): Promise<TogglePersistProfile> {
+        if (!(await fse.pathExists(profilePath))) return createEmptyTogglePersistProfile();
+        try {
+            return parseTogglePersistProfile(
+                JSON.parse(await fse.readFile(profilePath, "utf-8")) as unknown,
+            );
+        } catch (error) {
+            this.logPersistProfileError("parse-before-save", targetIniPath, profilePath, error);
+            return createEmptyTogglePersistProfile();
+        }
+    }
+
+    private async withPersistProfileLock<T>(profilePath: string, work: () => Promise<T>) {
+        const lockKey = profilePath.toLowerCase();
+        const previous = this.persistProfileUpdateLocks.get(lockKey) ?? Promise.resolve();
+        const next = previous.catch(() => {}).then(work);
+        this.persistProfileUpdateLocks.set(lockKey, next);
+
+        try {
+            return await next;
+        } finally {
+            if (this.persistProfileUpdateLocks.get(lockKey) === next) {
+                this.persistProfileUpdateLocks.delete(lockKey);
+            }
+        }
+    }
+
+    private logPersistProfileError(
+        stage: string,
+        targetIniPath: string,
+        profilePath: string,
+        error: unknown,
+    ) {
+        const errorKey = `${stage}:${profilePath.toLowerCase()}`;
+        if (this.persistProfileErrorsLogged.has(errorKey)) return;
+        this.persistProfileErrorsLogged.add(errorKey);
+        this.logError(
+            `Error processing toggle persist profile: stage=${stage}, targetIniPath=${targetIniPath}, profilePath=${profilePath}, error=${String(error)}`,
+        );
+    }
+
+    private schedulePersistFlush(
+        targetIniPath: string,
+        dueAt: number | undefined,
         generation: number,
     ) {
         if (!this.isActivePersistGeneration(generation)) return;
 
         const fileKey = targetIniPath.toLowerCase();
-        const varKey = varName.toLowerCase();
-        let pending = this.pendingPersistUpdates.get(fileKey);
-        if (!pending) {
-            pending = { targetIniPath, updates: new Map() };
-            this.pendingPersistUpdates.set(fileKey, pending);
+        const existingTimer = this.persistFlushTimers.get(fileKey);
+        if (existingTimer) {
+            clearTimeout(existingTimer);
+            this.persistFlushTimers.delete(fileKey);
         }
-        pending.updates.set(varKey, newValue);
+        if (dueAt === undefined) return;
 
-        let debounced = this.persistUpdateDebouncers.get(fileKey);
-        if (!debounced) {
-            debounced = debounce(() => {
-                if (!this.isActivePersistGeneration(generation)) return;
+        this.persistFlushTimers.set(
+            fileKey,
+            setTimeout(
+                () => {
+                    this.persistFlushTimers.delete(fileKey);
+                    void this.flushReadyPersistUpdates(targetIniPath, generation);
+                },
+                Math.max(0, dueAt - Date.now()),
+            ),
+        );
+    }
 
-                const pending = this.pendingPersistUpdates.get(fileKey);
-                if (!pending) return;
-                this.pendingPersistUpdates.delete(fileKey);
-
-                void this.enqueuePersistFileUpdate(
-                    pending.targetIniPath,
-                    pending.updates,
-                    generation,
-                );
-            }, 200);
-            this.persistUpdateDebouncers.set(fileKey, debounced);
-        }
-
-        debounced();
+    private async flushReadyPersistUpdates(targetIniPath: string, generation: number) {
+        if (!this.isActivePersistGeneration(generation)) return;
+        const ready = this.persistLearner.takeReady(targetIniPath, Date.now());
+        this.schedulePersistFlush(targetIniPath, ready.nextDueAt, generation);
+        if (ready.updates.size === 0) return;
+        await this.enqueuePersistFileUpdate(targetIniPath, ready.updates, generation);
     }
 
     private async enqueuePersistFileUpdate(
@@ -355,9 +520,6 @@ export class TogglePersist {
         const content = await fse.readFile(targetIniPath, "utf-8");
         const lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
         const lines = content.split(/\r?\n/);
-        // if (this.isAnimationPersistVariable(lines, varName)) {
-        //     return;
-        // }
 
         let inConstants = false;
         let modified = false;
@@ -419,69 +581,6 @@ export class TogglePersist {
 
     private isActivePersistGeneration(generation?: number) {
         return generation === undefined || this.persistGeneration === generation;
-    }
-
-    private isAnimationPersistVariable(lines: string[], varName: string): boolean {
-        let inKeySection = false;
-        let keyValue: string | null = null;
-        const escapedVarName = varName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const varRegex = new RegExp(`^\\$${escapedVarName}\\s*=`);
-
-        const evaluateSection = (hasVarAssignment: boolean) => {
-            if (!hasVarAssignment) return false;
-            if (!keyValue) return true;
-            return !this.isAllowedKeyBinding(keyValue);
-        };
-
-        let hasTargetVarAssignment = false;
-
-        for (const rawLine of lines) {
-            const trimmed = rawLine.trim();
-            if (!trimmed || trimmed.startsWith(";")) continue;
-
-            if (trimmed.startsWith("[")) {
-                if (evaluateSection(hasTargetVarAssignment)) {
-                    return true;
-                }
-                inKeySection = /^\[Key/i.test(trimmed);
-                keyValue = null;
-                hasTargetVarAssignment = false;
-                continue;
-            }
-
-            if (!inKeySection) continue;
-
-            const keyMatch = trimmed.match(/^key\s*=\s*(.+)$/i);
-            if (keyMatch) {
-                keyValue = keyMatch[1].trim();
-                continue;
-            }
-
-            if (varRegex.test(trimmed)) {
-                hasTargetVarAssignment = true;
-            }
-        }
-
-        return evaluateSection(hasTargetVarAssignment);
-    }
-
-    private isAllowedKeyBinding(keyValue: string): boolean {
-        const tokens = keyValue
-            .toLowerCase()
-            .split(/[+\s]+/)
-            .map((token) => token.trim())
-            .filter(Boolean);
-
-        if (tokens.length === 0) return false;
-        return tokens.every((token) => this.isAllowedKeyToken(token));
-    }
-
-    private isAllowedKeyToken(token: string): boolean {
-        if (token.length === 1) return true;
-        if (TogglePersist.modifierTokens.has(token)) return true;
-        if (TogglePersist.xboxTokens.has(token)) return true;
-        if (/^vk_[a-z0-9_]+$/i.test(token)) return true;
-        return false;
     }
 
     private addPersistLog(level: "INFO" | "ERROR", message: string) {

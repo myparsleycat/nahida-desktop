@@ -68,6 +68,13 @@
         "paused": "一時停止",
         "queued": "待機中",
         "preparing": "準備中",
+        "planning": {
+          "permission_check": "権限を確認中",
+          "parent_lookup": "親フォルダーを検索中",
+          "file_validation": "ファイルを検証中",
+          "dedup_lookup": "重複を確認中",
+          "processing": "ファイルを処理中"
+        },
         "time_remaining": "残り {{time}}",
         "time_elapsed": "経過 {{time}}",
         "failed_files": "{{count}}個 失敗",
@@ -151,6 +158,7 @@
         "download": "ダウンロード",
         "rename": "名前を変更",
         "trash": "ゴミ箱",
+        "trash_success": "{{count}}個のファイルとディレクトリをゴミ箱に移動しました",
         "new_dir": "フォルダー作成",
         "delete": "削除",
         "copy": "コピー",
@@ -212,11 +220,13 @@
         },
         "delete_items": {
           "title": "項目を削除",
-          "description": "選択した項目を完全に削除しますか？この操作は元に戻せません。",
+          "description": "リクエストが受け付けられると一覧からすぐに消え、整理はバックグラウンドで続きます。この操作は元に戻せません。",
           "action": "削除",
           "#": {
             "toast": {
-              "success": "項目が削除されました"
+              "success": "{{count}}件の削除リクエストを受け付けました",
+              "partial": "{{accepted}}件の削除リクエストを受け付け、{{failed}}件は失敗しました",
+              "error": "削除リクエストに失敗しました"
             }
           }
         }
@@ -434,9 +444,12 @@
             "continue_without_update": "更新せずに続行",
             "action": "更新"
           },
+          "tabs": {
+            "fix": "MOD 修正",
+            "rollback": "ロールバック"
+          },
           "options": {
             "title": "Wuwa Mod Fixer",
-            "rollback": "最近の Fix をロールバック",
             "derived_hashes": {
               "label": "Derived Hash を追加",
               "description": "不足しているテクスチャ状態ハッシュ（例: LOD Bias High/Medium、カンタレラ wet、千咲 Enhanced E、エイメス Charged）を追加し、キャラクター MOD のテクスチャが正しく表示されるようにします。一部のキャラクターはまだ含まれていない場合があります。"
@@ -449,6 +462,11 @@
               "label": "エイメスのメカ形態を修正",
               "description": "すでに正常なエイメスのメカ MOD では、このオプションを有効にしないでください。同じ修正を二重に適用してはいけません。"
             },
+            "rendering_33": {
+              "label": "Modのメッシュ穴/部位欠損修正",
+              "description": "ゲーム3.3バージョン以降、旧Mod内のColor1ゴミデータによって発生する身体部位の非表示や穴の問題を修正します。",
+              "warning": "身体部位の欠損やメッシュの穴がある MOD でのみ有効にしてください！"
+            },
             "aero_fix": {
               "label": "Aero 女性漂泊者の目 Fix",
               "description": "共鳴エネルギーが最大のときに目が崩れる問題がある場合に使用します。",
@@ -457,9 +475,35 @@
                 "texcoord_override": "TexCoord Override",
                 "texture_mirror_flip": "Texture Mirror Flip"
               },
-              "warning": "この問題が実際にある MOD にだけ有効化してください。"
+              "warning": "この問題が実際にある MOD にだけ有効化してください。",
+              "tip": "問題が解決されない場合は、ロールバックしてから別の方法を試してください。"
             },
             "run": "実行"
+          },
+          "rollback": {
+            "refresh": "同期",
+            "scanning": "バックアップ履歴をスキャン中...",
+            "no_backups": "バックアップ（.BAK）が見つかりません",
+            "no_backups_short": "バックアップなし",
+            "file_count": "バックアップファイル {{n}} 件",
+            "latest_state": "最新の復元ポイント",
+            "restore": "ロールバック",
+            "confirm_restore": "ロールバック実行",
+            "warn_restore": "MOD ファイルをこの状態に戻しますか？",
+            "warn_clean_newer": "（新しいバックアップ {{n}} 件が削除されます）",
+            "backup_size_label": "バックアップ容量:",
+            "success": "ロールバックが完了しました。",
+            "advanced": "高度な設定",
+            "advanced_hint": "破壊的な操作",
+            "restore_all": "最古のバックアップへ復元",
+            "restore_all_desc": "すべてのファイルを最古の記録状態へ戻し、途中のバックアップをすべて削除します。",
+            "restore_all_action": "復元...",
+            "warn_delete_all": "バックアップ {{n}} 件がすべて削除されます",
+            "clean_backups": "すべてのバックアップを削除",
+            "clean_backups_desc": "対象フォルダ内のすべての .BAK ファイルを完全に削除します。この操作は元に戻せません。",
+            "clean_action": "削除...",
+            "warn_clean": "確認のため WIPE と入力:",
+            "clean_success": "バックアップをすべて削除しました！"
           },
           "log": {
             "input_placeholder": "入力..."
@@ -1251,6 +1295,14 @@
       },
       "tools": {
         "title": "ツール",
+        "wuwaFixer": {
+          "title": "Wuwa Mod Fixer",
+          "autoUpdateNotification": {
+            "title": "更新通知",
+            "description": "Wuwa Mod Fixer の更新がある際に通知を表示します。通知をオフにしても、1時間ごとのバックグラウンド自動更新は継続されます。",
+            "save_failed": "設定の保存に失敗しました。"
+          }
+        },
         "touch_profile": {
           "title": "タッチプロファイル",
           "llm": {

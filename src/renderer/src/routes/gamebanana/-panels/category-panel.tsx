@@ -71,6 +71,16 @@ export function CategoryPanel({
     onModsPage(page);
   };
 
+  const sortOptions = [
+    { value: "Generic_Newest", label: t("page.gamebanana.mod_sort.Generic_Newest") },
+    { value: "Generic_MostLiked", label: t("page.gamebanana.mod_sort.Generic_MostLiked") },
+    {
+      value: "Generic_MostDownloaded",
+      label: t("page.gamebanana.mod_sort.Generic_MostDownloaded"),
+    },
+    { value: "Generic_MostViewed", label: t("page.gamebanana.mod_sort.Generic_MostViewed") },
+  ] as const;
+
   return (
     <div className="h-full min-h-0 min-w-0 p-2">
       <Card className="flex h-full min-h-0 flex-col">
@@ -78,26 +88,20 @@ export function CategoryPanel({
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Select
               value={modsSort}
+              items={sortOptions}
               onValueChange={(value) => onModsSort(value as GameBananaModIndexSort)}
             >
               <SelectTrigger
                 className="w-full sm:w-48"
                 aria-label={t("page.gamebanana.mod_sort.label")}
               >
-                <SelectValue>
-                  {(value) => t(`page.gamebanana.mod_sort.${value ?? "Generic_Newest"}`)}
-                </SelectValue>
+                <SelectValue />
               </SelectTrigger>
               <SelectContent align="start">
                 <SelectGroup>
-                  {[
-                    "Generic_Newest",
-                    "Generic_MostLiked",
-                    "Generic_MostDownloaded",
-                    "Generic_MostViewed",
-                  ].map((sort) => (
-                    <SelectItem key={sort} value={sort}>
-                      {t(`page.gamebanana.mod_sort.${sort}`)}
+                  {sortOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
                     </SelectItem>
                   ))}
                 </SelectGroup>

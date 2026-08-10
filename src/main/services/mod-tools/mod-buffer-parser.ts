@@ -256,13 +256,18 @@ function resourceGroupKey(resource: Resource): string | undefined {
 
 function logicalResourceName(name: string, kind: "position" | "index") {
     const withoutCs = name.replace(/cs$/i, "");
-    const variant = withoutCs.match(/\.(\d+)$/)?.[1];
-    const withoutVariant = withoutCs.replace(/\.\d+$/, "");
-    const withoutKind =
+    // Greedy base capture: bare `ib` must not win an earlier match inside names
+    // like Rib_Body_Index (lazy `(.*?)` would stop at the "ib" in "Rib").
+    const match = withoutCs.match(
         kind === "position"
-            ? withoutVariant.replace(/(?:position(?:buffer)?|_vb0)$/i, "")
-            : withoutVariant.replace(/(?:index(?:buffer)?|_ib|ib)$/i, "");
+            ? /^(.*)(?:position(?:buffer)?|_vb0)(?:[._-](.+))?$/i
+            : /^(.*)(?:index(?:buffer)?|_ib|ib)(?:[._-](.+))?$/i,
+    );
+    const withoutKind = match?.[1] ?? withoutCs;
     const withoutLodPrefix =
         kind === "index" ? withoutKind.replace(/^_?lod\d+(?:[._-]?)/i, "") : withoutKind;
-    return { base: withoutLodPrefix.replace(/[^a-z0-9]/gi, "").toLowerCase(), variant };
+    return {
+        base: withoutLodPrefix.replace(/[^a-z0-9]/gi, "").toLowerCase(),
+        variant: match?.[2]?.replace(/[^a-z0-9]/gi, "").toLowerCase(),
+    };
 }

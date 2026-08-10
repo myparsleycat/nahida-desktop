@@ -3,7 +3,7 @@ import path from "node:path";
 
 import sha256PiscinaWorker from "@main/worker/drive/sha256-piscina.worker?modulePath";
 import { collectFiles } from "@native/fs";
-import type { Content } from "@shared/types";
+import type { Content, PlanPhase } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import { orderBy, sumBy } from "es-toolkit";
 import { fileTypeFromBuffer } from "file-type";
@@ -319,6 +319,8 @@ export class UploadLib {
         requestId,
         files,
         onProgress,
+        onPlanProgress,
+        onPlanComplete,
         signal,
         pid,
     }: {
@@ -327,6 +329,8 @@ export class UploadLib {
         files: FinalFile[];
         totalSize: number;
         onProgress?: (progress: UploadProgress) => void;
+        onPlanProgress?: (progress: { phase: PlanPhase; processed: number; total: number }) => void;
+        onPlanComplete?: () => void;
         signal?: AbortSignal;
         pid?: string;
     }) {
@@ -349,6 +353,8 @@ export class UploadLib {
                 queue,
                 signal,
                 onProgress,
+                onPlanProgress,
+                onPlanComplete,
                 prepareDirectFile: async (file) => {
                     const data = await fse.readFile(file.fullPath);
                     if (file.size <= 100 || (await this.isPreviewFile(data, file.name))) {
@@ -480,11 +486,33 @@ export class UploadLib {
                         }
                         currentUploadedBytes += progress.bytes;
                     },
+                    onPlanProgress: (progress) => {
+                        void this.desktop.service.transfer.updateTransfer(pid, {
+                            planPhase: progress.phase,
+                            planProgress:
+                                progress.total > 0
+                                    ? (progress.processed / progress.total) * 100
+                                    : null,
+                        });
+                    },
+                    onPlanComplete: () => {
+                        void this.desktop.service.transfer.updateTransfer(pid, {
+                            status: "progress",
+                            transferedSize: currentUploadedBytes,
+                            transferedFiles: currentUploadedCount,
+                            planPhase: undefined,
+                            planProgress: undefined,
+                        });
+                    },
                     signal: abortController.signal,
                     pid,
                 });
             } finally {
                 clearInterval(heartbeat);
+                void this.desktop.service.transfer.updateTransfer(pid, {
+                    planPhase: undefined,
+                    planProgress: undefined,
+                });
             }
 
             if (abortController.signal.aborted) return;

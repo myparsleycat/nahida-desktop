@@ -1,22 +1,25 @@
 import { useModStore } from "@renderer/store/mod";
 import {
   type GitHubRateState,
+  type WuwaBackupGroup,
+  type WuwaBackupSize,
   type WuwaFixerOptions,
   type WuwaFixerPrepareResult,
   type FixToolLogEvent,
 } from "@shared/types";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
 import { useGames } from "./use-mod-data";
 
 const defaultWuwaOptions = (): WuwaFixerOptions => ({
   derivedHashes: false,
   stableTexture: false,
   aemeathMech: false,
+  rendering33: false,
   aeroFix: "none",
-  rollback: false,
 });
 
 export function useModFixRunner() {
@@ -42,15 +45,26 @@ export function useModFixRunner() {
   const [showInstallDialog, setShowInstallDialog] = useState(false);
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
   const [showOptionsDialog, setShowOptionsDialog] = useState(false);
+  const [optionsTab, setOptionsTab] = useState<"fix" | "rollback">("fix");
   const [logs, setLogs] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [inputCmd, setInputCmd] = useState("");
   const [prepareResult, setPrepareResult] = useState<WuwaFixerPrepareResult | null>(null);
   const [wuwaOptions, setWuwaOptions] = useState<WuwaFixerOptions>(defaultWuwaOptions);
+  const [backupGroups, setBackupGroups] = useState<WuwaBackupGroup[]>([]);
+  const [backupSize, setBackupSize] = useState<WuwaBackupSize>({ bytes: 0, count: 0 });
+  const [isLoadingBackups, setIsLoadingBackups] = useState(false);
+  const [isRollbackBusy, setIsRollbackBusy] = useState(false);
+  const [pendingRollbackKey, setPendingRollbackKey] = useState<string | null>(null);
+  const [showAdvancedRollback, setShowAdvancedRollback] = useState(false);
+  const [showCleanConfirm, setShowCleanConfirm] = useState(false);
+  const [cleanConfirmInput, setCleanConfirmInput] = useState("");
   const runInProgressRef = useRef(false);
+  const backupRefreshTokenRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const translationKey = "page.mod.dialog.wuwa-fix-runner";
 
   useEffect(() => {
     if (!showLogModal) return;
@@ -71,6 +85,56 @@ export function useModFixRunner() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [logs]);
+
+  const refreshBackups = useCallback(
+    async (modPath = activeModPath) => {
+      const requestToken = ++backupRefreshTokenRef.current;
+      const isCurrent = () => backupRefreshTokenRef.current === requestToken;
+
+      if (!modPath) {
+        if (!isCurrent()) return;
+        setBackupGroups([]);
+        setBackupSize({ bytes: 0, count: 0 });
+        setPendingRollbackKey(null);
+        setShowCleanConfirm(false);
+        setCleanConfirmInput("");
+        setIsLoadingBackups(false);
+        return;
+      }
+
+      setIsLoadingBackups(true);
+      setPendingRollbackKey(null);
+      setShowCleanConfirm(false);
+      setCleanConfirmInput("");
+      try {
+        const [groups, size] = await Promise.all([
+          window.api.invoke("wuwaFixer:scanBackups", modPath),
+          window.api.invoke("wuwaFixer:getBackupSize", modPath),
+        ]);
+        if (!isCurrent()) return;
+        setBackupGroups(groups);
+        setBackupSize(size);
+      } catch (error) {
+        if (!isCurrent()) return;
+        setBackupGroups([]);
+        setBackupSize({ bytes: 0, count: 0 });
+        toast.error((error as Error).message);
+      } finally {
+        if (isCurrent()) {
+          setIsLoadingBackups(false);
+        }
+      }
+    },
+    [activeModPath],
+  );
+
+  useEffect(() => {
+    if (!showOptionsDialog || optionsTab !== "rollback") {
+      return;
+    }
+
+    void refreshBackups();
+  }, [showOptionsDialog, optionsTab, refreshBackups]);
 
   const handleRun = async (type: "tool" | "preset", id: string, modPath: string) => {
     if (runInProgressRef.current) {
@@ -117,6 +181,11 @@ export function useModFixRunner() {
 
   const openOptionsDialog = () => {
     setWuwaOptions(defaultWuwaOptions());
+    setOptionsTab("fix");
+    setPendingRollbackKey(null);
+    setShowAdvancedRollback(false);
+    setShowCleanConfirm(false);
+    setCleanConfirmInput("");
     setShowOptionsDialog(true);
   };
 
@@ -188,7 +257,10 @@ export function useModFixRunner() {
     }
   };
 
-  const setCheckbox = (key: keyof WuwaFixerOptions, checked: boolean) => {
+  const setOptionFlag = (
+    key: "derivedHashes" | "stableTexture" | "aemeathMech" | "rendering33",
+    checked: boolean,
+  ) => {
     setWuwaOptions((prev) => {
       const next = { ...prev, [key]: checked };
 
@@ -198,15 +270,65 @@ export function useModFixRunner() {
       if (key === "stableTexture" && checked) {
         next.derivedHashes = false;
       }
-      if (key === "rollback" && checked) {
-        next.derivedHashes = false;
-        next.stableTexture = false;
-        next.aemeathMech = false;
-        next.aeroFix = "none";
-      }
 
       return next;
     });
+  };
+
+  const toggleAeroFix = () => {
+    setWuwaOptions((prev) => ({
+      ...prev,
+      aeroFix: prev.aeroFix === "none" ? "1" : "none",
+    }));
+  };
+
+  const setAeroFixMode = (mode: "1" | "2") => {
+    setWuwaOptions((prev) => ({
+      ...prev,
+      aeroFix: mode,
+    }));
+  };
+
+  const handleRollbackToGroup = async (groupKey: string) => {
+    if (!activeModPath || isRollbackBusy) {
+      return;
+    }
+
+    const targetKey =
+      groupKey === "__RESTORE_ALL__" && backupGroups.length > 0
+        ? backupGroups[backupGroups.length - 1].groupKey
+        : groupKey;
+
+    setIsRollbackBusy(true);
+    try {
+      await window.api.invoke("wuwaFixer:rollbackToGroup", activeModPath, targetKey);
+      toast.success(t(`${translationKey}.rollback.success`));
+      await refreshBackups(activeModPath);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setIsRollbackBusy(false);
+      setPendingRollbackKey(null);
+    }
+  };
+
+  const handleCleanBackups = async () => {
+    if (!activeModPath || isRollbackBusy || cleanConfirmInput.toUpperCase() !== "WIPE") {
+      return;
+    }
+
+    setIsRollbackBusy(true);
+    try {
+      await window.api.invoke("wuwaFixer:cleanBackups", activeModPath);
+      toast.success(t(`${translationKey}.rollback.clean_success`));
+      await refreshBackups(activeModPath);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setIsRollbackBusy(false);
+      setShowCleanConfirm(false);
+      setCleanConfirmInput("");
+    }
   };
 
   const isRateLimited = prepareResult?.rateLimited ?? false;
@@ -226,6 +348,8 @@ export function useModFixRunner() {
     setShowUpdateDialog,
     showOptionsDialog,
     setShowOptionsDialog,
+    optionsTab,
+    setOptionsTab,
     logs,
     isRunning,
     isPreparing,
@@ -236,6 +360,18 @@ export function useModFixRunner() {
     prepareResult,
     wuwaOptions,
     setWuwaOptions,
+    backupGroups,
+    backupSize,
+    isLoadingBackups,
+    isRollbackBusy,
+    pendingRollbackKey,
+    setPendingRollbackKey,
+    showAdvancedRollback,
+    setShowAdvancedRollback,
+    showCleanConfirm,
+    setShowCleanConfirm,
+    cleanConfirmInput,
+    setCleanConfirmInput,
     isRateLimited,
     rateResetText,
     handleRun,
@@ -249,7 +385,12 @@ export function useModFixRunner() {
       openOptionsDialog();
     },
     handleRunWuwaFixer,
-    setCheckbox,
+    setOptionFlag,
+    toggleAeroFix,
+    setAeroFixMode,
+    refreshBackups,
+    handleRollbackToGroup,
+    handleCleanBackups,
     labels: {
       logTitle: t("page.mod.log-dialog.title"),
     },

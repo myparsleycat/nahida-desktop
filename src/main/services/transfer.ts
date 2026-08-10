@@ -392,7 +392,13 @@ export class TransferService {
         const transfer = this.transfers.find((t) => t.pid === pid);
         if (!transfer) return;
 
-        Object.assign(transfer, updates);
+        for (const [key, value] of Object.entries(updates)) {
+            if (value === undefined) {
+                Reflect.deleteProperty(transfer, key);
+                continue;
+            }
+            Reflect.set(transfer, key, value);
+        }
 
         if (updates.transferedSize !== undefined && transfer.status === "progress") {
             const now = Date.now();

@@ -68,6 +68,13 @@
         "paused": "Paused",
         "queued": "Queued",
         "preparing": "Preparing",
+        "planning": {
+          "permission_check": "Checking permissions",
+          "parent_lookup": "Looking up parent folders",
+          "file_validation": "Validating files",
+          "dedup_lookup": "Checking duplicates",
+          "processing": "Processing files"
+        },
         "time_remaining": "{{time}} remaining",
         "time_elapsed": "{{time}} elapsed",
         "failed_files": "{{count}} failed",
@@ -168,6 +175,7 @@
         "rename": "Rename",
         "delete": "Delete",
         "trash": "Trash",
+        "trash_success": "{{count}} files and directories moved to trash",
         "new_dir": "Create folder",
         "copy": "Copy",
         "cut": "Cut",
@@ -228,11 +236,13 @@
         },
         "delete_items": {
           "title": "Delete Items",
-          "description": "Are you sure you want to permanently delete the selected items? This action cannot be undone.",
+          "description": "Items will disappear from the list immediately, and cleanup continues in the background. This action cannot be undone.",
           "action": "Delete",
           "#": {
             "toast": {
-              "success": "Items deleted successfully"
+              "success": "Deletion requested for {{count}} items",
+              "partial": "Deletion requested for {{accepted}} items; {{failed}} failed",
+              "error": "Deletion request failed"
             }
           }
         }
@@ -452,9 +462,12 @@
             "continue_without_update": "Continue Without Update",
             "action": "Update"
           },
+          "tabs": {
+            "fix": "Fix Mod",
+            "rollback": "Rollback"
+          },
           "options": {
             "title": "Wuwa Mod Fixer",
-            "rollback": "Rollback Latest Fix",
             "derived_hashes": {
               "label": "Add Derived Hashes",
               "description": "Add missing texture state hashes (e.g. LOD Bias High/Medium, Cantarella wet, Chisa Enhanced E, Aemeath Charged) so character mod textures display correctly (some characters are not included)."
@@ -467,6 +480,11 @@
               "label": "Fix Aemeath Mech Form",
               "description": "Do not enable this option for Aemeath mech mods that are already normal. Do not apply the fix twice."
             },
+            "rendering_33": {
+              "label": "Fix Mesh Holes / Missing Parts",
+              "description": "Fix missing body parts or mesh holes caused by old WWMI export data after version 3.3+.",
+              "warning": "Only enable if the mod has missing body parts or mesh holes!"
+            },
             "aero_fix": {
               "label": "Aero FemaleRover Eye Fix",
               "description": "Use this when the eyes glitch while resonance energy is full.",
@@ -475,9 +493,35 @@
                 "texcoord_override": "TexCoord Override",
                 "texture_mirror_flip": "Texture Mirror Flip"
               },
-              "warning": "Enable this only if your mod actually has this issue."
+              "warning": "Enable this only if your mod actually has this issue.",
+              "tip": "If the problem isn't resolved, rollback then try a different method."
             },
             "run": "Run"
+          },
+          "rollback": {
+            "refresh": "Sync",
+            "scanning": "Scanning backup histories...",
+            "no_backups": "No backups found (.BAK)",
+            "no_backups_short": "No backups",
+            "file_count": "{{n}} files backed up",
+            "latest_state": "Latest Restore Point",
+            "restore": "Rollback",
+            "confirm_restore": "Execute Rollback",
+            "warn_restore": "Revert mod files to this state?",
+            "warn_clean_newer": "(Wipes {{n}} newer backups ahead)",
+            "backup_size_label": "Backup Size:",
+            "success": "Rollback completed.",
+            "advanced": "Advanced",
+            "advanced_hint": "Destructive operations",
+            "restore_all": "Restore to Oldest Backup",
+            "restore_all_desc": "Reverts all files to the oldest recorded state and removes all intermediate backups.",
+            "restore_all_action": "Restore...",
+            "warn_delete_all": "All {{n}} backups will be removed",
+            "clean_backups": "Delete All Backup Files",
+            "clean_backups_desc": "Permanently removes all .BAK files from the target folder. This cannot be undone.",
+            "clean_action": "Delete...",
+            "warn_clean": "Type WIPE to confirm:",
+            "clean_success": "Backups wiped successfully!"
           },
           "log": {
             "input_placeholder": "Input..."
@@ -1284,6 +1328,14 @@
       },
       "tools": {
         "title": "Tools",
+        "wuwaFixer": {
+          "title": "Wuwa Mod Fixer",
+          "autoUpdateNotification": {
+            "title": "Update Notifications",
+            "description": "Show a notification when a Wuwa Mod Fixer update is available. Background auto-update runs every hour regardless of this setting.",
+            "save_failed": "Failed to save the setting."
+          }
+        },
         "touch_profile": {
           "title": "Touch Profile",
           "llm": {

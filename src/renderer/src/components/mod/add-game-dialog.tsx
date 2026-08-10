@@ -28,6 +28,7 @@ import { FolderOpen, Plus, ShieldAlert, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { NteBootstrapProgressView } from "./nte-bootstrap-progress";
 
@@ -73,10 +74,6 @@ export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGame
   const enabledImporters = xxmiData?.enabledImporters ?? [];
   const importers = [...enabledImporters, { key: NTE_IMPORTER_KEY }];
   const isXXMIConfigured = !!xxmiData?.xxmiPath;
-  const importerLabels: Record<string, string> = {
-    [NO_IMPORTER_VALUE]: t("page.mod.dialog.edit-game.no_importer"),
-    ...Object.fromEntries(importers.map((importer) => [importer.key, importer.key])),
-  };
 
   const form = useForm({
     defaultValues: {
@@ -281,7 +278,7 @@ export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGame
                   </Button>
                 </div>
                 {nteResolution && isNteSelected ? (
-                  <p className="text-xs text-muted-foreground break-all">
+                  <p className="text-xs break-all text-muted-foreground">
                     {nteResolution.modFolderPath}
                   </p>
                 ) : null}
@@ -353,15 +350,17 @@ export function AddGameDialog({ isAddingGame, onPickFolder, onAddGame }: AddGame
                 <FieldLabel>{t("page.mod.dialog.edit-game.importer_label")}</FieldLabel>
                 <Select
                   value={field.state.value}
+                  items={[
+                    { value: NO_IMPORTER_VALUE, label: t("page.mod.dialog.edit-game.no_importer") },
+                    ...importers.map((importer) => ({ value: importer.key, label: importer.key })),
+                  ]}
                   onValueChange={(value) => {
                     if (value === null) return;
                     handleImporterChange(value, field.handleChange);
                   }}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder={t("g.select")}>
-                      {(value) => importerLabels[value] ?? value}
-                    </SelectValue>
+                    <SelectValue placeholder={t("g.select")} />
                   </SelectTrigger>
                   <SelectContent aria-describedby={undefined}>
                     <SelectGroup>

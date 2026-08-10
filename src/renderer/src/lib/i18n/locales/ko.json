@@ -68,6 +68,13 @@
         "paused": "일시정지",
         "queued": "대기 중",
         "preparing": "준비 중",
+        "planning": {
+          "permission_check": "권한 확인 중",
+          "parent_lookup": "상위 폴더 조회 중",
+          "file_validation": "파일 검증 중",
+          "dedup_lookup": "중복 확인 중",
+          "processing": "파일 처리 중"
+        },
         "time_remaining": "{{time}} 남음",
         "time_elapsed": "{{time}} 경과",
         "failed_files": "{{count}}개 실패",
@@ -150,6 +157,7 @@
         "download": "다운로드",
         "rename": "이름 바꾸기",
         "trash": "휴지통",
+        "trash_success": "{{count}}개의 파일 및 디렉토리가 휴지통으로 이동되었습니다",
         "new_dir": "폴더 생성",
         "delete": "삭제",
         "copy": "복사",
@@ -211,11 +219,13 @@
         },
         "delete_items": {
           "title": "항목 삭제",
-          "description": "선택한 항목을 영구 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+          "description": "삭제 요청이 접수되면 목록에서 바로 사라지고, 정리는 백그라운드에서 진행됩니다. 이 작업은 되돌릴 수 없습니다.",
           "action": "삭제",
           "#": {
             "toast": {
-              "success": "항목이 삭제되었습니다"
+              "success": "{{count}}개 삭제 요청이 접수되었어요",
+              "partial": "{{accepted}}개 삭제 요청이 접수되었고, {{failed}}개는 실패했어요",
+              "error": "삭제 요청에 실패했어요"
             }
           }
         }
@@ -281,8 +291,8 @@
         "target_path_not_set": "대상 경로가 설정되지 않았습니다.",
         "group_path_not_set": "그룹 경로가 설정되지 않았습니다.",
         "file_path_unavailable": "파일 경로를 확인할 수 없습니다.",
-        "unsupported_file_with_images": "{{fileName}}은(는) 지원하는 파일 형식이 아닙니다. (압축 파일, 폴더, 이미지 파일만 가능)",
-        "unsupported_file_archive_only": "{{fileName}}은(는) 지원하는 파일 형식이 아닙니다. (압축 파일 또는 폴더만 가능)",
+        "unsupported_file_with_images": "{{fileName, josa(pair: 은/는)}} 지원하는 파일 형식이 아닙니다. (압축 파일, 폴더, 이미지 파일만 가능)",
+        "unsupported_file_archive_only": "{{fileName, josa(pair: 은/는)}} 지원하는 파일 형식이 아닙니다. (압축 파일 또는 폴더만 가능)",
         "already_exists_folder": "이미 존재하는 폴더입니다: {{folderName}}",
         "already_exists_item": "이미 존재하는 항목입니다: {{folderName}}",
         "processing_error": "파일 처리 중 오류가 발생했습니다.",
@@ -436,9 +446,12 @@
             "continue_without_update": "업데이트 없이 계속",
             "action": "업데이트"
           },
+          "tabs": {
+            "fix": "모드 수정",
+            "rollback": "롤백"
+          },
           "options": {
             "title": "Wuwa Mod Fixer",
-            "rollback": "최근 픽스 롤백",
             "derived_hashes": {
               "label": "Derived Hash 추가",
               "description": "누락된 텍스처 상태 해시(예: LOD Bias High/Medium, 칸타렐라 wet, 치사 Enhanced E, 에이메스 Charged)를 추가해 캐릭터 모드 텍스처가 올바르게 표시되도록 합니다. 일부 캐릭터는 아직 포함되지 않을 수 있습니다."
@@ -451,6 +464,11 @@
               "label": "에이메스 메카 폼 수정",
               "description": "이미 정상인 에이메스 메카 모드에는 이 옵션을 켜지 마세요. 같은 수정을 다시 적용하면 안 됩니다."
             },
+            "rendering_33": {
+              "label": "3.3 버전 이후 모드 수정 (메쉬 구멍/부위 누락)",
+              "description": "게임 3.3+ 이후 구 WWMI 내보내기 데이터의 Color1 더티데이터로 인해 신체 부위가 표시되지 않거나 파손되는 문제를 수정합니다.",
+              "warning": "신체 부위 누락이나 메쉬 구멍이 있는 모드에서만 활성화하세요!"
+            },
             "aero_fix": {
               "label": "Aero 여성 방랑자 눈 Fix",
               "description": "공명 에너지가 가득 찼을 때 눈이 깨지는 문제가 있는 경우 사용합니다.",
@@ -459,9 +477,35 @@
                 "texcoord_override": "TexCoord Override",
                 "texture_mirror_flip": "Texture Mirror Flip"
               },
-              "warning": "해당 문제가 실제로 있는 모드에서만 활성화하세요."
+              "warning": "해당 문제가 실제로 있는 모드에서만 활성화하세요.",
+              "tip": "문제가 해결되지 않으면 롤백한 뒤 다른 방식으로 시도해보세요."
             },
             "run": "실행"
+          },
+          "rollback": {
+            "refresh": "동기화",
+            "scanning": "백업 기록을 스캔하는 중...",
+            "no_backups": "백업 파일(.BAK)을 찾을 수 없습니다",
+            "no_backups_short": "백업 없음",
+            "file_count": "백업 파일 {{n}}개",
+            "latest_state": "최신 복원 지점",
+            "restore": "롤백",
+            "confirm_restore": "롤백 실행",
+            "warn_restore": "모드 파일을 이 상태로 되돌릴까요?",
+            "warn_clean_newer": "(이후 백업 {{n}}개가 삭제됩니다)",
+            "backup_size_label": "백업 용량:",
+            "success": "롤백이 완료되었습니다.",
+            "advanced": "고급",
+            "advanced_hint": "파괴적 작업",
+            "restore_all": "가장 오래된 백업으로 복원",
+            "restore_all_desc": "모든 파일을 가장 오래된 기록 상태로 되돌리고 중간 백업을 모두 제거합니다.",
+            "restore_all_action": "복원...",
+            "warn_delete_all": "백업 {{n}}개가 모두 제거됩니다",
+            "clean_backups": "모든 백업 파일 삭제",
+            "clean_backups_desc": "대상 폴더의 모든 .BAK 파일을 영구 삭제합니다. 이 작업은 되돌릴 수 없습니다.",
+            "clean_action": "삭제...",
+            "warn_clean": "확인하려면 WIPE를 입력하세요:",
+            "clean_success": "백업 파일을 모두 삭제했습니다!"
           },
           "log": {
             "input_placeholder": "입력..."
@@ -501,13 +545,13 @@
           },
           "toggle-mutation": {
             "0": "이미 {{name}} 폴더가 존재합니다",
-            "1": "{{processes}} 가 해당 폴더를 사용 중이기 때문에 변경할 수 없습니다",
+            "1": "{{processes, josa(pair: 이/가)}} 해당 폴더를 사용 중이기 때문에 변경할 수 없습니다",
             "1-fallback": "폴더가 잠겨있어 변경할 수 없습니다",
             "2": "모드 상태 변경에 실패했습니다"
           },
           "rename-mutation": {
             "0": "이미 {{name}} 폴더가 존재합니다",
-            "1": "{{processes}} 가 해당 폴더를 사용 중이기 때문에 이름을 변경할 수 없습니다",
+            "1": "{{processes, josa(pair: 이/가)}} 해당 폴더를 사용 중이기 때문에 이름을 변경할 수 없습니다",
             "1-fallback": "폴더가 잠겨있어 이름을 변경할 수 없습니다",
             "2": "올바른 모드 이름을 입력해주세요",
             "3": "모드 이름 변경에 실패했습니다"
@@ -1270,6 +1314,14 @@
       },
       "tools": {
         "title": "도구",
+        "wuwaFixer": {
+          "title": "Wuwa Mod Fixer",
+          "autoUpdateNotification": {
+            "title": "업데이트 알림",
+            "description": "Wuwa Mod Fixer 업데이트가 있을 때 알림을 표시합니다. 알림을 꺼도 1시간마다 백그라운드 자동 업데이트는 계속 진행됩니다.",
+            "save_failed": "설정 저장에 실패했습니다."
+          }
+        },
         "touch_profile": {
           "title": "터치 프로필",
           "llm": {
@@ -1546,7 +1598,7 @@
   "components": {
     "path-selector-dialog": {
       "title": "경로 선택",
-      "description": "{{name}} 를 어떤 방식으로 다운로드 할지 선택하세요",
+      "description": "{{name, josa(pair: 을/를)}} 어떤 방식으로 다운로드 할지 선택하세요",
       "multiple_description": "{{count}}개 항목을 어떤 방식으로 다운로드할지 선택하세요",
       "mod_manager": {
         "title": "모드 매니저",

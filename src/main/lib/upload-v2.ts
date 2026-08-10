@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { open } from "node:fs/promises";
 
-import { eden } from "@main/client";
-import { toErrorMessage } from "@shared/utils";
+import { networkFetch } from "@main/internal/network-fetch";
+import { BACKEND_URL } from "@shared/const";
+import type { PlanPhase } from "@shared/types";
 import { chunk } from "es-toolkit";
 import ky from "ky";
 import type PQueue from "p-queue";
+import { parseServerSentEvents } from "parse-sse";
 
 import type { NahidaDesktop } from "..";
 import type { FinalFile, UploadProgress } from "./upload";
@@ -46,6 +48,8 @@ export async function uploadDriveFilesV2({
     queue,
     prepareDirectFile,
     onProgress,
+    onPlanProgress,
+    onPlanComplete,
     signal,
 }: {
     desktop: NahidaDesktop;
@@ -55,30 +59,70 @@ export async function uploadDriveFilesV2({
     queue: PQueue;
     prepareDirectFile: (file: FinalFile) => Promise<{ data: Buffer; compAlg?: "zstd" }>;
     onProgress?: (progress: UploadProgress) => void;
+    onPlanProgress?: (progress: { phase: PlanPhase; processed: number; total: number }) => void;
+    onPlanComplete?: () => void;
     signal?: AbortSignal;
 }) {
     const items: UploadPlanItem[] = [];
     const uploads = new Map<string, UploadPlanEntry>();
 
-    for (const page of chunk(files, PLAN_PAGE_SIZE)) {
+    const url = `${BACKEND_URL}/akasha/v2/sse/drive/files:plan`;
+    const pages = chunk(files, PLAN_PAGE_SIZE);
+    for (const [pageIndex, page] of pages.entries()) {
         signal?.throwIfAborted();
-        const result = await eden.akasha.v2.drive["files:plan"].post({
-            requestId,
-            current: currentId,
-            files: page.map((file) => ({
-                clientId: file.FID,
-                name: file.name,
-                sha256: file.sha256,
-                size: file.size,
-                parentId: file.parentId,
-                path: file.path,
-            })),
+        const response = await networkFetch(url, {
+            method: "POST",
+            headers: {
+                ...(await desktop.httpService.getHeaders(url)),
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                requestId,
+                current: currentId,
+                files: page.map((file) => ({
+                    clientId: file.FID,
+                    name: file.name,
+                    sha256: file.sha256,
+                    size: file.size,
+                    parentId: file.parentId,
+                    path: file.path,
+                })),
+            }),
+            signal,
         });
-        if (result.error) {
-            throw new Error(`[upload plan failed] ${toErrorMessage(result.error.value)}`);
+        if (!response.ok) {
+            const body = await response.text().catch(() => response.statusText);
+            throw new Error(`[upload plan failed] ${body}`);
         }
-        items.push(...result.data.items);
-        result.data.uploads.forEach((upload) => uploads.set(upload.intentId, upload));
+        if (!response.body) {
+            throw new Error("[upload plan failed] empty response stream");
+        }
+
+        for await (const event of parseServerSentEvents(response)) {
+            if (event.type === "error") {
+                throw new Error(`[upload plan failed] ${event.data}`);
+            }
+            if (event.type === "progress") {
+                const data = JSON.parse(event.data) as {
+                    phase: PlanPhase;
+                    processed: number;
+                    total: number;
+                };
+                onPlanProgress?.({
+                    phase: data.phase,
+                    processed: pageIndex * PLAN_PAGE_SIZE + data.processed,
+                    total: files.length,
+                });
+            }
+            if (event.type === "complete") {
+                const data = JSON.parse(event.data) as {
+                    items: UploadPlanItem[];
+                    uploads: UploadPlanEntry[];
+                };
+                items.push(...data.items);
+                data.uploads.forEach((upload) => uploads.set(upload.intentId, upload));
+            }
+        }
     }
 
     const filesById = new Map(files.map((file) => [file.FID, file]));
@@ -111,6 +155,9 @@ export async function uploadDriveFilesV2({
                 reason: "upload_plan_item_missing",
             }),
         );
+
+    // Clear planning UI only after plan-side progress (e.g. server dedup) is applied.
+    onPlanComplete?.();
 
     const failures: Error[] = [];
     [...pendingByIntent.entries()].forEach(([intentId, targets]) => {

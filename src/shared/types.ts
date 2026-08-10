@@ -47,8 +47,25 @@ export interface WuwaFixerOptions {
     derivedHashes: boolean;
     stableTexture: boolean;
     aemeathMech: boolean;
+    rendering33: boolean;
     aeroFix: "none" | "1" | "2";
-    rollback: boolean;
+}
+
+export interface WuwaBackupFile {
+    currentPath: string;
+    originalPath: string;
+    timestamp: string;
+    groupKey: string;
+}
+
+export interface WuwaBackupGroup {
+    groupKey: string;
+    files: WuwaBackupFile[];
+}
+
+export interface WuwaBackupSize {
+    bytes: number;
+    count: number;
 }
 
 export interface WuwaFixerStatus {
@@ -417,6 +434,13 @@ export type DriveResolveModResult = {
 
 export type DriveResolveImportSourceResult = DriveResolveLinkResult | DriveResolveModResult;
 
+export type PlanPhase =
+    | "permission_check"
+    | "parent_lookup"
+    | "file_validation"
+    | "dedup_lookup"
+    | "processing";
+
 export type TransferStatus =
     | "pending"
     | "preparing"
@@ -467,6 +491,8 @@ export interface Transfer {
     failedFiles: number;
     path?: string;
     error?: string;
+    planPhase?: PlanPhase;
+    planProgress?: number | null;
 }
 
 export type TransferWithoutData = Omit<Transfer, "data">;

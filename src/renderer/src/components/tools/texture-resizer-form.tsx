@@ -56,15 +56,18 @@ export function TextureResizerForm({
     });
   };
 
-  const colorSpaceLabels: Record<string, string> = {
-    srgb: t("page.tools.texture_resizer.color_space.srgb"),
-    linear: t("page.tools.texture_resizer.color_space.linear"),
-  };
-  const operationLabels: Record<string, string> = {
-    resize: t("page.tools.texture_resizer.operation_options.resize"),
-    resize_and_convert: t("page.tools.texture_resizer.operation_options.resize_and_convert"),
-    convert: t("page.tools.texture_resizer.operation_options.convert"),
-  };
+  const colorSpaceOptions = [
+    { value: "srgb", label: t("page.tools.texture_resizer.color_space.srgb") },
+    { value: "linear", label: t("page.tools.texture_resizer.color_space.linear") },
+  ] as const;
+  const operationOptions = [
+    { value: "resize", label: t("page.tools.texture_resizer.operation_options.resize") },
+    {
+      value: "resize_and_convert",
+      label: t("page.tools.texture_resizer.operation_options.resize_and_convert"),
+    },
+    { value: "convert", label: t("page.tools.texture_resizer.operation_options.convert") },
+  ] as const;
 
   const showResizeInputs = settings.operation !== "convert";
   const showOutputFormat = settings.operation !== "resize";
@@ -112,6 +115,7 @@ export function TextureResizerForm({
       </label>
       <Select
         value={selectedOutputColorSpace}
+        items={colorSpaceOptions}
         onValueChange={(value) => {
           const nextColorSpace = value as Exclude<TextureColorSpace, "unknown">;
           const nextOutputFormat = availableOutputFormats.find((format) =>
@@ -124,14 +128,15 @@ export function TextureResizerForm({
         }}
       >
         <SelectTrigger disabled={disabled}>
-          <SelectValue>{(value) => colorSpaceLabels[value] ?? value}</SelectValue>
+          <SelectValue />
         </SelectTrigger>
         <SelectContent>
           <SelectGroup>
-            <SelectItem value="srgb">{t("page.tools.texture_resizer.color_space.srgb")}</SelectItem>
-            <SelectItem value="linear">
-              {t("page.tools.texture_resizer.color_space.linear")}
-            </SelectItem>
+            {colorSpaceOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
           </SelectGroup>
         </SelectContent>
       </Select>
@@ -148,24 +153,21 @@ export function TextureResizerForm({
       </label>
       <Select
         value={settings.operation}
+        items={operationOptions}
         onValueChange={(value) =>
           updateSettings({ operation: value as TextureResizeSettings["operation"] })
         }
       >
         <SelectTrigger disabled={disabled} className="w-42">
-          <SelectValue>{(value) => operationLabels[value] ?? value}</SelectValue>
+          <SelectValue />
         </SelectTrigger>
         <SelectContent>
           <SelectGroup>
-            <SelectItem value="resize">
-              {t("page.tools.texture_resizer.operation_options.resize")}
-            </SelectItem>
-            <SelectItem value="resize_and_convert">
-              {t("page.tools.texture_resizer.operation_options.resize_and_convert")}
-            </SelectItem>
-            <SelectItem value="convert">
-              {t("page.tools.texture_resizer.operation_options.convert")}
-            </SelectItem>
+            {operationOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
           </SelectGroup>
         </SelectContent>
       </Select>
@@ -221,6 +223,10 @@ export function TextureResizerForm({
               </label>
               <Select
                 value={outputFormatValue}
+                items={visibleOutputFormats.map((format) => ({
+                  value: format,
+                  label: formatTextureFormatLabel(format),
+                }))}
                 onValueChange={(value) => {
                   if (value === null) return;
                   updateSettings({ outputFormat: value });
@@ -230,9 +236,7 @@ export function TextureResizerForm({
                   disabled={disabled || visibleOutputFormats.length === 0}
                   className="w-52"
                 >
-                  <SelectValue>
-                    {(value) => (value ? formatTextureFormatLabel(value) : value)}
-                  </SelectValue>
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
@@ -329,6 +333,10 @@ export function TextureResizerForm({
             </label>
             <Select
               value={outputFormatValue}
+              items={visibleOutputFormats.map((format) => ({
+                value: format,
+                label: formatTextureFormatLabel(format),
+              }))}
               onValueChange={(value) => {
                 if (value === null) return;
                 updateSettings({ outputFormat: value });
@@ -338,9 +346,7 @@ export function TextureResizerForm({
                 disabled={disabled || visibleOutputFormats.length === 0}
                 className="w-52"
               >
-                <SelectValue>
-                  {(value) => (value ? formatTextureFormatLabel(value) : value)}
-                </SelectValue>
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>

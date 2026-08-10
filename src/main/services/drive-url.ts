@@ -6,6 +6,8 @@ export type DriveSource = {
 };
 
 export const NAHIDA_SOURCE_HOSTNAMES = ["nahida.live", "www.nahida.live"] as const;
+// Bound nested decoding so malformed input cannot trigger unbounded work.
+const MAX_SOURCE_URL_DECODING_DEPTH = 10;
 
 /** Match the web client's URL-safe Base64 password encoding. */
 export function encodeNahidaPassword(value: string) {
@@ -19,7 +21,39 @@ export function encodeNahidaPassword(value: string) {
         .replace(/=+$/, "");
 }
 
-export function parseDriveSourceUrl(value: string): DriveSource {
+export function parseDriveSourceUrl(value: unknown): DriveSource {
+    const sourceUrl = resolveSourceUrl(value);
+    const source = sourceUrl ? parseNahidaSourceUrl(sourceUrl) : undefined;
+    if (source) return source;
+
+    throw new DriveApiError(
+        "DRIVE_INVALID_SOURCE_URL",
+        "Enter a Nahida shared link or collection URL.",
+    );
+}
+
+function resolveSourceUrl(value: unknown, depth = 0): string | undefined {
+    if (typeof value !== "string") return;
+
+    const normalized = value.trim();
+    if (/^http/i.test(normalized)) return normalized;
+    const lowercase = normalized.toLowerCase();
+    if (
+        NAHIDA_SOURCE_HOSTNAMES.some(
+            (hostname) => lowercase === hostname || lowercase.startsWith(`${hostname}/`),
+        )
+    ) {
+        return `https://${normalized}`;
+    }
+    if (depth >= MAX_SOURCE_URL_DECODING_DEPTH) return;
+
+    const decoded = decodeBase64(normalized);
+    if (!decoded || decoded === normalized) return;
+
+    return resolveSourceUrl(decoded, depth + 1);
+}
+
+function parseNahidaSourceUrl(value: string): DriveSource | undefined {
     try {
         const url = new URL(value.trim());
         if (url.protocol !== "https:") throw new Error("unsupported protocol");
@@ -36,8 +70,20 @@ export function parseDriveSourceUrl(value: string): DriveSource {
         // Normalize malformed external input to the same user-facing error below.
     }
 
-    throw new DriveApiError(
-        "DRIVE_INVALID_SOURCE_URL",
-        "Enter a Nahida shared link or collection URL.",
-    );
+    return;
+}
+
+function decodeBase64(value: string) {
+    const normalized = value.trim().replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/");
+    if (
+        normalized.length === 0 ||
+        normalized.length % 4 === 1 ||
+        !/^[A-Za-z0-9+/]*={0,2}$/.test(normalized)
+    ) {
+        return;
+    }
+
+    return Buffer.from(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "="), "base64")
+        .toString("utf8")
+        .trim();
 }

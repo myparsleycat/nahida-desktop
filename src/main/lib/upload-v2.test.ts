@@ -12,21 +12,13 @@ import type { FinalFile, UploadProgress } from "./upload";
 import { uploadDriveFilesV2 } from "./upload-v2";
 
 const mocks = vi.hoisted(() => ({
-    plan: vi.fn(),
+    networkFetch: vi.fn(),
     request: vi.fn(),
     post: vi.fn(),
 }));
 
-vi.mock("@main/client", () => ({
-    eden: {
-        akasha: {
-            v2: {
-                drive: {
-                    "files:plan": { post: mocks.plan },
-                },
-            },
-        },
-    },
+vi.mock("@main/internal/network-fetch", () => ({
+    networkFetch: mocks.networkFetch,
 }));
 
 vi.mock("ky", () => ({
@@ -51,23 +43,52 @@ function file(id: string): FinalFile {
     };
 }
 
+function sseResponse(events: Array<{ event: string; data: unknown }>): Response {
+    const lines = events.flatMap((e) => {
+        const dataStr = typeof e.data === "string" ? e.data : JSON.stringify(e.data);
+        return [`event: ${e.event}`, `data: ${dataStr}`, ""];
+    });
+    const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+            controller.enqueue(new TextEncoder().encode(lines.join("\n")));
+            controller.close();
+        },
+    });
+    return new Response(body, { status: 200 });
+}
+
+function sseResponseText(events: Array<{ event: string; data: string }>): Response {
+    const lines = events.flatMap((e) => [`event: ${e.event}`, `data: ${e.data}`, ""]);
+    const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+            controller.enqueue(new TextEncoder().encode(lines.join("\n")));
+            controller.close();
+        },
+    });
+    return new Response(body, { status: 200 });
+}
+
 describe("uploadDriveFilesV2", () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
 
     it("marks files materialized by the plan as server-deduplicated", async () => {
-        mocks.plan.mockResolvedValue({
-            error: null,
-            data: {
-                requestId: "request-id",
-                items: [
-                    { clientId: "created", status: "created", itemId: "one" },
-                    { clientId: "exists", status: "exists", itemId: "two" },
-                ],
-                uploads: [],
-            },
-        });
+        mocks.networkFetch.mockResolvedValue(
+            sseResponse([
+                {
+                    event: "complete",
+                    data: {
+                        requestId: "request-id",
+                        items: [
+                            { clientId: "created", status: "created", itemId: "one" },
+                            { clientId: "exists", status: "exists", itemId: "two" },
+                        ],
+                        uploads: [],
+                    },
+                },
+            ]),
+        );
         const progress: UploadProgress[] = [];
 
         await uploadDriveFilesV2({
@@ -87,25 +108,123 @@ describe("uploadDriveFilesV2", () => {
         expect(mocks.request).not.toHaveBeenCalled();
     });
 
-    it("uploads a shared hash once and completes every planned target", async () => {
-        mocks.plan.mockResolvedValue({
-            error: null,
-            data: {
-                requestId: "request-id",
-                items: [
-                    { clientId: "first", status: "pending", intentId: "intent" },
-                    { clientId: "second", status: "pending", intentId: "intent" },
-                ],
-                uploads: [
-                    {
-                        intentId: "intent",
-                        url: "https://api.nahida.live/akasha/v2/uploads/intent",
-                        method: "POST",
-                        form: { token: "token", sha256: "a".repeat(64) },
+    it("emits plan progress events via onPlanProgress", async () => {
+        mocks.networkFetch.mockResolvedValue(
+            sseResponse([
+                { event: "status", data: "permission_check" },
+                {
+                    event: "progress",
+                    data: { phase: "permission_check", processed: 1, total: 1 },
+                },
+                { event: "status", data: "processing" },
+                {
+                    event: "progress",
+                    data: { phase: "processing", processed: 1, total: 1 },
+                },
+                {
+                    event: "complete",
+                    data: {
+                        requestId: "request-id",
+                        items: [{ clientId: "first", status: "created", itemId: "one" }],
+                        uploads: [],
                     },
-                ],
-            },
+                },
+            ]),
+        );
+        const planProgress: Array<{ phase: string; processed: number; total: number }> = [];
+
+        await uploadDriveFilesV2({
+            desktop,
+            currentId: "current",
+            requestId: "request-id",
+            files: [file("first")],
+            queue: new PQueue({ concurrency: 2 }),
+            prepareDirectFile: async () => ({ data: Buffer.from("unused") }),
+            onPlanProgress: (p) => planProgress.push(p),
         });
+
+        expect(planProgress).toEqual([
+            { phase: "permission_check", processed: 1, total: 1 },
+            { phase: "processing", processed: 1, total: 1 },
+        ]);
+    });
+
+    it("notifies plan completion after plan-side progress and before intent uploads", async () => {
+        const order: string[] = [];
+        mocks.networkFetch.mockResolvedValue(
+            sseResponse([
+                {
+                    event: "progress",
+                    data: { phase: "processing", processed: 2, total: 2 },
+                },
+                {
+                    event: "complete",
+                    data: {
+                        requestId: "request-id",
+                        items: [
+                            { clientId: "deduped", status: "created", itemId: "one" },
+                            { clientId: "first", status: "pending", intentId: "intent" },
+                        ],
+                        uploads: [
+                            {
+                                intentId: "intent",
+                                url: "https://api.nahida.live/akasha/v2/uploads/intent",
+                                method: "POST",
+                                form: { token: "token", sha256: "a".repeat(64) },
+                            },
+                        ],
+                    },
+                },
+            ]),
+        );
+        mocks.request.mockImplementation(async () => {
+            order.push("upload");
+            return new Response(JSON.stringify({ status: "completed" }), { status: 200 });
+        });
+
+        await uploadDriveFilesV2({
+            desktop,
+            currentId: "current",
+            requestId: "request-id",
+            files: [file("deduped"), file("first")],
+            queue: new PQueue({ concurrency: 1 }),
+            prepareDirectFile: async () => ({ data: Buffer.from("payload") }),
+            onPlanProgress: () => order.push("plan-progress"),
+            onPlanComplete: () => order.push("plan-complete"),
+            onProgress: (event) =>
+                order.push(event.fileId ? `progress:${event.fileId}` : "progress:bytes"),
+        });
+
+        expect(order.indexOf("plan-progress")).toBeLessThan(order.indexOf("progress:deduped"));
+        expect(order.indexOf("progress:deduped")).toBeLessThan(order.indexOf("plan-complete"));
+        expect(order.indexOf("plan-complete")).toBeLessThan(order.indexOf("upload"));
+        expect(order.indexOf("plan-complete")).toBeLessThan(order.indexOf("progress:bytes"));
+        expect(order.indexOf("plan-complete")).toBeLessThan(order.indexOf("progress:first"));
+    });
+
+    it("uploads a shared hash once and completes every planned target", async () => {
+        mocks.networkFetch.mockResolvedValue(
+            sseResponse([
+                {
+                    event: "complete",
+                    data: {
+                        requestId: "request-id",
+                        items: [
+                            { clientId: "first", status: "pending", intentId: "intent" },
+                            { clientId: "second", status: "pending", intentId: "intent" },
+                        ],
+                        uploads: [
+                            {
+                                intentId: "intent",
+                                url: "https://api.nahida.live/akasha/v2/uploads/intent",
+                                method: "POST",
+                                form: { token: "token", sha256: "a".repeat(64) },
+                            },
+                        ],
+                    },
+                },
+            ]),
+        );
         mocks.request.mockResolvedValue(
             new Response(JSON.stringify({ status: "completed" }), { status: 200 }),
         );
@@ -122,9 +241,6 @@ describe("uploadDriveFilesV2", () => {
         });
 
         expect(mocks.request).toHaveBeenCalledTimes(1);
-        expect(mocks.plan).toHaveBeenCalledWith(
-            expect.objectContaining({ current: "shared-directory" }),
-        );
         expect(progress.filter((event) => event.fileId).map((event) => event.fileId)).toEqual([
             "first",
             "second",
@@ -133,14 +249,18 @@ describe("uploadDriveFilesV2", () => {
     });
 
     it("reports denied plan items as a failed upload", async () => {
-        mocks.plan.mockResolvedValue({
-            error: null,
-            data: {
-                requestId: "request-id",
-                items: [{ clientId: "denied", status: "denied", reason: "invalid_parent" }],
-                uploads: [],
-            },
-        });
+        mocks.networkFetch.mockResolvedValue(
+            sseResponse([
+                {
+                    event: "complete",
+                    data: {
+                        requestId: "request-id",
+                        items: [{ clientId: "denied", status: "denied", reason: "invalid_parent" }],
+                        uploads: [],
+                    },
+                },
+            ]),
+        );
 
         await expect(
             uploadDriveFilesV2({
@@ -154,26 +274,47 @@ describe("uploadDriveFilesV2", () => {
         ).rejects.toThrow("denied.txt: invalid_parent");
     });
 
+    it("throws on SSE error event", async () => {
+        mocks.networkFetch.mockResolvedValue(
+            sseResponseText([{ event: "error", data: "An error occurred during planning" }]),
+        );
+
+        await expect(
+            uploadDriveFilesV2({
+                desktop,
+                currentId: "current",
+                requestId: "request-id",
+                files: [file("error-file")],
+                queue: new PQueue({ concurrency: 1 }),
+                prepareDirectFile: async () => ({ data: Buffer.from("unused") }),
+            }),
+        ).rejects.toThrow("[upload plan failed] An error occurred during planning");
+    });
+
     it("removes the abort listener after a retry delay completes", async () => {
         vi.useFakeTimers({ toFake: ["setTimeout"] });
         const controller = new AbortController();
         const addEventListener = vi.spyOn(controller.signal, "addEventListener");
         const removeEventListener = vi.spyOn(controller.signal, "removeEventListener");
-        mocks.plan.mockResolvedValue({
-            error: null,
-            data: {
-                requestId: "request-id",
-                items: [{ clientId: "retry", status: "pending", intentId: "intent" }],
-                uploads: [
-                    {
-                        intentId: "intent",
-                        url: "https://api.nahida.live/akasha/v2/uploads/intent",
-                        method: "POST",
-                        form: { token: "token", sha256: "a".repeat(64) },
+        mocks.networkFetch.mockResolvedValue(
+            sseResponse([
+                {
+                    event: "complete",
+                    data: {
+                        requestId: "request-id",
+                        items: [{ clientId: "retry", status: "pending", intentId: "intent" }],
+                        uploads: [
+                            {
+                                intentId: "intent",
+                                url: "https://api.nahida.live/akasha/v2/uploads/intent",
+                                method: "POST",
+                                form: { token: "token", sha256: "a".repeat(64) },
+                            },
+                        ],
                     },
-                ],
-            },
-        });
+                },
+            ]),
+        );
         mocks.request
             .mockResolvedValueOnce(new Response("server error", { status: 500 }))
             .mockResolvedValueOnce(
@@ -212,21 +353,25 @@ describe("uploadDriveFilesV2", () => {
         const filePath = path.join(os.tmpdir(), `nahida-upload-v2-${randomUUID()}.bin`);
         const size = 80 * 1024 * 1024;
         await writeFile(filePath, Buffer.from([0]));
-        mocks.plan.mockResolvedValue({
-            error: null,
-            data: {
-                requestId: "request-id",
-                items: [{ clientId: "large", status: "pending", intentId: "intent" }],
-                uploads: [
-                    {
-                        intentId: "intent",
-                        url: "https://api.nahida.live/akasha/v2/uploads/intent",
-                        method: "POST",
-                        form: { token: "token", sha256: "a".repeat(64) },
+        mocks.networkFetch.mockResolvedValue(
+            sseResponse([
+                {
+                    event: "complete",
+                    data: {
+                        requestId: "request-id",
+                        items: [{ clientId: "large", status: "pending", intentId: "intent" }],
+                        uploads: [
+                            {
+                                intentId: "intent",
+                                url: "https://api.nahida.live/akasha/v2/uploads/intent",
+                                method: "POST",
+                                form: { token: "token", sha256: "a".repeat(64) },
+                            },
+                        ],
                     },
-                ],
-            },
-        });
+                },
+            ]),
+        );
 
         try {
             await expect(
@@ -251,21 +396,25 @@ describe("uploadDriveFilesV2", () => {
         const size = 80 * 1024 * 1024;
         await writeFile(filePath, "");
         await truncate(filePath, size);
-        mocks.plan.mockResolvedValue({
-            error: null,
-            data: {
-                requestId: "request-id",
-                items: [{ clientId: "large", status: "pending", intentId: "intent" }],
-                uploads: [
-                    {
-                        intentId: "intent",
-                        url: "https://api.nahida.live/akasha/v2/uploads/intent",
-                        method: "POST",
-                        form: { token: "token", sha256: "a".repeat(64) },
+        mocks.networkFetch.mockResolvedValue(
+            sseResponse([
+                {
+                    event: "complete",
+                    data: {
+                        requestId: "request-id",
+                        items: [{ clientId: "large", status: "pending", intentId: "intent" }],
+                        uploads: [
+                            {
+                                intentId: "intent",
+                                url: "https://api.nahida.live/akasha/v2/uploads/intent",
+                                method: "POST",
+                                form: { token: "token", sha256: "a".repeat(64) },
+                            },
+                        ],
                     },
-                ],
-            },
-        });
+                },
+            ]),
+        );
         mocks.request.mockImplementation(async (_url, options: { body: ReadableStream }) => {
             const reader = options.body.getReader();
             while (!(await reader.read()).done) {}
