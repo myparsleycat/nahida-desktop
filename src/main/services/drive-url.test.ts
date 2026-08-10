@@ -27,6 +27,11 @@ const testSourceUrls = [
         url: "https://nahida.live/akasha/mod/-fpnEyi_nPNB-Mf97p5_k",
         expected: { type: "mod", id: "-fpnEyi_nPNB-Mf97p5_k" },
     },
+    {
+        label: "Base64-encoded public folder",
+        url: "aHR0cHM6Ly9uYWhpZGEubGl2ZS9ha2FzaGEvbGluay9xanNFZHZMcGNBeHI=",
+        expected: { type: "link", id: "qjsEdvLpcAxr" },
+    },
 ] as const;
 
 describe("encodeNahidaPassword", () => {

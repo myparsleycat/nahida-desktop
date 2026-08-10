@@ -20,6 +20,20 @@ export function encodeNahidaPassword(value: string) {
 }
 
 export function parseDriveSourceUrl(value: string): DriveSource {
+    const source = parseNahidaSourceUrl(value);
+    if (source) return source;
+
+    const decodedSource = decodeBase64(value);
+    const decoded = decodedSource ? parseNahidaSourceUrl(decodedSource) : undefined;
+    if (decoded) return decoded;
+
+    throw new DriveApiError(
+        "DRIVE_INVALID_SOURCE_URL",
+        "Enter a Nahida shared link or collection URL.",
+    );
+}
+
+function parseNahidaSourceUrl(value: string): DriveSource | undefined {
     try {
         const url = new URL(value.trim());
         if (url.protocol !== "https:") throw new Error("unsupported protocol");
@@ -36,8 +50,20 @@ export function parseDriveSourceUrl(value: string): DriveSource {
         // Normalize malformed external input to the same user-facing error below.
     }
 
-    throw new DriveApiError(
-        "DRIVE_INVALID_SOURCE_URL",
-        "Enter a Nahida shared link or collection URL.",
-    );
+    return;
+}
+
+function decodeBase64(value: string) {
+    const normalized = value.trim().replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/");
+    if (
+        normalized.length === 0 ||
+        normalized.length % 4 === 1 ||
+        !/^[A-Za-z0-9+/]*={0,2}$/.test(normalized)
+    ) {
+        return;
+    }
+
+    return Buffer.from(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "="), "base64")
+        .toString("utf8")
+        .trim();
 }
