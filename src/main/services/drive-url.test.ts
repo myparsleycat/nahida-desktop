@@ -5,6 +5,7 @@ import { encodeNahidaPassword, NAHIDA_SOURCE_HOSTNAMES, parseDriveSourceUrl } fr
 
 const sourceUrl = (hostname: string, pathname: string, protocol = "https:") =>
     new URL(pathname, `${protocol}//${hostname}`).toString();
+const base64 = (value: string) => Buffer.from(value).toString("base64");
 
 const testSourceUrls = [
     {
@@ -32,6 +33,16 @@ const testSourceUrls = [
         url: "aHR0cHM6Ly9uYWhpZGEubGl2ZS9ha2FzaGEvbGluay9xanNFZHZMcGNBeHI=",
         expected: { type: "link", id: "qjsEdvLpcAxr" },
     },
+    {
+        label: "multi-encoded public folder",
+        url: base64(base64("https://nahida.live/akasha/link/qjsEdvLpcAxr")),
+        expected: { type: "link", id: "qjsEdvLpcAxr" },
+    },
+    {
+        label: "Base64-encoded Nahida host",
+        url: base64("nahida.live/akasha/link/qjsEdvLpcAxr"),
+        expected: { type: "link", id: "qjsEdvLpcAxr" },
+    },
 ] as const;
 
 describe("encodeNahidaPassword", () => {
@@ -44,6 +55,13 @@ describe("encodeNahidaPassword", () => {
 describe("parseDriveSourceUrl", () => {
     it.each(testSourceUrls)("parses $label fixture", ({ url, expected }) => {
         expect(parseDriveSourceUrl(url)).toEqual(expected);
+    });
+
+    it("adds HTTPS to a Nahida host without a protocol", () => {
+        expect(parseDriveSourceUrl("nahida.live/akasha/link/qjsEdvLpcAxr")).toEqual({
+            type: "link",
+            id: "qjsEdvLpcAxr",
+        });
     });
 
     it.each([
