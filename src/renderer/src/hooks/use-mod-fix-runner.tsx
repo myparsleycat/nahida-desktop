@@ -61,6 +61,7 @@ export function useModFixRunner() {
   const [showCleanConfirm, setShowCleanConfirm] = useState(false);
   const [cleanConfirmInput, setCleanConfirmInput] = useState("");
   const runInProgressRef = useRef(false);
+  const backupRefreshTokenRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const translationKey = "page.mod.dialog.wuwa-fix-runner";
@@ -87,12 +88,17 @@ export function useModFixRunner() {
 
   const refreshBackups = useCallback(
     async (modPath = activeModPath) => {
+      const requestToken = ++backupRefreshTokenRef.current;
+      const isCurrent = () => backupRefreshTokenRef.current === requestToken;
+
       if (!modPath) {
+        if (!isCurrent()) return;
         setBackupGroups([]);
         setBackupSize({ bytes: 0, count: 0 });
         setPendingRollbackKey(null);
         setShowCleanConfirm(false);
         setCleanConfirmInput("");
+        setIsLoadingBackups(false);
         return;
       }
 
@@ -105,14 +111,18 @@ export function useModFixRunner() {
           window.api.invoke("wuwaFixer:scanBackups", modPath),
           window.api.invoke("wuwaFixer:getBackupSize", modPath),
         ]);
+        if (!isCurrent()) return;
         setBackupGroups(groups);
         setBackupSize(size);
       } catch (error) {
+        if (!isCurrent()) return;
         setBackupGroups([]);
         setBackupSize({ bytes: 0, count: 0 });
         toast.error((error as Error).message);
       } finally {
-        setIsLoadingBackups(false);
+        if (isCurrent()) {
+          setIsLoadingBackups(false);
+        }
       }
     },
     [activeModPath],

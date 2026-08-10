@@ -1332,7 +1332,8 @@
           "title": "Wuwa Mod Fixer",
           "autoUpdateNotification": {
             "title": "Update Notifications",
-            "description": "Show a notification when a Wuwa Mod Fixer update is available. Background auto-update runs every hour regardless of this setting."
+            "description": "Show a notification when a Wuwa Mod Fixer update is available. Background auto-update runs every hour regardless of this setting.",
+            "save_failed": "Failed to save the setting."
           }
         },
         "touch_profile": {

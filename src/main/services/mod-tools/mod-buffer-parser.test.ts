@@ -89,4 +89,30 @@ describe("matchIndexResources", () => {
             ["ZhaoBodyAIB_Bodysuit"],
         );
     });
+
+    it("does not treat an earlier ib inside the base name as the index kind", () => {
+        const positions = [
+            {
+                name: "Rib_BodyPosition",
+                filename: "Rib_BodyPosition.buf",
+                stride: 40,
+                values: {},
+            },
+        ] satisfies Resource[];
+        const indices = [
+            {
+                name: "Rib_Body_Index",
+                filename: "Rib_Body_Index.buf",
+                format: "DXGI_FORMAT_R32_UINT",
+                values: {},
+            },
+        ] satisfies Resource[];
+
+        const matches = matchIndexResources(positions, indices, []);
+
+        assert.deepEqual(
+            matches.get("rib_bodyposition")?.map((resource) => resource.name),
+            ["Rib_Body_Index"],
+        );
+    });
 });

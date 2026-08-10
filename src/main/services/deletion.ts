@@ -35,7 +35,7 @@ export async function deleteDriveItems(uuids: string[]) {
 
 export async function runDeletionBatches(
     ids: string[],
-    request: (page: string[]) => Promise<DeletionAccepted>,
+    request: (page: string[]) => Promise<DeletionAccepted | null>,
     batchSize = DELETION_BATCH_SIZE,
 ): Promise<BatchDeletionOutcome> {
     const requestedIds = [...new Set(ids)];
@@ -48,7 +48,8 @@ export async function runDeletionBatches(
 
     for (const page of chunk(requestedIds, batchSize)) {
         try {
-            jobs.push(await request(page));
+            const job = await request(page);
+            if (job) jobs.push(job);
             acceptedIds.push(...page);
         } catch (error) {
             return {
@@ -93,8 +94,10 @@ export function resolveDeletionResult(
     throw new Error("unexpected_deletion_response");
 }
 
-function requireAccepted(result: DeletionResult): DeletionAccepted {
+/** Returns the accepted job, or null when the batch completed synchronously. */
+function requireAccepted(result: DeletionResult): DeletionAccepted | null {
     if (result.kind === "accepted") return result;
+    if (result.kind === "completed") return null;
     throw new Error("unexpected_deletion_response");
 }
 

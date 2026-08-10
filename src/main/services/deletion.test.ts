@@ -1,11 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const deleteManyPost = vi.fn();
 
 vi.mock("@main/client", () => ({
     eden: {
         akasha: {
             content: {
                 delete_many: {
-                    post: vi.fn(),
+                    post: (...args: unknown[]) => deleteManyPost(...args),
                 },
             },
         },
@@ -14,10 +16,15 @@ vi.mock("@main/client", () => ({
 
 import {
     DELETION_BATCH_SIZE,
+    deleteDriveItems,
     requireBatchAccepted,
     resolveDeletionResult,
     runDeletionBatches,
 } from "./deletion";
+
+beforeEach(() => {
+    deleteManyPost.mockReset();
+});
 
 describe("resolveDeletionResult", () => {
     it("accepts a 202-style payload from data", () => {
@@ -104,5 +111,44 @@ describe("runDeletionBatches", () => {
 
         expect(outcome.acceptedIds).toEqual([]);
         expect(() => requireBatchAccepted(outcome)).toThrow("boom");
+    });
+
+    it("treats a null job (synchronous completed batch) as accepted ids", async () => {
+        const outcome = await runDeletionBatches(["a1", "a2"], async () => null);
+
+        expect(outcome.acceptedIds).toEqual(["a1", "a2"]);
+        expect(outcome.jobs).toEqual([]);
+        expect(outcome.errorMessage).toBeUndefined();
+    });
+});
+
+describe("deleteDriveItems", () => {
+    it("succeeds when delete_many returns a synchronous completed payload", async () => {
+        deleteManyPost.mockResolvedValue({
+            data: { status: "completed", deletedCount: 2 },
+            error: null,
+        });
+
+        const outcome = await deleteDriveItems(["id-1", "id-2"]);
+
+        expect(deleteManyPost).toHaveBeenCalledWith({ uuids: ["id-1", "id-2"] });
+        expect(outcome).toEqual({
+            requestedIds: ["id-1", "id-2"],
+            acceptedIds: ["id-1", "id-2"],
+            jobs: [],
+        });
+        expect(() => requireBatchAccepted(outcome)).not.toThrow();
+    });
+
+    it("still rejects unexpected delete_many payloads", async () => {
+        deleteManyPost.mockResolvedValue({
+            data: { status: "mystery" },
+            error: null,
+        });
+
+        const outcome = await deleteDriveItems(["id-1"]);
+
+        expect(outcome.acceptedIds).toEqual([]);
+        expect(outcome.errorMessage).toBe("unexpected_deletion_response");
     });
 });

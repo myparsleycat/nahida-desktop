@@ -1299,7 +1299,8 @@
           "title": "Wuwa Mod Fixer",
           "autoUpdateNotification": {
             "title": "更新通知",
-            "description": "Wuwa Mod Fixer の更新がある際に通知を表示します。通知をオフにしても、1時間ごとのバックグラウンド自動更新は継続されます。"
+            "description": "Wuwa Mod Fixer の更新がある際に通知を表示します。通知をオフにしても、1時間ごとのバックグラウンド自動更新は継続されます。",
+            "save_failed": "設定の保存に失敗しました。"
           }
         },
         "touch_profile": {

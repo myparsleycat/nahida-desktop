@@ -15,6 +15,8 @@ import fse from "fs-extra";
 
 import type { NahidaDesktop } from "@/main";
 
+import { isSameOrChildPath } from "../mod-manager/path-utils";
+
 const BAK_RE = /^(.*)_(\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}(?:\.\d{3})?)\.BAK$/i;
 
 const WUWA_RELEASES_LATEST_URL =
@@ -373,11 +375,34 @@ export class WuwaModFixer {
     }
 
     private async requireModPath(modPath: string, action: string) {
+        if (!(await this.isUnderManagedModRoot(modPath))) {
+            const error = new Error("Path is outside the managed mod folder");
+            this.desktop.logger.error(error, `${action}:${modPath}`);
+            throw error;
+        }
         if (!(await fse.pathExists(modPath))) {
             const error = new Error("Destination path does not exist");
             this.desktop.logger.error(error, `${action}:${modPath}`);
             throw error;
         }
+    }
+
+    private async isUnderManagedModRoot(modPath: string) {
+        const games = await this.desktop.service.mod.get.games();
+        const roots = games.map((game) => game.modFolderPath).filter(Boolean);
+        if (roots.length === 0) return false;
+
+        const resolvedTarget = (await fse.pathExists(modPath))
+            ? await fse.realpath(modPath).catch(() => null)
+            : path.resolve(modPath);
+        if (!resolvedTarget) return false;
+
+        for (const root of roots) {
+            if (!(await fse.pathExists(root))) continue;
+            const realRoot = await fse.realpath(root).catch(() => null);
+            if (realRoot && isSameOrChildPath(realRoot, resolvedTarget)) return true;
+        }
+        return false;
     }
 
     private async listBakFiles(modPath: string) {
