@@ -149,6 +149,59 @@ describe("uploadDriveFilesV2", () => {
         ]);
     });
 
+    it("notifies plan completion after plan-side progress and before intent uploads", async () => {
+        const order: string[] = [];
+        mocks.networkFetch.mockResolvedValue(
+            sseResponse([
+                {
+                    event: "progress",
+                    data: { phase: "processing", processed: 2, total: 2 },
+                },
+                {
+                    event: "complete",
+                    data: {
+                        requestId: "request-id",
+                        items: [
+                            { clientId: "deduped", status: "created", itemId: "one" },
+                            { clientId: "first", status: "pending", intentId: "intent" },
+                        ],
+                        uploads: [
+                            {
+                                intentId: "intent",
+                                url: "https://api.nahida.live/akasha/v2/uploads/intent",
+                                method: "POST",
+                                form: { token: "token", sha256: "a".repeat(64) },
+                            },
+                        ],
+                    },
+                },
+            ]),
+        );
+        mocks.request.mockImplementation(async () => {
+            order.push("upload");
+            return new Response(JSON.stringify({ status: "completed" }), { status: 200 });
+        });
+
+        await uploadDriveFilesV2({
+            desktop,
+            currentId: "current",
+            requestId: "request-id",
+            files: [file("deduped"), file("first")],
+            queue: new PQueue({ concurrency: 1 }),
+            prepareDirectFile: async () => ({ data: Buffer.from("payload") }),
+            onPlanProgress: () => order.push("plan-progress"),
+            onPlanComplete: () => order.push("plan-complete"),
+            onProgress: (event) =>
+                order.push(event.fileId ? `progress:${event.fileId}` : "progress:bytes"),
+        });
+
+        expect(order.indexOf("plan-progress")).toBeLessThan(order.indexOf("progress:deduped"));
+        expect(order.indexOf("progress:deduped")).toBeLessThan(order.indexOf("plan-complete"));
+        expect(order.indexOf("plan-complete")).toBeLessThan(order.indexOf("upload"));
+        expect(order.indexOf("plan-complete")).toBeLessThan(order.indexOf("progress:bytes"));
+        expect(order.indexOf("plan-complete")).toBeLessThan(order.indexOf("progress:first"));
+    });
+
     it("uploads a shared hash once and completes every planned target", async () => {
         mocks.networkFetch.mockResolvedValue(
             sseResponse([

@@ -49,6 +49,7 @@ export async function uploadDriveFilesV2({
     prepareDirectFile,
     onProgress,
     onPlanProgress,
+    onPlanComplete,
     signal,
 }: {
     desktop: NahidaDesktop;
@@ -59,6 +60,7 @@ export async function uploadDriveFilesV2({
     prepareDirectFile: (file: FinalFile) => Promise<{ data: Buffer; compAlg?: "zstd" }>;
     onProgress?: (progress: UploadProgress) => void;
     onPlanProgress?: (progress: { phase: PlanPhase; processed: number; total: number }) => void;
+    onPlanComplete?: () => void;
     signal?: AbortSignal;
 }) {
     const items: UploadPlanItem[] = [];
@@ -153,6 +155,9 @@ export async function uploadDriveFilesV2({
                 reason: "upload_plan_item_missing",
             }),
         );
+
+    // Clear planning UI only after plan-side progress (e.g. server dedup) is applied.
+    onPlanComplete?.();
 
     const failures: Error[] = [];
     [...pendingByIntent.entries()].forEach(([intentId, targets]) => {

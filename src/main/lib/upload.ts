@@ -320,6 +320,7 @@ export class UploadLib {
         files,
         onProgress,
         onPlanProgress,
+        onPlanComplete,
         signal,
         pid,
     }: {
@@ -329,6 +330,7 @@ export class UploadLib {
         totalSize: number;
         onProgress?: (progress: UploadProgress) => void;
         onPlanProgress?: (progress: { phase: PlanPhase; processed: number; total: number }) => void;
+        onPlanComplete?: () => void;
         signal?: AbortSignal;
         pid?: string;
     }) {
@@ -352,6 +354,7 @@ export class UploadLib {
                 signal,
                 onProgress,
                 onPlanProgress,
+                onPlanComplete,
                 prepareDirectFile: async (file) => {
                     const data = await fse.readFile(file.fullPath);
                     if (file.size <= 100 || (await this.isPreviewFile(data, file.name))) {
@@ -490,6 +493,15 @@ export class UploadLib {
                                 progress.total > 0
                                     ? (progress.processed / progress.total) * 100
                                     : null,
+                        });
+                    },
+                    onPlanComplete: () => {
+                        void this.desktop.service.transfer.updateTransfer(pid, {
+                            status: "progress",
+                            transferedSize: currentUploadedBytes,
+                            transferedFiles: currentUploadedCount,
+                            planPhase: undefined,
+                            planProgress: undefined,
                         });
                     },
                     signal: abortController.signal,
