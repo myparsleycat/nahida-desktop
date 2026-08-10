@@ -35,6 +35,7 @@ import { parseServerSentEvents } from "parse-sse";
 import type { NahidaDesktop } from "..";
 import type { LocalTransfer, TransferParams } from "./transfer";
 
+import { deleteDriveItems, requireBatchAccepted, type BatchDeletionOutcome } from "./deletion";
 import { createDriveApiError, DriveApiError, isBackendUnavailableStatus } from "./drive-errors";
 import { encodeNahidaPassword, parseDriveSourceUrl } from "./drive-url";
 import { processChunked } from "./util";
@@ -240,20 +241,34 @@ export class DriveService {
     };
 
     delete = {
-        items: async (ids: string[], action: "trash" | "delete") => {
+        items: async (ids: string[], action: "trash" | "delete"): Promise<BatchDeletionOutcome> => {
             if (action === "trash") {
                 const { error } = await eden.akasha.content.trash.trash_many.post({
                     uuids: ids,
                 });
                 if (error) throw error.value;
-            } else if (action === "delete") {
-                const { error } = await eden.akasha.content.delete_many.post({
-                    uuids: ids,
-                });
-                if (error) throw error.value;
-            } else {
-                throw new Error("INVALID_ACTION");
+                return { requestedIds: ids, acceptedIds: ids, jobs: [] };
             }
+            if (action === "delete") {
+                const outcome = requireBatchAccepted(await deleteDriveItems(ids));
+                if (outcome.errorMessage) {
+                    this.desktop.logger.warn(
+                        {
+                            channel: "drive:delete:items",
+                            action,
+                            stage: "delete-items-partial",
+                            ids: outcome.requestedIds,
+                            acceptedIds: outcome.acceptedIds,
+                            failedCount: outcome.requestedIds.length - outcome.acceptedIds.length,
+                            jobCount: outcome.jobs.length,
+                            error: outcome.errorMessage,
+                        },
+                        "Drive:delete:items:partial",
+                    );
+                }
+                return outcome;
+            }
+            throw new Error("INVALID_ACTION");
         },
     };
 

@@ -9,6 +9,7 @@ import { useDriveClipboardActions } from "@renderer/hooks/use-drive-clipboard";
 import { downloadItems } from "@renderer/lib/download";
 import { useContentMenu, useDialogStore, useSelectionStore } from "@renderer/store/drive";
 import type { Content } from "@shared/types";
+import { toErrorMessage } from "@shared/utils";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation, useNavigate, useParams, useRouteContext } from "@tanstack/react-router";
 import {
@@ -80,15 +81,16 @@ function ContextMenuContentSnippet() {
   });
 
   const handleTrashBtn = async (_e: React.MouseEvent) => {
+    const count = selectedItems.length;
     return trashMutation
       .mutateAsync({ items: selectedItems })
       .then(async () => {
-        toast.success(`${selectedItems.length}개의 파일 및 디렉토리가 휴지통으로 이동되었습니다`);
+        toast.success(t("page.drive.context_menu.trash_success", { count }));
         setSelectedItems([]);
         await queryClient.invalidateQueries();
       })
-      .catch((err: string) => {
-        toast.error(err);
+      .catch((err: unknown) => {
+        toast.error(toErrorMessage(err));
       });
   };
 

@@ -175,6 +175,7 @@
         "rename": "Rename",
         "delete": "Delete",
         "trash": "Trash",
+        "trash_success": "{{count}} files and directories moved to trash",
         "new_dir": "Create folder",
         "copy": "Copy",
         "cut": "Cut",
@@ -235,11 +236,13 @@
         },
         "delete_items": {
           "title": "Delete Items",
-          "description": "Are you sure you want to permanently delete the selected items? This action cannot be undone.",
+          "description": "Items will disappear from the list immediately, and cleanup continues in the background. This action cannot be undone.",
           "action": "Delete",
           "#": {
             "toast": {
-              "success": "Items deleted successfully"
+              "success": "Deletion requested for {{count}} items",
+              "partial": "Deletion requested for {{accepted}} items; {{failed}} failed",
+              "error": "Deletion request failed"
             }
           }
         }
