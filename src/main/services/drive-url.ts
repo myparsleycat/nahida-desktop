@@ -21,7 +21,7 @@ export function encodeNahidaPassword(value: string) {
         .replace(/=+$/, "");
 }
 
-export function parseDriveSourceUrl(value: string): DriveSource {
+export function parseDriveSourceUrl(value: unknown): DriveSource {
     const sourceUrl = resolveSourceUrl(value);
     const source = sourceUrl ? parseNahidaSourceUrl(sourceUrl) : undefined;
     if (source) return source;
@@ -32,10 +32,19 @@ export function parseDriveSourceUrl(value: string): DriveSource {
     );
 }
 
-function resolveSourceUrl(value: string, depth = 0): string | undefined {
+function resolveSourceUrl(value: unknown, depth = 0): string | undefined {
+    if (typeof value !== "string") return;
+
     const normalized = value.trim();
     if (/^http/i.test(normalized)) return normalized;
-    if (/^nahida/i.test(normalized)) return `https://${normalized}`;
+    const lowercase = normalized.toLowerCase();
+    if (
+        NAHIDA_SOURCE_HOSTNAMES.some(
+            (hostname) => lowercase === hostname || lowercase.startsWith(`${hostname}/`),
+        )
+    ) {
+        return `https://${normalized}`;
+    }
     if (depth >= MAX_SOURCE_URL_DECODING_DEPTH) return;
 
     const decoded = decodeBase64(normalized);
