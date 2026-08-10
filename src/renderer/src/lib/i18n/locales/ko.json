@@ -68,6 +68,13 @@
         "paused": "일시정지",
         "queued": "대기 중",
         "preparing": "준비 중",
+        "planning": {
+          "permission_check": "권한 확인 중",
+          "parent_lookup": "상위 폴더 조회 중",
+          "file_validation": "파일 검증 중",
+          "dedup_lookup": "중복 확인 중",
+          "processing": "파일 처리 중"
+        },
         "time_remaining": "{{time}} 남음",
         "time_elapsed": "{{time}} 경과",
         "failed_files": "{{count}}개 실패",

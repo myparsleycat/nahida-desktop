@@ -68,6 +68,13 @@
         "paused": "Paused",
         "queued": "Queued",
         "preparing": "Preparing",
+        "planning": {
+          "permission_check": "Checking permissions",
+          "parent_lookup": "Looking up parent folders",
+          "file_validation": "Validating files",
+          "dedup_lookup": "Checking duplicates",
+          "processing": "Processing files"
+        },
         "time_remaining": "{{time}} remaining",
         "time_elapsed": "{{time}} elapsed",
         "failed_files": "{{count}} failed",

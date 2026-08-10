@@ -86,6 +86,8 @@ function RouteComponent() {
       processedFiles: t.transferedFiles,
       failedFiles: t.failedFiles,
       error: t.error,
+      planPhase: t.planPhase,
+      planProgress: t.planProgress,
     };
   });
 

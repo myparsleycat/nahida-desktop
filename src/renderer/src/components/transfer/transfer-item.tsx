@@ -160,6 +160,8 @@ export const TransferItem = memo((props: TransferItemProps) => {
     processedFiles,
     failedFiles,
     error,
+    planPhase,
+    planProgress,
   } = props;
   const { t } = useTranslation();
 
@@ -167,6 +169,7 @@ export const TransferItem = memo((props: TransferItemProps) => {
   const isPaused = status === "paused";
   const isCompleted = status === "completed";
   const isFailed = status === "failed";
+  const isPlanning = status === "uploading" && planPhase != null;
 
   return (
     <div className="group grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 overflow-hidden rounded-lg border bg-card p-4 transition-all hover:border-accent">
@@ -186,7 +189,17 @@ export const TransferItem = memo((props: TransferItemProps) => {
             </span>
           </div>
           {(() => {
-            if (status === "preparing" || status === "downloading" || status === "uploading") {
+            if (isPlanning) {
+              return (
+                <span className={cn("shrink-0 text-xs font-medium", getStatusColor(status))}>
+                  {t(`page.transfer.item.planning.${planPhase}`)}
+                </span>
+              );
+            } else if (
+              status === "preparing" ||
+              status === "downloading" ||
+              status === "uploading"
+            ) {
               return (
                 <span className={cn("shrink-0 text-xs font-medium", getStatusColor(status))}>
                   {totalFiles && processedFiles !== undefined
@@ -215,16 +228,21 @@ export const TransferItem = memo((props: TransferItemProps) => {
           })()}
         </div>
 
-        <Progress value={progress} className="w-full" />
+        <Progress value={isPlanning ? (planProgress ?? 0) : progress} className="w-full" />
 
         <div className="flex w-full items-center justify-between text-xs text-muted-foreground">
           <span className="shrink-0">{fileSize}</span>
           <div className="ml-2 flex min-w-0 items-center gap-3 overflow-hidden">
             <div className="flex min-w-0 items-center gap-2 truncate">
-              {(isActive || isPaused) && speed && (
+              {isPlanning && (
+                <span className="shrink-0 whitespace-nowrap text-blue-400">
+                  {t(`page.transfer.item.planning.${planPhase}`)}
+                </span>
+              )}
+              {!isPlanning && (isActive || isPaused) && speed && (
                 <span className="shrink-0 whitespace-nowrap">{speed}</span>
               )}
-              {(isActive || isPaused) && timeRemaining && (
+              {!isPlanning && (isActive || isPaused) && timeRemaining && (
                 <span className="hidden truncate whitespace-nowrap sm:inline">
                   {t("page.transfer.item.time_remaining", { time: timeRemaining })}
                 </span>
@@ -246,7 +264,9 @@ export const TransferItem = memo((props: TransferItemProps) => {
                 )
               )}
             </div>
-            <span className="shrink-0 whitespace-nowrap">{progress.toFixed(2)}%</span>
+            <span className="shrink-0 whitespace-nowrap">
+              {(isPlanning ? (planProgress ?? 0) : progress).toFixed(2)}%
+            </span>
           </div>
         </div>
       </div>

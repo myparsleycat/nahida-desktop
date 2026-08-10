@@ -68,6 +68,13 @@
         "paused": "已暂停",
         "queued": "排队中",
         "preparing": "准备中",
+        "planning": {
+          "permission_check": "正在检查权限",
+          "parent_lookup": "正在查找上级文件夹",
+          "file_validation": "正在验证文件",
+          "dedup_lookup": "正在检查重复",
+          "processing": "正在处理文件"
+        },
         "time_remaining": "剩余 {{time}}",
         "time_elapsed": "经过 {{time}}",
         "failed_files": "{{count}} 个失败",

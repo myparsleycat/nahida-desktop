@@ -68,6 +68,13 @@
         "paused": "一時停止",
         "queued": "待機中",
         "preparing": "準備中",
+        "planning": {
+          "permission_check": "権限を確認中",
+          "parent_lookup": "親フォルダーを検索中",
+          "file_validation": "ファイルを検証中",
+          "dedup_lookup": "重複を確認中",
+          "processing": "ファイルを処理中"
+        },
         "time_remaining": "残り {{time}}",
         "time_elapsed": "経過 {{time}}",
         "failed_files": "{{count}}個 失敗",

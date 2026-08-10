@@ -434,6 +434,13 @@ export type DriveResolveModResult = {
 
 export type DriveResolveImportSourceResult = DriveResolveLinkResult | DriveResolveModResult;
 
+export type PlanPhase =
+    | "permission_check"
+    | "parent_lookup"
+    | "file_validation"
+    | "dedup_lookup"
+    | "processing";
+
 export type TransferStatus =
     | "pending"
     | "preparing"
@@ -484,6 +491,8 @@ export interface Transfer {
     failedFiles: number;
     path?: string;
     error?: string;
+    planPhase?: PlanPhase;
+    planProgress?: number | null;
 }
 
 export type TransferWithoutData = Omit<Transfer, "data">;

@@ -1,3 +1,5 @@
+import type { PlanPhase } from "@shared/types";
+
 export type TransferStatus =
     | "uploading"
     | "downloading"
@@ -28,6 +30,8 @@ export interface TransferItemProps {
     processedFiles?: number;
     failedFiles?: number;
     error?: string;
+    planPhase?: PlanPhase;
+    planProgress?: number | null;
 }
 
 export interface TransferStatsProps {
