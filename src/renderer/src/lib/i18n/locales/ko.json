@@ -165,9 +165,9 @@
         "paste": "붙여넣기"
       },
       "clipboard": {
-        "cut_single": "\"{{name}}\"이(가) 잘라내기 상태로 설정되었습니다",
+        "cut_single": "{{name, josa(pair: 이/가)}} 잘라내기 상태로 설정되었습니다",
         "cut_multiple": "\"{{name}}\"외 {{count}}개가 잘라내기 상태로 설정되었습니다",
-        "copy_single": "\"{{name}}\"이(가) 복사 상태로 설정되었습니다",
+        "copy_single": "{{name, josa(pair: 이/가)}} 복사 상태로 설정되었습니다",
         "copy_multiple": "\"{{name}}\"외 {{count}}개가 복사 상태로 설정되었습니다",
         "move_loading": "파일 이동 중...",
         "move_success": "파일을 이동했습니다",
@@ -277,7 +277,7 @@
           "descending": "내림차순"
         },
         "hide-empty-folders": "빈 폴더 숨기기",
-        "toggle-layout": "{{mode}}(으)로 전환",
+        "toggle-layout": "{{mode, josa(pair: 으로/로)}} 전환",
         "active-mod-count": "활성 {{enabled}}개 / 전체 {{total}}개",
         "collapse-subgroups": "서브폴더 접기",
         "expand-subgroups": "서브폴더로 탐색",
@@ -1046,7 +1046,7 @@
         "done_title": "이진 탐색 완료",
         "done_description": "{{path}} 모드가 문제의 원인으로 의심됩니다.",
         "keep_disabled": "이 모드 비활성화 유지",
-        "keep_disabled_hint": "\"{{from}}\" 파일이 비활성화를 유지하기 위해 \"{{to}}\"(으)로 이름이 변경됩니다.",
+        "keep_disabled_hint": "{{from, josa(pair: 은/는)}} 파일이 비활성화를 유지하기 위해 {{to, josa(pair: 으로/로)}} 이름이 변경됩니다.",
         "re_enable_all": "모든 모드 다시 활성화",
         "new_bisect_hint": "새 bisect를 시작하면 임시로 비활성화된 모드가 모두 되돌려집니다.",
         "preserve_d3dx": "d3dx_user.ini 보호",
