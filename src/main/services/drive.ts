@@ -482,8 +482,7 @@ export class DriveService {
             this.copyOperations.set(operationId, operation);
 
             try {
-                const effectivePassword =
-                    password || (await this.desktop.setting.get("drive.importPassword"));
+                const effectivePassword = password;
                 if (source.type === "link") {
                     if (selectedIds && selectedIds.length > 0) {
                         this.emitCopyProgress(operationId, {
@@ -809,8 +808,7 @@ export class DriveService {
             };
             this.copyOperations.set(operationId, operation);
             try {
-                const effectivePassword =
-                    params.password || (await this.desktop.setting.get("drive.importPassword"));
+                const effectivePassword = params.password || "";
                 if (source.type === "link") {
                     this.emitCopyProgress(operationId, {
                         source: "link",

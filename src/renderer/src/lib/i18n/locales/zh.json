@@ -1551,11 +1551,6 @@
             "natural": "默认自然排序"
           }
         },
-        "importPassword": {
-          "title": "共享链接自动密码",
-          "description": "自动将此密码用于受保护的共享链接和收藏集。留空则每次手动输入。",
-          "placeholder": "自动输入的密码"
-        },
         "import": {
           "title": "导入"
         },

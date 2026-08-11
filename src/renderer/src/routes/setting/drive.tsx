@@ -26,7 +26,6 @@ const DRIVE_PASSWORD_LIST_MAX = 10;
 
 const settingsConfig = {
   nameSortPolicy: "drive.nameSortPolicy",
-  importPassword: "drive.importPassword",
   autoTryPasswords: "drive.autoTryPasswords",
   passwordList: "drive.passwordList",
 } as const;
@@ -40,11 +39,6 @@ function createPasswordRow(value = ""): PasswordRow {
 function RouteComponent() {
   const { t } = useTranslation();
   const { settings, update, isLoading } = useSettings(settingsConfig);
-  const [importPassword, setImportPassword] = useState("");
-
-  useEffect(() => {
-    if (!isLoading) setImportPassword(settings.importPassword);
-  }, [isLoading, settings.importPassword]);
 
   if (isLoading) {
     return null;
@@ -127,31 +121,6 @@ function RouteComponent() {
           <PasswordListSetting
             value={settings.passwordList}
             onChange={(value) => update("passwordList", value)}
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">
-            {t("page.setting.drive.importPassword.title")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            {t("page.setting.drive.importPassword.description")}
-          </p>
-          <Input
-            id="drive-import-password"
-            type="password"
-            autoComplete="new-password"
-            value={importPassword}
-            onChange={(event) => setImportPassword(event.target.value)}
-            onBlur={() => void update("importPassword", importPassword)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") event.currentTarget.blur();
-            }}
-            placeholder={t("page.setting.drive.importPassword.placeholder")}
           />
         </CardContent>
       </Card>

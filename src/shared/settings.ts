@@ -49,7 +49,6 @@ export interface AppSettings {
     "transfer.uploadConcurrency": number;
 
     "drive.nameSortPolicy": DriveNameSortPolicy;
-    "drive.importPassword": string;
     "drive.autoTryPasswords": boolean;
     "drive.passwordList": string[];
 
@@ -261,12 +260,6 @@ export const APP_SETTINGS = {
         publicKey: "drive.nameSortPolicy",
         scope: "drive",
         storageKey: "drive_name_sort_policy",
-    },
-    "drive.importPassword": {
-        publicKey: "drive.importPassword",
-        scope: "drive",
-        storageKey: "drive_import_password",
-        sensitive: true,
     },
     "drive.autoTryPasswords": {
         publicKey: "drive.autoTryPasswords",

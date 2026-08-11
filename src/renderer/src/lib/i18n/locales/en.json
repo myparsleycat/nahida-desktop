@@ -1547,11 +1547,6 @@
             "natural": "Default natural sort"
           }
         },
-        "importPassword": {
-          "title": "Shared link password",
-          "description": "Automatically use this password for protected shared links and collections. Leave it empty to enter a password each time.",
-          "placeholder": "Password for automatic entry"
-        },
         "import": {
           "title": "Import"
         },

@@ -11,7 +11,6 @@ import { Label } from "@renderer/components/ui/label";
 import { Progress } from "@renderer/components/ui/progress";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { useAuth } from "@renderer/hooks/use-auth";
-import { useSetting } from "@renderer/hooks/use-settings";
 import { getSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
 import { useViewStore } from "@renderer/store/drive";
@@ -86,7 +85,6 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
   const { t } = useTranslation();
   const { session, sessionInitialized, startLogin } = useAuth();
   const queryClient = useQueryClient();
-  const { data: savedImportPassword } = useSetting("drive.importPassword");
 
   const importOverlay = useViewStore((s) => s.importOverlay);
   const setImportOverlay = useViewStore((s) => s.setImportOverlay);
@@ -126,7 +124,7 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
   useEffect(() => {
     if (!importOverlay) return;
     setUrl(importOverlay.url);
-    setPassword(savedImportPassword ?? "");
+    setPassword("");
     setCreateCollectionFolders(true);
     setRequiresPassword(false);
     setPasswordInvalid(false);
@@ -146,7 +144,7 @@ export function DriveImportOverlay({ destinationId }: { destinationId: string })
     loadSeqRef.current = 0;
     lastResolvedUrlRef.current = "";
     requestAnimationFrame(() => urlInputRef.current?.focus());
-  }, [importOverlay, savedImportPassword]);
+  }, [importOverlay]);
 
   useEffect(() => {
     if (!importOverlay) return;
