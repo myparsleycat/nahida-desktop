@@ -172,7 +172,7 @@ function PasswordListSetting({
       <div className="space-y-0.5">
         <span className="text-sm font-medium">{t("page.setting.drive.passwordList.title")}</span>
         <p className="text-xs text-muted-foreground">
-          {t("page.setting.drive.passwordList.description")}
+          {t("page.setting.drive.passwordList.description", { max: DRIVE_PASSWORD_LIST_MAX })}
         </p>
       </div>
       <div
