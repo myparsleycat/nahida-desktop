@@ -275,6 +275,7 @@ export class FourThousandOneFixer {
 
             const buildSuccess = await this.executeMsBuild(vcvarsPath, projectPath);
             if (!buildSuccess) {
+                this.updateProgress("XXMI_ERR_BUILD_FAILED");
                 this.activeTask = null;
                 return { success: false };
             }

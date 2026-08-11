@@ -303,6 +303,12 @@ export class Setting {
                 fromStored: (value) => parseBooleanSetting(value, true),
                 toStored: (value) => String(value),
             },
+            "general.titlebarActivityBadgeClickNavigate": {
+                definition: APP_SETTINGS["general.titlebarActivityBadgeClickNavigate"],
+                getDefault: () => true,
+                fromStored: (value) => parseBooleanSetting(value, true),
+                toStored: (value) => String(value),
+            },
             "mod.archiveExtractPathMode": {
                 definition: APP_SETTINGS["mod.archiveExtractPathMode"],
                 getDefault: () => "flatten_single_root",
@@ -627,19 +633,16 @@ export class Setting {
                 fromStored: (value) => normalizeDriveNameSortPolicy(value),
                 normalize: (value) => normalizeDriveNameSortPolicy(value),
             },
-            "drive.importPassword": {
-                definition: APP_SETTINGS["drive.importPassword"],
-                getDefault: () => "",
-                fromStored: (value) => value ?? "",
-                normalize: (value) => value,
-                toStored: (value) => value,
-            },
             "drive.autoTryPasswords": {
                 definition: APP_SETTINGS["drive.autoTryPasswords"],
                 getDefault: () => false,
                 fromStored: (value) => parseBooleanSetting(value, false),
                 toStored: (value) => String(value),
             },
+            // Intended design: passwords are persisted as plain JSON (no
+            // encryption) and exposed to the renderer for display. These are
+            // low-sensitivity share-link passwords the user manages themselves;
+            // the auto-try feature needs them in plain text. Not a vulnerability.
             "drive.passwordList": {
                 definition: APP_SETTINGS["drive.passwordList"],
                 getDefault: () => [],
@@ -942,10 +945,6 @@ export class Setting {
             await this.get("drive.nameSortPolicy"),
         setNameSortPolicy: async (policy: DriveNameSortPolicy) => {
             await this.set("drive.nameSortPolicy", policy);
-        },
-        getImportPassword: async () => await this.get("drive.importPassword"),
-        setImportPassword: async (password: string) => {
-            await this.set("drive.importPassword", password);
         },
     };
 

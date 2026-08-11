@@ -569,8 +569,11 @@
       "no-preview": "无预览",
       "context-menu": {
         "paste-preview": "粘贴",
+        "open-preview-lightbox": "放大查看",
         "open-preview-viewer": "用预览查看器打开",
         "delete-preview": "删除预览",
+        "group-mod": "模组",
+        "group-tools": "工具",
         "open-cmd": "打开 CMD",
         "open-folder": "打开文件夹",
         "open-gamebanana": "在 GameBanana 中查看",
@@ -1348,6 +1351,8 @@
           "title": "应用程序",
           "runOnStartup": "开机启动",
           "runOnStartupDescription": "系统启动时自动运行应用。",
+          "titlebarActivityBadgeClickNavigate": "点击标题栏活动徽章以打开",
+          "titlebarActivityBadgeClickNavigateDescription": "开启后点击徽章可打开相关页面。关闭后可用徽章拖动窗口。",
           "checkUpdate": "检查更新",
           "runInBackground": "后台运行",
           "runInBackgroundDescription": "关闭所有窗口后，应用仍在后台继续运行。",
@@ -1551,11 +1556,6 @@
             "natural": "默认自然排序"
           }
         },
-        "importPassword": {
-          "title": "共享链接自动密码",
-          "description": "自动将此密码用于受保护的共享链接和收藏集。留空则每次手动输入。",
-          "placeholder": "自动输入的密码"
-        },
         "import": {
           "title": "导入"
         },
@@ -1604,6 +1604,24 @@
       "need_select_character_folder": "请在左侧选择角色文件夹",
       "select_path_failed": "选择路径失败。",
       "return_to_gamebanana": "添加下载后返回 GameBanana"
+    }
+  },
+  "titlebar": {
+    "activity": {
+      "more": "+{{count}}",
+      "transfer": {
+        "downloading": "下载中",
+        "uploading": "上传中",
+        "transferring": "传输中"
+      },
+      "fixer4001": {
+        "building": "正在构建 DLL",
+        "diversifying": "正在混淆 DLL",
+        "restoring": "正在还原 DLL"
+      },
+      "modBisect": {
+        "running": "二分排查中"
+      }
     }
   },
   "updater": {

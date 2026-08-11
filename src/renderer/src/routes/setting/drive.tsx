@@ -26,25 +26,19 @@ const DRIVE_PASSWORD_LIST_MAX = 10;
 
 const settingsConfig = {
   nameSortPolicy: "drive.nameSortPolicy",
-  importPassword: "drive.importPassword",
   autoTryPasswords: "drive.autoTryPasswords",
   passwordList: "drive.passwordList",
 } as const;
 
-type PasswordRow = { id: string; value: string };
+type PasswordRow = { id: string; value: string; locked: boolean };
 
-function createPasswordRow(value = ""): PasswordRow {
-  return { id: crypto.randomUUID(), value };
+function createPasswordRow(value = "", locked = false): PasswordRow {
+  return { id: crypto.randomUUID(), value, locked };
 }
 
 function RouteComponent() {
   const { t } = useTranslation();
   const { settings, update, isLoading } = useSettings(settingsConfig);
-  const [importPassword, setImportPassword] = useState("");
-
-  useEffect(() => {
-    if (!isLoading) setImportPassword(settings.importPassword);
-  }, [isLoading, settings.importPassword]);
 
   if (isLoading) {
     return null;
@@ -130,35 +124,14 @@ function RouteComponent() {
           />
         </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">
-            {t("page.setting.drive.importPassword.title")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            {t("page.setting.drive.importPassword.description")}
-          </p>
-          <Input
-            id="drive-import-password"
-            type="password"
-            autoComplete="new-password"
-            value={importPassword}
-            onChange={(event) => setImportPassword(event.target.value)}
-            onBlur={() => void update("importPassword", importPassword)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") event.currentTarget.blur();
-            }}
-            placeholder={t("page.setting.drive.importPassword.placeholder")}
-          />
-        </CardContent>
-      </Card>
     </div>
   );
 }
 
+// Intended design: saved passwords are shown in plain text so the user can
+// review and edit them. These are low-sensitivity share-link passwords the
+// user entered themselves; masking them would make the list unmanageable.
+// This is not a security vulnerability.
 function PasswordListSetting({
   value,
   onChange,
@@ -167,7 +140,9 @@ function PasswordListSetting({
   onChange: (value: string[]) => void;
 }) {
   const { t } = useTranslation();
-  const [items, setItems] = useState<PasswordRow[]>(() => value.map(createPasswordRow));
+  const [items, setItems] = useState<PasswordRow[]>(() =>
+    value.map((entry) => createPasswordRow(entry, entry !== "")),
+  );
   const itemsRef = useRef(items);
   const isFocusedRef = useRef(false);
 
@@ -187,7 +162,7 @@ function PasswordListSetting({
       return value.map((entry, index) =>
         prev[index]?.value === entry
           ? prev[index]
-          : { id: prev[index]?.id ?? crypto.randomUUID(), value: entry },
+          : { id: prev[index]?.id ?? crypto.randomUUID(), value: entry, locked: entry !== "" },
       );
     });
   }, [value]);
@@ -198,12 +173,19 @@ function PasswordListSetting({
     onChange(next.map((item) => item.value));
   };
 
+  const lockRow = (row: PasswordRow) => {
+    if (!row.value) return;
+    const next = itemsRef.current.map((r) => (r.id === row.id ? { ...r, locked: true } : r));
+    itemsRef.current = next;
+    setItems(next);
+  };
+
   return (
     <div className="space-y-2">
       <div className="space-y-0.5">
         <span className="text-sm font-medium">{t("page.setting.drive.passwordList.title")}</span>
         <p className="text-xs text-muted-foreground">
-          {t("page.setting.drive.passwordList.description")}
+          {t("page.setting.drive.passwordList.description", { max: DRIVE_PASSWORD_LIST_MAX })}
         </p>
       </div>
       <div
@@ -222,33 +204,52 @@ function PasswordListSetting({
           onChange(itemsRef.current.map((row) => row.value));
         }}
       >
-        {items.map((item) => (
-          <div key={item.id} className="flex items-center gap-1.5">
-            <Input
-              value={item.value}
-              placeholder={t("page.setting.drive.passwordList.placeholder")}
-              className="h-8"
-              onChange={(event) => {
-                itemsRef.current = itemsRef.current.map((row) =>
-                  row.id === item.id ? { ...row, value: event.target.value } : row,
-                );
-                setItems(itemsRef.current);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") event.currentTarget.blur();
-              }}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-7 shrink-0"
-              onClick={() => commit(itemsRef.current.filter((row) => row.id !== item.id))}
-            >
-              <XIcon className="size-3.5" />
-            </Button>
-          </div>
-        ))}
+        {items.map((item) =>
+          item.locked ? (
+            <div key={item.id} className="flex h-8 items-center gap-1.5">
+              <span className="flex h-8 flex-1 items-center truncate rounded-md px-3 text-sm">
+                {item.value}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7 shrink-0"
+                onClick={() => commit(itemsRef.current.filter((row) => row.id !== item.id))}
+              >
+                <XIcon className="size-3.5" />
+              </Button>
+            </div>
+          ) : (
+            <div key={item.id} className="flex items-center gap-1.5">
+              <Input
+                value={item.value}
+                placeholder={t("page.setting.drive.passwordList.placeholder")}
+                className="h-8"
+                onChange={(event) => {
+                  itemsRef.current = itemsRef.current.map((row) =>
+                    row.id === item.id ? { ...row, value: event.target.value } : row,
+                  );
+                  setItems(itemsRef.current);
+                }}
+                onBlur={() => lockRow(item)}
+                onKeyDown={(event) => {
+                  if (event.nativeEvent.isComposing) return;
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7 shrink-0"
+                onClick={() => commit(itemsRef.current.filter((row) => row.id !== item.id))}
+              >
+                <XIcon className="size-3.5" />
+              </Button>
+            </div>
+          ),
+        )}
         <Button
           type="button"
           variant="outline"

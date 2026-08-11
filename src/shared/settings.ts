@@ -19,6 +19,7 @@ export interface AppSettings {
     "general.moveTransferPageWhenStartTransfer": boolean;
     "general.powerSaveBlockInTransfer": boolean;
     "general.bisectPreserveD3dx": boolean;
+    "general.titlebarActivityBadgeClickNavigate": boolean;
 
     "mod.archiveExtractPathMode": ArchiveExtractPathMode;
     "mod.deleteArchiveAfterExtract": boolean;
@@ -49,7 +50,6 @@ export interface AppSettings {
     "transfer.uploadConcurrency": number;
 
     "drive.nameSortPolicy": DriveNameSortPolicy;
-    "drive.importPassword": string;
     "drive.autoTryPasswords": boolean;
     "drive.passwordList": string[];
 
@@ -128,6 +128,11 @@ export const APP_SETTINGS = {
         publicKey: "general.bisectPreserveD3dx",
         scope: "general",
         storageKey: "bisect_preserve_d3dx",
+    },
+    "general.titlebarActivityBadgeClickNavigate": {
+        publicKey: "general.titlebarActivityBadgeClickNavigate",
+        scope: "general",
+        storageKey: "titlebarActivityBadgeClickNavigate",
     },
 
     "mod.archiveExtractPathMode": {
@@ -262,17 +267,16 @@ export const APP_SETTINGS = {
         scope: "drive",
         storageKey: "drive_name_sort_policy",
     },
-    "drive.importPassword": {
-        publicKey: "drive.importPassword",
-        scope: "drive",
-        storageKey: "drive_import_password",
-        sensitive: true,
-    },
     "drive.autoTryPasswords": {
         publicKey: "drive.autoTryPasswords",
         scope: "drive",
         storageKey: "drive_auto_try_passwords",
     },
+    // Intended design: drive share-link passwords are stored in plain text and
+    // shown in the settings UI. These are low-sensitivity access passwords for
+    // nahida.live share links, entered and managed by the user themselves. They
+    // must stay readable so the user can review/edit them and so the auto-try
+    // feature can send them as-is. This is not a security vulnerability.
     "drive.passwordList": {
         publicKey: "drive.passwordList",
         scope: "drive",

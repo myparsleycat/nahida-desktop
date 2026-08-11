@@ -165,9 +165,9 @@
         "paste": "붙여넣기"
       },
       "clipboard": {
-        "cut_single": "\"{{name}}\"이(가) 잘라내기 상태로 설정되었습니다",
+        "cut_single": "{{name, josa(pair: 이/가)}} 잘라내기 상태로 설정되었습니다",
         "cut_multiple": "\"{{name}}\"외 {{count}}개가 잘라내기 상태로 설정되었습니다",
-        "copy_single": "\"{{name}}\"이(가) 복사 상태로 설정되었습니다",
+        "copy_single": "{{name, josa(pair: 이/가)}} 복사 상태로 설정되었습니다",
         "copy_multiple": "\"{{name}}\"외 {{count}}개가 복사 상태로 설정되었습니다",
         "move_loading": "파일 이동 중...",
         "move_success": "파일을 이동했습니다",
@@ -277,7 +277,7 @@
           "descending": "내림차순"
         },
         "hide-empty-folders": "빈 폴더 숨기기",
-        "toggle-layout": "{{mode}}(으)로 전환",
+        "toggle-layout": "{{mode, josa(pair: 으로/로)}} 전환",
         "active-mod-count": "활성 {{enabled}}개 / 전체 {{total}}개",
         "collapse-subgroups": "서브폴더 접기",
         "expand-subgroups": "서브폴더로 탐색",
@@ -576,8 +576,11 @@
       "no-preview": "프리뷰 없음",
       "context-menu": {
         "paste-preview": "붙여넣기",
+        "open-preview-lightbox": "크게 보기",
         "open-preview-viewer": "뷰어로 열기",
         "delete-preview": "프리뷰 삭제",
+        "group-mod": "모드",
+        "group-tools": "도구",
         "open-cmd": "CMD 열기",
         "open-folder": "폴더 열기",
         "open-gamebanana": "GameBanana에서 보기",
@@ -1045,7 +1048,7 @@
         "done_title": "이진 탐색 완료",
         "done_description": "{{path}} 모드가 문제의 원인으로 의심됩니다.",
         "keep_disabled": "이 모드 비활성화 유지",
-        "keep_disabled_hint": "\"{{from}}\" 파일이 비활성화를 유지하기 위해 \"{{to}}\"(으)로 이름이 변경됩니다.",
+        "keep_disabled_hint": "{{from, josa(pair: 은/는)}} 파일이 비활성화를 유지하기 위해 {{to, josa(pair: 으로/로)}} 이름이 변경됩니다.",
         "re_enable_all": "모든 모드 다시 활성화",
         "new_bisect_hint": "새 bisect를 시작하면 임시로 비활성화된 모드가 모두 되돌려집니다.",
         "preserve_d3dx": "d3dx_user.ini 보호",
@@ -1368,6 +1371,8 @@
           "title": "애플리케이션",
           "runOnStartup": "로그인할 때 실행",
           "runOnStartupDescription": "시스템이 시작될 때 앱을 자동으로 실행합니다.",
+          "titlebarActivityBadgeClickNavigate": "타이틀바 작업 배지 클릭으로 이동",
+          "titlebarActivityBadgeClickNavigateDescription": "켜면 배지를 클릭해 관련 화면으로 이동합니다. 끄면 배지를 잡고 창을 드래그할 수 있습니다.",
           "checkUpdate": "업데이트 확인",
           "runInBackground": "백그라운드 실행",
           "runInBackgroundDescription": "모든 창을 닫아도 앱을 백그라운드에서 계속 실행합니다.",
@@ -1571,11 +1576,6 @@
             "natural": "기본 자연 정렬"
           }
         },
-        "importPassword": {
-          "title": "공유 링크 자동 비밀번호",
-          "description": "비밀번호가 필요한 공유 링크나 컬렉션에 자동으로 사용할 비밀번호입니다. 비워 두면 매번 입력합니다.",
-          "placeholder": "자동 입력할 비밀번호"
-        },
         "import": {
           "title": "가져오기"
         },
@@ -1624,6 +1624,24 @@
       "need_select_character_folder": "좌측에서 캐릭터 폴더를 선택하세요",
       "select_path_failed": "경로 선택에 실패했습니다.",
       "return_to_gamebanana": "다운로드 추가 후 GameBanana로 돌아가기"
+    }
+  },
+  "titlebar": {
+    "activity": {
+      "more": "+{{count}}",
+      "transfer": {
+        "downloading": "다운로드 중",
+        "uploading": "업로드 중",
+        "transferring": "전송 중"
+      },
+      "fixer4001": {
+        "building": "DLL 빌드 중",
+        "diversifying": "DLL 난독화 중",
+        "restoring": "DLL 복원 중"
+      },
+      "modBisect": {
+        "running": "이진 탐색 중"
+      }
     }
   },
   "updater": {

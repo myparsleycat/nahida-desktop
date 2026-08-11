@@ -570,8 +570,11 @@
       "no-preview": "プレビューなし",
       "context-menu": {
         "paste-preview": "貼り付け",
+        "open-preview-lightbox": "拡大表示",
         "open-preview-viewer": "プレビュービューアーで開く",
         "delete-preview": "プレビューを削除",
+        "group-mod": "Mod",
+        "group-tools": "ツール",
         "open-cmd": "CMDを開く",
         "open-folder": "フォルダーを開く",
         "open-gamebanana": "GameBananaで表示",
@@ -1349,6 +1352,8 @@
           "title": "アプリケーション",
           "runOnStartup": "ログイン時に実行",
           "runOnStartupDescription": "システム起動時にアプリを自動的に実行します。",
+          "titlebarActivityBadgeClickNavigate": "タイトルバー作業バッジをクリックで開く",
+          "titlebarActivityBadgeClickNavigateDescription": "オンにするとバッジをクリックして関連画面を開けます。オフにするとバッジを掴んでウィンドウをドラッグできます。",
           "checkUpdate": "更新確認",
           "runInBackground": "バックグラウンド実行",
           "runInBackgroundDescription": "すべてのウィンドウを閉じてもアプリをバックグラウンドで実行し続けます。",
@@ -1552,11 +1557,6 @@
             "natural": "標準の自然順"
           }
         },
-        "importPassword": {
-          "title": "共有リンクの自動パスワード",
-          "description": "パスワードが必要な共有リンクやコレクションに自動で使用します。空欄の場合は毎回入力します。",
-          "placeholder": "自動入力するパスワード"
-        },
         "import": {
           "title": "インポート"
         },
@@ -1605,6 +1605,24 @@
       "need_select_character_folder": "左側でキャラクターフォルダーを選択してください",
       "select_path_failed": "パスの選択に失敗しました。",
       "return_to_gamebanana": "ダウンロード追加後、GameBanana に戻る"
+    }
+  },
+  "titlebar": {
+    "activity": {
+      "more": "+{{count}}",
+      "transfer": {
+        "downloading": "ダウンロード中",
+        "uploading": "アップロード中",
+        "transferring": "転送中"
+      },
+      "fixer4001": {
+        "building": "DLLをビルド中",
+        "diversifying": "DLLを難読化中",
+        "restoring": "DLLを復元中"
+      },
+      "modBisect": {
+        "running": "バイセクト中"
+      }
     }
   },
   "updater": {

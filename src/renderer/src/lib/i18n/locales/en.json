@@ -592,8 +592,11 @@
       "no-preview": "No Preview",
       "context-menu": {
         "paste-preview": "Paste",
+        "open-preview-lightbox": "View large",
         "open-preview-viewer": "Open in viewer",
         "delete-preview": "Delete preview",
+        "group-mod": "Mod",
+        "group-tools": "Tools",
         "open-cmd": "Open CMD",
         "open-folder": "Open folder",
         "open-gamebanana": "View on GameBanana",
@@ -1382,6 +1385,8 @@
           "title": "Application",
           "runOnStartup": "Run on startup",
           "runOnStartupDescription": "Automatically launch the app when the system starts.",
+          "titlebarActivityBadgeClickNavigate": "Click titlebar activity badges to open",
+          "titlebarActivityBadgeClickNavigateDescription": "When enabled, clicking a badge opens the related page. When disabled, badges can be used to drag the window.",
           "checkUpdate": "Check for updates",
           "runInBackground": "Run in background",
           "runInBackgroundDescription": "Keep running in the background when all windows are closed.",
@@ -1547,11 +1552,6 @@
             "natural": "Default natural sort"
           }
         },
-        "importPassword": {
-          "title": "Shared link password",
-          "description": "Automatically use this password for protected shared links and collections. Leave it empty to enter a password each time.",
-          "placeholder": "Password for automatic entry"
-        },
         "import": {
           "title": "Import"
         },
@@ -1638,6 +1638,24 @@
       "need_select_character_folder": "Select a character folder on the left",
       "select_path_failed": "Failed to select path.",
       "return_to_gamebanana": "Return to GameBanana after adding the download"
+    }
+  },
+  "titlebar": {
+    "activity": {
+      "more": "+{{count}}",
+      "transfer": {
+        "downloading": "Downloading",
+        "uploading": "Uploading",
+        "transferring": "Transferring"
+      },
+      "fixer4001": {
+        "building": "Building DLL",
+        "diversifying": "Obfuscating DLL",
+        "restoring": "Restoring DLL"
+      },
+      "modBisect": {
+        "running": "Bisecting"
+      }
     }
   },
   "updater": {
