@@ -9,17 +9,23 @@ interface PreviewLightboxProps {
   isVideo: boolean;
   alt?: string;
   className?: string;
+  open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
 
 export function PreviewLightbox(props: PreviewLightboxProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = props.open !== undefined;
 
   const onOpenChangeRef = useRef(props.onOpenChange);
   onOpenChangeRef.current = props.onOpenChange;
 
+  const open = isControlled ? props.open : internalOpen;
+
   const change = (next: boolean) => {
-    setOpen(next);
+    if (!isControlled) {
+      setInternalOpen(next);
+    }
     onOpenChangeRef.current?.(next);
   };
 
@@ -34,32 +40,34 @@ export function PreviewLightbox(props: PreviewLightboxProps) {
 
   return (
     <>
-      <div
-        className={props.className}
-        onClick={(e) => {
-          e.stopPropagation();
-          change(true);
-        }}
-      >
-        {props.isVideo ? (
-          <video
-            src={props.thumbnailSrc}
-            className="h-full w-full object-cover"
-            muted
-            autoPlay
-            loop
-            playsInline
-            controls={false}
-          />
-        ) : (
-          <img
-            src={props.thumbnailSrc}
-            alt={props.alt}
-            className="h-full w-full object-cover"
-            draggable={false}
-          />
-        )}
-      </div>
+      {!isControlled && (
+        <div
+          className={props.className}
+          onClick={(e) => {
+            e.stopPropagation();
+            change(true);
+          }}
+        >
+          {props.isVideo ? (
+            <video
+              src={props.thumbnailSrc}
+              className="h-full w-full object-cover"
+              muted
+              autoPlay
+              loop
+              playsInline
+              controls={false}
+            />
+          ) : (
+            <img
+              src={props.thumbnailSrc}
+              alt={props.alt}
+              className="h-full w-full object-cover"
+              draggable={false}
+            />
+          )}
+        </div>
+      )}
 
       {open &&
         createPortal(

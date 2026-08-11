@@ -569,6 +569,7 @@
       "no-preview": "无预览",
       "context-menu": {
         "paste-preview": "粘贴",
+        "open-preview-lightbox": "放大查看",
         "open-preview-viewer": "用预览查看器打开",
         "delete-preview": "删除预览",
         "open-cmd": "打开 CMD",

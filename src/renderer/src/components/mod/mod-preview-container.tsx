@@ -6,11 +6,13 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@renderer/components/ui/context-menu";
+import { PreviewLightbox } from "@renderer/components/ui/preview-lightbox";
 import type { ModInfo } from "@renderer/types/mod";
-import { ClipboardIcon, ImageIcon, TrashIcon } from "lucide-react";
-import type { SyntheticEvent } from "react";
+import { ClipboardIcon, ImageIcon, TrashIcon, ZoomInIcon } from "lucide-react";
+import { type SyntheticEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+
 import { Preview } from "./preview";
 
 interface ModPreviewContainerProps {
@@ -21,6 +23,7 @@ interface ModPreviewContainerProps {
 
 export function ModPreviewContainer({ mod, onDeletePreview, onPaste }: ModPreviewContainerProps) {
   const { t } = useTranslation();
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   const handlePasteClick = (e?: SyntheticEvent) => {
     e?.stopPropagation();
@@ -36,16 +39,16 @@ export function ModPreviewContainer({ mod, onDeletePreview, onPaste }: ModPrevie
       className="absolute inset-0"
       fallback={
         <div className="flex flex-col items-center justify-center gap-2">
-          <ImageIcon className="w-12 h-12 text-muted-foreground/50" />
+          <ImageIcon className="h-12 w-12 text-muted-foreground/50" />
           <div className="flex flex-col items-center gap-1">
             <span className="text-sm text-muted-foreground">{t("page.mod.no-preview")}</span>
             <Button
               variant="outline"
               size="sm"
-              className="h-7 text-xs gap-1"
+              className="h-7 gap-1 text-xs"
               onClick={handlePasteClick}
             >
-              <ClipboardIcon className="w-3 h-3" />
+              <ClipboardIcon className="h-3 w-3" />
               {t("page.mod.context-menu.paste-preview")}
             </Button>
           </div>
@@ -55,11 +58,16 @@ export function ModPreviewContainer({ mod, onDeletePreview, onPaste }: ModPrevie
   );
 
   return (
-    <div className="flex-1 p-2 flex items-center justify-center relative overflow-hidden">
+    <div className="relative flex flex-1 items-center justify-center overflow-hidden p-2">
       {mod.preview ? (
         <ContextMenu>
           <ContextMenuTrigger>{previewContent}</ContextMenuTrigger>
           <ContextMenuContent onClick={(e) => e.stopPropagation()}>
+            <ContextMenuItem onClick={() => setLightboxOpen(true)}>
+              <ZoomInIcon />
+              {t("page.mod.context-menu.open-preview-lightbox")}
+            </ContextMenuItem>
+
             <ContextMenuItem
               onClick={() => {
                 if (!mod.preview) return;
@@ -89,6 +97,15 @@ export function ModPreviewContainer({ mod, onDeletePreview, onPaste }: ModPrevie
         </ContextMenu>
       ) : (
         previewContent
+      )}
+      {mod.preview && (
+        <PreviewLightbox
+          open={lightboxOpen}
+          onOpenChange={setLightboxOpen}
+          thumbnailSrc={`local://${mod.preview}?v=${encodeURIComponent(String(mod.mtime))}`}
+          fullSrc={`local://${mod.preview}?v=${encodeURIComponent(String(mod.mtime))}&orig=true`}
+          isVideo={/\.(mp4|webm|ogg)$/i.test(mod.preview)}
+        />
       )}
     </div>
   );

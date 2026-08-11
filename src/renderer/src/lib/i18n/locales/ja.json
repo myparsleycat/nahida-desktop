@@ -570,6 +570,7 @@
       "no-preview": "プレビューなし",
       "context-menu": {
         "paste-preview": "貼り付け",
+        "open-preview-lightbox": "拡大表示",
         "open-preview-viewer": "プレビュービューアーで開く",
         "delete-preview": "プレビューを削除",
         "open-cmd": "CMDを開く",

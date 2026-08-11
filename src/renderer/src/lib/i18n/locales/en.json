@@ -592,6 +592,7 @@
       "no-preview": "No Preview",
       "context-menu": {
         "paste-preview": "Paste",
+        "open-preview-lightbox": "View large",
         "open-preview-viewer": "Open in viewer",
         "delete-preview": "Delete preview",
         "open-cmd": "Open CMD",
