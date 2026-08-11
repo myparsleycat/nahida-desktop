@@ -1,4 +1,5 @@
 import type { TitlebarActivity } from "@renderer/store/titlebar-activity";
+import { isTerminalFixerProgressCode } from "@shared/4001-fixer";
 import { getAggregateTransferProgress, isOpenTransferQueueStatus } from "@shared/transfer-progress";
 import type {
     BisectSnapshot,
@@ -55,10 +56,6 @@ export function buildTransferTitlebarActivity(
         order: 0,
         href: "/transfer",
     };
-}
-
-function isTerminalFixerProgressCode(code: string) {
-    return code.includes("SUCCESS") || code.includes("ALREADY") || code.includes("ERR");
 }
 
 function getFixerTaskLabelKey(task: FixerTask) {

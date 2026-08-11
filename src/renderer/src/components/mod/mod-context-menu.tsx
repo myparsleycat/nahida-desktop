@@ -182,7 +182,7 @@ export function ModContextMenu({ mod, actions, children }: ModContextMenuProps) 
           </>
         )}
         <ContextMenuGroup>
-          <ContextMenuLabel>Mod</ContextMenuLabel>
+          <ContextMenuLabel>{t("page.mod.context-menu.group-mod")}</ContextMenuLabel>
           {!actions.isNteGame && (
             <ContextMenuItem
               onClick={() => {
@@ -216,7 +216,7 @@ export function ModContextMenu({ mod, actions, children }: ModContextMenuProps) 
           <>
             <ContextMenuSeparator />
             <ContextMenuGroup>
-              <ContextMenuLabel>Tools</ContextMenuLabel>
+              <ContextMenuLabel>{t("page.mod.context-menu.group-tools")}</ContextMenuLabel>
               <ContextMenuItem
                 disabled={isConvertingModel}
                 onClick={() => void actions.openModelViewer(mod)}

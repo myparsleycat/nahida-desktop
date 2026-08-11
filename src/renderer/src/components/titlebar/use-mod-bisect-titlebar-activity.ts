@@ -10,6 +10,9 @@ export function useModBisectTitlebarActivity() {
     const { t } = useTranslation();
 
     useEffect(() => {
+        let disposed = false;
+        let hasLiveEvent = false;
+
         const sync = (snapshot: BisectSnapshot | null) => {
             const activity = buildModBisectTitlebarActivity(snapshot, t);
             if (activity) {
@@ -19,8 +22,24 @@ export function useModBisectTitlebarActivity() {
             titlebarActivityStore.getState().removeActivity(BISECT_ACTIVITY_ID);
         };
 
-        void window.api.invoke("tools:bisectGetState").then(sync);
+        void window.api
+            .invoke("tools:bisectGetState")
+            .then((snapshot) => {
+                if (disposed || hasLiveEvent) return;
+                sync(snapshot);
+            })
+            .catch((error) => {
+                console.error("tools:bisectGetState failed for titlebar activity", error);
+            });
 
-        return window.api.on("tools:bisectState", sync);
+        const removeListener = window.api.on("tools:bisectState", (snapshot) => {
+            hasLiveEvent = true;
+            sync(snapshot);
+        });
+
+        return () => {
+            disposed = true;
+            removeListener();
+        };
     }, [t]);
 }

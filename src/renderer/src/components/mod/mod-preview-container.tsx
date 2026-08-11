@@ -105,6 +105,7 @@ export function ModPreviewContainer({ mod, onDeletePreview, onPaste }: ModPrevie
           thumbnailSrc={`local://${mod.preview}?v=${encodeURIComponent(String(mod.mtime))}`}
           fullSrc={`local://${mod.preview}?v=${encodeURIComponent(String(mod.mtime))}&orig=true`}
           isVideo={/\.(mp4|webm|ogg)$/i.test(mod.preview)}
+          alt={mod.name}
         />
       )}
     </div>

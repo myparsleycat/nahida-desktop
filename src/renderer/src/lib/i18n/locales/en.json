@@ -595,6 +595,8 @@
         "open-preview-lightbox": "View large",
         "open-preview-viewer": "Open in viewer",
         "delete-preview": "Delete preview",
+        "group-mod": "Mod",
+        "group-tools": "Tools",
         "open-cmd": "Open CMD",
         "open-folder": "Open folder",
         "open-gamebanana": "View on GameBanana",

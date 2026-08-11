@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@renderer/components/ui/tabs";
+import { isTerminalFixerProgressCode } from "@shared/4001-fixer";
 import { toErrorMessage } from "@shared/utils";
 import {
   CircleCheckIcon,
@@ -83,11 +84,7 @@ export default function FourThousandOneFixer() {
         setActiveTask(event.task);
       }
 
-      if (
-        event.code.includes("SUCCESS") ||
-        event.code.includes("ALREADY") ||
-        event.code.includes("ERR")
-      ) {
+      if (isTerminalFixerProgressCode(event.code)) {
         setActiveTask(null);
       }
     });

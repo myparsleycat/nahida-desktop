@@ -234,6 +234,7 @@ function PasswordListSetting({
                 }}
                 onBlur={() => lockRow(item)}
                 onKeyDown={(event) => {
+                  if (event.nativeEvent.isComposing) return;
                   if (event.key === "Enter") event.currentTarget.blur();
                 }}
               />

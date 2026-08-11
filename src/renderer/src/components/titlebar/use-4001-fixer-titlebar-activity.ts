@@ -9,6 +9,9 @@ export function use4001FixerTitlebarActivity() {
     const { t } = useTranslation();
 
     useEffect(() => {
+        let disposed = false;
+        let hasLiveEvent = false;
+
         const sync = (task: Parameters<typeof build4001FixerTitlebarActivity>[0], code = "") => {
             const activity = build4001FixerTitlebarActivity(task, code, t);
             if (activity) {
@@ -18,12 +21,24 @@ export function use4001FixerTitlebarActivity() {
             titlebarActivityStore.getState().removeActivity(FIXER_ACTIVITY_ID);
         };
 
-        void window.api.invoke("tools:4001FixerGetState").then((state) => {
-            sync(state.activeTask, state.progress || "");
-        });
+        void window.api
+            .invoke("tools:4001FixerGetState")
+            .then((state) => {
+                if (disposed || hasLiveEvent) return;
+                sync(state.activeTask, state.progress || "");
+            })
+            .catch((error) => {
+                console.error("tools:4001FixerGetState failed for titlebar activity", error);
+            });
 
-        return window.api.on("tools:4001FixerProgress", (event) => {
+        const removeListener = window.api.on("tools:4001FixerProgress", (event) => {
+            hasLiveEvent = true;
             sync(event.task, event.code);
         });
+
+        return () => {
+            disposed = true;
+            removeListener();
+        };
     }, [t]);
 }
