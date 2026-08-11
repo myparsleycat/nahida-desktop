@@ -234,7 +234,8 @@
     },
     "share_drive": {
       "title": "共有ドライブ",
-      "title_server_error": "共有ドライブ (サーバーエラー)"
+      "title_server_error": "共有ドライブ (サーバーエラー)",
+      "no_accessible_drives": "アクセス可能な共有ドライブがありません。"
     },
     "mod": {
       "title": "MODマネージャー",

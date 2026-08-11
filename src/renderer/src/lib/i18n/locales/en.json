@@ -250,7 +250,8 @@
     },
     "share_drive": {
       "title": "Share Drive",
-      "title_server_error": "Share Drive (server error)"
+      "title_server_error": "Share Drive (server error)",
+      "no_accessible_drives": "No accessible shared drives."
     },
     "mod": {
       "title": "Mod Manager",

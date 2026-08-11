@@ -233,7 +233,8 @@
     },
     "share_drive": {
       "title": "共享驱动器",
-      "title_server_error": "共享驱动器 (服务器错误)"
+      "title_server_error": "共享驱动器 (服务器错误)",
+      "no_accessible_drives": "没有可访问的共享云端硬盘。"
     },
     "mod": {
       "title": "模组管理器",

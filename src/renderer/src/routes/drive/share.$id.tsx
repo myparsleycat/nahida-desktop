@@ -28,7 +28,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useLocation } from "@tanstack/react-router";
 import { disassemble, getChoseong } from "es-hangul";
 import { orderBy } from "es-toolkit";
-import { FolderIcon } from "lucide-react";
+import { FolderIcon, Share2Icon } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -194,17 +194,28 @@ function RouteComponent() {
                     ) : null}
                   </ScrollArea>
                 ) : query.isFetched && sortedContents.length < 1 ? (
-                  <Center className="flex-col">
-                    <div>
-                      <FolderIcon size="80" />
-                    </div>
-                    <p className="mt-4 text-center text-lg">
-                      {t("drive.ui.no_contents_section_message.0")}
-                    </p>
-                    <p className="text-center text-muted-foreground">
-                      {t("drive.ui.no_contents_section_message.1")}
-                    </p>
-                  </Center>
+                  effectiveId === "share" && rawContents.length === 0 ? (
+                    <Center className="flex-col">
+                      <div>
+                        <Share2Icon size="80" />
+                      </div>
+                      <p className="mt-4 text-center text-lg">
+                        {t("page.share_drive.no_accessible_drives")}
+                      </p>
+                    </Center>
+                  ) : (
+                    <Center className="flex-col">
+                      <div>
+                        <FolderIcon size="80" />
+                      </div>
+                      <p className="mt-4 text-center text-lg">
+                        {t("page.drive.no_contents_section_message.0")}
+                      </p>
+                      <p className="text-center text-muted-foreground">
+                        {t("page.drive.no_contents_section_message.1")}
+                      </p>
+                    </Center>
+                  )
                 ) : query.isFetching && sortedContents.length === 0 ? (
                   <AkashaSkeleton />
                 ) : null}

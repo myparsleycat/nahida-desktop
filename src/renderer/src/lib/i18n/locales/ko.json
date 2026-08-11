@@ -233,7 +233,8 @@
     },
     "share_drive": {
       "title": "공유 드라이브",
-      "title_server_error": "공유 드라이브 (서버 에러)"
+      "title_server_error": "공유 드라이브 (서버 에러)",
+      "no_accessible_drives": "접근 가능한 공유 드라이브가 없습니다."
     },
     "mod": {
       "title": "모드 매니저",
