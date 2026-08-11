@@ -30,10 +30,10 @@ const settingsConfig = {
   passwordList: "drive.passwordList",
 } as const;
 
-type PasswordRow = { id: string; value: string };
+type PasswordRow = { id: string; value: string; locked: boolean };
 
-function createPasswordRow(value = ""): PasswordRow {
-  return { id: crypto.randomUUID(), value };
+function createPasswordRow(value = "", locked = false): PasswordRow {
+  return { id: crypto.randomUUID(), value, locked };
 }
 
 function RouteComponent() {
@@ -136,7 +136,9 @@ function PasswordListSetting({
   onChange: (value: string[]) => void;
 }) {
   const { t } = useTranslation();
-  const [items, setItems] = useState<PasswordRow[]>(() => value.map(createPasswordRow));
+  const [items, setItems] = useState<PasswordRow[]>(() =>
+    value.map((entry) => createPasswordRow(entry, entry !== "")),
+  );
   const itemsRef = useRef(items);
   const isFocusedRef = useRef(false);
 
@@ -156,7 +158,7 @@ function PasswordListSetting({
       return value.map((entry, index) =>
         prev[index]?.value === entry
           ? prev[index]
-          : { id: prev[index]?.id ?? crypto.randomUUID(), value: entry },
+          : { id: prev[index]?.id ?? crypto.randomUUID(), value: entry, locked: entry !== "" },
       );
     });
   }, [value]);
@@ -165,6 +167,13 @@ function PasswordListSetting({
     itemsRef.current = next;
     setItems(next);
     onChange(next.map((item) => item.value));
+  };
+
+  const lockRow = (row: PasswordRow) => {
+    if (!row.value) return;
+    const next = itemsRef.current.map((r) => (r.id === row.id ? { ...r, locked: true } : r));
+    itemsRef.current = next;
+    setItems(next);
   };
 
   return (
@@ -191,33 +200,51 @@ function PasswordListSetting({
           onChange(itemsRef.current.map((row) => row.value));
         }}
       >
-        {items.map((item) => (
-          <div key={item.id} className="flex items-center gap-1.5">
-            <Input
-              value={item.value}
-              placeholder={t("page.setting.drive.passwordList.placeholder")}
-              className="h-8"
-              onChange={(event) => {
-                itemsRef.current = itemsRef.current.map((row) =>
-                  row.id === item.id ? { ...row, value: event.target.value } : row,
-                );
-                setItems(itemsRef.current);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") event.currentTarget.blur();
-              }}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-7 shrink-0"
-              onClick={() => commit(itemsRef.current.filter((row) => row.id !== item.id))}
-            >
-              <XIcon className="size-3.5" />
-            </Button>
-          </div>
-        ))}
+        {items.map((item) =>
+          item.locked ? (
+            <div key={item.id} className="flex h-8 items-center gap-1.5">
+              <span className="flex h-8 flex-1 items-center truncate rounded-md px-3 text-sm">
+                {item.value}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7 shrink-0"
+                onClick={() => commit(itemsRef.current.filter((row) => row.id !== item.id))}
+              >
+                <XIcon className="size-3.5" />
+              </Button>
+            </div>
+          ) : (
+            <div key={item.id} className="flex items-center gap-1.5">
+              <Input
+                value={item.value}
+                placeholder={t("page.setting.drive.passwordList.placeholder")}
+                className="h-8"
+                onChange={(event) => {
+                  itemsRef.current = itemsRef.current.map((row) =>
+                    row.id === item.id ? { ...row, value: event.target.value } : row,
+                  );
+                  setItems(itemsRef.current);
+                }}
+                onBlur={() => lockRow(item)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7 shrink-0"
+                onClick={() => commit(itemsRef.current.filter((row) => row.id !== item.id))}
+              >
+                <XIcon className="size-3.5" />
+              </Button>
+            </div>
+          ),
+        )}
         <Button
           type="button"
           variant="outline"
