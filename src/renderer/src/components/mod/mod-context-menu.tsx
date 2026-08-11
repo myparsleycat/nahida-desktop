@@ -179,6 +179,11 @@ export function ModContextMenu({ mod, actions, children }: ModContextMenuProps) 
               )}
             </ContextMenuGroup>
             <ContextMenuSeparator />
+          </>
+        )}
+        <ContextMenuGroup>
+          <ContextMenuLabel>Mod</ContextMenuLabel>
+          {!actions.isNteGame && (
             <ContextMenuItem
               onClick={() => {
                 void window.api.invoke("util:openCmd", mod.path);
@@ -187,54 +192,59 @@ export function ModContextMenu({ mod, actions, children }: ModContextMenuProps) 
               <TerminalSquareIcon className="mr-2 size-4" />
               {t("page.mod.context-menu.open-cmd")}
             </ContextMenuItem>
-          </>
-        )}
-        <ContextMenuItem
-          onClick={() => {
-            void window.api.invoke("util:openPath", mod.path);
-          }}
-        >
-          <FolderIcon className="mr-2 size-4" />
-          {t("page.mod.context-menu.open-folder")}
-        </ContextMenuItem>
-        {!actions.isNteGame && (
-          <ContextMenuItem onClick={() => void actions.markAsManualSubGroup(mod)}>
-            <FolderTreeIcon className="mr-2 size-4" />
-            {t("page.mod.context-menu.mark-manual-subgroup")}
+          )}
+          <ContextMenuItem
+            onClick={() => {
+              void window.api.invoke("util:openPath", mod.path);
+            }}
+          >
+            <FolderIcon className="mr-2 size-4" />
+            {t("page.mod.context-menu.open-folder")}
           </ContextMenuItem>
-        )}
+          {!actions.isNteGame && (
+            <ContextMenuItem onClick={() => void actions.markAsManualSubGroup(mod)}>
+              <FolderTreeIcon className="mr-2 size-4" />
+              {t("page.mod.context-menu.mark-manual-subgroup")}
+            </ContextMenuItem>
+          )}
+          <ContextMenuItem onClick={() => actions.openRenameDialog(mod)}>
+            <PencilIcon className="mr-2 size-4" />
+            {t("page.mod.context-menu.rename")}
+          </ContextMenuItem>
+        </ContextMenuGroup>
         {!actions.isNteGame && (
           <>
-            <ContextMenuItem
-              disabled={isConvertingModel}
-              onClick={() => void actions.openModelViewer(mod)}
-            >
-              {isConvertingModel ? (
-                <Loader2Icon className="mr-2 size-4 animate-spin" />
-              ) : (
-                <BoxIcon className="mr-2 size-4" />
-              )}
-              {t("page.tools.model_viewer.title")}
-            </ContextMenuItem>
-            <ContextMenuItem onClick={() => actions.openTextureResizeDialog(mod)}>
-              <ImageIcon className="mr-2 size-4" />
-              {t("page.tools.texture_resizer.title")}
-            </ContextMenuItem>
-            <ContextMenuItem onClick={() => actions.openBodyShapeDialog(mod)}>
-              <PersonStandingIcon className="mr-2 size-4" />
-              {t("page.tools.body_shape.title")} ({t("g.beta")})
-            </ContextMenuItem>
-            <ContextMenuItem onClick={() => actions.openTouchProfileDialog(mod)}>
-              <SparklesIcon className="mr-2 size-4" />
-              {t("page.tools.touch_profile.title")} ({t("g.beta")})
-            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuGroup>
+              <ContextMenuLabel>Tools</ContextMenuLabel>
+              <ContextMenuItem
+                disabled={isConvertingModel}
+                onClick={() => void actions.openModelViewer(mod)}
+              >
+                {isConvertingModel ? (
+                  <Loader2Icon className="mr-2 size-4 animate-spin" />
+                ) : (
+                  <BoxIcon className="mr-2 size-4" />
+                )}
+                {t("page.tools.model_viewer.title")}
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => actions.openTextureResizeDialog(mod)}>
+                <ImageIcon className="mr-2 size-4" />
+                {t("page.tools.texture_resizer.title")}
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => actions.openBodyShapeDialog(mod)}>
+                <PersonStandingIcon className="mr-2 size-4" />
+                {t("page.tools.body_shape.title")} ({t("g.beta")})
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => actions.openTouchProfileDialog(mod)}>
+                <SparklesIcon className="mr-2 size-4" />
+                {t("page.tools.touch_profile.title")} ({t("g.beta")})
+              </ContextMenuItem>
+            </ContextMenuGroup>
+            <ContextMenuSeparator />
           </>
         )}
-        <ContextMenuItem onClick={() => actions.openRenameDialog(mod)}>
-          <PencilIcon className="mr-2 size-4" />
-          {t("page.mod.context-menu.rename")}
-        </ContextMenuItem>
-        <ContextMenuSeparator />
+        {actions.isNteGame && <ContextMenuSeparator />}
         <ContextMenuItem variant="destructive" onClick={() => actions.openDeleteMod(mod)}>
           <TrashIcon className="mr-2 size-4" />
           {t("g.delete")}
