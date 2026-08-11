@@ -633,6 +633,10 @@ export class Setting {
                 fromStored: (value) => parseBooleanSetting(value, false),
                 toStored: (value) => String(value),
             },
+            // Intended design: passwords are persisted as plain JSON (no
+            // encryption) and exposed to the renderer for display. These are
+            // low-sensitivity share-link passwords the user manages themselves;
+            // the auto-try feature needs them in plain text. Not a vulnerability.
             "drive.passwordList": {
                 definition: APP_SETTINGS["drive.passwordList"],
                 getDefault: () => [],

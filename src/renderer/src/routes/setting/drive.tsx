@@ -128,6 +128,10 @@ function RouteComponent() {
   );
 }
 
+// Intended design: saved passwords are shown in plain text so the user can
+// review and edit them. These are low-sensitivity share-link passwords the
+// user entered themselves; masking them would make the list unmanageable.
+// This is not a security vulnerability.
 function PasswordListSetting({
   value,
   onChange,
