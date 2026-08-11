@@ -1,6 +1,10 @@
 import { PathSelectorDialog } from "@renderer/components/path-selector-dialog";
 import { RootProvider } from "@renderer/components/root-provider";
 import { Sidebar } from "@renderer/components/sidebar";
+import { TitlebarActivityBadges } from "@renderer/components/titlebar/titlebar-activity-badges";
+import { use4001FixerTitlebarActivity } from "@renderer/components/titlebar/use-4001-fixer-titlebar-activity";
+import { useModBisectTitlebarActivity } from "@renderer/components/titlebar/use-mod-bisect-titlebar-activity";
+import { useTransferTitlebarActivity } from "@renderer/components/titlebar/use-transfer-titlebar-activity";
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
 import { Button } from "@renderer/components/ui/button";
 import { Toaster } from "@renderer/components/ui/sonner";
@@ -41,6 +45,9 @@ function RootComponent() {
   const { i18n, t } = useTranslation();
   const [isUpdateActionPending, setIsUpdateActionPending] = useState(false);
   useTitleBarOverlay();
+  useTransferTitlebarActivity();
+  use4001FixerTitlebarActivity();
+  useModBisectTitlebarActivity();
 
   useDownloadArchiveExtractPromptHandler();
 
@@ -167,6 +174,7 @@ function RootComponent() {
           isDarwin ? "pl-21" : "pl-2",
         )}
       >
+        <TitlebarActivityBadges />
         <div className="ml-auto flex h-full shrink-0 items-center gap-2 pr-2">
           {shouldShowUpdateButton && (
             <Button
@@ -226,7 +234,7 @@ function ErrorComponent({ error }: ErrorComponentProps) {
   const router = useRouter();
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col bg-transparent">
       <div className="flex min-h-0 flex-1 items-center justify-center p-6">
         <div className="w-full max-w-md space-y-4">
           <Alert variant="destructive">

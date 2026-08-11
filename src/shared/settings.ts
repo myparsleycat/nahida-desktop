@@ -19,6 +19,7 @@ export interface AppSettings {
     "general.moveTransferPageWhenStartTransfer": boolean;
     "general.powerSaveBlockInTransfer": boolean;
     "general.bisectPreserveD3dx": boolean;
+    "general.titlebarActivityBadgeClickNavigate": boolean;
 
     "mod.archiveExtractPathMode": ArchiveExtractPathMode;
     "mod.deleteArchiveAfterExtract": boolean;
@@ -127,6 +128,11 @@ export const APP_SETTINGS = {
         publicKey: "general.bisectPreserveD3dx",
         scope: "general",
         storageKey: "bisect_preserve_d3dx",
+    },
+    "general.titlebarActivityBadgeClickNavigate": {
+        publicKey: "general.titlebarActivityBadgeClickNavigate",
+        scope: "general",
+        storageKey: "titlebarActivityBadgeClickNavigate",
     },
 
     "mod.archiveExtractPathMode": {

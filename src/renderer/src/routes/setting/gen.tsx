@@ -40,6 +40,7 @@ const settingsConfig = {
   language: "general.language",
   autoUpdateMode: "general.autoUpdateMode",
   runInBackground: "general.runInBackground",
+  titlebarActivityBadgeClickNavigate: "general.titlebarActivityBadgeClickNavigate",
   defaultStartPage: "general.defaultStartPage",
   logLevel: "general.logLevel",
 } as const;
@@ -307,6 +308,23 @@ function RouteComponent() {
             <Switch
               checked={settings.runInBackground}
               onCheckedChange={handleRunInBackgroundChange}
+            />
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <span className="text-sm font-medium">
+                {t("page.setting.gen.application.titlebarActivityBadgeClickNavigate")}
+              </span>
+              <p className="text-xs text-muted-foreground">
+                {t("page.setting.gen.application.titlebarActivityBadgeClickNavigateDescription")}
+              </p>
+            </div>
+            <Switch
+              checked={settings.titlebarActivityBadgeClickNavigate}
+              onCheckedChange={(val) => update("titlebarActivityBadgeClickNavigate", val)}
             />
           </div>
         </CardContent>

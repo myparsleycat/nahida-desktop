@@ -303,6 +303,12 @@ export class Setting {
                 fromStored: (value) => parseBooleanSetting(value, true),
                 toStored: (value) => String(value),
             },
+            "general.titlebarActivityBadgeClickNavigate": {
+                definition: APP_SETTINGS["general.titlebarActivityBadgeClickNavigate"],
+                getDefault: () => true,
+                fromStored: (value) => parseBooleanSetting(value, true),
+                toStored: (value) => String(value),
+            },
             "mod.archiveExtractPathMode": {
                 definition: APP_SETTINGS["mod.archiveExtractPathMode"],
                 getDefault: () => "flatten_single_root",
