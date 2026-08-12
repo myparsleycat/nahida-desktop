@@ -1,4 +1,4 @@
-export type SlowChunkDetect = "stall" | "relative";
+export type SlowChunkDetect = "stall" | "relative" | "absolute";
 export type SlowChunkTransferPhase = "network" | "bandwidth-wait" | "disk-write" | "processing";
 
 export type InFlightChunkTransfer = {
@@ -39,14 +39,15 @@ const SLOW_CHUNK_CHECK_INTERVAL_MS = 1000;
 const SLOW_CHUNK_SPEED_WINDOW_MS = 2000;
 const SLOW_CHUNK_MIN_SPEED_SAMPLE_SPAN_MS = 500;
 const SLOW_CHUNK_NEAR_COMPLETE_RATIO = 0.85;
-const SLOW_CHUNK_REQUIRED_SLOW_TICKS = 2;
+const SLOW_CHUNK_REQUIRED_RELATIVE_SLOW_TICKS = 2;
+const SLOW_CHUNK_REQUIRED_ABSOLUTE_SLOW_TICKS = 5;
 const SLOW_CHUNK_MIN_ABSOLUTE_BPS = 64 * 1024;
 const SLOW_CHUNK_RECONNECT_DELAY_MS = 500;
 const SLOW_CHUNK_RECONNECT_JITTER_MS = 250;
 const SLOW_CHUNK_STALL_TIMEOUT_MS = 15_000;
 const SLOW_CHUNK_NEAR_COMPLETE_STALL_TIMEOUT_MS = 45_000;
 const SLOW_CHUNK_NEAR_COMPLETE_REMAINING_BYTES = 256 * 1024;
-const SLOW_CHUNK_SHORT_REMAINING_SECONDS = 10;
+const SLOW_CHUNK_SHORT_REMAINING_SECONDS = 30;
 
 export function isAbortError(error: unknown) {
     return (
@@ -205,6 +206,18 @@ export class SlowChunkMonitor {
         );
     }
 
+    public resetProgress(key: string, transferredBytes: number) {
+        const transfer = this.inFlightTransfers.get(key);
+        if (!transfer) return;
+
+        const now = Date.now();
+        const normalized = Math.max(0, Math.min(transfer.chunkSize, transferredBytes));
+        transfer.transferredBytes = normalized;
+        transfer.lastProgressAt = now;
+        transfer.samples = [{ t: now, b: normalized }];
+        transfer.slowTickCount = 0;
+    }
+
     public setPhase(key: string, phase: SlowChunkTransferPhase) {
         const transfer = this.inFlightTransfers.get(key);
         if (!transfer || transfer.phase === phase) {
@@ -265,6 +278,7 @@ export class SlowChunkMonitor {
 
         const stallCandidates: SlowAbortCandidate[] = [];
         const relativeCandidates: SlowAbortCandidate[] = [];
+        const absoluteCandidates: SlowAbortCandidate[] = [];
 
         for (const { entry, speed } of scored) {
             if (entry.slowReconnects >= SLOW_CHUNK_MAX_RECONNECTS) {
@@ -295,8 +309,6 @@ export class SlowChunkMonitor {
                         remainingBytes <= SLOW_CHUNK_NEAR_COMPLETE_REMAINING_BYTES));
             const estimatedRemainingSeconds =
                 speed !== null && speed > 0 ? remainingBytes / speed : Number.POSITIVE_INFINITY;
-            const shouldProtectRelative =
-                nearComplete || estimatedRemainingSeconds <= SLOW_CHUNK_SHORT_REMAINING_SECONDS;
             const stallTimeoutMs = nearComplete
                 ? SLOW_CHUNK_NEAR_COMPLETE_STALL_TIMEOUT_MS
                 : SLOW_CHUNK_STALL_TIMEOUT_MS;
@@ -312,7 +324,7 @@ export class SlowChunkMonitor {
                 continue;
             }
 
-            if (shouldProtectRelative) {
+            if (estimatedRemainingSeconds <= SLOW_CHUNK_SHORT_REMAINING_SECONDS) {
                 entry.slowTickCount = 0;
                 continue;
             }
@@ -323,29 +335,35 @@ export class SlowChunkMonitor {
             }
 
             const peerMedianBps = this.peerMedianBps(scored, entry);
-            if (peerMedianBps <= 0) {
-                entry.slowTickCount = 0;
-                continue;
-            }
-
-            if (speed >= peerMedianBps * SLOW_CHUNK_THRESHOLD_RATIO) {
-                entry.slowTickCount = 0;
-                continue;
-            }
-
             entry.slowTickCount += 1;
-            if (entry.slowTickCount >= SLOW_CHUNK_REQUIRED_SLOW_TICKS) {
+            if (
+                peerMedianBps > 0 &&
+                speed < peerMedianBps * SLOW_CHUNK_THRESHOLD_RATIO &&
+                entry.slowTickCount >= SLOW_CHUNK_REQUIRED_RELATIVE_SLOW_TICKS
+            ) {
                 relativeCandidates.push({
                     entry,
                     speed,
                     peerMedianBps,
                     detect: "relative",
                 });
+                continue;
+            }
+
+            if (entry.slowTickCount >= SLOW_CHUNK_REQUIRED_ABSOLUTE_SLOW_TICKS) {
+                absoluteCandidates.push({
+                    entry,
+                    speed,
+                    peerMedianBps,
+                    detect: "absolute",
+                });
             }
         }
 
         const pick =
-            pickOldestCandidate(stallCandidates) ?? pickSlowestCandidate(relativeCandidates);
+            pickOldestCandidate(stallCandidates) ??
+            pickSlowestCandidate(relativeCandidates) ??
+            pickSlowestCandidate(absoluteCandidates);
         if (!pick) {
             return;
         }

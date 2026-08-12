@@ -122,6 +122,58 @@ describe("SlowChunkMonitor", () => {
         monitor.unregister(slow.key);
     });
 
+    it("aborts a sustained absolute slow transfer without comparable peers", () => {
+        const monitor = new SlowChunkMonitor();
+        const attemptController = new AbortController();
+        const transfer = monitor.register({
+            fileId: "file-a",
+            chunkIndex: 0,
+            chunkSize: 10 * 1024 * 1024,
+            attemptController,
+            slowReconnects: 0,
+        });
+
+        for (let second = 1; second <= 6; second++) {
+            vi.advanceTimersByTime(1_000);
+            monitor.recordSample(transfer.key, second * 40 * 1024);
+        }
+
+        expect(transfer.abortReason).toBeNull();
+
+        vi.advanceTimersByTime(1_000);
+        monitor.recordSample(transfer.key, 7 * 40 * 1024);
+
+        expect(transfer.abortReason).toBe("slow-chunk");
+        expect(transfer.detect).toBe("absolute");
+        expect(attemptController.signal.aborted).toBe(true);
+
+        monitor.unregister(transfer.key);
+    });
+
+    it("lets an absolute slow transfer finish when less than thirty seconds remain", () => {
+        const monitor = new SlowChunkMonitor();
+        const attemptController = new AbortController();
+        const initialTransferredBytes = 1024 * 1024;
+        const transfer = monitor.register({
+            fileId: "file-a",
+            chunkIndex: 0,
+            chunkSize: 2 * 1024 * 1024,
+            initialTransferredBytes,
+            attemptController,
+            slowReconnects: 0,
+        });
+
+        for (let second = 1; second <= 10; second++) {
+            vi.advanceTimersByTime(1_000);
+            monitor.recordSample(transfer.key, initialTransferredBytes + second * 40 * 1024);
+        }
+
+        expect(transfer.abortReason).toBeNull();
+        expect(attemptController.signal.aborted).toBe(false);
+
+        monitor.unregister(transfer.key);
+    });
+
     it("skips relative abort when the chunk is near complete", () => {
         const monitor = new SlowChunkMonitor();
         const peerController = new AbortController();

@@ -393,6 +393,7 @@ export class DriveService {
                         currentId: data?.root.id || "",
                         savePath,
                         suggestedName: isSingle ? suggestedName : undefined,
+                        link,
                     });
 
                 this.processDownloadAsync({
@@ -1840,15 +1841,23 @@ export class DriveService {
         currentId,
         savePath,
         suggestedName,
+        link,
     }: {
         id: string;
         currentId: string;
         savePath: string;
         suggestedName?: string;
+        link?: LinkData;
     }) {
         const pid = nanoid();
         const abortController = new AbortController();
-        const restartParams: DownloadParams = { type: "download", id, savePath, suggestedName };
+        const restartParams: DownloadParams = {
+            type: "download",
+            id,
+            savePath,
+            suggestedName,
+            link,
+        };
 
         await this.desktop.service.transfer.createTransfer({
             pid,

@@ -7,7 +7,7 @@ import ky from "ky";
 
 import type { BandwidthLimiter } from "./bandwidth-limiter";
 
-import { networkFetch } from "../internal/network-fetch";
+import { createDownloadNetworkContext, networkFetch } from "../internal/network-fetch";
 import { createBandwidthLimitTransform } from "./bandwidth-limit-stream";
 import {
     downloadRequestLimiter,
@@ -61,6 +61,23 @@ const createAbortError = (message = "Aborted") => {
     return error;
 };
 
+class UnexpectedContentRangeError extends Error {}
+
+function isExpectedContentRange(
+    value: string | null,
+    start: number,
+    end: number,
+    fileSize: number,
+) {
+    const match = /^bytes\s+(\d+)-(\d+)\/(\d+)$/i.exec(value ?? "");
+    return (
+        !!match &&
+        Number(match[1]) === start &&
+        Number(match[2]) === end &&
+        Number(match[3]) === fileSize
+    );
+}
+
 export class ParallelDownloader {
     private readonly minSegmentSize = 4 * 1024 * 1024;
     private readonly requestLimiter: DownloadRequestLimiter;
@@ -70,8 +87,8 @@ export class ParallelDownloader {
     constructor(
         private options: {
             logger?: {
-                info: (msg: string, ...args: any[]) => void;
-                warn: (msg: string, ...args: any[]) => void;
+                info: (msg: unknown, ...args: any[]) => void;
+                warn: (msg: unknown, ...args: any[]) => void;
             };
             getHeaders: (url: string) => Promise<Record<string, string>>;
             requestLimiter?: DownloadRequestLimiter;
@@ -158,10 +175,12 @@ export class ParallelDownloader {
         headers,
         start,
         end,
+        fileSize,
+        resumeBytes,
         chunkPath,
         signal,
         onProgress,
-        preservePartialOnAbort,
+        networkContext,
         bandwidthLimiter,
         onPhaseChange,
     }: {
@@ -169,75 +188,89 @@ export class ParallelDownloader {
         headers?: Record<string, string>;
         start: number;
         end: number;
+        fileSize: number;
+        resumeBytes: number;
         chunkPath: string;
         signal?: AbortSignal;
         onProgress?: (transferredBytes: number, incrementalBytes: number) => void;
-        preservePartialOnAbort?: () => boolean;
+        networkContext?: ReturnType<typeof createDownloadNetworkContext>;
         bandwidthLimiter?: BandwidthLimiter;
         onPhaseChange?: (phase: "network" | "bandwidth-wait") => void;
     }): Promise<void> {
+        const rangeStart = start + resumeBytes;
         const requestHeaders: Record<string, string> = {
             ...(await this.options.getHeaders(url)),
             ...headers,
-            Range: `bytes=${start}-${end}`,
+            Range: `bytes=${rangeStart}-${end}`,
         };
 
-        await this.requestLimiter.run(
-            async () => {
-                const response = await ky(url, {
-                    headers: requestHeaders,
-                    fetch: networkFetch,
-                    signal,
-                    throwHttpErrors: false,
-                    timeout: 100000,
-                    retry: 0,
-                });
+        await this.requestLimiter.run(async () => {
+            const response = await ky(url, {
+                headers: requestHeaders,
+                fetch: networkContext?.fetch ?? networkFetch,
+                signal,
+                throwHttpErrors: false,
+                timeout: 100000,
+                retry: 0,
+            });
 
-                if (response.status !== 206) {
-                    await drainWebStream(response.body, signal).catch(() => {});
-                    throw new Error(
-                        `Chunk download failed: expected 206 Partial Content, got ${response.statusText} (${response.status})`,
+            if (response.status !== 206) {
+                await drainWebStream(response.body, signal).catch(() => {});
+                throw new Error(
+                    `Chunk download failed: expected 206 Partial Content, got ${response.statusText} (${response.status})`,
+                );
+            }
+
+            if (
+                !isExpectedContentRange(
+                    response.headers.get("Content-Range"),
+                    rangeStart,
+                    end,
+                    fileSize,
+                )
+            ) {
+                await drainWebStream(response.body, signal).catch(() => {});
+                throw new UnexpectedContentRangeError(
+                    `Chunk download returned an unexpected Content-Range for bytes=${rangeStart}-${end}`,
+                );
+            }
+
+            if (!response.body) throw new Error("No response body");
+
+            const fileStream = fse.createWriteStream(
+                chunkPath,
+                resumeBytes > 0 ? { flags: "a" } : undefined,
+            );
+            let transferredBytes = resumeBytes;
+            const source = webStreamToNodeReadable(response.body, signal);
+            const progressStream = new Transform({
+                transform(chunk: Buffer, _encoding, callback) {
+                    transferredBytes += chunk.byteLength;
+                    onProgress?.(transferredBytes, chunk.byteLength);
+                    callback(null, chunk);
+                },
+            });
+
+            try {
+                if (bandwidthLimiter) {
+                    await pipeline(
+                        source,
+                        createBandwidthLimitTransform(bandwidthLimiter, {
+                            signal,
+                            onPhaseChange,
+                        }),
+                        progressStream,
+                        fileStream,
+                        { signal },
                     );
+                } else {
+                    await pipeline(source, progressStream, fileStream, { signal });
                 }
-
-                if (!response.body) throw new Error("No response body");
-
-                const fileStream = fse.createWriteStream(chunkPath);
-                let transferredBytes = 0;
-                const source = webStreamToNodeReadable(response.body, signal);
-                const progressStream = new Transform({
-                    transform(chunk: Buffer, _encoding, callback) {
-                        transferredBytes += chunk.byteLength;
-                        onProgress?.(transferredBytes, chunk.byteLength);
-                        callback(null, chunk);
-                    },
-                });
-
-                try {
-                    if (bandwidthLimiter) {
-                        await pipeline(
-                            source,
-                            createBandwidthLimitTransform(bandwidthLimiter, {
-                                signal,
-                                onPhaseChange,
-                            }),
-                            progressStream,
-                            fileStream,
-                            { signal },
-                        );
-                    } else {
-                        await pipeline(source, progressStream, fileStream, { signal });
-                    }
-                } catch (pipeErr) {
-                    fileStream.destroy();
-                    if (!preservePartialOnAbort?.()) {
-                        await fse.remove(chunkPath).catch(() => {});
-                    }
-                    throw pipeErr;
-                }
-            },
-            signal,
-        );
+            } catch (pipeErr) {
+                fileStream.destroy();
+                throw pipeErr;
+            }
+        }, signal);
     }
 
     private async combineChunks({
@@ -345,7 +378,7 @@ export class ParallelDownloader {
             const stat = await fse.stat(segment.chunkPath);
             return Math.min(stat.size, segment.end - segment.start + 1);
         } catch {
-            return Math.min(segment.transferredBytes, segment.end - segment.start + 1);
+            return 0;
         }
     }
 
@@ -541,139 +574,213 @@ export class ParallelDownloader {
         };
 
         const runWorker = async () => {
-            while (true) {
-                const segment = await acquireSegment();
-                if (!segment) return;
+            const networkContext = createDownloadNetworkContext();
 
-                let slowReconnects = 0;
-                let errorRetries = 0;
-                const MAX_ERROR_RETRIES = 2;
-                let completed = false;
+            try {
+                while (true) {
+                    const segment = await acquireSegment();
+                    if (!segment) return;
 
-                while (!completed) {
-                    if (signal?.aborted) {
-                        return;
-                    }
+                    let slowReconnects = 0;
+                    let errorRetries = 0;
+                    const MAX_ERROR_RETRIES = 2;
+                    let completed = false;
 
-                    const attemptController = new AbortController();
-                    segment.controller = attemptController;
-                    segment.transferredBytes = 0;
-                    const previousReported = segment.reportedBytes;
-                    const combinedSignal = signal
-                        ? AbortSignal.any([signal, attemptController.signal])
-                        : attemptController.signal;
-
-                    const chunkSize = segment.end - segment.start + 1;
-                    const inFlight = slowChunkMonitor?.register({
-                        fileId,
-                        chunkIndex: segment.id,
-                        chunkSize,
-                        cohortKey,
-                        attemptController,
-                        slowReconnects,
-                    });
-
-                    try {
-                        await this.downloadChunk({
-                            url,
-                            headers,
-                            start: segment.start,
-                            end: segment.end,
-                            chunkPath: segment.chunkPath,
-                            signal: combinedSignal,
-                            onProgress: (transferredBytes) => {
-                                segment.transferredBytes = transferredBytes;
-                                if (inFlight) {
-                                    slowChunkMonitor?.recordSample(inFlight.key, transferredBytes);
-                                }
-                                const nextReported = Math.max(
-                                    segment.reportedBytes,
-                                    transferredBytes,
-                                );
-                                const incremental = nextReported - segment.reportedBytes;
-                                segment.reportedBytes = nextReported;
-                                if (incremental > 0) {
-                                    onProgress?.(incremental);
-                                }
-                            },
-                            preservePartialOnAbort: () => segment.splitRequested,
-                            bandwidthLimiter,
-                            onPhaseChange: (phase) => {
-                                if (inFlight) {
-                                    slowChunkMonitor?.setPhase(inFlight.key, phase);
-                                }
-                            },
-                        });
-
-                        segment.status = "completed";
-                        segment.controller = undefined;
-                        completed = true;
-                    } catch (err) {
-                        const reportedDelta = segment.reportedBytes - previousReported;
-                        if (reportedDelta > 0) {
-                            onProgress?.(-reportedDelta);
-                            segment.reportedBytes = previousReported;
-                        }
-
+                    while (!completed) {
                         if (signal?.aborted) {
                             return;
                         }
 
-                        if (isAbortError(err) && segment.splitRequested) {
-                            await this.splitSegmentForRebalance({
-                                segment,
-                                segments,
-                                tempChunkPaths,
-                                savePath,
-                                nextSegmentId,
-                                onProgressAdjustment: onProgress,
-                            });
-                            schedulerSignal.notify();
+                        const chunkSize = segment.end - segment.start + 1;
+                        const storedChunkBytes = await fse
+                            .stat(segment.chunkPath)
+                            .then(({ size }) => size)
+                            .catch(() => 0);
+                        const resumeBytes = storedChunkBytes <= chunkSize ? storedChunkBytes : 0;
+                        if (storedChunkBytes > chunkSize) {
+                            await fse.remove(segment.chunkPath).catch(() => {});
+                        }
+
+                        const storedProgressDelta = resumeBytes - segment.reportedBytes;
+                        if (storedProgressDelta !== 0) {
+                            onProgress?.(storedProgressDelta);
+                            segment.reportedBytes = resumeBytes;
+                        }
+                        segment.transferredBytes = resumeBytes;
+
+                        if (resumeBytes === chunkSize) {
+                            segment.status = "completed";
+                            segment.controller = undefined;
                             completed = true;
                             continue;
                         }
 
-                        if (
-                            inFlight?.abortReason === "slow-chunk" &&
-                            slowReconnects < SLOW_CHUNK_MAX_RECONNECTS
-                        ) {
-                            slowReconnects += 1;
-                            this.options.logger?.warn(
-                                `Slow chunk reconnect for ${fileId} segment ${segment.id} (${inFlight.detect}, reconnect ${slowReconnects})`,
-                                "ParallelDownloader:slowChunk",
-                            );
-                            if (signal) {
-                                await sleepWithAbort(slowReconnectDelayMs(), signal);
-                            } else {
-                                await new Promise((resolve) =>
-                                    setTimeout(resolve, slowReconnectDelayMs()),
-                                );
-                            }
-                            continue;
-                        }
+                        const attemptController = new AbortController();
+                        segment.controller = attemptController;
+                        const combinedSignal = signal
+                            ? AbortSignal.any([signal, attemptController.signal])
+                            : attemptController.signal;
 
-                        if (!isAbortError(err) && errorRetries < MAX_ERROR_RETRIES) {
-                            errorRetries += 1;
-                            if (signal) {
-                                await sleepWithAbort(2 ** errorRetries * 1000, signal);
-                            } else {
-                                await new Promise((resolve) =>
-                                    setTimeout(resolve, 2 ** errorRetries * 1000),
-                                );
-                            }
-                            continue;
-                        }
+                        const inFlight = slowChunkMonitor?.register({
+                            fileId,
+                            chunkIndex: segment.id,
+                            chunkSize,
+                            cohortKey,
+                            attemptController,
+                            slowReconnects,
+                            initialTransferredBytes: resumeBytes,
+                        });
 
-                        segment.controller = undefined;
-                        throw err;
-                    } finally {
-                        if (inFlight) {
-                            slowChunkMonitor?.unregister(inFlight.key);
+                        try {
+                            await this.downloadChunk({
+                                url,
+                                headers,
+                                start: segment.start,
+                                end: segment.end,
+                                fileSize,
+                                resumeBytes,
+                                chunkPath: segment.chunkPath,
+                                signal: combinedSignal,
+                                networkContext,
+                                onProgress: (transferredBytes) => {
+                                    segment.transferredBytes = transferredBytes;
+                                    if (inFlight) {
+                                        slowChunkMonitor?.recordSample(
+                                            inFlight.key,
+                                            transferredBytes,
+                                        );
+                                    }
+                                    const nextReported = Math.max(
+                                        segment.reportedBytes,
+                                        transferredBytes,
+                                    );
+                                    const incremental = nextReported - segment.reportedBytes;
+                                    segment.reportedBytes = nextReported;
+                                    if (incremental > 0) {
+                                        onProgress?.(incremental);
+                                    }
+                                },
+                                bandwidthLimiter,
+                                onPhaseChange: (phase) => {
+                                    if (inFlight) {
+                                        slowChunkMonitor?.setPhase(inFlight.key, phase);
+                                    }
+                                },
+                            });
+
+                            segment.status = "completed";
+                            segment.controller = undefined;
+                            completed = true;
+                        } catch (err) {
+                            if (err instanceof UnexpectedContentRangeError && resumeBytes > 0) {
+                                await fse.remove(segment.chunkPath).catch(() => {});
+                                if (segment.reportedBytes > 0) {
+                                    onProgress?.(-segment.reportedBytes);
+                                }
+                                segment.reportedBytes = 0;
+                                segment.transferredBytes = 0;
+                                continue;
+                            }
+
+                            const persistedBytes = await this.getCompletedBytes(segment);
+                            const progressCorrection = persistedBytes - segment.reportedBytes;
+                            if (progressCorrection !== 0) {
+                                onProgress?.(progressCorrection);
+                            }
+                            segment.reportedBytes = persistedBytes;
+                            segment.transferredBytes = persistedBytes;
+
+                            if (signal?.aborted) {
+                                return;
+                            }
+
+                            if (isAbortError(err) && segment.splitRequested) {
+                                await this.splitSegmentForRebalance({
+                                    segment,
+                                    segments,
+                                    tempChunkPaths,
+                                    savePath,
+                                    nextSegmentId,
+                                    onProgressAdjustment: onProgress,
+                                });
+                                schedulerSignal.notify();
+                                completed = true;
+                                continue;
+                            }
+
+                            if (
+                                inFlight?.abortReason === "slow-chunk" &&
+                                slowReconnects < SLOW_CHUNK_MAX_RECONNECTS
+                            ) {
+                                slowReconnects += 1;
+                                this.options.logger?.warn(
+                                    {
+                                        fileId,
+                                        segmentId: segment.id,
+                                        detect: inFlight.detect,
+                                        speedBps: inFlight.chunkSpeedBps,
+                                        peerMedianBps: inFlight.peerMedianBps,
+                                        remainingBytes: Math.max(
+                                            0,
+                                            segment.end -
+                                                (segment.start + segment.transferredBytes) +
+                                                1,
+                                        ),
+                                        resumeFrom: segment.start + segment.transferredBytes,
+                                        reconnect: slowReconnects,
+                                        url: getSafeUrlResource(url),
+                                    },
+                                    "ParallelDownloader:slowChunk",
+                                );
+                                await networkContext.resetConnections().catch((error) => {
+                                    this.options.logger?.warn(
+                                        {
+                                            fileId,
+                                            segmentId: segment.id,
+                                            reconnect: slowReconnects,
+                                            error:
+                                                error instanceof Error
+                                                    ? error.message
+                                                    : String(error),
+                                        },
+                                        "ParallelDownloader:resetConnectionsFailed",
+                                    );
+                                });
+                                if (signal) {
+                                    await sleepWithAbort(slowReconnectDelayMs(), signal);
+                                } else {
+                                    await new Promise((resolve) =>
+                                        setTimeout(resolve, slowReconnectDelayMs()),
+                                    );
+                                }
+                                continue;
+                            }
+
+                            if (!isAbortError(err) && errorRetries < MAX_ERROR_RETRIES) {
+                                errorRetries += 1;
+                                if (signal) {
+                                    await sleepWithAbort(2 ** errorRetries * 1000, signal);
+                                } else {
+                                    await new Promise((resolve) =>
+                                        setTimeout(resolve, 2 ** errorRetries * 1000),
+                                    );
+                                }
+                                continue;
+                            }
+
+                            segment.controller = undefined;
+                            throw err;
+                        } finally {
+                            if (inFlight) {
+                                slowChunkMonitor?.unregister(inFlight.key);
+                            }
                         }
                     }
-                }
 
-                schedulerSignal.notify();
+                    schedulerSignal.notify();
+                }
+            } finally {
+                networkContext.release();
             }
         };
 
@@ -710,5 +817,14 @@ function getRangeSupportCacheKey(url: string) {
         return `${parsed.origin}${parsed.pathname}`;
     } catch {
         return url;
+    }
+}
+
+function getSafeUrlResource(url: string) {
+    try {
+        const parsed = new URL(url);
+        return `${parsed.origin}${parsed.pathname}`;
+    } catch {
+        return "invalid-url";
     }
 }
