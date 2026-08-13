@@ -19,19 +19,19 @@ import { AliceLoader } from "@renderer/components/loaders";
 import { Button } from "@renderer/components/ui/button";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { useDrag } from "@renderer/hooks/drive";
+import { useDriveDescendantSearch } from "@renderer/hooks/use-drive-descendant-search";
 import { useDriveUploadRefresh } from "@renderer/hooks/use-drive-upload-refresh";
 import { useDriveNameSortPolicy } from "@renderer/hooks/use-settings";
 import { getSearchScore } from "@renderer/lib/sejong";
-import { commonSort, isDriveSearchUnavailable } from "@renderer/lib/utils";
+import { commonSort } from "@renderer/lib/utils";
 import { useViewStore, viewStore } from "@renderer/store/drive";
-import type { Content } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, useLocation } from "@tanstack/react-router";
 import { disassemble, getChoseong } from "es-hangul";
 import { orderBy } from "es-toolkit";
 import { FolderIcon, Share2Icon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -47,7 +47,6 @@ function RouteComponent() {
 
   const { onDragEnter, onDragLeave, onDragOver, onDrop } = useDrag();
   const searchInDirQuery = useViewStore((s) => s.searchInDirQuery);
-  const setSearchInDirQuery = useViewStore((s) => s.setSearchInDirQuery);
   const includeSubdirs = useViewStore((s) => s.includeSubdirs);
   const sortType = useViewStore((s) => s.sortType);
   const layout = useViewStore((s) => s.layout);
@@ -55,10 +54,18 @@ function RouteComponent() {
 
   useDriveUploadRefresh(effectiveId, ["drive", "share", effectiveId]);
 
-  const [debouncedQ, setDebouncedQ] = useState("");
-  const [extraItems, setExtraItems] = useState<Content[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const {
+    isSearching,
+    isDescendantSearch,
+    searchContents,
+    isSearchPending,
+    isSearchFailed,
+    searchErrorMessage,
+    isSearchEmpty,
+    hasNextPage,
+    isFetchingNextPage,
+    loadMore,
+  } = useDriveDescendantSearch(effectiveId);
 
   const query = useQuery({
     queryKey: ["drive", "share", effectiveId],
@@ -77,58 +84,7 @@ function RouteComponent() {
     },
   });
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: <>
-  useEffect(() => {
-    if (searchInDirQuery) {
-      setSearchInDirQuery("");
-    }
-    setDebouncedQ("");
-  }, [effectiveId]);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setDebouncedQ(searchInDirQuery.trim());
-    }, 300);
-
-    return () => clearTimeout(timeout);
-  }, [searchInDirQuery]);
-
   const isSubdirSearchMode = includeSubdirs && effectiveId !== "share";
-  const trimmedQuery = searchInDirQuery.trim();
-  const isSearching = isSubdirSearchMode && trimmedQuery.length >= 2;
-  const isDescendantSearch = isSearching && debouncedQ.length >= 2;
-
-  const searchQuery = useQuery({
-    queryKey: ["drive", "search", effectiveId, debouncedQ],
-    enabled: isDescendantSearch,
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
-    queryFn: async () => {
-      try {
-        return await window.api.invoke("drive:get:search", effectiveId, {
-          q: debouncedQ,
-          limit: 50,
-        });
-      } catch (error) {
-        if (isDriveSearchUnavailable(error)) {
-          toast.error(t("page.drive.head_buttons.search_unavailable"));
-          throw new Error("search_unavailable");
-        }
-        throw error;
-      }
-    },
-  });
-
-  useEffect(() => {
-    setExtraItems([]);
-    setNextCursor(null);
-    setIsLoadingMore(false);
-  }, [effectiveId, debouncedQ]);
-
-  useEffect(() => {
-    setExtraItems([]);
-    setNextCursor(searchQuery.data?.nextCursor ?? null);
-  }, [searchQuery.data]);
 
   useEffect(() => {
     if (effectiveId && location.pathname.startsWith("/drive/share/")) {
@@ -168,46 +124,7 @@ function RouteComponent() {
     ).map((scoredItem) => scoredItem.item);
   }, [rawContents, searchInDirQuery, isSubdirSearchMode]);
 
-  const searchContents = useMemo(() => {
-    if (!searchQuery.data) return extraItems;
-    return [...searchQuery.data.items, ...extraItems];
-  }, [searchQuery.data, extraItems]);
-
   const displayContents = isDescendantSearch ? searchContents : isSearching ? [] : localContents;
-  const isSearchPending =
-    isSearching && (!isDescendantSearch || (searchQuery.isFetching && searchContents.length === 0));
-  const isSearchFailed = isDescendantSearch && searchQuery.isError;
-  const isSearchEmpty =
-    isDescendantSearch &&
-    searchQuery.isFetched &&
-    !searchQuery.isError &&
-    searchContents.length === 0;
-
-  async function loadMore() {
-    if (!nextCursor || isLoadingMore) return;
-
-    const identity = `${effectiveId}:${debouncedQ}`;
-    setIsLoadingMore(true);
-    try {
-      const data = await window.api.invoke("drive:get:search", effectiveId, {
-        q: debouncedQ,
-        limit: 50,
-        cursor: nextCursor,
-      });
-
-      if (identity !== `${effectiveId}:${debouncedQ}`) return;
-
-      setExtraItems((prev) => [...prev, ...data.items]);
-      setNextCursor(data.nextCursor);
-    } catch {
-      if (identity !== `${effectiveId}:${debouncedQ}`) return;
-      toast.error(t("page.drive.head_buttons.search_unavailable"));
-    } finally {
-      if (identity === `${effectiveId}:${debouncedQ}`) {
-        setIsLoadingMore(false);
-      }
-    }
-  }
 
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     try {
@@ -289,11 +206,11 @@ function RouteComponent() {
                         />
                       ) : null}
 
-                      {isDescendantSearch && nextCursor && (
+                      {isDescendantSearch && hasNextPage && (
                         <div className="flex justify-center p-4">
                           <Button
                             variant="outline"
-                            disabled={isLoadingMore}
+                            disabled={isFetchingNextPage}
                             onClick={() => {
                               void loadMore();
                             }}
@@ -306,9 +223,7 @@ function RouteComponent() {
                   </ScrollArea>
                 ) : isSearchFailed ? (
                   <Center className="flex-col">
-                    <p className="text-center text-lg">
-                      {t("page.drive.head_buttons.search_unavailable")}
-                    </p>
+                    <p className="text-center text-lg">{searchErrorMessage}</p>
                   </Center>
                 ) : isSearchEmpty ? (
                   <Center className="flex-col">
