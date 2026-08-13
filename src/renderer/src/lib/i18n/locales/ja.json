@@ -387,6 +387,12 @@
           "name-placeholder": "MOD名",
           "confirm": "名前を変更"
         },
+        "find-conflict": {
+          "title": "競合モードを探す",
+          "description": "\"{{name}}\" のフォルダーを無効化対象から除外して二分探索を実行し、このモードと競合する他のモードを特定します。",
+          "mod-disabled-warning": "このモードは現在無効化されています。競合を再現するには先に有効化してください。",
+          "session-active": "二分探索はすでに実行中です。現在のセッションをキャンセルまたは完了してから再試行してください。"
+        },
         "texture-resize": {
           "title": "MOD テクスチャをリサイズ",
           "description": "\"{{name}}\" 内の DDS ファイルを検索してその場でリサイズします。"
@@ -585,7 +591,8 @@
         "open-folder": "フォルダーを開く",
         "open-gamebanana": "GameBananaで表示",
         "mark-manual-subgroup": "サブグループとして指定",
-        "rename": "名前を変更"
+        "rename": "名前を変更",
+        "find-conflict": "競合モードを探す"
       },
       "toast": {
         "trash-loading": "ゴミ箱に移動中...",
