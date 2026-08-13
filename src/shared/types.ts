@@ -294,6 +294,7 @@ export interface BisectSnapshot {
     batchSize: number;
     candidates: string[];
     currentBatch: string[];
+    excludePaths: string[];
     undoStackDepth: number;
     finalBadPath: string | null;
     error: string | null;

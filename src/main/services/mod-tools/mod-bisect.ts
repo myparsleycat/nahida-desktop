@@ -2,13 +2,14 @@ import path from "node:path";
 
 import { disabledPrefixString, isNteImporter, type DisabledPrefixStyle } from "@shared/mod";
 import type { BisectSnapshot, BisectStatus, GameConfig } from "@shared/types";
-import { delay, retry } from "es-toolkit";
+import { delay, retry, uniqBy } from "es-toolkit";
 import fg from "fast-glob";
 import fse from "fs-extra";
 import pLimit from "p-limit";
 
 import type { NahidaDesktop } from "@/main";
 
+import { isSameOrChildPath } from "../mod-manager/path-utils";
 import { BISECT_DISABLED_SUFFIX, BisectJournal } from "./mod-bisect-journal";
 import { disabledPathFor, renameIniDisable, renameIniEnable } from "./mod-bisect-rename";
 
@@ -19,6 +20,7 @@ interface InternalSession {
     round: number;
     batchSize: number;
     currentBatch: string[];
+    excludePaths: string[];
     undoStack: UndoEntry[];
     finalBadPath: string | null;
     phase: "scanning" | "active";
@@ -36,6 +38,12 @@ const RENAME_CONCURRENCY = 8;
 const DISABLED_FOLDER_PATTERN = /^disabled[\s_]+/i;
 const DISABLED_INI_PATTERN = /^disabled/i;
 const BISECT_INCONCLUSIVE_ERROR = "Bisect inconclusive";
+export const BISECT_ALL_EXCLUDED_ERROR = "All enabled INIs were excluded";
+
+export const BISECT_EXCLUDE_EMPTY = "Exclude path is empty.";
+export const BISECT_EXCLUDE_OUTSIDE = "Exclude path must be inside the selected importer.";
+export const BISECT_EXCLUDE_ROOT = "Exclude path cannot be the importer root.";
+export const BISECT_EXCLUDE_MISSING = "Exclude path does not exist.";
 
 export function isDisabledBisectPath(relativePath: string): boolean {
     const segments = relativePath.split(/[\\/]+/);
@@ -43,6 +51,28 @@ export function isDisabledBisectPath(relativePath: string): boolean {
         segments.slice(0, -1).some((segment) => DISABLED_FOLDER_PATTERN.test(segment)) ||
         DISABLED_INI_PATTERN.test(segments.at(-1) ?? "")
     );
+}
+
+export function toModRootRelativePath(modRootPath: string, inputPath: string): string {
+    const trimmed = inputPath.trim();
+    if (!trimmed) throw new Error(BISECT_EXCLUDE_EMPTY);
+
+    const resolvedRoot = path.resolve(modRootPath);
+    const resolvedInput = path.isAbsolute(trimmed)
+        ? path.resolve(trimmed)
+        : path.resolve(resolvedRoot, trimmed);
+
+    if (!isSameOrChildPath(resolvedRoot, resolvedInput)) {
+        throw new Error(BISECT_EXCLUDE_OUTSIDE);
+    }
+
+    const relative = path.relative(resolvedRoot, resolvedInput);
+    if (relative === "") throw new Error(BISECT_EXCLUDE_ROOT);
+    return relative.split(path.sep).join("/");
+}
+
+export function isExcludedBisectPath(iniPath: string, excludeAbsPaths: string[]): boolean {
+    return excludeAbsPaths.some((excludeAbs) => isSameOrChildPath(excludeAbs, iniPath));
 }
 
 export class ModBisect {
@@ -67,7 +97,12 @@ export class ModBisect {
         return this.toSnapshot(this.session, null, status);
     }
 
-    public async start(game: string): Promise<BisectSnapshot> {
+    public async validateExcludePath(game: string, inputPath: string): Promise<string> {
+        const gameConfig = await this.requireGameConfig(game);
+        return this.resolveExcludePath(gameConfig.modFolderPath, inputPath);
+    }
+
+    public async start(game: string, excludePaths: string[] = []): Promise<BisectSnapshot> {
         await this.recovering;
         if (this.session && !this.session.finalBadPath) {
             throw new Error("A bisect session is already running. Cancel it first.");
@@ -76,17 +111,18 @@ export class ModBisect {
             await this.cancel();
         }
 
-        const games = await this.desktop.service.mod.get.games();
-        const gameConfig = games.find((g) => g.game === game);
-        if (!gameConfig) {
-            throw new Error(`Game not found: ${game}`);
-        }
-        if (isNteImporter(gameConfig.importer)) {
-            throw new Error("NTE modders are not supported yet.");
-        }
-        if (!gameConfig.modFolderPath) {
-            throw new Error(`Mod folder path is not configured for ${game}.`);
-        }
+        const gameConfig = await this.requireGameConfig(game);
+        const excludeRelatives = uniqBy(
+            await Promise.all(
+                excludePaths.map((inputPath) =>
+                    this.resolveExcludePath(gameConfig.modFolderPath, inputPath),
+                ),
+            ),
+            (relativePath) => relativePath.toLowerCase(),
+        );
+        const excludeAbsPaths = excludeRelatives.map((relativePath) =>
+            path.resolve(gameConfig.modFolderPath, relativePath),
+        );
 
         const scanningSnapshot: BisectSnapshot = {
             status: "scanning",
@@ -96,6 +132,7 @@ export class ModBisect {
             batchSize: 0,
             candidates: [],
             currentBatch: [],
+            excludePaths: excludeRelatives,
             undoStackDepth: 0,
             finalBadPath: null,
             error: null,
@@ -107,19 +144,24 @@ export class ModBisect {
             round: 0,
             batchSize: 0,
             currentBatch: [],
+            excludePaths: excludeRelatives,
             undoStack: [],
             finalBadPath: null,
             phase: "scanning",
         };
         this.broadcast(scanningSnapshot);
 
-        let iniPaths: string[];
+        let scannedPaths: string[];
         try {
-            iniPaths = await this.scanEnabledInis(gameConfig.modFolderPath);
+            scannedPaths = await this.scanEnabledInis(gameConfig.modFolderPath);
         } catch (error) {
             this.session = null;
             throw error;
         }
+
+        const iniPaths = scannedPaths.filter(
+            (iniPath) => !isExcludedBisectPath(iniPath, excludeAbsPaths),
+        );
 
         if (iniPaths.length === 0) {
             this.session = null;
@@ -127,6 +169,7 @@ export class ModBisect {
                 ...scanningSnapshot,
                 status: "done",
                 finalBadPath: null,
+                error: scannedPaths.length > 0 ? BISECT_ALL_EXCLUDED_ERROR : null,
             };
             this.broadcast(doneSnapshot);
             return doneSnapshot;
@@ -154,6 +197,7 @@ export class ModBisect {
             round: 1,
             batchSize: firstBatchSize,
             currentBatch: firstBatch,
+            excludePaths: excludeRelatives,
             undoStack: [],
             finalBadPath: null,
             phase: "active",
@@ -338,6 +382,12 @@ export class ModBisect {
     }
 
     private async performRecoverOrphans(game: string): Promise<number> {
+        const gameConfig = await this.requireGameConfig(game);
+        const orphans = await this.journal.listOrphans(gameConfig.modFolderPath);
+        return (await this.recoverInis(orphans)).length;
+    }
+
+    private async requireGameConfig(game: string): Promise<GameConfig> {
         const games = await this.desktop.service.mod.get.games();
         const gameConfig = games.find((g) => g.game === game);
         if (!gameConfig) {
@@ -349,8 +399,15 @@ export class ModBisect {
         if (!gameConfig.modFolderPath) {
             throw new Error(`Mod folder path is not configured for ${game}.`);
         }
-        const orphans = await this.journal.listOrphans(gameConfig.modFolderPath);
-        return (await this.recoverInis(orphans)).length;
+        return gameConfig;
+    }
+
+    private async resolveExcludePath(modRootPath: string, inputPath: string): Promise<string> {
+        const relativePath = toModRootRelativePath(modRootPath, inputPath);
+        if (!(await fse.pathExists(path.resolve(modRootPath, relativePath)))) {
+            throw new Error(BISECT_EXCLUDE_MISSING);
+        }
+        return relativePath;
     }
 
     private assertSession() {
@@ -586,6 +643,7 @@ export class ModBisect {
             batchSize: session.batchSize,
             candidates: [...session.candidates],
             currentBatch: [...session.currentBatch],
+            excludePaths: [...session.excludePaths],
             undoStackDepth: session.undoStack.length,
             finalBadPath: session.finalBadPath,
             error,
@@ -601,6 +659,7 @@ export class ModBisect {
             batchSize: 0,
             candidates: [],
             currentBatch: [],
+            excludePaths: [],
             undoStackDepth: 0,
             finalBadPath: null,
             error: null,

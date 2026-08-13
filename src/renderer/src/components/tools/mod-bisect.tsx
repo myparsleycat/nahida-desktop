@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@renderer/components/ui/card";
+import { Input } from "@renderer/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -22,7 +23,8 @@ import { setSetting } from "@renderer/lib/settings";
 import { disabledPrefixString, isNteImporter } from "@shared/mod";
 import type { BisectSnapshot, GameConfig } from "@shared/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { PlusIcon, XIcon } from "lucide-react";
+import { useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -55,10 +57,34 @@ function statusColor(status: BisectSnapshot["status"]) {
   }
 }
 
+function isExcludeValidationMessage(message: string) {
+  return (
+    message.includes("Exclude path is empty.") ||
+    message.includes("Exclude path must be inside the selected importer.") ||
+    message.includes("Exclude path cannot be the importer root.") ||
+    message.includes("Exclude path does not exist.")
+  );
+}
+
+const ALL_EXCLUDED_ERROR = "All enabled INIs were excluded";
+
+type ExcludeRow = {
+  id: string;
+  value: string;
+  committed: string | null;
+};
+
+function createExcludeRow(): ExcludeRow {
+  return { id: crypto.randomUUID(), value: "", committed: null };
+}
+
 export default function ModBisect() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [selectedGame, setSelectedGame] = useState<string>("");
+  const [starting, setStarting] = useState(false);
+  const startingRef = useRef(false);
+  const excludeListRef = useRef<{ flush: () => Promise<string[] | null> }>(null);
   const { data: preserveD3dx = true } = useSetting("general.bisectPreserveD3dx");
 
   const { data: games = [] } = useGames();
@@ -89,9 +115,14 @@ export default function ModBisect() {
   }, [games, selectedGame]);
 
   const startMutation = useMutation({
-    mutationFn: (game: string) => window.api.invoke("tools:bisectStart", game),
+    mutationFn: ({ game, excludePaths }: { game: string; excludePaths: string[] }) =>
+      window.api.invoke("tools:bisectStart", game, excludePaths),
     onError: (err) => {
-      toast.error(err.message);
+      if (isExcludeValidationMessage(err.message)) {
+        toast.warning(t("page.tools.mod_bisect.exclude_invalid"));
+      } else {
+        toast.error(err.message);
+      }
       void queryClient.invalidateQueries({ queryKey: ["tools:bisectState"] });
     },
   });
@@ -137,6 +168,7 @@ export default function ModBisect() {
   const canRecover =
     !!selectedGame && (status === "idle" || status === "cancelled") && !recoverMutation.isPending;
   const isBusy =
+    starting ||
     startMutation.isPending ||
     respondMutation.isPending ||
     undoMutation.isPending ||
@@ -160,7 +192,27 @@ export default function ModBisect() {
               disabled={isActive || isBusy}
             />
             <Button
-              onClick={() => selectedGame && startMutation.mutate(selectedGame)}
+              onClick={() => {
+                if (!selectedGame || startingRef.current) return;
+                const game = selectedGame;
+                startingRef.current = true;
+                setStarting(true);
+                void (async () => {
+                  try {
+                    const excludePaths = await excludeListRef.current?.flush();
+                    if (excludePaths === null) return;
+                    await startMutation.mutateAsync({
+                      game,
+                      excludePaths: excludePaths ?? [],
+                    });
+                  } catch {
+                    // startMutation.onError already reported the failure
+                  } finally {
+                    startingRef.current = false;
+                    setStarting(false);
+                  }
+                })();
+              }}
               disabled={!canStart || isBusy}
             >
               {t("page.tools.mod_bisect.start")}
@@ -196,6 +248,12 @@ export default function ModBisect() {
               {t(`page.tools.mod_bisect.status.${status}`)}
             </span>
           </div>
+
+          <ExcludePathList
+            ref={excludeListRef}
+            game={selectedGame}
+            disabled={isActive || isBusy || !selectedGame}
+          />
 
           <div className="flex items-center justify-between gap-2 rounded-md border p-2">
             <div className="flex flex-col gap-0.5">
@@ -246,7 +304,22 @@ export default function ModBisect() {
         />
       ) : null}
 
-      {snapshot && status === "done" && !snapshot.finalBadPath && snapshot.error ? (
+      {snapshot &&
+      status === "done" &&
+      !snapshot.finalBadPath &&
+      snapshot.error === ALL_EXCLUDED_ERROR ? (
+        <Card>
+          <CardContent className="text-sm text-muted-foreground">
+            {t("page.tools.mod_bisect.all_excluded")}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {snapshot &&
+      status === "done" &&
+      !snapshot.finalBadPath &&
+      snapshot.error &&
+      snapshot.error !== ALL_EXCLUDED_ERROR ? (
         <Card>
           <CardContent className="text-sm text-muted-foreground">
             {t("page.tools.mod_bisect.bisect_inconclusive")}
@@ -277,6 +350,177 @@ export default function ModBisect() {
           </CardContent>
         </Card>
       ) : null}
+    </div>
+  );
+}
+
+function ExcludePathList({
+  ref,
+  game,
+  disabled,
+}: {
+  ref?: React.Ref<{ flush: () => Promise<string[] | null> }>;
+  game: string;
+  disabled: boolean;
+}) {
+  const { t } = useTranslation();
+  const [rows, setRows] = useState<ExcludeRow[]>([]);
+  const rowsRef = useRef(rows);
+  const committingRef = useRef(new Map<string, Promise<boolean>>());
+  const lastFailedRef = useRef(new Map<string, string>());
+
+  useEffect(() => {
+    rowsRef.current = rows;
+  }, [rows]);
+
+  useEffect(() => {
+    rowsRef.current = [];
+    setRows([]);
+  }, [game]);
+
+  const commitRow = (id: string): Promise<boolean> => {
+    const inFlight = committingRef.current.get(id);
+    if (inFlight) return inFlight;
+
+    const promise = (async () => {
+      const row = rowsRef.current.find((entry) => entry.id === id);
+      if (!row) return true;
+
+      const trimmed = row.value.trim();
+      if (!trimmed) {
+        lastFailedRef.current.delete(id);
+        const next = rowsRef.current.filter((entry) => entry.id !== id);
+        rowsRef.current = next;
+        setRows(next);
+        return true;
+      }
+      if (row.committed !== null && row.value === row.committed) return true;
+      if (lastFailedRef.current.get(id) === trimmed) return false;
+      if (!game) {
+        toast.warning(t("page.tools.mod_bisect.exclude_no_game"));
+        return false;
+      }
+      try {
+        const relative = await window.api.invoke("tools:bisectValidateExcludePath", game, trimmed);
+        if (
+          rowsRef.current.some(
+            (entry) => entry.id !== id && entry.committed?.toLowerCase() === relative.toLowerCase(),
+          )
+        ) {
+          lastFailedRef.current.set(id, trimmed);
+          toast.warning(t("page.tools.mod_bisect.exclude_duplicate"));
+          return false;
+        }
+        lastFailedRef.current.delete(id);
+        const next = rowsRef.current.map((entry) =>
+          entry.id === id ? { ...entry, value: relative, committed: relative } : entry,
+        );
+        rowsRef.current = next;
+        setRows(next);
+        return true;
+      } catch {
+        lastFailedRef.current.set(id, trimmed);
+        toast.warning(t("page.tools.mod_bisect.exclude_invalid"));
+        return false;
+      }
+    })();
+
+    committingRef.current.set(id, promise);
+    void promise.finally(() => {
+      if (committingRef.current.get(id) === promise) committingRef.current.delete(id);
+    });
+    return promise;
+  };
+
+  useImperativeHandle(ref, () => ({
+    flush: async () => {
+      const ids = rowsRef.current.map((entry) => entry.id);
+      const committed: string[] = [];
+      const ok = await ids.reduce(async (previous, id) => {
+        if (!(await previous)) return false;
+        const existing = rowsRef.current.find((entry) => entry.id === id)?.committed;
+        if (!(await commitRow(id))) return false;
+        const next = rowsRef.current.find((entry) => entry.id === id)?.committed ?? existing;
+        if (next) committed.push(next);
+        return true;
+      }, Promise.resolve(true));
+      if (!ok) return null;
+      return committed;
+    },
+  }));
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-0.5">
+        <span className="text-sm font-medium">{t("page.tools.mod_bisect.exclude_paths")}</span>
+        <span className="text-xs text-muted-foreground">
+          {t("page.tools.mod_bisect.exclude_paths_description")}
+        </span>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {rows.map((row) => (
+          <div key={row.id} className="flex items-center gap-1.5">
+            <Input
+              className="flex-1"
+              value={row.value}
+              disabled={disabled}
+              placeholder={t("page.tools.mod_bisect.exclude_paths_placeholder")}
+              onChange={(event) => {
+                lastFailedRef.current.delete(row.id);
+                const next = rowsRef.current.map((entry) =>
+                  entry.id === row.id ? { ...entry, value: event.target.value } : entry,
+                );
+                rowsRef.current = next;
+                setRows(next);
+              }}
+              onBlur={(event) => {
+                if (
+                  event.relatedTarget instanceof HTMLElement &&
+                  event.relatedTarget.closest(`[data-exclude-delete="${row.id}"]`)
+                ) {
+                  return;
+                }
+                void commitRow(row.id);
+              }}
+              onKeyDown={(event) => {
+                if (event.nativeEvent.isComposing) return;
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-7 shrink-0"
+              disabled={disabled}
+              data-exclude-delete={row.id}
+              aria-label={t("page.tools.mod_bisect.exclude_paths_remove")}
+              onClick={() => {
+                const next = rowsRef.current.filter((entry) => entry.id !== row.id);
+                rowsRef.current = next;
+                setRows(next);
+              }}
+            >
+              <XIcon className="size-3.5" />
+            </Button>
+          </div>
+        ))}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-fit"
+          disabled={disabled}
+          onClick={() => {
+            const next = [...rowsRef.current, createExcludeRow()];
+            rowsRef.current = next;
+            setRows(next);
+          }}
+        >
+          <PlusIcon className="size-3.5" />
+          {t("page.tools.mod_bisect.exclude_paths_add")}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -372,6 +616,13 @@ function RoundView({
             count: snapshot.currentBatch.length,
           })}
         </div>
+        {snapshot.excludePaths.length > 0 ? (
+          <div className="text-xs text-muted-foreground">
+            {t("page.tools.mod_bisect.exclude_count", {
+              count: snapshot.excludePaths.length,
+            })}
+          </div>
+        ) : null}
         <ScrollArea className="h-56 rounded border bg-muted/30 p-2">
           <ul className="space-y-0.5 font-mono text-xs break-all">
             {snapshot.currentBatch.map((iniPath) => (
