@@ -153,6 +153,11 @@
       },
       "head_buttons": {
         "search_in_dir_placeholder": "Search in this folder...",
+        "search_in_subdirs_placeholder": "Search in subfolders...",
+        "search_include_subdirs": "Include subfolders",
+        "search_no_results": "No search results",
+        "search_load_more": "Load more",
+        "search_unavailable": "Search is unavailable",
         "import": "Import a shared link",
         "dropdown_menu": {
           "download": "Download",

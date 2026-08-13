@@ -8,6 +8,20 @@ export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
 
+// Drive descendant search is unavailable when the backend OpenSearch dependency is down (503)
+// or the backend itself is unreachable; DriveApiError fields may be lost through IPC
+// serialization, so both status/code and message markers are checked.
+export function isDriveSearchUnavailable(error: unknown): boolean {
+    if (typeof error !== "object" || error === null) return false;
+
+    const record = error as Record<string, unknown>;
+    if (record.status === 502 || record.status === 503 || record.status === 504) return true;
+    if (record.code === "DRIVE_BACKEND_UNAVAILABLE") return true;
+
+    const message = typeof record.message === "string" ? record.message : "";
+    return message.includes("DRIVE_BACKEND_UNAVAILABLE") || message.includes("search_unavailable");
+}
+
 export const naturalCompare = (a: string, b: string, mp: number) => {
     const collator = new Intl.Collator(undefined, {
         numeric: true,

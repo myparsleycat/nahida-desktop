@@ -137,6 +137,11 @@
       },
       "head_buttons": {
         "search_in_dir_placeholder": "このフォルダー内を検索...",
+        "search_in_subdirs_placeholder": "サブフォルダ内を検索...",
+        "search_include_subdirs": "サブフォルダを含める",
+        "search_no_results": "検索結果がありません",
+        "search_load_more": "もっと見る",
+        "search_unavailable": "検索を利用できません",
         "import": "共有リンクをインポート",
         "dropdown_menu": {
           "download": "ダウンロード",

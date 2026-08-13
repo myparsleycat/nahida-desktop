@@ -33,6 +33,19 @@ export function registerDriveHandlers(d: NahidaDesktop) {
         );
     });
 
+    rh("drive:get:search", async (itemId, params) => {
+        return await safeDriveCall(
+            d,
+            "get:search",
+            {
+                entity: "drive items",
+                stage: "search-descendants",
+                itemId,
+            },
+            () => d.service.drive.get.search(itemId, params),
+        );
+    });
+
     rh("drive:patch:rename", async (itemId, name) => {
         return await safeDriveCall(
             d,

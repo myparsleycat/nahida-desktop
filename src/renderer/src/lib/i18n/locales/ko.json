@@ -136,6 +136,11 @@
       },
       "head_buttons": {
         "search_in_dir_placeholder": "이 폴더에서 검색...",
+        "search_in_subdirs_placeholder": "하위 폴더에서 검색...",
+        "search_include_subdirs": "하위 폴더 포함",
+        "search_no_results": "검색 결과가 없습니다",
+        "search_load_more": "더 보기",
+        "search_unavailable": "검색을 사용할 수 없습니다",
         "import": "공유 링크 가져오기",
         "dropdown_menu": {
           "download": "다운로드",

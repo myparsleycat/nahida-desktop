@@ -136,6 +136,11 @@
       },
       "head_buttons": {
         "search_in_dir_placeholder": "在此文件夹中搜索...",
+        "search_in_subdirs_placeholder": "在子文件夹中搜索...",
+        "search_include_subdirs": "包含子文件夹",
+        "search_no_results": "没有搜索结果",
+        "search_load_more": "加载更多",
+        "search_unavailable": "搜索暂不可用",
         "import": "导入共享链接",
         "dropdown_menu": {
           "download": "下载",
