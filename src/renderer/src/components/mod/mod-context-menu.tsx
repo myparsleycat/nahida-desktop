@@ -25,6 +25,7 @@ import {
   PencilIcon,
   PersonStandingIcon,
   SparklesIcon,
+  SwordsIcon,
   TerminalSquareIcon,
   TrashIcon,
 } from "lucide-react";
@@ -239,6 +240,10 @@ export function ModContextMenu({ mod, actions, children }: ModContextMenuProps) 
               <ContextMenuItem onClick={() => actions.openTouchProfileDialog(mod)}>
                 <SparklesIcon className="mr-2 size-4" />
                 {t("page.tools.touch_profile.title")} ({t("g.beta")})
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => actions.openConflictFinder(mod)}>
+                <SwordsIcon className="mr-2 size-4" />
+                {t("page.mod.context-menu.find-conflict")}
               </ContextMenuItem>
             </ContextMenuGroup>
             <ContextMenuSeparator />

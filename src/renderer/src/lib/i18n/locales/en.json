@@ -153,6 +153,11 @@
       },
       "head_buttons": {
         "search_in_dir_placeholder": "Search in this folder...",
+        "search_in_subdirs_placeholder": "Search in subfolders...",
+        "search_include_subdirs": "Include subfolders",
+        "search_no_results": "No search results",
+        "search_load_more": "Load more",
+        "search_unavailable": "Search is unavailable",
         "import": "Import a shared link",
         "dropdown_menu": {
           "download": "Download",
@@ -400,6 +405,12 @@
           "name-placeholder": "Mod name",
           "confirm": "Rename"
         },
+        "find-conflict": {
+          "title": "Find Conflict Mode",
+          "description": "Runs a bisect with \"{{name}}\" kept enabled to find which other mod conflicts with it.",
+          "mod-disabled-warning": "This mod is currently disabled. Enable it first to reproduce the conflict.",
+          "session-active": "A bisect session is already in progress. Cancel or finish it before starting a new one."
+        },
         "texture-resize": {
           "title": "Resize mod textures",
           "description": "Scan \"{{name}}\" for DDS files and resize them in place."
@@ -602,7 +613,8 @@
         "open-folder": "Open folder",
         "open-gamebanana": "View on GameBanana",
         "mark-manual-subgroup": "Mark as subgroup",
-        "rename": "Rename"
+        "rename": "Rename",
+        "find-conflict": "Find Conflict Mode"
       },
       "toast": {
         "trash-loading": "Moving to recycle bin...",

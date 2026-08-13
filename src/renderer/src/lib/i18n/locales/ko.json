@@ -136,6 +136,11 @@
       },
       "head_buttons": {
         "search_in_dir_placeholder": "이 폴더에서 검색...",
+        "search_in_subdirs_placeholder": "하위 폴더에서 검색...",
+        "search_include_subdirs": "하위 폴더 포함",
+        "search_no_results": "검색 결과가 없습니다",
+        "search_load_more": "더 보기",
+        "search_unavailable": "검색을 사용할 수 없습니다",
         "import": "공유 링크 가져오기",
         "dropdown_menu": {
           "download": "다운로드",
@@ -384,6 +389,12 @@
           "name-placeholder": "모드 이름",
           "confirm": "이름 변경"
         },
+        "find-conflict": {
+          "title": "충돌 모드 찾기",
+          "description": "\"{{name}}\" 모드의 폴더를 비활성화에서 제외한 채 이진 탐색을 실행합니다. 이 모드와 충돌하는 다른 모드를 찾아냅니다.",
+          "mod-disabled-warning": "이 모드는 현재 비활성화되어 있습니다. 충돌을 재현하려면 먼저 활성화하세요.",
+          "session-active": "이진 탐색이 이미 진행 중입니다. 현재 세션을 취소하거나 완료한 뒤 다시 시도하세요."
+        },
         "texture-resize": {
           "title": "모드 텍스처 리사이즈",
           "description": "\"{{name}}\" 아래의 DDS 파일을 찾아 제자리에서 리사이즈합니다."
@@ -586,7 +597,8 @@
         "open-folder": "폴더 열기",
         "open-gamebanana": "GameBanana에서 보기",
         "mark-manual-subgroup": "서브그룹으로 지정",
-        "rename": "이름 변경"
+        "rename": "이름 변경",
+        "find-conflict": "충돌 모드 찾기"
       },
       "toast": {
         "trash-loading": "휴지통으로 이동 중...",

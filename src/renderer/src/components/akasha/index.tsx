@@ -35,6 +35,7 @@ import {
   FileIcon,
   FileTextIcon,
   FolderIcon,
+  FolderTree,
   LinkIcon,
   LayoutGridIcon,
   ListIcon,
@@ -189,8 +190,16 @@ export function AkashaHeadButtons({ currentId }: { currentId?: string }) {
   const setLayout = useViewStore((s) => s.setLayout);
   const searchInDirQuery = useViewStore((s) => s.searchInDirQuery);
   const setSearchInDirQuery = useViewStore((s) => s.setSearchInDirQuery);
+  const includeSubdirs = useViewStore((s) => s.includeSubdirs);
+  const setIncludeSubdirs = useViewStore((s) => s.setIncludeSubdirs);
   const setFocusSearchInputState = useViewStore((s) => s.setFocusSearchInputState);
   const setImportOverlay = useViewStore((s) => s.setImportOverlay);
+
+  const canSearchSubdirs = !!currentId && currentId !== "share";
+  const searchPlaceholder =
+    canSearchSubdirs && includeSubdirs
+      ? t("page.drive.head_buttons.search_in_subdirs_placeholder")
+      : t("page.drive.head_buttons.search_in_dir_placeholder");
 
   const handleDownload = () => {
     if (selectedItems.length === 0) return;
@@ -215,12 +224,29 @@ export function AkashaHeadButtons({ currentId }: { currentId?: string }) {
         <Input
           id="drive-search-input"
           className="h-9 w-50 pl-7 dark:bg-transparent"
-          placeholder={t("page.drive.head_buttons.search_in_dir_placeholder")}
+          placeholder={searchPlaceholder}
           value={searchInDirQuery}
           onChange={(e) => setSearchInDirQuery(e.target.value)}
           onFocus={() => setFocusSearchInputState(true)}
           onBlur={() => setFocusSearchInputState(false)}
         />
+        {canSearchSubdirs && (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-pressed={includeSubdirs}
+            aria-label={t("page.drive.head_buttons.search_include_subdirs")}
+            title={t("page.drive.head_buttons.search_include_subdirs")}
+            className={cn(
+              "ml-1 h-9 w-9 shrink-0",
+              includeSubdirs && "bg-muted text-primary",
+              !includeSubdirs && "text-muted-foreground",
+            )}
+            onClick={() => setIncludeSubdirs(!includeSubdirs)}
+          >
+            <FolderTree size={20} />
+          </Button>
+        )}
       </div>
 
       <div className="flex shrink-0 flex-row items-center gap-1">

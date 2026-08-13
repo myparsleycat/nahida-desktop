@@ -20,6 +20,7 @@ import {
   Loader2Icon,
   PersonStandingIcon,
   SparklesIcon,
+  SwordsIcon,
   TerminalSquareIcon,
   TrashIcon,
   WrenchIcon,
@@ -87,6 +88,18 @@ export const ModCardHeader = memo(function ModCardHeader({ mod, actions }: ModCa
                 <SparklesIcon className="size-4" />
                 {t("page.tools.touch_profile.title")} ({t("g.beta")})
               </DropdownMenuItem>
+
+              {!actions.isNteGame && (
+                <DropdownMenuItem
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    actions.openConflictFinder(mod);
+                  }}
+                >
+                  <SwordsIcon className="size-4" />
+                  {t("page.mod.context-menu.find-conflict")}
+                </DropdownMenuItem>
+              )}
 
               {actions.runner.showWuwaFixer && (
                 <DropdownMenuItem

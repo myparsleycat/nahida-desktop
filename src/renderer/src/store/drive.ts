@@ -16,6 +16,8 @@ interface ViewState {
     ) => void;
     searchInDirQuery: string;
     setSearchInDirQuery: (query: string) => void;
+    includeSubdirs: boolean;
+    setIncludeSubdirs: (includeSubdirs: boolean) => void;
     isfocusSearchInput: boolean;
     setFocusSearchInputState: (state: boolean) => void;
     lastDriveId: string;
@@ -37,6 +39,8 @@ export const viewStore = createStore<ViewState>((set) => ({
     setSortType: (sortType) => set({ sortType }),
     searchInDirQuery: "",
     setSearchInDirQuery: (searchInDirQuery) => set({ searchInDirQuery }),
+    includeSubdirs: false,
+    setIncludeSubdirs: (includeSubdirs) => set({ includeSubdirs }),
     isfocusSearchInput: false,
     setFocusSearchInputState: (isfocusSearchInput) => set({ isfocusSearchInput }),
     lastDriveId: "",

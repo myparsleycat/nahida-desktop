@@ -69,6 +69,9 @@ export function useDriveClipboardActions(destinationId: string) {
                     void queryClient.invalidateQueries({
                         queryKey: ["drive", "share", destinationId],
                     });
+                    void queryClient.invalidateQueries({
+                        queryKey: ["drive", "search"],
+                    });
                     setCopyOrCuts(null, []);
                     return t("page.drive.clipboard.move_success");
                 },
@@ -96,6 +99,9 @@ export function useDriveClipboardActions(destinationId: string) {
                     });
                     void queryClient.invalidateQueries({
                         queryKey: ["drive", "share", destinationId],
+                    });
+                    void queryClient.invalidateQueries({
+                        queryKey: ["drive", "search"],
                     });
                     return t("page.drive.clipboard.copy_success");
                 },

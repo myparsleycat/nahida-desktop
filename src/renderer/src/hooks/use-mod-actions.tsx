@@ -37,6 +37,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { BodyShapeDialog } from "../components/mod/body-shape-dialog";
+import { ModConflictFinderDialog } from "../components/mod/mod-conflict-finder-dialog";
 import { ModFixRunnerDialogs } from "../components/mod/mod-fix-runner-dialogs";
 import { pasteModPreview } from "../components/mod/paste-preview";
 import { TextureResizeDialog } from "../components/mod/texture-resize-dialog";
@@ -85,6 +86,7 @@ export interface ModActionApi {
   openTextureResizeDialog: (mod: ModInfo) => void;
   openBodyShapeDialog: (mod: ModInfo) => void;
   openTouchProfileDialog: (mod: ModInfo) => void;
+  openConflictFinder: (mod: ModInfo) => void;
   openWuwaFixer: (mod: ModInfo) => Promise<void>;
   markAsManualSubGroup: (mod: ModInfo) => Promise<void>;
   runPreset: (mod: ModInfo, presetId: string) => Promise<void>;
@@ -108,6 +110,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
   const [textureResizeMod, setTextureResizeMod] = useState<ModInfo | null>(null);
   const [bodyShapeMod, setBodyShapeMod] = useState<ModInfo | null>(null);
   const [touchProfileMod, setTouchProfileMod] = useState<ModInfo | null>(null);
+  const [conflictFinderMod, setConflictFinderMod] = useState<ModInfo | null>(null);
   const [renameDialogState, setRenameDialogState] = useState<{
     groupPath?: string;
     mod: ModInfo;
@@ -353,6 +356,13 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
         }}
       />
 
+      <ModConflictFinderDialog
+        open={conflictFinderMod !== null}
+        onOpenChange={(open) => !open && setConflictFinderMod(null)}
+        game={selectedGame}
+        mod={conflictFinderMod}
+      />
+
       <ModelViewerDialog
         open={showModelViewer}
         onOpenChange={(open) => {
@@ -385,6 +395,7 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
     openTextureResizeDialog: (mod) => setTextureResizeMod(mod),
     openBodyShapeDialog: (mod) => setBodyShapeMod(mod),
     openTouchProfileDialog: (mod) => setTouchProfileMod(mod),
+    openConflictFinder: (mod) => setConflictFinderMod(mod),
     openWuwaFixer: async (mod) => {
       await runner.handleOpenWuwaFixer(mod.path);
     },

@@ -17,9 +17,11 @@ import { Center, ServerCrash } from "@renderer/components/common";
 import { ContextMenuProvider } from "@renderer/components/drive/context-menu";
 import { DriveImportOverlay } from "@renderer/components/drive/drive-import-overlay";
 import { AliceLoader } from "@renderer/components/loaders";
+import { Button } from "@renderer/components/ui/button";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { useDrag } from "@renderer/hooks/drive";
 import { useAuth } from "@renderer/hooks/use-auth";
+import { useDriveDescendantSearch } from "@renderer/hooks/use-drive-descendant-search";
 import { useDriveUploadRefresh } from "@renderer/hooks/use-drive-upload-refresh";
 import { useDriveNameSortPolicy } from "@renderer/hooks/use-settings";
 import { getSearchScore } from "@renderer/lib/sejong";
@@ -48,12 +50,25 @@ function RouteComponent() {
 
   const { onDragEnter, onDragLeave, onDragOver, onDrop } = useDrag();
   const searchInDirQuery = useViewStore((s) => s.searchInDirQuery);
-  const setSearchInDirQuery = useViewStore((s) => s.setSearchInDirQuery);
+  const includeSubdirs = useViewStore((s) => s.includeSubdirs);
   const sortType = useViewStore((s) => s.sortType);
   const layout = useViewStore((s) => s.layout);
   const { data: nameSortPolicy = "natural_ignore_spacing" } = useDriveNameSortPolicy();
 
   useDriveUploadRefresh(effectiveId, ["drive", "drive", effectiveId]);
+
+  const {
+    isSearching,
+    isDescendantSearch,
+    searchContents,
+    isSearchPending,
+    isSearchFailed,
+    searchErrorMessage,
+    isSearchEmpty,
+    hasNextPage,
+    isFetchingNextPage,
+    loadMore,
+  } = useDriveDescendantSearch(effectiveId);
 
   const query = useQuery({
     queryKey: ["drive", "drive", effectiveId],
@@ -72,12 +87,7 @@ function RouteComponent() {
     },
   });
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: <>
-  useEffect(() => {
-    if (searchInDirQuery) {
-      setSearchInDirQuery("");
-    }
-  }, [effectiveId]);
+  const isSubdirSearchMode = includeSubdirs && effectiveId !== "share";
 
   useEffect(() => {
     if (effectiveId && location.pathname.startsWith("/drive/drive/")) {
@@ -91,9 +101,9 @@ function RouteComponent() {
     return commonSort([...query.data.children], sortType, nameSortPolicy);
   }, [query.data?.children, sortType, nameSortPolicy]);
 
-  const sortedContents = useMemo(() => {
+  const localContents = useMemo(() => {
     if (!rawContents) return [];
-    if (!searchInDirQuery) return rawContents;
+    if (isSubdirSearchMode || !searchInDirQuery) return rawContents;
 
     const query = searchInDirQuery.toLowerCase();
 
@@ -115,7 +125,9 @@ function RouteComponent() {
       [(di) => di.score],
       ["desc"],
     ).map((scoredItem) => scoredItem.item);
-  }, [rawContents, searchInDirQuery]);
+  }, [rawContents, searchInDirQuery, isSubdirSearchMode]);
+
+  const displayContents = isDescendantSearch ? searchContents : isSearching ? [] : localContents;
 
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     try {
@@ -177,28 +189,57 @@ function RouteComponent() {
             <ContextMenuProvider>
               <HandlerProvider
                 queryData={query}
-                sortedContents={sortedContents}
+                sortedContents={displayContents}
                 currentId={effectiveId}
               >
-                {sortedContents.length > 0 ? (
+                {displayContents.length > 0 ? (
                   <ScrollArea className="flex h-full flex-1 flex-col">
                     <>
                       {layout === "list" ? (
                         <ContentMenuList
-                          sortedContents={sortedContents}
+                          sortedContents={displayContents}
                           isFetching={query.isFetching}
                           itemId={effectiveId}
                         />
                       ) : layout === "grid" ? (
                         <ContentMenuGrid
-                          sortedContents={sortedContents}
+                          sortedContents={displayContents}
                           isFetching={query.isFetching}
                           itemId={effectiveId}
                         />
                       ) : null}
+
+                      {isDescendantSearch && hasNextPage && (
+                        <div className="flex justify-center p-4">
+                          <Button
+                            variant="outline"
+                            disabled={isFetchingNextPage}
+                            onClick={() => {
+                              void loadMore();
+                            }}
+                          >
+                            {t("page.drive.head_buttons.search_load_more")}
+                          </Button>
+                        </div>
+                      )}
                     </>
                   </ScrollArea>
-                ) : query.isFetched && sortedContents.length < 1 ? (
+                ) : isSearchFailed ? (
+                  <Center className="flex-col">
+                    <p className="text-center text-lg">{searchErrorMessage}</p>
+                  </Center>
+                ) : isSearchEmpty ? (
+                  <Center className="flex-col">
+                    <div>
+                      <FolderIcon size="80" />
+                    </div>
+                    <p className="mt-4 text-center text-lg">
+                      {t("page.drive.head_buttons.search_no_results")}
+                    </p>
+                  </Center>
+                ) : isSearchPending ? (
+                  <AkashaSkeleton />
+                ) : query.isFetched && displayContents.length < 1 ? (
                   <Center className="flex-col">
                     <div>
                       <FolderIcon size="80" />
@@ -210,7 +251,7 @@ function RouteComponent() {
                       {t("page.drive.no_contents_section_message.1")}
                     </p>
                   </Center>
-                ) : query.isFetching && sortedContents.length === 0 ? (
+                ) : query.isFetching && displayContents.length === 0 ? (
                   <AkashaSkeleton />
                 ) : null}
               </HandlerProvider>
@@ -221,7 +262,7 @@ function RouteComponent() {
         <RenameDialog />
         <DeleteItemsDialog />
         <ConflictNameDialog />
-        <NewDirectoryDialog contents={sortedContents} />
+        <NewDirectoryDialog contents={rawContents} />
         {/* <PubLinkDialog /> */}
 
         <DriveImportOverlay destinationId={effectiveId} />

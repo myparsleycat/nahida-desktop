@@ -136,6 +136,11 @@
       },
       "head_buttons": {
         "search_in_dir_placeholder": "在此文件夹中搜索...",
+        "search_in_subdirs_placeholder": "在子文件夹中搜索...",
+        "search_include_subdirs": "包含子文件夹",
+        "search_no_results": "没有搜索结果",
+        "search_load_more": "加载更多",
+        "search_unavailable": "搜索暂不可用",
         "import": "导入共享链接",
         "dropdown_menu": {
           "download": "下载",
@@ -381,6 +386,12 @@
           "name-placeholder": "模组名称",
           "confirm": "重命名"
         },
+        "find-conflict": {
+          "title": "查找冲突模组",
+          "description": "运行二分查找，将 \"{{name}}\" 的文件夹排除在禁用之外，以找出与它冲突的其他模组。",
+          "mod-disabled-warning": "该模组当前已禁用。请先启用它再重现冲突。",
+          "session-active": "二分查找已在运行中。请先取消或完成当前会话，然后再试。"
+        },
         "texture-resize": {
           "title": "缩放模组纹理",
           "description": "扫描“{{name}}”中的 DDS 文件并原地缩放。"
@@ -579,7 +590,8 @@
         "open-folder": "打开文件夹",
         "open-gamebanana": "在 GameBanana 中查看",
         "mark-manual-subgroup": "指定为子分组",
-        "rename": "重命名"
+        "rename": "重命名",
+        "find-conflict": "查找冲突模组"
       },
       "toast": {
         "trash-loading": "移动到回收站中...",

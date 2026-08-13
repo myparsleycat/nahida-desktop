@@ -180,6 +180,14 @@ export class DriveService {
             if (error) throw error;
             return data;
         },
+
+        search: async (itemId: string, params: { q: string; limit?: number; cursor?: string }) => {
+            const { data, error } = await eden.akasha.content({ id: itemId }).search.get({
+                query: params,
+            });
+            if (error) throw error;
+            return data;
+        },
     };
 
     post = {
