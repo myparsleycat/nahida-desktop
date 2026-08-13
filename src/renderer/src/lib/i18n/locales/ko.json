@@ -233,7 +233,8 @@
     },
     "share_drive": {
       "title": "공유 드라이브",
-      "title_server_error": "공유 드라이브 (서버 에러)"
+      "title_server_error": "공유 드라이브 (서버 에러)",
+      "no_accessible_drives": "접근 가능한 공유 드라이브가 없습니다."
     },
     "mod": {
       "title": "모드 매니저",
@@ -1033,6 +1034,7 @@
         "scanning": "모드 폴더를 스캔하는 중입니다...",
         "bisect_inconclusive": "결정적인 원인을 찾지 못했습니다. 응답을 다시 확인해 주세요.",
         "no_inis_found": "활성화된 ini 파일이 없습니다.",
+        "all_excluded": "제외한 경로 때문에 탐색할 활성화된 ini가 남지 않았습니다.",
         "cancelled": "이진 탐색이 취소되었습니다.",
         "reverting": "변경 사항을 되돌리는 중입니다...",
         "no_games": "선택 가능한 게임이 없습니다",
@@ -1057,6 +1059,19 @@
         "recover_disabled_hint": "선택한 게임의 모드 폴더에 남은 .mod-bisect-disabled 파일을 복구합니다.",
         "recover_disabled_success": "비활성화된 모드 파일 {{count}}개를 복구했습니다.",
         "recover_disabled_none": "남아있는 비활성화 파일이 없습니다.",
+        "exclude_paths": "비활성화에서 제외할 경로 지정",
+        "exclude_paths_description": "지정한 경로와 하위 파일은 이진 탐색 중에도 활성화 상태를 유지합니다.",
+        "exclude_paths_placeholder": "모드 폴더 기준 상대 경로",
+        "exclude_paths_add": "추가",
+        "exclude_paths_remove": "삭제",
+        "exclude_count": "{{count}}개 경로를 비활성화에서 제외함",
+        "exclude_empty": "경로를 입력해 주세요.",
+        "exclude_outside": "선택한 importer의 모드 폴더 안 경로만 지정할 수 있습니다.",
+        "exclude_root": "모드 폴더 루트는 제외할 수 없습니다.",
+        "exclude_missing": "해당 경로가 존재하지 않습니다.",
+        "exclude_invalid": "선택한 게임의 모드 폴더 안에 있는 경로를 입력해 주세요.",
+        "exclude_duplicate": "이미 지정된 경로입니다.",
+        "exclude_no_game": "게임을 먼저 선택해 주세요.",
         "status": {
           "idle": "대기 중",
           "scanning": "스캔 중",

@@ -233,7 +233,8 @@
     },
     "share_drive": {
       "title": "共享驱动器",
-      "title_server_error": "共享驱动器 (服务器错误)"
+      "title_server_error": "共享驱动器 (服务器错误)",
+      "no_accessible_drives": "没有可访问的共享云端硬盘。"
     },
     "mod": {
       "title": "模组管理器",
@@ -1013,6 +1014,7 @@
         "scanning": "正在扫描模组文件夹...",
         "bisect_inconclusive": "无法确定原因,请检查您的回答。",
         "no_inis_found": "未找到已启用的 ini 文件。",
+        "all_excluded": "所有已启用的 ini 文件均被排除，无法继续二分查找。",
         "cancelled": "二分查找已取消。",
         "reverting": "正在恢复更改...",
         "no_games": "没有可选的游戏",
@@ -1037,6 +1039,19 @@
         "recover_disabled_hint": "恢复所选游戏模组文件夹中残留的 .mod-bisect-disabled 文件。",
         "recover_disabled_success": "已恢复 {{count}} 个已禁用模组文件。",
         "recover_disabled_none": "未发现残留的已禁用文件。",
+        "exclude_paths": "指定不禁用的路径",
+        "exclude_paths_description": "指定的路径及其子文件在二分查找期间保持启用。",
+        "exclude_paths_placeholder": "相对于模组文件夹的路径",
+        "exclude_paths_add": "添加",
+        "exclude_paths_remove": "删除",
+        "exclude_count": "已从禁用中排除 {{count}} 个路径",
+        "exclude_empty": "请输入路径。",
+        "exclude_outside": "只能指定所选导入器模组文件夹内的路径。",
+        "exclude_root": "不能排除模组文件夹根目录。",
+        "exclude_missing": "该路径不存在。",
+        "exclude_invalid": "请输入所选游戏模组文件夹内的有效路径。",
+        "exclude_duplicate": "该路径已指定。",
+        "exclude_no_game": "请先选择游戏。",
         "status": {
           "idle": "空闲",
           "scanning": "扫描中",

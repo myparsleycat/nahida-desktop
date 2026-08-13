@@ -18,12 +18,12 @@ import { parseServerSentEvents } from "parse-sse";
 
 import type { NahidaDesktop } from "..";
 
-import { networkFetch } from "../internal/network-fetch";
+import { createDownloadNetworkContext, networkFetch } from "../internal/network-fetch";
 import { createDriveApiError, isBackendUnavailableStatus } from "../services/drive-errors";
 import { createBandwidthLimitTransform } from "./bandwidth-limit-stream";
 import { zstdDecompressAsync } from "./compressor";
 import { downloadRequestLimiter, type DownloadRequestLimiter } from "./download-request-limiter";
-import { ParallelDownloader } from "./parallel-downloader";
+import { ParallelDownloader, getSafeUrlResource } from "./parallel-downloader";
 import {
     isAbortError,
     SLOW_CHUNK_MAX_RECONNECTS,
@@ -38,6 +38,7 @@ export type DownloadParams = {
     id: string;
     savePath: string;
     suggestedName?: string;
+    link?: LinkData;
 };
 
 export type DownloadMetadata = {
@@ -493,6 +494,7 @@ class FileDownloadTask {
                 phase: Extract<SlowChunkTransferPhase, "network" | "bandwidth-wait">,
             ) => void;
             link?: LinkData;
+            networkContext?: ReturnType<typeof createDownloadNetworkContext>;
             onResumeReset?: () => void;
             resumeFrom?: number;
         },
@@ -504,108 +506,105 @@ class FileDownloadTask {
         const headers = { ...baseHeaders, ...linkHeaders } as Record<string, string>;
         const resumeFrom = options?.resumeFrom ?? 0;
 
-        await this.requestLimiter.run(
-            async () => {
-                const request = (requestHeaders: Record<string, string>) =>
-                    ky(file.url, {
-                        headers: requestHeaders,
-                        signal,
-                        fetch: networkFetch,
-                        throwHttpErrors: false,
-                        timeout: 100000,
-                        retry: 0,
-                    });
-
-                let response = await request({
-                    ...headers,
-                    ...(resumeFrom > 0 && !file.compAlg ? { Range: `bytes=${resumeFrom}-` } : {}),
+        await this.requestLimiter.run(async () => {
+            const request = (requestHeaders: Record<string, string>) =>
+                ky(file.url, {
+                    headers: requestHeaders,
+                    signal,
+                    fetch: options?.networkContext?.fetch ?? networkFetch,
+                    throwHttpErrors: false,
+                    timeout: 100000,
+                    retry: 0,
                 });
-                let append = resumeFrom > 0 && !file.compAlg;
 
-                if (append && response.status === 416) {
-                    await drainWebStream(response.body, signal);
-                    if (resumeFrom === file.size) return;
-                    await fse.remove(targetPath).catch(() => {});
-                    options?.onResumeReset?.();
-                    response = await request(headers);
-                    append = false;
-                }
+            let response = await request({
+                ...headers,
+                ...(resumeFrom > 0 && !file.compAlg ? { Range: `bytes=${resumeFrom}-` } : {}),
+            });
+            let append = resumeFrom > 0 && !file.compAlg;
+
+            if (append && response.status === 416) {
+                await drainWebStream(response.body, signal);
+                if (resumeFrom === file.size) return;
+                await fse.remove(targetPath).catch(() => {});
+                options?.onResumeReset?.();
+                response = await request(headers);
+                append = false;
+            }
+
+            if (!response.ok) {
+                await drainWebStream(response.body, signal);
+                throw new Error(`Download failed: ${response.statusText}`);
+            }
+
+            if (append && response.status !== 206) {
+                await fse.remove(targetPath).catch(() => {});
+                options?.onResumeReset?.();
+                append = false;
+            }
+
+            if (
+                append &&
+                !isExpectedContentRange(
+                    response.headers.get("Content-Range"),
+                    resumeFrom,
+                    file.size,
+                )
+            ) {
+                await drainWebStream(response.body, signal);
+                await fse.remove(targetPath).catch(() => {});
+                options?.onResumeReset?.();
+                response = await request(headers);
+                append = false;
 
                 if (!response.ok) {
                     await drainWebStream(response.body, signal);
                     throw new Error(`Download failed: ${response.statusText}`);
                 }
+            }
 
-                if (append && response.status !== 206) {
-                    await fse.remove(targetPath).catch(() => {});
-                    options?.onResumeReset?.();
-                    append = false;
-                }
+            if (!response.body) throw new Error("No response body");
 
-                if (
-                    append &&
-                    !isExpectedContentRange(
-                        response.headers.get("Content-Range"),
-                        resumeFrom,
-                        file.size,
-                    )
-                ) {
-                    await drainWebStream(response.body, signal);
-                    await fse.remove(targetPath).catch(() => {});
-                    options?.onResumeReset?.();
-                    response = await request(headers);
-                    append = false;
+            const fileStream = createWriteStream(targetPath, append ? { flags: "a" } : undefined);
+            const source = webStreamToNodeReadable(response.body, signal);
+            const bandwidth = createBandwidthLimitTransform(
+                this.desktop.service.transfer.downloadBandwidth,
+                {
+                    signal,
+                    onPhaseChange: options?.onPhaseChange,
+                },
+            );
+            const progress = new Transform({
+                transform(chunk: Buffer, _encoding, callback) {
+                    options?.onProgress?.(chunk.byteLength);
+                    callback(null, chunk);
+                },
+            });
 
-                    if (!response.ok) {
-                        await drainWebStream(response.body, signal);
-                        throw new Error(`Download failed: ${response.statusText}`);
-                    }
-                }
-
-                if (!response.body) throw new Error("No response body");
-
-                const fileStream = createWriteStream(targetPath, append ? { flags: "a" } : undefined);
-                const source = webStreamToNodeReadable(response.body, signal);
-                const bandwidth = createBandwidthLimitTransform(
-                    this.desktop.service.transfer.downloadBandwidth,
-                    {
+            try {
+                if (file.compAlg === "gzip") {
+                    await pipeline(source, bandwidth, progress, createGunzip(), fileStream, {
                         signal,
-                        onPhaseChange: options?.onPhaseChange,
-                    },
-                );
-                const progress = new Transform({
-                    transform(chunk: Buffer, _encoding, callback) {
-                        options?.onProgress?.(chunk.byteLength);
-                        callback(null, chunk);
-                    },
-                });
-
-                try {
-                    if (file.compAlg === "gzip") {
-                        await pipeline(source, bandwidth, progress, createGunzip(), fileStream, {
+                    });
+                } else if (file.compAlg === "zstd") {
+                    await pipeline(
+                        source,
+                        bandwidth,
+                        progress,
+                        createZstdDecompress(),
+                        fileStream,
+                        {
                             signal,
-                        });
-                    } else if (file.compAlg === "zstd") {
-                        await pipeline(
-                            source,
-                            bandwidth,
-                            progress,
-                            createZstdDecompress(),
-                            fileStream,
-                            {
-                                signal,
-                            },
-                        );
-                    } else {
-                        await pipeline(source, bandwidth, progress, fileStream, { signal });
-                    }
-                } catch (pipeErr) {
-                    fileStream.destroy();
-                    throw pipeErr;
+                        },
+                    );
+                } else {
+                    await pipeline(source, bandwidth, progress, fileStream, { signal });
                 }
-            },
-            signal,
-        );
+            } catch (pipeErr) {
+                fileStream.destroy();
+                throw pipeErr;
+            }
+        }, signal);
     }
 
     private async getResumeOffset(
@@ -651,96 +650,119 @@ class FileDownloadTask {
         let slowReconnects = 0;
         let errorRetries = 0;
         let reportedResumeBytes = await this.getResumeOffset(file, targetPath);
+        const networkContext = createDownloadNetworkContext();
 
         if (reportedResumeBytes > 0) onProgress?.(reportedResumeBytes);
 
-        while (true) {
-            if (signal.aborted) return;
+        try {
+            while (true) {
+                if (signal.aborted) return;
 
-            const attemptController = new AbortController();
-            const combinedSignal = AbortSignal.any([signal, attemptController.signal]);
-            const transfer = monitor.register({
-                fileId: file.id,
-                chunkIndex: 0,
-                chunkSize: file.size,
-                cohortKey: "drive",
-                attemptController,
-                slowReconnects,
-                initialTransferredBytes: reportedResumeBytes,
-            });
-
-            let attemptBytes = 0;
-
-            try {
-                const resumeFrom = await this.getResumeOffset(file, targetPath);
-                const resumeDelta = resumeFrom - reportedResumeBytes;
-                if (resumeDelta !== 0) onProgress?.(resumeDelta);
-                reportedResumeBytes = resumeFrom;
-
-                await this.performDownload(file, targetPath, combinedSignal, {
-                    link,
-                    resumeFrom,
-                    onProgress: (bytes) => {
-                        attemptBytes += bytes;
-                        reportedResumeBytes += bytes;
-                        monitor.recordSample(transfer.key, attemptBytes);
-                        onProgress?.(bytes);
-                    },
-                    onPhaseChange: (phase) => monitor.setPhase(transfer.key, phase),
-                    onResumeReset: () => {
-                        if (reportedResumeBytes > 0) {
-                            onProgress?.(-reportedResumeBytes);
-                            reportedResumeBytes = 0;
-                        }
-                    },
+                const attemptController = new AbortController();
+                const combinedSignal = AbortSignal.any([signal, attemptController.signal]);
+                const transfer = monitor.register({
+                    fileId: file.id,
+                    chunkIndex: 0,
+                    chunkSize: file.size,
+                    cohortKey: "drive",
+                    attemptController,
+                    slowReconnects,
+                    initialTransferredBytes: reportedResumeBytes,
                 });
 
-                if (!signal.aborted) {
+                try {
+                    const resumeFrom = await this.getResumeOffset(file, targetPath);
+                    const resumeDelta = resumeFrom - reportedResumeBytes;
+                    if (resumeDelta !== 0) onProgress?.(resumeDelta);
+                    reportedResumeBytes = resumeFrom;
+                    monitor.resetProgress(transfer.key, reportedResumeBytes);
+
+                    await this.performDownload(file, targetPath, combinedSignal, {
+                        link,
+                        networkContext,
+                        resumeFrom,
+                        onProgress: (bytes) => {
+                            reportedResumeBytes += bytes;
+                            monitor.recordSample(transfer.key, reportedResumeBytes);
+                            onProgress?.(bytes);
+                        },
+                        onPhaseChange: (phase) => monitor.setPhase(transfer.key, phase),
+                        onResumeReset: () => {
+                            if (reportedResumeBytes > 0) {
+                                onProgress?.(-reportedResumeBytes);
+                                reportedResumeBytes = 0;
+                                monitor.resetProgress(transfer.key, 0);
+                            }
+                        },
+                    });
+
+                    if (signal.aborted) return;
+
                     await this.desktop.lib.fs.rename(targetPath, filePath);
-                }
+                    onComplete();
+                    return;
+                } catch (err) {
+                    const persistedBytes = await this.getResumeOffset(file, targetPath);
+                    const progressCorrection = persistedBytes - reportedResumeBytes;
+                    if (progressCorrection !== 0) onProgress?.(progressCorrection);
+                    reportedResumeBytes = persistedBytes;
 
-                onComplete();
-                return;
-            } catch (err) {
-                if (attemptBytes > 0) {
-                    onProgress?.(-attemptBytes);
-                    reportedResumeBytes = Math.max(0, reportedResumeBytes - attemptBytes);
-                }
+                    if (signal.aborted) {
+                        throw err;
+                    }
 
-                if (file.compAlg) await fse.remove(targetPath).catch(() => {});
+                    if (
+                        transfer.abortReason === "slow-chunk" &&
+                        slowReconnects < SLOW_CHUNK_MAX_RECONNECTS
+                    ) {
+                        slowReconnects += 1;
+                        this.desktop.logger.warn(
+                            {
+                                fileId: file.id,
+                                fileName: file.name,
+                                detect: transfer.detect,
+                                speedBps: transfer.chunkSpeedBps,
+                                peerMedianBps: transfer.peerMedianBps,
+                                remainingBytes: Math.max(0, file.size - reportedResumeBytes),
+                                resumeFrom: reportedResumeBytes,
+                                reconnect: slowReconnects,
+                                url: getSafeUrlResource(file.url),
+                            },
+                            "FileDownloadTask:slowChunk",
+                        );
+                        await networkContext.resetConnections().catch((error) => {
+                            this.desktop.logger.warn(
+                                {
+                                    fileId: file.id,
+                                    fileName: file.name,
+                                    reconnect: slowReconnects,
+                                    error: toErrorMessage(error),
+                                },
+                                "FileDownloadTask:resetConnectionsFailed",
+                            );
+                        });
+                        await sleepWithAbort(slowReconnectDelayMs(), signal);
+                        continue;
+                    }
 
-                if (signal.aborted) {
+                    if (!isAbortError(err) && errorRetries < MAX_ERROR_RETRIES) {
+                        errorRetries += 1;
+                        const retryDelayMs = 2 ** errorRetries * 1000;
+                        this.desktop.logger.warn(
+                            `Retrying download for ${file.name} (${errorRetries}/${MAX_ERROR_RETRIES}) after ${toErrorMessage(err)}; waiting ${retryDelayMs}ms`,
+                            "FileDownloadTask:retry",
+                        );
+                        await sleepWithAbort(retryDelayMs, signal);
+                        continue;
+                    }
+
                     throw err;
+                } finally {
+                    monitor.unregister(transfer.key);
                 }
-
-                if (
-                    transfer.abortReason === "slow-chunk" &&
-                    slowReconnects < SLOW_CHUNK_MAX_RECONNECTS
-                ) {
-                    slowReconnects += 1;
-                    this.desktop.logger.warn(
-                        `Slow chunk reconnect for ${file.name} (${transfer.detect}, speed=${Math.round(transfer.chunkSpeedBps / 1024)}KB/s, peerMedian=${Math.round(transfer.peerMedianBps / 1024)}KB/s, reconnect ${slowReconnects})`,
-                        "FileDownloadTask:slowChunk",
-                    );
-                    await sleepWithAbort(slowReconnectDelayMs(), signal);
-                    continue;
-                }
-
-                if (!isAbortError(err) && errorRetries < MAX_ERROR_RETRIES) {
-                    errorRetries += 1;
-                    const retryDelayMs = 2 ** errorRetries * 1000;
-                    this.desktop.logger.warn(
-                        `Retrying download for ${file.name} (${errorRetries}/${MAX_ERROR_RETRIES}) after ${toErrorMessage(err)}; waiting ${retryDelayMs}ms`,
-                        "FileDownloadTask:retry",
-                    );
-                    await sleepWithAbort(retryDelayMs, signal);
-                    continue;
-                }
-
-                throw err;
-            } finally {
-                monitor.unregister(transfer.key);
             }
+        } finally {
+            networkContext.release();
         }
     }
 }
@@ -975,6 +997,7 @@ export class DownloadLib {
                                 file,
                                 filePath,
                                 abort,
+                                link: params.link,
                                 onProgress: (bytes) => {
                                     downloadedBytes += bytes;
                                     throttledUpdate(downloadedBytes, downloadedCount);
@@ -1082,6 +1105,7 @@ export class DownloadLib {
         file,
         filePath,
         abort,
+        link,
         onProgress,
         onComplete,
     }: {
@@ -1089,6 +1113,7 @@ export class DownloadLib {
         file: DownloadMetadata["files"][0];
         filePath: string;
         abort: AbortController;
+        link?: LinkData;
         onProgress: (bytes: number) => void;
         onComplete: () => void;
     }): Promise<boolean> {
@@ -1111,6 +1136,7 @@ export class DownloadLib {
                 file,
                 filePath,
                 signal: abort.signal,
+                link,
                 onComplete: () => {
                     this.desktop.service.transfer.markFileCompleted(pid, file.id);
                     onComplete();
