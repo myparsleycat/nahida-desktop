@@ -150,6 +150,29 @@ describe("SlowChunkMonitor", () => {
         monitor.unregister(transfer.key);
     });
 
+    it("does not absolute-abort when allowAbsoluteAbort is false", () => {
+        const monitor = new SlowChunkMonitor();
+        const attemptController = new AbortController();
+        const transfer = monitor.register({
+            fileId: "file-a",
+            chunkIndex: 0,
+            chunkSize: 10 * 1024 * 1024,
+            attemptController,
+            slowReconnects: 0,
+            allowAbsoluteAbort: false,
+        });
+
+        for (let second = 1; second <= 7; second++) {
+            vi.advanceTimersByTime(1_000);
+            monitor.recordSample(transfer.key, second * 40 * 1024);
+        }
+
+        expect(transfer.abortReason).toBeNull();
+        expect(attemptController.signal.aborted).toBe(false);
+
+        monitor.unregister(transfer.key);
+    });
+
     it("lets an absolute slow transfer finish when less than thirty seconds remain", () => {
         const monitor = new SlowChunkMonitor();
         const attemptController = new AbortController();

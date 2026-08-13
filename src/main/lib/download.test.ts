@@ -302,6 +302,32 @@ describe("FileDownloadTask executeWithSlowRetry progress correction", () => {
         expect(progressCalls.reduce((sum, bytes) => sum + bytes, 0)).toBe(11);
     }, 15000);
 
+    it("does not complete when abort skips the rename", async () => {
+        const filePath = path.join(tempDir, "file.bin");
+        mocks.request.mockResolvedValue(
+            new Response(" world", {
+                status: 206,
+                headers: { "Content-Range": "bytes 5-10/11" },
+            }),
+        );
+        const desktop = createDesktop();
+        const onComplete = vi.fn();
+        const abort = new AbortController();
+        const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
+        vi.spyOn(task, "performDownload").mockImplementation(async () => {
+            abort.abort();
+        });
+
+        await task.executeWithSlowRetry({
+            file: { ...file, size: 11 },
+            filePath,
+            signal: abort.signal,
+            onComplete,
+        });
+
+        expect(onComplete).not.toHaveBeenCalled();
+    });
+
     it("records resumed progress using the cumulative file offset", async () => {
         const filePath = path.join(tempDir, "file.bin");
         const targetPath = `${filePath}.ntmp`;

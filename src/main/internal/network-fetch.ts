@@ -48,7 +48,13 @@ export function createDownloadNetworkContext() {
         release: () => {
             if (released) return;
             released = true;
-            idleDownloadSessions.push(downloadSession);
+            if (!connectionReset) {
+                idleDownloadSessions.push(downloadSession);
+                return;
+            }
+            void connectionReset.finally(() => {
+                idleDownloadSessions.push(downloadSession);
+            });
         },
     };
 }
@@ -62,4 +68,9 @@ function acquireDownloadSession() {
         `${DOWNLOAD_SESSION_PARTITION_PREFIX}-${downloadSessionSequence++}`,
         { cache: false },
     );
+}
+
+export function resetDownloadSessionsForTests() {
+    idleDownloadSessions.length = 0;
+    downloadSessionSequence = 0;
 }

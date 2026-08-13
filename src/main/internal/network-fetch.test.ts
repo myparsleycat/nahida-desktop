@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
     fromPartition: vi.fn(),
@@ -10,9 +10,18 @@ vi.mock("electron", () => ({
     session: { fromPartition: mocks.fromPartition },
 }));
 
-import { createDownloadNetworkContext, networkFetch } from "./network-fetch";
+import {
+    createDownloadNetworkContext,
+    networkFetch,
+    resetDownloadSessionsForTests,
+} from "./network-fetch";
 
 describe("download network contexts", () => {
+    afterEach(() => {
+        resetDownloadSessionsForTests();
+        mocks.fromPartition.mockReset();
+    });
+
     it("resets only the leased context and reuses released sessions", async () => {
         const sessions = Array.from({ length: 2 }, () => ({
             closeAllConnections: vi.fn().mockResolvedValue(undefined),
@@ -51,5 +60,28 @@ describe("download network contexts", () => {
 
         second.release();
         reused.release();
+    });
+
+    it("returns a session to the pool only after a pending reset settles", async () => {
+        let resolveReset: (() => void) | undefined;
+        const pendingReset = new Promise<void>((resolve) => {
+            resolveReset = resolve;
+        });
+        mocks.fromPartition.mockReturnValueOnce({
+            closeAllConnections: vi.fn().mockReturnValue(pendingReset),
+            fetch: vi.fn().mockResolvedValue(new Response("download")),
+        });
+
+        const context = createDownloadNetworkContext();
+        const reset = context.resetConnections();
+        context.release();
+
+        createDownloadNetworkContext().release();
+        expect(mocks.fromPartition).toHaveBeenCalledTimes(2);
+
+        resolveReset?.();
+        await reset;
+        createDownloadNetworkContext().release();
+        expect(mocks.fromPartition).toHaveBeenCalledTimes(2);
     });
 });

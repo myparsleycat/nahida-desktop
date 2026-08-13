@@ -23,7 +23,7 @@ import { createDriveApiError, isBackendUnavailableStatus } from "../services/dri
 import { createBandwidthLimitTransform } from "./bandwidth-limit-stream";
 import { zstdDecompressAsync } from "./compressor";
 import { downloadRequestLimiter, type DownloadRequestLimiter } from "./download-request-limiter";
-import { ParallelDownloader } from "./parallel-downloader";
+import { ParallelDownloader, getSafeUrlResource } from "./parallel-downloader";
 import {
     isAbortError,
     SLOW_CHUNK_MAX_RECONNECTS,
@@ -63,15 +63,6 @@ export type DownloadMetadata = {
 export const BATCH_ROOT_ID = "batch-root";
 const FILE_ID_BATCH_LIMIT = 100;
 const PARALLEL_DOWNLOAD_THRESHOLD = 20 * 1024 * 1024;
-
-function getSafeUrlResource(url: string) {
-    try {
-        const parsed = new URL(url);
-        return `${parsed.origin}${parsed.pathname}`;
-    } catch {
-        return "invalid-url";
-    }
-}
 
 function isExpectedContentRange(value: string | null, resumeFrom: number, fileSize: number) {
     const match = /^bytes\s+(\d+)-(\d+)\/(\d+)$/i.exec(value ?? "");
@@ -705,10 +696,9 @@ class FileDownloadTask {
                         },
                     });
 
-                    if (!signal.aborted) {
-                        await this.desktop.lib.fs.rename(targetPath, filePath);
-                    }
+                    if (signal.aborted) return;
 
+                    await this.desktop.lib.fs.rename(targetPath, filePath);
                     onComplete();
                     return;
                 } catch (err) {

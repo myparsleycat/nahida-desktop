@@ -20,6 +20,7 @@ export type InFlightChunkTransfer = {
     peerMedianBps: number;
     phase: SlowChunkTransferPhase;
     phaseStartedAt: number;
+    allowAbsoluteAbort: boolean;
 };
 
 type ByteSample = { t: number; b: number };
@@ -156,6 +157,7 @@ export class SlowChunkMonitor {
         initialTransferredBytes?: number;
         attemptController: AbortController;
         slowReconnects: number;
+        allowAbsoluteAbort?: boolean;
     }) {
         const now = Date.now();
         const key = `${input.fileId}:${input.chunkIndex}:${this.registrationSequence++}`;
@@ -182,6 +184,7 @@ export class SlowChunkMonitor {
             peerMedianBps: 0,
             phase: "network",
             phaseStartedAt: now,
+            allowAbsoluteAbort: input.allowAbsoluteAbort !== false,
         };
         this.inFlightTransfers.set(key, transfer);
         this.ensureMonitor();
@@ -350,7 +353,10 @@ export class SlowChunkMonitor {
                 continue;
             }
 
-            if (entry.slowTickCount >= SLOW_CHUNK_REQUIRED_ABSOLUTE_SLOW_TICKS) {
+            if (
+                entry.allowAbsoluteAbort &&
+                entry.slowTickCount >= SLOW_CHUNK_REQUIRED_ABSOLUTE_SLOW_TICKS
+            ) {
                 absoluteCandidates.push({
                     entry,
                     speed,

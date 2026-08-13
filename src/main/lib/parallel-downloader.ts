@@ -1,3 +1,4 @@
+import path from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
@@ -514,9 +515,19 @@ export class ParallelDownloader {
         }
 
         const schedulerSignal = this.createSchedulerSignal();
+        const chunkMetaPath = `${savePath}.chunk-meta.json`;
+        const expectedMeta = { resource: getSafeUrlResource(url), fileSize };
+        const existingMeta = await readChunkMeta(chunkMetaPath);
+        if (
+            existingMeta?.resource !== expectedMeta.resource ||
+            existingMeta?.fileSize !== expectedMeta.fileSize
+        ) {
+            await removeChunkArtifacts(savePath);
+        }
+        await fse.writeFile(chunkMetaPath, JSON.stringify(expectedMeta));
 
         const cleanupChunks = async () => {
-            await Promise.all([...tempChunkPaths].map((p) => fse.remove(p).catch(() => {})));
+            await removeChunkArtifacts(savePath);
         };
 
         const getPendingSegment = () =>
@@ -585,6 +596,7 @@ export class ParallelDownloader {
                     let errorRetries = 0;
                     const MAX_ERROR_RETRIES = 2;
                     let completed = false;
+                    let ignoreStoredChunk = false;
 
                     while (!completed) {
                         if (signal?.aborted) {
@@ -596,7 +608,11 @@ export class ParallelDownloader {
                             .stat(segment.chunkPath)
                             .then(({ size }) => size)
                             .catch(() => 0);
-                        const resumeBytes = storedChunkBytes <= chunkSize ? storedChunkBytes : 0;
+                        const resumeBytes =
+                            ignoreStoredChunk || storedChunkBytes > chunkSize
+                                ? 0
+                                : storedChunkBytes;
+                        ignoreStoredChunk = false;
                         if (storedChunkBytes > chunkSize) {
                             await fse.remove(segment.chunkPath).catch(() => {});
                         }
@@ -679,7 +695,12 @@ export class ParallelDownloader {
                                 }
                                 segment.reportedBytes = 0;
                                 segment.transferredBytes = 0;
-                                continue;
+                                ignoreStoredChunk = true;
+                                if (errorRetries < MAX_ERROR_RETRIES) {
+                                    errorRetries += 1;
+                                    continue;
+                                }
+                                throw err;
                             }
 
                             const persistedBytes = await this.getCompletedBytes(segment);
@@ -803,6 +824,7 @@ export class ParallelDownloader {
             }
 
             await fse.rename(targetPath, savePath);
+            await cleanupChunks();
         } catch (err) {
             await cleanupChunks();
             await fse.remove(targetPath).catch(() => {});
@@ -820,11 +842,48 @@ function getRangeSupportCacheKey(url: string) {
     }
 }
 
-function getSafeUrlResource(url: string) {
+export function getSafeUrlResource(url: string) {
     try {
         const parsed = new URL(url);
         return `${parsed.origin}${parsed.pathname}`;
     } catch {
         return "invalid-url";
     }
+}
+
+type ChunkMeta = { resource: string; fileSize: number };
+
+function parseChunkMeta(value: unknown): ChunkMeta | null {
+    if (!value || typeof value !== "object") return null;
+    if (!("resource" in value) || !("fileSize" in value)) return null;
+    if (typeof value.resource !== "string" || typeof value.fileSize !== "number") return null;
+    if (!Number.isFinite(value.fileSize)) return null;
+    return { resource: value.resource, fileSize: value.fileSize };
+}
+
+async function readChunkMeta(chunkMetaPath: string): Promise<ChunkMeta | null> {
+    const raw = await fse.readFile(chunkMetaPath, "utf8").catch(() => null);
+    if (!raw) return null;
+    try {
+        return parseChunkMeta(JSON.parse(raw));
+    } catch {
+        return null;
+    }
+}
+
+function isChunkArtifactName(saveBase: string, name: string) {
+    if (name === `${saveBase}.chunk-meta.json`) return true;
+    const prefix = `${saveBase}.chunk`;
+    return name.startsWith(prefix) && /^\d+$/.test(name.slice(prefix.length));
+}
+
+async function removeChunkArtifacts(savePath: string) {
+    const dir = path.dirname(savePath);
+    const base = path.basename(savePath);
+    const names = await fse.readdir(dir).catch(() => [] as string[]);
+    await Promise.all(
+        names
+            .filter((name) => isChunkArtifactName(base, name))
+            .map((name) => fse.remove(path.join(dir, name)).catch(() => {})),
+    );
 }

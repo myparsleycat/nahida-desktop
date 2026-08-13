@@ -402,6 +402,12 @@ function ExcludePathList({
       }
       try {
         const relative = await window.api.invoke("tools:bisectValidateExcludePath", game, trimmed);
+        const current = rowsRef.current.find((entry) => entry.id === id);
+        if (!current || current.value.trim() !== trimmed) {
+          committingRef.current.delete(id);
+          if (current?.value.trim()) return commitRow(id);
+          return true;
+        }
         if (
           rowsRef.current.some(
             (entry) => entry.id !== id && entry.committed?.toLowerCase() === relative.toLowerCase(),
