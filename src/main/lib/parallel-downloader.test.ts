@@ -214,6 +214,13 @@ describe("ParallelDownloader partial chunk resume", () => {
     it("stops retrying mismatched content ranges when the partial chunk cannot be deleted", async () => {
         const savePath = path.join(tempDir, "file.bin");
         await writeFile(`${savePath}.chunk0`, "abc");
+        await writeFile(
+            `${savePath}.chunk-meta.json`,
+            JSON.stringify({
+                resource: "https://n3.nahida.live/132/123412341234",
+                fileSize: 6,
+            }),
+        );
         mocks.request.mockResolvedValue(
             new Response("abcdef", {
                 status: 206,
@@ -268,6 +275,64 @@ describe("ParallelDownloader partial chunk resume", () => {
 
         expect(await readFile(savePath, "utf8")).toBe("abcdef");
         expect(mocks.request).toHaveBeenCalled();
+    });
+
+    it("does not resume leftover chunks when mismatched artifacts cannot be deleted", async () => {
+        const savePath = path.join(tempDir, "file.bin");
+        await writeFile(`${savePath}.chunk0`, "stale!");
+        await writeFile(
+            `${savePath}.chunk-meta.json`,
+            JSON.stringify({ resource: "https://other.example/file", fileSize: 6 }),
+        );
+        const remove = vi.spyOn(fse, "remove").mockRejectedValue(new Error("busy"));
+        const downloader = new ParallelDownloader({
+            getHeaders: vi.fn().mockResolvedValue({}),
+        });
+
+        try {
+            await expect(
+                downloader.download({
+                    url: "https://n3.nahida.live/132/123412341234",
+                    savePath,
+                    fileSize: 6,
+                    maxChunks: 1,
+                    adaptive: false,
+                }),
+            ).rejects.toThrow("Failed to discard leftover download chunks");
+            expect(mocks.request).not.toHaveBeenCalled();
+        } finally {
+            remove.mockRestore();
+        }
+    });
+
+    it("rejects a short response body even when Content-Range looks complete", async () => {
+        const chunkPath = path.join(tempDir, "file.chunk0");
+        mocks.request.mockResolvedValue(
+            new Response("abc", {
+                status: 206,
+                headers: { "Content-Range": "bytes 0-5/6" },
+            }),
+        );
+        const downloader = new ParallelDownloader({
+            getHeaders: vi.fn().mockResolvedValue({}),
+        });
+
+        await expect(
+            (
+                downloader as unknown as {
+                    downloadChunk: DownloadChunk;
+                }
+            ).downloadChunk({
+                url: "https://n3.nahida.live/132/123412341234",
+                start: 0,
+                end: 5,
+                fileSize: 6,
+                resumeBytes: 0,
+                chunkPath,
+            }),
+        ).rejects.toThrow("ended early");
+
+        expect(await readFile(chunkPath, "utf8")).toBe("abc");
     });
 
     it("resumes leftover chunks that match the current resource", async () => {

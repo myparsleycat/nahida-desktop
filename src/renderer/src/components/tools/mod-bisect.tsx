@@ -405,7 +405,12 @@ function ExcludePathList({
         const current = rowsRef.current.find((entry) => entry.id === id);
         if (!current || current.value.trim() !== trimmed) {
           committingRef.current.delete(id);
-          if (current?.value.trim()) return commitRow(id);
+          if (!current) return true;
+          if (current.value.trim()) return commitRow(id);
+          lastFailedRef.current.delete(id);
+          const next = rowsRef.current.filter((entry) => entry.id !== id);
+          rowsRef.current = next;
+          setRows(next);
           return true;
         }
         if (
@@ -444,9 +449,8 @@ function ExcludePathList({
       const committed: string[] = [];
       const ok = await ids.reduce(async (previous, id) => {
         if (!(await previous)) return false;
-        const existing = rowsRef.current.find((entry) => entry.id === id)?.committed;
         if (!(await commitRow(id))) return false;
-        const next = rowsRef.current.find((entry) => entry.id === id)?.committed ?? existing;
+        const next = rowsRef.current.find((entry) => entry.id === id)?.committed;
         if (next) committed.push(next);
         return true;
       }, Promise.resolve(true));

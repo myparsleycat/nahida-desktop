@@ -84,4 +84,19 @@ describe("download network contexts", () => {
         createDownloadNetworkContext().release();
         expect(mocks.fromPartition).toHaveBeenCalledTimes(2);
     });
+
+    it("does not return a session to the pool after a failed reset", async () => {
+        mocks.fromPartition.mockReturnValueOnce({
+            closeAllConnections: vi.fn().mockRejectedValue(new Error("reset failed")),
+            fetch: vi.fn().mockResolvedValue(new Response("download")),
+        });
+
+        const context = createDownloadNetworkContext();
+        await expect(context.resetConnections()).rejects.toThrow("reset failed");
+        context.release();
+        await Promise.resolve();
+
+        createDownloadNetworkContext();
+        expect(mocks.fromPartition).toHaveBeenCalledTimes(2);
+    });
 });

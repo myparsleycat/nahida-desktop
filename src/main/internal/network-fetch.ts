@@ -32,6 +32,7 @@ export function createDownloadNetworkContext() {
 
     let connectionReset: Promise<void> | undefined;
     let released = false;
+    let resetFailed = false;
 
     return {
         fetch: (input: FetchInput, init?: RequestInit) =>
@@ -39,22 +40,34 @@ export function createDownloadNetworkContext() {
         resetConnections: () => {
             if (connectionReset) return connectionReset;
 
-            const reset = downloadSession.closeAllConnections().finally(() => {
-                if (connectionReset === reset) connectionReset = undefined;
-            });
+            const reset = downloadSession
+                .closeAllConnections()
+                .then(
+                    () => {
+                        resetFailed = false;
+                    },
+                    (error: unknown) => {
+                        resetFailed = true;
+                        throw error;
+                    },
+                )
+                .finally(() => {
+                    if (connectionReset === reset) connectionReset = undefined;
+                });
             connectionReset = reset;
             return reset;
         },
         release: () => {
             if (released) return;
             released = true;
+            const returnToPool = () => {
+                if (!resetFailed) idleDownloadSessions.push(downloadSession);
+            };
             if (!connectionReset) {
-                idleDownloadSessions.push(downloadSession);
+                returnToPool();
                 return;
             }
-            void connectionReset.finally(() => {
-                idleDownloadSessions.push(downloadSession);
-            });
+            void connectionReset.then(returnToPool, () => {});
         },
     };
 }

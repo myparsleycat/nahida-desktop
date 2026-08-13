@@ -267,6 +267,12 @@ export class ParallelDownloader {
                 } else {
                     await pipeline(source, progressStream, fileStream, { signal });
                 }
+
+                if (transferredBytes !== end - start + 1) {
+                    throw new Error(
+                        `Chunk download ended early: expected ${end - start + 1} bytes, got ${transferredBytes}`,
+                    );
+                }
             } catch (pipeErr) {
                 fileStream.destroy();
                 throw pipeErr;
@@ -523,6 +529,9 @@ export class ParallelDownloader {
             existingMeta?.fileSize !== expectedMeta.fileSize
         ) {
             await removeChunkArtifacts(savePath);
+            if ((await listChunkFiles(savePath)).length > 0) {
+                throw new Error("Failed to discard leftover download chunks");
+            }
         }
         await fse.writeFile(chunkMetaPath, JSON.stringify(expectedMeta));
 
@@ -871,16 +880,29 @@ async function readChunkMeta(chunkMetaPath: string): Promise<ChunkMeta | null> {
     }
 }
 
-function isChunkArtifactName(saveBase: string, name: string) {
-    if (name === `${saveBase}.chunk-meta.json`) return true;
+function isChunkFileName(saveBase: string, name: string) {
     const prefix = `${saveBase}.chunk`;
     return name.startsWith(prefix) && /^\d+$/.test(name.slice(prefix.length));
 }
 
-async function removeChunkArtifacts(savePath: string) {
+function isChunkArtifactName(saveBase: string, name: string) {
+    return name === `${saveBase}.chunk-meta.json` || isChunkFileName(saveBase, name);
+}
+
+async function listDirectoryNames(savePath: string) {
     const dir = path.dirname(savePath);
     const base = path.basename(savePath);
     const names = await fse.readdir(dir).catch(() => [] as string[]);
+    return { dir, base, names };
+}
+
+async function listChunkFiles(savePath: string) {
+    const { dir, base, names } = await listDirectoryNames(savePath);
+    return names.filter((name) => isChunkFileName(base, name)).map((name) => path.join(dir, name));
+}
+
+async function removeChunkArtifacts(savePath: string) {
+    const { dir, base, names } = await listDirectoryNames(savePath);
     await Promise.all(
         names
             .filter((name) => isChunkArtifactName(base, name))
