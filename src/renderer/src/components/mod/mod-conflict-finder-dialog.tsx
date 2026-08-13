@@ -94,8 +94,9 @@ export function ModConflictFinderDialog({
 
   const status = snapshot?.status ?? "idle";
   const isActive = status === "scanning" || status === "round";
-  const sessionActive = isActive || status === "reverting" || status === "done";
-  const canStart = !!game && !!mod?.isEnabled && !sessionActive;
+  const sessionActive = isActive || status === "reverting";
+  const hasUnfinalizedResult = status === "done" && !!snapshot?.finalBadPath;
+  const canStart = !!game && !!mod?.isEnabled && !sessionActive && !hasUnfinalizedResult;
   const canCancel = !!snapshot && status !== "idle" && status !== "done" && status !== "cancelled";
   const isBusy =
     starting ||
@@ -114,7 +115,7 @@ export function ModConflictFinderDialog({
         <DialogHeader>
           <DialogTitle>{t("page.mod.dialog.find-conflict.title")}</DialogTitle>
           <DialogDescription>
-            {sessionActive
+            {sessionActive || hasUnfinalizedResult
               ? t("page.mod.dialog.find-conflict.session-active")
               : t("page.mod.dialog.find-conflict.description", { name: mod?.name ?? "" })}
           </DialogDescription>
@@ -129,7 +130,14 @@ export function ModConflictFinderDialog({
         <div className="flex flex-wrap items-center gap-2">
           <Button
             onClick={() => {
-              if (!game || !mod?.isEnabled || sessionActive || startingRef.current) return;
+              if (
+                !game ||
+                !mod?.isEnabled ||
+                sessionActive ||
+                hasUnfinalizedResult ||
+                startingRef.current
+              )
+                return;
               startingRef.current = true;
               setStarting(true);
               void startMutation
