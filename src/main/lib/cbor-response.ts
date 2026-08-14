@@ -35,6 +35,18 @@ export async function readApiBody(response: Response) {
     }
 }
 
+export async function jsonResponseFromBody(
+    response: Response,
+    mapData?: (data: unknown) => unknown,
+) {
+    const data = await readApiBody(response);
+    try {
+        return jsonResponseFrom(response, mapData ? mapData(data) : data);
+    } catch {
+        return jsonResponseFrom(response, data);
+    }
+}
+
 function parseDecodedHttpResult(status: number, value: unknown) {
     if (typeof value === "string") return { status, reason: value };
     if (value && typeof value === "object") {
