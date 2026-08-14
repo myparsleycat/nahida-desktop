@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 import { open } from "node:fs/promises";
 
 import { networkFetch } from "@main/internal/network-fetch";
+import { parseHttpBody, readApiBody } from "@main/lib/cbor-response";
 import { BACKEND_URL } from "@shared/const";
 import type { PlanPhase } from "@shared/types";
+import { toErrorMessage } from "@shared/utils";
 import { chunk } from "es-toolkit";
 import ky from "ky";
 import type PQueue from "p-queue";
@@ -91,8 +93,8 @@ export async function uploadDriveFilesV2({
             signal,
         });
         if (!response.ok) {
-            const body = await response.text().catch(() => response.statusText);
-            throw new Error(`[upload plan failed] ${body}`);
+            const body = await readApiBody(response).catch(() => response.statusText);
+            throw new Error(`[upload plan failed] ${toErrorMessage(body)}`);
         }
         if (!response.body) {
             throw new Error("[upload plan failed] empty response stream");
@@ -427,7 +429,11 @@ async function sendMultipart({
             // @ts-expect-error - duplex is required by Node/undici for streaming request bodies.
             duplex: "half",
         });
-        return parseHttpResult(response.status, await response.text());
+        return parseHttpBody(
+            response.status,
+            response.headers.get("Content-Type"),
+            new Uint8Array(await response.arrayBuffer()),
+        );
     } catch (error) {
         if (signal?.aborted) throw error;
         return { status: 0, reason: "network_error" };
@@ -444,7 +450,11 @@ async function sendJson(desktop: NahidaDesktop, url: string, body: unknown, sign
             retry: 0,
             timeout: false,
         });
-        return parseHttpResult(response.status, await response.text());
+        return parseHttpBody(
+            response.status,
+            response.headers.get("Content-Type"),
+            new Uint8Array(await response.arrayBuffer()),
+        );
     } catch (error) {
         if (signal?.aborted) throw error;
         return { status: 0, reason: "network_error" };
@@ -512,21 +522,6 @@ function createMultipartBody(
             },
         }),
     };
-}
-
-function parseHttpResult(status: number, raw: string): HttpResult {
-    if (!raw) return { status };
-    try {
-        const value: unknown = JSON.parse(raw);
-        if (typeof value === "string") return { status, reason: value };
-        if (value && typeof value === "object") {
-            const payload = value as { status?: string; reason?: string; message?: string };
-            return { status, payload, reason: payload.reason ?? payload.message };
-        }
-    } catch {
-        return { status, reason: raw.slice(0, 200) };
-    }
-    return { status };
 }
 
 function isRetryable(result: HttpResult) {

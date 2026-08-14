@@ -4,6 +4,7 @@ import path from "node:path";
 import type { Treaty } from "@elysiajs/eden";
 import { eden } from "@main/client";
 import { networkFetch } from "@main/internal/network-fetch";
+import { readApiBody } from "@main/lib/cbor-response";
 import Download, {
     BATCH_ROOT_ID,
     type DownloadMetadata,
@@ -1218,12 +1219,8 @@ export class DriveService {
             if (isBackendUnavailableStatus(response.status)) {
                 this.desktop.service.backendConnectivity.setOffline();
             }
-            const body = await response.text().catch(() => response.statusText);
-            throw createDriveApiError(
-                parseRemoteImportData(body),
-                `import ${mode} source ${sourceId}`,
-                response.status,
-            );
+            const body = await readApiBody(response).catch(() => response.statusText);
+            throw createDriveApiError(body, `import ${mode} source ${sourceId}`, response.status);
         }
         if (!response.body) {
             throw new DriveApiError(
@@ -1510,18 +1507,14 @@ export class DriveService {
             if (isBackendUnavailableStatus(response.status)) {
                 this.desktop.service.backendConnectivity.setOffline();
             }
-            const text = await response.text().catch(() => response.statusText);
+            const body = await readApiBody(response).catch(() => response.statusText);
             if (transferCreated) {
                 void this.desktop.service.transfer.updateTransfer(pid, {
                     status: "error",
-                    error: text || "Import failed",
+                    error: toErrorMessage(body) || "Import failed",
                 });
             }
-            throw createDriveApiError(
-                parseRemoteImportData(text),
-                `import-many ${mode}`,
-                response.status,
-            );
+            throw createDriveApiError(body, `import-many ${mode}`, response.status);
         }
         if (!response.body) {
             if (transferCreated) {
@@ -1653,7 +1646,7 @@ export class DriveService {
                 ...options,
                 throwHttpErrors: false,
             });
-            const body = await readJsonResponse(response);
+            const body = await readApiBody(response);
             if (!response.ok) {
                 throw createDriveApiError(body, operation, response.status);
             }
@@ -2125,6 +2118,9 @@ export class DriveService {
                 existing.children ?? [],
                 params.conflictStrategy ?? "suffix",
             );
+            if (files.length < 1) {
+                throw new Error("NO_UPLOADABLE_FILES");
+            }
 
             await this.upload.executeUpload({
                 currentId,
@@ -2147,17 +2143,6 @@ export class DriveService {
                 initialTransferedFiles: 0,
             });
         }
-    }
-}
-
-async function readJsonResponse(response: Response): Promise<unknown> {
-    const text = await response.text();
-    if (!text.trim()) return undefined;
-
-    try {
-        return JSON.parse(text) as unknown;
-    } catch {
-        return text;
     }
 }
 
