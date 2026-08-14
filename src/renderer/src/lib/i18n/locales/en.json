@@ -406,7 +406,7 @@
           "confirm": "Rename"
         },
         "find-conflict": {
-          "title": "Find Conflict Mode",
+          "title": "Find Conflict Mods",
           "description": "Runs a bisect with \"{{name}}\" kept enabled to find which other mod conflicts with it.",
           "mod-disabled-warning": "This mod is currently disabled. Enable it first to reproduce the conflict.",
           "session-active": "A bisect session is already in progress. Cancel or finish it before starting a new one."
@@ -614,7 +614,7 @@
         "open-gamebanana": "View on GameBanana",
         "mark-manual-subgroup": "Mark as subgroup",
         "rename": "Rename",
-        "find-conflict": "Find Conflict Mode"
+        "find-conflict": "Find Conflict Mods"
       },
       "toast": {
         "trash-loading": "Moving to recycle bin...",
