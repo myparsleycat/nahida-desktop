@@ -1,23 +1,58 @@
 // oxlint-disable typescript/no-explicit-any
 import type { App } from "@backend/index";
+import { isMinified, unminify } from "@backend/utils/jsonMinify";
 import { treaty } from "@elysiajs/eden";
 import { BACKEND_URL } from "@shared/const";
 import { isEmpty } from "es-toolkit/compat";
 
 import { desktop } from "./index";
+import {
+    decodeCborBody,
+    isCborContentType,
+    jsonResponseFrom,
+    readApiBody,
+} from "./lib/cbor-response";
 
 export const eden = treaty<App>(BACKEND_URL, {
     fetcher: (async (input: URL | RequestInfo, init: RequestInit | undefined) => {
         const url = input instanceof Request ? input.url : input.toString();
-        const response = await desktop.httpService.fetcher(url, init);
+        let response = await desktop.httpService.fetcher(url, init);
 
         if (response.status === 401) {
             await desktop.service.auth.startLogout();
         }
 
-        return response;
+        const contentType = response.headers.get("Content-Type");
+        if (isCborContentType(contentType)) {
+            try {
+                return rewriteEdenBody(
+                    response,
+                    decodeCborBody(new Uint8Array(await response.arrayBuffer())),
+                );
+            } catch (error) {
+                desktop.logger.error(error, "EdenCborDecodeFailed");
+                const retryUrl = new URL(url);
+                retryUrl.searchParams.set("res", "json");
+                response = await desktop.httpService.fetcher(retryUrl.toString(), init);
+            }
+        }
+
+        if (!contentType?.includes("application/json") && !isCborContentType(contentType)) {
+            return response;
+        }
+
+        try {
+            return rewriteEdenBody(response, await readApiBody(response));
+        } catch {
+            return response;
+        }
     }) as typeof fetch,
+    parseDate: false,
 });
+
+function rewriteEdenBody(response: Response, data: unknown) {
+    return jsonResponseFrom(response, isMinified(data) ? unminify(data) : data);
+}
 
 export type Eden = typeof eden;
 

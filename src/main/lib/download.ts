@@ -21,6 +21,7 @@ import type { NahidaDesktop } from "..";
 import { createDownloadNetworkContext, networkFetch } from "../internal/network-fetch";
 import { createDriveApiError, isBackendUnavailableStatus } from "../services/drive-errors";
 import { createBandwidthLimitTransform } from "./bandwidth-limit-stream";
+import { readApiBody } from "./cbor-response";
 import { zstdDecompressAsync } from "./compressor";
 import { downloadRequestLimiter, type DownloadRequestLimiter } from "./download-request-limiter";
 import { ParallelDownloader, getSafeUrlResource } from "./parallel-downloader";
@@ -126,12 +127,8 @@ class DownloadStreamer {
             if (isBackendUnavailableStatus(response.status)) {
                 this.desktop.service.backendConnectivity.setOffline();
             }
-            const errorText = await response.text().catch(() => response.statusText);
-            throw createDriveApiError(
-                errorText || response.statusText,
-                "download metadata",
-                response.status,
-            );
+            const body = await readApiBody(response).catch(() => response.statusText);
+            throw createDriveApiError(body, "download metadata", response.status);
         }
         if (!response.body) throw new Error("Download metadata stream is empty.");
 

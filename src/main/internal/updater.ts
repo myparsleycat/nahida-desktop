@@ -9,7 +9,10 @@ import { app, BrowserWindow } from "electron";
 import { convert as htmlToText } from "html-to-text";
 import ms from "ms";
 import z from "zod";
+
 import type { NahidaDesktop } from "..";
+
+import { readApiBody } from "../lib/cbor-response";
 import isDev from "./isDev";
 
 autoUpdater.allowDowngrade = false;
@@ -415,15 +418,15 @@ export class Updater {
             }),
         });
 
-        const responseText = await response.text();
+        const body = await readApiBody(response);
 
         if (!response.ok) {
             throw new Error(
-                `Release notes translation failed with status ${response.status}: ${responseText}`,
+                `Release notes translation failed with status ${response.status}: ${stringifyApiBody(body)}`,
             );
         }
 
-        const translatedText = this.extractTranslatedText(responseText);
+        const translatedText = this.extractTranslatedText(body);
 
         if (!translatedText || translatedText === originalText) {
             return null;
@@ -432,15 +435,13 @@ export class Updater {
         return translatedText;
     }
 
-    private extractTranslatedText(responseText: string): string {
-        const trimmedResponseText = responseText.trim();
-
-        if (!trimmedResponseText) {
-            return "";
-        }
+    private extractTranslatedText(body: unknown): string {
+        if (body === undefined) return "";
 
         try {
-            const parsed = this.translationResponseSchema.parse(JSON.parse(trimmedResponseText));
+            const parsed = this.translationResponseSchema.parse(
+                typeof body === "string" ? JSON.parse(body) : body,
+            );
 
             if (typeof parsed.response === "string") {
                 return parsed.response.trim();
@@ -448,7 +449,7 @@ export class Updater {
 
             return parsed.response.choices[0]?.message.content?.trim() ?? "";
         } catch {
-            return trimmedResponseText;
+            return stringifyApiBody(body);
         }
     }
 
@@ -553,6 +554,12 @@ export class Updater {
             app.exit(0);
         }, 1000);
     }
+}
+
+function stringifyApiBody(body: unknown) {
+    if (typeof body === "string") return body;
+    if (body === undefined) return "";
+    return JSON.stringify(body);
 }
 
 export default Updater;
