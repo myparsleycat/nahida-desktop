@@ -16,6 +16,30 @@ import type { NahidaDesktop } from "..";
 
 import { uploadDriveFilesV2 } from "./upload-v2";
 
+const SYSTEM_FILE_PATTERNS = [
+    /^\.DS_Store$/,
+    /^\._/,
+    /^\.AppleDouble$/,
+    /^\.Spotlight-V100$/,
+    /^\.Trashes$/,
+    /^\.fseventsd$/,
+    /^\.TemporaryItems$/,
+    /^\.apdisk$/,
+    /^__MACOSX$/,
+    /^Thumbs\.db$/i,
+    /^ehthumbs.*\.db$/i,
+    /^desktop\.ini$/i,
+    /^~$/,
+];
+
+export function isSystemFile(name: string) {
+    return SYSTEM_FILE_PATTERNS.some((pattern) => pattern.test(name));
+}
+
+export function hasSystemFileSegment(path: string) {
+    return path.split("/").some(isSystemFile);
+}
+
 export type FilesComponent = {
     FID: string;
     path: string;
@@ -114,6 +138,10 @@ export class UploadLib {
                 const absolutePath = await fse.realpath(rawPath);
                 const stat = await fse.stat(absolutePath);
 
+                if (isSystemFile(path.basename(absolutePath))) {
+                    continue;
+                }
+
                 if (stat.isDirectory()) {
                     directoryPaths.push(absolutePath);
                     continue;
@@ -151,12 +179,16 @@ export class UploadLib {
             directoryPaths.length > 0
                 ? await collectFiles(directoryPaths, allowAllFiles ? [] : allowedExt)
                 : null;
-        const files: FilesComponent[] = [...(collected?.files ?? []), ...rootFiles].map((f) => ({
+        const filteredFiles = collected?.files.filter((file) => !hasSystemFileSegment(file.path));
+        const filteredDirectories = collected?.directories.filter(
+            (dir) => !hasSystemFileSegment(dir.path),
+        );
+        const files: FilesComponent[] = [...(filteredFiles ?? []), ...rootFiles].map((f) => ({
             ...f,
             FID: nanoid(),
         }));
 
-        return { files, directories: collected?.directories ?? [] };
+        return { files, directories: filteredDirectories ?? [] };
     }
 
     private async isMediaByMagicNumbers(file: Buffer) {

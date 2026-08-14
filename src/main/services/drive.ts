@@ -2125,6 +2125,9 @@ export class DriveService {
                 existing.children ?? [],
                 params.conflictStrategy ?? "suffix",
             );
+            if (files.length < 1) {
+                throw new Error("NO_UPLOADABLE_FILES");
+            }
 
             await this.upload.executeUpload({
                 currentId,
