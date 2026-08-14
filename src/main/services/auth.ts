@@ -2,7 +2,7 @@ import { appVersion } from "@main/const";
 import type { NahidaDesktop } from "@main/index";
 import { focus } from "@main/windows/utils";
 import { BACKEND_URL } from "@shared/const";
-import { SessionSchema } from "@shared/schemas/auth";
+import { SessionSchema, type Session } from "@shared/schemas/auth";
 import ky from "ky";
 import { parseServerSentEvents } from "parse-sse";
 import { Nullable, validate } from "valdex";
@@ -11,6 +11,7 @@ import { openExternal } from "./util";
 
 export class Auth {
     private desktop: NahidaDesktop;
+    private sessionInFlight: Promise<Session | null> | null = null;
 
     constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
@@ -25,6 +26,7 @@ export class Auth {
     }
 
     public async saveToken(key: string) {
+        this.sessionInFlight = null;
         const encryptedKey = this.desktop.lib.crypto.encryptString(key);
         await this.desktop.lib.db.settings.upsert("token", encryptedKey);
     }
@@ -43,6 +45,7 @@ export class Auth {
     }
 
     public async removeToken() {
+        this.sessionInFlight = null;
         await this.desktop.lib.db.settings.updateValue("token", null);
     }
 
@@ -51,6 +54,20 @@ export class Auth {
     }
 
     public async getSession() {
+        if (this.sessionInFlight) return this.sessionInFlight;
+
+        const fetchPromise = this.fetchSession();
+        this.sessionInFlight = fetchPromise;
+        try {
+            return await fetchPromise;
+        } finally {
+            if (this.sessionInFlight === fetchPromise) {
+                this.sessionInFlight = null;
+            }
+        }
+    }
+
+    private async fetchSession() {
         const token = await this.getToken();
         if (!token) return null;
 

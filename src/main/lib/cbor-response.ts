@@ -40,8 +40,9 @@ export async function jsonResponseFromBody(
     mapData?: (data: unknown) => unknown,
 ) {
     const data = await readApiBody(response);
+    const mapped = mapData ? mapData(data) : data;
     try {
-        return jsonResponseFrom(response, mapData ? mapData(data) : data);
+        return jsonResponseFrom(response, mapped);
     } catch {
         return jsonResponseFrom(response, data);
     }

@@ -43,14 +43,15 @@ describe("jsonResponseFromBody", () => {
         expect(await rewritten.json()).toEqual(payload);
     });
 
-    it("falls back to the already-read payload when mapping throws", async () => {
-        const response = jsonResponse({ ok: true });
-        const rewritten = await jsonResponseFromBody(response, () => {
-            throw new Error("unminify failed");
-        });
+    it("propagates mapping errors so CBOR callers can retry as JSON", async () => {
+        const response = cborResponse(encoder.encode({ ok: true }));
 
+        await expect(
+            jsonResponseFromBody(response, () => {
+                throw new Error("unminify failed");
+            }),
+        ).rejects.toThrow("unminify failed");
         expect(response.bodyUsed).toBe(true);
-        expect(await rewritten.json()).toEqual({ ok: true });
     });
 
     it("throws a decode error instead of returning the consumed CBOR response", async () => {

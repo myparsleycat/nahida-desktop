@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { useGlobalStore } from "../store/global";
+import { globalStore, useGlobalStore } from "../store/global";
 
 export function useGlobalEvents(
     onPathSelectorModeSelect?: (data: {
@@ -57,11 +57,19 @@ export function useGlobalEvents(
         setListeners(new Map(listeners.set("auth:update", removeAuthListener)));
 
         const removeBackendStatusListener = window.api.on("backend:status", (status) => {
+            const previousStatus = globalStore.getState().backendStatus;
             setBackendStatus(status);
             if (status !== "online") return;
 
             void (async () => {
                 try {
+                    if (previousStatus !== "offline") {
+                        if (previousStatus !== "unknown") return;
+                        await whenSessionInitialized();
+                        const state = globalStore.getState();
+                        if (state.session || !state.hasToken) return;
+                    }
+
                     const session = await window.api.invoke("auth:getSession");
                     setSession(session);
                     setHasToken(!!session || (await window.api.invoke("auth:hasToken")));
@@ -81,4 +89,21 @@ export function useGlobalEvents(
             removeAllListeners();
         };
     }, [onPathSelectorModeSelect, i18n]);
+}
+
+function whenSessionInitialized() {
+    if (globalStore.getState().sessionInitialized) return Promise.resolve();
+
+    return new Promise<void>((resolve) => {
+        const unsubscribe = globalStore.subscribe((state) => {
+            if (!state.sessionInitialized) return;
+            unsubscribe();
+            resolve();
+        });
+
+        if (globalStore.getState().sessionInitialized) {
+            unsubscribe();
+            resolve();
+        }
+    });
 }
