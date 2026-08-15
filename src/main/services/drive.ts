@@ -1315,11 +1315,14 @@ export class DriveService {
         return 1;
     }
 
-    private async listDestinationChildIds(destinationId: string, signal: AbortSignal) {
+    private async listDestinationChildIds(
+        destinationId: string,
+        signal: AbortSignal,
+    ): Promise<Set<string>> {
         if (signal.aborted) throw this.createCopyCanceledError();
         try {
             const item = await this.get.item(destinationId);
-            return new Set((item.children ?? []).map((child) => child.id));
+            return new Set<string>((item.children ?? []).map((child) => String(child.id)));
         } catch (error) {
             this.desktop.logger.warn(
                 {
