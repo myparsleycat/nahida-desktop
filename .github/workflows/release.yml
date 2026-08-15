@@ -18,15 +18,27 @@ permissions:
 jobs:
     release:
         runs-on: windows-latest
+        defaults:
+            run:
+                working-directory: desktop
         env:
             CSC_IDENTITY_AUTO_DISCOVERY: "false"
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             VCPKG_ROOT: C:\vcpkg
         steps:
-            - name: Checkout
+            - name: Checkout desktop
               uses: actions/checkout@v4
               with:
                   fetch-depth: 0
+                  path: desktop
+
+            - name: Checkout backend
+              uses: actions/checkout@v4
+              with:
+                  repository: myparsleycat/nahida-backend
+                  path: backend
+                  token: ${{ secrets.NAHIDA_BACKEND_TOKEN }}
+                  persist-credentials: false
 
             - name: Setup pnpm
               uses: pnpm/action-setup@v4
@@ -38,6 +50,7 @@ jobs:
               with:
                   node-version: 22
                   cache: pnpm
+                  cache-dependency-path: desktop/pnpm-lock.yaml
 
             - name: Setup Rust
               uses: dtolnay/rust-toolchain@stable
@@ -46,14 +59,14 @@ jobs:
               uses: Swatinem/rust-cache@v2
               with:
                   workspaces: |
-                      native/dll-injector
-                      native/extractor
-                      native/fs
-                      native/mod-manager
-                      native/mod-tools
-                      native/pe-padding-diversifier
-                      native/static-glb
-                      native/utils
+                      desktop/native/dll-injector
+                      desktop/native/extractor
+                      desktop/native/fs
+                      desktop/native/mod-manager
+                      desktop/native/mod-tools
+                      desktop/native/pe-padding-diversifier
+                      desktop/native/static-glb
+                      desktop/native/utils
 
             - name: Configure vcpkg
               id: vcpkg
@@ -78,6 +91,9 @@ jobs:
 
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
+
+            - name: Build native modules
+              run: pnpm run build:native
 
             - name: Generate types
               run: pnpm build
