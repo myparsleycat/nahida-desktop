@@ -24,8 +24,10 @@ interface GlobalStore {
     setUpdaterStatus: (status: UpdaterStatus) => void;
     session: Session | null;
     sessionInitialized: boolean;
+    pendingSessionRestore: boolean;
     setSession: (session: Session | null) => void;
     setSessionInitialized: (initialized: boolean) => void;
+    setPendingSessionRestore: (pending: boolean) => void;
     backendStatus: BackendStatus;
     setBackendStatus: (status: BackendStatus) => void;
     hasToken: boolean;
@@ -65,8 +67,10 @@ export const globalStore = createStore<GlobalStore>((set) => {
             }),
         session: null,
         sessionInitialized: false,
+        pendingSessionRestore: false,
         setSession: (session) => set({ session, sessionInitialized: true }),
         setSessionInitialized: (sessionInitialized) => set({ sessionInitialized }),
+        setPendingSessionRestore: (pendingSessionRestore) => set({ pendingSessionRestore }),
         backendStatus: "unknown",
         setBackendStatus: (backendStatus) => set({ backendStatus }),
         hasToken: false,

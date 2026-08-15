@@ -1,3 +1,5 @@
+import type { BackendStatus } from "@shared/backend";
+
 export const DRIVE_START_PAGES = ["/drive/drive/root", "/drive/share/root"] as const;
 
 export function requiresAuthForStartPage(page: string | null | undefined) {
@@ -26,6 +28,18 @@ export function materializeStartPage(
     }
 
     return page;
+}
+
+export function isStartPageSessionReady(state: {
+    sessionInitialized: boolean;
+    pendingSessionRestore: boolean;
+    hasSession: boolean;
+    hasToken: boolean;
+    backendStatus: BackendStatus;
+}) {
+    if (!state.sessionInitialized || state.pendingSessionRestore) return false;
+    if (state.hasToken && !state.hasSession && state.backendStatus === "unknown") return false;
+    return true;
 }
 
 export function resolveStartPage(

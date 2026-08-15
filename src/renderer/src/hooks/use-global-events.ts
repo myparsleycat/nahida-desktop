@@ -19,6 +19,7 @@ export function useGlobalEvents(
     const setSession = useGlobalStore((state) => state.setSession);
     const setHasToken = useGlobalStore((state) => state.setHasToken);
     const setBackendStatus = useGlobalStore((state) => state.setBackendStatus);
+    const setPendingSessionRestore = useGlobalStore((state) => state.setPendingSessionRestore);
     const [listeners, setListeners] = useState<Map<string, () => void>>(new Map());
     const { i18n } = useTranslation();
 
@@ -61,10 +62,14 @@ export function useGlobalEvents(
             setBackendStatus(status);
             if (status !== "online") return;
 
+            const isColdStartRestore = previousStatus === "unknown";
+            if (previousStatus !== "offline" && !isColdStartRestore) return;
+
+            if (isColdStartRestore) setPendingSessionRestore(true);
+
             void (async () => {
                 try {
-                    if (previousStatus !== "offline") {
-                        if (previousStatus !== "unknown") return;
+                    if (isColdStartRestore) {
                         await whenSessionInitialized();
                         const state = globalStore.getState();
                         if (state.session || !state.hasToken) return;
@@ -75,6 +80,8 @@ export function useGlobalEvents(
                     setHasToken(!!session || (await window.api.invoke("auth:hasToken")));
                 } catch (error) {
                     console.error("Failed to refresh session after backend recovery", error);
+                } finally {
+                    if (isColdStartRestore) setPendingSessionRestore(false);
                 }
             })();
         });
