@@ -1,0 +1,92 @@
+name: Release
+
+on:
+    push:
+        branches:
+            - main
+
+concurrency:
+    group: release
+    cancel-in-progress: false
+
+permissions:
+    actions: write
+    contents: write
+    issues: write
+    pull-requests: write
+
+jobs:
+    release:
+        runs-on: windows-latest
+        env:
+            CSC_IDENTITY_AUTO_DISCOVERY: "false"
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            VCPKG_ROOT: C:\vcpkg
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v4
+              with:
+                  version: 11
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+
+            - name: Setup Rust
+              uses: dtolnay/rust-toolchain@stable
+
+            - name: Cache Rust
+              uses: Swatinem/rust-cache@v2
+              with:
+                  workspaces: |
+                      native/dll-injector
+                      native/extractor
+                      native/fs
+                      native/mod-manager
+                      native/mod-tools
+                      native/pe-padding-diversifier
+                      native/static-glb
+                      native/utils
+
+            - name: Configure vcpkg
+              id: vcpkg
+              shell: pwsh
+              run: |
+                  if (-not $env:VCPKG_INSTALLATION_ROOT) {
+                    throw "VCPKG_INSTALLATION_ROOT is not set"
+                  }
+                  Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_ROOT=$($env:VCPKG_INSTALLATION_ROOT)"
+                  Add-Content -Path $env:GITHUB_OUTPUT -Value "root=$($env:VCPKG_INSTALLATION_ROOT)"
+
+            - name: Cache vcpkg libarchive
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ${{ steps.vcpkg.outputs.root }}/installed/x64-windows-static
+                      ${{ steps.vcpkg.outputs.root }}/installed/vcpkg
+                  key: vcpkg-libarchive-x64-windows-static
+
+            - name: Install libarchive
+              run: vcpkg install libarchive:x64-windows-static
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Generate types
+              run: pnpm build
+
+            - name: Lint
+              run: pnpm lint
+
+            - name: Test
+              run: pnpm test
+
+            - name: Release
+              run: pnpm exec semantic-release
