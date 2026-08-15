@@ -34,7 +34,7 @@
     "postinstall": "install-electron && electron-builder install-app-deps",
     "release": "semantic-release",
     "release:docs": "pnpm run docs:build && pnpm exec wrangler pages deploy docs/.vitepress/dist --project-name nahida-desktop-docs --branch main",
-    "release:prepare": "pnpm run build:native && pnpm run clean && pnpm run build && electron-builder --win --publish never",
+    "release:prepare": "pnpm run clean && pnpm run build && electron-builder --win --publish never",
     "release:win": "pnpm run clean && pnpm run build && electron-builder --win --publish always",
     "start": "electron-vite preview",
     "test": "vitest run",
