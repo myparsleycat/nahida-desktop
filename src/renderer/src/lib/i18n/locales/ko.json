@@ -885,12 +885,34 @@
         "operation_options": {
           "resize": "리사이즈만",
           "resize_and_convert": "리사이즈 + 포맷 변환",
-          "convert": "포맷 변환만"
+          "convert": "포맷 변환만",
+          "upscale": "업스케일만",
+          "upscale_and_convert": "업스케일 + 포맷 변환"
         },
         "operation_descriptions": {
           "resize": "텍스처 크기만 변경합니다. DDS 포맷은 유지됩니다.",
           "resize_and_convert": "텍스처를 리사이즈한 뒤 색공간은 유지하면서 다른 DDS 포맷으로 다시 인코딩합니다.",
-          "convert": "원본 크기는 유지하고 DDS 출력 포맷만 변경합니다."
+          "convert": "원본 크기는 유지하고 DDS 출력 포맷만 변경합니다.",
+          "upscale": "Real-ESRGAN으로 텍스처를 확대합니다. DDS 포맷은 유지됩니다.",
+          "upscale_and_convert": "Real-ESRGAN으로 확대한 뒤 다른 DDS 포맷으로 다시 인코딩합니다."
+        },
+        "upscale_model": "업스케일 모델",
+        "upscale_model_options": {
+          "realesr-animevideov3": "애니 / 게임 (기본)",
+          "realesrgan-x4plus-anime": "애니 x4+",
+          "realesrgan-x4plus": "실사 x4+"
+        },
+        "upscale_model_descriptions": {
+          "realesr-animevideov3": "게임·애니 텍스처에 가장 무난한 기본 모델입니다. 2x, 3x, 4x를 지원합니다.",
+          "realesrgan-x4plus-anime": "품질이 더 높은 애니 모델입니다. 배율은 4x로 고정됩니다.",
+          "realesrgan-x4plus": "실사·사진용 모델입니다. 배율은 4x로 고정됩니다."
+        },
+        "upscale_scale": "배율",
+        "upscale_scale_option": "{{scale}}배",
+        "upscale_scale_description": "출력 크기는 원본 크기에 선택한 배율을 곱한 값입니다. 한 변이 8192px를 넘으면 건너뜁니다.",
+        "upscale_normal_warning": "노멀·러프니스 같은 Linear 텍스처는 업스케일하면 채널이 손상될 수 있습니다. 컬러 텍스처에만 사용하세요.",
+        "upscale_progress": {
+          "working": "업스케일 런타임을 준비하는 중"
         },
         "mode": "리사이즈 방식",
         "mode_options": {

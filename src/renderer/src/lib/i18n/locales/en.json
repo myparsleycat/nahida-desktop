@@ -901,12 +901,34 @@
         "operation_options": {
           "resize": "Resize only",
           "resize_and_convert": "Resize and convert",
-          "convert": "Convert format only"
+          "convert": "Convert format only",
+          "upscale": "Upscale only",
+          "upscale_and_convert": "Upscale and convert"
         },
         "operation_descriptions": {
           "resize": "Only change the texture size. The DDS format stays the same.",
           "resize_and_convert": "Resize the texture and re-encode it to a different DDS format while preserving color space.",
-          "convert": "Keep the original texture size and only change the DDS output format."
+          "convert": "Keep the original texture size and only change the DDS output format.",
+          "upscale": "Enlarge the texture with Real-ESRGAN. The DDS format stays the same.",
+          "upscale_and_convert": "Enlarge the texture with Real-ESRGAN and re-encode it to a different DDS format."
+        },
+        "upscale_model": "Upscale model",
+        "upscale_model_options": {
+          "realesr-animevideov3": "Anime / game (default)",
+          "realesrgan-x4plus-anime": "Anime x4+",
+          "realesrgan-x4plus": "Photo x4+"
+        },
+        "upscale_model_descriptions": {
+          "realesr-animevideov3": "Best default for game and anime textures. Supports 2x, 3x, and 4x.",
+          "realesrgan-x4plus-anime": "Higher-quality anime model. Fixed 4x scale.",
+          "realesrgan-x4plus": "Photo / realistic model. Fixed 4x scale."
+        },
+        "upscale_scale": "Scale",
+        "upscale_scale_option": "{{scale}}x",
+        "upscale_scale_description": "Output size is original size multiplied by the selected scale. Results above 8192px are skipped.",
+        "upscale_normal_warning": "Linear textures such as normal or roughness maps can be damaged by upscaling. Use this only for color textures.",
+        "upscale_progress": {
+          "working": "Preparing upscale runtime"
         },
         "mode": "Resize mode",
         "mode_options": {

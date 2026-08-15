@@ -1,18 +1,39 @@
+import { spawn } from "node:child_process";
+import os from "node:os";
 import path from "node:path";
+
 import type { NahidaDesktop } from "@main/index";
-import { resizeTextures } from "@native/mod-tools";
+import { decodeDdsToRgba8, encodeRgba8ToDds, resizeTextures } from "@native/mod-tools";
 import type {
     TextureColorSpace,
+    TextureResizeFileResult,
     TextureResizeFileRunInput,
     TextureResizeListItem,
     TextureResizeOperation,
     TextureResizeRunInput,
     TextureResizeSettings,
+    TextureUpscaleModel,
+    TextureUpscaleProgressEvent,
+    TextureUpscaleScale,
 } from "@shared/types";
-import { getTextureResizeCandidates, pickTextureResizeCandidate } from "@shared/utils";
+import {
+    getTextureResizeCandidates,
+    getTextureUpscaleTarget,
+    isTextureUpscaleOperation,
+    isUnsupportedTextureUpscaleFormat,
+    pickTextureResizeCandidate,
+    resolveTextureUpscaleScale,
+    TEXTURE_UPSCALE_MODELS,
+    TEXTURE_UPSCALE_SCALES,
+    toErrorMessage,
+} from "@shared/utils";
 import fg from "fast-glob";
 import fse from "fs-extra";
+import { nanoid } from "nanoid";
 import pLimit from "p-limit";
+import sharp from "sharp";
+
+import { RealesrganRuntime } from "./realesrgan-runtime";
 
 const MODE_KEY = "texture_resize_mode";
 const OPERATION_KEY = "texture_resize_operation";
@@ -21,6 +42,8 @@ const PERCENT_KEY = "texture_resize_percent";
 const CUSTOM_WIDTH_KEY = "texture_resize_custom_width";
 const CUSTOM_HEIGHT_KEY = "texture_resize_custom_height";
 const BACKUP_KEY = "texture_resize_backup";
+const UPSCALE_SCALE_KEY = "texture_resize_upscale_scale";
+const UPSCALE_MODEL_KEY = "texture_resize_upscale_model";
 const MIN_DIMENSION = 1024;
 const DIMENSION_STEP = 1024;
 const DDS_MAGIC = 0x20534444;
@@ -188,22 +211,39 @@ const DEFAULT_SETTINGS: TextureResizeSettings = {
     customHeight: 2048,
     outputFormat: "",
     backup: true,
+    upscaleScale: 2,
+    upscaleModel: "realesr-animevideov3",
 };
 
 export class TextureResizer {
-    constructor(private readonly desktop: NahidaDesktop) {}
+    private readonly realesrganRuntime: RealesrganRuntime;
+
+    constructor(private readonly desktop: NahidaDesktop) {
+        this.realesrganRuntime = new RealesrganRuntime(desktop);
+    }
 
     public async getSettings() {
-        const [mode, operation, outputFormat, percent, customWidth, customHeight, backup] =
-            await Promise.all([
-                this.getSettingValue(MODE_KEY),
-                this.getSettingValue(OPERATION_KEY),
-                this.getSettingValue(OUTPUT_FORMAT_KEY),
-                this.getSettingValue(PERCENT_KEY),
-                this.getSettingValue(CUSTOM_WIDTH_KEY),
-                this.getSettingValue(CUSTOM_HEIGHT_KEY),
-                this.getSettingValue(BACKUP_KEY),
-            ]);
+        const [
+            mode,
+            operation,
+            outputFormat,
+            percent,
+            customWidth,
+            customHeight,
+            backup,
+            upscaleScale,
+            upscaleModel,
+        ] = await Promise.all([
+            this.getSettingValue(MODE_KEY),
+            this.getSettingValue(OPERATION_KEY),
+            this.getSettingValue(OUTPUT_FORMAT_KEY),
+            this.getSettingValue(PERCENT_KEY),
+            this.getSettingValue(CUSTOM_WIDTH_KEY),
+            this.getSettingValue(CUSTOM_HEIGHT_KEY),
+            this.getSettingValue(BACKUP_KEY),
+            this.getSettingValue(UPSCALE_SCALE_KEY),
+            this.getSettingValue(UPSCALE_MODEL_KEY),
+        ]);
 
         return {
             mode: normalizeResizeMode(mode),
@@ -213,6 +253,11 @@ export class TextureResizer {
             customHeight: normalizeDimension(customHeight),
             outputFormat: normalizeOutputFormat(outputFormat),
             backup: normalizeBoolean(backup, DEFAULT_SETTINGS.backup),
+            upscaleScale: resolveTextureUpscaleScale(
+                normalizeUpscaleModel(upscaleModel),
+                normalizeUpscaleScale(upscaleScale),
+            ),
+            upscaleModel: normalizeUpscaleModel(upscaleModel),
         };
     }
 
@@ -228,9 +273,15 @@ export class TextureResizer {
             this.saveSettingValue(CUSTOM_WIDTH_KEY, String(merged.customWidth)),
             this.saveSettingValue(CUSTOM_HEIGHT_KEY, String(merged.customHeight)),
             this.saveSettingValue(BACKUP_KEY, merged.backup ? "1" : "0"),
+            this.saveSettingValue(UPSCALE_SCALE_KEY, String(merged.upscaleScale)),
+            this.saveSettingValue(UPSCALE_MODEL_KEY, merged.upscaleModel),
         ]);
 
         return merged;
+    }
+
+    public async getUpscaleRuntimeStatus() {
+        return await this.realesrganRuntime.getStatus();
     }
 
     public async listFolderTextures(targetPath: string, settings?: Partial<TextureResizeSettings>) {
@@ -258,11 +309,17 @@ export class TextureResizer {
         }
 
         const settings = await this.saveSettings(input.settings);
+        if (isTextureUpscaleOperation(settings.operation)) {
+            throw new Error("Folder upscale is not supported.");
+        }
         return await resizeTextures(buildResizeRequest(path.resolve(targetPath), settings));
     }
 
     public async resizeMod(modPath: string, input: Omit<TextureResizeRunInput, "targetPath">) {
         const settings = await this.saveSettings(input.settings);
+        if (isTextureUpscaleOperation(settings.operation)) {
+            throw new Error("Folder upscale is not supported.");
+        }
         return await resizeTextures(buildResizeRequest(path.resolve(modPath), settings));
     }
 
@@ -273,7 +330,12 @@ export class TextureResizer {
         }
 
         const settings = await this.saveSettings(input.settings);
-        return await resizeTextures(buildResizeRequest(path.resolve(filePath), settings));
+        const resolvedPath = path.resolve(filePath);
+        if (isTextureUpscaleOperation(settings.operation)) {
+            return await this.upscaleFile(resolvedPath, settings);
+        }
+
+        return await resizeTextures(buildResizeRequest(resolvedPath, settings));
     }
 
     private async getSettingValue(key: string) {
@@ -282,6 +344,204 @@ export class TextureResizer {
 
     private async saveSettingValue(key: string, value: string) {
         await this.desktop.lib.db.settings.upsert(key, value);
+    }
+
+    private async upscaleFile(filePath: string, settings: TextureResizeSettings) {
+        const buffer = await fse.readFile(filePath);
+        const info = parseDDSMetadata(buffer);
+        const skipReason = resolveUpscaleSkipReason(info, settings.upscaleScale);
+        if (skipReason) {
+            this.emitUpscaleProgress({
+                phase: "done",
+                percent: 100,
+                filePath,
+                message: skipReason,
+            });
+            return {
+                targetPath: filePath,
+                processed: 1,
+                updated: 0,
+                skipped: 1,
+                failed: 0,
+                files: [buildSkippedFileResult(filePath, info, skipReason)],
+            };
+        }
+
+        const workDir = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-texture-upscale-"));
+        const inputPngPath = path.join(workDir, `${nanoid(8)}-in.png`);
+        const outputPngPath = path.join(workDir, `${nanoid(8)}-out.png`);
+
+        try {
+            this.emitUpscaleProgress({
+                phase: "download",
+                percent: 0,
+                filePath,
+                message: "Preparing Real-ESRGAN runtime",
+            });
+            const runtime = await this.realesrganRuntime.ensureInstalled((phase, percent) => {
+                this.emitUpscaleProgress({
+                    phase,
+                    percent,
+                    filePath,
+                    message:
+                        phase === "download"
+                            ? "Downloading Real-ESRGAN runtime"
+                            : "Extracting Real-ESRGAN runtime",
+                });
+            });
+            if (!runtime.binaryPath || !runtime.modelsPath) {
+                throw new Error("Real-ESRGAN runtime is not installed.");
+            }
+
+            this.emitUpscaleProgress({
+                phase: "decode",
+                percent: null,
+                filePath,
+                message: "Decoding DDS texture",
+            });
+            const decoded = await decodeDdsToRgba8(filePath);
+            if (decoded.layers > 1) {
+                return {
+                    targetPath: filePath,
+                    processed: 1,
+                    updated: 0,
+                    skipped: 1,
+                    failed: 0,
+                    files: [
+                        buildSkippedFileResult(
+                            filePath,
+                            info,
+                            "Cubemap and layered DDS textures cannot be upscaled.",
+                        ),
+                    ],
+                };
+            }
+
+            const outputFormat = resolveUpscaleOutputFormat(
+                settings.operation,
+                settings.outputFormat,
+                decoded.format,
+            );
+            if (outputFormat == null) {
+                return {
+                    targetPath: filePath,
+                    processed: 1,
+                    updated: 0,
+                    skipped: 1,
+                    failed: 0,
+                    files: [
+                        buildSkippedFileResult(
+                            filePath,
+                            info,
+                            "This DDS format cannot be re-encoded after upscaling.",
+                        ),
+                    ],
+                };
+            }
+
+            await sharp(Buffer.from(decoded.data), {
+                raw: {
+                    width: decoded.width,
+                    height: decoded.height,
+                    channels: 4,
+                },
+            })
+                .png()
+                .toFile(inputPngPath);
+
+            this.emitUpscaleProgress({
+                phase: "upscale",
+                percent: null,
+                filePath,
+                message: "Running Real-ESRGAN",
+            });
+            await runRealesrganProcess({
+                binaryPath: runtime.binaryPath,
+                modelsPath: runtime.modelsPath,
+                inputPath: inputPngPath,
+                outputPath: outputPngPath,
+                model: settings.upscaleModel,
+                scale: settings.upscaleScale,
+                logger: (message) => this.desktop.logger.info(message, "TextureResizer:upscale"),
+            });
+
+            const upscaled = await sharp(outputPngPath).ensureAlpha().raw().toBuffer({
+                resolveWithObject: true,
+            });
+            const outputWidth = upscaled.info.width;
+            const outputHeight = upscaled.info.height;
+            const expected = getTextureUpscaleTarget(
+                decoded.width,
+                decoded.height,
+                settings.upscaleScale,
+            );
+            if (expected && (outputWidth !== expected.width || outputHeight !== expected.height)) {
+                this.desktop.logger.warn(
+                    `Real-ESRGAN output size ${outputWidth}x${outputHeight} did not match expected ${expected.width}x${expected.height}`,
+                    "TextureResizer:upscale",
+                );
+            }
+
+            this.emitUpscaleProgress({
+                phase: "encode",
+                percent: null,
+                filePath,
+                message: "Encoding DDS texture",
+            });
+            const encoded = await encodeRgba8ToDds({
+                path: filePath,
+                width: outputWidth,
+                height: outputHeight,
+                data: upscaled.data,
+                outputFormat,
+                backup: settings.backup,
+                generateMipmaps: decoded.mipmaps > 1,
+            });
+
+            this.emitUpscaleProgress({
+                phase: "done",
+                percent: 100,
+                filePath,
+                message: "Texture upscale completed",
+            });
+
+            return {
+                targetPath: filePath,
+                processed: 1,
+                updated: 1,
+                skipped: 0,
+                failed: 0,
+                files: [
+                    {
+                        filePath,
+                        status: "updated" as const,
+                        originalWidth: decoded.width,
+                        originalHeight: decoded.height,
+                        outputWidth: encoded.width,
+                        outputHeight: encoded.height,
+                        originalFormat: decoded.format,
+                        outputFormat: encoded.outputFormat,
+                        backupCreated: encoded.backupCreated,
+                        message: null,
+                    } satisfies TextureResizeFileResult,
+                ],
+            };
+        } catch (error) {
+            this.emitUpscaleProgress({
+                phase: "error",
+                percent: null,
+                filePath,
+                message: toErrorMessage(error),
+            });
+            this.desktop.logger.error(error, `tools:resizeTextureFile:upscale:${filePath}`);
+            throw error;
+        } finally {
+            await fse.remove(workDir).catch(() => {});
+        }
+    }
+
+    private emitUpscaleProgress(event: TextureUpscaleProgressEvent) {
+        this.desktop.ipc.broadcast("tools:textureUpscaleProgress", event);
     }
 }
 
@@ -382,7 +642,10 @@ async function buildTextureListItem(
         info.colorSpace,
         canConvertFormat,
     );
-    const canProcess = targetSize != null || canConvertFormat;
+    const upscaleSkipReason = resolveUpscaleSkipReason(info, settings.upscaleScale);
+    const canUpscale = upscaleSkipReason == null;
+    const canResize = targetSize != null;
+    const canProcess = canResize || canConvertFormat || canUpscale;
 
     return {
         filePath,
@@ -397,16 +660,14 @@ async function buildTextureListItem(
         originalHeight,
         targetWidth: previewSize.width,
         targetHeight: previewSize.height,
-        canResize: targetSize != null,
+        canResize,
+        canUpscale,
         canConvertFormat,
         canProcess,
         availableOutputFormats,
         outputFormatDefault,
         formatConversionMessage,
-        message:
-            targetSize == null && settings.operation !== "convert"
-                ? "No valid downscale candidate matched the requested bounds."
-                : null,
+        message: resolveListMessage(settings, targetSize, upscaleSkipReason),
     };
 }
 
@@ -423,7 +684,7 @@ function buildResizeRequest(targetPath: string, settings: TextureResizeSettings)
     };
 }
 
-function mergeTextureResizeSettings(
+export function mergeTextureResizeSettings(
     current: TextureResizeSettings,
     nextSettings: Partial<TextureResizeSettings>,
 ): TextureResizeSettings {
@@ -435,6 +696,11 @@ function mergeTextureResizeSettings(
         customHeight: normalizeDimension(nextSettings.customHeight ?? current.customHeight),
         outputFormat: normalizeOutputFormat(nextSettings.outputFormat ?? current.outputFormat),
         backup: nextSettings.backup ?? current.backup,
+        upscaleScale: resolveTextureUpscaleScale(
+            normalizeUpscaleModel(nextSettings.upscaleModel ?? current.upscaleModel),
+            normalizeUpscaleScale(nextSettings.upscaleScale ?? current.upscaleScale),
+        ),
+        upscaleModel: normalizeUpscaleModel(nextSettings.upscaleModel ?? current.upscaleModel),
     };
 }
 
@@ -661,11 +927,39 @@ function normalizeResizeMode(value?: string | null): TextureResizeSettings["mode
 }
 
 function normalizeOperation(value?: string | null): TextureResizeOperation {
-    if (value === "convert" || value === "resize_and_convert") {
+    if (
+        value === "convert" ||
+        value === "resize_and_convert" ||
+        value === "upscale" ||
+        value === "upscale_and_convert"
+    ) {
         return value;
     }
 
     return "resize";
+}
+
+function normalizeUpscaleScale(value?: string | number | null): TextureUpscaleScale {
+    const parsed =
+        typeof value === "number"
+            ? value
+            : typeof value === "string"
+              ? Number.parseInt(value, 10)
+              : Number.NaN;
+
+    if (TEXTURE_UPSCALE_SCALES.includes(parsed as TextureUpscaleScale)) {
+        return parsed as TextureUpscaleScale;
+    }
+
+    return DEFAULT_SETTINGS.upscaleScale;
+}
+
+function normalizeUpscaleModel(value?: string | null): TextureUpscaleModel {
+    if (value && TEXTURE_UPSCALE_MODELS.includes(value as TextureUpscaleModel)) {
+        return value as TextureUpscaleModel;
+    }
+
+    return DEFAULT_SETTINGS.upscaleModel;
 }
 
 function normalizeOutputFormat(value?: string | null) {
@@ -732,11 +1026,15 @@ function calculatePreviewDimensions(
         return { width, height };
     }
 
+    if (isTextureUpscaleOperation(settings.operation)) {
+        return getTextureUpscaleTarget(width, height, settings.upscaleScale) ?? { width, height };
+    }
+
     return calculateTargetDimensions(width, height, settings) ?? { width, height };
 }
 
 function calculateTargetDimensions(width: number, height: number, settings: TextureResizeSettings) {
-    if (settings.operation === "convert") {
+    if (settings.operation === "convert" || isTextureUpscaleOperation(settings.operation)) {
         return null;
     }
 
@@ -757,4 +1055,144 @@ function calculateTargetDimensions(width: number, height: number, settings: Text
               };
 
     return pickTextureResizeCandidate(candidates, bounds.width, bounds.height);
+}
+
+export function resolveUpscaleOutputFormat(
+    operation: TextureResizeOperation,
+    requestedOutputFormat: string,
+    decodedFormat: string,
+) {
+    if (operation === "upscale_and_convert") {
+        const requested = normalizeOutputFormat(requestedOutputFormat);
+        if (requested) {
+            return requested;
+        }
+    }
+
+    return ALL_OUTPUT_FORMATS.includes(decodedFormat as TextureOutputFormat) ? decodedFormat : null;
+}
+
+export function resolveUpscaleSkipReason(
+    info: Pick<ParsedDDSMetadata, "width" | "height" | "format" | "layerCount">,
+    scale: TextureUpscaleScale,
+) {
+    if (info.layerCount > 1) {
+        return "Cubemap and layered DDS textures cannot be upscaled.";
+    }
+
+    if (isUnsupportedTextureUpscaleFormat(info.format)) {
+        return "This DDS format cannot be upscaled without destroying channel data.";
+    }
+
+    if (getTextureUpscaleTarget(info.width, info.height, scale) == null) {
+        return "Upscaled dimensions would exceed the 8192px limit.";
+    }
+
+    return null;
+}
+
+function resolveListMessage(
+    settings: TextureResizeSettings,
+    targetSize: { width: number; height: number } | null,
+    upscaleSkipReason: string | null,
+) {
+    if (isTextureUpscaleOperation(settings.operation)) {
+        return upscaleSkipReason;
+    }
+
+    if (targetSize == null && settings.operation !== "convert") {
+        return "No valid downscale candidate matched the requested bounds.";
+    }
+
+    return null;
+}
+
+function buildSkippedFileResult(
+    filePath: string,
+    info: ParsedDDSMetadata,
+    message: string,
+): TextureResizeFileResult {
+    return {
+        filePath,
+        status: "skipped",
+        originalWidth: info.width,
+        originalHeight: info.height,
+        outputWidth: info.width,
+        outputHeight: info.height,
+        originalFormat: info.format,
+        outputFormat: info.format,
+        backupCreated: false,
+        message,
+    };
+}
+
+function runRealesrganProcess({
+    binaryPath,
+    modelsPath,
+    inputPath,
+    outputPath,
+    model,
+    scale,
+    logger,
+}: {
+    binaryPath: string;
+    modelsPath: string;
+    inputPath: string;
+    outputPath: string;
+    model: TextureUpscaleModel;
+    scale: TextureUpscaleScale;
+    logger: (message: string) => void;
+}) {
+    return new Promise<void>((resolve, reject) => {
+        const child = spawn(
+            binaryPath,
+            [
+                "-i",
+                inputPath,
+                "-o",
+                outputPath,
+                "-n",
+                model,
+                "-s",
+                String(scale),
+                "-t",
+                "0",
+                "-f",
+                "png",
+                "-m",
+                modelsPath,
+            ],
+            {
+                windowsHide: true,
+                cwd: path.dirname(binaryPath),
+                shell: false,
+            },
+        );
+
+        let stderr = "";
+        child.stderr?.on("data", (chunk: Buffer) => {
+            const text = chunk.toString();
+            stderr += text;
+            logger(text.trim());
+        });
+        child.stdout?.on("data", (chunk: Buffer) => {
+            const text = chunk.toString().trim();
+            if (text) {
+                logger(text);
+            }
+        });
+        child.on("error", reject);
+        child.on("close", (code) => {
+            if (code === 0) {
+                resolve();
+                return;
+            }
+
+            reject(
+                new Error(
+                    `Real-ESRGAN exited with code ${code ?? "unknown"}${stderr.trim() ? `: ${stderr.trim()}` : ""}`,
+                ),
+            );
+        });
+    });
 }

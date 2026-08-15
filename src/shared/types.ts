@@ -109,8 +109,18 @@ export interface WuwaFixerPrepareResult extends WuwaFixerStatus {
 }
 
 export type TextureResizeMode = "percent" | "custom";
-export type TextureResizeOperation = "resize" | "resize_and_convert" | "convert";
+export type TextureResizeOperation =
+    | "resize"
+    | "resize_and_convert"
+    | "convert"
+    | "upscale"
+    | "upscale_and_convert";
 export type TextureColorSpace = "srgb" | "linear" | "unknown";
+export type TextureUpscaleScale = 2 | 3 | 4;
+export type TextureUpscaleModel =
+    | "realesr-animevideov3"
+    | "realesrgan-x4plus-anime"
+    | "realesrgan-x4plus";
 
 export interface TextureResizeSettings {
     mode: TextureResizeMode;
@@ -120,6 +130,23 @@ export interface TextureResizeSettings {
     customHeight: number;
     outputFormat: string;
     backup: boolean;
+    upscaleScale: TextureUpscaleScale;
+    upscaleModel: TextureUpscaleModel;
+}
+
+export interface TextureUpscaleRuntimeStatus {
+    installed: boolean;
+    version: string | null;
+    binaryPath: string | null;
+    modelsPath: string | null;
+    needsInstall: boolean;
+}
+
+export interface TextureUpscaleProgressEvent {
+    phase: "idle" | "download" | "extract" | "decode" | "upscale" | "encode" | "done" | "error";
+    percent: number | null;
+    message?: string;
+    filePath?: string;
 }
 
 export interface TextureResizeRunInput {
@@ -141,6 +168,7 @@ export interface TextureResizeListItem {
     targetWidth: number;
     targetHeight: number;
     canResize: boolean;
+    canUpscale: boolean;
     canConvertFormat: boolean;
     canProcess: boolean;
     availableOutputFormats: string[];
@@ -358,6 +386,7 @@ export type IpcEvents = {
     "setting:xxmi:persistLogs": (logs: string[]) => void;
     "setting:xxmi:toggleViewerLogs": (logs: string[]) => void;
     "tools:4001FixerProgress": (event: FourThousandOneFixerProgressEvent) => void;
+    "tools:textureUpscaleProgress": (event: TextureUpscaleProgressEvent) => void;
     "tools:touchProfileProgress": (event: TouchProfileProgressEvent) => void;
     "tools:bisectState": (snapshot: BisectSnapshot) => void;
     "ftm:log": (event: FixToolLogEvent) => void;

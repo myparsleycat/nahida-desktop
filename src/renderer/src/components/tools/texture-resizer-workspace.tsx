@@ -13,15 +13,20 @@ import {
   DialogTitle,
 } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
+import { Progress } from "@renderer/components/ui/progress";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import type {
   TextureResizeFileResult,
   TextureResizeListItem,
   TextureResizeSettings,
+  TextureUpscaleProgressEvent,
 } from "@shared/types";
 import {
   formatSize,
   getTextureResizeCandidates,
+  getTextureUpscaleTarget,
+  isTextureUpscaleOperation,
+  isUnsupportedTextureUpscaleFormat,
   pickTextureResizeCandidate,
   toErrorMessage,
 } from "@shared/utils";
@@ -45,6 +50,8 @@ const DEFAULT_SETTINGS: TextureResizeSettings = {
   customHeight: 2048,
   outputFormat: "",
   backup: true,
+  upscaleScale: 2,
+  upscaleModel: "realesr-animevideov3",
 };
 
 export function TextureResizerWorkspace({
@@ -59,6 +66,7 @@ export function TextureResizerWorkspace({
   const [runningFilePath, setRunningFilePath] = useState<string | null>(null);
   const [loadedTargetPath, setLoadedTargetPath] = useState("");
   const [selectedTexture, setSelectedTexture] = useState<TextureResizeListItem | null>(null);
+  const [upscaleProgress, setUpscaleProgress] = useState<TextureUpscaleProgressEvent | null>(null);
   const settingsForm = useForm({
     defaultValues: DEFAULT_SETTINGS,
     onSubmit: async () => {},
@@ -71,6 +79,12 @@ export function TextureResizerWorkspace({
   useEffect(() => {
     setTargetPath(fixedTargetPath ?? "");
   }, [fixedTargetPath]);
+
+  useEffect(() => {
+    return window.api.on("tools:textureUpscaleProgress", (event) => {
+      setUpscaleProgress(event);
+    });
+  }, []);
 
   useEffect(() => {
     window.api
@@ -131,6 +145,7 @@ export function TextureResizerWorkspace({
     }
 
     setRunningFilePath(filePath);
+    setUpscaleProgress(null);
     try {
       settingsForm.reset(nextSettings);
       const nextResult = await window.api.invoke("tools:resizeTextureFile", {
@@ -151,6 +166,7 @@ export function TextureResizerWorkspace({
       });
     } finally {
       setRunningFilePath(null);
+      setUpscaleProgress(null);
     }
   };
 
@@ -318,6 +334,22 @@ export function TextureResizerWorkspace({
                         {selectedTexture.formatConversionMessage && (
                           <div>{selectedTexture.formatConversionMessage}</div>
                         )}
+                        {selectedTexture.message &&
+                          isTextureUpscaleOperation(dialogSettings.operation) && (
+                            <div>{selectedTexture.message}</div>
+                          )}
+                      </div>
+                    )}
+                    {runningFilePath === selectedTexture?.filePath && upscaleProgress && (
+                      <div className="space-y-2 rounded-md border bg-background/40 p-3">
+                        <div className="text-xs text-muted-foreground">
+                          {upscaleProgress.message ??
+                            t("page.tools.texture_resizer.upscale_progress.working")}
+                        </div>
+                        <Progress
+                          value={upscaleProgress.percent}
+                          className={upscaleProgress.percent == null ? "animate-pulse" : undefined}
+                        />
                       </div>
                     )}
                     <TextureResizerForm
@@ -330,6 +362,8 @@ export function TextureResizerWorkspace({
                         dialogSettingsForm.setFieldValue("customHeight", nextSettings.customHeight);
                         dialogSettingsForm.setFieldValue("outputFormat", nextSettings.outputFormat);
                         dialogSettingsForm.setFieldValue("backup", nextSettings.backup);
+                        dialogSettingsForm.setFieldValue("upscaleScale", nextSettings.upscaleScale);
+                        dialogSettingsForm.setFieldValue("upscaleModel", nextSettings.upscaleModel);
                       }}
                       disabled={runningFilePath != null}
                       showTargetPath={false}
@@ -464,8 +498,14 @@ function buildDialogSettings(
       : texture.outputFormatDefault;
 
   let operation = settings.operation;
-  if (operation !== "resize" && !texture.canConvertFormat) {
+  if (
+    (operation === "resize_and_convert" || operation === "convert") &&
+    !texture.canConvertFormat
+  ) {
     operation = "resize";
+  }
+  if (operation === "upscale_and_convert" && !texture.canConvertFormat) {
+    operation = "upscale";
   }
 
   return {
@@ -489,12 +529,28 @@ function resolveTexturePreview(
     };
   }
 
+  if (isTextureUpscaleOperation(settings.operation)) {
+    return getTextureUpscaleTarget(
+      texture.originalWidth,
+      texture.originalHeight,
+      settings.upscaleScale,
+    );
+  }
+
   const candidates = getTextureResizeCandidates(texture.originalWidth, texture.originalHeight);
   if (candidates.length === 0) {
     return null;
   }
 
   return pickTextureResizeCandidate(candidates, settings.customWidth, settings.customHeight);
+}
+
+function canUpscaleWithSettings(texture: TextureResizeListItem, settings: TextureResizeSettings) {
+  if (texture.layerCount > 1 || isUnsupportedTextureUpscaleFormat(texture.format)) {
+    return false;
+  }
+
+  return resolveTexturePreview(texture, settings) != null;
 }
 
 function canRun(settings: TextureResizeSettings, texture: TextureResizeListItem): boolean {
@@ -506,6 +562,14 @@ function canRun(settings: TextureResizeSettings, texture: TextureResizeListItem)
 
   if (settings.operation === "convert") {
     return texture.canConvertFormat;
+  }
+
+  if (settings.operation === "upscale") {
+    return canUpscaleWithSettings(texture, settings);
+  }
+
+  if (settings.operation === "upscale_and_convert") {
+    return texture.canConvertFormat && canUpscaleWithSettings(texture, settings);
   }
 
   return canResizeWithSettings && texture.canConvertFormat;
