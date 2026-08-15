@@ -12,6 +12,7 @@ import { openExternal } from "./util";
 export class Auth {
     private desktop: NahidaDesktop;
     private sessionInFlight: Promise<Session | null> | null = null;
+    private tokenGeneration = 0;
 
     constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
@@ -27,6 +28,7 @@ export class Auth {
 
     public async saveToken(key: string) {
         this.sessionInFlight = null;
+        this.tokenGeneration++;
         const encryptedKey = this.desktop.lib.crypto.encryptString(key);
         await this.desktop.lib.db.settings.upsert("token", encryptedKey);
     }
@@ -46,6 +48,7 @@ export class Auth {
 
     public async removeToken() {
         this.sessionInFlight = null;
+        this.tokenGeneration++;
         await this.desktop.lib.db.settings.updateValue("token", null);
     }
 
@@ -68,18 +71,25 @@ export class Auth {
     }
 
     private async fetchSession() {
+        const capturedGeneration = this.tokenGeneration;
         const token = await this.getToken();
         if (!token) return null;
 
         const url = `${BACKEND_URL}/api/auth/get-session`;
         const resp = await this.desktop.httpService.fetcher(url, { throwHttpErrors: false });
+
+        // Check if token was changed while request was in flight
+        if (this.tokenGeneration !== capturedGeneration) {
+            return null;
+        }
+
         if (!resp.ok) {
-            if (resp.status === 401) await this.startLogout();
+            if (resp.status === 401) await this.startLogout(capturedGeneration);
             return null;
         }
         const data = await resp.text();
         if (data === "null") {
-            await this.startLogout();
+            await this.startLogout(capturedGeneration);
             return null;
         }
         return SessionSchema.parse(JSON.parse(data));
@@ -171,7 +181,12 @@ export class Auth {
         }
     }
 
-    public async startLogout() {
+    public async startLogout(expectedGeneration?: number) {
+        // If a generation was provided, verify we're still on that generation
+        if (expectedGeneration !== undefined && this.tokenGeneration !== expectedGeneration) {
+            return;
+        }
+
         const token = await this.getToken();
         await this.removeToken();
         this.desktop.ipc.broadcast("auth:update", null);
