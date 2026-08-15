@@ -59,13 +59,17 @@ export function useGlobalEvents(
 
         const removeBackendStatusListener = window.api.on("backend:status", (status) => {
             const previousStatus = globalStore.getState().backendStatus;
-            setBackendStatus(status);
+            const isColdStartRestore = status === "online" && previousStatus === "unknown";
+            if (isColdStartRestore) {
+                globalStore.setState({
+                    backendStatus: status,
+                    pendingSessionRestore: true,
+                });
+            } else {
+                setBackendStatus(status);
+            }
             if (status !== "online") return;
-
-            const isColdStartRestore = previousStatus === "unknown";
             if (previousStatus !== "offline" && !isColdStartRestore) return;
-
-            if (isColdStartRestore) setPendingSessionRestore(true);
 
             void (async () => {
                 try {
