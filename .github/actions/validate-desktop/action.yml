@@ -1,0 +1,97 @@
+name: Validate desktop
+description: Install dependencies, build native modules, then build, lint, and test.
+
+runs:
+    using: composite
+    steps:
+        - name: Setup pnpm
+          uses: pnpm/action-setup@v4
+          with:
+              version: 11
+
+        - name: Setup Node.js
+          uses: actions/setup-node@v4
+          with:
+              node-version: 22
+              cache: pnpm
+              cache-dependency-path: desktop/pnpm-lock.yaml
+
+        - name: Cache built native modules
+          id: cache-native
+          uses: actions/cache@v4
+          with:
+              path: |
+                  desktop/native/*/*.node
+                  desktop/native/*/index.js
+                  desktop/native/*/index.d.ts
+                  desktop/native/dll-injector/target/release/dll-injector.exe
+              key: native-modules-${{ runner.os }}-${{ hashFiles('desktop/native/**/src/**', 'desktop/native/**/Cargo.toml', 'desktop/native/**/Cargo.lock', 'desktop/native/**/build.rs', 'desktop/native/**/package.json', 'desktop/pnpm-lock.yaml') }}
+
+        - name: Setup Rust
+          if: steps.cache-native.outputs.cache-hit != 'true'
+          uses: dtolnay/rust-toolchain@stable
+
+        - name: Cache Rust
+          if: steps.cache-native.outputs.cache-hit != 'true'
+          uses: Swatinem/rust-cache@v2
+          with:
+              workspaces: |
+                  desktop/native/dll-injector
+                  desktop/native/extractor
+                  desktop/native/fs
+                  desktop/native/mod-manager
+                  desktop/native/mod-tools
+                  desktop/native/pe-padding-diversifier
+                  desktop/native/static-glb
+                  desktop/native/utils
+
+        - name: Configure vcpkg
+          if: steps.cache-native.outputs.cache-hit != 'true'
+          id: vcpkg
+          shell: pwsh
+          run: |
+              if (-not $env:VCPKG_INSTALLATION_ROOT) {
+                throw "VCPKG_INSTALLATION_ROOT is not set"
+              }
+              Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_ROOT=$($env:VCPKG_INSTALLATION_ROOT)"
+              Add-Content -Path $env:GITHUB_OUTPUT -Value "root=$($env:VCPKG_INSTALLATION_ROOT)"
+
+        - name: Cache vcpkg libarchive
+          if: steps.cache-native.outputs.cache-hit != 'true'
+          uses: actions/cache@v4
+          with:
+              path: |
+                  ${{ steps.vcpkg.outputs.root }}/installed/x64-windows-static
+                  ${{ steps.vcpkg.outputs.root }}/installed/vcpkg
+              key: vcpkg-libarchive-x64-windows-static
+
+        - name: Install libarchive
+          if: steps.cache-native.outputs.cache-hit != 'true'
+          shell: pwsh
+          run: vcpkg install libarchive:x64-windows-static
+
+        - name: Install dependencies
+          shell: pwsh
+          working-directory: desktop
+          run: pnpm install --frozen-lockfile
+
+        - name: Build native modules
+          if: steps.cache-native.outputs.cache-hit != 'true'
+          shell: pwsh
+          working-directory: desktop
+          run: pnpm run build:native
+
+        - name: Generate types
+          shell: pwsh
+          working-directory: desktop
+          run: pnpm build
+
+        - name: Lint
+          shell: pwsh
+          working-directory: desktop
+          run: pnpm lint
+
+        - name: Test
+          shell: pwsh
+          working-directory: desktop
+          run: pnpm test

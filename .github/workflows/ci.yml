@@ -1,0 +1,53 @@
+name: CI
+
+on:
+    pull_request:
+
+concurrency:
+    group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
+
+permissions:
+    contents: read
+
+jobs:
+    validate:
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        runs-on: windows-latest
+        env:
+            VCPKG_ROOT: C:\vcpkg
+        steps:
+            - name: Checkout desktop
+              uses: actions/checkout@v4
+              with:
+                  path: desktop
+
+            - name: Checkout backend
+              uses: actions/checkout@v4
+              with:
+                  repository: myparsleycat/nahida-backend
+                  path: backend
+                  token: ${{ secrets.NAHIDA_BACKEND_TOKEN }}
+                  persist-credentials: false
+
+            - name: Validate
+              uses: ./desktop/.github/actions/validate-desktop
+
+    fork-notice:
+        if: github.event.pull_request.head.repo.full_name != github.repository
+        runs-on: ubuntu-latest
+        steps:
+            - name: Skip fork PR validation
+              run: echo "Fork PRs cannot check out the private backend. Skipping validate."
+
+    ci:
+        if: always()
+        needs: [validate, fork-notice]
+        runs-on: ubuntu-latest
+        steps:
+            - name: Fail if validate failed
+              if: needs.validate.result == 'failure' || needs.validate.result == 'cancelled'
+              run: exit 1
+
+            - name: Pass
+              run: echo ok

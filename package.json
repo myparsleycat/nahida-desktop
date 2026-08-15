@@ -22,6 +22,7 @@
     "build:unpack": "pnpm run clean && pnpm run build && electron-builder --dir",
     "build:utils": "pnpm --dir native/utils run build",
     "build:win": "pnpm run clean && pnpm run build && electron-builder --win",
+    "check:release": "node scripts/check-release.mjs",
     "clean": "rimraf dist",
     "dev": "electron-vite dev",
     "docs:build": "vitepress build docs",

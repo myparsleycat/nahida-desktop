@@ -16,7 +16,44 @@ permissions:
     pull-requests: write
 
 jobs:
+    check-release:
+        runs-on: windows-latest
+        defaults:
+            run:
+                working-directory: desktop
+        outputs:
+            should_release: ${{ steps.check.outputs.should_release }}
+            next_version: ${{ steps.check.outputs.next_version }}
+            release_type: ${{ steps.check.outputs.release_type }}
+        steps:
+            - name: Checkout desktop
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  path: desktop
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v4
+              with:
+                  version: 11
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+                  cache-dependency-path: desktop/pnpm-lock.yaml
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Check if release is needed
+              id: check
+              run: node scripts/check-release.mjs
+
     release:
+        needs: check-release
+        if: needs.check-release.outputs.should_release == 'true'
         runs-on: windows-latest
         defaults:
             run:
@@ -40,86 +77,8 @@ jobs:
                   token: ${{ secrets.NAHIDA_BACKEND_TOKEN }}
                   persist-credentials: false
 
-            - name: Setup pnpm
-              uses: pnpm/action-setup@v4
-              with:
-                  version: 11
-
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 22
-                  cache: pnpm
-                  cache-dependency-path: desktop/pnpm-lock.yaml
-
-            - name: Cache built native modules
-              id: cache-native
-              uses: actions/cache@v4
-              with:
-                  path: |
-                      desktop/native/*/*.node
-                      desktop/native/*/index.js
-                      desktop/native/*/index.d.ts
-                      desktop/native/dll-injector/target/release/dll-injector.exe
-                  key: native-modules-${{ runner.os }}-${{ hashFiles('desktop/native/**/src/**', 'desktop/native/**/Cargo.toml', 'desktop/native/**/Cargo.lock', 'desktop/native/**/build.rs', 'desktop/native/**/package.json', 'desktop/pnpm-lock.yaml') }}
-
-            - name: Setup Rust
-              if: steps.cache-native.outputs.cache-hit != 'true'
-              uses: dtolnay/rust-toolchain@stable
-
-            - name: Cache Rust
-              if: steps.cache-native.outputs.cache-hit != 'true'
-              uses: Swatinem/rust-cache@v2
-              with:
-                  workspaces: |
-                      desktop/native/dll-injector
-                      desktop/native/extractor
-                      desktop/native/fs
-                      desktop/native/mod-manager
-                      desktop/native/mod-tools
-                      desktop/native/pe-padding-diversifier
-                      desktop/native/static-glb
-                      desktop/native/utils
-
-            - name: Configure vcpkg
-              if: steps.cache-native.outputs.cache-hit != 'true'
-              id: vcpkg
-              shell: pwsh
-              run: |
-                  if (-not $env:VCPKG_INSTALLATION_ROOT) {
-                    throw "VCPKG_INSTALLATION_ROOT is not set"
-                  }
-                  Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_ROOT=$($env:VCPKG_INSTALLATION_ROOT)"
-                  Add-Content -Path $env:GITHUB_OUTPUT -Value "root=$($env:VCPKG_INSTALLATION_ROOT)"
-
-            - name: Cache vcpkg libarchive
-              if: steps.cache-native.outputs.cache-hit != 'true'
-              uses: actions/cache@v4
-              with:
-                  path: |
-                      ${{ steps.vcpkg.outputs.root }}/installed/x64-windows-static
-                      ${{ steps.vcpkg.outputs.root }}/installed/vcpkg
-                  key: vcpkg-libarchive-x64-windows-static
-
-            - name: Install libarchive
-              if: steps.cache-native.outputs.cache-hit != 'true'
-              run: vcpkg install libarchive:x64-windows-static
-
-            - name: Install dependencies
-              run: pnpm install --frozen-lockfile
-
-            - name: Build native modules
-              if: steps.cache-native.outputs.cache-hit != 'true'
-              run: pnpm run build:native
-
-            - name: Generate types
-              run: pnpm build
-
-            - name: Lint
-              run: pnpm lint
-
-            - name: Test
-              run: pnpm test
+            - name: Validate
+              uses: ./desktop/.github/actions/validate-desktop
 
             - name: Release
               run: pnpm exec semantic-release
