@@ -52,10 +52,23 @@ jobs:
                   cache: pnpm
                   cache-dependency-path: desktop/pnpm-lock.yaml
 
+            - name: Cache built native modules
+              id: cache-native
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      desktop/native/*/*.node
+                      desktop/native/*/index.js
+                      desktop/native/*/index.d.ts
+                      desktop/native/dll-injector/target/release/dll-injector.exe
+                  key: native-modules-${{ runner.os }}-${{ hashFiles('desktop/native/**/src/**', 'desktop/native/**/Cargo.toml', 'desktop/native/**/Cargo.lock', 'desktop/native/**/build.rs', 'desktop/native/**/package.json', 'desktop/pnpm-lock.yaml') }}
+
             - name: Setup Rust
+              if: steps.cache-native.outputs.cache-hit != 'true'
               uses: dtolnay/rust-toolchain@stable
 
             - name: Cache Rust
+              if: steps.cache-native.outputs.cache-hit != 'true'
               uses: Swatinem/rust-cache@v2
               with:
                   workspaces: |
@@ -69,6 +82,7 @@ jobs:
                       desktop/native/utils
 
             - name: Configure vcpkg
+              if: steps.cache-native.outputs.cache-hit != 'true'
               id: vcpkg
               shell: pwsh
               run: |
@@ -79,6 +93,7 @@ jobs:
                   Add-Content -Path $env:GITHUB_OUTPUT -Value "root=$($env:VCPKG_INSTALLATION_ROOT)"
 
             - name: Cache vcpkg libarchive
+              if: steps.cache-native.outputs.cache-hit != 'true'
               uses: actions/cache@v4
               with:
                   path: |
@@ -87,12 +102,14 @@ jobs:
                   key: vcpkg-libarchive-x64-windows-static
 
             - name: Install libarchive
+              if: steps.cache-native.outputs.cache-hit != 'true'
               run: vcpkg install libarchive:x64-windows-static
 
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
 
             - name: Build native modules
+              if: steps.cache-native.outputs.cache-hit != 'true'
               run: pnpm run build:native
 
             - name: Generate types
