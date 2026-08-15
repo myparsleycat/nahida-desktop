@@ -25,6 +25,7 @@
     [
       "@semantic-release/github",
       {
+        "draftRelease": true,
         "assets": [
           "dist/Nahida-Desktop-Setup-*.exe",
           "dist/Nahida-Desktop-Setup-*.exe.blockmap",
