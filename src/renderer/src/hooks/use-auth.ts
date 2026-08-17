@@ -3,11 +3,6 @@ import type { Session } from "@shared/schemas/auth";
 import { useEffect } from "react";
 
 export function useInitializeAuth() {
-    const setSession = useGlobalStore((state) => state.setSession);
-    const setSessionInitialized = useGlobalStore((state) => state.setSessionInitialized);
-    const setBackendStatus = useGlobalStore((state) => state.setBackendStatus);
-    const setHasToken = useGlobalStore((state) => state.setHasToken);
-
     useEffect(() => {
         let mounted = true;
 
@@ -33,12 +28,24 @@ export function useInitializeAuth() {
                 console.error("Failed to load auth bootstrap state", error);
             }
 
+            if (!session && hasToken && backendStatus === "online") {
+                try {
+                    session = await window.api.invoke("auth:getSession");
+                } catch (error) {
+                    console.error("Failed to restore session after backend became online", error);
+                }
+            }
+
             if (!mounted) return;
 
-            setSession(session);
-            setHasToken(!!session || hasToken);
-            setBackendStatus(backendStatus);
-            setSessionInitialized(true);
+            const currentBackendStatus = globalStore.getState().backendStatus;
+            globalStore.setState({
+                session,
+                sessionInitialized: true,
+                hasToken: !!session || hasToken,
+                backendStatus:
+                    currentBackendStatus === "unknown" ? backendStatus : currentBackendStatus,
+            });
         };
 
         void loadSession();
@@ -46,7 +53,7 @@ export function useInitializeAuth() {
         return () => {
             mounted = false;
         };
-    }, [setSession, setSessionInitialized, setBackendStatus, setHasToken]);
+    }, []);
 }
 
 export function useAuth() {

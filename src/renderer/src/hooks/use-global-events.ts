@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { useGlobalStore } from "../store/global";
+import { globalStore, useGlobalStore } from "../store/global";
 
 export function useGlobalEvents(
     onPathSelectorModeSelect?: (data: {
@@ -19,6 +19,7 @@ export function useGlobalEvents(
     const setSession = useGlobalStore((state) => state.setSession);
     const setHasToken = useGlobalStore((state) => state.setHasToken);
     const setBackendStatus = useGlobalStore((state) => state.setBackendStatus);
+    const setPendingSessionRestore = useGlobalStore((state) => state.setPendingSessionRestore);
     const [listeners, setListeners] = useState<Map<string, () => void>>(new Map());
     const { i18n } = useTranslation();
 
@@ -57,16 +58,34 @@ export function useGlobalEvents(
         setListeners(new Map(listeners.set("auth:update", removeAuthListener)));
 
         const removeBackendStatusListener = window.api.on("backend:status", (status) => {
-            setBackendStatus(status);
+            const previousStatus = globalStore.getState().backendStatus;
+            const isColdStartRestore = status === "online" && previousStatus === "unknown";
+            if (isColdStartRestore) {
+                globalStore.setState({
+                    backendStatus: status,
+                    pendingSessionRestore: true,
+                });
+            } else {
+                setBackendStatus(status);
+            }
             if (status !== "online") return;
+            if (previousStatus !== "offline" && !isColdStartRestore) return;
 
             void (async () => {
                 try {
+                    if (isColdStartRestore) {
+                        await whenSessionInitialized();
+                        const state = globalStore.getState();
+                        if (state.session || !state.hasToken) return;
+                    }
+
                     const session = await window.api.invoke("auth:getSession");
                     setSession(session);
                     setHasToken(!!session || (await window.api.invoke("auth:hasToken")));
                 } catch (error) {
                     console.error("Failed to refresh session after backend recovery", error);
+                } finally {
+                    if (isColdStartRestore) setPendingSessionRestore(false);
                 }
             })();
         });
@@ -81,4 +100,21 @@ export function useGlobalEvents(
             removeAllListeners();
         };
     }, [onPathSelectorModeSelect, i18n]);
+}
+
+function whenSessionInitialized() {
+    if (globalStore.getState().sessionInitialized) return Promise.resolve();
+
+    return new Promise<void>((resolve) => {
+        const unsubscribe = globalStore.subscribe((state) => {
+            if (!state.sessionInitialized) return;
+            unsubscribe();
+            resolve();
+        });
+
+        if (globalStore.getState().sessionInitialized) {
+            unsubscribe();
+            resolve();
+        }
+    });
 }

@@ -33,12 +33,19 @@ export class DesktopHttpService {
     public async fetcher(url: string, options?: FetcherOptions) {
         const isNHD = this.isNHD(url);
         const isSessionRequest = URL.parse(url)?.pathname === "/api/auth/get-session";
-        const headers = {
-            ...(options?.headers instanceof Headers
+        const optionHeaders =
+            options?.headers instanceof Headers
                 ? Object.fromEntries(options.headers.entries())
-                : (options?.headers as Record<string, string> | undefined)),
-            ...(await this.getHeaders(url)),
-        };
+                : Array.isArray(options?.headers)
+                  ? Object.fromEntries(options.headers)
+                  : ((options?.headers as Record<string, string> | undefined) ?? {});
+        const hasAuthorization = Object.keys(optionHeaders).some(
+            (key) => key.toLowerCase() === "authorization",
+        );
+        // Keep a caller-supplied Authorization instead of resolving a newer token mid-request.
+        const headers = hasAuthorization
+            ? { ...optionHeaders, "User-Agent": `Nahida Desktop/${appVersion}` }
+            : { ...optionHeaders, ...(await this.getHeaders(url)) };
 
         try {
             const resp = await ky(url, {

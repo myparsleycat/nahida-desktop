@@ -2,7 +2,7 @@ import { appVersion } from "@main/const";
 import type { NahidaDesktop } from "@main/index";
 import { focus } from "@main/windows/utils";
 import { BACKEND_URL } from "@shared/const";
-import { SessionSchema } from "@shared/schemas/auth";
+import { SessionSchema, type Session } from "@shared/schemas/auth";
 import ky from "ky";
 import { parseServerSentEvents } from "parse-sse";
 import { Nullable, validate } from "valdex";
@@ -11,6 +11,9 @@ import { openExternal } from "./util";
 
 export class Auth {
     private desktop: NahidaDesktop;
+    private sessionInFlight: Promise<Session | null> | null = null;
+    private tokenMutationInFlight = Promise.resolve();
+    private tokenGeneration = 0;
 
     constructor(desktop: NahidaDesktop) {
         this.desktop = desktop;
@@ -26,10 +29,11 @@ export class Auth {
 
     public async saveToken(key: string) {
         const encryptedKey = this.desktop.lib.crypto.encryptString(key);
-        await this.desktop.lib.db.settings.upsert("token", encryptedKey);
+        await this.mutateToken(() => this.desktop.lib.db.settings.upsert("token", encryptedKey));
     }
 
     public async getToken() {
+        await this.tokenMutationInFlight;
         const key = await this.desktop.lib.db.settings.getValue("token");
         if (!key) {
             return null;
@@ -43,7 +47,18 @@ export class Auth {
     }
 
     public async removeToken() {
-        await this.desktop.lib.db.settings.updateValue("token", null);
+        await this.mutateToken(() => this.desktop.lib.db.settings.updateValue("token", null));
+    }
+
+    private async mutateToken(mutation: () => Promise<unknown>) {
+        this.sessionInFlight = null;
+        this.tokenGeneration++;
+        const queuedMutation = this.tokenMutationInFlight.then(mutation);
+        this.tokenMutationInFlight = queuedMutation.then(
+            () => undefined,
+            () => undefined,
+        );
+        await queuedMutation;
     }
 
     public async hasToken() {
@@ -51,18 +66,44 @@ export class Auth {
     }
 
     public async getSession() {
+        if (this.sessionInFlight) return this.sessionInFlight;
+
+        const fetchPromise = this.fetchSession();
+        this.sessionInFlight = fetchPromise;
+        try {
+            return await fetchPromise;
+        } finally {
+            if (this.sessionInFlight === fetchPromise) {
+                this.sessionInFlight = null;
+            }
+        }
+    }
+
+    private async fetchSession(): Promise<Session | null> {
+        const capturedGeneration = this.tokenGeneration;
         const token = await this.getToken();
+        if (this.tokenGeneration !== capturedGeneration) return this.fetchSession();
         if (!token) return null;
 
         const url = `${BACKEND_URL}/api/auth/get-session`;
-        const resp = await this.desktop.httpService.fetcher(url, { throwHttpErrors: false });
+        const resp = await this.desktop.httpService.fetcher(url, {
+            throwHttpErrors: false,
+            headers: { Authorization: `Bearer ${token}` },
+        });
+
+        // A newer token landed in flight; this response no longer belongs to the current session.
+        if (this.tokenGeneration !== capturedGeneration) return this.fetchSession();
+
         if (!resp.ok) {
-            if (resp.status === 401) await this.startLogout();
+            if (resp.status === 401) await this.startLogout(capturedGeneration);
+            if (this.tokenGeneration !== capturedGeneration) return this.fetchSession();
             return null;
         }
         const data = await resp.text();
+        if (this.tokenGeneration !== capturedGeneration) return this.fetchSession();
         if (data === "null") {
-            await this.startLogout();
+            await this.startLogout(capturedGeneration);
+            if (this.tokenGeneration !== capturedGeneration) return this.fetchSession();
             return null;
         }
         return SessionSchema.parse(JSON.parse(data));
@@ -154,8 +195,16 @@ export class Auth {
         }
     }
 
-    public async startLogout() {
+    public async startLogout(expectedGeneration?: number) {
+        // If a generation was provided, verify we're still on that generation
+        if (expectedGeneration !== undefined && this.tokenGeneration !== expectedGeneration) {
+            return;
+        }
+
         const token = await this.getToken();
+        if (expectedGeneration !== undefined && this.tokenGeneration !== expectedGeneration) {
+            return;
+        }
         await this.removeToken();
         this.desktop.ipc.broadcast("auth:update", null);
 

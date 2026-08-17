@@ -6,12 +6,7 @@ import { BACKEND_URL } from "@shared/const";
 import { isEmpty } from "es-toolkit/compat";
 
 import { desktop } from "./index";
-import {
-    decodeCborBody,
-    isCborContentType,
-    jsonResponseFrom,
-    readApiBody,
-} from "./lib/cbor-response";
+import { isCborContentType, jsonResponseFromBody } from "./lib/cbor-response";
 
 export const eden = treaty<App>(BACKEND_URL, {
     fetcher: (async (input: URL | RequestInfo, init: RequestInit | undefined) => {
@@ -25,10 +20,7 @@ export const eden = treaty<App>(BACKEND_URL, {
         const contentType = response.headers.get("Content-Type");
         if (isCborContentType(contentType)) {
             try {
-                return rewriteEdenBody(
-                    response,
-                    decodeCborBody(new Uint8Array(await response.arrayBuffer())),
-                );
+                return await jsonResponseFromBody(response, unminifyIfNeeded);
             } catch (error) {
                 desktop.logger.error(error, "EdenCborDecodeFailed");
                 const retryUrl = new URL(url);
@@ -42,16 +34,17 @@ export const eden = treaty<App>(BACKEND_URL, {
         }
 
         try {
-            return rewriteEdenBody(response, await readApiBody(response));
-        } catch {
-            return response;
+            return await jsonResponseFromBody(response, unminifyIfNeeded);
+        } catch (error) {
+            desktop.logger.error(error, "EdenBodyRewriteFailed");
+            throw error;
         }
     }) as typeof fetch,
     parseDate: false,
 });
 
-function rewriteEdenBody(response: Response, data: unknown) {
-    return jsonResponseFrom(response, isMinified(data) ? unminify(data) : data);
+function unminifyIfNeeded(data: unknown) {
+    return isMinified(data) ? unminify(data) : data;
 }
 
 export type Eden = typeof eden;
