@@ -177,7 +177,9 @@ export function TextureResizerForm({
         value={settings.operation}
         items={operationOptions}
         onValueChange={(value) => {
-          const operation = value as TextureResizeSettings["operation"];
+          if (value === null) return;
+          const operation = operationOptions.find((option) => option.value === value)?.value;
+          if (!operation) return;
           updateSettings({
             operation,
             upscaleScale: isTextureUpscaleOperation(operation)
