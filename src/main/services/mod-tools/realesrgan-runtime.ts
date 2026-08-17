@@ -1,4 +1,5 @@
-import { createWriteStream } from "node:fs";
+import { createHash } from "node:crypto";
+import { createReadStream, createWriteStream } from "node:fs";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 
@@ -18,6 +19,8 @@ export const REALESRGAN_RUNTIME_DIR_NAME = "realesrgan-ncnn-vulkan";
 export { REALESRGAN_BINARY_NAME };
 export const REALESRGAN_DOWNLOAD_URL =
     "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-windows.zip";
+export const REALESRGAN_ARCHIVE_SHA256 =
+    "abc02804e17982a3be33675e4d471e91ea374e65b70167abc09e31acb412802d";
 
 const INSTALLED_VERSION_KEY = "mod_tools:realesrgan-ncnn-vulkan:installed-version";
 const BINARY_PATH_KEY = "mod_tools:realesrgan-ncnn-vulkan:binary-path";
@@ -80,6 +83,13 @@ export class RealesrganRuntime {
         try {
             onProgress?.("download", 0);
             await this.downloadArchive(zipPath, (percent) => onProgress?.("download", percent));
+            const digest = createHash("sha256");
+            for await (const chunk of createReadStream(zipPath)) {
+                digest.update(chunk);
+            }
+            if (digest.digest("hex") !== REALESRGAN_ARCHIVE_SHA256) {
+                throw new Error("Downloaded Real-ESRGAN archive checksum mismatch.");
+            }
             onProgress?.("extract", null);
             await this.desktop.service.archive.extract(zipPath, extractDir);
             const layout = await this.resolveExtractedLayout(extractDir);
