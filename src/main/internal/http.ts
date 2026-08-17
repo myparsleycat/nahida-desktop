@@ -36,7 +36,9 @@ export class DesktopHttpService {
         const optionHeaders =
             options?.headers instanceof Headers
                 ? Object.fromEntries(options.headers.entries())
-                : ((options?.headers as Record<string, string> | undefined) ?? {});
+                : Array.isArray(options?.headers)
+                  ? Object.fromEntries(options.headers)
+                  : ((options?.headers as Record<string, string> | undefined) ?? {});
         const hasAuthorization = Object.keys(optionHeaders).some(
             (key) => key.toLowerCase() === "authorization",
         );

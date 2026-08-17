@@ -47,6 +47,26 @@ describe("DesktopHttpService", () => {
         );
     });
 
+    it("does not replace an Authorization header provided as a tuple array", async () => {
+        mocks.ky.mockResolvedValue(new Response("ok"));
+        const { service, getToken } = createService();
+
+        await service.fetcher("https://api.nahida.live/api/auth/get-session", {
+            headers: [["Authorization", "Bearer pinned-token"]],
+        });
+
+        expect(getToken).not.toHaveBeenCalled();
+        expect(mocks.ky).toHaveBeenCalledWith(
+            "https://api.nahida.live/api/auth/get-session",
+            expect.objectContaining({
+                headers: {
+                    Authorization: "Bearer pinned-token",
+                    "User-Agent": "Nahida Desktop/test-version",
+                },
+            }),
+        );
+    });
+
     it("resolves Authorization from the current token when the caller does not provide one", async () => {
         mocks.ky.mockResolvedValue(new Response("ok"));
         const { service, getToken } = createService();
