@@ -75,6 +75,7 @@ const DDPF_FOURCC = 0x4;
 const DDPF_RGB = 0x40;
 const DDSCAPS2_CUBEMAP = 0x200;
 const DDSD_MIPMAPCOUNT = 0x00020000;
+const REALESRGAN_PROCESS_TIMEOUT_MS = 10 * 60 * 1000;
 
 type TextureOutputFormat = (typeof ALL_OUTPUT_FORMATS)[number];
 
@@ -1181,6 +1182,14 @@ function runRealesrganProcess({
         );
 
         let stderr = "";
+        const timeout = setTimeout(() => {
+            child.kill();
+            reject(
+                new Error(
+                    `Real-ESRGAN timed out after ${REALESRGAN_PROCESS_TIMEOUT_MS}ms${stderr.trim() ? `: ${stderr.trim()}` : ""}`,
+                ),
+            );
+        }, REALESRGAN_PROCESS_TIMEOUT_MS);
         child.stderr?.on("data", (chunk: Buffer) => {
             const text = chunk.toString();
             stderr += text;
@@ -1192,8 +1201,12 @@ function runRealesrganProcess({
                 logger(text);
             }
         });
-        child.on("error", reject);
+        child.on("error", (error) => {
+            clearTimeout(timeout);
+            reject(error);
+        });
         child.on("close", (code) => {
+            clearTimeout(timeout);
             if (code === 0) {
                 resolve();
                 return;
