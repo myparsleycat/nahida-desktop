@@ -159,6 +159,9 @@ describe("TouchProfileService regeneration", () => {
                 },
             },
             service: {
+                xxmi: {
+                    getXXMIConfig: () => null,
+                },
                 mod: {
                     fn: {
                         enable: async (source: string) => {

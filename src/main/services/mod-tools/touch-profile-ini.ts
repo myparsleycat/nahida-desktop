@@ -20,7 +20,16 @@ export type TouchIniCompileInput = {
     assets: TouchGeneratedAssets[];
     namespaceToken: string;
     varPrefix: string;
+    useFrameNumberGuard?: boolean;
 };
+
+const FRAME_NUMBER_GUARD_MIN_VERSION = "1.0.2";
+
+export function supportsTouchFrameNumberGuard(deployedVersion: string | null | undefined) {
+    if (!deployedVersion) return false;
+    const comparison = compareTouchIniVersions(deployedVersion, FRAME_NUMBER_GUARD_MIN_VERSION);
+    return comparison !== null && comparison >= 0;
+}
 
 type InteractiveEntry = {
     draft: TouchComponentDraft;
@@ -68,6 +77,7 @@ export async function compileTouchIni(input: TouchIniCompileInput) {
         text,
         input.varPrefix,
         interactive.map((entry) => entry.component),
+        input.useFrameNumberGuard === true,
     );
     text = appendRuntime(text, input.varPrefix, interactive, interactive[0].asset.relativeDir);
 
@@ -209,7 +219,12 @@ function patchBlendSections(text: string, varPrefix: string, components: TouchCo
     return next;
 }
 
-function patchIbSections(text: string, varPrefix: string, components: TouchComponentAnalysis[]) {
+function patchIbSections(
+    text: string,
+    varPrefix: string,
+    components: TouchComponentAnalysis[],
+    useFrameNumberGuard: boolean,
+) {
     let next = text;
     const st = sectionToken(varPrefix);
     const groups = new Map<string, TouchComponentAnalysis[]>();
@@ -233,7 +248,7 @@ function patchIbSections(text: string, varPrefix: string, components: TouchCompo
         }
 
         const inject = group
-            .map((component) => buildIbInjection(component, varPrefix, st))
+            .map((component) => buildIbInjection(component, varPrefix, st, useFrameNumberGuard))
             .join("\n");
         const ibLine = section.body.match(/^\s*ib\s*=\s*.+$/im);
         if (ibLine) {
@@ -258,17 +273,23 @@ function patchIbSections(text: string, varPrefix: string, components: TouchCompo
     return next;
 }
 
-function buildIbInjection(component: TouchComponentAnalysis, varPrefix: string, st: string) {
+function buildIbInjection(
+    component: TouchComponentAnalysis,
+    varPrefix: string,
+    st: string,
+    useFrameNumberGuard: boolean,
+) {
     const id = token(component.id);
+    const frameToken = useFrameNumberGuard ? "FRAME_NUMBER" : "time";
     const lines = `
  if $${varPrefix}_detect_allowed == 1
 	run = CustomShader${st}Bake${id}
 	run = CustomShader${st}Detect${id}
 endif
 if $${varPrefix}_mode == 1
-	if time != $${varPrefix}_last_dispatch_${id}
+	if ${frameToken} != $${varPrefix}_last_dispatch_${id}
 		run = CustomShader${st}Jiggle${id}
-		$${varPrefix}_last_dispatch_${id} = time
+		$${varPrefix}_last_dispatch_${id} = ${frameToken}
 	endif
 	vb0 = Resource${st}TempVB${id}
 endif
@@ -916,6 +937,29 @@ function packedVectorLines(slot: number, values: number[]) {
 
 function formatIniNumber(value: number) {
     return Number(value.toFixed(6)).toString();
+}
+
+function compareTouchIniVersions(left: string, right: string) {
+    const leftParts = parseTouchIniVersionParts(left);
+    const rightParts = parseTouchIniVersionParts(right);
+    if (!leftParts || !rightParts) return null;
+
+    const maxLength = Math.max(leftParts.length, rightParts.length);
+    for (let index = 0; index < maxLength; index += 1) {
+        const leftValue = leftParts[index] ?? 0;
+        const rightValue = rightParts[index] ?? 0;
+        if (leftValue > rightValue) return 1;
+        if (leftValue < rightValue) return -1;
+    }
+    return 0;
+}
+
+function parseTouchIniVersionParts(version: string) {
+    const rawParts = version.replace(/^v/i, "").split(".");
+    if (rawParts.length === 0 || rawParts.some((part) => part.length === 0)) return null;
+    const parts = rawParts.map((part) => Number(part));
+    if (parts.some((part) => !Number.isFinite(part))) return null;
+    return parts;
 }
 
 function matchSection(text: string, header: string) {

@@ -42,7 +42,7 @@ import {
     DEFAULT_BONE_WEIGHT_THRESHOLD_MAX,
 } from "./touch-profile-bone";
 import { assertTouchProfileInputAllowed } from "./touch-profile-detection";
-import { compileTouchIni } from "./touch-profile-ini";
+import { compileTouchIni, supportsTouchFrameNumberGuard } from "./touch-profile-ini";
 import { normalizeTouchZoneSettings } from "./touch-profile-settings";
 import {
     TOUCH_CONFIDENCE_AUTO_APPLY_AVG,
@@ -1098,6 +1098,9 @@ export class TouchProfileService {
             assets,
             namespaceToken,
             varPrefix,
+            useFrameNumberGuard: supportsTouchFrameNumberGuard(
+                this.desktop.service.xxmi.getXXMIConfig()?.Packages.packages.XXMI?.deployed_version,
+            ),
         });
 
         this.broadcast({
