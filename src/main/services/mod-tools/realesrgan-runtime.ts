@@ -110,6 +110,7 @@ export class RealesrganRuntime {
     private async downloadArchive(zipPath: string, onPercent: (percent: number | null) => void) {
         const response = await ky.get(REALESRGAN_DOWNLOAD_URL, {
             timeout: 10 * 60 * 1000,
+            throwHttpErrors: false,
             headers: {
                 "User-Agent": "Nahida Desktop",
             },
