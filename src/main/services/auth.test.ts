@@ -146,4 +146,45 @@ describe("Auth token concurrency", () => {
         expect(settings.updateValue).not.toHaveBeenCalled();
         expect(broadcast).not.toHaveBeenCalled();
     });
+
+    it("deduplicates concurrent getSession calls started before the first fetch resolves", async () => {
+        const storedToken = "session-token";
+        const allowFetch = deferred();
+        const fetcher = vi.fn(async () => {
+            await allowFetch.promise;
+            return sessionResponse(storedToken);
+        });
+        const desktop = {
+            lib: {
+                crypto: {
+                    encryptString: (value: string) => value,
+                    decryptString: (value: string) => value,
+                },
+                db: {
+                    settings: {
+                        getValue: vi.fn(async () => storedToken),
+                        upsert: vi.fn(),
+                        updateValue: vi.fn(),
+                    },
+                },
+            },
+            httpService: { fetcher },
+            ipc: { broadcast: vi.fn() },
+            logger: { error: vi.fn() },
+        } as unknown as NahidaDesktop;
+        const auth = new Auth(desktop);
+
+        const firstSession = auth.getSession();
+        const secondSession = auth.getSession();
+        allowFetch.resolve();
+
+        await expect(firstSession).resolves.toMatchObject({
+            session: { token: storedToken },
+        });
+        await expect(secondSession).resolves.toMatchObject({
+            session: { token: storedToken },
+        });
+        expect(await firstSession).toBe(await secondSession);
+        expect(fetcher).toHaveBeenCalledOnce();
+    });
 });
