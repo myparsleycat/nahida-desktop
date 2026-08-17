@@ -12,6 +12,7 @@ import { openExternal } from "./util";
 export class Auth {
     private desktop: NahidaDesktop;
     private sessionInFlight: Promise<Session | null> | null = null;
+    private tokenMutationInFlight = Promise.resolve();
     private tokenGeneration = 0;
 
     constructor(desktop: NahidaDesktop) {
@@ -27,13 +28,12 @@ export class Auth {
     }
 
     public async saveToken(key: string) {
-        this.sessionInFlight = null;
-        this.tokenGeneration++;
         const encryptedKey = this.desktop.lib.crypto.encryptString(key);
-        await this.desktop.lib.db.settings.upsert("token", encryptedKey);
+        await this.mutateToken(() => this.desktop.lib.db.settings.upsert("token", encryptedKey));
     }
 
     public async getToken() {
+        await this.tokenMutationInFlight;
         const key = await this.desktop.lib.db.settings.getValue("token");
         if (!key) {
             return null;
@@ -47,9 +47,18 @@ export class Auth {
     }
 
     public async removeToken() {
+        await this.mutateToken(() => this.desktop.lib.db.settings.updateValue("token", null));
+    }
+
+    private async mutateToken(mutation: () => Promise<unknown>) {
         this.sessionInFlight = null;
         this.tokenGeneration++;
-        await this.desktop.lib.db.settings.updateValue("token", null);
+        const queuedMutation = this.tokenMutationInFlight.then(mutation);
+        this.tokenMutationInFlight = queuedMutation.then(
+            () => undefined,
+            () => undefined,
+        );
+        await queuedMutation;
     }
 
     public async hasToken() {
@@ -73,6 +82,7 @@ export class Auth {
     private async fetchSession() {
         const capturedGeneration = this.tokenGeneration;
         const token = await this.getToken();
+        if (this.tokenGeneration !== capturedGeneration) return null;
         if (!token) return null;
 
         const url = `${BACKEND_URL}/api/auth/get-session`;
@@ -188,6 +198,9 @@ export class Auth {
         }
 
         const token = await this.getToken();
+        if (expectedGeneration !== undefined && this.tokenGeneration !== expectedGeneration) {
+            return;
+        }
         await this.removeToken();
         this.desktop.ipc.broadcast("auth:update", null);
 
