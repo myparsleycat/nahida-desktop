@@ -96,11 +96,14 @@ export class Auth {
 
         if (!resp.ok) {
             if (resp.status === 401) await this.startLogout(capturedGeneration);
+            if (this.tokenGeneration !== capturedGeneration) return this.fetchSession();
             return null;
         }
         const data = await resp.text();
+        if (this.tokenGeneration !== capturedGeneration) return this.fetchSession();
         if (data === "null") {
             await this.startLogout(capturedGeneration);
+            if (this.tokenGeneration !== capturedGeneration) return this.fetchSession();
             return null;
         }
         return SessionSchema.parse(JSON.parse(data));

@@ -300,4 +300,118 @@ describe("Auth token concurrency", () => {
         expect(await firstSession).toBe(await secondSession);
         expect(fetcher).toHaveBeenCalledOnce();
     });
+
+    it("does not return null when a token is saved while 401 logout is in flight", async () => {
+        let storedToken: string | null = "old-token";
+        let tokenReads = 0;
+        const logoutReadStarted = deferred();
+        const allowLogoutRead = deferred();
+        const fetcher = vi.fn(
+            async (_url: string, options?: { headers?: Record<string, string> }) => {
+                const requestToken = options?.headers?.Authorization?.replace(/^Bearer /, "");
+                if (requestToken === "old-token") {
+                    return new Response(null, { status: 401 });
+                }
+                return sessionResponse(requestToken ?? "missing-token");
+            },
+        );
+        const settings = {
+            getValue: vi.fn(async () => {
+                tokenReads++;
+                if (tokenReads === 2) {
+                    logoutReadStarted.resolve();
+                    await allowLogoutRead.promise;
+                }
+                return storedToken;
+            }),
+            upsert: vi.fn(async (_key: string, value: string) => {
+                storedToken = value;
+            }),
+            updateValue: vi.fn(async (_key: string, value: null) => {
+                storedToken = value;
+            }),
+        };
+        const desktop = {
+            lib: {
+                crypto: {
+                    encryptString: (value: string) => value,
+                    decryptString: (value: string) => value,
+                },
+                db: { settings },
+            },
+            httpService: { fetcher },
+            ipc: { broadcast: vi.fn() },
+            logger: { error: vi.fn() },
+        } as unknown as NahidaDesktop;
+        const auth = new Auth(desktop);
+
+        const sessionPromise = auth.getSession();
+        await logoutReadStarted.promise;
+        await auth.saveToken("new-token");
+        allowLogoutRead.resolve();
+
+        await expect(sessionPromise).resolves.toMatchObject({
+            session: { token: "new-token" },
+        });
+        expect(storedToken).toBe("new-token");
+        expect(settings.updateValue).not.toHaveBeenCalled();
+        expect(fetcher).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not return null when a token is saved while a "null" session logout is in flight', async () => {
+        let storedToken: string | null = "old-token";
+        let tokenReads = 0;
+        const logoutReadStarted = deferred();
+        const allowLogoutRead = deferred();
+        const fetcher = vi.fn(
+            async (_url: string, options?: { headers?: Record<string, string> }) => {
+                const requestToken = options?.headers?.Authorization?.replace(/^Bearer /, "");
+                if (requestToken === "old-token") {
+                    return new Response("null", { status: 200 });
+                }
+                return sessionResponse(requestToken ?? "missing-token");
+            },
+        );
+        const settings = {
+            getValue: vi.fn(async () => {
+                tokenReads++;
+                if (tokenReads === 2) {
+                    logoutReadStarted.resolve();
+                    await allowLogoutRead.promise;
+                }
+                return storedToken;
+            }),
+            upsert: vi.fn(async (_key: string, value: string) => {
+                storedToken = value;
+            }),
+            updateValue: vi.fn(async (_key: string, value: null) => {
+                storedToken = value;
+            }),
+        };
+        const desktop = {
+            lib: {
+                crypto: {
+                    encryptString: (value: string) => value,
+                    decryptString: (value: string) => value,
+                },
+                db: { settings },
+            },
+            httpService: { fetcher },
+            ipc: { broadcast: vi.fn() },
+            logger: { error: vi.fn() },
+        } as unknown as NahidaDesktop;
+        const auth = new Auth(desktop);
+
+        const sessionPromise = auth.getSession();
+        await logoutReadStarted.promise;
+        await auth.saveToken("new-token");
+        allowLogoutRead.resolve();
+
+        await expect(sessionPromise).resolves.toMatchObject({
+            session: { token: "new-token" },
+        });
+        expect(storedToken).toBe("new-token");
+        expect(settings.updateValue).not.toHaveBeenCalled();
+        expect(fetcher).toHaveBeenCalledTimes(2);
+    });
 });
