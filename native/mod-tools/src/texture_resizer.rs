@@ -5,7 +5,7 @@ use napi::bindgen_prelude::{AsyncTask, Buffer};
 use napi::Task;
 use napi_derive::napi;
 use std::fs::{self, File};
-use std::io::{BufReader, BufWriter};
+use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 const MIN_DIMENSION: u32 = 1024;
@@ -159,7 +159,9 @@ impl Task for EncodeRgba8ToDdsTask {
 }
 
 #[napi]
-pub fn resize_textures(request: TextureResizeRequest) -> napi::Result<AsyncTask<TextureResizeTask>> {
+pub fn resize_textures(
+    request: TextureResizeRequest,
+) -> napi::Result<AsyncTask<TextureResizeTask>> {
     Ok(AsyncTask::new(TextureResizeTask {
         request: normalize_request(request)?,
     }))
@@ -354,14 +356,23 @@ fn collect_dds_files(root: &Path, files: &mut Vec<PathBuf>) -> std::io::Result<(
     Ok(())
 }
 
-fn resize_single_file(path: &Path, request: &NormalizedRequest) -> Result<TextureResizeFileResult, String> {
+fn resize_single_file(
+    path: &Path,
+    request: &NormalizedRequest,
+) -> Result<TextureResizeFileResult, String> {
     let file = File::open(path)
         .map_err(|error| format!("Failed to open DDS file '{}': {}", path.display(), error))?;
     let mut reader = BufReader::new(file);
     let dds = Dds::read(&mut reader)
         .map_err(|error| format!("Failed to read DDS file '{}': {}", path.display(), error))?;
-    let surface = Surface::from_dds(&dds)
-        .map_err(|error| format!("Failed to decode DDS metadata '{}': {}", path.display(), error))?;
+    drop(reader);
+    let surface = Surface::from_dds(&dds).map_err(|error| {
+        format!(
+            "Failed to decode DDS metadata '{}': {}",
+            path.display(),
+            error
+        )
+    })?;
 
     let original_width = surface.width;
     let original_height = surface.height;
@@ -406,14 +417,24 @@ fn resize_single_file(path: &Path, request: &NormalizedRequest) -> Result<Textur
         });
     };
 
-    let decoded = surface
-        .decode_rgbaf32()
-        .map_err(|error| format!("Failed to decode DDS pixels '{}': {}", path.display(), error))?;
+    let decoded = surface.decode_rgbaf32().map_err(|error| {
+        format!(
+            "Failed to decode DDS pixels '{}': {}",
+            path.display(),
+            error
+        )
+    })?;
     let output_surface = if target_width == original_width && target_height == original_height {
         decoded
     } else {
-        resize_surface_rgba32f(&decoded, surface.layers, surface.depth, target_width, target_height)
-            .map_err(|error| format!("Failed to resize DDS '{}': {}", path.display(), error))?
+        resize_surface_rgba32f(
+            &decoded,
+            surface.layers,
+            surface.depth,
+            target_width,
+            target_height,
+        )
+        .map_err(|error| format!("Failed to resize DDS '{}': {}", path.display(), error))?
     };
 
     let mipmaps = if surface.mipmaps > 1 {
@@ -441,16 +462,14 @@ fn resize_single_file(path: &Path, request: &NormalizedRequest) -> Result<Textur
         false
     };
 
-    let output = File::create(path)
-        .map_err(|error| format!("Failed to overwrite DDS file '{}': {}", path.display(), error))?;
-    let mut writer = BufWriter::new(output);
-    resized_dds
-        .write(&mut writer)
-        .map_err(|error| format!("Failed to write DDS file '{}': {}", path.display(), error))?;
+    write_dds_atomically(path, &resized_dds)?;
 
     let message = if request.operation == TextureOperation::Convert {
         Some("Format changed without resizing.".to_string())
-    } else if output_format != surface.image_format && target_width == original_width && target_height == original_height {
+    } else if output_format != surface.image_format
+        && target_width == original_width
+        && target_height == original_height
+    {
         Some("Texture format changed without resizing.".to_string())
     } else {
         None
@@ -481,11 +500,20 @@ fn decode_dds_to_rgba8_inner(path_value: &str) -> Result<DecodedDdsRgba8, String
     let mut reader = BufReader::new(file);
     let dds = Dds::read(&mut reader)
         .map_err(|error| format!("Failed to read DDS file '{}': {}", path.display(), error))?;
-    let surface = Surface::from_dds(&dds)
-        .map_err(|error| format!("Failed to decode DDS metadata '{}': {}", path.display(), error))?;
-    let decoded = surface
-        .decode_rgbaf32()
-        .map_err(|error| format!("Failed to decode DDS pixels '{}': {}", path.display(), error))?;
+    let surface = Surface::from_dds(&dds).map_err(|error| {
+        format!(
+            "Failed to decode DDS metadata '{}': {}",
+            path.display(),
+            error
+        )
+    })?;
+    let decoded = surface.decode_rgbaf32().map_err(|error| {
+        format!(
+            "Failed to decode DDS pixels '{}': {}",
+            path.display(),
+            error
+        )
+    })?;
     let image = decoded
         .get_image(0, 0, 0)
         .ok_or_else(|| "Missing base mip image data.".to_string())?;
@@ -561,13 +589,7 @@ fn encode_rgba8_to_dds_inner(
     } else {
         false
     };
-    let output = File::create(&path).map_err(|error| {
-        format!("Failed to overwrite DDS file '{}': {}", path.display(), error)
-    })?;
-    let mut writer = BufWriter::new(output);
-    output_dds
-        .write(&mut writer)
-        .map_err(|error| format!("Failed to write DDS file '{}': {}", path.display(), error))?;
+    write_dds_atomically(&path, &output_dds)?;
 
     Ok(EncodeRgba8ToDdsResult {
         path: path.to_string_lossy().to_string(),
@@ -596,7 +618,8 @@ fn resize_surface_rgba32f(
             let image = surface
                 .get_image(layer, depth_level, 0)
                 .ok_or_else(|| "Missing base mip image data.".to_string())?;
-            let resized = image::imageops::resize(&image, target_width, target_height, FilterType::Triangle);
+            let resized =
+                image::imageops::resize(&image, target_width, target_height, FilterType::Triangle);
             data.extend_from_slice(resized.as_raw());
         }
     }
@@ -609,6 +632,37 @@ fn resize_surface_rgba32f(
         mipmaps: 1,
         data,
     })
+}
+
+fn write_dds_atomically(path: &Path, dds: &Dds) -> Result<(), String> {
+    let temp_path = path.with_file_name(format!(
+        "{}.tmp",
+        path.file_name()
+            .map(|name| name.to_string_lossy())
+            .unwrap_or_default()
+    ));
+    let result = (|| {
+        let output = File::create(&temp_path).map_err(|error| {
+            format!(
+                "Failed to overwrite DDS file '{}': {}",
+                path.display(),
+                error
+            )
+        })?;
+        let mut writer = BufWriter::new(output);
+        dds.write(&mut writer)
+            .map_err(|error| format!("Failed to write DDS file '{}': {}", path.display(), error))?;
+        writer
+            .flush()
+            .map_err(|error| format!("Failed to write DDS file '{}': {}", path.display(), error))?;
+        drop(writer);
+        fs::rename(&temp_path, path)
+            .map_err(|error| format!("Failed to write DDS file '{}': {}", path.display(), error))
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temp_path);
+    }
+    result
 }
 
 fn create_backup_if_missing(path: &Path) -> Result<bool, String> {
@@ -631,11 +685,7 @@ fn backup_path(path: &Path) -> PathBuf {
     PathBuf::from(format!("{}.bak", path.to_string_lossy()))
 }
 
-fn calculate_target_dimensions(
-    width: u32,
-    height: u32,
-    mode: &ResizeMode,
-) -> Option<(u32, u32)> {
+fn calculate_target_dimensions(width: u32, height: u32, mode: &ResizeMode) -> Option<(u32, u32)> {
     let candidates = valid_downscale_candidates(width, height);
     if candidates.is_empty() {
         return None;
@@ -673,7 +723,8 @@ fn valid_downscale_candidates(width: u32, height: u32) -> Vec<(u32, u32)> {
         return Vec::new();
     }
 
-    let max_scale = (width / (ratio_width * DIMENSION_STEP)).min(height / (ratio_height * DIMENSION_STEP));
+    let max_scale =
+        (width / (ratio_width * DIMENSION_STEP)).min(height / (ratio_height * DIMENSION_STEP));
     if max_scale == 0 {
         return Vec::new();
     }
@@ -871,5 +922,50 @@ mod tests {
 
         assert_eq!(request.operation, TextureOperation::Convert);
         assert_eq!(request.output_format, Some(ImageFormat::BC7RgbaUnorm));
+    }
+
+    #[test]
+    fn write_dds_atomically_replaces_existing_file_without_leaving_tmp() {
+        let dir = std::env::temp_dir().join(format!(
+            "mod-tools-atomic-write-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("example.dds");
+        let temp_path = path.with_file_name("example.dds.tmp");
+
+        write_marker_dds(&path, 1);
+        write_dds_atomically(&path, &marker_dds(2)).unwrap();
+
+        let overwritten = Dds::read(&mut BufReader::new(File::open(&path).unwrap())).unwrap();
+        assert!(overwritten.data.iter().all(|byte| *byte == 2));
+        assert!(!temp_path.exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    fn marker_dds(marker: u8) -> Dds {
+        let mut dds = Dds::new_d3d(ddsfile::NewD3dParams {
+            height: 4,
+            width: 4,
+            depth: None,
+            format: ddsfile::D3DFormat::A8R8G8B8,
+            mipmap_levels: None,
+            caps2: None,
+        })
+        .unwrap();
+        dds.data.fill(marker);
+        dds
+    }
+
+    fn write_marker_dds(path: &Path, marker: u8) {
+        let dds = marker_dds(marker);
+        let mut writer = BufWriter::new(File::create(path).unwrap());
+        dds.write(&mut writer).unwrap();
+        writer.flush().unwrap();
     }
 }
