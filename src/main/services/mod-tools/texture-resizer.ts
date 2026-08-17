@@ -648,7 +648,11 @@ async function buildTextureListItem(
     const upscaleSkipReason = resolveUpscaleSkipReason(info, settings.upscaleScale);
     const canUpscale = upscaleSkipReason == null;
     const canResize = targetSize != null;
-    const canProcess = canResize || canConvertFormat || canUpscale;
+    const canProcess = isTextureUpscaleOperation(settings.operation)
+        ? canUpscale
+        : settings.operation === "convert"
+          ? canConvertFormat
+          : canResize;
 
     return {
         filePath,
