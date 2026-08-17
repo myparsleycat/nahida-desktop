@@ -4,13 +4,15 @@ use image_dds::{ImageFormat, Mipmaps, Quality, Surface, SurfaceRgba32Float};
 use napi::bindgen_prelude::{AsyncTask, Buffer};
 use napi::Task;
 use napi_derive::napi;
-use std::fs::{self, File};
-use std::io::{BufReader, BufWriter, Write};
+use std::fs::{self, File, OpenOptions};
+use std::io::{BufReader, BufWriter, ErrorKind, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 const MIN_DIMENSION: u32 = 1024;
 const DIMENSION_STEP: u32 = 1024;
 const DEFAULT_PERCENT: u32 = 50;
+static TEMP_DDS_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Debug)]
 #[napi(object)]
@@ -635,20 +637,14 @@ fn resize_surface_rgba32f(
 }
 
 fn write_dds_atomically(path: &Path, dds: &Dds) -> Result<(), String> {
-    let temp_path = path.with_file_name(format!(
-        "{}.tmp",
-        path.file_name()
-            .map(|name| name.to_string_lossy())
-            .unwrap_or_default()
-    ));
+    let (output, temp_path) = create_exclusive_sibling_temp(path).map_err(|error| {
+        format!(
+            "Failed to overwrite DDS file '{}': {}",
+            path.display(),
+            error
+        )
+    })?;
     let result = (|| {
-        let output = File::create(&temp_path).map_err(|error| {
-            format!(
-                "Failed to overwrite DDS file '{}': {}",
-                path.display(),
-                error
-            )
-        })?;
         let mut writer = BufWriter::new(output);
         dds.write(&mut writer)
             .map_err(|error| format!("Failed to write DDS file '{}': {}", path.display(), error))?;
@@ -663,6 +659,28 @@ fn write_dds_atomically(path: &Path, dds: &Dds) -> Result<(), String> {
         let _ = fs::remove_file(&temp_path);
     }
     result
+}
+
+fn create_exclusive_sibling_temp(path: &Path) -> std::io::Result<(File, PathBuf)> {
+    loop {
+        let temp_path = path.with_file_name(format!(
+            "{}.{}.{}.tmp",
+            path.file_name()
+                .map(|name| name.to_string_lossy())
+                .unwrap_or_default(),
+            std::process::id(),
+            TEMP_DDS_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)
+        {
+            Ok(file) => return Ok((file, temp_path)),
+            Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
 }
 
 fn create_backup_if_missing(path: &Path) -> Result<bool, String> {
@@ -936,14 +954,16 @@ mod tests {
         ));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("example.dds");
-        let temp_path = path.with_file_name("example.dds.tmp");
 
         write_marker_dds(&path, 1);
         write_dds_atomically(&path, &marker_dds(2)).unwrap();
 
         let overwritten = Dds::read(&mut BufReader::new(File::open(&path).unwrap())).unwrap();
         assert!(overwritten.data.iter().all(|byte| *byte == 2));
-        assert!(!temp_path.exists());
+        assert!(!fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(Result::ok)
+            .any(|entry| entry.file_name().to_string_lossy().ends_with(".tmp")));
 
         let _ = fs::remove_dir_all(&dir);
     }
