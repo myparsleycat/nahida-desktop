@@ -25,6 +25,7 @@ export const REALESRGAN_ARCHIVE_SHA256 =
 const INSTALLED_VERSION_KEY = "mod_tools:realesrgan-ncnn-vulkan:installed-version";
 const BINARY_PATH_KEY = "mod_tools:realesrgan-ncnn-vulkan:binary-path";
 const MODELS_PATH_KEY = "mod_tools:realesrgan-ncnn-vulkan:models-path";
+const DOWNLOAD_STALL_TIMEOUT_MS = 30_000;
 
 export class RealesrganRuntime {
     private installPromise: Promise<TextureUpscaleRuntimeStatus> | null = null;
@@ -118,8 +119,10 @@ export class RealesrganRuntime {
     }
 
     private async downloadArchive(zipPath: string, onPercent: (percent: number | null) => void) {
+        const abortController = new AbortController();
         const response = await ky.get(REALESRGAN_DOWNLOAD_URL, {
             timeout: 10 * 60 * 1000,
+            signal: abortController.signal,
             throwHttpErrors: false,
             headers: {
                 "User-Agent": "Nahida Desktop",
@@ -138,12 +141,25 @@ export class RealesrganRuntime {
         const hasLength = Number.isFinite(contentLength) && contentLength > 0;
         let received = 0;
         const source = webStreamToNodeReadable(response.body);
+        let stallTimer: ReturnType<typeof setTimeout> | undefined;
+        const resetStallTimer = () => {
+            clearTimeout(stallTimer);
+            stallTimer = setTimeout(() => {
+                abortController.abort();
+                source.destroy(new Error("Failed to download Real-ESRGAN runtime: stalled."));
+            }, DOWNLOAD_STALL_TIMEOUT_MS);
+        };
+
         source.on("data", (chunk: Buffer) => {
+            resetStallTimer();
             received += chunk.byteLength;
             onPercent(hasLength ? Math.min(100, (received / contentLength) * 100) : null);
         });
+        resetStallTimer();
 
-        await pipeline(source, createWriteStream(zipPath));
+        await pipeline(source, createWriteStream(zipPath)).finally(() => {
+            clearTimeout(stallTimer);
+        });
         onPercent(100);
     }
 
