@@ -405,6 +405,8 @@ describe("touch frame number guard version", () => {
         assert.equal(supportsTouchFrameNumberGuard("1.0.1"), false);
         assert.equal(supportsTouchFrameNumberGuard(""), false);
         assert.equal(supportsTouchFrameNumberGuard(undefined), false);
+        assert.equal(supportsTouchFrameNumberGuard("1..2"), false);
+        assert.equal(supportsTouchFrameNumberGuard("1.0.2."), false);
     });
 });
 

@@ -955,11 +955,10 @@ function compareTouchIniVersions(left: string, right: string) {
 }
 
 function parseTouchIniVersionParts(version: string) {
-    const parts = version
-        .replace(/^v/i, "")
-        .split(".")
-        .map((part) => Number(part));
-    if (parts.length === 0 || parts.some((part) => !Number.isFinite(part))) return null;
+    const rawParts = version.replace(/^v/i, "").split(".");
+    if (rawParts.length === 0 || rawParts.some((part) => part.length === 0)) return null;
+    const parts = rawParts.map((part) => Number(part));
+    if (parts.some((part) => !Number.isFinite(part))) return null;
     return parts;
 }
 
