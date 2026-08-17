@@ -401,19 +401,20 @@ export class TextureResizer {
             });
             const decoded = await decodeDdsToRgba8(filePath);
             if (decoded.layers > 1) {
+                const skipMessage = "Cubemap and layered DDS textures cannot be upscaled.";
+                this.emitUpscaleProgress({
+                    phase: "done",
+                    percent: 100,
+                    filePath,
+                    message: skipMessage,
+                });
                 return {
                     targetPath: filePath,
                     processed: 1,
                     updated: 0,
                     skipped: 1,
                     failed: 0,
-                    files: [
-                        buildSkippedFileResult(
-                            filePath,
-                            info,
-                            "Cubemap and layered DDS textures cannot be upscaled.",
-                        ),
-                    ],
+                    files: [buildSkippedFileResult(filePath, info, skipMessage)],
                 };
             }
 
@@ -423,19 +424,20 @@ export class TextureResizer {
                 decoded.format,
             );
             if (outputFormat == null) {
+                const skipMessage = "This DDS format cannot be re-encoded after upscaling.";
+                this.emitUpscaleProgress({
+                    phase: "done",
+                    percent: 100,
+                    filePath,
+                    message: skipMessage,
+                });
                 return {
                     targetPath: filePath,
                     processed: 1,
                     updated: 0,
                     skipped: 1,
                     failed: 0,
-                    files: [
-                        buildSkippedFileResult(
-                            filePath,
-                            info,
-                            "This DDS format cannot be re-encoded after upscaling.",
-                        ),
-                    ],
+                    files: [buildSkippedFileResult(filePath, info, skipMessage)],
                 };
             }
 
