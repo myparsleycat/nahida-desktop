@@ -422,6 +422,7 @@ export class TextureResizer {
                 settings.operation,
                 settings.outputFormat,
                 decoded.format,
+                info.colorSpace,
             );
             if (outputFormat == null) {
                 const skipMessage = "This DDS format cannot be re-encoded after upscaling.";
@@ -1063,15 +1064,19 @@ export function resolveUpscaleOutputFormat(
     operation: TextureResizeOperation,
     requestedOutputFormat: string,
     decodedFormat: string,
+    colorSpace: TextureColorSpace,
 ) {
-    if (operation === "upscale_and_convert") {
-        const requested = normalizeOutputFormat(requestedOutputFormat);
-        if (requested) {
-            return requested;
-        }
+    const availableOutputFormats = resolveAvailableOutputFormats(colorSpace);
+    if (
+        operation === "upscale_and_convert" &&
+        availableOutputFormats.includes(requestedOutputFormat as TextureOutputFormat)
+    ) {
+        return requestedOutputFormat;
     }
 
-    return ALL_OUTPUT_FORMATS.includes(decodedFormat as TextureOutputFormat) ? decodedFormat : null;
+    return availableOutputFormats.includes(decodedFormat as TextureOutputFormat)
+        ? decodedFormat
+        : null;
 }
 
 export function resolveUpscaleSkipReason(

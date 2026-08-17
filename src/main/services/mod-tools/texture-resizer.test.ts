@@ -95,6 +95,7 @@ describe("texture resizer settings", () => {
                 "upscale",
                 "DXGI_FORMAT_BC7_UNORM_SRGB",
                 "DXGI_FORMAT_BC1_UNORM",
+                "linear",
             ),
         ).toBe("DXGI_FORMAT_BC1_UNORM");
         expect(
@@ -102,8 +103,27 @@ describe("texture resizer settings", () => {
                 "upscale_and_convert",
                 "DXGI_FORMAT_BC7_UNORM_SRGB",
                 "DXGI_FORMAT_BC1_UNORM",
+                "srgb",
             ),
         ).toBe("DXGI_FORMAT_BC7_UNORM_SRGB");
-        expect(resolveUpscaleOutputFormat("upscale", "", "DXGI_FORMAT_B8G8R8X8_UNORM")).toBeNull();
+        expect(
+            resolveUpscaleOutputFormat("upscale", "", "DXGI_FORMAT_B8G8R8X8_UNORM", "linear"),
+        ).toBeNull();
+        expect(
+            resolveUpscaleOutputFormat(
+                "upscale_and_convert",
+                "DXGI_FORMAT_BC7_UNORM",
+                "DXGI_FORMAT_BC1_UNORM_SRGB",
+                "srgb",
+            ),
+        ).toBe("DXGI_FORMAT_BC1_UNORM_SRGB");
+        expect(
+            resolveUpscaleOutputFormat(
+                "upscale_and_convert",
+                "DXGI_FORMAT_BC7_UNORM",
+                "DXGI_FORMAT_BC1_UNORM",
+                "srgb",
+            ),
+        ).toBeNull();
     });
 });
