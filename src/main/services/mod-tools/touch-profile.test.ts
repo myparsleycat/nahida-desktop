@@ -29,7 +29,11 @@ import {
     assertTouchProfileDetectionAllowed,
     inspectTouchProfileInput,
 } from "./touch-profile-detection";
-import { buildTouchRuntimeZoneOverrides, compileTouchIni } from "./touch-profile-ini";
+import {
+    buildTouchRuntimeZoneOverrides,
+    compileTouchIni,
+    supportsTouchFrameNumberGuard,
+} from "./touch-profile-ini";
 import {
     buildAllViewTransforms,
     buildViewTransform,
@@ -255,10 +259,16 @@ describe("touch profile INI generation", () => {
         const sourceIniPath = path.join(root, "source.ini");
         const targetIniPath = path.join(root, "Body", "target.ini");
         const resourceDir = path.join(root, "Resources", "IM");
-        const component = makeTouchComponent(3);
+        const component = {
+            ...makeTouchComponent(3),
+            ibSectionName: "BodyA",
+        };
         fs.mkdirSync(path.dirname(targetIniPath));
         fs.mkdirSync(resourceDir, { recursive: true });
-        fs.writeFileSync(sourceIniPath, "[Constants]\n\n[Present]\n");
+        fs.writeFileSync(
+            sourceIniPath,
+            "[Constants]\n\n[Present]\n\n[TextureOverrideBodyA]\nib = ResourceBodyA\n",
+        );
 
         await compileTouchIni({
             sourceIniPath,
@@ -313,7 +323,88 @@ describe("touch profile INI generation", () => {
         assert.match(ini, /filename = \.\.\/Resources\/IM\/mask0\.buf/);
         assert.match(ini, /filename = \.\.\/Resources\/IM\/object-map\.buf/);
         assert.match(ini, /filename = \.\.\/Resources\/IM\/params\.buf/);
+        assert.match(ini, /if time != \$nhd_touch_test_last_dispatch_bodyPosition/);
+        assert.doesNotMatch(ini, /FRAME_NUMBER != \$nhd_touch_test_last_dispatch_bodyPosition/);
         fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    it("uses FRAME_NUMBER for the per-frame jiggle guard when requested", async () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), "touch-profile-ini-frame-"));
+        const sourceIniPath = path.join(root, "source.ini");
+        const targetIniPath = path.join(root, "target.ini");
+        const resourceDir = path.join(root, "Resources", "IM");
+        const component = {
+            ...makeTouchComponent(3),
+            ibSectionName: "BodyA",
+        };
+        fs.mkdirSync(resourceDir, { recursive: true });
+        fs.writeFileSync(
+            sourceIniPath,
+            "[Constants]\n\n[Present]\n\n[TextureOverrideBodyA]\nib = ResourceBodyA\n",
+        );
+
+        await compileTouchIni({
+            sourceIniPath,
+            targetIniPath,
+            analysis: {
+                modRoot: root,
+                sourceRoot: root,
+                modRootRelativeToSource: "",
+                iniPath: sourceIniPath,
+                iniRelativePath: "source.ini",
+                sourceFilesRelativePaths: ["source.ini"],
+                supportGrade: "A",
+                supportReasons: [],
+                components: [component],
+                meshHash: "mesh",
+                iniHash: "ini",
+            },
+            drafts: [
+                {
+                    ...createSettingsDraft(0, "normal"),
+                    componentId: component.id,
+                },
+            ],
+            assets: [
+                {
+                    componentId: component.id,
+                    assetPrefix: "Body",
+                    relativeDir: "Resources/IM",
+                    maskPaths: ["mask0.buf", "mask1.buf", "mask2.buf"],
+                    objectMapPaths: [
+                        {
+                            label: "main",
+                            relativePath: "object-map.buf",
+                            absolutePath: path.join(resourceDir, "object-map.buf"),
+                        },
+                    ],
+                    paramsRelativePath: "params.buf",
+                    paramsAbsolutePath: path.join(resourceDir, "params.buf"),
+                    previewRelativePath: "preview.png",
+                    previewAbsolutePath: path.join(resourceDir, "preview.png"),
+                    masks: new Float32Array(),
+                } satisfies TouchGeneratedAssets,
+            ],
+            namespaceToken: "test",
+            varPrefix: "nhd_touch_test",
+            useFrameNumberGuard: true,
+        });
+
+        const ini = fs.readFileSync(targetIniPath, "utf8");
+        assert.match(ini, /if FRAME_NUMBER != \$nhd_touch_test_last_dispatch_bodyPosition/);
+        assert.match(ini, /\$nhd_touch_test_last_dispatch_bodyPosition = FRAME_NUMBER/);
+        assert.doesNotMatch(ini, /if time != \$nhd_touch_test_last_dispatch_bodyPosition/);
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+});
+
+describe("touch frame number guard version", () => {
+    it("enables FRAME_NUMBER only for deployed XXMI 1.0.2 and newer", () => {
+        assert.equal(supportsTouchFrameNumberGuard("1.0.2"), true);
+        assert.equal(supportsTouchFrameNumberGuard("v1.0.3"), true);
+        assert.equal(supportsTouchFrameNumberGuard("1.0.1"), false);
+        assert.equal(supportsTouchFrameNumberGuard(""), false);
+        assert.equal(supportsTouchFrameNumberGuard(undefined), false);
     });
 });
 
