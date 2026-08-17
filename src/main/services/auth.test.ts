@@ -147,6 +147,119 @@ describe("Auth token concurrency", () => {
         expect(broadcast).not.toHaveBeenCalled();
     });
 
+    it("does not drop a session when a token is saved after getToken but before the request finishes", async () => {
+        let storedToken: string | null = "old-token";
+        let auth!: Auth;
+        const fetchStarted = deferred();
+        const allowFetch = deferred();
+        const fetcher = vi.fn(
+            async (_url: string, options?: { headers?: Record<string, string> }) => {
+                fetchStarted.resolve();
+                await allowFetch.promise;
+                const requestToken = options?.headers?.Authorization?.replace(/^Bearer /, "");
+                return sessionResponse(requestToken ?? "missing-token");
+            },
+        );
+        const desktop = {
+            lib: {
+                crypto: {
+                    encryptString: (value: string) => value,
+                    decryptString: (value: string) => value,
+                },
+                db: {
+                    settings: {
+                        getValue: vi.fn(async () => storedToken),
+                        upsert: vi.fn(async (_key: string, value: string) => {
+                            storedToken = value;
+                        }),
+                        updateValue: vi.fn(async (_key: string, value: null) => {
+                            storedToken = value;
+                        }),
+                    },
+                },
+            },
+            httpService: { fetcher },
+            ipc: { broadcast: vi.fn() },
+            logger: { error: vi.fn() },
+        } as unknown as NahidaDesktop;
+        auth = new Auth(desktop);
+
+        const sessionPromise = auth.getSession();
+        await fetchStarted.promise;
+        await auth.saveToken("new-token");
+        allowFetch.resolve();
+
+        await expect(sessionPromise).resolves.toMatchObject({
+            session: { token: "new-token" },
+        });
+        expect(storedToken).toBe("new-token");
+        expect(desktop.lib.db.settings.updateValue).not.toHaveBeenCalled();
+        expect(fetcher).toHaveBeenCalledTimes(2);
+        expect(fetcher).toHaveBeenNthCalledWith(
+            1,
+            expect.stringContaining("/api/auth/get-session"),
+            expect.objectContaining({ headers: { Authorization: "Bearer old-token" } }),
+        );
+        expect(fetcher).toHaveBeenNthCalledWith(
+            2,
+            expect.stringContaining("/api/auth/get-session"),
+            expect.objectContaining({ headers: { Authorization: "Bearer new-token" } }),
+        );
+    });
+
+    it("does not drop a session when a token is saved while getToken is waiting", async () => {
+        let storedToken: string | null = "old-token";
+        const readStarted = deferred();
+        const allowRead = deferred();
+        let blockNextRead = true;
+        const fetcher = vi.fn(
+            async (_url: string, options?: { headers?: Record<string, string> }) => {
+                const requestToken = options?.headers?.Authorization?.replace(/^Bearer /, "");
+                return sessionResponse(requestToken ?? "missing-token");
+            },
+        );
+        const settings = {
+            getValue: vi.fn(async () => {
+                if (blockNextRead) {
+                    blockNextRead = false;
+                    readStarted.resolve();
+                    await allowRead.promise;
+                }
+                return storedToken;
+            }),
+            upsert: vi.fn(async (_key: string, value: string) => {
+                storedToken = value;
+            }),
+            updateValue: vi.fn(async (_key: string, value: null) => {
+                storedToken = value;
+            }),
+        };
+        const desktop = {
+            lib: {
+                crypto: {
+                    encryptString: (value: string) => value,
+                    decryptString: (value: string) => value,
+                },
+                db: { settings },
+            },
+            httpService: { fetcher },
+            ipc: { broadcast: vi.fn() },
+            logger: { error: vi.fn() },
+        } as unknown as NahidaDesktop;
+        const auth = new Auth(desktop);
+
+        const sessionPromise = auth.getSession();
+        await readStarted.promise;
+        await auth.saveToken("new-token");
+        allowRead.resolve();
+
+        await expect(sessionPromise).resolves.toMatchObject({
+            session: { token: "new-token" },
+        });
+        expect(storedToken).toBe("new-token");
+        expect(settings.updateValue).not.toHaveBeenCalled();
+    });
+
     it("deduplicates concurrent getSession calls started before the first fetch resolves", async () => {
         const storedToken = "session-token";
         const allowFetch = deferred();

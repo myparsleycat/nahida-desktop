@@ -79,19 +79,20 @@ export class Auth {
         }
     }
 
-    private async fetchSession() {
+    private async fetchSession(): Promise<Session | null> {
         const capturedGeneration = this.tokenGeneration;
         const token = await this.getToken();
-        if (this.tokenGeneration !== capturedGeneration) return null;
+        if (this.tokenGeneration !== capturedGeneration) return this.fetchSession();
         if (!token) return null;
 
         const url = `${BACKEND_URL}/api/auth/get-session`;
-        const resp = await this.desktop.httpService.fetcher(url, { throwHttpErrors: false });
+        const resp = await this.desktop.httpService.fetcher(url, {
+            throwHttpErrors: false,
+            headers: { Authorization: `Bearer ${token}` },
+        });
 
-        // Check if token was changed while request was in flight
-        if (this.tokenGeneration !== capturedGeneration) {
-            return null;
-        }
+        // A newer token landed in flight; this response no longer belongs to the current session.
+        if (this.tokenGeneration !== capturedGeneration) return this.fetchSession();
 
         if (!resp.ok) {
             if (resp.status === 401) await this.startLogout(capturedGeneration);
