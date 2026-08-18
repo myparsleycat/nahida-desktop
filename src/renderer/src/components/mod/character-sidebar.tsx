@@ -38,6 +38,7 @@ import { Input } from "@renderer/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import { useConfirmTrash } from "@renderer/hooks/use-confirm-trash";
 import { useDelayedSkeleton } from "@renderer/hooks/use-delayed-skeleton";
+import { useGames } from "@renderer/hooks/use-mod-data";
 import { useSidebarLayoutSetting } from "@renderer/hooks/use-settings";
 import { setSetting } from "@renderer/lib/settings";
 import { useModStore } from "@renderer/store/mod";
@@ -49,12 +50,13 @@ import {
   ArrowDownIcon,
   ArrowUpDownIcon,
   ArrowUpIcon,
+  EllipsisIcon,
+  FolderPlus,
   FolderXIcon,
   LayoutGridIcon,
   ListIcon,
   Loader2Icon,
   Search,
-  SlidersHorizontalIcon,
 } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -123,6 +125,8 @@ export const CharacterSidebar = memo(function CharacterSidebar({
   const markUserSelectedDuringDownload = useModStore((s) => s.markUserSelectedDuringDownload);
   const selectedGame = useModStore((s) => s.selectedGame);
   const selectedGroup = useModStore((s) => s.selectedGroup);
+  const { data: games = [] } = useGames();
+  const selectedGameConfig = games.find((game) => game.game === selectedGame);
   const setExpandedGroup = useModStore((s) => s.setExpandedGroup);
   const [searchTerm, setSearchTerm] = useState("");
   const sortKey = useModStore((s) => s.folderSortKey);
@@ -456,19 +460,37 @@ export const CharacterSidebar = memo(function CharacterSidebar({
                         type="button"
                         size="icon"
                         variant="ghost"
-                        aria-label={t("page.mod.character-sidebar.sort.label")}
+                        aria-label={t("page.mod.character-sidebar.more-options")}
                       />
                     }
                   />
                 }
               >
-                <SlidersHorizontalIcon />
+                <EllipsisIcon />
               </TooltipTrigger>
               <TooltipContent side="bottom">
-                {t("page.mod.character-sidebar.sort.label")}
+                {t("page.mod.character-sidebar.more-options")}
               </TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="end" className="w-56" finalFocus={false}>
+              <DropdownMenuItem
+                disabled={!selectedGameConfig?.modFolderPath}
+                onClick={() => {
+                  if (!selectedGameConfig?.modFolderPath) {
+                    return;
+                  }
+
+                  handleCreateFolderOpen({
+                    name: selectedGameConfig.game,
+                    path: selectedGameConfig.modFolderPath,
+                    mods: [],
+                  });
+                }}
+              >
+                <FolderPlus />
+                {t("page.mod.character-sidebar.create-folder")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                   <ArrowUpDownIcon />

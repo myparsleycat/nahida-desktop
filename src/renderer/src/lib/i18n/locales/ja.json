@@ -283,6 +283,7 @@
           "ascending": "昇順",
           "descending": "降順"
         },
+        "more-options": "その他",
         "hide-empty-folders": "空のフォルダーを非表示",
         "toggle-layout": "{{mode}}に切り替え",
         "active-mod-count": "有効 {{enabled}} 件 / 全 {{total}} 件",

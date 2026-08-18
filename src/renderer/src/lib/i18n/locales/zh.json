@@ -282,6 +282,7 @@
           "ascending": "升序",
           "descending": "降序"
         },
+        "more-options": "更多选项",
         "hide-empty-folders": "隐藏空文件夹",
         "toggle-layout": "切换到{{mode}}",
         "active-mod-count": "已启用 {{enabled}} 个 / 共 {{total}} 个",
