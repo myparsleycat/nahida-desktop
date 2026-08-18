@@ -538,19 +538,14 @@ export interface Transfer {
 
 export type TransferWithoutData = Omit<Transfer, "data">;
 
-export const MERGE_PACK_FAMILIES = [
-    "ordinary",
-    "in_mod_toggle",
-    "classic_merge",
-    "namespace_merge",
-    "support",
-] as const;
+export type MergePackFamily =
+    | "ordinary"
+    | "in_mod_toggle"
+    | "classic_merge"
+    | "namespace_merge"
+    | "support";
 
-export type MergePackFamily = (typeof MERGE_PACK_FAMILIES)[number];
-
-export const MERGE_DIALECTS = ["gimi", "srmi", "zzmi", "wwmi", "efmi", "unknown"] as const;
-
-export type MergeDialect = (typeof MERGE_DIALECTS)[number];
+export type MergeDialect = "gimi" | "srmi" | "zzmi" | "wwmi" | "efmi" | "unknown";
 
 export interface MergePackClassification {
     path: string;
@@ -570,13 +565,9 @@ export interface ClassifyMergePacksResult {
     warnings: string[];
 }
 
-export const MERGE_PLACEMENTS = ["in_place", "new_folder"] as const;
+export type MergePlacement = "in_place" | "new_folder";
 
-export type MergePlacement = (typeof MERGE_PLACEMENTS)[number];
-
-export const MERGE_ENGINES = ["classic", "namespace"] as const;
-
-export type MergeEngine = (typeof MERGE_ENGINES)[number];
+export type MergeEngine = "classic" | "namespace";
 
 export type MergePlanLeaf = {
     kind: "leaf";

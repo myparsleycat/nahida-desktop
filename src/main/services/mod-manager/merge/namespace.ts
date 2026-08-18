@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import fg from "fast-glob";
 import fse from "fs-extra";
 
 import {
@@ -11,6 +12,7 @@ import {
     parseIniText,
     serializeIni,
 } from "./ini-text";
+import { ensureMergeBackup, recordFileWrite, type RollbackAction } from "./rollback";
 
 export async function writeNamespaceMerge(options: {
     masterDir: string;
@@ -20,11 +22,14 @@ export async function writeNamespaceMerge(options: {
     backKey: string;
     includeVanilla: boolean;
     existingMasterPath?: string;
+    created?: RollbackAction[];
 }) {
+    const created = options.created ?? [];
     const wrapSources = await Promise.all(
         options.sources.map(async (source) => {
-            await ensureBackup(source.iniPath);
+            await ensureMergeBackup(source.iniPath, created);
             const text = await unwrapNamespace(await fse.readFile(source.iniPath, "utf8"));
+            await recordFileWrite(source.iniPath, created);
             await fse.writeFile(
                 source.iniPath,
                 wrapHashedSections(text, options.name, source.index),
@@ -38,9 +43,7 @@ export async function writeNamespaceMerge(options: {
     const positionHash = firstHashSource
         ? extractPositionHash(await fse.readFile(firstHashSource, "utf8"))
         : null;
-    const swapCount = options.includeVanilla
-        ? Math.max(...options.sources.map((source) => source.index), 0) + 1
-        : options.sources.length;
+    const swapCount = Math.max(...options.sources.map((source) => source.index), 0) + 1;
     const swapValues = Array.from({ length: swapCount }, (_, index) => String(index)).join(",");
     const listed = [
         ...(options.existingMasterPath
@@ -49,8 +52,9 @@ export async function writeNamespaceMerge(options: {
         ...wrapSources,
     ];
 
+    const uniqueListed = [...new Set(listed)];
     const master = [
-        `; Merged Mod: ${[...new Set(listed)].join(", ")}`,
+        ...uniqueListed.map((entry) => `; Merged Mod: ${entry}`),
         `namespace = ${options.name}\\Master`,
         "",
         "; Constants ---------------------------",
@@ -80,6 +84,7 @@ export async function writeNamespaceMerge(options: {
     ].join("\n");
 
     const masterPath = path.join(options.masterDir, `Master${options.name}.ini`);
+    await recordFileWrite(masterPath, created);
     await fse.writeFile(masterPath, master, "utf8");
     return masterPath;
 }
@@ -97,26 +102,18 @@ export async function collectNamespaceChildren(masterPath: string) {
     const pattern = token
         ? new RegExp(`\\$\\\\${escapeRegExp(token)}\\\\Master\\\\swapvar`, "i")
         : /\$\\[^\\\s]+\\Master\\swapvar/i;
-    const walk = await import("fast-glob").then((mod) =>
-        mod.default("**/*.ini", {
-            cwd: masterDir,
-            absolute: true,
-            onlyFiles: true,
-            caseSensitiveMatch: false,
-        }),
-    );
+    const walk = await fg("**/*.ini", {
+        cwd: masterDir,
+        absolute: true,
+        onlyFiles: true,
+        caseSensitiveMatch: false,
+    });
     return walk.filter((candidate) => {
         if (path.resolve(candidate) === path.resolve(masterPath)) return false;
         if (!fse.pathExistsSync(candidate)) return false;
         const child = fse.readFileSync(candidate, "utf8");
         return pattern.test(child) || hasMasterSwapRef(child);
     });
-}
-
-async function ensureBackup(iniPath: string) {
-    const backupPath = path.join(path.dirname(iniPath), `DISABLED${path.basename(iniPath)}`);
-    if (await fse.pathExists(backupPath)) return;
-    await fse.copy(iniPath, backupPath);
 }
 
 export async function unwrapNamespace(text: string) {
@@ -139,6 +136,13 @@ function unwrapSectionLines(lines: ReturnType<typeof parseIniText>["sections"][n
         }
         if (trimmed.startsWith("if ") && /\$\\[^\\\s]+\\master\\swapvar/i.test(line.raw)) {
             depth += 1;
+            continue;
+        }
+        if (
+            depth === 1 &&
+            trimmed.startsWith("else if ") &&
+            /\$\\[^\\\s]+\\master\\swapvar/i.test(line.raw)
+        ) {
             continue;
         }
         if (depth > 0 && (trimmed.startsWith("if ") || trimmed.startsWith("else if "))) {
@@ -175,7 +179,7 @@ export function wrapHashedSections(text: string, name: string, index: number) {
         const trimmed = raw.trim().toLowerCase();
         if (
             wrapping &&
-            (raw.startsWith("[") || trimmed.startsWith("hash =") || trimmed.startsWith("hash="))
+            (trimmed.startsWith("[") || trimmed.startsWith("hash =") || trimmed.startsWith("hash="))
         ) {
             flush();
         }

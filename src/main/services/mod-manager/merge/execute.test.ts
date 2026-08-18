@@ -203,9 +203,119 @@ describe("merge writers together", () => {
         assert.equal(await fse.pathExists(path.join(aDir, "MasterKlee.ini")), true);
         assert.equal(await fse.pathExists(path.join(aDir, "MasterAlpha.ini")), false);
         assert.equal(await fse.pathExists(path.join(bDir, "MasterBeta.ini")), false);
-        assert.equal(await fse.pathExists(path.join(bDir, "DISABLEDMasterBeta.ini")), true);
+        assert.equal(await fse.pathExists(path.join(bDir, "DISABLED_BACKUP_MasterBeta.ini")), true);
         assert.match(await fse.readFile(a, "utf8"), /if \$\\Klee\\Master\\swapvar==0/);
         assert.match(await fse.readFile(b, "utf8"), /if \$\\Klee\\Master\\swapvar==1/);
+    });
+
+    it("shares one swapvar index across INIs from the same pack", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-exec-"));
+        tempRoots.push(root);
+        const packA = path.join(root, "PackA");
+        const packB = path.join(root, "PackB");
+        await fse.ensureDir(packA);
+        await fse.ensureDir(packB);
+        const mainIni = path.join(packA, "Klee.ini");
+        const helperIni = path.join(packA, "ORFix.ini");
+        const extraIni = path.join(packB, "Klee.ini");
+        await fse.writeFile(mainIni, ordinary());
+        await fse.writeFile(helperIni, ordinary("abcdef02"));
+        await fse.writeFile(extraIni, ordinary());
+
+        const service = new ModMergeService({
+            logger: { error() {} },
+            lib: {
+                fs: {
+                    getUniqueName: (name: string) => name,
+                },
+            },
+        } as never);
+
+        await service.mergeMods({
+            groupPath: root,
+            placement: "in_place",
+            packName: "Klee",
+            root: {
+                kind: "group",
+                id: "root",
+                engine: "namespace",
+                name: "Klee",
+                forwardKey: "]",
+                backKey: "[",
+                includeVanilla: false,
+                children: [
+                    { kind: "leaf", path: packA },
+                    { kind: "leaf", path: packB },
+                ],
+            },
+        });
+
+        assert.match(await fse.readFile(mainIni, "utf8"), /if \$\\Klee\\Master\\swapvar==0/);
+        assert.match(await fse.readFile(helperIni, "utf8"), /if \$\\Klee\\Master\\swapvar==0/);
+        assert.match(await fse.readFile(extraIni, "utf8"), /if \$\\Klee\\Master\\swapvar==1/);
+        assert.match(
+            await fse.readFile(path.join(packA, "MasterKlee.ini"), "utf8"),
+            /\$swapvar = 0,1/,
+        );
+    });
+
+    it("keeps one swapvar index per copied pack in a new folder", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-exec-"));
+        tempRoots.push(root);
+        const packA = path.join(root, "PackA");
+        const packB = path.join(root, "PackB");
+        await fse.ensureDir(packA);
+        await fse.ensureDir(packB);
+        await fse.writeFile(path.join(packA, "Klee.ini"), ordinary());
+        await fse.writeFile(path.join(packA, "ORFix.ini"), ordinary("abcdef02"));
+        await fse.writeFile(path.join(packB, "Klee.ini"), ordinary());
+
+        const service = new ModMergeService({
+            logger: { error() {} },
+            lib: {
+                fs: {
+                    getUniqueName: (name: string) => name,
+                },
+            },
+        } as never);
+
+        const result = await service.mergeMods({
+            groupPath: root,
+            placement: "new_folder",
+            packName: "Klee",
+            root: {
+                kind: "group",
+                id: "root",
+                engine: "namespace",
+                name: "Klee",
+                forwardKey: "]",
+                backKey: "[",
+                includeVanilla: true,
+                children: [
+                    { kind: "leaf", path: packA },
+                    { kind: "leaf", path: packB },
+                ],
+            },
+        });
+
+        const copiedA = path.join(result.outputPath, "PackA");
+        const copiedB = path.join(result.outputPath, "PackB");
+        assert.match(
+            await fse.readFile(path.join(copiedA, "Klee.ini"), "utf8"),
+            /if \$\\Klee\\Master\\swapvar==1/,
+        );
+        assert.match(
+            await fse.readFile(path.join(copiedA, "ORFix.ini"), "utf8"),
+            /if \$\\Klee\\Master\\swapvar==1/,
+        );
+        assert.match(
+            await fse.readFile(path.join(copiedB, "Klee.ini"), "utf8"),
+            /if \$\\Klee\\Master\\swapvar==2/,
+        );
+        assert.match(
+            await fse.readFile(path.join(result.outputPath, "MasterKlee.ini"), "utf8"),
+            /\$swapvar = 0,1,2/,
+        );
     });
 
     it("drops DISABLED prefixes when copying disabled packs into a new folder", async () => {
@@ -257,5 +367,441 @@ describe("merge writers together", () => {
             false,
         );
         assert.equal(await fse.pathExists(disabled), true);
+    });
+
+    it("disables an original pack under a free name when DISABLED already exists", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-exec-"));
+        tempRoots.push(root);
+        const packA = path.join(root, "PackA");
+        const packB = path.join(root, "PackB");
+        const existingDisabled = path.join(root, "DISABLED PackA");
+        await fse.ensureDir(packA);
+        await fse.ensureDir(packB);
+        await fse.ensureDir(existingDisabled);
+        await fse.writeFile(path.join(packA, "Klee.ini"), ordinary());
+        await fse.writeFile(path.join(packB, "Klee.ini"), ordinary());
+        await fse.writeFile(path.join(existingDisabled, "keep.ini"), "user-disabled");
+
+        const service = new ModMergeService({
+            logger: { error() {} },
+            lib: {
+                fs: {
+                    getUniqueName: (name: string) => name,
+                },
+            },
+        } as never);
+
+        await service.mergeMods({
+            groupPath: root,
+            placement: "new_folder",
+            packName: "Klee",
+            root: {
+                kind: "group",
+                id: "root",
+                engine: "namespace",
+                name: "Klee",
+                forwardKey: "]",
+                backKey: "[",
+                includeVanilla: false,
+                children: [
+                    { kind: "leaf", path: packA },
+                    { kind: "leaf", path: packB },
+                ],
+            },
+        });
+
+        assert.equal(await fse.pathExists(packA), false);
+        assert.equal(await fse.pathExists(path.join(root, "DISABLED PackA (2)")), true);
+        assert.equal(
+            await fse.readFile(path.join(existingDisabled, "keep.ini"), "utf8"),
+            "user-disabled",
+        );
+    });
+
+    it("restores wrapped child INIs when a nested namespace merge fails", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-exec-"));
+        tempRoots.push(root);
+        const packA = path.join(root, "PackA");
+        const packB = path.join(root, "PackB");
+        const empty = path.join(root, "Empty");
+        await fse.ensureDir(packA);
+        await fse.ensureDir(packB);
+        await fse.ensureDir(empty);
+        const aIni = path.join(packA, "Klee.ini");
+        const bIni = path.join(packB, "Klee.ini");
+        await fse.writeFile(aIni, ordinary());
+        await fse.writeFile(bIni, ordinary());
+
+        const service = new ModMergeService({
+            logger: { error() {} },
+            lib: {
+                fs: {
+                    getUniqueName: (name: string) => name,
+                },
+            },
+        } as never);
+
+        await assert.rejects(
+            () =>
+                service.mergeMods({
+                    groupPath: root,
+                    placement: "in_place",
+                    packName: "Klee",
+                    root: {
+                        kind: "group",
+                        id: "root",
+                        engine: "namespace",
+                        name: "Klee",
+                        forwardKey: "]",
+                        backKey: "[",
+                        includeVanilla: false,
+                        children: [
+                            {
+                                kind: "group",
+                                id: "inner",
+                                engine: "namespace",
+                                name: "Inner",
+                                forwardKey: "]",
+                                backKey: "[",
+                                includeVanilla: false,
+                                children: [
+                                    { kind: "leaf", path: packA },
+                                    { kind: "leaf", path: packB },
+                                ],
+                            },
+                            {
+                                kind: "group",
+                                id: "fail",
+                                engine: "namespace",
+                                name: "Fail",
+                                forwardKey: "]",
+                                backKey: "[",
+                                includeVanilla: false,
+                                children: [{ kind: "leaf", path: empty }],
+                            },
+                        ],
+                    },
+                }),
+            /NAMESPACE_MERGE_NEEDS_CHILD/,
+        );
+
+        assert.equal(await fse.readFile(aIni, "utf8"), ordinary());
+        assert.equal(await fse.readFile(bIni, "utf8"), ordinary());
+        assert.equal(await fse.pathExists(path.join(packA, "DISABLED_BACKUP_Klee.ini")), false);
+        assert.equal(await fse.pathExists(path.join(packB, "DISABLED_BACKUP_Klee.ini")), false);
+        assert.equal(await fse.pathExists(path.join(packA, "MasterInner.ini")), false);
+        assert.equal(await fse.pathExists(path.join(packB, "MasterInner.ini")), false);
+    });
+
+    it("restores a leftover master when its DISABLED backup already exists", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-exec-"));
+        tempRoots.push(root);
+        const packA = path.join(root, "PackA");
+        const packB = path.join(root, "PackB");
+        const empty = path.join(root, "Empty");
+        await fse.ensureDir(packA);
+        await fse.ensureDir(packB);
+        await fse.ensureDir(empty);
+        const aIni = path.join(packA, "Klee.ini");
+        const bIni = path.join(packB, "Klee.ini");
+        await fse.writeFile(aIni, ordinary());
+        await fse.writeFile(bIni, ordinary());
+        await writeNamespaceMerge({
+            masterDir: packA,
+            name: "Alpha",
+            sources: [{ iniPath: aIni, index: 0 }],
+            forwardKey: "]",
+            backKey: "[",
+            includeVanilla: false,
+        });
+        await writeNamespaceMerge({
+            masterDir: packB,
+            name: "Beta",
+            sources: [{ iniPath: bIni, index: 0 }],
+            forwardKey: "]",
+            backKey: "[",
+            includeVanilla: false,
+        });
+
+        const masterBeta = path.join(packB, "MasterBeta.ini");
+        const disabledBeta = path.join(packB, "DISABLEDMasterBeta.ini");
+        const masterBetaText = await fse.readFile(masterBeta, "utf8");
+        await fse.writeFile(disabledBeta, "stale-master-backup");
+
+        const service = new ModMergeService({
+            logger: { error() {} },
+            lib: {
+                fs: {
+                    getUniqueName: (name: string) => name,
+                },
+            },
+        } as never);
+
+        await assert.rejects(
+            () =>
+                service.mergeMods({
+                    groupPath: root,
+                    placement: "in_place",
+                    packName: "Klee",
+                    root: {
+                        kind: "group",
+                        id: "root",
+                        engine: "namespace",
+                        name: "Klee",
+                        forwardKey: "]",
+                        backKey: "[",
+                        includeVanilla: false,
+                        children: [
+                            {
+                                kind: "group",
+                                id: "inner",
+                                engine: "namespace",
+                                name: "Inner",
+                                forwardKey: "]",
+                                backKey: "[",
+                                includeVanilla: false,
+                                children: [
+                                    { kind: "leaf", path: packA },
+                                    { kind: "leaf", path: packB },
+                                ],
+                            },
+                            {
+                                kind: "group",
+                                id: "fail",
+                                engine: "namespace",
+                                name: "Fail",
+                                forwardKey: "]",
+                                backKey: "[",
+                                includeVanilla: false,
+                                children: [{ kind: "leaf", path: empty }],
+                            },
+                        ],
+                    },
+                }),
+            /NAMESPACE_MERGE_NEEDS_CHILD/,
+        );
+
+        assert.equal(await fse.readFile(masterBeta, "utf8"), masterBetaText);
+        assert.equal(await fse.readFile(disabledBeta, "utf8"), "stale-master-backup");
+    });
+
+    it("re-enables classic source INIs when a later nested merge fails", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-exec-"));
+        tempRoots.push(root);
+        const packA = path.join(root, "PackA");
+        const packB = path.join(root, "PackB");
+        const wwmi = path.join(root, "WWMI");
+        const extra = path.join(root, "Extra");
+        await fse.ensureDir(packA);
+        await fse.ensureDir(packB);
+        await fse.ensureDir(wwmi);
+        await fse.ensureDir(extra);
+        const aIni = path.join(packA, "Klee.ini");
+        const bIni = path.join(packB, "Klee.ini");
+        await fse.writeFile(aIni, ordinary());
+        await fse.writeFile(bIni, ordinary());
+        await fse.writeFile(
+            path.join(wwmi, "mod.ini"),
+            `; WWMI ALPHA-2 INI
+[Constants]
+global $object_guid = 170961
+[TextureOverrideComponent0]
+hash = 7748c1d8
+`,
+        );
+        await fse.writeFile(path.join(extra, "Klee.ini"), ordinary());
+
+        const service = new ModMergeService({
+            logger: { error() {} },
+            lib: {
+                fs: {
+                    getUniqueName: (name: string) => name,
+                },
+            },
+        } as never);
+
+        await assert.rejects(
+            () =>
+                service.mergeMods({
+                    groupPath: root,
+                    placement: "in_place",
+                    packName: "Klee",
+                    root: {
+                        kind: "group",
+                        id: "root",
+                        engine: "namespace",
+                        name: "Klee",
+                        forwardKey: "]",
+                        backKey: "[",
+                        includeVanilla: false,
+                        children: [
+                            {
+                                kind: "group",
+                                id: "classic",
+                                engine: "classic",
+                                name: "Classic",
+                                forwardKey: "vk_right",
+                                backKey: "vk_left",
+                                includeVanilla: false,
+                                children: [
+                                    { kind: "leaf", path: packA },
+                                    { kind: "leaf", path: packB },
+                                ],
+                            },
+                            {
+                                kind: "group",
+                                id: "locked",
+                                engine: "classic",
+                                name: "Locked",
+                                forwardKey: "vk_right",
+                                backKey: "vk_left",
+                                includeVanilla: false,
+                                children: [
+                                    { kind: "leaf", path: wwmi },
+                                    { kind: "leaf", path: extra },
+                                ],
+                            },
+                        ],
+                    },
+                }),
+            /CLASSIC_LOCKED/,
+        );
+
+        assert.equal(await fse.pathExists(packA), true);
+        assert.equal(await fse.pathExists(packB), true);
+        assert.equal(await fse.readFile(aIni, "utf8"), ordinary());
+        assert.equal(await fse.readFile(bIni, "utf8"), ordinary());
+        assert.equal(await fse.pathExists(path.join(packA, "DISABLED_BACKUP_Klee.ini")), false);
+        assert.equal(await fse.pathExists(path.join(packB, "DISABLED_BACKUP_Klee.ini")), false);
+        assert.equal(await fse.pathExists(path.join(root, "Classic")), false);
+    });
+
+    it("stages packs through temporary paths when in-place destinations collide", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-exec-"));
+        tempRoots.push(root);
+        const disabledPackA = path.join(root, "DISABLED PackA");
+        const packA = path.join(root, "PackA");
+        await fse.ensureDir(disabledPackA);
+        await fse.ensureDir(packA);
+        const disabledIni = path.join(disabledPackA, "Klee.ini");
+        const packAIni = path.join(packA, "Klee.ini");
+        await fse.writeFile(disabledIni, ordinary("abcdef01"));
+        await fse.writeFile(packAIni, ordinary("abcdef02"));
+
+        const service = new ModMergeService({
+            logger: { error() {} },
+            lib: {
+                fs: {
+                    getUniqueName: (name: string) => name,
+                },
+            },
+        } as never);
+
+        await service.mergeMods({
+            groupPath: root,
+            placement: "in_place",
+            packName: "Klee",
+            root: {
+                kind: "group",
+                id: "root",
+                engine: "namespace",
+                name: "Klee",
+                forwardKey: "]",
+                backKey: "[",
+                includeVanilla: false,
+                children: [
+                    { kind: "leaf", path: disabledPackA },
+                    { kind: "leaf", path: packA },
+                ],
+            },
+        });
+
+        const finalPackA = path.join(root, "PackA");
+        const finalPackA2 = path.join(root, "PackA (2)");
+        assert.equal(await fse.pathExists(disabledPackA), false);
+        assert.equal(await fse.pathExists(finalPackA), true);
+        assert.equal(await fse.pathExists(finalPackA2), true);
+        assert.match(
+            await fse.readFile(path.join(finalPackA, "Klee.ini"), "utf8"),
+            /hash = abcdef01[\s\S]*if \$\\Klee\\Master\\swapvar==0/,
+        );
+        assert.match(
+            await fse.readFile(path.join(finalPackA2, "Klee.ini"), "utf8"),
+            /hash = abcdef02[\s\S]*if \$\\Klee\\Master\\swapvar==1/,
+        );
+    });
+
+    it("restores staged packs to original paths when an in-place merge with collisions fails", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-exec-"));
+        tempRoots.push(root);
+        const disabledPackA = path.join(root, "DISABLED PackA");
+        const packA = path.join(root, "PackA");
+        const empty = path.join(root, "Empty");
+        await fse.ensureDir(disabledPackA);
+        await fse.ensureDir(packA);
+        await fse.ensureDir(empty);
+        const disabledIni = path.join(disabledPackA, "Klee.ini");
+        const packAIni = path.join(packA, "Klee.ini");
+        await fse.writeFile(disabledIni, ordinary("abcdef01"));
+        await fse.writeFile(packAIni, ordinary("abcdef02"));
+
+        const service = new ModMergeService({
+            logger: { error() {} },
+            lib: {
+                fs: {
+                    getUniqueName: (name: string) => name,
+                },
+            },
+        } as never);
+
+        await assert.rejects(
+            () =>
+                service.mergeMods({
+                    groupPath: root,
+                    placement: "in_place",
+                    packName: "Klee",
+                    root: {
+                        kind: "group",
+                        id: "root",
+                        engine: "namespace",
+                        name: "Klee",
+                        forwardKey: "]",
+                        backKey: "[",
+                        includeVanilla: false,
+                        children: [
+                            {
+                                kind: "group",
+                                id: "inner",
+                                engine: "namespace",
+                                name: "Inner",
+                                forwardKey: "]",
+                                backKey: "[",
+                                includeVanilla: false,
+                                children: [
+                                    { kind: "leaf", path: disabledPackA },
+                                    { kind: "leaf", path: packA },
+                                ],
+                            },
+                            {
+                                kind: "group",
+                                id: "fail",
+                                engine: "namespace",
+                                name: "Fail",
+                                forwardKey: "]",
+                                backKey: "[",
+                                includeVanilla: false,
+                                children: [{ kind: "leaf", path: empty }],
+                            },
+                        ],
+                    },
+                }),
+            /NAMESPACE_MERGE_NEEDS_CHILD/,
+        );
+
+        assert.equal(await fse.pathExists(disabledPackA), true);
+        assert.equal(await fse.pathExists(packA), true);
+        assert.equal(await fse.pathExists(path.join(root, "PackA (2)")), false);
+        assert.match(await fse.readFile(disabledIni, "utf8"), /hash = abcdef01/);
+        assert.match(await fse.readFile(packAIni, "utf8"), /hash = abcdef02/);
     });
 });

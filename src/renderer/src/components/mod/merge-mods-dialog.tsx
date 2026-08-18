@@ -61,11 +61,13 @@ export function MergeModsDialog() {
       return;
     }
 
+    let cancelled = false;
     const paths = Array.from(selectedModPaths);
     setIsLoading(true);
     void window.api
       .invoke("mod:classifyMergePacks", paths)
       .then((result) => {
+        if (cancelled) return;
         setClassification(result);
         const nextName =
           stripDisabledPrefix(result.packs[0]?.name ?? "Merged").replace(/\s+/g, "") || "Merged";
@@ -73,13 +75,19 @@ export function MergeModsDialog() {
         setPlan(buildDefaultPlan(result, nextName));
       })
       .catch((error) => {
+        if (cancelled) return;
         toast.error(toErrorMessage(error) || t("page.mod.merge.classify_failed"));
         setOpen(false);
       })
       .finally(() => {
+        if (cancelled) return;
         setIsLoading(false);
       });
-  }, [open, selectedModPaths, setOpen, t]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, selectedModPaths, setOpen]);
 
   const classicLocked = plan ? planHasClassicViolation(plan, packsByPath) : false;
   const canSubmit = Boolean(plan && selectedGroupPath && planIsValid(plan) && !classicLocked);
@@ -112,10 +120,16 @@ export function MergeModsDialog() {
             <DialogTitle>{t("page.mod.merge.dialog_title")} (Beta)</DialogTitle>
           </DialogHeader>
 
-          {isLoading || !plan || !classification ? (
+          {isLoading || !classification ? (
             <div className="flex items-center justify-center py-10 text-muted-foreground">
               <Loader2Icon className="mr-2 size-4 animate-spin" />
               {t("page.mod.merge.classifying")}
+            </div>
+          ) : !plan ? (
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 py-10">
+              <Alert variant="destructive">
+                <AlertDescription>{t("page.mod.merge.no_usable_mods")}</AlertDescription>
+              </Alert>
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
@@ -324,7 +338,7 @@ function MergeGroupEditor({
                         {
                           kind: "group",
                           id: `group-${Date.now()}-${index}`,
-                          engine: "classic",
+                          engine: node.engine,
                           name: `${node.name}Part${index + 1}`,
                           forwardKey: node.forwardKey,
                           backKey: node.backKey,

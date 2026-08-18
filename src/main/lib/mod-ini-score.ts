@@ -1,9 +1,9 @@
 import path from "node:path";
 
-const MERGED_MOD_HEADER = /;\s*(?:merged mods?|合并mod)\s*:/i;
+import { extractMergedModPaths } from "../services/mod-manager/merge/ini-text";
 
 export function hasMergedModHeader(text: string) {
-    return MERGED_MOD_HEADER.test(text);
+    return extractMergedModPaths(text).length > 0;
 }
 
 export function scoreIniCandidate(candidatePath: string, text: string): number {

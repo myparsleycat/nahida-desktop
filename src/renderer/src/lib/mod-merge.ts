@@ -13,7 +13,7 @@ export function isThreedmigotoImporter(importer: string | null | undefined) {
 }
 
 export function canUseClassic(pack: MergePackClassification) {
-    return pack.allowsClassic && pack.family === "ordinary";
+    return pack.allowsClassic;
 }
 
 export function suggestedEngine(packs: MergePackClassification[]): MergeEngine {
@@ -24,8 +24,9 @@ export function suggestedEngine(packs: MergePackClassification[]): MergeEngine {
 export function buildDefaultPlan(
     result: ClassifyMergePacksResult,
     packName: string,
-): MergePlanGroup {
+): MergePlanGroup | null {
     const usable = result.packs.filter((pack) => pack.family !== "support");
+    if (usable.length === 0) return null;
     const engine = suggestedEngine(usable);
     return {
         kind: "group",
@@ -59,7 +60,8 @@ export function planHasClassicViolation(
     return node.children.some((child) => planHasClassicViolation(child, packsByPath));
 }
 
-export function planIsValid(node: MergePlanNode) {
+export function planIsValid(node: MergePlanNode | null | undefined): node is MergePlanNode {
+    if (!node) return false;
     if (node.kind === "leaf") return true;
     if (!node.name.trim() || !node.forwardKey.trim()) return false;
     if (node.engine === "namespace" && !node.backKey.trim()) return false;

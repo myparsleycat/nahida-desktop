@@ -258,6 +258,7 @@
         "dialog_title": "모드 병합",
         "classifying": "선택한 모드를 확인하는 중…",
         "classify_failed": "선택한 모드를 확인할 수 없습니다.",
+        "no_usable_mods": "선택한 모드 중 병합 가능한 모드가 없습니다.",
         "hash_mismatch": "이 모드들은 공통 해시가 없습니다. 그래도 계속할 수 있습니다.",
         "classic_locked": "일반 병합으로 묶을 수 없는 모드가 있습니다.",
         "pack_name": "이름",

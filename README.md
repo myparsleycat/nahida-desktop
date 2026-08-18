@@ -26,6 +26,7 @@ Nahida Desktop is a desktop application that provides a unified interface for ma
 - Enable, disable, and toggle mods per game with a single click
 - **Exclusive toggle** — automatically disable conflicting mods in the same group
 - **Presets** — save and restore sets of enabled mods instantly
+- **Merge** — combine selected 3DMigoto mods into one pack
 - Watches the mod folder in real time and reflects changes immediately
 - Drag-and-drop archive extraction and folder copy directly into mod groups
 - Clipboard image paste for mod preview thumbnails

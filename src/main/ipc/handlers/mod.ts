@@ -4,6 +4,13 @@ import type { NahidaDesktop } from "@main/index";
 import { rh } from "@main/ipc/helper";
 import { isGBDownloaderError } from "@main/lib/custom-downloader";
 import { readGameBananaModId } from "@main/lib/mod-download-metadata";
+import {
+    assertMergeRequestPaths,
+    assertOwnedModPaths,
+    collectManagedModRoots,
+    parseMergeModsRequest,
+    parseModPaths,
+} from "@main/services/mod-manager/merge/validate";
 import { toErrorMessage } from "@shared/utils";
 import { dialog } from "electron";
 
@@ -171,26 +178,21 @@ export function registerModHandlers(desktop: NahidaDesktop) {
     });
 
     rh("mod:classifyMergePacks", async (modPaths: string[]) => {
-        return await desktop.service.mod.get.classifyMergePacks(modPaths);
+        const ownedPaths = parseModPaths(modPaths);
+        await assertOwnedModPaths(
+            ownedPaths,
+            collectManagedModRoots(await desktop.service.mod.get.games()),
+        );
+        return await desktop.service.mod.get.classifyMergePacks(ownedPaths);
     });
 
     rh("mod:mergeMods", async (request) => {
-        try {
-            return await desktop.service.mod.fn.mergeMods(request);
-        } catch (error) {
-            desktop.logger.error(
-                {
-                    operation: "mod:mergeMods",
-                    groupPath: request.groupPath,
-                    placement: request.placement,
-                    packName: request.packName,
-                    stage: "ipc",
-                    error: toErrorMessage(error),
-                },
-                "Mod:mergeMods:context",
-            );
-            throw error;
-        }
+        const validRequest = parseMergeModsRequest(request);
+        await assertMergeRequestPaths(
+            validRequest,
+            collectManagedModRoots(await desktop.service.mod.get.games()),
+        );
+        return await desktop.service.mod.fn.mergeMods(validRequest);
     });
 
     rh("mod:downloadFromUrl", async (url: string, groupPath: string) => {

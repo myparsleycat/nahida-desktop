@@ -275,6 +275,7 @@
         "dialog_title": "Merge mods",
         "classifying": "Inspecting selected mods…",
         "classify_failed": "Could not inspect the selected mods.",
+        "no_usable_mods": "None of the selected mods can be merged.",
         "hash_mismatch": "These mods do not share a hash. You can still continue.",
         "classic_locked": "A selected mod cannot use classic merge.",
         "pack_name": "Name",

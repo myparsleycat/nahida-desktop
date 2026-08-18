@@ -59,6 +59,83 @@ filename = B.buf
         assert.match(text, /\[CommandListKleePosition\]/);
         assert.match(text, /\[ResourcePosition\.0\]/);
         assert.equal(await fse.pathExists(aIni), false);
-        assert.equal(await fse.pathExists(path.join(aDir, "DISABLEDKlee.ini")), true);
+        assert.equal(await fse.pathExists(path.join(aDir, "DISABLED_BACKUP_Klee.ini")), true);
+    });
+
+    it("does not overwrite an existing DISABLED source ini", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-classic-"));
+        tempRoots.push(root);
+        const aDir = path.join(root, "A");
+        const bDir = path.join(root, "B");
+        await fse.ensureDir(aDir);
+        await fse.ensureDir(bDir);
+        const aIni = path.join(aDir, "Klee.ini");
+        const bIni = path.join(bDir, "Klee.ini");
+        const disabledA = path.join(aDir, "DISABLEDKlee.ini");
+        await fse.writeFile(
+            aIni,
+            `[TextureOverrideKleePosition]
+hash = abcdef01
+vb0 = ResourcePosition
+`,
+        );
+        await fse.writeFile(
+            bIni,
+            `[TextureOverrideKleePosition]
+hash = abcdef01
+vb0 = ResourcePosition
+`,
+        );
+        await fse.writeFile(disabledA, "user-disabled");
+
+        await writeClassicMerge({
+            outputDir: root,
+            sources: [
+                { iniPath: aIni, groupIndex: 0 },
+                { iniPath: bIni, groupIndex: 1 },
+            ],
+            forwardKey: "vk_right",
+        });
+
+        assert.equal(await fse.pathExists(aIni), false);
+        assert.equal(await fse.readFile(disabledA, "utf8"), "user-disabled");
+        assert.equal(await fse.pathExists(path.join(aDir, "DISABLED_BACKUP_Klee.ini")), true);
+    });
+
+    it("preserves absolute filename in resources and joins relative filename", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-classic-"));
+        tempRoots.push(root);
+        const aDir = path.join(root, "A");
+        await fse.ensureDir(aDir);
+        const aIni = path.join(aDir, "Klee.ini");
+        const absoluteBufPath = path.resolve(root, "shared", "Absolute.buf");
+        await fse.writeFile(
+            aIni,
+            `[TextureOverrideKleePosition]
+hash = abcdef01
+vb0 = ResourcePosition
+[ResourcePosition]
+filename = ${absoluteBufPath}
+[ResourceRelative]
+filename = Relative.buf
+`,
+        );
+
+        const output = await writeClassicMerge({
+            outputDir: root,
+            sources: [{ iniPath: aIni, groupIndex: 0 }],
+            forwardKey: "vk_right",
+        });
+
+        const text = await fse.readFile(output, "utf8");
+        assert.match(
+            text,
+            new RegExp(`filename = ${absoluteBufPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
+        );
+        const expectedRelativePath = path.join(aDir, "Relative.buf");
+        assert.match(
+            text,
+            new RegExp(`filename = ${expectedRelativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
+        );
     });
 });

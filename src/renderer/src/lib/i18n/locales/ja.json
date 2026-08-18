@@ -259,6 +259,7 @@
         "dialog_title": "MODを結合",
         "classifying": "選択したMODを確認しています…",
         "classify_failed": "選択したMODを確認できませんでした。",
+        "no_usable_mods": "選択したMODの中に結合可能なMODがありません。",
         "hash_mismatch": "これらのMODは共通のハッシュを持っていません。続行はできます。",
         "classic_locked": "通常結合にできないMODが含まれています。",
         "pack_name": "名前",

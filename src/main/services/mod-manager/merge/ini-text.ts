@@ -82,13 +82,55 @@ export function sectionValues(section: IniSectionBlock) {
 }
 
 export function extractMergedModPaths(text: string) {
-    const firstLine = text.split(/\r?\n/, 1)[0] ?? "";
-    const match = firstLine.match(/;\s*(?:merged mods?|合并mod)\s*:\s*(.+)$/i);
-    if (!match) return [];
-    return match[1]
-        .split(",")
-        .map((entry) => entry.trim())
-        .filter(Boolean);
+    const rawMatches: string[] = [];
+    for (const raw of text.split(/\r?\n/)) {
+        const trimmed = raw.trim();
+        if (trimmed.startsWith("[") && !trimmed.startsWith("[;")) break;
+        const match = raw.match(/^\s*;\s*(?:merged mods?|合并mod)\s*:\s*(.+)$/i);
+        if (match?.[1]) {
+            rawMatches.push(match[1].trim());
+        }
+    }
+    if (rawMatches.length === 0) return [];
+
+    return rawMatches.flatMap((rawMatch) => {
+        if (!rawMatch) return [];
+        if (rawMatch.startsWith("[") && rawMatch.endsWith("]")) {
+            try {
+                const parsed = JSON.parse(rawMatch);
+                if (Array.isArray(parsed)) {
+                    return parsed
+                        .filter(
+                            (item): item is string =>
+                                typeof item === "string" && item.trim().length > 0,
+                        )
+                        .map((item) => item.trim());
+                }
+            } catch {
+                // fall through
+            }
+        }
+        if (rawMatch.startsWith('"') && rawMatch.endsWith('"')) {
+            try {
+                const parsed = JSON.parse(rawMatch);
+                if (typeof parsed === "string" && parsed.trim().length > 0) {
+                    return [parsed.trim()];
+                }
+            } catch {
+                // fall through
+            }
+        }
+        if (rawMatches.length === 1 && rawMatch.includes(",")) {
+            const parts = rawMatch
+                .split(",")
+                .map((entry) => entry.trim())
+                .filter(Boolean);
+            if (parts.length > 1 && parts.every((entry) => /\.ini$/i.test(entry))) {
+                return parts;
+            }
+        }
+        return [rawMatch];
+    });
 }
 
 export function extractNamespace(text: string) {

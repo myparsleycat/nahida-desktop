@@ -258,6 +258,7 @@
         "dialog_title": "合并模组",
         "classifying": "正在检查所选模组…",
         "classify_failed": "无法检查所选模组。",
+        "no_usable_mods": "所选模组中没有可合并的模组。",
         "hash_mismatch": "这些模组没有共同哈希。你仍可以继续。",
         "classic_locked": "所选模组中有无法使用经典合并的项目。",
         "pack_name": "名称",

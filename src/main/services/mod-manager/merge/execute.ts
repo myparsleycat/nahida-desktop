@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { disabledPrefixString, stripDisabledPrefix } from "@shared/mod";
+import { stripDisabledPrefix } from "@shared/mod";
 import type {
     MergeModsRequest,
     MergeModsResult,
@@ -15,8 +15,13 @@ import type { NahidaDesktop } from "../../..";
 import { writeClassicMerge } from "./classic";
 import { classifyMergePacks, classifyPack, collectEnabledInis } from "./classify";
 import { collectNamespaceChildren, writeNamespaceMerge } from "./namespace";
-
-type RollbackAction = { kind: "remove"; path: string } | { kind: "move"; from: string; to: string };
+import {
+    allocateMergeDisabledPath,
+    describeRollbackAction,
+    disableIniFile,
+    rollbackCreated,
+    type RollbackAction,
+} from "./rollback";
 
 export class ModMergeService {
     constructor(private readonly desktop: NahidaDesktop) {}
@@ -39,9 +44,7 @@ export class ModMergeService {
                     placement: request.placement,
                     packName: request.packName,
                     stage: "execute",
-                    created: created.map((entry) =>
-                        entry.kind === "remove" ? entry.path : `${entry.from}->${entry.to}`,
-                    ),
+                    created: created.map(describeRollbackAction),
                     error: error instanceof Error ? error.message : String(error),
                 },
                 "Mod:mergeMods:context",
@@ -110,6 +113,7 @@ export class ModMergeService {
                 sources,
                 forwardKey: node.forwardKey,
                 backKey: node.backKey || undefined,
+                created,
             }),
         );
     }
@@ -127,88 +131,71 @@ export class ModMergeService {
             namespacePacks.find((pack) => isMasterIni(pack.primaryIniPath)) ??
             namespacePacks[0] ??
             workingPacks[0];
-        const existingMasterPath = isMasterIni(host.primaryIniPath)
-            ? host.primaryIniPath
-            : undefined;
+        const hostMasterPath = isMasterIni(host.primaryIniPath) ? host.primaryIniPath : undefined;
 
-        if (request.placement === "new_folder") {
-            const masterDir = await this.prepareNewFolder(
-                node.name || request.packName,
-                request.groupPath,
-                created,
-            );
-            const destNames = assignEnabledFolderNames(
-                workingPacks.map((pack) => pack.path),
-                await fse.readdir(masterDir),
-            );
-            const copied = await Promise.all(
-                workingPacks.map((pack, index) =>
-                    copyPackInto(pack.path, masterDir, destNames[index], created),
-                ),
-            );
-            await Promise.all(workingPacks.map((pack) => disableOriginal(pack.path, created)));
-            const sources = (
-                await Promise.all(copied.map((copiedPath) => collectEnabledInis(copiedPath)))
-            )
-                .flat()
-                .filter(
-                    (iniPath) =>
-                        path.basename(iniPath).toLowerCase().startsWith("master") === false,
-                )
-                .map((iniPath, index) => ({
-                    iniPath,
-                    index: node.includeVanilla ? index + 1 : index,
-                }));
-            if (sources.length === 0) throw new Error("NAMESPACE_MERGE_NEEDS_CHILD");
-            const masterPath = await writeNamespaceMerge({
-                masterDir,
-                name: sanitizeToken(node.name || request.packName),
-                sources,
-                forwardKey: node.forwardKey,
-                backKey: node.backKey,
-                includeVanilla: node.includeVanilla,
-            });
-            await disableForeignMasters([masterDir], masterPath, created);
-            return path.dirname(masterPath);
-        }
+        const placement =
+            request.placement === "new_folder"
+                ? await this.prepareNamespaceNewFolder(node, workingPacks, request, created)
+                : {
+                      masterDir: hostMasterPath ? path.dirname(hostMasterPath) : host.path,
+                      iniRoots: workingPacks
+                          .filter((pack) => !hostMasterPath || pack.path !== host.path)
+                          .map((pack) => pack.path),
+                      existingMasterPath: hostMasterPath,
+                      disableRoots: workingPacks.map((pack) => pack.path),
+                  };
 
-        const masterDir = existingMasterPath ? path.dirname(existingMasterPath) : host.path;
-        const existingChildren = existingMasterPath
-            ? await collectNamespaceChildren(existingMasterPath)
+        const existingChildren = placement.existingMasterPath
+            ? await collectNamespaceChildren(placement.existingMasterPath)
             : [];
-        const extraInis = (
-            await Promise.all(
-                workingPacks
-                    .filter((pack) => pack.path !== host.path)
-                    .map((pack) => collectEnabledInis(pack.path)),
-            )
-        ).flat();
-        const hostInis = existingMasterPath ? [] : await collectEnabledInis(host.path);
-        const sources = uniquePaths([...existingChildren, ...hostInis, ...extraInis])
-            .filter(
-                (iniPath) => path.basename(iniPath).toLowerCase().startsWith("master") === false,
-            )
-            .map((iniPath, index) => ({
-                iniPath,
-                index: node.includeVanilla ? index + 1 : index,
-            }));
+        const sources = await buildNamespaceSources(
+            placement.iniRoots,
+            existingChildren,
+            node.includeVanilla,
+        );
         if (sources.length === 0) throw new Error("NAMESPACE_MERGE_NEEDS_CHILD");
 
         const masterPath = await writeNamespaceMerge({
-            masterDir,
+            masterDir: placement.masterDir,
             name: sanitizeToken(node.name || request.packName),
             sources,
             forwardKey: node.forwardKey,
             backKey: node.backKey,
             includeVanilla: node.includeVanilla,
-            existingMasterPath,
+            existingMasterPath: placement.existingMasterPath,
+            created,
         });
-        await disableForeignMasters(
-            workingPacks.map((pack) => pack.path),
-            masterPath,
+        await disableForeignMasters(placement.disableRoots, masterPath, created);
+        return path.dirname(masterPath);
+    }
+
+    private async prepareNamespaceNewFolder(
+        node: MergePlanGroup,
+        packs: MergePackClassification[],
+        request: MergeModsRequest,
+        created: RollbackAction[],
+    ) {
+        const masterDir = await this.prepareNewFolder(
+            node.name || request.packName,
+            request.groupPath,
             created,
         );
-        return path.dirname(masterPath);
+        const destNames = assignEnabledFolderNames(
+            packs.map((pack) => pack.path),
+            await fse.readdir(masterDir),
+        );
+        const copied = await Promise.all(
+            packs.map((pack, index) =>
+                copyPackInto(pack.path, masterDir, destNames[index], created),
+            ),
+        );
+        for (const pack of packs) await disableOriginal(pack.path, created);
+        return {
+            masterDir,
+            iniRoots: copied,
+            existingMasterPath: undefined,
+            disableRoots: [masterDir],
+        };
     }
 
     private async prepareClassicWorkDir(
@@ -227,14 +214,18 @@ export class ModMergeService {
             await fse.readdir(container),
         );
         const destPaths = destNames.map((destName) => path.join(container, destName));
+        if (request.placement === "new_folder") {
+            await Promise.all(
+                packs.map((pack, index) =>
+                    copyPackInto(pack.path, container, destNames[index], created),
+                ),
+            );
+            for (const pack of packs) await disableOriginal(pack.path, created);
+            return destPaths;
+        }
         await Promise.all(
             packs.map(async (pack, index) => {
                 const dest = destPaths[index];
-                if (request.placement === "new_folder") {
-                    await copyPackInto(pack.path, container, destNames[index], created);
-                    await disableOriginal(pack.path, created);
-                    return;
-                }
                 await fse.move(pack.path, dest);
                 created.push({ kind: "move", from: dest, to: pack.path });
             }),
@@ -305,15 +296,50 @@ async function enablePackFolders(packs: MergePackClassification[], created: Roll
         destPaths.push(path.join(parent, uniqueEnabledFolderName(pack.path, used)));
     }
 
-    return await Promise.all(
-        packs.map(async (pack, index) => {
-            const dest = destPaths[index];
-            if (path.resolve(dest) === path.resolve(pack.path)) return pack;
-            await fse.move(pack.path, dest);
-            created.push({ kind: "move", from: dest, to: pack.path });
-            return remapPackPath(pack, dest);
-        }),
-    );
+    const currentPaths = packs.map((pack) => pack.path);
+    for (let index = 0; index < packs.length; index += 1) {
+        const dest = destPaths[index];
+        const current = currentPaths[index];
+        if (path.resolve(dest).toLowerCase() === path.resolve(current).toLowerCase()) {
+            continue;
+        }
+
+        const conflictIndex = currentPaths.findIndex(
+            (itemPath, otherIndex) =>
+                otherIndex !== index &&
+                path.resolve(itemPath).toLowerCase() === path.resolve(dest).toLowerCase(),
+        );
+        if (conflictIndex !== -1) {
+            const conflictSource = currentPaths[conflictIndex];
+            const tempPath = await allocateStagePath(conflictSource);
+            await fse.move(conflictSource, tempPath);
+            created.push({ kind: "move", from: tempPath, to: conflictSource });
+            currentPaths[conflictIndex] = tempPath;
+        }
+
+        await fse.move(current, dest);
+        created.push({ kind: "move", from: dest, to: current });
+        currentPaths[index] = dest;
+    }
+
+    return packs.map((pack, index) => {
+        const finalPath = currentPaths[index];
+        return path.resolve(finalPath).toLowerCase() === path.resolve(pack.path).toLowerCase()
+            ? pack
+            : remapPackPath(pack, finalPath);
+    });
+}
+
+async function allocateStagePath(sourcePath: string) {
+    const parent = path.dirname(sourcePath);
+    const baseName = path.basename(sourcePath);
+    for (let counter = 1; counter <= 1000; counter += 1) {
+        const candidate = path.join(parent, `__nhd_stage_${Date.now()}_${counter}_${baseName}`);
+        if (!(await fse.pathExists(candidate))) {
+            return candidate;
+        }
+    }
+    throw new Error("STAGE_PATH_CONFLICT");
 }
 
 function assignEnabledFolderNames(sourcePaths: string[], reservedNames: string[]) {
@@ -345,14 +371,11 @@ function remapPackPath(pack: MergePackClassification, nextPath: string): MergePa
 }
 
 async function disableOriginal(modPath: string, created: RollbackAction[]) {
-    const parent = path.dirname(modPath);
     const currentName = path.basename(modPath);
     if (/^disabled[\s_]/i.test(currentName)) return;
-    const nextName = `${disabledPrefixString("space")}${stripDisabledPrefix(currentName)}`;
-    const target = path.join(parent, nextName);
-    if (await fse.pathExists(target)) return;
-    await fse.move(modPath, target);
-    created.push({ kind: "move", from: target, to: modPath });
+    const dest = await allocateMergeDisabledPath(modPath);
+    await fse.move(modPath, dest);
+    created.push({ kind: "move", from: dest, to: modPath });
 }
 
 function sanitizeToken(name: string) {
@@ -369,6 +392,34 @@ function uniquePaths(paths: string[]) {
     return [...new Set(paths.map((entry) => path.resolve(entry)))];
 }
 
+async function buildNamespaceSources(
+    iniRoots: string[],
+    existingChildren: string[],
+    includeVanilla: boolean,
+) {
+    const seen = new Set<string>();
+    const take = (iniPath: string) => {
+        if (isMasterIni(iniPath)) return false;
+        const resolved = path.resolve(iniPath);
+        if (seen.has(resolved)) return false;
+        seen.add(resolved);
+        return true;
+    };
+    const groups = [
+        uniquePaths(existingChildren).filter(take),
+        ...(await Promise.all(iniRoots.map((root) => collectEnabledInis(root)))).map((inis) =>
+            inis.filter(take),
+        ),
+    ].filter((group) => group.length > 0);
+
+    return groups.flatMap((group, index) =>
+        group.map((iniPath) => ({
+            iniPath,
+            index: includeVanilla ? index + 1 : index,
+        })),
+    );
+}
+
 function isMasterIni(iniPath: string | null | undefined): iniPath is string {
     if (!iniPath) return false;
     const basename = path.basename(iniPath).toLowerCase();
@@ -382,26 +433,4 @@ async function disableForeignMasters(roots: string[], keepPath: string, created:
         .filter((iniPath) => isMasterIni(iniPath) && path.resolve(iniPath) !== keep);
 
     await Promise.all(masters.map((iniPath) => disableIniFile(iniPath, created)));
-}
-
-async function disableIniFile(iniPath: string, created: RollbackAction[]) {
-    const dest = path.join(path.dirname(iniPath), `DISABLED${path.basename(iniPath)}`);
-    if (await fse.pathExists(dest)) {
-        await fse.remove(iniPath);
-        return;
-    }
-    await fse.move(iniPath, dest);
-    created.push({ kind: "move", from: dest, to: iniPath });
-}
-
-async function rollbackCreated(created: RollbackAction[]) {
-    for (const entry of [...created].reverse()) {
-        if (entry.kind === "move") {
-            if (await fse.pathExists(entry.from)) {
-                await fse.move(entry.from, entry.to, { overwrite: true });
-            }
-            continue;
-        }
-        await fse.remove(entry.path);
-    }
 }

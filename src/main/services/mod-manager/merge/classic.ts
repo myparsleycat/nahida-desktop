@@ -3,6 +3,7 @@ import path from "node:path";
 import fse from "fs-extra";
 
 import { classifyLine } from "./ini-text";
+import { disableIniFile, recordFileWrite, type RollbackAction } from "./rollback";
 
 type ClassicSource = {
     iniPath: string;
@@ -32,6 +33,7 @@ export async function writeClassicMerge(options: {
     sources: ClassicSource[];
     forwardKey: string;
     backKey?: string;
+    created?: RollbackAction[];
 }) {
     const sections = (
         await Promise.all(
@@ -117,17 +119,15 @@ export async function writeClassicMerge(options: {
         "",
     ].join("\n");
 
+    const created = options.created ?? [];
     const outputPath = path.join(options.outputDir, "merged.ini");
+    await recordFileWrite(outputPath, created);
     await fse.writeFile(outputPath, result, "utf8");
 
     await Promise.all(
         options.sources.map(async (source) => {
-            const disabledPath = path.join(
-                path.dirname(source.iniPath),
-                `DISABLED${path.basename(source.iniPath)}`,
-            );
             if (await fse.pathExists(source.iniPath)) {
-                await fse.move(source.iniPath, disabledPath, { overwrite: true });
+                await disableIniFile(source.iniPath, created);
             }
         }),
     );
@@ -191,7 +191,9 @@ function buildResource(section: SectionData) {
     const lines = [`[${section.header}${section.name}.${section.groupIndex}]`];
     for (const [key, value] of Object.entries(section.values)) {
         if (key === "filename") {
-            lines.push(`${key} = ${path.join(section.location, value)}`);
+            lines.push(
+                `${key} = ${path.isAbsolute(value) ? value : path.join(section.location, value)}`,
+            );
             continue;
         }
         lines.push(`${key} = ${value}`);

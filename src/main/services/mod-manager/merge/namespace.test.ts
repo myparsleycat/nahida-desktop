@@ -5,7 +5,13 @@ import path from "node:path";
 import fse from "fs-extra";
 import { afterEach, describe, it } from "vitest";
 
-import { unwrapNamespace, wrapHashedSections, writeNamespaceMerge } from "./namespace.ts";
+import { extractMergedModPaths } from "./ini-text.ts";
+import {
+    collectNamespaceChildren,
+    unwrapNamespace,
+    wrapHashedSections,
+    writeNamespaceMerge,
+} from "./namespace.ts";
 
 const tempRoots: string[] = [];
 
@@ -41,7 +47,31 @@ describe("namespace merge writer", () => {
         assert.match(master, /hash = abcdef01/);
         assert.match(child, /if \$\\Klee\\Master\\swapvar==0/);
         assert.match(child, /endif/);
-        assert.equal(await fse.pathExists(path.join(root, "DISABLEDKlee.ini")), true);
+        assert.equal(await fse.pathExists(path.join(root, "DISABLED_BACKUP_Klee.ini")), true);
+    });
+
+    it("does not treat an unrelated DISABLED ini as a merge backup", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-ns-"));
+        tempRoots.push(root);
+        const childPath = path.join(root, "Klee.ini");
+        const disabled = path.join(root, "DISABLEDKlee.ini");
+        await fse.writeFile(childPath, childIni);
+        await fse.writeFile(disabled, "user-disabled");
+
+        await writeNamespaceMerge({
+            masterDir: root,
+            name: "Klee",
+            sources: [{ iniPath: childPath, index: 0 }],
+            forwardKey: "]",
+            backKey: "[",
+            includeVanilla: false,
+        });
+
+        assert.equal(await fse.readFile(disabled, "utf8"), "user-disabled");
+        assert.equal(
+            await fse.readFile(path.join(root, "DISABLED_BACKUP_Klee.ini"), "utf8"),
+            childIni,
+        );
     });
 
     it("unwraps an existing namespace wrap before remastering", async () => {
@@ -50,5 +80,126 @@ describe("namespace merge writer", () => {
         assert.doesNotMatch(unwrapped, /\$\\Old\\Master\\swapvar/);
         assert.match(unwrapped, /hash = abcdef01/);
         assert.match(unwrapped, /match_priority = 0/);
+    });
+
+    it("flushes wrapped section before indented section headers", () => {
+        const input = `[TextureOverrideKleePosition]
+hash = abcdef01
+vb0 = ResourcePosition
+  [ResourcePosition]
+type = Buffer
+`;
+        const wrapped = wrapHashedSections(input, "Klee", 0);
+        assert.match(wrapped, /endif\n\n  \[ResourcePosition\]/);
+    });
+
+    it("unwraps a two-branch if/else-if/endif chain", async () => {
+        const twoBranchIni = `[TextureOverrideKleePosition]
+hash = abcdef01
+match_priority = 0
+if $\\Klee\\Master\\swapvar == 0
+\tvb0 = ResourcePosition0
+else if $\\Klee\\Master\\swapvar == 1
+\tvb0 = ResourcePosition1
+endif
+ps-t0 = ResourceTexture
+`;
+        const unwrapped = await unwrapNamespace(twoBranchIni);
+        assert.doesNotMatch(unwrapped, /\$\\Klee\\Master\\swapvar/);
+        assert.doesNotMatch(unwrapped, /else if/i);
+        assert.doesNotMatch(unwrapped, /endif/i);
+        assert.match(unwrapped, /hash = abcdef01/);
+        assert.match(unwrapped, /vb0 = ResourcePosition0/);
+        assert.match(unwrapped, /vb0 = ResourcePosition1/);
+        assert.match(unwrapped, /ps-t0 = ResourceTexture/);
+    });
+
+    it("extractMergedModPaths handles one path per line, JSON arrays, and legacy lists", () => {
+        const multiLine = [
+            "; Merged Mod: C:\\Mods\\Klee, (Red Dress)\\Klee.ini",
+            "; Merged Mod: C:\\Mods\\Klee, (Blue Dress)\\Klee.ini",
+            "namespace = Klee\\Master",
+        ].join("\n");
+        assert.deepEqual(extractMergedModPaths(multiLine), [
+            "C:\\Mods\\Klee, (Red Dress)\\Klee.ini",
+            "C:\\Mods\\Klee, (Blue Dress)\\Klee.ini",
+        ]);
+
+        const jsonArray =
+            '; Merged Mod: ["C:\\\\Mods\\\\Klee, (Red)\\\\Klee.ini", "D:\\\\Other.ini"]';
+        assert.deepEqual(extractMergedModPaths(jsonArray), [
+            "C:\\Mods\\Klee, (Red)\\Klee.ini",
+            "D:\\Other.ini",
+        ]);
+
+        const singleCommaPath = "; Merged Mod: C:\\Mods\\Klee, (Red Dress)\\Klee.ini";
+        assert.deepEqual(extractMergedModPaths(singleCommaPath), [
+            "C:\\Mods\\Klee, (Red Dress)\\Klee.ini",
+        ]);
+
+        const legacyList = "; Merged Mod: a.ini, b.ini, c.ini";
+        assert.deepEqual(extractMergedModPaths(legacyList), ["a.ini", "b.ini", "c.ini"]);
+    });
+
+    it("round-trips merged paths containing commas and rediscovers them on subsequent merges", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-ns-comma-"));
+        tempRoots.push(root);
+
+        const folder1 = path.join(root, "Klee, (Red Dress)");
+        const folder2 = path.join(root, "Klee, (Blue Dress)");
+        const folder3 = path.join(root, "Klee, (Green Dress)");
+        await fse.ensureDir(folder1);
+        await fse.ensureDir(folder2);
+        await fse.ensureDir(folder3);
+
+        const child1 = path.join(folder1, "Klee.ini");
+        const child2 = path.join(folder2, "Klee.ini");
+        const child3 = path.join(folder3, "Klee.ini");
+        await fse.writeFile(child1, childIni);
+        await fse.writeFile(child2, childIni);
+        await fse.writeFile(child3, childIni);
+
+        const masterPath = await writeNamespaceMerge({
+            masterDir: root,
+            name: "Klee",
+            sources: [
+                { iniPath: child1, index: 0 },
+                { iniPath: child2, index: 1 },
+            ],
+            forwardKey: "]",
+            backKey: "[",
+            includeVanilla: false,
+        });
+
+        const masterContent = await fse.readFile(masterPath, "utf8");
+        assert.ok(masterContent.includes(`; Merged Mod: ${child1}`));
+        assert.ok(masterContent.includes(`; Merged Mod: ${child2}`));
+
+        const discovered = await collectNamespaceChildren(masterPath);
+        assert.deepEqual(
+            discovered.map((entry) => path.resolve(entry)).sort(),
+            [path.resolve(child1), path.resolve(child2)].sort(),
+        );
+
+        // Subsequent merge referencing existing master
+        const updatedMasterPath = await writeNamespaceMerge({
+            masterDir: root,
+            name: "Klee",
+            sources: [
+                { iniPath: child1, index: 0 },
+                { iniPath: child2, index: 1 },
+                { iniPath: child3, index: 2 },
+            ],
+            forwardKey: "]",
+            backKey: "[",
+            includeVanilla: false,
+            existingMasterPath: masterPath,
+        });
+
+        const redisoveredAfterRemerge = await collectNamespaceChildren(updatedMasterPath);
+        assert.deepEqual(
+            redisoveredAfterRemerge.map((entry) => path.resolve(entry)).sort(),
+            [path.resolve(child1), path.resolve(child2), path.resolve(child3)].sort(),
+        );
     });
 });
