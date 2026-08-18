@@ -282,6 +282,7 @@
           "ascending": "오름차순",
           "descending": "내림차순"
         },
+        "more-options": "더보기",
         "hide-empty-folders": "빈 폴더 숨기기",
         "toggle-layout": "{{mode, josa(pair: 으로/로)}} 전환",
         "active-mod-count": "활성 {{enabled}}개 / 전체 {{total}}개",

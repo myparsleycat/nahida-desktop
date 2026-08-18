@@ -299,6 +299,7 @@
           "ascending": "Ascending",
           "descending": "Descending"
         },
+        "more-options": "More options",
         "hide-empty-folders": "Hide empty folders",
         "toggle-layout": "Switch to {{mode}}",
         "active-mod-count": "{{enabled}} active / {{total}} total",
