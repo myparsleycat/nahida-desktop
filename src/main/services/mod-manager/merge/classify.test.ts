@@ -110,6 +110,23 @@ endif
         assert.equal(result.packs.find((pack) => pack.path === toggle)?.allowsClassic, false);
     });
 
+    it("locks classic when an ordinary pack contains control-flow lines", async () => {
+        const conditional = await makePack("Conditional", {
+            "Klee.ini": `[TextureOverrideKleePosition]
+hash = abcdef01
+if DRAW_TYPE == 1
+	vb0 = ResourcePosition
+endif
+
+[ResourcePosition]
+filename = KleePosition.buf
+`,
+        });
+        const result = await classifyMergePacks([conditional]);
+        assert.equal(result.packs[0].family, "ordinary");
+        assert.equal(result.packs[0].allowsClassic, false);
+    });
+
     it("locks classic for WWMI dumps even when they look ordinary", async () => {
         const wwmi = await makePack("Camellya", {
             "mod.ini": `; WWMI ALPHA-2 INI

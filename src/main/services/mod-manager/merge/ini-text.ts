@@ -73,6 +73,14 @@ export function classifyLine(raw: string): IniLine {
     return { kind: "other", raw };
 }
 
+export function isControlFlowLine(raw: string) {
+    return /^(?:if|else\s+if|elif|else|endif)\b/i.test(raw.trim());
+}
+
+export function hasControlFlow(text: string) {
+    return text.split(/\r?\n/).some((line) => isControlFlowLine(line));
+}
+
 export function sectionValues(section: IniSectionBlock) {
     return Object.fromEntries(
         section.lines.flatMap((line) =>

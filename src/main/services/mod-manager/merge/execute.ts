@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { stripDisabledPrefix } from "@shared/mod";
+import { isSafeMergeName, stripDisabledPrefix } from "@shared/mod";
 import type {
     MergeModsRequest,
     MergeModsResult,
@@ -380,7 +380,7 @@ async function disableOriginal(modPath: string, created: RollbackAction[]) {
 
 function sanitizeToken(name: string) {
     const token = name.replace(/\s+/g, "");
-    if (!token) throw new Error("MERGE_NAME_REQUIRED");
+    if (!isSafeMergeName(token)) throw new Error("MERGE_NAME_REQUIRED");
     return token;
 }
 

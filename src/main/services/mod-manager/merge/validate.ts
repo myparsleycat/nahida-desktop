@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import { isSafeMergeName } from "@shared/mod";
 import type { GameConfig, MergeModsRequest, MergePlacement, MergePlanNode } from "@shared/types";
 import { uniq } from "es-toolkit";
 import fse from "fs-extra";
@@ -81,7 +82,7 @@ function parsePlanNode(input: unknown, depth: number, state: { count: number }):
     if (node.kind !== "group") throw invalidMergeRequest();
     if (typeof node.id !== "string" || !node.id.trim()) throw invalidMergeRequest();
     if (node.engine !== "classic" && node.engine !== "namespace") throw invalidMergeRequest();
-    if (typeof node.name !== "string" || !isSafePathSegment(node.name.trim())) {
+    if (typeof node.name !== "string" || !isSafeMergeName(node.name)) {
         throw invalidMergeRequest();
     }
     if (typeof node.forwardKey !== "string" || !node.forwardKey.trim()) {
@@ -113,9 +114,8 @@ function parsePlacement(value: unknown): MergePlacement {
 }
 
 function parsePackName(value: unknown) {
-    if (typeof value !== "string" || value.includes("\0") || /[\\/]/.test(value)) {
-        throw invalidMergeRequest();
-    }
+    if (typeof value !== "string") throw invalidMergeRequest();
+    if (value.trim() !== "" && !isSafeMergeName(value)) throw invalidMergeRequest();
     return value;
 }
 
@@ -124,17 +124,6 @@ function parseAbsolutePath(value: unknown, error: () => TypeError) {
         throw error();
     }
     return value;
-}
-
-// Folder names become path.join(groupPath, name); separators would escape the group.
-function isSafePathSegment(name: string) {
-    return (
-        Boolean(name) &&
-        name !== "." &&
-        name !== ".." &&
-        !name.includes("\0") &&
-        !/[\\/]/.test(name)
-    );
 }
 
 function collectIntendedOutputPaths(request: MergeModsRequest) {

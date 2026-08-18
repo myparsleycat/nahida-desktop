@@ -202,6 +202,110 @@ ps-t0 = ResourceTexture
         );
     });
 
+    it("unwraps a parenthesized simple master condition", async () => {
+        const wrapped = `[TextureOverrideKleePosition]
+hash = abcdef01
+match_priority = 0
+if ($\\Klee\\Master\\swapvar == 0)
+	vb0 = ResourcePosition
+endif
+`;
+        const unwrapped = await unwrapNamespace(wrapped);
+        assert.doesNotMatch(unwrapped, /\$\\Klee\\Master\\swapvar/);
+        assert.match(unwrapped, /vb0 = ResourcePosition/);
+    });
+
+    it("rejects compound leftover master conditions instead of flattening them", async () => {
+        const compound = `[TextureOverrideKleePosition]
+hash = abcdef01
+if ($\\Klee\\Master\\swapvar == 0 && $foo == 1)
+	vb0 = ResourcePosition
+endif
+`;
+        await assert.rejects(unwrapNamespace(compound), /NAMESPACE_UNWRAP_INCOMPLETE/);
+
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-ns-compound-"));
+        tempRoots.push(root);
+        const childPath = path.join(root, "Klee.ini");
+        await fse.writeFile(childPath, compound);
+        await assert.rejects(
+            writeNamespaceMerge({
+                masterDir: root,
+                name: "Klee",
+                sources: [{ iniPath: childPath, index: 0 }],
+                forwardKey: "]",
+                backKey: "[",
+                includeVanilla: false,
+            }),
+            /NAMESPACE_UNWRAP_INCOMPLETE/,
+        );
+    });
+
+    it("drops a top-level master else when unwrapping", async () => {
+        const withElse = `[TextureOverrideKleePosition]
+hash = abcdef01
+if $\\Klee\\Master\\swapvar == 0
+	vb0 = ResourcePosition0
+else
+	vb0 = ResourcePosition1
+endif
+`;
+        const unwrapped = await unwrapNamespace(withElse);
+        assert.doesNotMatch(unwrapped, /\$\\Klee\\Master\\swapvar/);
+        assert.doesNotMatch(unwrapped, /^else$/im);
+        assert.match(unwrapped, /vb0 = ResourcePosition0/);
+        assert.match(unwrapped, /vb0 = ResourcePosition1/);
+    });
+
+    it("scans for children when every listed Merged Mod path is missing", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-ns-missing-"));
+        tempRoots.push(root);
+        const childPath = path.join(root, "Klee.ini");
+        await fse.writeFile(
+            childPath,
+            `${childIni}if $\\Klee\\Master\\swapvar==0\n\tvb0 = ResourcePosition\nendif\n`,
+        );
+        const masterPath = path.join(root, "MasterKlee.ini");
+        await fse.writeFile(
+            masterPath,
+            `; Merged Mod: ${path.join(root, "missing", "gone.ini")}
+namespace = Klee\\Master
+`,
+        );
+
+        const discovered = await collectNamespaceChildren(masterPath);
+        assert.deepEqual(
+            discovered.map((entry) => path.resolve(entry)),
+            [path.resolve(childPath)],
+        );
+    });
+
+    it("unions surviving listed paths with scanned children", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-ns-partial-"));
+        tempRoots.push(root);
+        const listedChild = path.join(root, "Listed.ini");
+        const scannedChild = path.join(root, "Scanned.ini");
+        await fse.writeFile(listedChild, childIni);
+        await fse.writeFile(
+            scannedChild,
+            `${childIni}if $\\Klee\\Master\\swapvar==1\n\tvb0 = ResourcePosition\nendif\n`,
+        );
+        const masterPath = path.join(root, "MasterKlee.ini");
+        await fse.writeFile(
+            masterPath,
+            `; Merged Mod: ${listedChild}
+; Merged Mod: ${path.join(root, "missing.ini")}
+namespace = Klee\\Master
+`,
+        );
+
+        const discovered = await collectNamespaceChildren(masterPath);
+        assert.deepEqual(
+            discovered.map((entry) => path.resolve(entry)).sort(),
+            [path.resolve(listedChild), path.resolve(scannedChild)].sort(),
+        );
+    });
+
     it("preserves nested if/elif/else/endif blocks when unwrapping namespace wrap", async () => {
         const complexIni = `[TextureOverrideBlackSwanHairBlend]
 hash = e2770c9a

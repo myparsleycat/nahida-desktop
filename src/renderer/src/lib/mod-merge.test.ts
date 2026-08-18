@@ -153,6 +153,8 @@ describe("planIsValid", () => {
         // Empty name
         expect(planIsValid({ ...validGroup, name: "   " })).toBe(false);
 
+        expect(planIsValid({ ...validGroup, name: "Bad]Name" })).toBe(false);
+
         // Empty forwardKey
         expect(planIsValid({ ...validGroup, forwardKey: "" })).toBe(false);
 

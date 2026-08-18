@@ -1,3 +1,4 @@
+import { isSafeMergeName } from "@shared/mod";
 import type {
     ClassifyMergePacksResult,
     MergeEngine,
@@ -63,7 +64,7 @@ export function planHasClassicViolation(
 export function planIsValid(node: MergePlanNode | null | undefined): node is MergePlanNode {
     if (!node) return false;
     if (node.kind === "leaf") return true;
-    if (!node.name.trim() || !node.forwardKey.trim()) return false;
+    if (!isSafeMergeName(node.name) || !node.forwardKey.trim()) return false;
     if (node.engine === "namespace" && !node.backKey.trim()) return false;
     const leaves = collectLeaves(node);
     return leaves.length >= 2 && node.children.every(planIsValid);

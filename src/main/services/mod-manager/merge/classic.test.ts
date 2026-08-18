@@ -145,4 +145,33 @@ filename = Relative.buf
         assert.doesNotMatch(text, /ps-t0 = 1\.0/);
         assert.doesNotMatch(text, /this = CommandListFace\.0/);
     });
+
+    it("does not rewrite comparison control-flow lines as key/value pairs", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-classic-"));
+        tempRoots.push(root);
+        const aDir = path.join(root, "A");
+        await fse.ensureDir(aDir);
+        const aIni = path.join(aDir, "Klee.ini");
+        await fse.writeFile(
+            aIni,
+            `[TextureOverrideKleePosition]
+hash = abcdef01
+if DRAW_TYPE == 1
+	vb0 = ResourcePosition
+endif
+[ResourcePosition]
+filename = A.buf
+`,
+        );
+
+        const output = await writeClassicMerge({
+            outputDir: root,
+            sources: [{ iniPath: aIni, groupIndex: 0 }],
+            forwardKey: "vk_right",
+        });
+
+        const text = await fse.readFile(output, "utf8");
+        assert.doesNotMatch(text, /if DRAW_TYPE = = 1/);
+        assert.doesNotMatch(text, /if DRAW_TYPE\s*=/);
+    });
 });

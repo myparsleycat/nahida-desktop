@@ -2,7 +2,12 @@ import path from "node:path";
 
 import fse from "fs-extra";
 
-import { appendResourceSuffix, classifyLine, isResourceReference } from "./ini-text";
+import {
+    appendResourceSuffix,
+    classifyLine,
+    isControlFlowLine,
+    isResourceReference,
+} from "./ini-text";
 import { disableIniFile, recordFileWrite, type RollbackAction } from "./rollback";
 
 type ClassicSource = {
@@ -175,7 +180,7 @@ function parseClassicSections(text: string, location: string, groupIndex: number
             sections.push(current);
             continue;
         }
-        if (!current || line.kind !== "kv") continue;
+        if (!current || line.kind !== "kv" || isControlFlowLine(line.raw)) continue;
         if (line.key.includes("CharacterIB") || line.key.includes("ResourceRef")) continue;
         current.entries.push({ key: line.key, value: line.value });
     }

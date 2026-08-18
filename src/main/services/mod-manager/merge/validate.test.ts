@@ -84,6 +84,18 @@ describe("parseMergeModsRequest", () => {
             /Invalid merge request payload/,
         );
         assert.throws(
+            () => parseMergeModsRequest(validRequest({ packName: "Bad]Name" })),
+            /Invalid merge request payload/,
+        );
+        assert.throws(
+            () => parseMergeModsRequest(validRequest({ packName: "A=B" })),
+            /Invalid merge request payload/,
+        );
+        assert.throws(
+            () => parseMergeModsRequest(validRequest({ packName: "Line\nBreak" })),
+            /Invalid merge request payload/,
+        );
+        assert.throws(
             () => parseMergeModsRequest(validRequest({ groupPath: "relative-group" })),
             /Invalid merge request payload/,
         );
@@ -134,6 +146,25 @@ describe("parseMergeModsRequest", () => {
                     }),
                 ),
             /Invalid merge request payload/,
+        );
+        assert.throws(
+            () =>
+                parseMergeModsRequest(
+                    validRequest({
+                        root: validRoot({ name: "Bad]Name" }),
+                    }),
+                ),
+            /Invalid merge request payload/,
+        );
+        assert.doesNotThrow(() =>
+            parseMergeModsRequest(
+                validRequest({ packName: "나히다", root: validRoot({ name: "나히다" }) }),
+            ),
+        );
+        assert.doesNotThrow(() =>
+            parseMergeModsRequest(
+                validRequest({ packName: "AnbyS0", root: validRoot({ name: "AnbyS0" }) }),
+            ),
         );
         assert.throws(
             () =>

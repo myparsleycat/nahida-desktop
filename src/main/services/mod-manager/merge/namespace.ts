@@ -10,6 +10,8 @@ import {
     extractNamespace,
     extractPositionHash,
     hasMasterSwapRef,
+    isBackupIniName,
+    isFileDisabledIniName,
     parseIniText,
     serializeIni,
 } from "./ini-text";
@@ -101,10 +103,9 @@ export async function collectNamespaceChildren(masterPath: string) {
     const masterDir = path.dirname(masterPath);
     const text = await fse.readFile(masterPath, "utf8");
     const namespace = extractNamespace(text);
-    const listed = extractMergedModPaths(text).map((entry) => path.resolve(masterDir, entry));
-    if (listed.length > 0) {
-        return listed.filter((entry) => fse.pathExistsSync(entry));
-    }
+    const listed = extractMergedModPaths(text)
+        .map((entry) => path.resolve(masterDir, entry))
+        .filter((entry) => fse.pathExistsSync(entry));
 
     const token = namespace?.replace(/\\Master$/i, "") ?? "";
     const pattern = token
@@ -116,12 +117,16 @@ export async function collectNamespaceChildren(masterPath: string) {
         onlyFiles: true,
         caseSensitiveMatch: false,
     });
-    return walk.filter((candidate) => {
+    const scanned = walk.filter((candidate) => {
         if (path.resolve(candidate) === path.resolve(masterPath)) return false;
+        const fileName = path.basename(candidate);
+        if (isFileDisabledIniName(fileName) || isBackupIniName(fileName)) return false;
         if (!fse.pathExistsSync(candidate)) return false;
         const child = fse.readFileSync(candidate, "utf8");
         return pattern.test(child) || hasMasterSwapRef(child);
     });
+
+    return [...new Set([...listed, ...scanned].map((entry) => path.resolve(entry)))];
 }
 
 export async function unwrapNamespace(text: string) {
@@ -130,11 +135,20 @@ export async function unwrapNamespace(text: string) {
         ...section,
         lines: unwrapSectionLines(section.lines),
     }));
-    return serializeIni(parsed);
+    const next = serializeIni(parsed);
+    if (hasCompoundMasterSwap(text) || hasMasterSwapRef(next)) {
+        throw new Error("NAMESPACE_UNWRAP_INCOMPLETE");
+    }
+    return next;
 }
 
-const MASTER_SWAP_IF_RE = /^if\s+\$\\[^\\\s]+\\master\\swapvar\w*/i;
-const MASTER_SWAP_ELSE_IF_RE = /^(?:else\s+if|elif)\s+\$\\[^\\\s]+\\master\\swapvar\w*/i;
+const MASTER_SWAP_IF_RE =
+    /^if\s+\(?\s*\$\\[^\\\s]+\\master\\swapvar\w*(?!\w)(?:\s*==\s*\S+\s*\)?)?\s*(?:;.*)?$/i;
+const MASTER_SWAP_ELSE_IF_RE =
+    /^(?:else\s+if|elif)\s+\(?\s*\$\\[^\\\s]+\\master\\swapvar\w*(?!\w)(?:\s*==\s*\S+\s*\)?)?\s*(?:;.*)?$/i;
+const MASTER_SWAP_ELSE_RE = /^else\s*(?:;.*)?$/i;
+const COMPOUND_MASTER_SWAP_RE =
+    /^(?:if|else\s+if|elif)\s+\(?\s*\$\\[^\\\s]+\\master\\swapvar\w*.*(?:&&|\|\|)/i;
 
 function unwrapSectionLines(lines: ReturnType<typeof parseIniText>["sections"][number]["lines"]) {
     const nextLines: typeof lines = [];
@@ -169,7 +183,11 @@ function unwrapSectionLines(lines: ReturnType<typeof parseIniText>["sections"][n
             continue;
         }
 
-        if (masterSwapActive && innerIfDepth === 0 && MASTER_SWAP_ELSE_IF_RE.test(trimmed)) {
+        if (
+            masterSwapActive &&
+            innerIfDepth === 0 &&
+            (MASTER_SWAP_ELSE_IF_RE.test(trimmed) || MASTER_SWAP_ELSE_RE.test(trimmed))
+        ) {
             continue;
         }
 
@@ -276,6 +294,10 @@ function closeWrap(block: string[]) {
     }
     next.push("endif", "");
     return next;
+}
+
+function hasCompoundMasterSwap(text: string) {
+    return text.split(/\r?\n/).some((line) => COMPOUND_MASTER_SWAP_RE.test(line.trim()));
 }
 
 function escapeRegExp(value: string) {

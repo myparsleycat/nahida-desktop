@@ -17,6 +17,7 @@ import {
     extractNamespace,
     extractObjectGuid,
     hasCommandListDispatch,
+    hasControlFlow,
     hasKeySection,
     hasMasterSwapRef,
     hasNumberedResources,
@@ -91,7 +92,11 @@ export async function classifyPack(modPath: string): Promise<MergePackClassifica
     );
     const warnings = collectWarnings(family, dialect, primary.text);
     const allowsClassic =
-        family === "ordinary" && dialect !== "wwmi" && dialect !== "efmi" && dialect !== "unknown";
+        family === "ordinary" &&
+        dialect !== "wwmi" &&
+        dialect !== "efmi" &&
+        dialect !== "unknown" &&
+        !hasControlFlow(primary.text);
 
     return {
         path: modPath,
