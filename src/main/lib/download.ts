@@ -53,6 +53,7 @@ export type DownloadMetadata = {
         size: number;
         compAlg: "gzip" | "zstd" | null;
         url: string;
+        urlOrigin?: "cdn" | "presign";
     }>;
     dirs: Array<{
         id: string;
@@ -64,6 +65,21 @@ export type DownloadMetadata = {
 export const BATCH_ROOT_ID = "batch-root";
 const FILE_ID_BATCH_LIMIT = 100;
 const PARALLEL_DOWNLOAD_THRESHOLD = 20 * 1024 * 1024;
+
+export class DownloadHttpError extends Error {
+    readonly status: number;
+
+    constructor(status: number, statusText: string) {
+        super(`Download failed: ${statusText}`);
+        this.name = "DownloadHttpError";
+        this.status = status;
+    }
+}
+
+function isDownloadHttpError(error: unknown, status?: number) {
+    if (!(error instanceof DownloadHttpError)) return false;
+    return status === undefined || error.status === status;
+}
 
 function isExpectedContentRange(value: string | null, resumeFrom: number, fileSize: number) {
     const match = /^bytes\s+(\d+)-(\d+)\/(\d+)$/i.exec(value ?? "");
@@ -491,15 +507,17 @@ class FileDownloadTask {
                 phase: Extract<SlowChunkTransferPhase, "network" | "bandwidth-wait">,
             ) => void;
             link?: LinkData;
+            attachLinkToken?: boolean;
             networkContext?: ReturnType<typeof createDownloadNetworkContext>;
             onResumeReset?: () => void;
             resumeFrom?: number;
         },
     ): Promise<void> {
         const baseHeaders = await this.desktop.httpService.getHeaders(file.url);
-        const linkHeaders: Record<string, string> = options?.link
-            ? { "nhd-link-token": options.link.token }
-            : {};
+        const linkHeaders: Record<string, string> =
+            options?.link && options.attachLinkToken !== false
+                ? { "nhd-link-token": options.link.token }
+                : {};
         const headers = { ...baseHeaders, ...linkHeaders } as Record<string, string>;
         const resumeFrom = options?.resumeFrom ?? 0;
 
@@ -531,7 +549,7 @@ class FileDownloadTask {
 
             if (!response.ok) {
                 await drainWebStream(response.body, signal);
-                throw new Error(`Download failed: ${response.statusText}`);
+                throw new DownloadHttpError(response.status, response.statusText);
             }
 
             if (append && response.status !== 206) {
@@ -556,7 +574,7 @@ class FileDownloadTask {
 
                 if (!response.ok) {
                     await drainWebStream(response.body, signal);
-                    throw new Error(`Download failed: ${response.statusText}`);
+                    throw new DownloadHttpError(response.status, response.statusText);
                 }
             }
 
@@ -646,10 +664,27 @@ class FileDownloadTask {
 
         let slowReconnects = 0;
         let errorRetries = 0;
+        let urlOrigin: "cdn" | "presign" = file.urlOrigin ?? "cdn";
+        let refreshedExpiredPresign = false;
         let reportedResumeBytes = await this.getResumeOffset(file, targetPath);
         const networkContext = createDownloadNetworkContext();
 
         if (reportedResumeBytes > 0) onProgress?.(reportedResumeBytes);
+
+        const resetAndWait = async (reconnect: number) => {
+            await networkContext.resetConnections().catch((error) => {
+                this.desktop.logger.warn(
+                    {
+                        fileId: file.id,
+                        fileName: file.name,
+                        reconnect,
+                        error: toErrorMessage(error),
+                    },
+                    "FileDownloadTask:resetConnectionsFailed",
+                );
+            });
+            await sleepWithAbort(slowReconnectDelayMs(), signal);
+        };
 
         try {
             while (true) {
@@ -676,6 +711,7 @@ class FileDownloadTask {
 
                     await this.performDownload(file, targetPath, combinedSignal, {
                         link,
+                        attachLinkToken: urlOrigin === "cdn",
                         networkContext,
                         resumeFrom,
                         onProgress: (bytes) => {
@@ -698,7 +734,8 @@ class FileDownloadTask {
                     await this.desktop.lib.fs.rename(targetPath, filePath);
                     onComplete();
                     return;
-                } catch (err) {
+                } catch (caught) {
+                    let err = caught;
                     const persistedBytes = await this.getResumeOffset(file, targetPath);
                     const progressCorrection = persistedBytes - reportedResumeBytes;
                     if (progressCorrection !== 0) onProgress?.(progressCorrection);
@@ -708,38 +745,89 @@ class FileDownloadTask {
                         throw err;
                     }
 
-                    if (
-                        transfer.abortReason === "slow-chunk" &&
-                        slowReconnects < SLOW_CHUNK_MAX_RECONNECTS
-                    ) {
-                        slowReconnects += 1;
-                        this.desktop.logger.warn(
-                            {
+                    if (transfer.abortReason === "slow-chunk") {
+                        if (urlOrigin === "cdn" && slowReconnects > 0) {
+                            const nextUrl = await this.fetchPresignedDownloadUrl({
                                 fileId: file.id,
-                                fileName: file.name,
-                                detect: transfer.detect,
-                                speedBps: transfer.chunkSpeedBps,
-                                peerMedianBps: transfer.peerMedianBps,
-                                remainingBytes: Math.max(0, file.size - reportedResumeBytes),
-                                resumeFrom: reportedResumeBytes,
-                                reconnect: slowReconnects,
-                                url: getSafeUrlResource(file.url),
-                            },
-                            "FileDownloadTask:slowChunk",
-                        );
-                        await networkContext.resetConnections().catch((error) => {
+                                link,
+                                signal,
+                            }).catch((presignErr: unknown) => {
+                                err = presignErr;
+                                return null;
+                            });
+                            if (nextUrl) {
+                                file.url = nextUrl;
+                                file.urlOrigin = "presign";
+                                urlOrigin = "presign";
+                                slowReconnects = 0;
+                                this.desktop.logger.warn(
+                                    {
+                                        fileId: file.id,
+                                        fileName: file.name,
+                                        remainingBytes: Math.max(
+                                            0,
+                                            file.size - reportedResumeBytes,
+                                        ),
+                                        resumeFrom: reportedResumeBytes,
+                                        url: getSafeUrlResource(file.url),
+                                    },
+                                    "FileDownloadTask:presignFallback",
+                                );
+                                await resetAndWait(0);
+                                continue;
+                            }
+                        }
+
+                        if (slowReconnects < SLOW_CHUNK_MAX_RECONNECTS) {
+                            slowReconnects += 1;
                             this.desktop.logger.warn(
                                 {
                                     fileId: file.id,
                                     fileName: file.name,
+                                    detect: transfer.detect,
+                                    speedBps: transfer.chunkSpeedBps,
+                                    peerMedianBps: transfer.peerMedianBps,
+                                    remainingBytes: Math.max(0, file.size - reportedResumeBytes),
+                                    resumeFrom: reportedResumeBytes,
                                     reconnect: slowReconnects,
-                                    error: toErrorMessage(error),
+                                    url: getSafeUrlResource(file.url),
                                 },
-                                "FileDownloadTask:resetConnectionsFailed",
+                                "FileDownloadTask:slowChunk",
                             );
+                            await resetAndWait(slowReconnects);
+                            continue;
+                        }
+                    }
+
+                    if (
+                        isDownloadHttpError(err, 403) &&
+                        urlOrigin === "presign" &&
+                        !refreshedExpiredPresign
+                    ) {
+                        refreshedExpiredPresign = true;
+                        const nextUrl = await this.fetchPresignedDownloadUrl({
+                            fileId: file.id,
+                            link,
+                            signal,
+                        }).catch((presignErr: unknown) => {
+                            err = presignErr;
+                            return null;
                         });
-                        await sleepWithAbort(slowReconnectDelayMs(), signal);
-                        continue;
+                        if (nextUrl) {
+                            file.url = nextUrl;
+                            file.urlOrigin = "presign";
+                            this.desktop.logger.warn(
+                                {
+                                    fileId: file.id,
+                                    fileName: file.name,
+                                    resumeFrom: reportedResumeBytes,
+                                    url: getSafeUrlResource(file.url),
+                                },
+                                "FileDownloadTask:presignRefresh",
+                            );
+                            await resetAndWait(slowReconnects);
+                            continue;
+                        }
                     }
 
                     if (!isAbortError(err) && errorRetries < MAX_ERROR_RETRIES) {
@@ -761,6 +849,33 @@ class FileDownloadTask {
         } finally {
             networkContext.release();
         }
+    }
+
+    private async fetchPresignedDownloadUrl({
+        fileId,
+        link,
+        signal,
+    }: {
+        fileId: string;
+        link?: LinkData;
+        signal: AbortSignal;
+    }) {
+        const { data, error } = await eden.akasha.file.download.get({
+            query: {
+                uuid: fileId,
+                presign: true,
+                ...(link && { linkId: link.linkId }),
+            },
+            ...(link && {
+                headers: { "nhd-link-token": link.token },
+            }),
+            fetch: { signal },
+        });
+        if (error) throw error;
+        if (!data || typeof data !== "object" || !("url" in data) || typeof data.url !== "string") {
+            throw new Error("Presigned download URL not received.");
+        }
+        return data.url;
     }
 }
 

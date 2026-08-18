@@ -8,20 +8,55 @@ import type { NahidaDesktop } from "..";
 import type { DownloadMetadata } from "./download";
 
 import { BandwidthLimiter } from "./bandwidth-limiter";
-import { DownloadLib } from "./download";
+import { DownloadHttpError, DownloadLib } from "./download";
 import { SlowChunkMonitor } from "./slow-chunk-monitor";
 
 const mocks = vi.hoisted(() => ({
     request: vi.fn(),
+    fetchPresignedUrl: vi.fn(),
 }));
 
 vi.mock("@main/client", () => ({
-    eden: {},
+    eden: {
+        akasha: {
+            file: {
+                download: {
+                    get: mocks.fetchPresignedUrl,
+                },
+            },
+        },
+    },
 }));
 
 vi.mock("ky", () => ({
     default: mocks.request,
 }));
+
+vi.mock("./slow-chunk-monitor", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("./slow-chunk-monitor")>();
+    return {
+        ...actual,
+        slowReconnectDelayMs: () => 0,
+    };
+});
+
+function waitForSlowAbort(signal: AbortSignal) {
+    return new Promise<never>((_resolve, reject) => {
+        if (signal.aborted) {
+            reject(signal.reason ?? new DOMException("The operation was aborted.", "AbortError"));
+            return;
+        }
+        signal.addEventListener(
+            "abort",
+            () => {
+                reject(
+                    signal.reason ?? new DOMException("The operation was aborted.", "AbortError"),
+                );
+            },
+            { once: true },
+        );
+    });
+}
 
 type DownloadTask = {
     performDownload: (
@@ -31,12 +66,16 @@ type DownloadTask = {
         options?: {
             onResumeReset?: () => void;
             resumeFrom?: number;
+            attachLinkToken?: boolean;
+            onProgress?: (bytes: number) => void;
+            link?: { linkId: string; token: string };
         },
     ) => Promise<void>;
     executeWithSlowRetry: (input: {
         file: DownloadMetadata["files"][number];
         filePath: string;
         signal: AbortSignal;
+        link?: { linkId: string; token: string };
         onComplete: () => void;
         onProgress?: (bytes: number) => void;
     }) => Promise<void>;
@@ -90,6 +129,7 @@ describe("FileDownloadTask range handling", () => {
 
     beforeEach(async () => {
         mocks.request.mockReset();
+        mocks.fetchPresignedUrl.mockReset();
         tempDir = await mkdtemp(path.join(os.tmpdir(), "nahida-download-test-"));
     });
 
@@ -212,6 +252,25 @@ describe("FileDownloadTask range handling", () => {
         expect(mocks.request).toHaveBeenCalledTimes(1);
     });
 
+    it("omits the link token when attachLinkToken is false", async () => {
+        const targetPath = path.join(tempDir, "file.bin.ntmp");
+        mocks.request.mockResolvedValue(new Response("complete", { status: 200 }));
+        const desktop = createDesktop();
+        const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
+
+        await task.performDownload(file, targetPath, new AbortController().signal, {
+            link: { linkId: "link-1", token: "link-token" },
+            attachLinkToken: false,
+        });
+
+        expect(mocks.request).toHaveBeenCalledWith(
+            file.url,
+            expect.objectContaining({
+                headers: { Authorization: "Bearer token" },
+            }),
+        );
+    });
+
     it("deletes the temp file and returns zero for compressed files", async () => {
         const targetPath = path.join(tempDir, "file.bin.ntmp");
         await writeFile(targetPath, "stale-gzip");
@@ -231,6 +290,11 @@ describe("FileDownloadTask executeWithSlowRetry progress correction", () => {
 
     beforeEach(async () => {
         mocks.request.mockReset();
+        mocks.fetchPresignedUrl.mockReset();
+        mocks.fetchPresignedUrl.mockResolvedValue({
+            data: { url: "https://r2.test/signed" },
+            error: null,
+        });
         tempDir = await mkdtemp(path.join(os.tmpdir(), "nahida-download-test-"));
     });
 
@@ -351,6 +415,175 @@ describe("FileDownloadTask executeWithSlowRetry progress correction", () => {
 
         expect(recordSample).toHaveBeenCalledWith(expect.any(String), 100);
         recordSample.mockRestore();
+    });
+
+    it("keeps the original url through the first slow reconnect then switches to a presigned url", async () => {
+        const filePath = path.join(tempDir, "file.bin");
+        const targetPath = `${filePath}.ntmp`;
+        await writeFile(targetPath, "hello");
+        const slowFile = {
+            ...file,
+            size: 11,
+            url: "https://n1.nahida.live/fil/file.bin",
+        };
+        const desktop = createDesktop();
+        const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
+        const registered: Array<{ abortSlow: () => void }> = [];
+        const register = vi.spyOn(slowChunkMonitor, "register").mockImplementation((input) => {
+            const transfer = {
+                key: `transfer-${registered.length}`,
+                abortReason: null as "slow-chunk" | null,
+                detect: null as "stall" | null,
+                chunkSpeedBps: 0,
+                peerMedianBps: 0,
+            };
+            registered.push({
+                abortSlow: () => {
+                    transfer.abortReason = "slow-chunk";
+                    transfer.detect = "stall";
+                    input.attemptController.abort();
+                },
+            });
+            return transfer as never;
+        });
+        const performDownload = vi.spyOn(task, "performDownload");
+        performDownload
+            .mockImplementationOnce(async (_file, _target, signal, options) => {
+                options?.onProgress?.(3);
+                await waitForSlowAbort(signal);
+            })
+            .mockImplementationOnce(async (_file, _target, signal, options) => {
+                options?.onProgress?.(3);
+                await waitForSlowAbort(signal);
+            })
+            .mockImplementationOnce(async (currentFile, currentTarget, _signal, options) => {
+                expect(currentFile.url).toBe("https://r2.test/signed");
+                expect(currentFile.urlOrigin).toBe("presign");
+                expect(currentTarget).toBe(targetPath);
+                expect(options?.resumeFrom).toBe(5);
+                expect(options?.attachLinkToken).toBe(false);
+                await writeFile(currentTarget, "hello world");
+            });
+
+        const run = task.executeWithSlowRetry({
+            file: slowFile,
+            filePath,
+            signal: new AbortController().signal,
+            link: { linkId: "link-1", token: "link-token" },
+            onComplete: vi.fn(),
+        });
+
+        await vi.waitFor(() => expect(performDownload).toHaveBeenCalledTimes(1));
+        registered[0]?.abortSlow();
+        await vi.waitFor(() => expect(performDownload).toHaveBeenCalledTimes(2));
+        expect(slowFile.url).toBe("https://n1.nahida.live/fil/file.bin");
+        expect(slowFile.urlOrigin).toBeUndefined();
+        expect(mocks.fetchPresignedUrl).not.toHaveBeenCalled();
+        expect(register).toHaveBeenNthCalledWith(2, expect.objectContaining({ slowReconnects: 1 }));
+
+        registered[1]?.abortSlow();
+        await vi.waitFor(() => expect(performDownload).toHaveBeenCalledTimes(3));
+        await run;
+
+        expect(slowFile.url).toBe("https://r2.test/signed");
+        expect(slowFile.urlOrigin).toBe("presign");
+        expect(mocks.fetchPresignedUrl).toHaveBeenCalledWith({
+            query: {
+                uuid: "file-id",
+                presign: true,
+                linkId: "link-1",
+            },
+            headers: { "nhd-link-token": "link-token" },
+            fetch: { signal: expect.any(AbortSignal) },
+        });
+        expect(performDownload).toHaveBeenNthCalledWith(
+            3,
+            slowFile,
+            targetPath,
+            expect.any(AbortSignal),
+            expect.objectContaining({
+                attachLinkToken: false,
+                resumeFrom: 5,
+            }),
+        );
+
+        register.mockRestore();
+        performDownload.mockRestore();
+    });
+
+    it("refreshes an expired presigned url once after a 403", async () => {
+        const filePath = path.join(tempDir, "file.bin");
+        const targetPath = `${filePath}.ntmp`;
+        await writeFile(targetPath, "hello");
+        const slowFile = {
+            ...file,
+            size: 11,
+            url: "https://n1.nahida.live/fil/file.bin",
+        };
+        mocks.fetchPresignedUrl
+            .mockResolvedValueOnce({
+                data: { url: "https://r2.test/signed-1" },
+                error: null,
+            })
+            .mockResolvedValueOnce({
+                data: { url: "https://r2.test/signed-2" },
+                error: null,
+            });
+        const desktop = createDesktop();
+        const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
+        const registered: Array<{ abortSlow: () => void }> = [];
+        const register = vi.spyOn(slowChunkMonitor, "register").mockImplementation((input) => {
+            const transfer = {
+                key: `transfer-${registered.length}`,
+                abortReason: null as "slow-chunk" | null,
+                detect: null,
+                chunkSpeedBps: 0,
+                peerMedianBps: 0,
+            };
+            registered.push({
+                abortSlow: () => {
+                    transfer.abortReason = "slow-chunk";
+                    input.attemptController.abort();
+                },
+            });
+            return transfer as never;
+        });
+        const performDownload = vi.spyOn(task, "performDownload");
+        performDownload
+            .mockImplementationOnce(async (_file, _target, signal) => {
+                await waitForSlowAbort(signal);
+            })
+            .mockImplementationOnce(async (_file, _target, signal) => {
+                await waitForSlowAbort(signal);
+            })
+            .mockRejectedValueOnce(new DownloadHttpError(403, "Forbidden"))
+            .mockImplementationOnce(async (currentFile, currentTarget, _signal, options) => {
+                expect(currentFile.url).toBe("https://r2.test/signed-2");
+                expect(currentFile.urlOrigin).toBe("presign");
+                expect(options?.resumeFrom).toBe(5);
+                await writeFile(currentTarget, "hello world");
+            });
+
+        const run = task.executeWithSlowRetry({
+            file: slowFile,
+            filePath,
+            signal: new AbortController().signal,
+            onComplete: vi.fn(),
+        });
+
+        for (const expectedCalls of [1, 2]) {
+            await vi.waitFor(() => expect(performDownload).toHaveBeenCalledTimes(expectedCalls));
+            registered[expectedCalls - 1]?.abortSlow();
+        }
+
+        await vi.waitFor(() => expect(performDownload).toHaveBeenCalledTimes(4));
+        await run;
+
+        expect(slowFile.url).toBe("https://r2.test/signed-2");
+        expect(slowFile.urlOrigin).toBe("presign");
+        expect(mocks.fetchPresignedUrl).toHaveBeenCalledTimes(2);
+        register.mockRestore();
+        performDownload.mockRestore();
     });
 });
 
