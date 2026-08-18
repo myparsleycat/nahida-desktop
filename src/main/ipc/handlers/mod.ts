@@ -170,6 +170,29 @@ export function registerModHandlers(desktop: NahidaDesktop) {
         return await desktop.service.mod.fn.disableAll(groupPath);
     });
 
+    rh("mod:classifyMergePacks", async (modPaths: string[]) => {
+        return await desktop.service.mod.get.classifyMergePacks(modPaths);
+    });
+
+    rh("mod:mergeMods", async (request) => {
+        try {
+            return await desktop.service.mod.fn.mergeMods(request);
+        } catch (error) {
+            desktop.logger.error(
+                {
+                    operation: "mod:mergeMods",
+                    groupPath: request.groupPath,
+                    placement: request.placement,
+                    packName: request.packName,
+                    stage: "ipc",
+                    error: toErrorMessage(error),
+                },
+                "Mod:mergeMods:context",
+            );
+            throw error;
+        }
+    });
+
     rh("mod:downloadFromUrl", async (url: string, groupPath: string) => {
         return await desktop.lib.customDownloader.downloadToGroup(url, groupPath);
     });

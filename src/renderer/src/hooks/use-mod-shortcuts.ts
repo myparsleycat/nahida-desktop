@@ -6,15 +6,24 @@ import { useEffect, useRef } from "react";
 export function useModShortcuts(searchQuery: string, filteredMods: ModInfo[]) {
     const latestSearchQueryRef = useRef(searchQuery);
     const latestFilteredModsRef = useRef(filteredMods);
+    const isMergeMode = useModStore((s) => s.isMergeMode);
+    const exitMergeMode = useModStore((s) => s.exitMergeMode);
+    const isMergeDialogOpen = useModStore((s) => s.isMergeDialogOpen);
     const setSearchQuery = useModStore((s) => s.setSearchQuery);
     const setSearchQueryRef = useRef(setSearchQuery);
     const { exclusiveToggleModMutation } = useModMutations();
     const exclusiveToggleRef = useRef(exclusiveToggleModMutation.mutate);
 
+    const isMergeModeRef = useRef(isMergeMode);
+    const exitMergeModeRef = useRef(exitMergeMode);
+    const isMergeDialogOpenRef = useRef(isMergeDialogOpen);
     latestSearchQueryRef.current = searchQuery;
     latestFilteredModsRef.current = filteredMods;
     setSearchQueryRef.current = setSearchQuery;
     exclusiveToggleRef.current = exclusiveToggleModMutation.mutate;
+    isMergeModeRef.current = isMergeMode;
+    exitMergeModeRef.current = exitMergeMode;
+    isMergeDialogOpenRef.current = isMergeDialogOpen;
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -39,7 +48,17 @@ export function useModShortcuts(searchQuery: string, filteredMods: ModInfo[]) {
                 characterSearch?.focus();
             }
 
+            if (e.key === "Escape" && isMergeModeRef.current && !isMergeDialogOpenRef.current) {
+                e.preventDefault();
+                exitMergeModeRef.current();
+                return;
+            }
+
             if (e.key !== "Enter") {
+                return;
+            }
+
+            if (isMergeModeRef.current) {
                 return;
             }
 

@@ -537,3 +537,72 @@ export interface Transfer {
 }
 
 export type TransferWithoutData = Omit<Transfer, "data">;
+
+export const MERGE_PACK_FAMILIES = [
+    "ordinary",
+    "in_mod_toggle",
+    "classic_merge",
+    "namespace_merge",
+    "support",
+] as const;
+
+export type MergePackFamily = (typeof MERGE_PACK_FAMILIES)[number];
+
+export const MERGE_DIALECTS = ["gimi", "srmi", "zzmi", "wwmi", "efmi", "unknown"] as const;
+
+export type MergeDialect = (typeof MERGE_DIALECTS)[number];
+
+export interface MergePackClassification {
+    path: string;
+    name: string;
+    family: MergePackFamily;
+    dialect: MergeDialect;
+    primaryIniPath: string | null;
+    hashes: string[];
+    objectGuid: string | null;
+    allowsClassic: boolean;
+    warnings: string[];
+}
+
+export interface ClassifyMergePacksResult {
+    packs: MergePackClassification[];
+    hashOverlap: boolean;
+    warnings: string[];
+}
+
+export const MERGE_PLACEMENTS = ["in_place", "new_folder"] as const;
+
+export type MergePlacement = (typeof MERGE_PLACEMENTS)[number];
+
+export const MERGE_ENGINES = ["classic", "namespace"] as const;
+
+export type MergeEngine = (typeof MERGE_ENGINES)[number];
+
+export type MergePlanLeaf = {
+    kind: "leaf";
+    path: string;
+};
+
+export type MergePlanGroup = {
+    kind: "group";
+    id: string;
+    engine: MergeEngine;
+    name: string;
+    forwardKey: string;
+    backKey: string;
+    includeVanilla: boolean;
+    children: MergePlanNode[];
+};
+
+export type MergePlanNode = MergePlanLeaf | MergePlanGroup;
+
+export interface MergeModsRequest {
+    groupPath: string;
+    placement: MergePlacement;
+    packName: string;
+    root: MergePlanNode;
+}
+
+export interface MergeModsResult {
+    outputPath: string;
+}

@@ -26,6 +26,8 @@ export function ModList(_props: ModListProps) {
   const { data: activeGroup, isPlaceholderData, isPending } = useModGroup(selectedGroupPath);
   const actions = useModActions(selectedGroupPath);
 
+  const isMergeMode = useModStore((s) => s.isMergeMode);
+  const toggleMergeSelection = useModStore((s) => s.toggleMergeSelection);
   const { toggleModMutation, exclusiveToggleModMutation } = useModMutations();
 
   const mods = useFilteredMods(activeGroup?.mods || [], searchQuery);
@@ -39,13 +41,22 @@ export function ModList(_props: ModListProps) {
 
   const handleToggle = useCallback(
     (mod: ModInfo, event?: React.MouseEvent) => {
+      if (isMergeMode) {
+        toggleMergeSelection(mod.path);
+        return;
+      }
       if (event && (event.ctrlKey || event.metaKey)) {
         exclusiveToggleModMutation.mutate(mod);
       } else {
         toggleModMutation.mutate(mod);
       }
     },
-    [toggleModMutation.mutate, exclusiveToggleModMutation.mutate],
+    [
+      isMergeMode,
+      toggleMergeSelection,
+      toggleModMutation.mutate,
+      exclusiveToggleModMutation.mutate,
+    ],
   );
 
   if (!selectedGroupPath) {

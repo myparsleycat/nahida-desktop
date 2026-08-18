@@ -2,6 +2,7 @@ import { PreviewLightbox } from "@renderer/components/ui/preview-lightbox";
 import type { ModActionApi } from "@renderer/hooks/use-mod-actions";
 import i18n from "@renderer/lib/i18n";
 import { cn } from "@renderer/lib/utils";
+import { useModStore } from "@renderer/store/mod";
 import type { ModInfo } from "@renderer/types/mod";
 import { stripDisabledPrefix } from "@shared/mod";
 import { formatDate, formatSize } from "@shared/utils";
@@ -19,6 +20,7 @@ export function ModListRow({
   actions: ModActionApi;
   handleToggle: (mod: ModInfo, e?: React.MouseEvent) => void;
 }) {
+  const isMergeSelected = useModStore((s) => s.isMergeMode && s.selectedModPaths.has(mod.path));
   const localSrc = mod.preview
     ? `local://${mod.preview}?v=${encodeURIComponent(String(mod.mtime))}`
     : "";
@@ -29,6 +31,7 @@ export function ModListRow({
         className={cn(
           "group relative cursor-pointer border-b border-transparent transition-colors",
           getModColorClass(mod.isEnabled),
+          isMergeSelected && "ring-2 ring-primary ring-inset",
           "after:pointer-events-none after:absolute after:inset-0 hover:after:bg-black/10 dark:hover:after:bg-white/10",
         )}
         onClick={(e) => {

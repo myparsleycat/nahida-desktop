@@ -7,6 +7,7 @@ import type { ModInfo } from "@renderer/types/mod";
 import { formatDate, formatSize } from "@shared/utils";
 import { CalendarIcon, FolderIcon } from "lucide-react";
 import { memo, useCallback, useRef } from "react";
+
 import { ModCardHeader } from "./mod-card-header";
 import { ModContextMenu } from "./mod-context-menu";
 import { ModIniList } from "./mod-ini-list";
@@ -34,6 +35,7 @@ export const ModCard = memo(function ModCard({
   onToggle,
   onToggleKeyUpdate,
 }: ModCardProps) {
+  const isMergeSelected = useModStore((s) => s.isMergeMode && s.selectedModPaths.has(mod.path));
   const setIniListExpanded = useModStore((s) => s.setIniListExpanded);
   const isIniListExpanded = useModStore((s) =>
     selectedGroupPath
@@ -54,8 +56,9 @@ export const ModCard = memo(function ModCard({
       <ModContextMenu mod={mod} actions={actions}>
         <div
           className={cn(
-            "rounded-sm overflow-hidden border-border/75 cursor-pointer p-1 h-100 relative hover:shadow-lg transition-shadow duration-150",
+            "relative h-100 cursor-pointer overflow-hidden rounded-sm border-border/75 p-1 transition-shadow duration-150 hover:shadow-lg",
             getModColorClass(mod.isEnabled),
+            isMergeSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background",
           )}
           onMouseDown={(e) => {
             mouseDownTargetRef.current = e.target;
@@ -71,20 +74,20 @@ export const ModCard = memo(function ModCard({
         >
           {mod.preview?.match(/\.(jpeg|jpg|gif|png|webp|bmp)$/i) && (
             <div
-              className="absolute inset-0 z-0 blur-lg scale-110 pointer-events-none opacity-25"
+              className="pointer-events-none absolute inset-0 z-0 scale-110 opacity-25 blur-lg"
               style={{ transform: "translateZ(0)", willChange: "filter" }}
             >
               <img
                 src={`local://${mod.preview}?v=${encodeURIComponent(String(mod.mtime))}`}
                 alt="preview"
-                className="w-full h-full object-fill"
+                className="h-full w-full object-fill"
               />
             </div>
           )}
 
           <ModCardHeader mod={mod} actions={actions} />
 
-          <div className="flex flex-row h-[calc(100%-2rem)] space-x-2 relative z-10">
+          <div className="relative z-10 flex h-[calc(100%-2rem)] flex-row space-x-2">
             <ModPreviewContainer
               mod={mod}
               onDeletePreview={() => actions.openDeletePreview(mod)}
@@ -98,7 +101,7 @@ export const ModCard = memo(function ModCard({
                   <button
                     type="button"
                     aria-label={isIniListExpanded ? "Collapse ini list" : "Expand ini list"}
-                    className="absolute inset-y-0 left-1/2 z-10 w-6 -translate-x-1/2 bg-transparent pointer-events-auto"
+                    className="pointer-events-auto absolute inset-y-0 left-1/2 z-10 w-6 -translate-x-1/2 bg-transparent"
                     style={{ cursor: "col-resize" }}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -116,16 +119,16 @@ export const ModCard = memo(function ModCard({
             )}
           </div>
 
-          <div className="absolute left-1 bottom-1 flex flex-col space-y-1 z-10">
+          <div className="absolute bottom-1 left-1 z-10 flex flex-col space-y-1">
             <Badge
-              className="bg-background/35 backdrop-blur text-foreground text-xs h-5 flex items-center gap-1.5"
+              className="flex h-5 items-center gap-1.5 bg-background/35 text-xs text-foreground backdrop-blur"
               style={{ transform: "translateZ(0)", willChange: "backdrop-filter" }}
             >
               <FolderIcon />
               {formatSize(mod.size)}
             </Badge>
             <Badge
-              className="bg-background/35 backdrop-blur text-foreground text-xs h-5 flex items-center gap-1.5"
+              className="flex h-5 items-center gap-1.5 bg-background/35 text-xs text-foreground backdrop-blur"
               style={{ transform: "translateZ(0)", willChange: "backdrop-filter" }}
             >
               <CalendarIcon />

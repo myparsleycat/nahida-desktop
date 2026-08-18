@@ -21,6 +21,8 @@ import {
 } from "@renderer/components/ui/select";
 import { Separator } from "@renderer/components/ui/separator";
 import { useBulkModToggle } from "@renderer/hooks/use-bulk-mod-toggle";
+import { useGames } from "@renderer/hooks/use-mod-data";
+import { isThreedmigotoImporter } from "@renderer/lib/mod-merge";
 import { useModStore } from "@renderer/store/mod";
 import {
   ArrowDown10,
@@ -34,6 +36,7 @@ import {
   DownloadIcon,
   EllipsisIcon,
   FolderIcon,
+  LayersIcon,
   LayoutGridIcon,
   ListIcon,
   Loader2Icon,
@@ -60,7 +63,16 @@ export function ContentHeader({
   const searchValue = useModStore((s) => s.searchQuery);
   const onSearchChange = useModStore((s) => s.setSearchQuery);
   const selectedGroup = useModStore((s) => s.selectedGroup);
+  const selectedGame = useModStore((s) => s.selectedGame);
   const setIsCustomDownloadDialogOpen = useModStore((s) => s.setIsCustomDownloadDialogOpen);
+  const isMergeMode = useModStore((s) => s.isMergeMode);
+  const enterMergeMode = useModStore((s) => s.enterMergeMode);
+  const exitMergeMode = useModStore((s) => s.exitMergeMode);
+  const selectedModPaths = useModStore((s) => s.selectedModPaths);
+  const setMergeDialogOpen = useModStore((s) => s.setMergeDialogOpen);
+  const { data: games = [] } = useGames();
+  const selectedImporter = games.find((game) => game.game === selectedGame)?.importer ?? null;
+  const showMerge = isThreedmigotoImporter(selectedImporter);
   const bulkModToggle = useBulkModToggle();
 
   const sortType = useModStore((s) => s.sortType);
@@ -114,6 +126,23 @@ export function ContentHeader({
     <div className="z-20 flex h-12 items-center justify-between border-b px-3">
       <div className="flex items-center gap-3">
         {groupName && <h1 className="text-2xl font-semibold text-foreground">{groupName}</h1>}
+        {isMergeMode && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">
+              {t("page.mod.merge.selected_count", { count: selectedModPaths.size })}
+            </span>
+            <Button variant="outline" size="sm" onClick={exitMergeMode}>
+              {t("g.cancel")}
+            </Button>
+            <Button
+              size="sm"
+              disabled={selectedModPaths.size < 2}
+              onClick={() => setMergeDialogOpen(true)}
+            >
+              {t("page.mod.merge.next")}
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
@@ -190,7 +219,7 @@ export function ContentHeader({
           <DropdownMenuTrigger render={<Button variant="outline" size="icon" />}>
             <EllipsisIcon />
           </DropdownMenuTrigger>
-          <DropdownMenuContent finalFocus={false}>
+          <DropdownMenuContent finalFocus={false} className="w-full">
             <DropdownMenuGroup>
               <DropdownMenuItem
                 disabled={!hasSelectedGroup || bulkModToggle.isPending}
@@ -217,6 +246,22 @@ export function ContentHeader({
             </DropdownMenuGroup>
 
             <DropdownMenuSeparator />
+
+            {showMerge && (
+              <DropdownMenuItem
+                disabled={!hasSelectedGroup}
+                onClick={() => {
+                  if (isMergeMode) {
+                    exitMergeMode();
+                    return;
+                  }
+                  enterMergeMode();
+                }}
+              >
+                <LayersIcon />
+                {isMergeMode ? t("page.mod.merge.exit") : t("page.mod.merge.enter") + " (Beta)"}
+              </DropdownMenuItem>
+            )}
 
             <DropdownMenuItem
               disabled={!hasSelectedGroup}

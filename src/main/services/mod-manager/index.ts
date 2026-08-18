@@ -1,8 +1,11 @@
 import type { ResolvedArchiveExtractPathMode } from "@shared/mod";
+
 import type { NahidaDesktop } from "../..";
+
 import { ModImportsService } from "./imports";
 import { ModIniService } from "./ini";
 import { ModLibraryService } from "./library";
+import { ModMergeService } from "./merge/execute";
 import { ModActionsService } from "./mod-actions";
 import { ModPresetsService } from "./presets";
 import { ModShaderFixesService } from "./shader-fixes";
@@ -16,6 +19,7 @@ export class ModManager {
     private readonly imports: ModImportsService;
     private readonly ini: ModIniService;
     private readonly watchers: ModWatchersService;
+    private readonly merge: ModMergeService;
 
     public readonly get: {
         gamePath: ModLibraryService["gamePath"];
@@ -32,6 +36,7 @@ export class ModManager {
         gamePid: ModLibraryService["gamePid"];
         resolveDownloadTarget: ModLibraryService["resolveDownloadTarget"];
         resolveNteInstallPath: ModLibraryService["resolveNteInstallPath"];
+        classifyMergePacks: ModMergeService["classifyMergePacks"];
     };
 
     public readonly fn: {
@@ -64,6 +69,7 @@ export class ModManager {
         ) => Promise<void>;
         copyFolderToGroup: ModImportsService["copyFolderToGroup"];
         pastePreview: ModImportsService["pastePreview"];
+        mergeMods: ModMergeService["mergeMods"];
     };
 
     constructor(desktop: NahidaDesktop) {
@@ -74,6 +80,7 @@ export class ModManager {
         this.imports = new ModImportsService(desktop, this.shaderFixes);
         this.ini = new ModIniService(desktop);
         this.watchers = new ModWatchersService(desktop, this.library);
+        this.merge = new ModMergeService(desktop);
 
         this.get = {
             gamePath: this.library.gamePath.bind(this.library),
@@ -90,6 +97,7 @@ export class ModManager {
             gamePid: this.library.gamePid.bind(this.library),
             resolveDownloadTarget: this.library.resolveDownloadTarget.bind(this.library),
             resolveNteInstallPath: this.library.resolveNteInstallPath.bind(this.library),
+            classifyMergePacks: this.merge.classifyMergePacks.bind(this.merge),
         };
 
         this.fn = {
@@ -118,6 +126,7 @@ export class ModManager {
             extractArchiveToGroup: this.imports.extractArchiveToGroup.bind(this.imports),
             copyFolderToGroup: this.imports.copyFolderToGroup.bind(this.imports),
             pastePreview: this.imports.pastePreview.bind(this.imports),
+            mergeMods: this.merge.mergeMods.bind(this.merge),
         };
     }
 
