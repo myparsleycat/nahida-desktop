@@ -219,6 +219,8 @@ const DEFAULT_SETTINGS: TextureResizeSettings = {
 
 export class TextureResizer {
     private activeState: TextureResizeProgressEvent = { status: "idle" };
+    private nextJobId = 0;
+    private readonly inFlightJobs = new Map<number, TextureResizeProgressEvent>();
     private readonly realesrganRuntime: RealesrganRuntime;
 
     constructor(private readonly desktop: NahidaDesktop) {
@@ -232,6 +234,48 @@ export class TextureResizer {
     private updateProgress(event: TextureResizeProgressEvent) {
         this.activeState = event;
         this.desktop.ipc.broadcast("tools:textureResizeProgress", event);
+    }
+
+    // Concurrent resizeFile/resizeFolder/resizeMod share this service. A finished
+    // job must not broadcast completed/failed or reset idle while another job is
+    // still running, or titlebar activity would clear.
+    private async runResizeJob<T>(
+        running: TextureResizeProgressEvent,
+        work: () => Promise<T>,
+        toCompleted: (result: T) => TextureResizeProgressEvent,
+    ) {
+        const jobId = ++this.nextJobId;
+        this.inFlightJobs.set(jobId, running);
+        this.updateProgress(running);
+        try {
+            const result = await work();
+            this.settleJob(jobId, toCompleted(result));
+            return result;
+        } catch (error) {
+            this.settleJob(jobId, {
+                ...running,
+                status: "failed",
+                error: toErrorMessage(error),
+            });
+            throw error;
+        } finally {
+            this.inFlightJobs.delete(jobId);
+            if (this.inFlightJobs.size === 0) {
+                this.activeState = { status: "idle" };
+            }
+        }
+    }
+
+    private settleJob(jobId: number, event: TextureResizeProgressEvent) {
+        const remaining = [...this.inFlightJobs].filter(([id]) => id !== jobId).at(-1)?.[1];
+        if (remaining) {
+            if (this.activeState !== remaining) {
+                this.updateProgress(remaining);
+            }
+            return;
+        }
+
+        this.updateProgress(event);
     }
 
     public async getSettings() {
@@ -326,36 +370,22 @@ export class TextureResizer {
         }
 
         const resolvedPath = path.resolve(targetPath);
-        this.updateProgress({
+        const running: TextureResizeProgressEvent = {
             status: "running",
             operation: settings.operation,
             filePath: resolvedPath,
             fileName: path.basename(resolvedPath),
-        });
-
-        try {
-            const result = await resizeTextures(buildResizeRequest(resolvedPath, settings));
-            this.updateProgress({
+        };
+        return await this.runResizeJob(
+            running,
+            () => resizeTextures(buildResizeRequest(resolvedPath, settings)),
+            (result) => ({
+                ...running,
                 status: "completed",
-                operation: settings.operation,
-                filePath: resolvedPath,
-                fileName: path.basename(resolvedPath),
                 totalFiles: result.processed,
                 processedFiles: result.processed,
-            });
-            return result;
-        } catch (error) {
-            this.updateProgress({
-                status: "failed",
-                operation: settings.operation,
-                filePath: resolvedPath,
-                fileName: path.basename(resolvedPath),
-                error: toErrorMessage(error),
-            });
-            throw error;
-        } finally {
-            this.activeState = { status: "idle" };
-        }
+            }),
+        );
     }
 
     public async resizeMod(modPath: string, input: Omit<TextureResizeRunInput, "targetPath">) {
@@ -365,36 +395,22 @@ export class TextureResizer {
         }
 
         const resolvedPath = path.resolve(modPath);
-        this.updateProgress({
+        const running: TextureResizeProgressEvent = {
             status: "running",
             operation: settings.operation,
             filePath: resolvedPath,
             fileName: path.basename(resolvedPath),
-        });
-
-        try {
-            const result = await resizeTextures(buildResizeRequest(resolvedPath, settings));
-            this.updateProgress({
+        };
+        return await this.runResizeJob(
+            running,
+            () => resizeTextures(buildResizeRequest(resolvedPath, settings)),
+            (result) => ({
+                ...running,
                 status: "completed",
-                operation: settings.operation,
-                filePath: resolvedPath,
-                fileName: path.basename(resolvedPath),
                 totalFiles: result.processed,
                 processedFiles: result.processed,
-            });
-            return result;
-        } catch (error) {
-            this.updateProgress({
-                status: "failed",
-                operation: settings.operation,
-                filePath: resolvedPath,
-                fileName: path.basename(resolvedPath),
-                error: toErrorMessage(error),
-            });
-            throw error;
-        } finally {
-            this.activeState = { status: "idle" };
-        }
+            }),
+        );
     }
 
     public async resizeFile(input: TextureResizeFileRunInput) {
@@ -405,40 +421,26 @@ export class TextureResizer {
 
         const settings = await this.saveSettings(input.settings);
         const resolvedPath = path.resolve(filePath);
-        this.updateProgress({
+        const running: TextureResizeProgressEvent = {
             status: "running",
             operation: settings.operation,
             filePath: resolvedPath,
             fileName: path.basename(resolvedPath),
             totalFiles: 1,
             processedFiles: 0,
-        });
-
-        try {
-            const result = isTextureUpscaleOperation(settings.operation)
-                ? await this.upscaleFile(resolvedPath, settings)
-                : await resizeTextures(buildResizeRequest(resolvedPath, settings));
-            this.updateProgress({
+        };
+        return await this.runResizeJob(
+            running,
+            () =>
+                isTextureUpscaleOperation(settings.operation)
+                    ? this.upscaleFile(resolvedPath, settings)
+                    : resizeTextures(buildResizeRequest(resolvedPath, settings)),
+            () => ({
+                ...running,
                 status: "completed",
-                operation: settings.operation,
-                filePath: resolvedPath,
-                fileName: path.basename(resolvedPath),
-                totalFiles: 1,
                 processedFiles: 1,
-            });
-            return result;
-        } catch (error) {
-            this.updateProgress({
-                status: "failed",
-                operation: settings.operation,
-                filePath: resolvedPath,
-                fileName: path.basename(resolvedPath),
-                error: toErrorMessage(error),
-            });
-            throw error;
-        } finally {
-            this.activeState = { status: "idle" };
-        }
+            }),
+        );
     }
 
     private async getSettingValue(key: string) {
