@@ -2,7 +2,7 @@ import path from "node:path";
 
 import fse from "fs-extra";
 
-import { classifyLine } from "./ini-text";
+import { appendResourceSuffix, classifyLine, isResourceReference } from "./ini-text";
 import { disableIniFile, recordFileWrite, type RollbackAction } from "./rollback";
 
 type ClassicSource = {
@@ -10,10 +10,15 @@ type ClassicSource = {
     groupIndex: number;
 };
 
+type SectionEntry = {
+    key: string;
+    value: string;
+};
+
 type SectionData = {
     header: string;
     name: string;
-    values: Record<string, string>;
+    entries: SectionEntry[];
     location: string;
     groupIndex: number;
 };
@@ -49,9 +54,10 @@ export async function writeClassicMerge(options: {
     const resources: string[] = [];
 
     for (const section of sections) {
-        if (section.values.hash) {
-            const index = section.values.match_first_index ?? "-1";
-            const key = `${section.values.hash.toLowerCase()}::${index}`;
+        const hash = getEntryValue(section, "hash");
+        if (hash) {
+            const index = getEntryValue(section, "match_first_index") ?? "-1";
+            const key = `${hash.toLowerCase()}::${index}`;
             const existing = commandData.get(key);
             if (!existing) {
                 commandData.set(key, [section]);
@@ -70,8 +76,8 @@ export async function writeClassicMerge(options: {
             continue;
         }
 
-        if (section.values.filename || section.values.type) {
-            resources.push(buildResource(section));
+        if (hasEntry(section, "filename") || hasEntry(section, "type")) {
+            resources.push(buildResource(section, options.outputDir));
         }
     }
 
@@ -100,7 +106,12 @@ export async function writeClassicMerge(options: {
         .map((group) => buildCommandList(group))
         .join("\n");
 
-    const headerPaths = options.sources.map((source) => source.iniPath).join(", ");
+    const headerPaths = options.sources
+        .map((source) => {
+            const rel = path.relative(options.outputDir, source.iniPath);
+            return rel.startsWith(".") ? rel : `.\\${rel}`;
+        })
+        .join(", ");
     const result = [
         `; Merged Mod: ${headerPaths}`,
         "",
@@ -157,7 +168,7 @@ function parseClassicSections(text: string, location: string, groupIndex: number
             current = {
                 header: recognized,
                 name: line.name.slice(recognized.length),
-                values: {},
+                entries: [],
                 location,
                 groupIndex,
             };
@@ -166,17 +177,48 @@ function parseClassicSections(text: string, location: string, groupIndex: number
         }
         if (!current || line.kind !== "kv") continue;
         if (line.key.includes("CharacterIB") || line.key.includes("ResourceRef")) continue;
-        current.values[line.key] = line.value;
+        current.entries.push({ key: line.key, value: line.value });
     }
 
     return sections;
 }
 
+function getEntryValue(section: SectionData, keyName: string) {
+    const target = keyName.toLowerCase();
+    const entry = section.entries.find((item) => item.key.toLowerCase() === target);
+    return entry?.value ?? null;
+}
+
+function hasEntry(section: SectionData, keyName: string) {
+    const target = keyName.toLowerCase();
+    return section.entries.some((item) => item.key.toLowerCase() === target);
+}
+
 function buildOverride(section: SectionData, setActive: boolean) {
-    const lines = [`[${section.header}${section.name}]`, `hash = ${section.values.hash}`];
-    if (section.values.match_first_index) {
-        lines.push(`match_first_index = ${section.values.match_first_index}`);
+    const hash = getEntryValue(section, "hash");
+    const lines = [`[${section.header}${section.name}]`, `hash = ${hash}`];
+    const matchFirstIndex = getEntryValue(section, "match_first_index");
+    if (matchFirstIndex) {
+        lines.push(`match_first_index = ${matchFirstIndex}`);
     }
+
+    const preserveKeys = [
+        "allow_duplicate_hash",
+        "filter_index",
+        "match_priority",
+        "cull",
+        "topology",
+        "override_vertex_count",
+        "override_byte_stride",
+    ];
+
+    for (const entry of section.entries) {
+        const lower = entry.key.toLowerCase();
+        if (preserveKeys.includes(lower)) {
+            lines.push(`${entry.key} = ${entry.value}`);
+        }
+    }
+
     if (!section.name.includes("VertexLimitRaise")) {
         lines.push(`run = CommandList${section.name}`);
     }
@@ -187,16 +229,20 @@ function buildOverride(section: SectionData, setActive: boolean) {
     return lines.join("\n");
 }
 
-function buildResource(section: SectionData) {
+function buildResource(section: SectionData, outputDir: string) {
     const lines = [`[${section.header}${section.name}.${section.groupIndex}]`];
-    for (const [key, value] of Object.entries(section.values)) {
-        if (key === "filename") {
-            lines.push(
-                `${key} = ${path.isAbsolute(value) ? value : path.join(section.location, value)}`,
-            );
+    for (const entry of section.entries) {
+        if (entry.key.toLowerCase() === "filename") {
+            const rawPath = entry.value.replace(/^["']|["']$/g, "").trim();
+            const absTarget = path.isAbsolute(rawPath)
+                ? rawPath
+                : path.resolve(section.location, rawPath);
+            const relTarget = path.relative(outputDir, absTarget);
+            const formatted = relTarget.startsWith(".") ? relTarget : `.\\${relTarget}`;
+            lines.push(`${entry.key} = ${formatted}`);
             continue;
         }
-        lines.push(`${key} = ${value}`);
+        lines.push(`${entry.key} = ${entry.value}`);
     }
     lines.push("");
     return lines.join("\n");
@@ -204,21 +250,26 @@ function buildResource(section: SectionData) {
 
 function buildCommandList(group: SectionData[]) {
     const lines = [`[CommandList${group[0].name}]`];
+    const excludedKeys = [
+        "hash",
+        "match_first_index",
+        "allow_duplicate_hash",
+        "override_vertex_count",
+        "override_byte_stride",
+    ];
+
     group.forEach((model, index) => {
         lines.push(`${index === 0 ? "if" : "else if"} $swapvar == ${model.groupIndex}`);
-        for (const [key, value] of Object.entries(model.values)) {
-            if (["hash", "match_first_index"].includes(key.toLowerCase())) continue;
-            const suffix =
-                (key.startsWith("vb") ||
-                    key.startsWith("ib") ||
-                    key.startsWith("ps") ||
-                    key.startsWith("vs") ||
-                    key.startsWith("th") ||
-                    value.includes("Resource")) &&
-                value.toLowerCase() !== "null"
-                    ? `.${model.groupIndex}`
-                    : "";
-            lines.push(`\t${key} = ${value}${suffix}`);
+        for (const entry of model.entries) {
+            const lowerKey = entry.key.toLowerCase();
+            if (excludedKeys.includes(lowerKey)) continue;
+
+            if (isResourceReference(entry.key, entry.value)) {
+                const suffixed = appendResourceSuffix(entry.value, model.groupIndex);
+                lines.push(`\t${entry.key} = ${suffixed}`);
+            } else {
+                lines.push(`\t${entry.key} = ${entry.value}`);
+            }
         }
     });
     lines.push("endif", "");

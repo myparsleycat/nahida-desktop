@@ -21,7 +21,6 @@ afterEach(async () => {
 
 const childIni = `[TextureOverrideKleePosition]
 hash = abcdef01
-match_priority = 0
 vb0 = ResourcePosition
 `;
 
@@ -79,7 +78,7 @@ describe("namespace merge writer", () => {
         const unwrapped = await unwrapNamespace(wrapped);
         assert.doesNotMatch(unwrapped, /\$\\Old\\Master\\swapvar/);
         assert.match(unwrapped, /hash = abcdef01/);
-        assert.match(unwrapped, /match_priority = 0/);
+        assert.match(unwrapped, /vb0 = ResourcePosition/);
     });
 
     it("flushes wrapped section before indented section headers", () => {
@@ -201,5 +200,37 @@ ps-t0 = ResourceTexture
             redisoveredAfterRemerge.map((entry) => path.resolve(entry)).sort(),
             [path.resolve(child1), path.resolve(child2), path.resolve(child3)].sort(),
         );
+    });
+
+    it("preserves nested if/elif/else/endif blocks when unwrapping namespace wrap", async () => {
+        const complexIni = `[TextureOverrideBlackSwanHairBlend]
+hash = e2770c9a
+match_priority = 0
+if $\\BlackswanMerge\\Master\\swapvarZ==0
+\thandling = skip
+\tvb2 = ResourceBlackSwanHairBlend
+\tif DRAW_TYPE == 1
+\t\tvb0 = ResourceBlackSwanHairPosition
+\t\tdraw = 5376, 0
+\tendif
+\tResourceBlackSwanHairDrawCS = copy ResourceBlackSwanHairDrawCS
+\tif DRAW_TYPE == 8
+\t\tResource\\SRMI\\PositionBuffer = ref ResourceBlackSwanHairPositionCS
+\t\tResource\\SRMI\\BlendBuffer = ref ResourceBlackSwanHairBlendCS
+\t\tResource\\SRMI\\DrawBuffer = ref ResourceBlackSwanHairDrawCS
+\t\t$\\SRMI\\vertcount = 5376
+\telif DRAW_TYPE != 1
+\t\t$_blend_ = 2
+\tendif
+endif
+`;
+        const unwrapped = await unwrapNamespace(complexIni);
+        assert.doesNotMatch(unwrapped, /\$\\BlackswanMerge\\Master\\swapvarZ/);
+        assert.match(unwrapped, /handling = skip/);
+        assert.match(
+            unwrapped,
+            /if DRAW_TYPE == 1\n\tvb0 = ResourceBlackSwanHairPosition\n\tdraw = 5376, 0\nendif/,
+        );
+        assert.match(unwrapped, /elif DRAW_TYPE != 1\n\t\$_blend_ = 2\nendif/);
     });
 });

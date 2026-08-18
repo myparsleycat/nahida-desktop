@@ -102,21 +102,27 @@ vb0 = ResourcePosition
         assert.equal(await fse.pathExists(path.join(aDir, "DISABLED_BACKUP_Klee.ini")), true);
     });
 
-    it("preserves absolute filename in resources and joins relative filename", async () => {
+    it("formats relative filename in resources and keeps resource references accurate", async () => {
         const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-classic-"));
         tempRoots.push(root);
         const aDir = path.join(root, "A");
         await fse.ensureDir(aDir);
         const aIni = path.join(aDir, "Klee.ini");
-        const absoluteBufPath = path.resolve(root, "shared", "Absolute.buf");
         await fse.writeFile(
             aIni,
             `[TextureOverrideKleePosition]
 hash = abcdef01
 vb0 = ResourcePosition
+handling = skip
+ps-t0 = 1
+this = CommandListFace
+
+[TextureOverrideKleeVertexLimitRaise]
+hash = fedcba98
+override_vertex_count = 50000
+override_byte_stride = 40
+
 [ResourcePosition]
-filename = ${absoluteBufPath}
-[ResourceRelative]
 filename = Relative.buf
 `,
         );
@@ -128,14 +134,15 @@ filename = Relative.buf
         });
 
         const text = await fse.readFile(output, "utf8");
+        assert.match(text, /filename = \.\\A\\Relative\.buf/);
         assert.match(
             text,
-            new RegExp(`filename = ${absoluteBufPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
+            /\[TextureOverrideKleeVertexLimitRaise\]\nhash = fedcba98\noverride_vertex_count = 50000\noverride_byte_stride = 40/,
         );
-        const expectedRelativePath = path.join(aDir, "Relative.buf");
-        assert.match(
-            text,
-            new RegExp(`filename = ${expectedRelativePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
-        );
+        assert.match(text, /handling = skip/);
+        assert.match(text, /ps-t0 = 1/);
+        assert.match(text, /this = CommandListFace/);
+        assert.doesNotMatch(text, /ps-t0 = 1\.0/);
+        assert.doesNotMatch(text, /this = CommandListFace\.0/);
     });
 });

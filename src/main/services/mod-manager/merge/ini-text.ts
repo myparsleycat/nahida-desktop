@@ -120,21 +120,22 @@ export function extractMergedModPaths(text: string) {
                 // fall through
             }
         }
-        if (rawMatches.length === 1 && rawMatch.includes(",")) {
+        if (rawMatch.includes(",")) {
             const parts = rawMatch
                 .split(",")
-                .map((entry) => entry.trim())
+                .map((entry) => entry.trim().replace(/^["']|["']$/g, ""))
                 .filter(Boolean);
             if (parts.length > 1 && parts.every((entry) => /\.ini$/i.test(entry))) {
                 return parts;
             }
         }
-        return [rawMatch];
+        return [rawMatch.replace(/^["']|["']$/g, "").trim()];
     });
 }
 
 export function extractNamespace(text: string) {
-    return text.match(/^\s*namespace\s*=\s*(.+)$/im)?.[1]?.trim() ?? null;
+    const match = text.match(/^\s*namespace\s*=\s*([^;\r\n]+)/im);
+    return match?.[1]?.trim() ?? null;
 }
 
 export function extractObjectGuid(text: string) {
@@ -153,18 +154,21 @@ export function extractHashes(text: string) {
 
 export function extractPositionHash(text: string) {
     const parsed = parseIniText(text);
-    const position = parsed.sections.find((section) => /position$/i.test(section.name));
-    if (position) {
-        const hash = sectionValues(position).hash;
-        if (hash) return hash.toLowerCase();
-    }
+    const candidatePatterns = [
+        /position$/i,
+        /markbonedatacb$/i,
+        /headblend$/i,
+        /hairblend$/i,
+        /textureoverride(?:_?)component0(?:_lod0)?$/i,
+        /textureoverride\w+ib$/i,
+    ];
 
-    const component = parsed.sections.find((section) =>
-        /textureoverride(?:_?)component0(?:_lod0)?$/i.test(section.name),
-    );
-    if (component) {
-        const hash = sectionValues(component).hash;
-        if (hash) return hash.toLowerCase();
+    for (const pattern of candidatePatterns) {
+        const found = parsed.sections.find((section) => pattern.test(section.name));
+        if (found) {
+            const hash = sectionValues(found).hash;
+            if (hash) return hash.toLowerCase();
+        }
     }
 
     return extractHashes(text)[0] ?? null;
@@ -183,11 +187,32 @@ export function hasNumberedResources(text: string) {
 }
 
 export function hasCommandListDispatch(text: string) {
-    return /\$swapvar/i.test(text) && /^\s*\[CommandList/im.test(text);
+    return /\$swapvar\w*/i.test(text) && /^\s*\[CommandList/im.test(text);
 }
 
 export function hasMasterSwapRef(text: string) {
-    return /\$\\[^\\\s]+\\Master\\swapvar/i.test(text);
+    return /\$\\[^\\\s]+\\Master\\swapvar\w*/i.test(text);
+}
+
+export function isResourceReference(key: string, value: string) {
+    const trimmedVal = value.trim();
+    if (trimmedVal.toLowerCase() === "null") return false;
+    if (/^\d+(\.\d+)?$/.test(trimmedVal)) return false;
+    if (/^commandlist/i.test(trimmedVal)) return false;
+    if (trimmedVal.toLowerCase() === "auto") return false;
+
+    if (/\bResource\w*/i.test(trimmedVal)) return true;
+    return /^(?:vb|ib|ps-t|vs-t|ps-u|cs-u|cs-t)\d*/i.test(key) && !/^[a-z_]+$/i.test(trimmedVal);
+}
+
+export function appendResourceSuffix(value: string, groupIndex: number) {
+    const resourceMatch = value.match(/(\bResource[^\s,;]+)/i);
+    if (resourceMatch && resourceMatch.index !== undefined) {
+        const target = resourceMatch[1];
+        if (target.endsWith(`.${groupIndex}`)) return value;
+        return `${value.slice(0, resourceMatch.index)}${target}.${groupIndex}${value.slice(resourceMatch.index + target.length)}`;
+    }
+    return `${value}.${groupIndex}`;
 }
 
 export function isFileDisabledIniName(fileName: string) {
