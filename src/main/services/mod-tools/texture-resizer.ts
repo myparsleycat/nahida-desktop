@@ -259,6 +259,7 @@ export class TextureResizer {
                     channel: "tools:textureResizeProgress",
                     operation: running.operation,
                     filePath: running.filePath,
+                    jobId,
                     stage: "runResizeJob",
                 },
                 "TextureResizer:runResizeJob",
