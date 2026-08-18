@@ -193,15 +193,14 @@ export class XXMI {
             await this.ensureLauncherClosed();
             await fse.ensureDir(workDir);
             const zipPath = path.join(workDir, "package.zip");
+            const githubHeaders = {
+                "User-Agent":
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+                Referer: "https://github.com/SpectrumQT/XXMI-Libs-Package",
+            };
             const resp = await ky.get(
                 `https://github.com/SpectrumQT/XXMI-Libs-Package/releases/download/${selectedVersion}/XXMI-PACKAGE-${selectedVersion}.zip`,
-                {
-                    headers: {
-                        "User-Agent":
-                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-                        Referer: "https://github.com/SpectrumQT/XXMI-Libs-Package",
-                    },
-                },
+                { headers: githubHeaders },
             );
 
             if (!resp.ok) {
@@ -226,6 +225,19 @@ export class XXMI {
             await fse.copy(onlyDir ? path.join(extractedPath, onlyDir) : extractedPath, destDir, {
                 overwrite: true,
             });
+
+            const manifestResp = await ky.get(
+                `https://github.com/SpectrumQT/XXMI-Libs-Package/releases/download/${selectedVersion}/Manifest.json`,
+                { headers: githubHeaders },
+            );
+            if (!manifestResp.ok) {
+                await drainWebStream(manifestResp.body).catch(() => {});
+                throw new Error(`Failed to download XXMI manifest: ${manifestResp.statusText}`);
+            }
+            await fse.writeFile(
+                path.join(destDir, "Manifest.json"),
+                Buffer.from(await manifestResp.arrayBuffer()),
+            );
 
             const configPath = path.join(xxmiPath, "XXMI Launcher Config.json");
             const config = await fse.readJson(configPath);
