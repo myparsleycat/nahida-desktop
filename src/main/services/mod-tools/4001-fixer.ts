@@ -77,7 +77,12 @@ export class FourThousandOneFixer {
             name: "mod-tools:d3d-build",
             run: () => this.cleanupStaleBuildDirs(),
         });
-        void this.updateReleases();
+        void this.updateReleases().catch((error) => {
+            this.desktop.logger.warn(
+                `Automatic XXMI libs release prefetch failed: ${String(error)}`,
+                "4001Fixer:updateReleases",
+            );
+        });
     }
 
     public getState() {
