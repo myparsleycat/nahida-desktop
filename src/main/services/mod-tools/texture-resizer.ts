@@ -252,6 +252,17 @@ export class TextureResizer {
             this.settleJob(jobId, toCompleted(result));
             return result;
         } catch (error) {
+            this.desktop.logger.error(
+                {
+                    error,
+                    stack: error instanceof Error ? error.stack : undefined,
+                    channel: "tools:textureResizeProgress",
+                    operation: running.operation,
+                    filePath: running.filePath,
+                    stage: "runResizeJob",
+                },
+                "TextureResizer:runResizeJob",
+            );
             this.settleJob(jobId, {
                 ...running,
                 status: "failed",
@@ -641,7 +652,18 @@ export class TextureResizer {
                 filePath,
                 message: toErrorMessage(error),
             });
-            this.desktop.logger.error(error, `tools:resizeTextureFile:upscale:${filePath}`);
+            this.desktop.logger.error(
+                {
+                    error,
+                    stack: error instanceof Error ? error.stack : undefined,
+                    channel: "tools:textureUpscaleProgress",
+                    operation: settings.operation,
+                    filePath,
+                    stage: "upscaleFile",
+                    cleanup: "pending",
+                },
+                `TextureResizer:upscaleFile:${filePath}`,
+            );
             throw error;
         } finally {
             await fse.remove(workDir).catch(() => {});
