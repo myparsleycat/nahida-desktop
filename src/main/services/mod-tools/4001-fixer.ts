@@ -64,7 +64,13 @@ type D3DBuildState = {
 };
 
 export class FourThousandOneFixer {
-    private readonly VS_EDITIONS = ["Community", "Professional", "Enterprise", "Insiders"];
+    private readonly VS_EDITIONS = [
+        "Community",
+        "Professional",
+        "Enterprise",
+        "Insiders",
+        "BuildTools",
+    ];
     private readonly VS_VERSIONS = ["2025", "2022", "18", "17"];
     private readonly RELEASES_FETCH_COOLDOWN_MS = ms("1m");
 
@@ -770,21 +776,29 @@ export class FourThousandOneFixer {
     }
 
     private async findVsDevCmd(): Promise<string | null> {
-        const baseDir = "C:\\Program Files\\Microsoft Visual Studio";
+        const baseDirs = [
+            path.join(process.env.ProgramFiles ?? "C:\\Program Files", "Microsoft Visual Studio"),
+            path.join(
+                process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)",
+                "Microsoft Visual Studio",
+            ),
+        ];
 
-        for (const version of this.VS_VERSIONS) {
-            for (const edition of this.VS_EDITIONS) {
-                const candidatePath = path.join(
-                    baseDir,
-                    version,
-                    edition,
-                    "VC",
-                    "Auxiliary",
-                    "Build",
-                    "vcvars64.bat",
-                );
-                if (await fse.pathExists(candidatePath)) {
-                    return candidatePath;
+        for (const baseDir of baseDirs) {
+            for (const version of this.VS_VERSIONS) {
+                for (const edition of this.VS_EDITIONS) {
+                    const candidatePath = path.join(
+                        baseDir,
+                        version,
+                        edition,
+                        "VC",
+                        "Auxiliary",
+                        "Build",
+                        "vcvars64.bat",
+                    );
+                    if (await fse.pathExists(candidatePath)) {
+                        return candidatePath;
+                    }
                 }
             }
         }
