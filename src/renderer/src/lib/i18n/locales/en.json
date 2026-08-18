@@ -1703,7 +1703,14 @@
         "restoring": "Restoring DLL"
       },
       "modBisect": {
-        "running": "Bisecting"
+        "running": "Running bisect"
+      },
+      "textureResizer": {
+        "resizing": "Resizing texture",
+        "upscaling": "Upscaling texture",
+        "converting": "Converting texture format",
+        "resizing_and_converting": "Resizing & converting texture",
+        "upscaling_and_converting": "Upscaling & converting texture"
       }
     }
   },

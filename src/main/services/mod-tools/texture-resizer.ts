@@ -10,6 +10,7 @@ import type {
     TextureResizeFileRunInput,
     TextureResizeListItem,
     TextureResizeOperation,
+    TextureResizeProgressEvent,
     TextureResizeRunInput,
     TextureResizeSettings,
     TextureUpscaleModel,
@@ -217,10 +218,76 @@ const DEFAULT_SETTINGS: TextureResizeSettings = {
 };
 
 export class TextureResizer {
+    private activeState: TextureResizeProgressEvent = { status: "idle" };
+    private nextJobId = 0;
+    private readonly inFlightJobs = new Map<number, TextureResizeProgressEvent>();
     private readonly realesrganRuntime: RealesrganRuntime;
 
     constructor(private readonly desktop: NahidaDesktop) {
         this.realesrganRuntime = new RealesrganRuntime(desktop);
+    }
+
+    public getState(): TextureResizeProgressEvent {
+        return this.activeState;
+    }
+
+    private updateProgress(event: TextureResizeProgressEvent) {
+        this.activeState = event;
+        this.desktop.ipc.broadcast("tools:textureResizeProgress", event);
+    }
+
+    // Concurrent resizeFile/resizeFolder/resizeMod share this service. A finished
+    // job must not broadcast completed/failed or reset idle while another job is
+    // still running, or titlebar activity would clear.
+    private async runResizeJob<T>(
+        running: TextureResizeProgressEvent,
+        work: () => Promise<T>,
+        toCompleted: (result: T) => TextureResizeProgressEvent,
+    ) {
+        const jobId = ++this.nextJobId;
+        this.inFlightJobs.set(jobId, running);
+        this.updateProgress(running);
+        try {
+            const result = await work();
+            this.settleJob(jobId, toCompleted(result));
+            return result;
+        } catch (error) {
+            this.desktop.logger.error(
+                {
+                    error,
+                    stack: error instanceof Error ? error.stack : undefined,
+                    channel: "tools:textureResizeProgress",
+                    operation: running.operation,
+                    filePath: running.filePath,
+                    jobId,
+                    stage: "runResizeJob",
+                },
+                "TextureResizer:runResizeJob",
+            );
+            this.settleJob(jobId, {
+                ...running,
+                status: "failed",
+                error: toErrorMessage(error),
+            });
+            throw error;
+        } finally {
+            this.inFlightJobs.delete(jobId);
+            if (this.inFlightJobs.size === 0) {
+                this.activeState = { status: "idle" };
+            }
+        }
+    }
+
+    private settleJob(jobId: number, event: TextureResizeProgressEvent) {
+        const remaining = [...this.inFlightJobs].filter(([id]) => id !== jobId).at(-1)?.[1];
+        if (remaining) {
+            if (this.activeState !== remaining) {
+                this.updateProgress(remaining);
+            }
+            return;
+        }
+
+        this.updateProgress(event);
     }
 
     public async getSettings() {
@@ -313,7 +380,24 @@ export class TextureResizer {
         if (isTextureUpscaleOperation(settings.operation)) {
             throw new Error("Folder upscale is not supported.");
         }
-        return await resizeTextures(buildResizeRequest(path.resolve(targetPath), settings));
+
+        const resolvedPath = path.resolve(targetPath);
+        const running: TextureResizeProgressEvent = {
+            status: "running",
+            operation: settings.operation,
+            filePath: resolvedPath,
+            fileName: path.basename(resolvedPath),
+        };
+        return await this.runResizeJob(
+            running,
+            () => resizeTextures(buildResizeRequest(resolvedPath, settings)),
+            (result) => ({
+                ...running,
+                status: "completed",
+                totalFiles: result.processed,
+                processedFiles: result.processed,
+            }),
+        );
     }
 
     public async resizeMod(modPath: string, input: Omit<TextureResizeRunInput, "targetPath">) {
@@ -321,7 +405,24 @@ export class TextureResizer {
         if (isTextureUpscaleOperation(settings.operation)) {
             throw new Error("Folder upscale is not supported.");
         }
-        return await resizeTextures(buildResizeRequest(path.resolve(modPath), settings));
+
+        const resolvedPath = path.resolve(modPath);
+        const running: TextureResizeProgressEvent = {
+            status: "running",
+            operation: settings.operation,
+            filePath: resolvedPath,
+            fileName: path.basename(resolvedPath),
+        };
+        return await this.runResizeJob(
+            running,
+            () => resizeTextures(buildResizeRequest(resolvedPath, settings)),
+            (result) => ({
+                ...running,
+                status: "completed",
+                totalFiles: result.processed,
+                processedFiles: result.processed,
+            }),
+        );
     }
 
     public async resizeFile(input: TextureResizeFileRunInput) {
@@ -332,11 +433,26 @@ export class TextureResizer {
 
         const settings = await this.saveSettings(input.settings);
         const resolvedPath = path.resolve(filePath);
-        if (isTextureUpscaleOperation(settings.operation)) {
-            return await this.upscaleFile(resolvedPath, settings);
-        }
-
-        return await resizeTextures(buildResizeRequest(resolvedPath, settings));
+        const running: TextureResizeProgressEvent = {
+            status: "running",
+            operation: settings.operation,
+            filePath: resolvedPath,
+            fileName: path.basename(resolvedPath),
+            totalFiles: 1,
+            processedFiles: 0,
+        };
+        return await this.runResizeJob(
+            running,
+            () =>
+                isTextureUpscaleOperation(settings.operation)
+                    ? this.upscaleFile(resolvedPath, settings)
+                    : resizeTextures(buildResizeRequest(resolvedPath, settings)),
+            () => ({
+                ...running,
+                status: "completed",
+                processedFiles: 1,
+            }),
+        );
     }
 
     private async getSettingValue(key: string) {
@@ -537,7 +653,18 @@ export class TextureResizer {
                 filePath,
                 message: toErrorMessage(error),
             });
-            this.desktop.logger.error(error, `tools:resizeTextureFile:upscale:${filePath}`);
+            this.desktop.logger.error(
+                {
+                    error,
+                    stack: error instanceof Error ? error.stack : undefined,
+                    channel: "tools:textureUpscaleProgress",
+                    operation: settings.operation,
+                    filePath,
+                    stage: "upscaleFile",
+                    cleanup: "pending",
+                },
+                `TextureResizer:upscaleFile:${filePath}`,
+            );
             throw error;
         } finally {
             await fse.remove(workDir).catch(() => {});

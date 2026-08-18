@@ -1671,6 +1671,13 @@
       },
       "modBisect": {
         "running": "バイセクト中"
+      },
+      "textureResizer": {
+        "resizing": "テクスチャリサイズ中",
+        "upscaling": "テクスチャアップスケール中",
+        "converting": "テクスチャフォーマット変換中",
+        "resizing_and_converting": "テクスチャリサイズおよび変換中",
+        "upscaling_and_converting": "テクスチャアップスケールおよび変換中"
       }
     }
   },
