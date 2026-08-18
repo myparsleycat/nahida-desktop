@@ -70,7 +70,7 @@ export class DownloadHttpError extends Error {
     readonly status: number;
 
     constructor(status: number, statusText: string) {
-        super(`Download failed: ${statusText}`);
+        super(`Download failed: ${status}${statusText ? ` ${statusText}` : ""}`);
         this.name = "DownloadHttpError";
         this.status = status;
     }
@@ -747,7 +747,7 @@ class FileDownloadTask {
 
                     if (transfer.abortReason === "slow-chunk") {
                         if (urlOrigin === "cdn" && slowReconnects > 0) {
-                            const nextUrl = await this.fetchPresignedDownloadUrl({
+                            const freshUrl = await this.fetchPresignedDownloadUrl({
                                 fileId: file.id,
                                 link,
                                 signal,
@@ -755,8 +755,8 @@ class FileDownloadTask {
                                 err = presignErr;
                                 return null;
                             });
-                            if (nextUrl) {
-                                file.url = nextUrl;
+                            if (freshUrl) {
+                                file.url = freshUrl;
                                 file.urlOrigin = "presign";
                                 urlOrigin = "presign";
                                 slowReconnects = 0;
@@ -769,7 +769,7 @@ class FileDownloadTask {
                                             file.size - reportedResumeBytes,
                                         ),
                                         resumeFrom: reportedResumeBytes,
-                                        url: getSafeUrlResource(file.url),
+                                        url: getSafeUrlResource(freshUrl),
                                     },
                                     "FileDownloadTask:presignFallback",
                                 );
@@ -804,7 +804,7 @@ class FileDownloadTask {
                         urlOrigin === "presign" &&
                         !refreshedExpiredPresign
                     ) {
-                        const nextUrl = await this.fetchPresignedDownloadUrl({
+                        const freshUrl = await this.fetchPresignedDownloadUrl({
                             fileId: file.id,
                             link,
                             signal,
@@ -812,16 +812,16 @@ class FileDownloadTask {
                             err = presignErr;
                             return null;
                         });
-                        if (nextUrl) {
+                        if (freshUrl) {
                             refreshedExpiredPresign = true;
-                            file.url = nextUrl;
+                            file.url = freshUrl;
                             file.urlOrigin = "presign";
                             this.desktop.logger.warn(
                                 {
                                     fileId: file.id,
                                     fileName: file.name,
                                     resumeFrom: reportedResumeBytes,
-                                    url: getSafeUrlResource(file.url),
+                                    url: getSafeUrlResource(freshUrl),
                                 },
                                 "FileDownloadTask:presignRefresh",
                             );
@@ -871,7 +871,15 @@ class FileDownloadTask {
             }),
             fetch: { signal },
         });
-        if (error) throw error;
+        if (error) {
+            if (typeof error === "object" && error !== null && "value" in error) {
+                const innerError = (error as { value?: unknown }).value;
+                if (isAbortError(innerError)) {
+                    throw innerError;
+                }
+            }
+            throw error;
+        }
         if (!data || typeof data !== "object" || !("url" in data) || typeof data.url !== "string") {
             throw new Error("Presigned download URL not received.");
         }

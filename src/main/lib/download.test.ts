@@ -305,6 +305,7 @@ describe("FileDownloadTask executeWithSlowRetry progress correction", () => {
 
     afterEach(async () => {
         await rm(tempDir, { recursive: true, force: true });
+        vi.restoreAllMocks();
     });
 
     it("reports resume delta across multiple failed attempts", async () => {
@@ -451,22 +452,41 @@ describe("FileDownloadTask executeWithSlowRetry progress correction", () => {
             });
             return transfer as never;
         });
+        const captured: Array<{
+            url: string;
+            urlOrigin?: "cdn" | "presign";
+            resumeFrom?: number;
+            attachLinkToken?: boolean;
+        }> = [];
         const performDownload = vi.spyOn(task, "performDownload");
         performDownload
-            .mockImplementationOnce(async (_file, _target, signal, options) => {
+            .mockImplementationOnce(async (currentFile, _target, signal, options) => {
+                captured.push({
+                    url: currentFile.url,
+                    urlOrigin: currentFile.urlOrigin,
+                    resumeFrom: options?.resumeFrom,
+                    attachLinkToken: options?.attachLinkToken,
+                });
                 options?.onProgress?.(3);
                 await waitForSlowAbort(signal);
             })
-            .mockImplementationOnce(async (_file, _target, signal, options) => {
+            .mockImplementationOnce(async (currentFile, _target, signal, options) => {
+                captured.push({
+                    url: currentFile.url,
+                    urlOrigin: currentFile.urlOrigin,
+                    resumeFrom: options?.resumeFrom,
+                    attachLinkToken: options?.attachLinkToken,
+                });
                 options?.onProgress?.(3);
                 await waitForSlowAbort(signal);
             })
             .mockImplementationOnce(async (currentFile, currentTarget, _signal, options) => {
-                expect(currentFile.url).toBe("https://r2.test/signed");
-                expect(currentFile.urlOrigin).toBe("presign");
-                expect(currentTarget).toBe(targetPath);
-                expect(options?.resumeFrom).toBe(5);
-                expect(options?.attachLinkToken).toBe(false);
+                captured.push({
+                    url: currentFile.url,
+                    urlOrigin: currentFile.urlOrigin,
+                    resumeFrom: options?.resumeFrom,
+                    attachLinkToken: options?.attachLinkToken,
+                });
                 await writeFile(currentTarget, "hello world");
             });
 
@@ -501,19 +521,26 @@ describe("FileDownloadTask executeWithSlowRetry progress correction", () => {
             headers: { "nhd-link-token": "link-token" },
             fetch: { signal: expect.any(AbortSignal) },
         });
-        expect(performDownload).toHaveBeenNthCalledWith(
-            3,
-            slowFile,
-            targetPath,
-            expect.any(AbortSignal),
-            expect.objectContaining({
-                attachLinkToken: false,
+        expect(captured).toEqual([
+            {
+                url: "https://n1.nahida.live/fil/file.bin",
+                urlOrigin: undefined,
                 resumeFrom: 5,
-            }),
-        );
-
-        register.mockRestore();
-        performDownload.mockRestore();
+                attachLinkToken: true,
+            },
+            {
+                url: "https://n1.nahida.live/fil/file.bin",
+                urlOrigin: undefined,
+                resumeFrom: 5,
+                attachLinkToken: true,
+            },
+            {
+                url: "https://r2.test/signed",
+                urlOrigin: "presign",
+                resumeFrom: 5,
+                attachLinkToken: false,
+            },
+        ]);
     });
 
     it("refreshes an expired presigned url once after a 403", async () => {
@@ -537,7 +564,7 @@ describe("FileDownloadTask executeWithSlowRetry progress correction", () => {
         const desktop = createDesktop();
         const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
         const registered: Array<{ abortSlow: () => void }> = [];
-        const register = vi.spyOn(slowChunkMonitor, "register").mockImplementation((input) => {
+        vi.spyOn(slowChunkMonitor, "register").mockImplementation((input) => {
             const transfer = {
                 key: `transfer-${registered.length}`,
                 abortReason: null as "slow-chunk" | null,
@@ -553,19 +580,36 @@ describe("FileDownloadTask executeWithSlowRetry progress correction", () => {
             });
             return transfer as never;
         });
+        const captured: Array<{
+            url: string;
+            urlOrigin?: "cdn" | "presign";
+            resumeFrom?: number;
+        }> = [];
         const performDownload = vi.spyOn(task, "performDownload");
         performDownload
-            .mockImplementationOnce(async (_file, _target, signal) => {
+            .mockImplementationOnce(async (currentFile, _target, signal, options) => {
+                captured.push({
+                    url: currentFile.url,
+                    urlOrigin: currentFile.urlOrigin,
+                    resumeFrom: options?.resumeFrom,
+                });
                 await waitForSlowAbort(signal);
             })
-            .mockImplementationOnce(async (_file, _target, signal) => {
+            .mockImplementationOnce(async (currentFile, _target, signal, options) => {
+                captured.push({
+                    url: currentFile.url,
+                    urlOrigin: currentFile.urlOrigin,
+                    resumeFrom: options?.resumeFrom,
+                });
                 await waitForSlowAbort(signal);
             })
             .mockRejectedValueOnce(new DownloadHttpError(403, "Forbidden"))
             .mockImplementationOnce(async (currentFile, currentTarget, _signal, options) => {
-                expect(currentFile.url).toBe("https://r2.test/signed-2");
-                expect(currentFile.urlOrigin).toBe("presign");
-                expect(options?.resumeFrom).toBe(5);
+                captured.push({
+                    url: currentFile.url,
+                    urlOrigin: currentFile.urlOrigin,
+                    resumeFrom: options?.resumeFrom,
+                });
                 await writeFile(currentTarget, "hello world");
             });
 
@@ -587,8 +631,23 @@ describe("FileDownloadTask executeWithSlowRetry progress correction", () => {
         expect(slowFile.url).toBe("https://r2.test/signed-2");
         expect(slowFile.urlOrigin).toBe("presign");
         expect(mocks.fetchPresignedUrl).toHaveBeenCalledTimes(2);
-        register.mockRestore();
-        performDownload.mockRestore();
+        expect(captured).toEqual([
+            {
+                url: "https://n1.nahida.live/fil/file.bin",
+                urlOrigin: undefined,
+                resumeFrom: 5,
+            },
+            {
+                url: "https://n1.nahida.live/fil/file.bin",
+                urlOrigin: undefined,
+                resumeFrom: 5,
+            },
+            {
+                url: "https://r2.test/signed-2",
+                urlOrigin: "presign",
+                resumeFrom: 5,
+            },
+        ]);
     });
 
     it("retries expired presign refresh after a transient fetch failure", async () => {
