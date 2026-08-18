@@ -31,28 +31,39 @@ export function XXMIDllVersion({
   const currentVersionLabel =
     versions?.find((item) => isCurrentVersion(item)) ?? xxmiData?.dllVersion;
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchReleases = (cancelled: { current: boolean }) => {
+    setVersions(null);
+    setFetchError(false);
 
     void window.api
       .invoke("xxmi:getLibsReleases")
       .then((releases) => {
-        if (cancelled) return;
+        if (cancelled.current) return;
         setVersions(releases);
         setVersion(releases[0] ?? "");
         setFetchError(false);
       })
       .catch(() => {
-        if (cancelled) return;
+        if (cancelled.current) return;
         setVersions([]);
         setVersion("");
         setFetchError(true);
       });
+  };
+
+  useEffect(() => {
+    const cancelled = { current: false };
+    fetchReleases(cancelled);
 
     return () => {
-      cancelled = true;
+      cancelled.current = true;
     };
   }, []);
+
+  const handleRetry = () => {
+    const cancelled = { current: false };
+    fetchReleases(cancelled);
+  };
 
   const applyVersion = async () => {
     try {
@@ -89,7 +100,12 @@ export function XXMIDllVersion({
             {t("page.setting.xxmi.persistNotFoundXXMI")}
           </p>
         ) : fetchError ? (
-          <p className="text-sm text-destructive">{t("page.setting.xxmi.dllVersionLoadFailed")}</p>
+          <>
+            <p className="text-sm text-destructive">{t("page.setting.xxmi.dllVersionLoadFailed")}</p>
+            <Button variant="outline" size="sm" onClick={handleRetry}>
+              {t("page.setting.xxmi.dllVersionRetry")}
+            </Button>
+          </>
         ) : versions === null ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2Icon className="size-3.5 animate-spin" />

@@ -1541,6 +1541,7 @@
         "dllVersionDescription": "更改版本时将禁用 XXMI Launcher 自动更新。",
         "dllVersionLoading": "正在加载版本...",
         "dllVersionLoadFailed": "无法加载版本。",
+        "dllVersionRetry": "重试",
         "dllVersionEmpty": "没有可用版本。",
         "dllVersionCurrent": "当前：{{version}}",
         "dllVersionUnknown": "未知",

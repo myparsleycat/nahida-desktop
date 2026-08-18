@@ -9,45 +9,45 @@ type GitHubRelease = {
 const NON_RELEASE_VERSION_NAMES = new Set(["main", "master"]);
 const RELEASES_FETCH_COOLDOWN_MS = ms("1m");
 
-const releasesCache: Partial<Record<string, string[]>> = {};
-const releasesFetchedAt: Partial<Record<string, number>> = {};
-const releasesFetchInFlight: Partial<Record<string, Promise<boolean>>> = {};
+const releasesCache = new Map<string, string[]>();
+const releasesFetchedAt = new Map<string, number>();
+const releasesFetchInFlight = new Map<string, Promise<boolean>>();
 
 export async function updateXxmiLibsReleases(logger: Logger, provider = "SpectrumQT") {
     await fetchProviderReleases(logger, provider);
 }
 
 export async function getXxmiLibsReleases(logger: Logger, provider = "SpectrumQT") {
-    if (!releasesCache[provider]) {
+    if (!releasesCache.has(provider)) {
         await fetchProviderReleases(logger, provider);
     }
 
-    return releasesCache[provider] ?? [];
+    return releasesCache.get(provider) ?? [];
 }
 
 async function fetchProviderReleases(logger: Logger, provider: string) {
-    const inFlight = releasesFetchInFlight[provider];
+    const inFlight = releasesFetchInFlight.get(provider);
     if (inFlight) {
         return inFlight;
     }
 
     const now = Date.now();
-    const lastFetchedAt = releasesFetchedAt[provider] ?? 0;
+    const lastFetchedAt = releasesFetchedAt.get(provider) ?? 0;
     if (now - lastFetchedAt < RELEASES_FETCH_COOLDOWN_MS) {
         return true;
     }
 
     const fetchPromise = fetchProviderReleasesInternal(logger, provider);
-    releasesFetchInFlight[provider] = fetchPromise;
+    releasesFetchInFlight.set(provider, fetchPromise);
 
     try {
         const success = await fetchPromise;
         if (success) {
-            releasesFetchedAt[provider] = Date.now();
+            releasesFetchedAt.set(provider, Date.now());
         }
         return success;
     } finally {
-        delete releasesFetchInFlight[provider];
+        releasesFetchInFlight.delete(provider);
     }
 }
 
@@ -71,13 +71,16 @@ async function fetchProviderReleasesInternal(logger: Logger, provider: string) {
         }
 
         const releases = (await resp.json()) as GitHubRelease[];
-        releasesCache[provider] = releases
-            .map((release) => release.tag_name)
-            .filter(
-                (tagName): tagName is string =>
-                    typeof tagName === "string" &&
-                    !NON_RELEASE_VERSION_NAMES.has(tagName.toLowerCase()),
-            );
+        releasesCache.set(
+            provider,
+            releases
+                .map((release) => release.tag_name)
+                .filter(
+                    (tagName): tagName is string =>
+                        typeof tagName === "string" &&
+                        !NON_RELEASE_VERSION_NAMES.has(tagName.toLowerCase()),
+                ),
+        );
         return true;
     } catch (error) {
         logger.error(error, "XxmiLibsReleases:fetchProviderReleases");

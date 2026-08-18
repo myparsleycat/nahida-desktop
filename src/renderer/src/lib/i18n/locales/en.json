@@ -1627,6 +1627,7 @@
         "dllVersionDescription": "Changing the version disables XXMI Launcher auto-update.",
         "dllVersionLoading": "Loading versions...",
         "dllVersionLoadFailed": "Failed to load versions.",
+        "dllVersionRetry": "Retry",
         "dllVersionEmpty": "No versions available.",
         "dllVersionCurrent": "Current: {{version}}",
         "dllVersionUnknown": "Unknown",

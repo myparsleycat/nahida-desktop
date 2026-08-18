@@ -235,10 +235,8 @@ export class XXMI {
             const onlyDir =
                 entries.length === 1 && entries[0].isDirectory() ? entries[0].name : null;
 
-            await fse.ensureDir(destDir);
-            await fse.copy(onlyDir ? path.join(extractedPath, onlyDir) : extractedPath, destDir, {
-                overwrite: true,
-            });
+            const stagingDir = path.join(workDir, "staging");
+            await fse.copy(onlyDir ? path.join(extractedPath, onlyDir) : extractedPath, stagingDir);
 
             const manifestResp = await ky.get(
                 `https://github.com/SpectrumQT/XXMI-Libs-Package/releases/download/${selectedVersion}/Manifest.json`,
@@ -248,10 +246,17 @@ export class XXMI {
                 await drainWebStream(manifestResp.body).catch(() => {});
                 throw new Error(`Failed to download XXMI manifest: ${manifestResp.statusText}`);
             }
-            await fse.writeFile(
-                path.join(destDir, "Manifest.json"),
-                Buffer.from(await manifestResp.arrayBuffer()),
-            );
+            const manifestBuffer = Buffer.from(await manifestResp.arrayBuffer());
+            await fse.writeFile(path.join(stagingDir, "Manifest.json"), manifestBuffer);
+
+            const manifestJson = JSON.parse(manifestBuffer.toString("utf8"));
+            const manifestVersion =
+                typeof manifestJson?.version === "string" ? manifestJson.version : null;
+            if (manifestVersion !== selectedVersion) {
+                throw new Error(
+                    `Manifest version mismatch: expected ${selectedVersion}, got ${manifestVersion ?? "null"}`,
+                );
+            }
 
             const configPath = path.join(xxmiPath, "XXMI Launcher Config.json");
             const config = await fse.readJson(configPath);
@@ -260,6 +265,9 @@ export class XXMI {
             }
 
             config.Launcher.auto_update = false;
+
+            await fse.ensureDir(destDir);
+            await fse.copy(stagingDir, destDir, { overwrite: true });
             await fse.writeJson(configPath, config, { spaces: 4 });
             this.xxmiConfig = XXMIConfigSchema.parse(await fse.readJson(configPath));
 

@@ -149,7 +149,11 @@ export class FourThousandOneFixer {
         });
     }
 
-    private async closeLauncherOrFail(): Promise<BuildD3DResult | null> {
+    private async closeLauncherOrFail(context: {
+        operation: string;
+        target?: string;
+        fileChangesStarted: boolean;
+    }): Promise<BuildD3DResult | null> {
         try {
             await this.desktop.service.xxmi.ensureLauncherClosed();
             return null;
@@ -158,6 +162,9 @@ export class FourThousandOneFixer {
             this.desktop.logger.error(
                 {
                     action: "4001Fixer:closeLauncher",
+                    operation: context.operation,
+                    target: context.target,
+                    fileChangesStarted: context.fileChangesStarted,
                     error: errorMessage,
                 },
                 "4001Fixer:closeLauncher",
@@ -191,7 +198,11 @@ export class FourThousandOneFixer {
             return { success: false };
         }
 
-        const launcherCloseError = await this.closeLauncherOrFail();
+        const launcherCloseError = await this.closeLauncherOrFail({
+            operation: "build-dll",
+            target: importerPath,
+            fileChangesStarted: false,
+        });
         if (launcherCloseError) return launcherCloseError;
 
         const finalDestination = path.join(importerPath, TARGET_DLL_NAME);
@@ -321,7 +332,11 @@ export class FourThousandOneFixer {
             return { success: false };
         }
 
-        const launcherCloseError = await this.closeLauncherOrFail();
+        const launcherCloseError = await this.closeLauncherOrFail({
+            operation: "diversify-dll",
+            target: targetDllPath,
+            fileChangesStarted: false,
+        });
         if (launcherCloseError) return launcherCloseError;
 
         const destinationCheck = await this.desktop.lib.fs.isPathWritable(targetDllPath, {
@@ -444,10 +459,14 @@ export class FourThousandOneFixer {
             return { success: false };
         }
 
-        const launcherCloseError = await this.closeLauncherOrFail();
+        const targetDllPath = path.join(importerPath, TARGET_DLL_NAME);
+        const launcherCloseError = await this.closeLauncherOrFail({
+            operation: "restore-dll",
+            target: targetDllPath,
+            fileChangesStarted: false,
+        });
         if (launcherCloseError) return launcherCloseError;
 
-        const targetDllPath = path.join(importerPath, TARGET_DLL_NAME);
         const destinationCheck = await this.desktop.lib.fs.isPathWritable(targetDllPath, {
             detailed: true,
             parentPath: importerPath,

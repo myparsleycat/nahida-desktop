@@ -1561,6 +1561,7 @@
         "dllVersionDescription": "버전 변경 시 XXMI Launcher 자동 업데이트가 비활성화됩니다.",
         "dllVersionLoading": "버전을 불러오는 중...",
         "dllVersionLoadFailed": "버전을 불러오지 못했습니다.",
+        "dllVersionRetry": "다시 시도",
         "dllVersionEmpty": "사용 가능한 버전이 없습니다.",
         "dllVersionCurrent": "현재: {{version}}",
         "dllVersionUnknown": "알 수 없음",
