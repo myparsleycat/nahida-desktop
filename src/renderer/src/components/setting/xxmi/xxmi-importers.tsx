@@ -1,5 +1,4 @@
 import { GameIcon } from "@renderer/components/game-icon";
-import { Card, CardContent, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { cn } from "@renderer/lib/utils";
 import type { XXMIData } from "@renderer/routes/setting/xxmi";
 import { Loader2Icon } from "lucide-react";
@@ -31,42 +30,38 @@ export function XXMIImporters({ xxmiData }: { xxmiData?: XXMIData }) {
   const isAnyProcessing = processingKey !== null;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("page.setting.xxmi.activeImporter")}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="flex flex-row space-x-2 justify-evenly">
-          {xxmiData.enabledImporters.map((importer) => {
-            const isThisProcessing = processingKey === importer.key;
+    <div>
+      <span className="text-sm font-medium">{t("page.setting.xxmi.activeImporter")}</span>
+      <div className="flex flex-row justify-evenly space-x-2 pt-2">
+        {xxmiData.enabledImporters.map((importer) => {
+          const isThisProcessing = processingKey === importer.key;
 
-            return (
-              <button
-                key={importer.key}
-                className={cn(
-                  "flex flex-col space-y-1 relative group",
-                  isAnyProcessing && !isThisProcessing && "opacity-50 cursor-not-allowed",
+          return (
+            <button
+              key={importer.key}
+              className={cn(
+                "group relative flex flex-col space-y-1",
+                isAnyProcessing && !isThisProcessing && "cursor-not-allowed opacity-50",
+              )}
+              onClick={() => handleStartGame(importer.key)}
+              disabled={isAnyProcessing}
+            >
+              <div className="relative inline-block">
+                <GameIcon gameName={importer.key} className="size-16" />
+
+                {isThisProcessing && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded-md bg-black/60 transition-opacity">
+                    <Loader2Icon className="size-8 animate-spin text-white" />
+                  </div>
                 )}
-                onClick={() => handleStartGame(importer.key)}
-                disabled={isAnyProcessing}
-              >
-                <div className="relative inline-block">
-                  <GameIcon gameName={importer.key} className="size-16" />
+              </div>
 
-                  {isThisProcessing && (
-                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center rounded-md transition-opacity">
-                      <Loader2Icon className="size-8 animate-spin text-white" />
-                    </div>
-                  )}
-                </div>
-
-                <span className="text-center text-xs">{importer.key}</span>
-                <span className="text-center text-xs">{importer.packageInfo.latest_version}</span>
-              </button>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
+              <span className="text-center text-xs">{importer.key}</span>
+              <span className="text-center text-xs">{importer.packageInfo.latest_version}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }

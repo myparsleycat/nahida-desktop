@@ -1,6 +1,5 @@
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
 import { Button } from "@renderer/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@renderer/components/ui/card";
 import { Input } from "@renderer/components/ui/input";
 import type { XXMIData } from "@renderer/routes/setting/xxmi";
 import { InfoIcon } from "lucide-react";
@@ -33,51 +32,47 @@ export function XXMIPath({ xxmiData, refetch }: { xxmiData?: XXMIData; refetch: 
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("page.setting.xxmi.xxmiPath")}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3 w-full" aria-describedby={undefined}>
-        <div className="flex flex-row w-full space-x-2">
-          <Input
-            value={xxmiPath}
-            onChange={(e) => {
-              setXXMIPath(e.target.value);
-            }}
-          />
-          <Button
-            variant="outline"
-            onClickPromise={async () => {
-              setShowAutoSearchAlert(false);
-              const path = await window.api.invoke("xxmi:findXXMIPath");
+    <div className="space-y-3">
+      <div className="space-y-0.5">
+        <span className="text-sm font-medium">{t("page.setting.xxmi.xxmiPath")}</span>
+      </div>
+      <div className="flex w-full flex-row space-x-2">
+        <Input
+          value={xxmiPath}
+          onChange={(e) => {
+            setXXMIPath(e.target.value);
+          }}
+        />
+        <Button
+          variant="outline"
+          onClickPromise={async () => {
+            setShowAutoSearchAlert(false);
+            const path = await window.api.invoke("xxmi:findXXMIPath");
 
-              if (!path) {
-                toast.error(t("page.setting.xxmi.fn.findXXMIPath.xxmiNotFound"));
-                return;
-              }
+            if (!path) {
+              toast.error(t("page.setting.xxmi.fn.findXXMIPath.xxmiNotFound"));
+              return;
+            }
 
-              setXXMIPath(path);
-              setShowAutoSearchAlert(true);
-            }}
-          >
-            {t("page.setting.xxmi.autoScan")}
-          </Button>
-        </div>
-        {showAutoSearchAlert && (
-          <Alert>
-            <InfoIcon />
-            <AlertTitle>{t("page.setting.xxmi.fn.findXXMIPath.alert.title")}</AlertTitle>
-            <AlertDescription className="text-wrap">
-              {t("page.setting.xxmi.fn.findXXMIPath.alert.description")}
-            </AlertDescription>
-          </Alert>
-        )}
-      </CardContent>
-      <CardFooter className="flex justify-end">
+            setXXMIPath(path);
+            setShowAutoSearchAlert(true);
+          }}
+        >
+          {t("page.setting.xxmi.autoScan")}
+        </Button>
         <Button onClickPromise={saveXXMIPath} disabled={!xxmiPath}>
           {t("g.save")}
         </Button>
-      </CardFooter>
-    </Card>
+      </div>
+      {showAutoSearchAlert && (
+        <Alert>
+          <InfoIcon />
+          <AlertTitle>{t("page.setting.xxmi.fn.findXXMIPath.alert.title")}</AlertTitle>
+          <AlertDescription className="text-wrap">
+            {t("page.setting.xxmi.fn.findXXMIPath.alert.description")}
+          </AlertDescription>
+        </Alert>
+      )}
+    </div>
   );
 }

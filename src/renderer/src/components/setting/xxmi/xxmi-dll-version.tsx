@@ -1,13 +1,5 @@
 import { Button } from "@renderer/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@renderer/components/ui/card";
-import {
   Select,
   SelectContent,
   SelectGroup,
@@ -67,12 +59,14 @@ export function XXMIDllVersion({ xxmiData }: { xxmiData?: XXMIData }) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t("page.setting.xxmi.dllVersion")}</CardTitle>
-        <CardDescription>{t("page.setting.xxmi.dllVersionDescription")}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
+    <div className="flex items-center justify-between gap-6">
+      <div className="space-y-0.5">
+        <span className="text-sm font-medium">{t("page.setting.xxmi.dllVersion")}</span>
+        <p className="text-xs text-muted-foreground">
+          {t("page.setting.xxmi.dllVersionDescription")}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
         {xxmiData && !hasPath ? (
           <p className="text-sm text-muted-foreground">
             {t("page.setting.xxmi.persistNotFoundXXMI")}
@@ -87,37 +81,37 @@ export function XXMIDllVersion({ xxmiData }: { xxmiData?: XXMIData }) {
         ) : versions.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("page.setting.xxmi.dllVersionEmpty")}</p>
         ) : (
-          <Select
-            items={versions.map((item) => ({ label: item, value: item }))}
-            value={version}
-            onValueChange={(value) => {
-              if (value === null) return;
-              setVersion(value);
-            }}
-          >
-            <SelectTrigger className="w-full max-w-36">
-              <SelectValue placeholder={t("page.setting.xxmi.dllVersion")} />
-            </SelectTrigger>
-            <SelectContent className="h-64">
-              <SelectGroup>
-                {versions.map((item) => (
-                  <SelectItem key={item} value={item}>
-                    {item}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          <>
+            <Select
+              items={versions.map((item) => ({ label: item, value: item }))}
+              value={version}
+              onValueChange={(value) => {
+                if (value === null) return;
+                setVersion(value);
+              }}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue placeholder={t("page.setting.xxmi.dllVersion")} />
+              </SelectTrigger>
+              <SelectContent className="h-64">
+                <SelectGroup>
+                  {versions.map((item) => (
+                    <SelectItem key={item} value={item}>
+                      {item}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <Button
+              onClickPromise={applyVersion}
+              disabled={!hasPath || !version || fetchError || versions === null}
+            >
+              {t("g.confirm")}
+            </Button>
+          </>
         )}
-      </CardContent>
-      <CardFooter className="flex justify-end">
-        <Button
-          onClickPromise={applyVersion}
-          disabled={!hasPath || !version || fetchError || versions === null}
-        >
-          {t("g.confirm")}
-        </Button>
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
   );
 }
