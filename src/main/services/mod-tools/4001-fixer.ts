@@ -149,6 +149,25 @@ export class FourThousandOneFixer {
         });
     }
 
+    private async closeLauncherOrFail(): Promise<BuildD3DResult | null> {
+        try {
+            await this.desktop.service.xxmi.ensureLauncherClosed();
+            return null;
+        } catch (error) {
+            const errorMessage = toErrorMessage(error);
+            this.desktop.logger.error(
+                {
+                    action: "4001Fixer:closeLauncher",
+                    error: errorMessage,
+                },
+                "4001Fixer:closeLauncher",
+            );
+            this.updateProgress("XXMI_ERR_LAUNCHER_CLOSE_FAILED", errorMessage);
+            this.activeTask = null;
+            return { success: false, errorMessage };
+        }
+    }
+
     public async buildD3D11Dll({
         provider,
         version,
@@ -171,6 +190,9 @@ export class FourThousandOneFixer {
             this.activeTask = null;
             return { success: false };
         }
+
+        const launcherCloseError = await this.closeLauncherOrFail();
+        if (launcherCloseError) return launcherCloseError;
 
         const finalDestination = path.join(importerPath, TARGET_DLL_NAME);
         const destinationCheck = await this.desktop.lib.fs.isPathWritable(finalDestination, {
@@ -299,6 +321,9 @@ export class FourThousandOneFixer {
             return { success: false };
         }
 
+        const launcherCloseError = await this.closeLauncherOrFail();
+        if (launcherCloseError) return launcherCloseError;
+
         const destinationCheck = await this.desktop.lib.fs.isPathWritable(targetDllPath, {
             detailed: true,
             parentPath: importerPath,
@@ -418,6 +443,9 @@ export class FourThousandOneFixer {
             this.activeTask = null;
             return { success: false };
         }
+
+        const launcherCloseError = await this.closeLauncherOrFail();
+        if (launcherCloseError) return launcherCloseError;
 
         const targetDllPath = path.join(importerPath, TARGET_DLL_NAME);
         const destinationCheck = await this.desktop.lib.fs.isPathWritable(targetDllPath, {

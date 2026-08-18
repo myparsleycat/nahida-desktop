@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import type { XXMIData } from "@renderer/routes/setting/xxmi";
+import { toErrorMessage } from "@shared/utils";
 import { Loader2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -56,8 +57,12 @@ export function XXMIDllVersion({ xxmiData }: { xxmiData?: XXMIData }) {
     try {
       await window.api.invoke("xxmi:installDllVersion", { version });
       toast.success(t("page.setting.xxmi.fn.installDllVersion.success", { version }));
-    } catch {
-      toast.error(t("page.setting.xxmi.fn.installDllVersion.failed"));
+    } catch (error) {
+      toast.error(
+        toErrorMessage(error).includes("XXMI Launcher")
+          ? t("page.setting.xxmi.fn.installDllVersion.launcherCloseFailed")
+          : t("page.setting.xxmi.fn.installDllVersion.failed"),
+      );
     }
   };
 

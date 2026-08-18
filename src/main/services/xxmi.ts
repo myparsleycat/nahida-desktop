@@ -2,7 +2,13 @@ import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 
-import { findFileAcrossDrives, spawnPrivilegedProcess, waitForProcess } from "@native/utils";
+import {
+    findFileAcrossDrives,
+    getProcess,
+    killProcess,
+    spawnPrivilegedProcess,
+    waitForProcess,
+} from "@native/utils";
 import { WaitResult } from "@native/utils/constants";
 import { type XXMIConfig, XXMIConfigSchema } from "@shared/schemas/xxmi";
 import { toErrorMessage } from "@shared/utils";
@@ -16,6 +22,8 @@ import { drainWebStream, webStreamToNodeReadable } from "@/main/lib/web-stream-t
 import type { NahidaDesktop } from "..";
 
 import { getXxmiLibsReleases } from "./xxmi-libs-releases";
+
+const XXMI_LAUNCHER_EXE = "XXMI Launcher.exe";
 
 export class XXMI {
     private readonly desktop: NahidaDesktop;
@@ -145,6 +153,21 @@ export class XXMI {
         return getXxmiLibsReleases(this.desktop.logger);
     }
 
+    public async ensureLauncherClosed() {
+        const deadline = Date.now() + 5000;
+        while (true) {
+            const running = getProcess(undefined, XXMI_LAUNCHER_EXE);
+            if (!running) return;
+            if (!killProcess(running.pid)) {
+                throw new Error("Failed to close XXMI Launcher");
+            }
+            if (Date.now() >= deadline) {
+                throw new Error("XXMI Launcher is still running");
+            }
+            await delay(100);
+        }
+    }
+
     public async installDllVersion({ version }: { version: string }) {
         await this.init();
 
@@ -167,6 +190,7 @@ export class XXMI {
         const workDir = path.join(os.tmpdir(), `nahida-xxmi-dll-${nanoid()}`);
 
         try {
+            await this.ensureLauncherClosed();
             await fse.ensureDir(workDir);
             const zipPath = path.join(workDir, "package.zip");
             const resp = await ky.get(

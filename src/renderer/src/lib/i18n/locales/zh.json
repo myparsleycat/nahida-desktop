@@ -777,6 +777,7 @@
           "XXMI_ERR_DLL_NOT_FOUND": "未找到已构建的 d3d11.dll 文件。",
           "XXMI_ERR_DLL_NOT_WRITABLE": "无法将 d3d11.dll 写入目标 Importer。请检查文件夹权限，或允许管理员权限请求。",
           "XXMI_ERR_DLL_IN_USE": "无法替换 d3d11.dll。请先关闭游戏，然后重试。",
+          "XXMI_ERR_LAUNCHER_CLOSE_FAILED": "无法关闭 XXMI Launcher。请手动关闭后重试。",
           "XXMI_ERR_ELEVATION_FAILED": "管理员权限被拒绝，或提升权限后写入失败。请批准 UAC 提示后重试。",
           "XXMI_BUILD_SUCCESS": "d3d11.dll 已成功应用。",
           "XXMI_OBFUSCATE_SUCCESS": "d3d11.dll 填充已成功多样化。",
@@ -1555,7 +1556,8 @@
           },
           "installDllVersion": {
             "success": "已应用 XXMI DLL 版本 {{version}}",
-            "failed": "应用所选 XXMI DLL 版本失败"
+            "failed": "应用所选 XXMI DLL 版本失败",
+            "launcherCloseFailed": "无法关闭 XXMI Launcher。请手动关闭后重试。"
           }
         }
       },
