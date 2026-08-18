@@ -14,7 +14,7 @@ vi.mock("./realesrgan-runtime", () => ({
 
 import type { NahidaDesktop } from "@main/index";
 import { resizeTextures } from "@native/mod-tools";
-import type { TextureResizeResult, TextureResizeSettings } from "@shared/types";
+import type { TextureResizeSettings } from "@shared/types";
 
 import {
     TextureResizer,
@@ -47,7 +47,7 @@ function deferred<T>() {
     return { promise, resolve, reject };
 }
 
-function resizeResult(targetPath: string): TextureResizeResult {
+function resizeResult(targetPath: string): Awaited<ReturnType<typeof resizeTextures>> {
     return {
         targetPath,
         processed: 1,
@@ -194,8 +194,8 @@ describe("texture resizer progress ownership", () => {
 
     it("keeps running state when a later resizeFile finishes first", async () => {
         const { resizer, broadcast } = createResizer();
-        const first = deferred<TextureResizeResult>();
-        const second = deferred<TextureResizeResult>();
+        const first = deferred<Awaited<ReturnType<typeof resizeTextures>>>();
+        const second = deferred<Awaited<ReturnType<typeof resizeTextures>>>();
         const firstPath = "/tmp/first.dds";
         const secondPath = "/tmp/second.dds";
 
@@ -256,8 +256,8 @@ describe("texture resizer progress ownership", () => {
 
     it("does not idle after a failed resize while another job is in flight", async () => {
         const { resizer, broadcast } = createResizer();
-        const first = deferred<TextureResizeResult>();
-        const second = deferred<TextureResizeResult>();
+        const first = deferred<Awaited<ReturnType<typeof resizeTextures>>>();
+        const second = deferred<Awaited<ReturnType<typeof resizeTextures>>>();
         const firstPath = "/tmp/first.dds";
         const secondPath = "/tmp/second.dds";
 
@@ -303,8 +303,8 @@ describe("texture resizer progress ownership", () => {
 
     it("keeps folder resize activity when a file resize finishes first", async () => {
         const { resizer } = createResizer();
-        const folder = deferred<TextureResizeResult>();
-        const file = deferred<TextureResizeResult>();
+        const folder = deferred<Awaited<ReturnType<typeof resizeTextures>>>();
+        const file = deferred<Awaited<ReturnType<typeof resizeTextures>>>();
         const folderPath = "/tmp/mod-folder";
         const filePath = "/tmp/dialog.dds";
 

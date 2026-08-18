@@ -11,6 +11,7 @@ import type {
     TextureResizeListItem,
     TextureResizeOperation,
     TextureResizeProgressEvent,
+    TextureResizeResult,
     TextureResizeRunInput,
     TextureResizeSettings,
     TextureUpscaleModel,
@@ -425,7 +426,7 @@ export class TextureResizer {
         );
     }
 
-    public async resizeFile(input: TextureResizeFileRunInput) {
+    public async resizeFile(input: TextureResizeFileRunInput): Promise<TextureResizeResult> {
         const filePath = input.filePath?.trim();
         if (!filePath) {
             throw new Error("File path is required.");
@@ -446,7 +447,9 @@ export class TextureResizer {
             () =>
                 isTextureUpscaleOperation(settings.operation)
                     ? this.upscaleFile(resolvedPath, settings)
-                    : resizeTextures(buildResizeRequest(resolvedPath, settings)),
+                    : toSharedTextureResizeResult(
+                          resizeTextures(buildResizeRequest(resolvedPath, settings)),
+                      ),
             () => ({
                 ...running,
                 status: "completed",
@@ -463,7 +466,10 @@ export class TextureResizer {
         await this.desktop.lib.db.settings.upsert(key, value);
     }
 
-    private async upscaleFile(filePath: string, settings: TextureResizeSettings) {
+    private async upscaleFile(
+        filePath: string,
+        settings: TextureResizeSettings,
+    ): Promise<TextureResizeResult> {
         const buffer = await fse.readFile(filePath);
         const info = parseDDSMetadata(buffer);
         const skipReason = resolveUpscaleSkipReason(info, settings.upscaleScale);
@@ -817,6 +823,20 @@ function buildResizeRequest(targetPath: string, settings: TextureResizeSettings)
         customHeight: settings.customHeight,
         outputFormat: settings.outputFormat,
         backup: settings.backup,
+    };
+}
+
+async function toSharedTextureResizeResult(
+    result: ReturnType<typeof resizeTextures>,
+): Promise<TextureResizeResult> {
+    const nativeResult = await result;
+    return {
+        ...nativeResult,
+        files: nativeResult.files.map((file) => ({
+            ...file,
+            status: file.status as TextureResizeFileResult["status"],
+            message: file.message ?? null,
+        })),
     };
 }
 
