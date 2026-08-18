@@ -252,7 +252,10 @@ export class XXMI {
             const manifestJson = JSON.parse(manifestBuffer.toString("utf8"));
             const manifestVersion =
                 typeof manifestJson?.version === "string" ? manifestJson.version : null;
-            if (manifestVersion !== selectedVersion) {
+            if (
+                !manifestVersion ||
+                manifestVersion.trim().replace(/^v/i, "") !== selectedVersion.replace(/^v/i, "")
+            ) {
                 throw new Error(
                     `Manifest version mismatch: expected ${selectedVersion}, got ${manifestVersion ?? "null"}`,
                 );

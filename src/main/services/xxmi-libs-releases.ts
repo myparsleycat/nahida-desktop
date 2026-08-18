@@ -14,7 +14,10 @@ const releasesFetchedAt = new Map<string, number>();
 const releasesFetchInFlight = new Map<string, Promise<boolean>>();
 
 export async function updateXxmiLibsReleases(logger: Logger, provider = "SpectrumQT") {
-    await fetchProviderReleases(logger, provider);
+    const success = await fetchProviderReleases(logger, provider);
+    if (!success) {
+        throw new Error(`Failed to fetch XXMI libs releases for ${provider}`);
+    }
 }
 
 export async function getXxmiLibsReleases(logger: Logger, provider = "SpectrumQT") {
