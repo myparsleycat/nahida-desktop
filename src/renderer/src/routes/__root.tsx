@@ -4,6 +4,7 @@ import { Sidebar } from "@renderer/components/sidebar";
 import { TitlebarActivityBadges } from "@renderer/components/titlebar/titlebar-activity-badges";
 import { use4001FixerTitlebarActivity } from "@renderer/components/titlebar/use-4001-fixer-titlebar-activity";
 import { useModBisectTitlebarActivity } from "@renderer/components/titlebar/use-mod-bisect-titlebar-activity";
+import { useTextureResizerTitlebarActivity } from "@renderer/components/titlebar/use-texture-resizer-titlebar-activity";
 import { useTransferTitlebarActivity } from "@renderer/components/titlebar/use-transfer-titlebar-activity";
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
 import { Button } from "@renderer/components/ui/button";
@@ -48,6 +49,7 @@ function RootComponent() {
   useTransferTitlebarActivity();
   use4001FixerTitlebarActivity();
   useModBisectTitlebarActivity();
+  useTextureResizerTitlebarActivity();
 
   useDownloadArchiveExtractPromptHandler();
 

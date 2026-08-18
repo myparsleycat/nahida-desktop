@@ -1690,6 +1690,13 @@
       },
       "modBisect": {
         "running": "이진 탐색 중"
+      },
+      "textureResizer": {
+        "resizing": "텍스처 리사이즈 중",
+        "upscaling": "텍스처 업스케일 중",
+        "converting": "텍스처 포맷 변환 중",
+        "resizing_and_converting": "텍스처 리사이즈 및 변환 중",
+        "upscaling_and_converting": "텍스처 업스케일 및 변환 중"
       }
     }
   },

@@ -10,6 +10,7 @@ import type {
     TextureResizeFileRunInput,
     TextureResizeListItem,
     TextureResizeOperation,
+    TextureResizeProgressEvent,
     TextureResizeRunInput,
     TextureResizeSettings,
     TextureUpscaleModel,
@@ -217,10 +218,20 @@ const DEFAULT_SETTINGS: TextureResizeSettings = {
 };
 
 export class TextureResizer {
+    private activeState: TextureResizeProgressEvent = { status: "idle" };
     private readonly realesrganRuntime: RealesrganRuntime;
 
     constructor(private readonly desktop: NahidaDesktop) {
         this.realesrganRuntime = new RealesrganRuntime(desktop);
+    }
+
+    public getState(): TextureResizeProgressEvent {
+        return this.activeState;
+    }
+
+    private updateProgress(event: TextureResizeProgressEvent) {
+        this.activeState = event;
+        this.desktop.ipc.broadcast("tools:textureResizeProgress", event);
     }
 
     public async getSettings() {
@@ -313,7 +324,38 @@ export class TextureResizer {
         if (isTextureUpscaleOperation(settings.operation)) {
             throw new Error("Folder upscale is not supported.");
         }
-        return await resizeTextures(buildResizeRequest(path.resolve(targetPath), settings));
+
+        const resolvedPath = path.resolve(targetPath);
+        this.updateProgress({
+            status: "running",
+            operation: settings.operation,
+            filePath: resolvedPath,
+            fileName: path.basename(resolvedPath),
+        });
+
+        try {
+            const result = await resizeTextures(buildResizeRequest(resolvedPath, settings));
+            this.updateProgress({
+                status: "completed",
+                operation: settings.operation,
+                filePath: resolvedPath,
+                fileName: path.basename(resolvedPath),
+                totalFiles: result.processed,
+                processedFiles: result.processed,
+            });
+            return result;
+        } catch (error) {
+            this.updateProgress({
+                status: "failed",
+                operation: settings.operation,
+                filePath: resolvedPath,
+                fileName: path.basename(resolvedPath),
+                error: toErrorMessage(error),
+            });
+            throw error;
+        } finally {
+            this.activeState = { status: "idle" };
+        }
     }
 
     public async resizeMod(modPath: string, input: Omit<TextureResizeRunInput, "targetPath">) {
@@ -321,7 +363,38 @@ export class TextureResizer {
         if (isTextureUpscaleOperation(settings.operation)) {
             throw new Error("Folder upscale is not supported.");
         }
-        return await resizeTextures(buildResizeRequest(path.resolve(modPath), settings));
+
+        const resolvedPath = path.resolve(modPath);
+        this.updateProgress({
+            status: "running",
+            operation: settings.operation,
+            filePath: resolvedPath,
+            fileName: path.basename(resolvedPath),
+        });
+
+        try {
+            const result = await resizeTextures(buildResizeRequest(resolvedPath, settings));
+            this.updateProgress({
+                status: "completed",
+                operation: settings.operation,
+                filePath: resolvedPath,
+                fileName: path.basename(resolvedPath),
+                totalFiles: result.processed,
+                processedFiles: result.processed,
+            });
+            return result;
+        } catch (error) {
+            this.updateProgress({
+                status: "failed",
+                operation: settings.operation,
+                filePath: resolvedPath,
+                fileName: path.basename(resolvedPath),
+                error: toErrorMessage(error),
+            });
+            throw error;
+        } finally {
+            this.activeState = { status: "idle" };
+        }
     }
 
     public async resizeFile(input: TextureResizeFileRunInput) {
@@ -332,11 +405,40 @@ export class TextureResizer {
 
         const settings = await this.saveSettings(input.settings);
         const resolvedPath = path.resolve(filePath);
-        if (isTextureUpscaleOperation(settings.operation)) {
-            return await this.upscaleFile(resolvedPath, settings);
-        }
+        this.updateProgress({
+            status: "running",
+            operation: settings.operation,
+            filePath: resolvedPath,
+            fileName: path.basename(resolvedPath),
+            totalFiles: 1,
+            processedFiles: 0,
+        });
 
-        return await resizeTextures(buildResizeRequest(resolvedPath, settings));
+        try {
+            const result = isTextureUpscaleOperation(settings.operation)
+                ? await this.upscaleFile(resolvedPath, settings)
+                : await resizeTextures(buildResizeRequest(resolvedPath, settings));
+            this.updateProgress({
+                status: "completed",
+                operation: settings.operation,
+                filePath: resolvedPath,
+                fileName: path.basename(resolvedPath),
+                totalFiles: 1,
+                processedFiles: 1,
+            });
+            return result;
+        } catch (error) {
+            this.updateProgress({
+                status: "failed",
+                operation: settings.operation,
+                filePath: resolvedPath,
+                fileName: path.basename(resolvedPath),
+                error: toErrorMessage(error),
+            });
+            throw error;
+        } finally {
+            this.activeState = { status: "idle" };
+        }
     }
 
     private async getSettingValue(key: string) {

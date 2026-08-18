@@ -1670,6 +1670,13 @@
       },
       "modBisect": {
         "running": "二分排查中"
+      },
+      "textureResizer": {
+        "resizing": "正在调整纹理大小",
+        "upscaling": "正在放大纹理",
+        "converting": "正在转换纹理格式",
+        "resizing_and_converting": "正在调整纹理大小并转换",
+        "upscaling_and_converting": "正在放大纹理并转换"
       }
     }
   },

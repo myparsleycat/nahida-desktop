@@ -4,6 +4,7 @@ import { getAggregateTransferProgress, isOpenTransferQueueStatus } from "@shared
 import type {
     BisectSnapshot,
     FourThousandOneFixerProgressEvent,
+    TextureResizeProgressEvent,
     TransferWithoutData,
 } from "@shared/types";
 import { formatSize } from "@shared/utils";
@@ -108,6 +109,40 @@ export function buildModBisectTitlebarActivity(
         label: t("titlebar.activity.modBisect.running"),
         status: "running",
         order: 20,
+        href: "/tools",
+    };
+}
+
+function getTextureResizerLabelKey(operation?: TextureResizeProgressEvent["operation"]) {
+    switch (operation) {
+        case "upscale":
+            return "titlebar.activity.textureResizer.upscaling";
+        case "upscale_and_convert":
+            return "titlebar.activity.textureResizer.upscaling_and_converting";
+        case "convert":
+            return "titlebar.activity.textureResizer.converting";
+        case "resize_and_convert":
+            return "titlebar.activity.textureResizer.resizing_and_converting";
+        case "resize":
+        default:
+            return "titlebar.activity.textureResizer.resizing";
+    }
+}
+
+export function buildTextureResizerTitlebarActivity(
+    event: TextureResizeProgressEvent | null,
+    t: Translate,
+): TitlebarActivity | null {
+    if (!event || event.status !== "running") return null;
+
+    const detail = event.fileName;
+
+    return {
+        id: "tools:texture-resizer",
+        label: t(getTextureResizerLabelKey(event.operation)),
+        status: "running",
+        detail: detail || undefined,
+        order: 30,
         href: "/tools",
     };
 }

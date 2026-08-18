@@ -204,6 +204,16 @@ export interface TextureResizeResult {
     files: TextureResizeFileResult[];
 }
 
+export type TextureResizeProgressEvent = {
+    status: "idle" | "running" | "completed" | "failed";
+    operation?: TextureResizeOperation;
+    filePath?: string;
+    fileName?: string;
+    totalFiles?: number;
+    processedFiles?: number;
+    error?: string;
+};
+
 export interface ToggleKey {
     sectionName: string;
     iniFileName: string;
@@ -386,6 +396,7 @@ export type IpcEvents = {
     "setting:xxmi:persistLogs": (logs: string[]) => void;
     "setting:xxmi:toggleViewerLogs": (logs: string[]) => void;
     "tools:4001FixerProgress": (event: FourThousandOneFixerProgressEvent) => void;
+    "tools:textureResizeProgress": (event: TextureResizeProgressEvent) => void;
     "tools:textureUpscaleProgress": (event: TextureUpscaleProgressEvent) => void;
     "tools:touchProfileProgress": (event: TouchProfileProgressEvent) => void;
     "tools:bisectState": (snapshot: BisectSnapshot) => void;

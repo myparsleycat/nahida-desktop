@@ -43,6 +43,7 @@ export function registerToolsHandlers(d: NahidaDesktop) {
     rh("tools:resizeTextureMod", (modPath: string, input) =>
         d.service.modTools.textureResizer.resizeMod(modPath, input),
     );
+    rh("tools:getTextureResizeState", () => d.service.modTools.textureResizer.getState());
     rh(
         "tools:4001FixerBuildDll",
         ({
