@@ -19,7 +19,10 @@ export async function updateXxmiLibsReleases(logger: Logger, provider = "Spectru
 
 export async function getXxmiLibsReleases(logger: Logger, provider = "SpectrumQT") {
     if (!releasesCache.has(provider)) {
-        await fetchProviderReleases(logger, provider);
+        const success = await fetchProviderReleases(logger, provider);
+        if (!success) {
+            throw new Error(`Failed to fetch XXMI libs releases for ${provider}`);
+        }
     }
 
     return releasesCache.get(provider) ?? [];
