@@ -9,4 +9,8 @@ export function registerXXMIHandlers(d: NahidaDesktop) {
     rh("xxmi:findXXMIPath", () => d.service.xxmi.findXXMIPath());
     rh("xxmi:startGame", (importer: string) => d.service.xxmi.startGame(importer));
     rh("xxmi:getEnabledImporters", () => d.service.xxmi.getEnabledImporters());
+    rh("xxmi:getLibsReleases", () => d.service.xxmi.getLibsReleases());
+    rh("xxmi:installDllVersion", (input: { version: string }) =>
+        d.service.xxmi.installDllVersion(input),
+    );
 }

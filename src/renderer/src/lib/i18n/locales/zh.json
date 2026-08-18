@@ -1536,6 +1536,11 @@
         "persistToggles": "持久保存切换状态",
         "persistTogglesDescription": "在重载时修改模组 INI，以持久保存切换状态",
         "persistNotFoundXXMI": "请先设置 XXMI Launcher 路径。",
+        "dllVersion": "XXMI DLL 版本",
+        "dllVersionDescription": "安装指定的 XXMI 软件包版本。启动器自动更新将被关闭。",
+        "dllVersionLoading": "正在加载版本...",
+        "dllVersionLoadFailed": "无法加载版本。",
+        "dllVersionEmpty": "没有可用版本。",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "未找到XXMI",
@@ -1547,6 +1552,10 @@
           "saveXXMIPath": {
             "success": "XXMI路径已保存",
             "configNotFound": "在指定路径中找不到XXMI Launcher Config.json文件"
+          },
+          "installDllVersion": {
+            "success": "已应用 XXMI DLL 版本 {{version}}",
+            "failed": "应用所选 XXMI DLL 版本失败"
           }
         }
       },

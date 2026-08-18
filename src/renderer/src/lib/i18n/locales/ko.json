@@ -1556,6 +1556,11 @@
         "persistToggles": "토글 영구 저장",
         "persistTogglesDescription": "리로드할 때 모드 ini를 수정해 토글 상태를 영구 저장합니다",
         "persistNotFoundXXMI": "XXMI Launcher 경로를 먼저 설정해 주세요.",
+        "dllVersion": "XXMI DLL 버전",
+        "dllVersionDescription": "원하는 XXMI 패키지 버전을 설치합니다. 런처 자동 업데이트는 꺼집니다.",
+        "dllVersionLoading": "버전을 불러오는 중...",
+        "dllVersionLoadFailed": "버전을 불러오지 못했습니다.",
+        "dllVersionEmpty": "사용 가능한 버전이 없습니다.",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "XXMI 를 찾을 수 없습니다",
@@ -1567,6 +1572,10 @@
           "saveXXMIPath": {
             "success": "XXMI 경로가 저장되었습니다",
             "configNotFound": "해당 경로에서 XXMI Launcher Config.json 파일을 찾을 수 없습니다"
+          },
+          "installDllVersion": {
+            "success": "XXMI DLL 버전 {{version}} 을 적용했습니다",
+            "failed": "선택한 XXMI DLL 버전을 적용하지 못했습니다"
           }
         }
       },

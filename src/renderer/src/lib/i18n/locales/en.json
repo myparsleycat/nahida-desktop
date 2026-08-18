@@ -1622,6 +1622,11 @@
         "persistToggles": "Persist Toggles",
         "persistTogglesDescription": "Permanently saves toggle states by modifying the mod INI during reload",
         "persistNotFoundXXMI": "Please set the XXMI Launcher path first.",
+        "dllVersion": "XXMI DLL Version",
+        "dllVersionDescription": "Install a specific XXMI package version. Launcher auto update will be turned off.",
+        "dllVersionLoading": "Loading versions...",
+        "dllVersionLoadFailed": "Failed to load versions.",
+        "dllVersionEmpty": "No versions available.",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "XXMI not found",
@@ -1633,6 +1638,10 @@
           "saveXXMIPath": {
             "success": "XXMI path has been saved",
             "configNotFound": "Cannot find XXMI Launcher Config.json file in the specified path"
+          },
+          "installDllVersion": {
+            "success": "XXMI DLL version {{version}} has been applied",
+            "failed": "Failed to apply the selected XXMI DLL version"
           }
         }
       },
