@@ -103,9 +103,23 @@ export class XXMI {
         await this.init();
         return {
             xxmiPath: this.xxmiPath,
+            dllVersion: await this.getDllVersion(),
             enabledImporters: this.getEnabledImporters(),
             xxmiConfig: this.xxmiConfig,
         };
+    }
+
+    private async getDllVersion() {
+        if (!this.xxmiPath) return null;
+
+        try {
+            const manifest = await fse.readJson(
+                path.join(this.xxmiPath, "Resources", "Packages", "XXMI", "Manifest.json"),
+            );
+            return typeof manifest?.version === "string" ? manifest.version : null;
+        } catch {
+            return null;
+        }
     }
 
     public async getXXMIPath() {

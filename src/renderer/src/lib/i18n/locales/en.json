@@ -1624,10 +1624,12 @@
         "persistTogglesDescription": "Permanently saves toggle states by modifying the mod INI during reload",
         "persistNotFoundXXMI": "Please set the XXMI Launcher path first.",
         "dllVersion": "XXMI DLL Version",
-        "dllVersionDescription": "Install a specific XXMI package version. Launcher auto update will be turned off.",
+        "dllVersionDescription": "Changing the version disables XXMI Launcher auto-update.",
         "dllVersionLoading": "Loading versions...",
         "dllVersionLoadFailed": "Failed to load versions.",
         "dllVersionEmpty": "No versions available.",
+        "dllVersionCurrent": "Current: {{version}}",
+        "dllVersionUnknown": "Unknown",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "XXMI not found",

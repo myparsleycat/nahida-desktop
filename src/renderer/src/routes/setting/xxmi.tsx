@@ -27,7 +27,7 @@ function XXMIRouteContent() {
     <main className="mx-auto flex w-full flex-1 flex-col space-y-6 p-4 select-none">
       <XXMIPath xxmiData={xxmiData} refetch={refetch} />
       <Separator />
-      <XXMIDllVersion xxmiData={xxmiData} />
+      <XXMIDllVersion xxmiData={xxmiData} refetch={refetch} />
       {xxmiData?.xxmiConfig && (
         <>
           <Separator />

@@ -60,7 +60,10 @@ export function XXMIPath({ xxmiData, refetch }: { xxmiData?: XXMIData; refetch: 
         >
           {t("page.setting.xxmi.autoScan")}
         </Button>
-        <Button onClickPromise={saveXXMIPath} disabled={!xxmiPath}>
+        <Button
+          onClickPromise={saveXXMIPath}
+          disabled={!xxmiPath || xxmiPath === (xxmiData?.xxmiPath ?? "")}
+        >
           {t("g.save")}
         </Button>
       </div>

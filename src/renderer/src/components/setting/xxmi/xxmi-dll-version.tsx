@@ -14,13 +14,22 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-export function XXMIDllVersion({ xxmiData }: { xxmiData?: XXMIData }) {
+export function XXMIDllVersion({
+  xxmiData,
+  refetch,
+}: {
+  xxmiData?: XXMIData;
+  refetch: () => void;
+}) {
   const { t } = useTranslation();
   const [versions, setVersions] = useState<string[] | null>(null);
   const [version, setVersion] = useState("");
   const [fetchError, setFetchError] = useState(false);
 
   const hasPath = !!xxmiData?.xxmiPath;
+  const isCurrentVersion = (value: string) => isSameDllVersion(value, xxmiData?.dllVersion);
+  const currentVersionLabel =
+    versions?.find((item) => isCurrentVersion(item)) ?? xxmiData?.dllVersion;
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +58,7 @@ export function XXMIDllVersion({ xxmiData }: { xxmiData?: XXMIData }) {
     try {
       await window.api.invoke("xxmi:installDllVersion", { version });
       toast.success(t("page.setting.xxmi.fn.installDllVersion.success", { version }));
+      refetch();
     } catch (error) {
       toast.error(
         toErrorMessage(error).includes("XXMI Launcher")
@@ -65,6 +75,13 @@ export function XXMIDllVersion({ xxmiData }: { xxmiData?: XXMIData }) {
         <p className="text-xs text-muted-foreground">
           {t("page.setting.xxmi.dllVersionDescription")}
         </p>
+        {hasPath && (
+          <p className="text-xs text-muted-foreground">
+            {t("page.setting.xxmi.dllVersionCurrent", {
+              version: currentVersionLabel ?? t("page.setting.xxmi.dllVersionUnknown"),
+            })}
+          </p>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {xxmiData && !hasPath ? (
@@ -96,7 +113,7 @@ export function XXMIDllVersion({ xxmiData }: { xxmiData?: XXMIData }) {
               <SelectContent className="h-64">
                 <SelectGroup>
                   {versions.map((item) => (
-                    <SelectItem key={item} value={item}>
+                    <SelectItem key={item} value={item} disabled={isCurrentVersion(item)}>
                       {item}
                     </SelectItem>
                   ))}
@@ -105,7 +122,9 @@ export function XXMIDllVersion({ xxmiData }: { xxmiData?: XXMIData }) {
             </Select>
             <Button
               onClickPromise={applyVersion}
-              disabled={!hasPath || !version || fetchError || versions === null}
+              disabled={
+                !hasPath || !version || fetchError || versions === null || isCurrentVersion(version)
+              }
             >
               {t("g.confirm")}
             </Button>
@@ -114,4 +133,13 @@ export function XXMIDllVersion({ xxmiData }: { xxmiData?: XXMIData }) {
       </div>
     </div>
   );
+}
+
+function isSameDllVersion(selected?: string | null, installed?: string | null) {
+  if (!selected || !installed) return false;
+  return normalizeDllVersion(selected) === normalizeDllVersion(installed);
+}
+
+function normalizeDllVersion(value: string) {
+  return value.trim().replace(/^v/i, "");
 }

@@ -1539,10 +1539,12 @@
         "persistTogglesDescription": "リロード時にMODのINIを変更して、トグル状態を永続的に保存します",
         "persistNotFoundXXMI": "先にXXMI Launcherのパスを設定してください。",
         "dllVersion": "XXMI DLLバージョン",
-        "dllVersionDescription": "指定したXXMIパッケージバージョンをインストールします。ランチャーの自動更新はオフになります。",
+        "dllVersionDescription": "バージョンを変更すると、XXMI Launcherの自動更新が無効になります。",
         "dllVersionLoading": "バージョンを読み込み中...",
         "dllVersionLoadFailed": "バージョンの読み込みに失敗しました。",
         "dllVersionEmpty": "利用可能なバージョンがありません。",
+        "dllVersionCurrent": "現在: {{version}}",
+        "dllVersionUnknown": "不明",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "XXMIが見つかりません",
