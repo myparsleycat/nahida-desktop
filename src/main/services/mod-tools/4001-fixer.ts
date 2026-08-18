@@ -10,7 +10,6 @@ import { diversifyDllPadding } from "@native/pe-padding-diversifier";
 import { toErrorMessage } from "@shared/utils";
 import fse from "fs-extra";
 import ky from "ky";
-import ms from "ms";
 import { nanoid } from "nanoid";
 
 import type { NahidaDesktop } from "@/main";
@@ -21,6 +20,7 @@ import {
     removeFilesElevated,
 } from "@/main/lib/elevated-fs";
 import { drainWebStream, webStreamToNodeReadable } from "@/main/lib/web-stream-to-readable";
+import { getXxmiLibsReleases, updateXxmiLibsReleases } from "@/main/services/xxmi-libs-releases";
 
 const execAsync = promisify(exec);
 
@@ -42,12 +42,7 @@ type DiversificationState = {
     backupPath: string | null;
 };
 
-type GitHubRelease = {
-    tag_name?: unknown;
-};
-
 const TARGET_DLL_NAME = "d3d11.dll";
-const NON_RELEASE_VERSION_NAMES = new Set(["main", "master"]);
 const D3D_BUILD_STATE_KEY_PREFIX = "mod_tools:d3d_build:";
 const D3D_BUILD_TEMP_DIR_NAME = "nahida-tools-d3d-build";
 const D3D_BUILD_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -72,22 +67,22 @@ export class FourThousandOneFixer {
         "BuildTools",
     ];
     private readonly VS_VERSIONS = ["2025", "2022", "18", "17"];
-    private readonly RELEASES_FETCH_COOLDOWN_MS = ms("1m");
 
     private activeTask: FourThousandOneFixerTask | null = null;
     private currentProgress = "";
     private currentErrorMessage = "";
-
-    private releasesCache: Partial<Record<string, string[]>> = {};
-    private readonly releasesFetchedAt: Partial<Record<string, number>> = {};
-    private readonly releasesFetchInFlight: Partial<Record<string, Promise<boolean>>> = {};
 
     constructor(private readonly desktop: NahidaDesktop) {
         this.desktop.service.startupCleanup.register({
             name: "mod-tools:d3d-build",
             run: () => this.cleanupStaleBuildDirs(),
         });
-        void this.updateReleases();
+        void this.updateReleases().catch((error) => {
+            this.desktop.logger.warn(
+                `Automatic XXMI libs release prefetch failed: ${String(error)}`,
+                "4001Fixer:updateReleases",
+            );
+        });
     }
 
     public getState() {
@@ -100,75 +95,11 @@ export class FourThousandOneFixer {
     }
 
     public async updateReleases() {
-        await this.fetchProviderReleases("SpectrumQT");
-    }
-
-    private async fetchProviderReleases(provider: string) {
-        const inFlight = this.releasesFetchInFlight[provider];
-        if (inFlight) {
-            return inFlight;
-        }
-
-        const now = Date.now();
-        const lastFetchedAt = this.releasesFetchedAt[provider] ?? 0;
-        if (now - lastFetchedAt < this.RELEASES_FETCH_COOLDOWN_MS) {
-            return true;
-        }
-
-        const fetchPromise = this.fetchProviderReleasesInternal(provider);
-        this.releasesFetchInFlight[provider] = fetchPromise;
-
-        try {
-            const success = await fetchPromise;
-            if (success) {
-                this.releasesFetchedAt[provider] = Date.now();
-            }
-            return success;
-        } finally {
-            delete this.releasesFetchInFlight[provider];
-        }
-    }
-
-    private async fetchProviderReleasesInternal(provider: string) {
-        try {
-            const url = `https://api.github.com/repos/${provider}/XXMI-Libs-Package/releases`;
-            const resp = await ky.get(url, {
-                headers: {
-                    "User-Agent":
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-                },
-                throwHttpErrors: false,
-            });
-
-            if (!resp.ok) {
-                this.desktop.logger.warn(
-                    `Failed to fetch releases for ${provider}: ${resp.status} ${resp.statusText}`,
-                    "4001Fixer:fetchProviderReleases",
-                );
-                return false;
-            }
-
-            const releases = (await resp.json()) as GitHubRelease[];
-            this.releasesCache[provider] = releases
-                .map((release) => release.tag_name)
-                .filter(
-                    (tagName): tagName is string =>
-                        typeof tagName === "string" &&
-                        !NON_RELEASE_VERSION_NAMES.has(tagName.toLowerCase()),
-                );
-            return true;
-        } catch (error) {
-            this.desktop.logger.error(error, "4001Fixer:fetchProviderReleases");
-            return false;
-        }
+        await updateXxmiLibsReleases(this.desktop.logger, "SpectrumQT");
     }
 
     public async getProviderReleases(provider: string) {
-        if (!this.releasesCache[provider]) {
-            await this.fetchProviderReleases(provider);
-        }
-
-        return this.releasesCache[provider] ?? [];
+        return getXxmiLibsReleases(this.desktop.logger, provider);
     }
 
     public async getDiversificationState({
@@ -223,6 +154,32 @@ export class FourThousandOneFixer {
         });
     }
 
+    private async closeLauncherOrFail(context: {
+        operation: string;
+        target?: string;
+        fileChangesStarted: boolean;
+    }): Promise<BuildD3DResult | null> {
+        try {
+            await this.desktop.service.xxmi.ensureLauncherClosed();
+            return null;
+        } catch (error) {
+            const errorMessage = toErrorMessage(error);
+            this.desktop.logger.error(
+                {
+                    action: "4001Fixer:closeLauncher",
+                    operation: context.operation,
+                    target: context.target,
+                    fileChangesStarted: context.fileChangesStarted,
+                    error: errorMessage,
+                },
+                "4001Fixer:closeLauncher",
+            );
+            this.updateProgress("XXMI_ERR_LAUNCHER_CLOSE_FAILED", errorMessage);
+            this.activeTask = null;
+            return { success: false, errorMessage };
+        }
+    }
+
     public async buildD3D11Dll({
         provider,
         version,
@@ -245,6 +202,13 @@ export class FourThousandOneFixer {
             this.activeTask = null;
             return { success: false };
         }
+
+        const launcherCloseError = await this.closeLauncherOrFail({
+            operation: "build-dll",
+            target: importerPath,
+            fileChangesStarted: false,
+        });
+        if (launcherCloseError) return launcherCloseError;
 
         const finalDestination = path.join(importerPath, TARGET_DLL_NAME);
         const destinationCheck = await this.desktop.lib.fs.isPathWritable(finalDestination, {
@@ -373,6 +337,13 @@ export class FourThousandOneFixer {
             return { success: false };
         }
 
+        const launcherCloseError = await this.closeLauncherOrFail({
+            operation: "diversify-dll",
+            target: targetDllPath,
+            fileChangesStarted: false,
+        });
+        if (launcherCloseError) return launcherCloseError;
+
         const destinationCheck = await this.desktop.lib.fs.isPathWritable(targetDllPath, {
             detailed: true,
             parentPath: importerPath,
@@ -494,6 +465,13 @@ export class FourThousandOneFixer {
         }
 
         const targetDllPath = path.join(importerPath, TARGET_DLL_NAME);
+        const launcherCloseError = await this.closeLauncherOrFail({
+            operation: "restore-dll",
+            target: targetDllPath,
+            fileChangesStarted: false,
+        });
+        if (launcherCloseError) return launcherCloseError;
+
         const destinationCheck = await this.desktop.lib.fs.isPathWritable(targetDllPath, {
             detailed: true,
             parentPath: importerPath,

@@ -798,6 +798,7 @@
           "XXMI_ERR_DLL_NOT_FOUND": "빌드된 d3d11.dll 파일을 찾을 수 없습니다.",
           "XXMI_ERR_DLL_NOT_WRITABLE": "대상 Importer에 d3d11.dll을 쓸 수 없습니다. 폴더 권한을 확인하거나 관리자 권한 요청을 허용하세요.",
           "XXMI_ERR_DLL_IN_USE": "d3d11.dll을 교체할 수 없습니다. 게임을 먼저 종료한 뒤 다시 시도하세요.",
+          "XXMI_ERR_LAUNCHER_CLOSE_FAILED": "XXMI Launcher를 종료하지 못했습니다. 직접 종료한 뒤 다시 시도하세요.",
           "XXMI_ERR_ELEVATION_FAILED": "관리자 권한이 거부되었거나 권한 상승 후 쓰기에 실패했습니다. UAC 확인을 허용한 뒤 다시 시도하세요.",
           "XXMI_BUILD_SUCCESS": "d3d11.dll이 성공적으로 적용되었습니다.",
           "XXMI_OBFUSCATE_SUCCESS": "d3d11.dll 패딩 다양화가 완료되었습니다.",
@@ -1557,6 +1558,14 @@
         "persistToggles": "토글 영구 저장",
         "persistTogglesDescription": "리로드할 때 모드 ini를 수정해 토글 상태를 영구 저장합니다",
         "persistNotFoundXXMI": "XXMI Launcher 경로를 먼저 설정해 주세요.",
+        "dllVersion": "XXMI DLL 버전",
+        "dllVersionDescription": "버전 변경 시 XXMI Launcher 자동 업데이트가 비활성화됩니다.",
+        "dllVersionLoading": "버전을 불러오는 중...",
+        "dllVersionLoadFailed": "버전을 불러오지 못했습니다.",
+        "dllVersionRetry": "다시 시도",
+        "dllVersionEmpty": "사용 가능한 버전이 없습니다.",
+        "dllVersionCurrent": "현재: {{version}}",
+        "dllVersionUnknown": "알 수 없음",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "XXMI 를 찾을 수 없습니다",
@@ -1568,6 +1577,11 @@
           "saveXXMIPath": {
             "success": "XXMI 경로가 저장되었습니다",
             "configNotFound": "해당 경로에서 XXMI Launcher Config.json 파일을 찾을 수 없습니다"
+          },
+          "installDllVersion": {
+            "success": "XXMI DLL 버전 {{version}} 을 적용했습니다",
+            "failed": "선택한 XXMI DLL 버전을 적용하지 못했습니다",
+            "launcherCloseFailed": "XXMI Launcher를 종료하지 못했습니다. 직접 종료한 뒤 다시 시도하세요."
           }
         }
       },

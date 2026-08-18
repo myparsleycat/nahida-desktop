@@ -779,6 +779,7 @@
           "XXMI_ERR_DLL_NOT_FOUND": "ビルドされた d3d11.dll ファイルが見つかりません。",
           "XXMI_ERR_DLL_NOT_WRITABLE": "対象 Importer に d3d11.dll を書き込めません。フォルダーの権限を確認するか、管理者権限の要求を許可してください。",
           "XXMI_ERR_DLL_IN_USE": "d3d11.dll を置き換えられません。先にゲームを終了してからもう一度お試しください。",
+          "XXMI_ERR_LAUNCHER_CLOSE_FAILED": "XXMI Launcher を終了できませんでした。手動で終了してからもう一度お試しください。",
           "XXMI_ERR_ELEVATION_FAILED": "管理者権限が拒否されたか、昇格後の書き込みに失敗しました。UAC を許可してから再試行してください。",
           "XXMI_BUILD_SUCCESS": "d3d11.dll が正常に適用されました。",
           "XXMI_OBFUSCATE_SUCCESS": "d3d11.dll のパディング多様化が完了しました。",
@@ -1538,6 +1539,14 @@
         "persistToggles": "トグルの永続保存",
         "persistTogglesDescription": "リロード時にMODのINIを変更して、トグル状態を永続的に保存します",
         "persistNotFoundXXMI": "先にXXMI Launcherのパスを設定してください。",
+        "dllVersion": "XXMI DLLバージョン",
+        "dllVersionDescription": "バージョンを変更すると、XXMI Launcherの自動更新が無効になります。",
+        "dllVersionLoading": "バージョンを読み込み中...",
+        "dllVersionLoadFailed": "バージョンの読み込みに失敗しました。",
+        "dllVersionRetry": "再試行",
+        "dllVersionEmpty": "利用可能なバージョンがありません。",
+        "dllVersionCurrent": "現在: {{version}}",
+        "dllVersionUnknown": "不明",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "XXMIが見つかりません",
@@ -1549,6 +1558,11 @@
           "saveXXMIPath": {
             "success": "XXMIパスが保存されました",
             "configNotFound": "指定されたパスでXXMI Launcher Config.jsonファイルが見つかりません"
+          },
+          "installDllVersion": {
+            "success": "XXMI DLLバージョン {{version}} を適用しました",
+            "failed": "選択したXXMI DLLバージョンの適用に失敗しました",
+            "launcherCloseFailed": "XXMI Launcher を終了できませんでした。手動で終了してからもう一度お試しください。"
           }
         }
       },

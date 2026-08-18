@@ -1,10 +1,29 @@
+import os from "node:os";
 import path from "node:path";
-import { findFileAcrossDrives, spawnPrivilegedProcess, waitForProcess } from "@native/utils";
+import { pipeline } from "node:stream/promises";
+
+import {
+    findFileAcrossDrives,
+    getProcess,
+    killProcess,
+    spawnPrivilegedProcess,
+    waitForProcess,
+} from "@native/utils";
 import { WaitResult } from "@native/utils/constants";
 import { type XXMIConfig, XXMIConfigSchema } from "@shared/schemas/xxmi";
+import { toErrorMessage } from "@shared/utils";
 import { delay } from "es-toolkit";
 import fse from "fs-extra";
+import ky from "ky";
+import { nanoid } from "nanoid";
+
+import { drainWebStream, webStreamToNodeReadable } from "@/main/lib/web-stream-to-readable";
+
 import type { NahidaDesktop } from "..";
+
+import { getXxmiLibsReleases } from "./xxmi-libs-releases";
+
+const XXMI_LAUNCHER_EXE = "XXMI Launcher.exe";
 
 export class XXMI {
     private readonly desktop: NahidaDesktop;
@@ -84,9 +103,23 @@ export class XXMI {
         await this.init();
         return {
             xxmiPath: this.xxmiPath,
+            dllVersion: await this.getDllVersion(),
             enabledImporters: this.getEnabledImporters(),
             xxmiConfig: this.xxmiConfig,
         };
+    }
+
+    private async getDllVersion() {
+        if (!this.xxmiPath) return null;
+
+        try {
+            const manifest = await fse.readJson(
+                path.join(this.xxmiPath, "Resources", "Packages", "XXMI", "Manifest.json"),
+            );
+            return typeof manifest?.version === "string" ? manifest.version : null;
+        } catch {
+            return null;
+        }
     }
 
     public async getXXMIPath() {
@@ -128,6 +161,139 @@ export class XXMI {
             return path.dirname(result);
         }
         return null;
+    }
+
+    public async getLibsReleases() {
+        return getXxmiLibsReleases(this.desktop.logger);
+    }
+
+    public async ensureLauncherClosed() {
+        const deadline = Date.now() + 5000;
+        while (true) {
+            const running = getProcess(undefined, XXMI_LAUNCHER_EXE);
+            if (!running) return;
+            if (!killProcess(running.pid)) {
+                throw new Error("Failed to close XXMI Launcher");
+            }
+            if (Date.now() >= deadline) {
+                throw new Error("XXMI Launcher is still running");
+            }
+            await delay(100);
+        }
+    }
+
+    public async installDllVersion({ version }: { version: string }) {
+        await this.init();
+
+        const selectedVersion = version.trim();
+        if (!selectedVersion) {
+            throw new Error("No version selected");
+        }
+
+        if (!this.xxmiPath) {
+            throw new Error("XXMI is not configured");
+        }
+
+        if (this.busy) {
+            throw new Error("XXMI is busy");
+        }
+
+        this.busy = true;
+        const xxmiPath = this.xxmiPath;
+        const destDir = path.join(xxmiPath, "Resources", "Packages", "XXMI");
+        const workDir = path.join(os.tmpdir(), `nahida-xxmi-dll-${nanoid()}`);
+
+        try {
+            await this.ensureLauncherClosed();
+            await fse.ensureDir(workDir);
+            const zipPath = path.join(workDir, "package.zip");
+            const githubHeaders = {
+                "User-Agent":
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+                Referer: "https://github.com/SpectrumQT/XXMI-Libs-Package",
+            };
+            const resp = await ky.get(
+                `https://github.com/SpectrumQT/XXMI-Libs-Package/releases/download/${selectedVersion}/XXMI-PACKAGE-${selectedVersion}.zip`,
+                { headers: githubHeaders },
+            );
+
+            if (!resp.ok) {
+                await drainWebStream(resp.body).catch(() => {});
+                throw new Error(`Failed to download XXMI package: ${resp.statusText}`);
+            }
+            if (!resp.body) {
+                throw new Error("No response body");
+            }
+
+            await pipeline(webStreamToNodeReadable(resp.body), fse.createWriteStream(zipPath));
+
+            const extractedPath = await this.desktop.service.archive.extract(
+                zipPath,
+                path.join(workDir, "extracted"),
+            );
+            const entries = await fse.readdir(extractedPath, { withFileTypes: true });
+            const onlyDir =
+                entries.length === 1 && entries[0].isDirectory() ? entries[0].name : null;
+
+            const stagingDir = path.join(workDir, "staging");
+            await fse.copy(onlyDir ? path.join(extractedPath, onlyDir) : extractedPath, stagingDir);
+
+            const manifestResp = await ky.get(
+                `https://github.com/SpectrumQT/XXMI-Libs-Package/releases/download/${selectedVersion}/Manifest.json`,
+                { headers: githubHeaders },
+            );
+            if (!manifestResp.ok) {
+                await drainWebStream(manifestResp.body).catch(() => {});
+                throw new Error(`Failed to download XXMI manifest: ${manifestResp.statusText}`);
+            }
+            const manifestBuffer = Buffer.from(await manifestResp.arrayBuffer());
+            await fse.writeFile(path.join(stagingDir, "Manifest.json"), manifestBuffer);
+
+            const manifestJson = JSON.parse(manifestBuffer.toString("utf8"));
+            const manifestVersion =
+                typeof manifestJson?.version === "string" ? manifestJson.version : null;
+            if (
+                !manifestVersion ||
+                manifestVersion.trim().replace(/^v/i, "") !== selectedVersion.replace(/^v/i, "")
+            ) {
+                throw new Error(
+                    `Manifest version mismatch: expected ${selectedVersion}, got ${manifestVersion ?? "null"}`,
+                );
+            }
+
+            const configPath = path.join(xxmiPath, "XXMI Launcher Config.json");
+            const config = await fse.readJson(configPath);
+            if (!config.Launcher) {
+                throw new Error("XXMI Launcher config is missing Launcher section");
+            }
+
+            config.Launcher.auto_update = false;
+            await fse.writeJson(configPath, config, { spaces: 4 });
+            this.xxmiConfig = XXMIConfigSchema.parse(await fse.readJson(configPath));
+
+            await fse.ensureDir(destDir);
+            await fse.copy(stagingDir, destDir, { overwrite: true });
+
+            this.desktop.logger.info(
+                `Installed XXMI DLL version ${selectedVersion} to ${destDir}`,
+                "XXMI.installDllVersion",
+            );
+        } catch (error) {
+            this.desktop.logger.error(
+                {
+                    action: "xxmi:installDllVersion",
+                    version: selectedVersion,
+                    xxmiPath,
+                    destDir,
+                    error: toErrorMessage(error),
+                },
+                "XXMI.installDllVersion",
+            );
+            throw error;
+        } finally {
+            this.busy = false;
+            await fse.remove(workDir).catch(() => {});
+        }
     }
 
     public getEnabledImporters() {

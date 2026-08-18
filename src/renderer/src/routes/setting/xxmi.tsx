@@ -1,5 +1,7 @@
+import { XXMIDllVersion } from "@renderer/components/setting/xxmi/xxmi-dll-version";
 import { XXMIImporters } from "@renderer/components/setting/xxmi/xxmi-importers";
 import { XXMIPath } from "@renderer/components/setting/xxmi/xxmi-path";
+import { Separator } from "@renderer/components/ui/separator";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 
@@ -22,9 +24,16 @@ function XXMIRouteContent() {
   });
 
   return (
-    <main className="flex-1 flex flex-col mx-auto p-4 space-y-6 w-full select-none">
+    <main className="mx-auto flex w-full flex-1 flex-col space-y-6 p-4 select-none">
       <XXMIPath xxmiData={xxmiData} refetch={refetch} />
-      <XXMIImporters xxmiData={xxmiData} />
+      <Separator />
+      <XXMIDllVersion xxmiData={xxmiData} refetch={refetch} />
+      {xxmiData?.xxmiConfig && (
+        <>
+          <Separator />
+          <XXMIImporters xxmiData={xxmiData} />
+        </>
+      )}
     </main>
   );
 }

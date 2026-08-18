@@ -814,6 +814,7 @@
           "XXMI_ERR_DLL_NOT_FOUND": "Could not find the built d3d11.dll file.",
           "XXMI_ERR_DLL_NOT_WRITABLE": "Cannot write d3d11.dll to the target Importer. Check the folder permissions or approve the administrator prompt.",
           "XXMI_ERR_DLL_IN_USE": "Cannot replace d3d11.dll. Close the game first, then try again.",
+          "XXMI_ERR_LAUNCHER_CLOSE_FAILED": "Could not close XXMI Launcher. Close it and try again.",
           "XXMI_ERR_ELEVATION_FAILED": "Administrator permission was denied or the elevated write failed. Approve the UAC prompt and try again.",
           "XXMI_BUILD_SUCCESS": "d3d11.dll was applied successfully.",
           "XXMI_OBFUSCATE_SUCCESS": "d3d11.dll padding was diversified successfully.",
@@ -1623,6 +1624,14 @@
         "persistToggles": "Persist Toggles",
         "persistTogglesDescription": "Permanently saves toggle states by modifying the mod INI during reload",
         "persistNotFoundXXMI": "Please set the XXMI Launcher path first.",
+        "dllVersion": "XXMI DLL Version",
+        "dllVersionDescription": "Changing the version disables XXMI Launcher auto-update.",
+        "dllVersionLoading": "Loading versions...",
+        "dllVersionLoadFailed": "Failed to load versions.",
+        "dllVersionRetry": "Retry",
+        "dllVersionEmpty": "No versions available.",
+        "dllVersionCurrent": "Current: {{version}}",
+        "dllVersionUnknown": "Unknown",
         "fn": {
           "findXXMIPath": {
             "xxmiNotFound": "XXMI not found",
@@ -1634,6 +1643,11 @@
           "saveXXMIPath": {
             "success": "XXMI path has been saved",
             "configNotFound": "Cannot find XXMI Launcher Config.json file in the specified path"
+          },
+          "installDllVersion": {
+            "success": "XXMI DLL version {{version}} has been applied",
+            "failed": "Failed to apply the selected XXMI DLL version",
+            "launcherCloseFailed": "Could not close XXMI Launcher. Close it and try again."
           }
         }
       },
