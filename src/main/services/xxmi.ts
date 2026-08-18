@@ -265,11 +265,11 @@ export class XXMI {
             }
 
             config.Launcher.auto_update = false;
+            await fse.writeJson(configPath, config, { spaces: 4 });
+            this.xxmiConfig = XXMIConfigSchema.parse(await fse.readJson(configPath));
 
             await fse.ensureDir(destDir);
             await fse.copy(stagingDir, destDir, { overwrite: true });
-            await fse.writeJson(configPath, config, { spaces: 4 });
-            this.xxmiConfig = XXMIConfigSchema.parse(await fse.readJson(configPath));
 
             this.desktop.logger.info(
                 `Installed XXMI DLL version ${selectedVersion} to ${destDir}`,
