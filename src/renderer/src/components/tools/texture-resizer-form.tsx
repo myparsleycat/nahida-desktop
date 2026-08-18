@@ -10,8 +10,15 @@ import {
 } from "@renderer/components/ui/select";
 import { Slider } from "@renderer/components/ui/slider";
 import { Switch } from "@renderer/components/ui/switch";
-import type { TextureColorSpace, TextureResizeSettings } from "@shared/types";
-import { getTextureResizeCandidates, pickTextureResizeCandidate } from "@shared/utils";
+import type { TextureColorSpace, TextureResizeSettings, TextureUpscaleModel } from "@shared/types";
+import {
+  getAvailableTextureUpscaleScales,
+  getTextureResizeCandidates,
+  isTextureUpscaleOperation,
+  pickTextureResizeCandidate,
+  resolveTextureUpscaleScale,
+  TEXTURE_UPSCALE_MODELS,
+} from "@shared/utils";
 import { FolderOpenIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -67,10 +74,25 @@ export function TextureResizerForm({
       label: t("page.tools.texture_resizer.operation_options.resize_and_convert"),
     },
     { value: "convert", label: t("page.tools.texture_resizer.operation_options.convert") },
+    { value: "upscale", label: t("page.tools.texture_resizer.operation_options.upscale") },
+    {
+      value: "upscale_and_convert",
+      label: t("page.tools.texture_resizer.operation_options.upscale_and_convert"),
+    },
   ] as const;
+  const upscaleModelOptions = TEXTURE_UPSCALE_MODELS.map((model) => ({
+    value: model,
+    label: t(`page.tools.texture_resizer.upscale_model_options.${model}`),
+  }));
+  const availableUpscaleScales = getAvailableTextureUpscaleScales(settings.upscaleModel);
+  const selectedUpscaleScale = resolveTextureUpscaleScale(
+    settings.upscaleModel,
+    settings.upscaleScale,
+  );
 
-  const showResizeInputs = settings.operation !== "convert";
-  const showOutputFormat = settings.operation !== "resize";
+  const isUpscale = isTextureUpscaleOperation(settings.operation);
+  const showResizeInputs = settings.operation !== "convert" && !isUpscale;
+  const showOutputFormat = settings.operation !== "resize" && settings.operation !== "upscale";
   const useHorizontalConvertLayout = settings.operation === "convert";
   const resizeCandidates = resizeSource
     ? getTextureResizeCandidates(resizeSource.width, resizeSource.height)
@@ -154,11 +176,19 @@ export function TextureResizerForm({
       <Select
         value={settings.operation}
         items={operationOptions}
-        onValueChange={(value) =>
-          updateSettings({ operation: value as TextureResizeSettings["operation"] })
-        }
+        onValueChange={(value) => {
+          if (value === null) return;
+          const operation = operationOptions.find((option) => option.value === value)?.value;
+          if (!operation) return;
+          updateSettings({
+            operation,
+            upscaleScale: isTextureUpscaleOperation(operation)
+              ? resolveTextureUpscaleScale(settings.upscaleModel, settings.upscaleScale)
+              : settings.upscaleScale,
+          });
+        }}
       >
-        <SelectTrigger disabled={disabled} className="w-42">
+        <SelectTrigger disabled={disabled} className="w-56">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -205,7 +235,90 @@ export function TextureResizerForm({
         </div>
       )}
 
-      {showResizeInputs ? (
+      {isUpscale ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          {operationField}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+                {t("page.tools.texture_resizer.upscale_model")}
+              </label>
+              <Select
+                value={settings.upscaleModel}
+                items={upscaleModelOptions}
+                onValueChange={(value) => {
+                  if (value === null) return;
+                  const nextModel = value as TextureUpscaleModel;
+                  updateSettings({
+                    upscaleModel: nextModel,
+                    upscaleScale: resolveTextureUpscaleScale(nextModel, settings.upscaleScale),
+                  });
+                }}
+              >
+                <SelectTrigger disabled={disabled} className="w-64">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {upscaleModelOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {t(
+                  `page.tools.texture_resizer.upscale_model_descriptions.${settings.upscaleModel}`,
+                )}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+                {t("page.tools.texture_resizer.upscale_scale")}
+              </label>
+              <Select
+                value={String(selectedUpscaleScale)}
+                items={availableUpscaleScales.map((scale) => ({
+                  value: String(scale),
+                  label: t("page.tools.texture_resizer.upscale_scale_option", { scale }),
+                }))}
+                onValueChange={(value) => {
+                  if (value === null) return;
+                  updateSettings({
+                    upscaleScale: resolveTextureUpscaleScale(
+                      settings.upscaleModel,
+                      Number.parseInt(value, 10),
+                    ),
+                  });
+                }}
+              >
+                <SelectTrigger disabled={disabled} className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {availableUpscaleScales.map((scale) => (
+                      <SelectItem key={scale} value={String(scale)}>
+                        {t("page.tools.texture_resizer.upscale_scale_option", { scale })}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {t("page.tools.texture_resizer.upscale_scale_description")}
+              </p>
+            </div>
+            {currentColorSpace === "linear" && (
+              <div className="rounded-md border bg-background/40 p-3 text-xs text-muted-foreground">
+                {t("page.tools.texture_resizer.upscale_normal_warning")}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : showResizeInputs ? (
         <div className="grid gap-4 md:grid-cols-2">
           {operationField}
           <div className="rounded-md border bg-background/40 p-3 text-xs text-muted-foreground">

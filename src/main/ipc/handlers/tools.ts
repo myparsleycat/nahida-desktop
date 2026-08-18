@@ -24,6 +24,9 @@ import type {
 
 export function registerToolsHandlers(d: NahidaDesktop) {
     rh("tools:getTextureResizeSettings", () => d.service.modTools.textureResizer.getSettings());
+    rh("tools:getTextureUpscaleRuntimeStatus", () =>
+        d.service.modTools.textureResizer.getUpscaleRuntimeStatus(),
+    );
     rh("tools:listTextureFolder", (targetPath: string, settings) =>
         d.service.modTools.textureResizer.listFolderTextures(targetPath, settings),
     );
