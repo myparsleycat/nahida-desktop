@@ -37,6 +37,11 @@ vi.mock("./slow-chunk-monitor", async (importOriginal) => {
     return {
         ...actual,
         slowReconnectDelayMs: () => 0,
+        sleepWithAbort: async (_ms: number, signal: AbortSignal) => {
+            if (signal.aborted) {
+                throw new DOMException("The operation was aborted.", "AbortError");
+            }
+        },
     };
 });
 
@@ -583,6 +588,48 @@ describe("FileDownloadTask executeWithSlowRetry progress correction", () => {
         expect(slowFile.urlOrigin).toBe("presign");
         expect(mocks.fetchPresignedUrl).toHaveBeenCalledTimes(2);
         register.mockRestore();
+        performDownload.mockRestore();
+    });
+
+    it("retries expired presign refresh after a transient fetch failure", async () => {
+        const filePath = path.join(tempDir, "file.bin");
+        const targetPath = `${filePath}.ntmp`;
+        await writeFile(targetPath, "hello");
+        const expiredFile = {
+            ...file,
+            size: 11,
+            url: "https://r2.test/expired",
+            urlOrigin: "presign" as const,
+        };
+        mocks.fetchPresignedUrl
+            .mockRejectedValueOnce(new Error("temporary network error"))
+            .mockResolvedValueOnce({
+                data: { url: "https://r2.test/signed-fresh" },
+                error: null,
+            });
+        const desktop = createDesktop();
+        const task = (new DownloadLib(desktop) as unknown as { task: DownloadTask }).task;
+        const performDownload = vi.spyOn(task, "performDownload");
+        performDownload
+            .mockRejectedValueOnce(new DownloadHttpError(403, "Forbidden"))
+            .mockRejectedValueOnce(new DownloadHttpError(403, "Forbidden"))
+            .mockImplementationOnce(async (currentFile, currentTarget, _signal, options) => {
+                expect(currentFile.url).toBe("https://r2.test/signed-fresh");
+                expect(currentFile.urlOrigin).toBe("presign");
+                expect(options?.resumeFrom).toBe(5);
+                await writeFile(currentTarget, "hello world");
+            });
+
+        await task.executeWithSlowRetry({
+            file: expiredFile,
+            filePath,
+            signal: new AbortController().signal,
+            onComplete: vi.fn(),
+        });
+
+        expect(expiredFile.url).toBe("https://r2.test/signed-fresh");
+        expect(mocks.fetchPresignedUrl).toHaveBeenCalledTimes(2);
+        expect(performDownload).toHaveBeenCalledTimes(3);
         performDownload.mockRestore();
     });
 });

@@ -804,7 +804,6 @@ class FileDownloadTask {
                         urlOrigin === "presign" &&
                         !refreshedExpiredPresign
                     ) {
-                        refreshedExpiredPresign = true;
                         const nextUrl = await this.fetchPresignedDownloadUrl({
                             fileId: file.id,
                             link,
@@ -814,6 +813,7 @@ class FileDownloadTask {
                             return null;
                         });
                         if (nextUrl) {
+                            refreshedExpiredPresign = true;
                             file.url = nextUrl;
                             file.urlOrigin = "presign";
                             this.desktop.logger.warn(
