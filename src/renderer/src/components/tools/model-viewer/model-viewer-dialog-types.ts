@@ -1,3 +1,5 @@
+import type { ModViewerTransport } from "@shared/mod-viewer/types";
+
 import type {
     ModelViewerAnimationClip,
     ModelViewerRealtimeShapeKey,
@@ -57,6 +59,13 @@ export type ModelViewerVariantManifest = {
 };
 
 export type ModelViewerDialogSource =
+    | {
+          mode: "payload";
+          transport: ModViewerTransport;
+          memorySessionId: string;
+          modPath: string;
+          name: string;
+      }
     | {
           mode: "single";
           glbPath: string;

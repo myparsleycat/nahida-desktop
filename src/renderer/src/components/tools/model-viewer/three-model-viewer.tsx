@@ -49,6 +49,7 @@ import type {
 } from "./model-viewer-contract";
 
 import { parseOrientation } from "./model-viewer-contract";
+import { applyPayloadEval, buildPayloadModel } from "./model-viewer-payload";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
 
 type BodyShapeBaseline = {
@@ -96,6 +97,8 @@ export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurface
       onError,
       onLoad,
       orientation,
+      payloadEval,
+      payloadTransport,
       shapeKeys,
       src,
       threeEnvironment = "studio",
@@ -184,6 +187,8 @@ export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurface
             threeToneMapping={threeToneMapping}
             onError={onError}
             onLoad={onLoad}
+            payloadEval={payloadEval}
+            payloadTransport={payloadTransport}
             variantState={variantState}
           />
         </Canvas>
@@ -200,6 +205,8 @@ function ThreeModelScene({
   onError,
   onLoad,
   orientation,
+  payloadEval,
+  payloadTransport,
   shapeKeys,
   src,
   threeEnvironment = "studio",
@@ -219,6 +226,8 @@ function ThreeModelScene({
   const pendingLoadIdRef = useRef(0);
   const onLoadRef = useRef(onLoad);
   const onErrorRef = useRef(onError);
+  const payloadEvalRef = useRef(payloadEval);
+  payloadEvalRef.current = payloadEval;
   const floatBufferCacheRef = useRef<Map<string, Promise<Float32Array>>>(new Map());
   const uint32BufferCacheRef = useRef<Map<string, Promise<Uint32Array>>>(new Map());
   const lastAppliedVariantSnapshotRef = useRef<Record<string, number | string> | null>(null);
@@ -290,7 +299,7 @@ function ThreeModelScene({
     const loader = new GLTFLoader();
     let disposed = false;
 
-    if (!src) {
+    if (!src && !payloadTransport) {
       if (activeObjectRef.current) {
         disposeObjectTree(activeObjectRef.current);
       }
@@ -310,6 +319,34 @@ function ThreeModelScene({
       orientedCenterRef.current = null;
       return null;
     });
+
+    if (payloadTransport) {
+      void buildPayloadModel(
+        payloadTransport,
+        payloadEvalRef.current ?? { state: {}, meshes: [] },
+        true,
+      )
+        .then((nextRoot) => {
+          if (disposed || pendingLoadIdRef.current !== loadId) {
+            disposeObjectTree(nextRoot);
+            return;
+          }
+          materialRef.current = collectStandardMaterials(nextRoot);
+          activeObjectRef.current = nextRoot;
+          setModelRoot(nextRoot);
+        })
+        .catch((error) => {
+          if (disposed || pendingLoadIdRef.current !== loadId) {
+            return;
+          }
+          activeObjectRef.current = null;
+          materialRef.current = [];
+          onErrorRef.current?.(error);
+        });
+      return () => {
+        disposed = true;
+      };
+    }
 
     loader.load(
       src,
@@ -339,7 +376,15 @@ function ThreeModelScene({
     return () => {
       disposed = true;
     };
-  }, [src]);
+  }, [payloadTransport, src]);
+
+  useEffect(() => {
+    if (!modelRoot || !payloadEval || !payloadTransport) {
+      return;
+    }
+    applyPayloadEval(modelRoot, payloadEval);
+    invalidate();
+  }, [invalidate, modelRoot, payloadEval, payloadTransport]);
 
   useLayoutEffect(() => {
     if (!modelRoot) {

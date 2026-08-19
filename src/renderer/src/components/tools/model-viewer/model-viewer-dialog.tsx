@@ -13,9 +13,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@renderer/comp
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { getSetting, setSetting } from "@renderer/lib/settings";
 import { cn } from "@renderer/lib/utils";
+import { applyVariableSelection, evaluateViewerState } from "@shared/mod-viewer/eval";
 import { toErrorMessage } from "@shared/utils";
 import { Loader2Icon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -193,6 +194,18 @@ export function ModelViewerDialog({
       return;
     }
 
+    if (source.mode === "payload") {
+      resetViewerSession({ resetOrientation: shouldResetOrientation });
+      setActiveState(source.transport.defaultState);
+      setManifest(null);
+      setActiveAnimationId(null);
+      setAnimationFrameIndex(0);
+      setAnimationPlaying(false);
+      setViewerUrl(0, "");
+      setViewerUrl(1, "");
+      return;
+    }
+
     if (source.mode === "single") {
       resetViewerSession({ resetOrientation: shouldResetOrientation });
       setActiveState({});
@@ -298,7 +311,14 @@ export function ModelViewerDialog({
   };
 
   const handleResetToggles = async () => {
-    if (!source || source.mode !== "variant-set" || isResolving || loadingViewerIndex !== null) {
+    if (!source || isResolving || loadingViewerIndex !== null) {
+      return;
+    }
+    if (source.mode === "payload") {
+      setActiveState(source.transport.defaultState);
+      return;
+    }
+    if (source.mode !== "variant-set") {
       return;
     }
 
@@ -382,11 +402,19 @@ export function ModelViewerDialog({
   };
 
   const handleSaveTogglesToIni = async () => {
-    if (!source || source.mode !== "variant-set" || isResolving || loadingViewerIndex !== null) {
+    if (
+      !source ||
+      (source.mode !== "variant-set" && source.mode !== "payload") ||
+      isResolving ||
+      loadingViewerIndex !== null
+    ) {
       return;
     }
 
-    const iniPath = manifest?.iniPath ?? source.manifest.iniPath;
+    const iniPath =
+      source.mode === "payload"
+        ? source.transport.iniPath
+        : (manifest?.iniPath ?? source.manifest.iniPath);
     if (!iniPath) {
       toast.error(t("page.tools.model_viewer.toast.save_to_ini_error"));
       return;
@@ -413,7 +441,17 @@ export function ModelViewerDialog({
   };
 
   const handleSelectValue = async (variableId: string, value: VariableStateValue) => {
-    if (!source || source.mode !== "variant-set" || isResolving || loadingViewerIndex !== null) {
+    if (!source || isResolving || loadingViewerIndex !== null) {
+      return;
+    }
+    if (source.mode === "payload") {
+      const variable = source.transport.variables.find((entry) => entry.id === variableId) ?? {
+        id: variableId,
+      };
+      setActiveState((current) => applyVariableSelection(current, variable, value));
+      return;
+    }
+    if (source.mode !== "variant-set") {
       return;
     }
 
@@ -513,10 +551,17 @@ export function ModelViewerDialog({
     setAnimationPlaying(false);
   };
 
-  const variables = manifest?.variables ?? [];
-  const uiAssets = manifest?.uiAssets;
+  const payloadTransport = source?.mode === "payload" ? source.transport : null;
+  const payloadEval = useMemo(
+    () => (payloadTransport ? evaluateViewerState(payloadTransport, activeState) : null),
+    [activeState, payloadTransport],
+  );
+  const variables = manifest?.variables ?? payloadTransport?.variables ?? [];
+  const uiAssets = manifest?.uiAssets ?? payloadTransport?.uiAssets;
   const visibleVariables = variables.filter(
-    (variable) => variable.values.length > 0 && !animationVariableIds.has(variable.id),
+    (variable) =>
+      (variable.values.length > 0 || variable.controlType === "slider") &&
+      !animationVariableIds.has(variable.id),
   );
   const tileVariables = visibleVariables.filter((variable) => variable.controlType !== "slider");
   const sliderVariables = visibleVariables.filter((variable) => variable.controlType === "slider");
@@ -533,7 +578,8 @@ export function ModelViewerDialog({
   const hasVariantTileUi = Boolean(tileBackgroundPath) && tileVariables.length > 0;
   const hasVariantToggleUi = visibleVariables.length > 0;
   const showToggleViewer = Boolean(
-    source?.mode === "variant-set" && manifest && (hasVariantTileUi || hasVariantToggleUi),
+    (source?.mode === "variant-set" && manifest && (hasVariantTileUi || hasVariantToggleUi)) ||
+    (source?.mode === "payload" && hasVariantToggleUi),
   );
   const isViewerBusy = isResolving || loadingViewerIndex !== null;
   const canSaveCapturedPreview =
@@ -715,7 +761,7 @@ export function ModelViewerDialog({
             )}
           >
             <div className="relative min-h-80 overflow-hidden rounded-md border bg-muted/30">
-              {viewerUrls.some((url) => Boolean(url)) ? (
+              {payloadTransport || viewerUrls.some((url) => Boolean(url)) ? (
                 <>
                   {([0, 1] as const).map((index) => (
                     <ThreeModelViewer
@@ -730,6 +776,8 @@ export function ModelViewerDialog({
                           : "pointer-events-none z-0 opacity-0",
                       )}
                       src={viewerUrls[index]}
+                      payloadTransport={index === 0 ? (payloadTransport ?? undefined) : undefined}
+                      payloadEval={index === 0 ? (payloadEval ?? undefined) : undefined}
                       orientation={modelOrientation}
                       variantState={viewerVariantState}
                       shapeKeys={shapeKeys}
@@ -841,13 +889,16 @@ export function ModelViewerDialog({
                           variable={variable}
                           activeValue={activeState[variable.id]}
                           disabled={isViewerBusy}
-                          realtime={Boolean(
-                            shapeKeys?.some((shapeKey) =>
-                              shapeKey.dimensions.some(
-                                (dimension) => dimension.variableId === variable.id,
+                          realtime={
+                            source?.mode === "payload" ||
+                            Boolean(
+                              shapeKeys?.some((shapeKey) =>
+                                shapeKey.dimensions.some(
+                                  (dimension) => dimension.variableId === variable.id,
+                                ),
                               ),
-                            ),
-                          )}
+                            )
+                          }
                           onSelect={handleSelectValue}
                         />
                       ))}

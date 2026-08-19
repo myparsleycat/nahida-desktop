@@ -109,6 +109,9 @@ export function registerToolsHandlers(d: NahidaDesktop) {
     rh("tools:convertStaticGlbForViewer", (input: StaticGlbViewerInput) =>
         d.service.modTools.staticGlb.convertForViewer(input),
     );
+    rh("tools:loadModViewer", (modPath: string) =>
+        d.service.modTools.staticGlb.loadForViewer(modPath),
+    );
     rh(
         "tools:persistModelViewerToggleState",
         (iniPath: string, state: Record<string, string | number>) =>
