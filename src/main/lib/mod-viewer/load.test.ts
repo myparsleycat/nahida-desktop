@@ -58,6 +58,40 @@ filename = diffuse.png
         assert.match(await fse.readFile(path.join(root, "mod.ini"), "utf8"), /drawindexed/);
     });
 
+    it("loads mesh INIs from subfolders when the root INI has no geometry", async () => {
+        const root = await makeMod({
+            ini: `[Constants]
+global $swap = 0
+`,
+            extra: async (dir) => {
+                await fse.ensureDir(path.join(dir, "body"));
+                await fse.writeFile(
+                    path.join(dir, "body", "body.ini"),
+                    `[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[ResourcePos]
+filename = ../pos.buf
+stride = 40
+[ResourceTc]
+filename = ../tc.buf
+stride = 20
+[ResourceBodyIB]
+filename = ../body.ib
+format = DXGI_FORMAT_R32_UINT
+`,
+                );
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        assert.ok(payload.meshes.length >= 1);
+        assert.equal(payload.meshes[0].positions.length, 9);
+        assert.deepEqual([...payload.meshes[0].indices], [0, 1, 2]);
+    });
+
     it("keeps mid-section ib reassignment as two meshes with distinct index sources", async () => {
         const root = await makeMod({
             ini: `[TextureOverrideBodyBlend]

@@ -19,8 +19,6 @@ export type ResourceInfo = {
 
 const DECL_RE = /^global\s+(?:persist\s+)?\$(\w+)\b/i;
 const VAR_RE = /\$(\w+)/g;
-const DRAW_RE = /^drawindexed\s*=/i;
-const IB_RE = /^ib\s*=/i;
 const MAX_INI_FILES = 10;
 const MAX_INI_DEPTH = 2;
 const MAX_ESCAPE_DEPTH = 1;
@@ -150,12 +148,7 @@ export function sectionLookup(sections: IniSections, name: string): IniLine[] | 
 }
 
 export async function discoverIniPaths(modDir: string): Promise<string[]> {
-    const direct = await activeIniPaths(modDir);
-    if (!(await someGeometryIni(direct))) {
-        return direct;
-    }
-
-    const found = [...direct];
+    const found = await activeIniPaths(modDir);
     if (found.length >= MAX_INI_FILES) {
         return found;
     }
@@ -251,39 +244,6 @@ async function activeIniPaths(folder: string): Promise<string[]> {
         )
         .sort((left, right) => left.name.localeCompare(right.name))
         .map((entry) => path.join(folder, entry.name));
-}
-
-async function someGeometryIni(paths: string[]): Promise<boolean> {
-    for (const iniPath of paths) {
-        if (hasGeometrySections(await parseIniFile(iniPath))) {
-            return true;
-        }
-    }
-    return false;
-}
-
-function hasGeometrySections(sections: IniSections): boolean {
-    let hasDraw = false;
-    let hasIndex = false;
-    for (const [name, lines] of Object.entries(sections)) {
-        const lowered = name.toLowerCase();
-        if (lowered.startsWith("textureoverride")) {
-            for (const line of lines) {
-                if (DRAW_RE.test(line.text)) {
-                    hasDraw = true;
-                } else if (IB_RE.test(line.text)) {
-                    hasIndex = true;
-                }
-            }
-        } else if (lowered.startsWith("commandlist")) {
-            for (const line of lines) {
-                if (IB_RE.test(line.text)) {
-                    hasIndex = true;
-                }
-            }
-        }
-    }
-    return hasDraw || hasIndex;
 }
 
 async function walkNested(
