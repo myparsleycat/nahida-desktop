@@ -69,6 +69,12 @@ describe("dnf logic", () => {
         assert.equal(dnfSatisfied(dnf, { top: "0" }), false);
     });
 
+    it("parses constant 0 as DNF_FALSE and 1 as unconstrained true", () => {
+        assert.deepEqual(parseConditionDnf("0", {}), DNF_FALSE);
+        assert.deepEqual(parseConditionDnf("1", {}), DNF_TRUE);
+        assert.deepEqual(dnfNot(parseConditionDnf("0", {})), DNF_TRUE);
+    });
+
     it("covers conditions correctly", () => {
         assert.equal(dnfCovers(DNF_TRUE, DNF_TRUE), true);
         assert.equal(dnfCovers(DNF_TRUE, DNF_FALSE), false);

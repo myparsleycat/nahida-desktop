@@ -17,6 +17,7 @@ import {
     isUnconstrained,
     normalizeDnf,
     parseConditionDnf,
+    sameDnf,
 } from "./dnf";
 import {
     resourceLookup,
@@ -645,32 +646,43 @@ function scanSectionsForDraws(
             const vb0 = /^vb0\s*=\s*(?:ref\s+)?(\S+)/i.exec(line);
             if (vb0) {
                 const value = vb0[1].toLowerCase() === "null" ? undefined : vb0[1];
-                info.vb0 ??= value;
+                const cond = stackedCond(condStack);
+                if (!sameDnf(cond, DNF_FALSE)) {
+                    info.vb0 ??= value;
+                }
                 info.curVb0 = value;
                 if (value) {
-                    info.vb0History.push({ res: value, cond: stackedCond(condStack) });
+                    info.vb0History.push({ res: value, cond });
                 }
             }
             const vb1 = /^vb1\s*=\s*(?:ref\s+)?(\S+)/i.exec(line);
             if (vb1) {
                 const value = vb1[1].toLowerCase() === "null" ? undefined : vb1[1];
-                info.vb1 ??= value;
+                const cond = stackedCond(condStack);
+                if (!sameDnf(cond, DNF_FALSE)) {
+                    info.vb1 ??= value;
+                }
                 info.curVb1 = value;
                 if (value) {
-                    info.vb1History.push({ res: value, cond: stackedCond(condStack) });
+                    info.vb1History.push({ res: value, cond });
                 }
             }
             const vb2 = /^vb2\s*=\s*(?:ref\s+)?(\S+)/i.exec(line);
             if (vb2) {
                 const value = vb2[1].toLowerCase() === "null" ? undefined : vb2[1];
-                info.vb2 ??= value;
+                if (!sameDnf(stackedCond(condStack), DNF_FALSE)) {
+                    info.vb2 ??= value;
+                }
                 info.curVb2 = value;
             }
             const ib = /^ib\s*=\s*(\S+)/i.exec(line);
             if (ib) {
-                info.ib ??= ib[1];
+                const cond = stackedCond(condStack);
+                if (!sameDnf(cond, DNF_FALSE)) {
+                    info.ib ??= ib[1];
+                }
                 info.curIb = ib[1];
-                info.ibHistory.push({ res: ib[1], cond: stackedCond(condStack) });
+                info.ibHistory.push({ res: ib[1], cond });
             }
             if (/^handling\s*=\s*skip\b/i.test(line)) {
                 info.handlingSkip = true;
@@ -1256,7 +1268,9 @@ function implicitDrawsFromIbHistory(info: SectionInfo): {
     auxDrawStates: SectionInfo["auxDrawStates"];
 } {
     const constrained = lastAssignmentByCond(
-        info.ibHistory.filter((entry) => !isUnconstrained(entry.cond)),
+        info.ibHistory.filter(
+            (entry) => !isUnconstrained(entry.cond) && !sameDnf(entry.cond, DNF_FALSE),
+        ),
     );
     if (constrained.length === 0) {
         return {

@@ -296,6 +296,8 @@ function atomToDnf(
         const bare = /^\$(\w+)$/.exec(atom);
         if (bare) {
             dnf = aliasMap[bare[1]] ?? [[{ var: bare[1], value: "0", negate: true }]];
+        } else if (/^-?\d+(?:\.\d+)?$/.test(atom) && Number(atom) === 0) {
+            dnf = DNF_FALSE;
         } else {
             dnf = DNF_TRUE;
         }

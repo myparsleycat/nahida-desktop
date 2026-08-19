@@ -1324,6 +1324,59 @@ format = DXGI_FORMAT_R32_UINT
         assert.equal(groups[0]?.draws[0]?.base, 0);
     });
 
+    it("ignores if 0 ib assignments and keeps the reachable else buffers", () => {
+        const sections = parseIniText(
+            `[Constants]
+global persist $swap = 0
+[KeySwap]
+type = cycle
+$swap = 0,1
+[TextureOverrideBody]
+if 0
+ib = ResourceDeadIB
+else
+if $swap == 0
+ib = ResourceBodyIB
+else
+ib = ResourceAltIB
+endif
+endif
+vb0 = ResourcePos
+vb1 = ResourceTc
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceDeadIB]
+filename = dead.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceAltIB]
+filename = alt.ib
+format = DXGI_FORMAT_R32_UINT
+`,
+            "mod.ini",
+        );
+        const groups = buildDrawGroups(sections, extractResources(sections));
+        assert.equal(groups.length, 1);
+        assert.equal(groups[0]?.ibFile, "body.ib");
+        assert.equal(groups[0]?.draws.length, 2);
+        const ibFiles = groups[0]?.draws.map((draw) => draw.ibFile ?? groups[0]?.ibFile) ?? [];
+        assert.deepEqual(ibFiles.sort(), ["alt.ib", "body.ib"]);
+        assert.equal(
+            groups[0]?.draws.some((draw) => sameDnf(draw.conditions, DNF_FALSE)),
+            false,
+        );
+        assert.equal(
+            groups[0]?.draws.every((draw) => !isUnconstrained(draw.conditions)),
+            true,
+        );
+    });
+
     it("bounds nested run recursion across the full traversal", () => {
         const chain = Array.from({ length: 32 }, (_, index) => {
             const next = `CommandListExp${index + 1}`;
