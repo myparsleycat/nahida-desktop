@@ -83,4 +83,88 @@ describe("extractMenuToggles parseBranch variable names", () => {
         assert.ok(swap);
         assert.deepEqual(swap.values, ["0", "1", "2"]);
     });
+
+    it("rejects increment-mod cycles that exceed the value limit", () => {
+        const menu = menuFromIni(`[Constants]
+global persist $swapvar = 0
+global persist $other = 0
+global persist $fine = 0
+global $clickedSlot
+[CommandListClickedSlot]
+if $clickedSlot == 1
+    $swapvar = ($swapvar + 1) % 100000
+elif $clickedSlot == 2
+    $other = ($other + 1) % 2
+elif $clickedSlot == 3
+    $fine = ($fine + 1) % 2
+endif
+`);
+        assert.equal(slotByVar(menu, "swapvar"), undefined);
+        assert.deepEqual(slotByVar(menu, "other")?.values, ["0", "1"]);
+        assert.deepEqual(slotByVar(menu, "fine")?.values, ["0", "1"]);
+    });
+
+    it("rejects increment reset cycles that exceed the value limit", () => {
+        const menu = menuFromIni(`[Constants]
+global persist $swapvar = 0
+global persist $other = 0
+global persist $fine = 0
+global $clickedSlot
+[CommandListClickedSlot]
+if $clickedSlot == 1
+    $swapvar = $swapvar + 1
+    if $swapvar > 100000
+        $swapvar = 0
+    endif
+elif $clickedSlot == 2
+    $other = ($other + 1) % 2
+elif $clickedSlot == 3
+    $fine = ($fine + 1) % 2
+endif
+`);
+        assert.equal(slotByVar(menu, "swapvar"), undefined);
+        assert.deepEqual(slotByVar(menu, "other")?.values, ["0", "1"]);
+        assert.deepEqual(slotByVar(menu, "fine")?.values, ["0", "1"]);
+    });
+
+    it("rejects arrow-button ranges that exceed the value limit", () => {
+        const menu = menuFromIni(`[Constants]
+global persist $swapvar = 0
+global persist $other = 0
+global persist $fine = 0
+[CommandListButton1Right]
+$swapvar = $swapvar + 1
+if $swapvar > 100000
+    $swapvar = 0
+endif
+[CommandListButton1Left]
+$swapvar = $swapvar - 1
+if $swapvar < 0
+    $swapvar = 100000
+endif
+[CommandListButton2Right]
+$other = $other + 1
+if $other > 1
+    $other = 0
+endif
+[CommandListButton2Left]
+$other = $other - 1
+if $other < 0
+    $other = 1
+endif
+[CommandListButton3Right]
+$fine = $fine + 1
+if $fine > 1
+    $fine = 0
+endif
+[CommandListButton3Left]
+$fine = $fine - 1
+if $fine < 0
+    $fine = 1
+endif
+`);
+        assert.equal(slotByVar(menu, "swapvar"), undefined);
+        assert.deepEqual(slotByVar(menu, "other")?.values, ["0", "1"]);
+        assert.deepEqual(slotByVar(menu, "fine")?.values, ["0", "1"]);
+    });
 });

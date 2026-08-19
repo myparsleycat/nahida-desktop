@@ -11,6 +11,7 @@ const GUARD_RE = /^\$(\w+)\s*(==|!=|>=|<=|>|<)\s*(-?\d+)$/;
 const LITERAL_RE = /^-?\d+(?:\.\d+)?$/;
 const ELSE_RE = /^(?:else\s+if|elif)\s+(.*)$/i;
 const MIN_SLOTS = 2;
+const MAX_RANGE_LENGTH = 4096;
 const NEGATED_OP: Record<string, string> = {
     "==": "!=",
     "!=": "==",
@@ -346,7 +347,7 @@ function parseBranch(
         effects.push({ when: guard, var: lhs, value: rhs });
     }
 
-    if (!variable || !values) {
+    if (!variable || !values || values.length === 0) {
         return null;
     }
     return { var: variable, values, effects };
@@ -416,7 +417,11 @@ function parseArrowButton(lines: IniLine[]): { variable: string; values: string[
     if (hi < lo) {
         return null;
     }
-    return { variable, values: cycleValues(lo, hi) };
+    const values = cycleValues(lo, hi);
+    if (values.length === 0) {
+        return null;
+    }
+    return { variable, values };
 }
 
 function parseGuard(text: string): MenuGuard | null {
@@ -429,7 +434,11 @@ function negateGuard(guard: MenuGuard | null): MenuGuard | null {
 }
 
 function cycleValues(lo: number, hi: number): string[] {
-    return Array.from({ length: hi - lo + 1 }, (_, index) => String(lo + index));
+    const length = hi - lo + 1;
+    if (!Number.isInteger(length) || length <= 0 || length > MAX_RANGE_LENGTH) {
+        return [];
+    }
+    return Array.from({ length }, (_, index) => String(lo + index));
 }
 
 function uniqueKey(menu: Record<string, MenuSlot>, base: string): string {

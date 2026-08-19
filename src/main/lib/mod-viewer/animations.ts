@@ -2,6 +2,8 @@ import type { ViewerAnimationClip } from "@shared/mod-viewer/types";
 
 import { stripComment, type IniSections } from "./ini";
 
+const MAX_RANGE_LENGTH = 4096;
+
 type PresentPattern = {
     variableId: string;
     speedToken: string;
@@ -118,8 +120,12 @@ function buildClip(
     if (!Number.isInteger(frameStart) || !Number.isInteger(frameEnd) || frameEnd <= frameStart) {
         return null;
     }
+    const frameCount = frameEnd - frameStart + 1;
+    if (!Number.isInteger(frameCount) || frameCount > MAX_RANGE_LENGTH) {
+        return null;
+    }
     const id = prefixedId(variableId, varPrefix);
-    const frames = Array.from({ length: frameEnd - frameStart + 1 }, (_, offset) => {
+    const frames = Array.from({ length: frameCount }, (_, offset) => {
         const frameIndex = frameStart + offset;
         return {
             index: frameIndex,
