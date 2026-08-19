@@ -436,4 +436,36 @@ describe("merge path ownership", () => {
             /managed mod folder/,
         );
     });
+
+    it("rejects dangling symlinks whose target is outside the managed root", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-owned-"));
+        const outside = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-out-"));
+        tempRoots.push(root, outside);
+        const outsideTarget = path.join(outside, "secret");
+        await fse.ensureDir(outsideTarget);
+
+        const escapeLink = path.join(root, "escape");
+        await fse.symlink(outsideTarget, escapeLink, "junction");
+        await fse.remove(outsideTarget);
+
+        await assert.rejects(assertOwnedModPaths([escapeLink], [root]), /managed mod folder/);
+        await assert.rejects(
+            assertOwnedModPaths([path.join(escapeLink, "child")], [root]),
+            /managed mod folder/,
+        );
+    });
+
+    it("accepts dangling symlinks whose target stays inside the managed root", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-owned-"));
+        tempRoots.push(root);
+        const insideTarget = path.join(root, "missing-dest");
+        await fse.ensureDir(insideTarget);
+
+        const alias = path.join(root, "alias");
+        await fse.symlink(insideTarget, alias, "junction");
+        await fse.remove(insideTarget);
+
+        await assertOwnedModPaths([alias], [root]);
+        await assertOwnedModPaths([path.join(alias, "child")], [root]);
+    });
 });

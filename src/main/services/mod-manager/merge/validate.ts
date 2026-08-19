@@ -152,24 +152,37 @@ async function assertWithinGroup(groupPath: string, paths: string[]) {
 }
 
 async function resolveForCompare(targetPath: string) {
-    const resolved = path.resolve(targetPath);
-    if (await fse.pathExists(resolved)) return await fse.realpath(resolved);
+    const seen = new Set<string>();
+    const resolve = async (currentPath: string): Promise<string> => {
+        const resolved = path.resolve(currentPath);
+        const seenKey = normalizeModPath(resolved);
+        if (seen.has(seenKey)) return resolved;
+        seen.add(seenKey);
 
-    let current = resolved;
-    const trailingSegments: string[] = [];
-    while (!(await fse.pathExists(current))) {
-        const parent = path.dirname(current);
-        if (parent === current) break;
-        trailingSegments.unshift(path.basename(current));
-        current = parent;
+        const stat = await lstatIfPresent(resolved);
+        if (stat?.isSymbolicLink()) {
+            const target = await fse.readlink(resolved);
+            const next = path.isAbsolute(target)
+                ? path.resolve(target)
+                : path.resolve(path.dirname(resolved), target);
+            return await resolve(next);
+        }
+        if (stat) return await fse.realpath(resolved);
+
+        const parent = path.dirname(resolved);
+        if (parent === resolved) return resolved;
+        return path.join(await resolve(parent), path.basename(resolved));
+    };
+    return await resolve(targetPath);
+}
+
+async function lstatIfPresent(targetPath: string) {
+    try {
+        return await fse.lstat(targetPath);
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw error;
     }
-
-    if (await fse.pathExists(current)) {
-        const realAncestor = await fse.realpath(current);
-        return path.join(realAncestor, ...trailingSegments);
-    }
-
-    return resolved;
 }
 
 function isStrictChildPath(parentPath: string, targetPath: string) {

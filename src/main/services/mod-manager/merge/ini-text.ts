@@ -172,11 +172,11 @@ const POSITION_SECTION_PATTERNS = [
 export function extractPositionSectionHash(text: string) {
     const parsed = parseIniText(text);
     for (const pattern of POSITION_SECTION_PATTERNS) {
-        const found = parsed.sections.find((section) => pattern.test(section.name));
-        if (found) {
-            const hash = sectionValues(found).hash;
-            if (hash) return hash.toLowerCase();
-        }
+        const hash = parsed.sections
+            .filter((section) => pattern.test(section.name))
+            .map((section) => sectionValues(section).hash)
+            .find(Boolean);
+        if (hash) return hash.toLowerCase();
     }
     return null;
 }

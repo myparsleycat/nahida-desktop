@@ -5,7 +5,7 @@ import path from "node:path";
 import fse from "fs-extra";
 import { afterEach, describe, it } from "vitest";
 
-import { extractMergedModPaths } from "./ini-text.ts";
+import { extractMergedModPaths, extractPositionSectionHash } from "./ini-text.ts";
 import {
     collectNamespaceChildren,
     unwrapNamespace,
@@ -558,5 +558,57 @@ vb0 = ResourceRoverPosition
         assert.match(master, /\[TextureOverrideRoverMarkBoneDataCB\]/);
         assert.match(master, /hash = 98765432/);
         assert.doesNotMatch(master, /hash = helper01/);
+    });
+
+    it("reads the position hash after a filename-only ResourcePosition section", () => {
+        const text = `[ResourcePosition]
+filename = KleePosition.buf
+
+[TextureOverrideKleePosition]
+hash = abcdef01
+vb0 = ResourcePosition
+`;
+        assert.equal(extractPositionSectionHash(text), "abcdef01");
+    });
+
+    it("keeps the position hash when a later hairblend source is also present", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-ns-resource-pos-"));
+        tempRoots.push(root);
+        const bodyPath = path.join(root, "Klee.ini");
+        const hairPath = path.join(root, "KleeHair.ini");
+        await fse.writeFile(
+            bodyPath,
+            `[ResourcePosition]
+filename = KleePosition.buf
+
+[TextureOverrideKleePosition]
+hash = abcdef01
+vb0 = ResourcePosition
+`,
+        );
+        await fse.writeFile(
+            hairPath,
+            `[TextureOverrideKleeHairBlend]
+hash = hairblend01
+vb2 = ResourceHairBlend
+`,
+        );
+
+        const masterPath = await writeNamespaceMerge({
+            masterDir: root,
+            name: "Klee",
+            sources: [
+                { iniPath: bodyPath, index: 0 },
+                { iniPath: hairPath, index: 0 },
+            ],
+            forwardKey: "]",
+            backKey: "[",
+            includeVanilla: false,
+        });
+
+        const master = await fse.readFile(masterPath, "utf8");
+        assert.match(master, /\[TextureOverrideKleePosition\]/);
+        assert.match(master, /hash = abcdef01/);
+        assert.doesNotMatch(master, /hash = hairblend01/);
     });
 });
