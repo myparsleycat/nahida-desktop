@@ -1324,6 +1324,59 @@ format = DXGI_FORMAT_R32_UINT
         assert.equal(groups[0]?.draws[0]?.base, 0);
     });
 
+    it("ignores if 0 buffer assignments without else before drawindexed", () => {
+        const sections = parseIniText(
+            `[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+if 0
+ib = ResourceDeadIB
+vb0 = ResourceDeadPos
+vb1 = ResourceDeadTc
+vb2 = ResourceDeadLm
+endif
+drawindexed = 3, 0, 0
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceDeadPos]
+filename = dead-pos.buf
+stride = 40
+[ResourceDeadTc]
+filename = dead-tc.buf
+stride = 20
+[ResourceDeadLm]
+filename = dead-lm.buf
+stride = 20
+[ResourceDeadIB]
+filename = dead.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+`,
+            "mod.ini",
+        );
+        const groups = buildDrawGroups(sections, extractResources(sections));
+        assert.equal(groups.length, 1);
+        assert.equal(groups[0]?.ibFile, "body.ib");
+        assert.equal(groups[0]?.positionFile, "pos.buf");
+        assert.equal(groups[0]?.texcoordFile, "tc.buf");
+        assert.equal(groups[0]?.draws.length, 1);
+        assert.equal(groups[0]?.draws[0]?.ibFile, undefined);
+        assert.equal(groups[0]?.draws[0]?.positionFile, undefined);
+        assert.equal(groups[0]?.draws[0]?.texcoordFile, undefined);
+        assert.equal(groups[0]?.draws[0]?.count, 3);
+        assert.equal(groups[0]?.draws[0]?.start, 0);
+        assert.equal(groups[0]?.draws[0]?.base, 0);
+        assert.equal(sameDnf(groups[0]?.draws[0]?.conditions ?? DNF_FALSE, DNF_FALSE), false);
+        assert.equal(isUnconstrained(groups[0]?.draws[0]?.conditions), true);
+    });
+
     it("ignores if 0 ib assignments and keeps the reachable else buffers", () => {
         const sections = parseIniText(
             `[Constants]

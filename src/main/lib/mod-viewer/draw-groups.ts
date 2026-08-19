@@ -649,8 +649,8 @@ function scanSectionsForDraws(
                 const cond = stackedCond(condStack);
                 if (!sameDnf(cond, DNF_FALSE)) {
                     info.vb0 ??= value;
+                    info.curVb0 = value;
                 }
-                info.curVb0 = value;
                 if (value) {
                     info.vb0History.push({ res: value, cond });
                 }
@@ -661,8 +661,8 @@ function scanSectionsForDraws(
                 const cond = stackedCond(condStack);
                 if (!sameDnf(cond, DNF_FALSE)) {
                     info.vb1 ??= value;
+                    info.curVb1 = value;
                 }
-                info.curVb1 = value;
                 if (value) {
                     info.vb1History.push({ res: value, cond });
                 }
@@ -670,18 +670,19 @@ function scanSectionsForDraws(
             const vb2 = /^vb2\s*=\s*(?:ref\s+)?(\S+)/i.exec(line);
             if (vb2) {
                 const value = vb2[1].toLowerCase() === "null" ? undefined : vb2[1];
-                if (!sameDnf(stackedCond(condStack), DNF_FALSE)) {
+                const cond = stackedCond(condStack);
+                if (!sameDnf(cond, DNF_FALSE)) {
                     info.vb2 ??= value;
+                    info.curVb2 = value;
                 }
-                info.curVb2 = value;
             }
             const ib = /^ib\s*=\s*(\S+)/i.exec(line);
             if (ib) {
                 const cond = stackedCond(condStack);
                 if (!sameDnf(cond, DNF_FALSE)) {
                     info.ib ??= ib[1];
+                    info.curIb = ib[1];
                 }
-                info.curIb = ib[1];
                 info.ibHistory.push({ res: ib[1], cond });
             }
             if (/^handling\s*=\s*skip\b/i.test(line)) {
