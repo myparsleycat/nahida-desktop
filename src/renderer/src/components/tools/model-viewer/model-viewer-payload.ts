@@ -269,11 +269,31 @@ async function buildGeometry(mesh: ViewerMeshTransport): Promise<BufferGeometry>
 }
 
 async function fetchFloat32(url: string): Promise<Float32Array> {
-    return new Float32Array(await (await fetch(url)).arrayBuffer());
+    const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error(`Failed to load float32 buffer: ${url} (${response.status})`);
+    }
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength % Float32Array.BYTES_PER_ELEMENT !== 0) {
+        throw new Error(
+            `Invalid float32 buffer length for ${url}: ${buffer.byteLength} is not divisible by ${Float32Array.BYTES_PER_ELEMENT}`,
+        );
+    }
+    return new Float32Array(buffer);
 }
 
 async function fetchUint32(url: string): Promise<Uint32Array> {
-    return new Uint32Array(await (await fetch(url)).arrayBuffer());
+    const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error(`Failed to load uint32 buffer: ${url} (${response.status})`);
+    }
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength % Uint32Array.BYTES_PER_ELEMENT !== 0) {
+        throw new Error(
+            `Invalid uint32 buffer length for ${url}: ${buffer.byteLength} is not divisible by ${Uint32Array.BYTES_PER_ELEMENT}`,
+        );
+    }
+    return new Uint32Array(buffer);
 }
 
 function loadTexture(
