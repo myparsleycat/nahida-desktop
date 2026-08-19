@@ -186,7 +186,7 @@ function applyPositionVariant(
             ? userData.basePositions
             : (userData.positionVariants[variantIndex] ?? userData.basePositions);
     const position = object.geometry.attributes.position;
-    position.array.set(next);
+    position.array.set(next.length === position.array.length ? next : userData.basePositions);
     position.needsUpdate = true;
     userData.lastPositionVariantIndex = variantIndex;
 
@@ -223,6 +223,9 @@ function applyShapeTargets(object: Mesh, weights: Record<string, number>): void 
         if (target.mode === "midpoint_pair") {
             const endpoint =
                 weight <= 0.5 ? (target.lowPositions ?? target.positions) : target.positions;
+            if (endpoint.length !== base.length) {
+                continue;
+            }
             const factor = weight <= 0.5 ? 2 - weight * 4 : weight * 4 - 2;
             const divisor = midpointTargets.length || 1;
             for (let index = 0; index < attr.array.length; index++) {
@@ -232,6 +235,9 @@ function applyShapeTargets(object: Mesh, weights: Record<string, number>): void 
             continue;
         }
         if (weight === 0) {
+            continue;
+        }
+        if (target.positions.length !== base.length) {
             continue;
         }
         for (let index = 0; index < attr.array.length; index++) {
