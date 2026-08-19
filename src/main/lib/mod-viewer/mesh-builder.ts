@@ -137,7 +137,7 @@ export async function buildMeshResult(
             }
             const key = textureKey(path.relative(modDir, resolved).replaceAll("\\", "/"), role);
             if (!textures[key]) {
-                const encoded = await encodeTexture(resolved, role);
+                const encoded = await encodeTexture(resolved, role, readBuffer);
                 if (encoded) {
                     textures[key] = {
                         texKey: key,
@@ -671,13 +671,14 @@ async function buildShapeBuffers(
 async function encodeTexture(
     filePath: string,
     role: ViewerTextureRole,
+    readBuffer: (filePath: string) => Promise<Buffer>,
 ): Promise<{ bytes: Buffer; mimeType: "image/png" | "image/jpeg" } | null> {
     const ext = path.extname(filePath).toLowerCase();
     if (ext === ".png") {
-        return { bytes: await fse.readFile(filePath), mimeType: "image/png" };
+        return { bytes: await readBuffer(filePath), mimeType: "image/png" };
     }
     if (ext === ".jpg" || ext === ".jpeg") {
-        return { bytes: await fse.readFile(filePath), mimeType: "image/jpeg" };
+        return { bytes: await readBuffer(filePath), mimeType: "image/jpeg" };
     }
     if (ext !== ".dds") {
         return null;

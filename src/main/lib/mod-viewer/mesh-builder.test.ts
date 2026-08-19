@@ -35,6 +35,35 @@ describe("buildMeshResult", () => {
         assert.equal(result.meshes[0]?.id, "ok");
         assert.deepEqual([...result.meshes[0].indices], [0, 1, 2]);
     });
+
+    it("keeps png and jpeg textures with their mime types after buffer-limit reads", async () => {
+        const root = await makeMeshDir();
+        const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+        const jpeg = Buffer.from([0xff, 0xd8, 0xff]);
+        await fse.writeFile(path.join(root, "diffuse.png"), png);
+        await fse.writeFile(path.join(root, "alt.jpg"), jpeg);
+        const result = await buildMeshResult(
+            [
+                makeGroup([
+                    makeDraw({
+                        label: "ok",
+                        textureDefaultFile: "diffuse.png",
+                        textureAssignments: [
+                            {
+                                conditions: [[{ var: "color", value: "1", negate: false }]],
+                                file: "alt.jpg",
+                            },
+                        ],
+                    }),
+                ]),
+            ],
+            root,
+        );
+        assert.equal(result.textures["diffuse::diffuse.png"]?.mimeType, "image/png");
+        assert.deepEqual(result.textures["diffuse::diffuse.png"]?.bytes, png);
+        assert.equal(result.textures["diffuse::alt.jpg"]?.mimeType, "image/jpeg");
+        assert.deepEqual(result.textures["diffuse::alt.jpg"]?.bytes, jpeg);
+    });
 });
 
 async function makeMeshDir() {
