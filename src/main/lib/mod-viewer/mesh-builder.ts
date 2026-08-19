@@ -383,7 +383,11 @@ export async function buildMeshResult(
     return {
         meshes: meshes.map((mesh) => ({
             ...mesh,
-            textureVariants: mesh.textureVariants.length > 1 ? mesh.textureVariants : [],
+            textureVariants:
+                mesh.textureVariants.length > 1 ||
+                (mesh.textureVariants[0] && !isUnconstrained(mesh.textureVariants[0].conditions))
+                    ? mesh.textureVariants
+                    : [],
         })),
         textures,
     };

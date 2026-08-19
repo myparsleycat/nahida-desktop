@@ -278,6 +278,57 @@ filename = material.png
         assert.match(String(color1.meshes[0].materialMapKey), /material\.png$/);
     });
 
+    it("keeps a single remaining conditional diffuse variant", async () => {
+        const root = await makeMod({
+            ini: `[Constants]
+global persist $color = 0
+[KeyColor]
+type = cycle
+$color = 0,1,2
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+Resource\\GIMI\\Diffuse = ref ResourceDiffuseA
+if $color == 1
+Resource\\GIMI\\Diffuse = ref ResourceDiffuseB
+endif
+if $color == 2
+Resource\\GIMI\\Diffuse = ref ResourceDiffuseC
+endif
+drawindexed = 3, 0, 0
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceDiffuseA]
+filename = missingA.png
+[ResourceDiffuseB]
+filename = diffuseB.png
+[ResourceDiffuseC]
+filename = missingC.png
+`,
+            extra: async (dir) => {
+                await fse.writeFile(path.join(dir, "diffuseB.png"), PNG_1X1);
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        const mesh = payload.meshes[0];
+        assert.equal(mesh.textureVariants.length, 1);
+        assert.equal(isUnconstrained(mesh.textureVariants[0].conditions), false);
+
+        const color0 = evaluateViewerState(payload, { color: "0" });
+        const color1 = evaluateViewerState(payload, { color: "1" });
+        assert.match(String(color1.meshes[0].texKey), /diffuseB\.png$/);
+        assert.notEqual(color0.meshes[0].texKey, color1.meshes[0].texKey);
+    });
+
     it("replays Present literal assignments before visibility", async () => {
         const root = await makeMod({
             ini: `[Constants]
