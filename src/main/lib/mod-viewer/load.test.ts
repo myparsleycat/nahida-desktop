@@ -8,7 +8,7 @@ import { afterEach, describe, it } from "vitest";
 
 import { DNF_FALSE, isUnconstrained, sameDnf } from "./dnf";
 import { buildDrawGroups, pickWwmiDumpDiffuse } from "./draw-groups";
-import { extractResources, parseIniFile } from "./ini";
+import { extractResources, parseIniFile, parseIniText } from "./ini";
 import { loadModViewerPayload } from "./load";
 
 const tempRoots: string[] = [];
@@ -1234,6 +1234,37 @@ format = DXGI_FORMAT_R32_UINT
         const evaluated = evaluateViewerState(payload, {});
         assert.equal(evaluated.meshes.find((mesh) => mesh.id === included.id)?.visible, true);
         assert.equal(evaluated.meshes.find((mesh) => mesh.id === excluded.id)?.visible, false);
+    });
+});
+
+describe("buildDrawGroups run expansion", () => {
+    it("bounds nested run recursion across the full traversal", () => {
+        const chain = Array.from({ length: 32 }, (_, index) => {
+            const next = `CommandListExp${index + 1}`;
+            return `[CommandListExp${index}]\nrun = ${next}\nrun = ${next}\n`;
+        }).join("");
+        const sections = parseIniText(
+            `${chain}[CommandListExp32]
+drawindexed = 3, 0, 0
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+run = CommandListExp0
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+`,
+            "mod.ini",
+        );
+        const groups = buildDrawGroups(sections, extractResources(sections));
+        assert.ok(Array.isArray(groups));
     });
 });
 

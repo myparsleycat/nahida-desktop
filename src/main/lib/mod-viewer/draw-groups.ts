@@ -39,6 +39,7 @@ const RUN_SKIP_PREFIXES = [
     "Key",
     "Constants",
 ];
+const MAX_RUN_EXPANSIONS = 4096;
 const AUX_MAP_CHANNELS: Record<string, "normal_map" | "light_map" | "material_map"> = {
     normalmap: "normal_map",
     lightmap: "light_map",
@@ -582,6 +583,7 @@ function scanSectionsForDraws(
     }
     let seqCounter = 0;
     let bareCounter = 0;
+    let runExpansions = 0;
     const auxBareCounters: Record<string, number> = {
         normal_map: 0,
         light_map: 0,
@@ -796,7 +798,8 @@ function scanSectionsForDraws(
                     !RUN_SKIP_PREFIXES.some((prefix) => target.startsWith(prefix))
                 ) {
                     const nested = sectionLookup(sections, target);
-                    if (nested) {
+                    if (nested && runExpansions < MAX_RUN_EXPANSIONS) {
+                        runExpansions += 1;
                         visiting.add(target);
                         scan(nested, info, condStack, visiting, target);
                         visiting.delete(target);
