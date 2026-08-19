@@ -163,6 +163,9 @@ export async function buildMeshResult(
                     ibCache.set(drawIbPath, await readBuffer(drawIbPath));
                 }
             }
+            if (draw.start < 0 || (draw.count !== null && draw.count < 0) || draw.base < 0) {
+                continue;
+            }
             const raw = readIndices(
                 ibCache.get(drawIbPath)!,
                 draw.start,
@@ -175,6 +178,9 @@ export async function buildMeshResult(
             const base = draw.base || 0;
             const shifted = base ? raw.map((value) => value + base) : raw;
             const used = [...new Set(shifted)].sort((left, right) => left - right);
+            if (used.length === 0 || used[0] < 0) {
+                continue;
+            }
             const remap = new Map(used.map((value, index) => [value, index]));
 
             let drawBuffers = buffers;
@@ -215,15 +221,15 @@ export async function buildMeshResult(
             for (const [outIndex, vertex] of used.entries()) {
                 const posOff = vertex * drawBuffers.posStride + POSITION_OFFSET;
                 const x =
-                    posOff + 12 <= drawBuffers.posData.length
+                    posOff >= 0 && posOff + 12 <= drawBuffers.posData.length
                         ? drawBuffers.posData.readFloatLE(posOff)
                         : 0;
                 const y =
-                    posOff + 12 <= drawBuffers.posData.length
+                    posOff >= 0 && posOff + 12 <= drawBuffers.posData.length
                         ? drawBuffers.posData.readFloatLE(posOff + 4)
                         : 0;
                 const z =
-                    posOff + 12 <= drawBuffers.posData.length
+                    posOff >= 0 && posOff + 12 <= drawBuffers.posData.length
                         ? drawBuffers.posData.readFloatLE(posOff + 8)
                         : 0;
                 positions[outIndex * 3] = x;
@@ -238,36 +244,36 @@ export async function buildMeshResult(
                     } else {
                         const targetOff = vertex * shape.stride + POSITION_OFFSET;
                         shape.positions[outIndex * 3] =
-                            targetOff + 12 <= shape.data.length
+                            targetOff >= 0 && targetOff + 12 <= shape.data.length
                                 ? shape.data.readFloatLE(targetOff)
                                 : x;
                         shape.positions[outIndex * 3 + 1] =
-                            targetOff + 12 <= shape.data.length
+                            targetOff >= 0 && targetOff + 12 <= shape.data.length
                                 ? shape.data.readFloatLE(targetOff + 4)
                                 : y;
                         shape.positions[outIndex * 3 + 2] =
-                            targetOff + 12 <= shape.data.length
+                            targetOff >= 0 && targetOff + 12 <= shape.data.length
                                 ? shape.data.readFloatLE(targetOff + 8)
                                 : z;
                     }
                     if (shape.lowData && shape.lowPositions) {
                         const lowOff = vertex * shape.stride + POSITION_OFFSET;
                         shape.lowPositions[outIndex * 3] =
-                            lowOff + 12 <= shape.lowData.length
+                            lowOff >= 0 && lowOff + 12 <= shape.lowData.length
                                 ? shape.lowData.readFloatLE(lowOff)
                                 : x;
                         shape.lowPositions[outIndex * 3 + 1] =
-                            lowOff + 12 <= shape.lowData.length
+                            lowOff >= 0 && lowOff + 12 <= shape.lowData.length
                                 ? shape.lowData.readFloatLE(lowOff + 4)
                                 : y;
                         shape.lowPositions[outIndex * 3 + 2] =
-                            lowOff + 12 <= shape.lowData.length
+                            lowOff >= 0 && lowOff + 12 <= shape.lowData.length
                                 ? shape.lowData.readFloatLE(lowOff + 8)
                                 : z;
                     }
                 }
                 const tcOff = vertex * drawBuffers.tcStride + drawBuffers.uvOff;
-                if (tcOff + uvSize <= drawBuffers.tcData.length) {
+                if (tcOff >= 0 && tcOff + uvSize <= drawBuffers.tcData.length) {
                     const u =
                         drawBuffers.uvFmt === "f32"
                             ? drawBuffers.tcData.readFloatLE(tcOff)
@@ -309,11 +315,17 @@ export async function buildMeshResult(
                     for (const [outIndex, vertex] of used.entries()) {
                         const posOff = vertex * stride + POSITION_OFFSET;
                         variantPositions[outIndex * 3] =
-                            posOff + 12 <= data.length ? data.readFloatLE(posOff) : 0;
+                            posOff >= 0 && posOff + 12 <= data.length
+                                ? data.readFloatLE(posOff)
+                                : 0;
                         variantPositions[outIndex * 3 + 1] =
-                            posOff + 12 <= data.length ? data.readFloatLE(posOff + 4) : 0;
+                            posOff >= 0 && posOff + 12 <= data.length
+                                ? data.readFloatLE(posOff + 4)
+                                : 0;
                         variantPositions[outIndex * 3 + 2] =
-                            posOff + 12 <= data.length ? data.readFloatLE(posOff + 8) : 0;
+                            posOff >= 0 && posOff + 12 <= data.length
+                                ? data.readFloatLE(posOff + 8)
+                                : 0;
                     }
                     variantCache.set(cacheKey, variantPositions);
                 }
@@ -443,6 +455,9 @@ function readIndices(
     count: number | null,
     indexSize: number,
 ): number[] {
+    if (startIndex < 0 || (count !== null && count < 0) || indexSize <= 0) {
+        return [];
+    }
     const total = Math.floor(data.length / indexSize);
     const length = count === null ? total - startIndex : count;
     const end = Math.min(startIndex + length, total);

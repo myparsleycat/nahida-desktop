@@ -1289,6 +1289,41 @@ format = DXGI_FORMAT_R32_UINT
 });
 
 describe("buildDrawGroups run expansion", () => {
+    it("rejects negative drawindexed count, start, and base values", () => {
+        const sections = parseIniText(
+            `[Constants]
+global $n = -5
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = -3, 0, 0
+drawindexed = 3, -1, 0
+drawindexed = 3, 0, -2
+drawindexed = $n, 0, 0
+drawindexed = 3, $n, 0
+drawindexed = 3, 0, $n
+drawindexed = 3, 0, 0
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+`,
+            "mod.ini",
+        );
+        const groups = buildDrawGroups(sections, extractResources(sections));
+        assert.equal(groups.length, 1);
+        assert.equal(groups[0]?.draws.length, 1);
+        assert.equal(groups[0]?.draws[0]?.count, 3);
+        assert.equal(groups[0]?.draws[0]?.start, 0);
+        assert.equal(groups[0]?.draws[0]?.base, 0);
+    });
+
     it("bounds nested run recursion across the full traversal", () => {
         const chain = Array.from({ length: 32 }, (_, index) => {
             const next = `CommandListExp${index + 1}`;

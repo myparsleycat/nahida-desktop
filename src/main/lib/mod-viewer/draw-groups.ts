@@ -1219,7 +1219,8 @@ function ibResToComponent(ibRes: string): string {
 function resolveDrawNumber(token: string, constants: Record<string, string>): number | null {
     const trimmed = token.trim();
     if (/^-?\d+$/.test(trimmed)) {
-        return Number(trimmed);
+        const value = Number(trimmed);
+        return value >= 0 ? value : null;
     }
     const match = /^\$(\w+)$/.exec(trimmed);
     if (!match) {
@@ -1234,7 +1235,7 @@ function resolveDrawNumber(token: string, constants: Record<string, string>): nu
         return null;
     }
     const value = Number(raw.trim());
-    return Number.isFinite(value) ? value : null;
+    return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 function toggleValueDomainsFromKeys(
