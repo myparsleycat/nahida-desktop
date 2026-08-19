@@ -156,7 +156,7 @@ async function resolveForCompare(targetPath: string) {
     const resolve = async (currentPath: string): Promise<string> => {
         const resolved = path.resolve(currentPath);
         const seenKey = normalizeModPath(resolved);
-        if (seen.has(seenKey)) return resolved;
+        if (seen.has(seenKey)) throw unownedPath();
         seen.add(seenKey);
 
         const stat = await lstatIfPresent(resolved);

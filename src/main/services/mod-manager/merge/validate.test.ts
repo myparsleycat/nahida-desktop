@@ -455,6 +455,26 @@ describe("merge path ownership", () => {
         );
     });
 
+    it("rejects a self-referential symbolic link", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-owned-"));
+        tempRoots.push(root);
+        const loop = path.join(root, "loop");
+        await fse.symlink(loop, loop, "dir");
+
+        await assert.rejects(assertOwnedModPaths([loop], [root]), /managed mod folder/);
+    });
+
+    it("rejects a cycle spanning multiple symbolic links", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-owned-"));
+        tempRoots.push(root);
+        const first = path.join(root, "first");
+        const second = path.join(root, "second");
+        await fse.symlink(second, first, "dir");
+        await fse.symlink(first, second, "dir");
+
+        await assert.rejects(assertOwnedModPaths([first], [root]), /managed mod folder/);
+    });
+
     it("accepts dangling symlinks whose target stays inside the managed root", async () => {
         const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-owned-"));
         tempRoots.push(root);
