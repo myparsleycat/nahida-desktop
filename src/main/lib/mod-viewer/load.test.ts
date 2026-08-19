@@ -181,7 +181,6 @@ format = DXGI_FORMAT_R32_UINT
         assert.equal(first.meshes[1].visible, false);
         assert.equal(second.meshes[0].visible, false);
         assert.equal(second.meshes[1].visible, true);
-        assert.equal(payload.meshes[0].positions, payload.meshes[0].positions);
     });
 
     it("resolves later-write-wins diffuse and conditional aux maps", async () => {
