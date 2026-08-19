@@ -15,10 +15,7 @@ type ClassicSource = {
     groupIndex: number;
 };
 
-type SectionEntry = {
-    key: string;
-    value: string;
-};
+type SectionEntry = { kind: "kv"; key: string; value: string } | { kind: "control"; raw: string };
 
 type SectionData = {
     header: string;
@@ -87,7 +84,10 @@ export async function writeClassicMerge(options: {
     }
 
     const swapValues = options.sources.map((source) => String(source.groupIndex)).join(",");
+    const hasCreditInfo = sections.some((section) => section.name.toLowerCase() === "creditinfo");
     const constants = [
+        "; Constants ---------------------------",
+        "",
         "[Constants]",
         "global persist $swapvar = 0",
         "global $active",
@@ -103,6 +103,7 @@ export async function writeClassicMerge(options: {
         "",
         "[Present]",
         "post $active = 0",
+        ...(hasCreditInfo ? ["run = CommandListCreditInfo"] : []),
         "",
     ].join("\n");
 
@@ -111,15 +112,15 @@ export async function writeClassicMerge(options: {
         .map((group) => buildCommandList(group))
         .join("\n");
 
-    const headerLines = options.sources.map((source) => {
-        const rel = path.relative(options.outputDir, source.iniPath);
-        const formatted = path.isAbsolute(rel) || rel.startsWith(".") ? rel : `.\\${rel}`;
-        return `; Merged Mod: ${formatted}`;
-    });
     const result = [
-        ...headerLines,
+        formatMergedModHeader(
+            options.outputDir,
+            options.sources.map((source) => source.iniPath),
+        ),
         "",
         constants,
+        "; Shader ------------------------------",
+        "",
         "; Overrides ---------------------------",
         "",
         overrides.join("\n"),
@@ -179,9 +180,15 @@ function parseClassicSections(text: string, location: string, groupIndex: number
             sections.push(current);
             continue;
         }
-        if (!current || line.kind !== "kv" || isControlFlowLine(line.raw)) continue;
+        if (!current) continue;
+        // DRAW_TYPE branches must survive into CommandList; they are not key/value pairs.
+        if (isControlFlowLine(raw)) {
+            current.entries.push({ kind: "control", raw: raw.trim() });
+            continue;
+        }
+        if (line.kind !== "kv") continue;
         if (line.key.includes("CharacterIB") || line.key.includes("ResourceRef")) continue;
-        current.entries.push({ key: line.key, value: line.value });
+        current.entries.push({ kind: "kv", key: line.key, value: line.value });
     }
 
     return sections;
@@ -189,13 +196,15 @@ function parseClassicSections(text: string, location: string, groupIndex: number
 
 function getEntryValue(section: SectionData, keyName: string) {
     const target = keyName.toLowerCase();
-    const entry = section.entries.find((item) => item.key.toLowerCase() === target);
-    return entry?.value ?? null;
+    const entry = section.entries.find(
+        (item) => item.kind === "kv" && item.key.toLowerCase() === target,
+    );
+    return entry?.kind === "kv" ? entry.value : null;
 }
 
 function hasEntry(section: SectionData, keyName: string) {
     const target = keyName.toLowerCase();
-    return section.entries.some((item) => item.key.toLowerCase() === target);
+    return section.entries.some((item) => item.kind === "kv" && item.key.toLowerCase() === target);
 }
 
 function buildOverride(section: SectionData, setActive: boolean) {
@@ -217,6 +226,8 @@ function buildOverride(section: SectionData, setActive: boolean) {
     ];
 
     for (const entry of section.entries) {
+        // Control flow belongs in CommandList, not TextureOverride.
+        if (entry.kind !== "kv") continue;
         const lower = entry.key.toLowerCase();
         if (preserveKeys.includes(lower)) {
             lines.push(`${entry.key} = ${entry.value}`);
@@ -236,6 +247,7 @@ function buildOverride(section: SectionData, setActive: boolean) {
 function buildResource(section: SectionData, outputDir: string) {
     const lines = [`[${section.header}${section.name}.${section.groupIndex}]`];
     for (const entry of section.entries) {
+        if (entry.kind !== "kv") continue;
         if (entry.key.toLowerCase() === "filename") {
             const rawPath = entry.value.replace(/^["']|["']$/g, "").trim();
             const absTarget = path.isAbsolute(rawPath)
@@ -264,18 +276,50 @@ function buildCommandList(group: SectionData[]) {
 
     group.forEach((model, index) => {
         lines.push(`${index === 0 ? "if" : "else if"} $swapvar == ${model.groupIndex}`);
+        let indent = 1;
         for (const entry of model.entries) {
+            if (entry.kind === "control") {
+                const command = entry.raw;
+                const lower = command.toLowerCase();
+                if (lower === "endif") {
+                    indent = Math.max(1, indent - 1);
+                    lines.push(`${"\t".repeat(indent)}${command}`);
+                    continue;
+                }
+                if (lower.startsWith("else if") || lower.startsWith("elif") || lower === "else") {
+                    indent = Math.max(1, indent - 1);
+                    lines.push(`${"\t".repeat(indent)}${command}`);
+                    indent += 1;
+                    continue;
+                }
+                if (lower.startsWith("if")) {
+                    lines.push(`${"\t".repeat(indent)}${command}`);
+                    indent += 1;
+                    continue;
+                }
+                lines.push(`${"\t".repeat(indent)}${command}`);
+                continue;
+            }
+
             const lowerKey = entry.key.toLowerCase();
             if (excludedKeys.includes(lowerKey)) continue;
 
-            if (isResourceReference(entry.key, entry.value)) {
-                const suffixed = appendResourceSuffix(entry.value, model.groupIndex);
-                lines.push(`\t${entry.key} = ${suffixed}`);
-            } else {
-                lines.push(`\t${entry.key} = ${entry.value}`);
-            }
+            const value = isResourceReference(entry.key, entry.value)
+                ? appendResourceSuffix(entry.value, model.groupIndex)
+                : entry.value;
+            lines.push(`${"\t".repeat(indent)}${entry.key} = ${value}`);
         }
     });
     lines.push("endif", "");
     return lines.join("\n");
+}
+
+function formatMergedModHeader(baseDir: string, iniPaths: string[]) {
+    // One comma-separated header, not one line per source.
+    return `; Merged Mod: ${iniPaths
+        .map((iniPath) => {
+            const rel = path.relative(baseDir, iniPath);
+            return path.isAbsolute(rel) || rel.startsWith(".") ? rel : `.\\${rel}`;
+        })
+        .join(", ")}`;
 }

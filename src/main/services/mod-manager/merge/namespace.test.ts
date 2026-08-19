@@ -42,10 +42,15 @@ describe("namespace merge writer", () => {
 
         const master = await fse.readFile(masterPath, "utf8");
         const child = await fse.readFile(childPath, "utf8");
-        assert.match(master, /namespace = Klee\\Master/);
-        assert.match(master, /hash = abcdef01/);
-        assert.match(child, /if \$\\Klee\\Master\\swapvar==0/);
-        assert.match(child, /endif/);
+        assert.match(master, /namespace = Klee\\Master\n; Constants ---------------------------/);
+        assert.match(
+            master,
+            /; Overrides ---------------------------\n\n\[TextureOverrideKleePosition\]\nhash = abcdef01\n\$active = 1/,
+        );
+        assert.match(
+            child,
+            /hash = abcdef01\nmatch_priority = 0\nif \$\\Klee\\Master\\swapvar==0\n\tvb0 = ResourcePosition\nendif/,
+        );
         assert.equal(await fse.pathExists(path.join(root, "DISABLED_BACKUP_Klee.ini")), true);
     });
 
@@ -81,6 +86,28 @@ describe("namespace merge writer", () => {
         assert.match(unwrapped, /vb0 = ResourcePosition/);
     });
 
+    it("keeps nested DRAW_TYPE branches inside a single swapvar wrap", () => {
+        const input = `[TextureOverrideHertaHairBlend]
+hash = af0ef73c
+handling = skip
+vb2 = ResourceHertaHairBlend
+if DRAW_TYPE == 1
+	vb0 = ResourceHertaHairPosition
+	draw = 2981, 0
+endif
+if DRAW_TYPE == 8
+	Resource\\SRMI\\PositionBuffer = ref ResourceHertaHairPositionCS
+	$\\SRMI\\vertcount = 2981
+endif
+`;
+        const wrapped = wrapHashedSections(input, "HertaMerge", 0);
+        assert.match(
+            wrapped,
+            /hash = af0ef73c\nmatch_priority = 0\nif \$\\HertaMerge\\Master\\swapvar==0\n\thandling = skip\n\tvb2 = ResourceHertaHairBlend\n\tif DRAW_TYPE == 1\n\t\tvb0 = ResourceHertaHairPosition\n\t\tdraw = 2981, 0\n\tendif\n\tif DRAW_TYPE == 8\n\t\tResource\\SRMI\\PositionBuffer = ref ResourceHertaHairPositionCS\n\t\t\$\\SRMI\\vertcount = 2981\n\tendif\nendif/,
+        );
+        assert.doesNotMatch(wrapped, /else if \$\\HertaMerge\\Master\\swapvar/);
+    });
+
     it("flushes wrapped section before indented section headers", () => {
         const input = `[TextureOverrideKleePosition]
 hash = abcdef01
@@ -113,7 +140,7 @@ ps-t0 = ResourceTexture
         assert.match(unwrapped, /ps-t0 = ResourceTexture/);
     });
 
-    it("preserves separate branch bodies for multiple vb0 assignments when wrapping", () => {
+    it("wraps every hashed section as one swapvar branch, including multiple vb0 lines", () => {
         const input = `[TextureOverrideKleePosition]
 hash = abcdef01
 vb0 = ResourcePosition0
@@ -121,15 +148,14 @@ vb0 = ResourcePosition1
 ps-t0 = ResourceTexture
 `;
         const wrapped = wrapHashedSections(input, "Klee", 0);
-        assert.match(wrapped, /match_priority = 0/);
-        assert.match(wrapped, /if \$\\Klee\\Master\\swapvar==0\n\tvb0 = ResourcePosition0/);
         assert.match(
             wrapped,
-            /else if \$\\Klee\\Master\\swapvar==1\n\tvb0 = ResourcePosition1\n\tps-t0 = ResourceTexture\nendif/,
+            /hash = abcdef01\nmatch_priority = 0\nif \$\\Klee\\Master\\swapvar==0\n\tvb0 = ResourcePosition0\n\tvb0 = ResourcePosition1\n\tps-t0 = ResourceTexture\nendif/,
         );
+        assert.doesNotMatch(wrapped, /else if \$\\Klee\\Master\\swapvar==1/);
     });
 
-    it("generates master INI with all swapvar indices when child contains multiple vb0 variants", async () => {
+    it("does not invent extra swapvar indices from multiple vb0 lines in one child", async () => {
         const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-ns-multi-vb0-"));
         tempRoots.push(root);
         const multiVb0Ini = `[TextureOverrideKleePosition]
@@ -151,12 +177,77 @@ vb0 = ResourcePosition1
 
         const master = await fse.readFile(masterPath, "utf8");
         const child = await fse.readFile(childPath, "utf8");
-        assert.match(master, /\$swapvar = 0,1/);
-        assert.match(child, /if \$\\Klee\\Master\\swapvar==0\n\tvb0 = ResourcePosition0/);
+        assert.match(master, /\$swapvar = 0\n/);
+        assert.doesNotMatch(master, /\$swapvar = 0,1/);
         assert.match(
             child,
-            /else if \$\\Klee\\Master\\swapvar==1\n\tvb0 = ResourcePosition1\nendif/,
+            /if \$\\Klee\\Master\\swapvar==0\n\tvb0 = ResourcePosition0\n\tvb0 = ResourcePosition1\nendif/,
         );
+        assert.doesNotMatch(child, /else if \$\\Klee\\Master\\swapvar==1/);
+    });
+
+    it("remasters two already-namespaced children into one master", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-ns-nested-"));
+        tempRoots.push(root);
+        const alphaDir = path.join(root, "Alpha");
+        const betaDir = path.join(root, "Beta");
+        const alphaPath = path.join(alphaDir, "A.ini");
+        const betaPath = path.join(betaDir, "B.ini");
+        await fse.ensureDir(alphaDir);
+        await fse.ensureDir(betaDir);
+        await fse.writeFile(alphaPath, childIni);
+        await fse.writeFile(betaPath, childIni);
+
+        await writeNamespaceMerge({
+            masterDir: alphaDir,
+            name: "Alpha",
+            sources: [{ iniPath: alphaPath, index: 0 }],
+            forwardKey: "]",
+            backKey: "[",
+            includeVanilla: false,
+        });
+        await writeNamespaceMerge({
+            masterDir: betaDir,
+            name: "Beta",
+            sources: [{ iniPath: betaPath, index: 0 }],
+            forwardKey: "]",
+            backKey: "[",
+            includeVanilla: false,
+        });
+
+        const masterPath = await writeNamespaceMerge({
+            masterDir: root,
+            name: "Klee",
+            sources: [
+                { iniPath: alphaPath, index: 0 },
+                { iniPath: betaPath, index: 1 },
+            ],
+            forwardKey: "]",
+            backKey: "[",
+            includeVanilla: false,
+        });
+
+        const master = await fse.readFile(masterPath, "utf8");
+        const alpha = await fse.readFile(alphaPath, "utf8");
+        const beta = await fse.readFile(betaPath, "utf8");
+        assert.match(master, /namespace = Klee\\Master\n; Constants ---------------------------/);
+        assert.match(master, /\$swapvar = 0,1\n/);
+        assert.match(
+            master,
+            /; Overrides ---------------------------\n\n\[TextureOverrideKleePosition\]\nhash = abcdef01\n\$active = 1/,
+        );
+        assert.match(
+            alpha,
+            /hash = abcdef01\nmatch_priority = 0\nif \$\\Klee\\Master\\swapvar==0\n\tvb0 = ResourcePosition\nendif/,
+        );
+        assert.match(
+            beta,
+            /hash = abcdef01\nmatch_priority = 1\nif \$\\Klee\\Master\\swapvar==1\n\tvb0 = ResourcePosition\nendif/,
+        );
+        assert.doesNotMatch(alpha, /\$\\Alpha\\Master\\swapvar/);
+        assert.doesNotMatch(beta, /\$\\Beta\\Master\\swapvar/);
+        assert.doesNotMatch(alpha, /else if \$\\Klee\\Master\\swapvar/);
+        assert.doesNotMatch(beta, /else if \$\\Klee\\Master\\swapvar/);
     });
 
     it("extractMergedModPaths handles one path per line, JSON arrays, and legacy lists", () => {
@@ -226,14 +317,13 @@ vb0 = ResourcePosition1
         const masterContent = await fse.readFile(masterPath, "utf8");
         const rel1 = path.relative(root, child1);
         const rel2 = path.relative(root, child2);
-        assert.ok(
-            masterContent.includes(`; Merged Mod: .\\${rel1}`) ||
-                masterContent.includes(`; Merged Mod: ${rel1}`),
-        );
-        assert.ok(
-            masterContent.includes(`; Merged Mod: .\\${rel2}`) ||
-                masterContent.includes(`; Merged Mod: ${rel2}`),
-        );
+        const headerLines = masterContent
+            .split(/\r?\n/)
+            .filter((line) => line.startsWith("; Merged Mod:"));
+        assert.equal(headerLines.length, 1);
+        assert.ok(headerLines[0]?.includes(rel1));
+        assert.ok(headerLines[0]?.includes(rel2));
+        assert.deepEqual(extractMergedModPaths(masterContent), [`.\\${rel1}`, `.\\${rel2}`]);
 
         const discovered = await collectNamespaceChildren(masterPath);
         assert.deepEqual(

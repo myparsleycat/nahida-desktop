@@ -413,10 +413,14 @@ async function buildNamespaceSources(
         return true;
     };
     const groups = [
-        uniquePaths(existingChildren).filter(take),
-        ...(await Promise.all(iniRoots.map((root) => collectEnabledInis(root)))).map((inis) =>
-            inis.filter(take),
-        ),
+        ...(await groupInisBySwapSlot(uniquePaths(existingChildren).filter(take))),
+        ...(
+            await Promise.all(
+                iniRoots.map(async (root) =>
+                    groupInisBySwapSlot((await collectEnabledInis(root)).filter(take)),
+                ),
+            )
+        ).flat(),
     ].filter((group) => group.length > 0);
 
     return groups.flatMap((group, index) =>
@@ -425,6 +429,39 @@ async function buildNamespaceSources(
             index: includeVanilla ? index + 1 : index,
         })),
     );
+}
+
+async function groupInisBySwapSlot(iniPaths: string[]) {
+    if (iniPaths.length === 0) return [];
+    const entries = await Promise.all(
+        iniPaths.map(async (iniPath) => ({
+            iniPath,
+            slot: extractExistingSwapSlot(await fse.readFile(iniPath, "utf8")),
+        })),
+    );
+    if (entries.every((entry) => entry.slot === null)) return [iniPaths];
+
+    // Helper INIs in a namespaced pack often have no master swap wrap. They must
+    // keep sharing that pack's first slot instead of becoming their own cycle index.
+    const leftover = entries.filter((entry) => entry.slot === null).map((entry) => entry.iniPath);
+    const indexed = entries.filter(
+        (entry): entry is { iniPath: string; slot: number } => entry.slot !== null,
+    );
+    const slots = [...new Set(indexed.map((entry) => entry.slot))].sort(
+        (left, right) => left - right,
+    );
+    const [first, ...rest] = slots.map((slot) =>
+        indexed.filter((entry) => entry.slot === slot).map((entry) => entry.iniPath),
+    );
+    return [[...first, ...leftover], ...rest];
+}
+
+function extractExistingSwapSlot(text: string) {
+    const slots = [...text.matchAll(/\$\\[^\\\s]+\\Master\\swapvar\w*\s*==\s*(\d+)/gi)].map(
+        (match) => Number(match[1]),
+    );
+    // Flatten nested namespace packs by the child's original cycle index, not by folder.
+    return slots.length > 0 ? Math.min(...slots) : null;
 }
 
 function isMasterIni(iniPath: string | null | undefined): iniPath is string {

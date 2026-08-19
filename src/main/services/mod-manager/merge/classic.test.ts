@@ -6,6 +6,7 @@ import fse from "fs-extra";
 import { afterEach, describe, it } from "vitest";
 
 import { writeClassicMerge } from "./classic.ts";
+import { extractMergedModPaths } from "./ini-text.ts";
 
 const tempRoots: string[] = [];
 
@@ -53,9 +54,19 @@ filename = B.buf
         });
 
         const text = await fse.readFile(output, "utf8");
-        assert.match(text, /; Merged Mod:/);
+        const mergedModLines = text
+            .split(/\r?\n/)
+            .filter((line) => line.startsWith("; Merged Mod:"));
+        assert.equal(mergedModLines.length, 1);
+        assert.match(mergedModLines[0] ?? "", /A[\\/]Klee\.ini, .*B[\\/]Klee\.ini/);
+        assert.match(text, /; Constants ---------------------------/);
+        assert.match(text, /; Shader ------------------------------/);
+        assert.match(text, /; Overrides ---------------------------/);
+        assert.match(text, /; CommandList -------------------------/);
+        assert.match(text, /; Resources ---------------------------/);
         assert.match(text, /\$swapvar = 0,1/);
         assert.match(text, /\[KeySwap\]/);
+        assert.match(text, /back = vk_left/);
         assert.match(text, /\[CommandListKleePosition\]/);
         assert.match(text, /\[ResourcePosition\.0\]/);
         assert.equal(await fse.pathExists(aIni), false);
@@ -171,11 +182,108 @@ filename = A.buf
         });
 
         const text = await fse.readFile(output, "utf8");
+        assert.match(
+            text,
+            /\[CommandListKleePosition\]\nif \$swapvar == 0\n\tif DRAW_TYPE == 1\n\t\tvb0 = ResourcePosition\.0\n\tendif\nendif/,
+        );
         assert.doesNotMatch(text, /if DRAW_TYPE = = 1/);
-        assert.doesNotMatch(text, /if DRAW_TYPE\s*=/);
+        assert.doesNotMatch(text, /if DRAW_TYPE = 1/);
     });
 
-    it("emits one Merged Mod line per source and preserves commas in directory names", async () => {
+    it("keeps nested DRAW_TYPE branches inside the swapvar command list", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-classic-"));
+        tempRoots.push(root);
+        const aDir = path.join(root, "Hertaf0000Mod");
+        await fse.ensureDir(aDir);
+        const aIni = path.join(aDir, "Herta.ini");
+        await fse.writeFile(
+            aIni,
+            `[TextureOverrideHertaHairBlend]
+hash = af0ef73c
+handling = skip
+vb2 = ResourceHertaHairBlend
+if DRAW_TYPE == 1
+	vb0 = ResourceHertaHairPosition
+	draw = 2984, 0
+endif
+if DRAW_TYPE == 8
+	Resource\\SRMI\\PositionBuffer = ref ResourceHertaHairPositionCS
+	$\\SRMI\\vertcount = 2984
+endif
+
+[ResourceHertaHairBlend]
+type = Buffer
+stride = 32
+filename = HertaHairBlend.buf
+
+[ResourceHertaHairPosition]
+type = Buffer
+stride = 40
+filename = HertaHairPosition.buf
+
+[ResourceHertaHairPositionCS]
+type = StructuredBuffer
+stride = 40
+filename = HertaHairPosition.buf
+`,
+        );
+
+        const output = await writeClassicMerge({
+            outputDir: root,
+            sources: [{ iniPath: aIni, groupIndex: 0 }],
+            forwardKey: "vk_right",
+        });
+
+        const text = await fse.readFile(output, "utf8");
+        assert.match(text, /\[CommandListHertaHairBlend\]/);
+        assert.match(text, /if \$swapvar == 0/);
+        assert.match(text, /\thandling = skip/);
+        assert.match(text, /\tvb2 = ResourceHertaHairBlend\.0/);
+        assert.match(
+            text,
+            /\tif DRAW_TYPE == 1\n\t\tvb0 = ResourceHertaHairPosition\.0\n\t\tdraw = 2984, 0\n\tendif/,
+        );
+        assert.match(
+            text,
+            /\tif DRAW_TYPE == 8\n\t\tResource\\SRMI\\PositionBuffer = ref ResourceHertaHairPositionCS\.0\n\t\t\$\\SRMI\\vertcount = 2984\n\tendif/,
+        );
+        assert.match(text, /\[ResourceHertaHairBlend\.0\]/);
+        assert.match(text, /\[ResourceHertaHairPositionCS\.0\]/);
+        assert.doesNotMatch(text, /if DRAW_TYPE = = 1/);
+        assert.doesNotMatch(text, /if DRAW_TYPE = 1/);
+    });
+
+    it("adds CommandListCreditInfo to Present when a creditinfo section exists", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-classic-"));
+        tempRoots.push(root);
+        const aDir = path.join(root, "A");
+        await fse.ensureDir(aDir);
+        const aIni = path.join(aDir, "Klee.ini");
+        await fse.writeFile(
+            aIni,
+            `[TextureOverrideKleePosition]
+hash = abcdef01
+vb0 = ResourcePosition
+
+[CommandListCreditInfo]
+if $creditinfo == 0
+	; credits
+endif
+`,
+        );
+
+        const output = await writeClassicMerge({
+            outputDir: root,
+            sources: [{ iniPath: aIni, groupIndex: 0 }],
+            forwardKey: "vk_right",
+        });
+
+        const text = await fse.readFile(output, "utf8");
+        assert.match(text, /\[Present\]\npost \$active = 0\nrun = CommandListCreditInfo/);
+        assert.match(text, /\[CommandListCreditInfo\]/);
+    });
+
+    it("emits one comma-separated Merged Mod line", async () => {
         const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-classic-"));
         tempRoots.push(root);
         const aDir = path.join(root, "Klee, (Red Dress)");
@@ -210,8 +318,12 @@ vb0 = ResourcePosition
 
         const text = await fse.readFile(output, "utf8");
         const headerLines = text.split(/\r?\n/).filter((line) => line.startsWith("; Merged Mod:"));
-        assert.equal(headerLines.length, 2);
-        assert.ok(headerLines[0].includes("Klee, (Red Dress)"));
-        assert.ok(headerLines[1].includes("Klee, (Blue Dress)"));
+        assert.equal(headerLines.length, 1);
+        assert.ok(headerLines[0]?.includes("Klee, (Red Dress)"));
+        assert.ok(headerLines[0]?.includes("Klee, (Blue Dress)"));
+        assert.deepEqual(extractMergedModPaths(text), [
+            `.\\Klee, (Red Dress)\\Klee.ini`,
+            `.\\Klee, (Blue Dress)\\Klee.ini`,
+        ]);
     });
 });

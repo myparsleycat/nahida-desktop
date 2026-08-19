@@ -67,18 +67,12 @@ export async function writeNamespaceMerge(options: {
               ? `TextureOverride${options.name}Component0`
               : `TextureOverride${options.name}Position`;
 
-    const extractedSwapIndices = wrapSources.flatMap((entry) =>
-        [...entry.text.matchAll(/\$\\[^\\\s]+\\Master\\swapvar\w*==(\d+)/gi)].map((m) =>
-            Number(m[1]),
-        ),
+    const maxSwapIndex = Math.max(...options.sources.map((source) => source.index), 0);
+    // Emit a contiguous cycle, including a reserved vanilla 0 when requested.
+    // Do not invent extra indices from multiple vb0 lines inside one child.
+    const swapValues = Array.from({ length: maxSwapIndex + 1 }, (_, index) => String(index)).join(
+        ",",
     );
-    const maxSwapIndex = Math.max(
-        ...options.sources.map((source) => source.index),
-        ...extractedSwapIndices,
-        0,
-    );
-    const swapCount = maxSwapIndex + 1;
-    const swapValues = Array.from({ length: swapCount }, (_, index) => String(index)).join(",");
     const existingDir = options.existingMasterPath
         ? path.dirname(options.existingMasterPath)
         : options.masterDir;
@@ -92,13 +86,9 @@ export async function writeNamespaceMerge(options: {
     );
     const uniqueListed = [...new Set([...existingListed, ...currentSources])];
     const master = [
-        ...uniqueListed.map((entry) => {
-            const rel = path.relative(options.masterDir, entry);
-            const formatted = path.isAbsolute(rel) || rel.startsWith(".") ? rel : `.\\${rel}`;
-            return `; Merged Mod: ${formatted}`;
-        }),
+        formatMergedModHeader(options.masterDir, uniqueListed),
         `namespace = ${options.name}\\Master`,
-        "",
+        // Keep Constants immediately after the namespace line.
         "; Constants ---------------------------",
         "",
         "[Constants]",
@@ -116,6 +106,8 @@ export async function writeNamespaceMerge(options: {
         "",
         "[Present]",
         "post $active = 0",
+        "",
+        "; Overrides ---------------------------",
         "",
         ...(positionHash
             ? [`[${representativeSectionName}]`, `hash = ${positionHash}`, "$active = 1", ""]
@@ -324,50 +316,13 @@ export function wrapHashedSections(text: string, name: string, index: number) {
 }
 
 function buildWrappedBlock(block: string[], name: string, baseIndex: number) {
-    const vb0Indices = block.flatMap((line, idx) => {
-        const classified = classifyLine(line);
-        return classified.kind === "kv" && classified.key.toLowerCase() === "vb0" ? [idx] : [];
-    });
-
-    if (vb0Indices.length <= 1) {
-        const head = [
-            `match_priority = ${baseIndex}`,
-            `if $\\${name}\\Master\\swapvar==${baseIndex}`,
-        ];
-        return [...head, ...closeWrap(block)];
-    }
-
-    const preamble = block.slice(0, vb0Indices[0]);
-    const output = [...preamble, `match_priority = ${baseIndex}`];
-
-    for (let b = 0; b < vb0Indices.length; b += 1) {
-        const start = vb0Indices[b];
-        const end = b + 1 < vb0Indices.length ? vb0Indices[b + 1] : block.length;
-        const branchLines = block.slice(start, end);
-        const swapIndex = baseIndex + b;
-        const header =
-            b === 0
-                ? `if $\\${name}\\Master\\swapvar==${swapIndex}`
-                : `else if $\\${name}\\Master\\swapvar==${swapIndex}`;
-
-        output.push(header);
-        if (b === vb0Indices.length - 1) {
-            output.push(...closeWrap(branchLines));
-            continue;
-        }
-
-        output.push(
-            ...branchLines.map((line) => {
-                const trimmed = line.trim();
-                if (trimmed.startsWith(";") || trimmed === "" || trimmed.startsWith("[")) {
-                    return line;
-                }
-                return `\t${line.replace(/^\t/, "")}`;
-            }),
-        );
-    }
-
-    return output;
+    // Wrap the whole hashed section as one branch.
+    // Extra vb0 lines are not extra swap slots.
+    return [
+        `match_priority = ${baseIndex}`,
+        `if $\\${name}\\Master\\swapvar==${baseIndex}`,
+        ...closeWrap(block),
+    ];
 }
 
 function closeWrap(block: string[]) {
@@ -376,7 +331,9 @@ function closeWrap(block: string[]) {
         const trimmed = line.trim();
         if (trimmed.startsWith(";")) return line;
         if (trimmed !== "" && !trimmed.startsWith("[")) lastCode = index;
-        return trimmed === "" || trimmed.startsWith("[") ? line : `\t${line.replace(/^\t/, "")}`;
+        if (trimmed === "" || trimmed.startsWith("[")) return line;
+        // Keep nested DRAW_TYPE indent and add one wrap level on top.
+        return `\t${line}`;
     });
     if (lastCode >= 0) {
         next.splice(lastCode + 1, 0, "endif", "");
@@ -384,6 +341,16 @@ function closeWrap(block: string[]) {
     }
     next.push("endif", "");
     return next;
+}
+
+function formatMergedModHeader(baseDir: string, iniPaths: string[]) {
+    // One comma-separated header, not one line per source.
+    return `; Merged Mod: ${iniPaths
+        .map((iniPath) => {
+            const rel = path.relative(baseDir, iniPath);
+            return path.isAbsolute(rel) || rel.startsWith(".") ? rel : `.\\${rel}`;
+        })
+        .join(", ")}`;
 }
 
 function hasCompoundMasterSwap(text: string) {

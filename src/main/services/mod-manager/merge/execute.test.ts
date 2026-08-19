@@ -23,6 +23,66 @@ vb0 = ResourcePosition
 filename = KleePosition.buf
 `;
 
+const withDrawType = (hash: string) => `[TextureOverrideKleePosition]
+hash = ${hash}
+if DRAW_TYPE == 1
+	vb0 = ResourcePosition
+endif
+
+[ResourcePosition]
+filename = KleePosition.buf
+`;
+
+function assertBalancedControlFlow(text: string) {
+    let depth = 0;
+    for (const line of text.split(/\r?\n/)) {
+        const trimmed = line.trim().toLowerCase();
+        if (trimmed.startsWith("if ") || trimmed.startsWith("if\t")) depth += 1;
+        if (trimmed === "endif") depth -= 1;
+        assert.ok(depth >= 0, `endif without if in:\n${text}`);
+    }
+    assert.equal(depth, 0, `unbalanced if/endif in:\n${text}`);
+}
+
+function assertNamespaceMaster(text: string, name: string, swapValues: string, hash: string) {
+    const headerLines = text.split(/\r?\n/).filter((line) => line.startsWith("; Merged Mod:"));
+    assert.equal(headerLines.length, 1);
+    assert.match(
+        text,
+        new RegExp(`namespace = ${name}\\\\Master\\n; Constants ---------------------------`),
+    );
+    assert.match(
+        text,
+        /\[Constants\]\nglobal persist \$swapvar = 0\nglobal \$active\nglobal \$creditinfo = 0/,
+    );
+    assert.match(
+        text,
+        new RegExp(
+            `\\[KeySwap\\]\\ncondition = \\$active == 1\\nkey = \\]\\nback = \\[\\ntype = cycle\\n\\$swapvar = ${swapValues}\\n\\$creditinfo = 0`,
+        ),
+    );
+    assert.match(text, /\[Present\]\npost \$active = 0/);
+    assert.match(
+        text,
+        new RegExp(
+            `; Overrides ---------------------------\\n\\n\\[TextureOverride${name}Position\\]\\nhash = ${hash}\\n\\$active = 1`,
+        ),
+    );
+}
+
+function assertNamespaceChild(text: string, name: string, index: number, hash: string) {
+    assert.match(
+        text,
+        new RegExp(
+            `hash = ${hash}\\nmatch_priority = ${index}\\nif \\$\\\\${name}\\\\Master\\\\swapvar==${index}\\n\\tvb0 = ResourcePosition\\nendif`,
+        ),
+    );
+    assert.match(text, /\[ResourcePosition\]\nfilename = KleePosition\.buf/);
+    assert.doesNotMatch(text, /else if\s+\$\\/);
+    assert.doesNotMatch(text, /\$\\(?:Alpha|Beta)\\Master\\swapvar/);
+    assertBalancedControlFlow(text);
+}
+
 describe("merge writers together", () => {
     it("namespaces an ordinary pack onto an existing master", async () => {
         const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-exec-"));
@@ -206,6 +266,187 @@ describe("merge writers together", () => {
         assert.equal(await fse.pathExists(path.join(bDir, "DISABLED_BACKUP_MasterBeta.ini")), true);
         assert.match(await fse.readFile(a, "utf8"), /if \$\\Klee\\Master\\swapvar==0/);
         assert.match(await fse.readFile(b, "utf8"), /if \$\\Klee\\Master\\swapvar==1/);
+    });
+
+    it("flattens two multi-child namespace packs into one namespace merge", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-exec-"));
+        tempRoots.push(root);
+        const alphaDir = path.join(root, "Alpha");
+        const betaDir = path.join(root, "Beta");
+        const alphaA = path.join(alphaDir, "A.ini");
+        const alphaB = path.join(alphaDir, "B.ini");
+        const betaC = path.join(betaDir, "C.ini");
+        const betaD = path.join(betaDir, "D.ini");
+        await fse.ensureDir(alphaDir);
+        await fse.ensureDir(betaDir);
+        await fse.writeFile(alphaA, withDrawType("abcdef01"));
+        await fse.writeFile(alphaB, withDrawType("abcdef02"));
+        await fse.writeFile(betaC, withDrawType("abcdef03"));
+        await fse.writeFile(betaD, withDrawType("abcdef04"));
+
+        await writeNamespaceMerge({
+            masterDir: alphaDir,
+            name: "Alpha",
+            sources: [
+                { iniPath: alphaA, index: 0 },
+                { iniPath: alphaB, index: 1 },
+            ],
+            forwardKey: "]",
+            backKey: "[",
+            includeVanilla: false,
+        });
+        await writeNamespaceMerge({
+            masterDir: betaDir,
+            name: "Beta",
+            sources: [
+                { iniPath: betaC, index: 0 },
+                { iniPath: betaD, index: 1 },
+            ],
+            forwardKey: "]",
+            backKey: "[",
+            includeVanilla: false,
+        });
+
+        const service = new ModMergeService({
+            logger: { error() {} },
+            lib: {
+                fs: {
+                    getUniqueName: (name: string) => name,
+                },
+            },
+        } as never);
+
+        await service.mergeMods({
+            groupPath: root,
+            placement: "in_place",
+            packName: "Klee",
+            root: {
+                kind: "group",
+                id: "root",
+                engine: "namespace",
+                name: "Klee",
+                forwardKey: "]",
+                backKey: "[",
+                includeVanilla: false,
+                children: [
+                    { kind: "leaf", path: alphaDir },
+                    { kind: "leaf", path: betaDir },
+                ],
+            },
+        });
+
+        const master = await fse.readFile(path.join(alphaDir, "MasterKlee.ini"), "utf8");
+        const aText = await fse.readFile(alphaA, "utf8");
+        const bText = await fse.readFile(alphaB, "utf8");
+        const cText = await fse.readFile(betaC, "utf8");
+        const dText = await fse.readFile(betaD, "utf8");
+
+        assert.equal(await fse.pathExists(path.join(alphaDir, "MasterAlpha.ini")), false);
+        assert.equal(await fse.pathExists(path.join(betaDir, "MasterBeta.ini")), false);
+        assertNamespaceMaster(master, "Klee", "0,1,2,3", "abcdef01");
+        assert.match(master, /; Merged Mod:.*A\.ini/);
+        assert.match(master, /; Merged Mod:.*B\.ini/);
+        assert.match(master, /; Merged Mod:.*C\.ini/);
+        assert.match(master, /; Merged Mod:.*D\.ini/);
+
+        assert.match(
+            aText,
+            /hash = abcdef01\nmatch_priority = 0\nif \$\\Klee\\Master\\swapvar==0\n\tif DRAW_TYPE == 1\n\t\tvb0 = ResourcePosition\n\tendif\nendif/,
+        );
+        assert.match(
+            bText,
+            /hash = abcdef02\nmatch_priority = 1\nif \$\\Klee\\Master\\swapvar==1\n\tif DRAW_TYPE == 1\n\t\tvb0 = ResourcePosition\n\tendif\nendif/,
+        );
+        assert.match(
+            cText,
+            /hash = abcdef03\nmatch_priority = 2\nif \$\\Klee\\Master\\swapvar==2\n\tif DRAW_TYPE == 1\n\t\tvb0 = ResourcePosition\n\tendif\nendif/,
+        );
+        assert.match(
+            dText,
+            /hash = abcdef04\nmatch_priority = 3\nif \$\\Klee\\Master\\swapvar==3\n\tif DRAW_TYPE == 1\n\t\tvb0 = ResourcePosition\n\tendif\nendif/,
+        );
+        for (const text of [aText, bText, cText, dText]) {
+            assert.doesNotMatch(text, /else if\s+\$\\/);
+            assert.doesNotMatch(text, /\$\\(?:Alpha|Beta)\\Master\\swapvar/);
+            assert.match(text, /\[ResourcePosition\]\nfilename = KleePosition\.buf/);
+            assertBalancedControlFlow(text);
+        }
+    });
+
+    it("inserts a multi-child namespace pack onto an existing namespace master", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-exec-"));
+        tempRoots.push(root);
+        const hostDir = path.join(root, "Host");
+        const extraDir = path.join(root, "Extra");
+        const hostA = path.join(hostDir, "A.ini");
+        const hostB = path.join(hostDir, "B.ini");
+        const extraC = path.join(extraDir, "C.ini");
+        const extraD = path.join(extraDir, "D.ini");
+        await fse.ensureDir(hostDir);
+        await fse.ensureDir(extraDir);
+        await fse.writeFile(hostA, ordinary("abcdef01"));
+        await fse.writeFile(hostB, ordinary("abcdef02"));
+        await fse.writeFile(extraC, ordinary("abcdef03"));
+        await fse.writeFile(extraD, ordinary("abcdef04"));
+
+        await writeNamespaceMerge({
+            masterDir: hostDir,
+            name: "Klee",
+            sources: [
+                { iniPath: hostA, index: 0 },
+                { iniPath: hostB, index: 1 },
+            ],
+            forwardKey: "]",
+            backKey: "[",
+            includeVanilla: false,
+        });
+        await writeNamespaceMerge({
+            masterDir: extraDir,
+            name: "Beta",
+            sources: [
+                { iniPath: extraC, index: 0 },
+                { iniPath: extraD, index: 1 },
+            ],
+            forwardKey: "]",
+            backKey: "[",
+            includeVanilla: false,
+        });
+
+        const service = new ModMergeService({
+            logger: { error() {} },
+            lib: {
+                fs: {
+                    getUniqueName: (name: string) => name,
+                },
+            },
+        } as never);
+
+        await service.mergeMods({
+            groupPath: root,
+            placement: "in_place",
+            packName: "Klee",
+            root: {
+                kind: "group",
+                id: "root",
+                engine: "namespace",
+                name: "Klee",
+                forwardKey: "]",
+                backKey: "[",
+                includeVanilla: false,
+                children: [
+                    { kind: "leaf", path: hostDir },
+                    { kind: "leaf", path: extraDir },
+                ],
+            },
+        });
+
+        const master = await fse.readFile(path.join(hostDir, "MasterKlee.ini"), "utf8");
+        assert.equal(await fse.pathExists(path.join(extraDir, "MasterBeta.ini")), false);
+        assertNamespaceMaster(master, "Klee", "0,1,2,3", "abcdef01");
+        assertNamespaceChild(await fse.readFile(hostA, "utf8"), "Klee", 0, "abcdef01");
+        assertNamespaceChild(await fse.readFile(hostB, "utf8"), "Klee", 1, "abcdef02");
+        assertNamespaceChild(await fse.readFile(extraC, "utf8"), "Klee", 2, "abcdef03");
+        assertNamespaceChild(await fse.readFile(extraD, "utf8"), "Klee", 3, "abcdef04");
     });
 
     it("shares one swapvar index across INIs from the same pack", async () => {
