@@ -5,31 +5,29 @@ import fse from "fs-extra";
 
 import type { IniSection } from "./types";
 
+import { extractMergedModPaths } from "../../services/mod-manager/merge/ini-text";
+import { scoreIniCandidate } from "../mod-ini-score";
+
 export async function loadIniBundle(
     input: string,
 ): Promise<{ iniPath: string; sections: IniSection[]; sourcePaths: string[] }> {
     const iniPath = await findIni(input);
     const iniText = await fse.readFile(iniPath, "utf8");
     const sections = parseIni(iniText);
-    const mergedRefs = extractMergedIniRefs(iniText, path.dirname(iniPath));
+    const mergedRefs = await extractMergedIniRefs(iniText, path.dirname(iniPath));
 
     if (mergedRefs.length === 0) {
         return { iniPath, sections, sourcePaths: [iniPath] };
     }
 
-    const mergedIniFiles = (
-        await Promise.all(
-            mergedRefs
-                .filter((refPath) => path.resolve(refPath) !== path.resolve(iniPath))
-                .map(async (refPath) => {
-                    if (!(await fse.pathExists(refPath))) {
-                        return null;
-                    }
-                    const refText = await fse.readFile(refPath, "utf8");
-                    return { path: refPath, sections: parseIni(refText) };
-                }),
-        )
-    ).filter((entry): entry is NonNullable<typeof entry> => !!entry);
+    const mergedIniFiles = await Promise.all(
+        mergedRefs
+            .filter((refPath) => path.resolve(refPath) !== path.resolve(iniPath))
+            .map(async (refPath) => {
+                const refText = await fse.readFile(refPath, "utf8");
+                return { path: refPath, sections: parseIni(refText) };
+            }),
+    );
 
     return {
         iniPath,
@@ -67,43 +65,36 @@ async function findIni(input: string): Promise<string> {
     return scored[0].path;
 }
 
-function scoreIniCandidate(candidatePath: string, text: string): number {
-    const basename = path.basename(candidatePath).toLowerCase();
-    let score = 0;
-
-    if (basename === "merged.ini") score += 120;
-    if (basename.startsWith("master") && basename.endsWith(".ini")) score += 140;
-    if (text.includes("; Merged Mod:")) score += 80;
-    if (/^\s*namespace\s*=.+$/im.test(text)) score += 60;
-
-    const persistCount = (text.match(/^\s*global\s+persist\s+\$/gim) || []).length;
-    const cycleCount = (text.match(/^\s*type\s*=\s*cycle\s*$/gim) || []).length;
-    const overrideCount = (text.match(/^\s*\[TextureOverride/gim) || []).length;
-    const resourceCount = (text.match(/^\s*\[Resource/gim) || []).length;
-
-    score += persistCount * 15;
-    score += cycleCount * 10;
-    score += Math.min(overrideCount, 50);
-    score += Math.min(resourceCount, 50);
-
-    if (/^\s*\[KeyHelp\]/im.test(text)) score -= 25;
-    if (basename.startsWith("disabled") && !text.includes("; Merged Mod:")) score -= 10;
-
-    return score;
+async function extractMergedIniRefs(text: string, baseDir: string) {
+    const resolvedBaseDir = path.resolve(baseDir);
+    return (
+        await Promise.all(
+            extractMergedModPaths(text).map((entry) => resolveMergedIniRef(entry, resolvedBaseDir)),
+        )
+    ).filter((entry): entry is string => !!entry);
 }
 
-function extractMergedIniRefs(text: string, baseDir: string): string[] {
-    const firstLine = text.split(/\r?\n/, 1)[0] || "";
-    const match = firstLine.match(/;\s*Merged Mod:\s*(.+)$/i);
-    if (!match) {
-        return [];
-    }
+async function resolveMergedIniRef(entry: string, baseDir: string) {
+    const resolved = path.resolve(baseDir, entry);
+    if (!isPathInside(baseDir, resolved) || !(await fse.pathExists(resolved))) return null;
 
-    return match[1]
-        .split(",")
-        .map((entry) => entry.trim())
-        .filter(Boolean)
-        .map((entry) => path.resolve(baseDir, entry));
+    const realPath = await fse.realpath(resolved);
+    if (!isPathInside(await fse.realpath(baseDir), realPath)) return null;
+
+    const stat = await fse.stat(realPath);
+    if (!stat.isFile()) return null;
+
+    return realPath;
+}
+
+function isPathInside(parentPath: string, targetPath: string) {
+    const relative = path.relative(parentPath, targetPath);
+    return (
+        relative !== "" &&
+        relative !== ".." &&
+        !relative.startsWith(`..${path.sep}`) &&
+        !path.isAbsolute(relative)
+    );
 }
 
 function parseIni(text: string): IniSection[] {

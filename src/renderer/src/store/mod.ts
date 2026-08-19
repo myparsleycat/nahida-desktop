@@ -74,15 +74,34 @@ interface ModState {
     setIniListExpanded: (groupPath: string, modId: string, expanded: boolean) => void;
     resetIniListExpanded: (groupPath: string) => void;
     initExpandedGroups: () => Promise<void>;
+    isMergeMode: boolean;
+    selectedModPaths: Set<string>;
+    isMergeDialogOpen: boolean;
+    enterMergeMode: () => void;
+    exitMergeMode: () => void;
+    toggleMergeSelection: (modPath: string) => void;
+    setMergeDialogOpen: (open: boolean) => void;
 }
 
 export const modStore = createStore<ModState>((set) => ({
     selectedGame: "",
-    setSelectedGame: (selectedGame) => set({ selectedGame }),
+    setSelectedGame: (selectedGame) =>
+        set({
+            selectedGame,
+            isMergeMode: false,
+            selectedModPaths: new Set(),
+            isMergeDialogOpen: false,
+        }),
     deletingGame: null,
     setDeletingGame: (deletingGame) => set({ deletingGame }),
     selectedGroup: null,
-    setSelectedGroup: (selectedGroup) => set({ selectedGroup }),
+    setSelectedGroup: (selectedGroup) =>
+        set({
+            selectedGroup,
+            isMergeMode: false,
+            selectedModPaths: new Set(),
+            isMergeDialogOpen: false,
+        }),
     selectedPreset: null,
     setSelectedPreset: (selectedPreset) => set({ selectedPreset }),
     isPresetDialogOpen: false,
@@ -194,6 +213,21 @@ export const modStore = createStore<ModState>((set) => ({
             delete next[groupPath];
             return { iniListExpandedByGroupPath: next };
         }),
+
+    isMergeMode: false,
+    selectedModPaths: new Set<string>(),
+    isMergeDialogOpen: false,
+    enterMergeMode: () => set({ isMergeMode: true, selectedModPaths: new Set() }),
+    exitMergeMode: () =>
+        set({ isMergeMode: false, selectedModPaths: new Set(), isMergeDialogOpen: false }),
+    toggleMergeSelection: (modPath) =>
+        set((state) => {
+            const next = new Set(state.selectedModPaths);
+            if (next.has(modPath)) next.delete(modPath);
+            else next.add(modPath);
+            return { selectedModPaths: next };
+        }),
+    setMergeDialogOpen: (isMergeDialogOpen) => set({ isMergeDialogOpen }),
 
     initExpandedGroups: async () => {
         try {

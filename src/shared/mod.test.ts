@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { describe, it } from "vitest";
 
-import { disabledPrefixString, stripDisabledPrefix } from "./mod.ts";
+import { disabledPrefixString, isSafeMergeName, stripDisabledPrefix } from "./mod.ts";
 
 describe("disabledPrefixString", () => {
     it("returns DISABLED with trailing space for space style", () => {
@@ -31,5 +31,21 @@ describe("stripDisabledPrefix", () => {
             stripDisabledPrefix("disableddisableddisabledFoo"),
             "disableddisableddisabledFoo",
         );
+    });
+});
+
+describe("isSafeMergeName", () => {
+    it("rejects INI and path tokens", () => {
+        assert.equal(isSafeMergeName("Bad]Name"), false);
+        assert.equal(isSafeMergeName("A=B"), false);
+        assert.equal(isSafeMergeName("Line\nBreak"), false);
+        assert.equal(isSafeMergeName("Merged/evil"), false);
+        assert.equal(isSafeMergeName(""), false);
+    });
+
+    it("allows CJK and ordinary identifiers", () => {
+        assert.equal(isSafeMergeName("나히다"), true);
+        assert.equal(isSafeMergeName("AnbyS0"), true);
+        assert.equal(isSafeMergeName("Merged"), true);
     });
 });

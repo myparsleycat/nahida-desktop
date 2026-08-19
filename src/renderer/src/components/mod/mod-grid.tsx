@@ -32,6 +32,8 @@ export function ModGrid(_props: ModGridProps) {
   const { data: activeGroup, isPlaceholderData, isPending } = useModGroup(selectedGroupPath);
   const actions = useModActions(selectedGroupPath);
 
+  const isMergeMode = useModStore((s) => s.isMergeMode);
+  const toggleMergeSelection = useModStore((s) => s.toggleMergeSelection);
   const { toggleModMutation, exclusiveToggleModMutation, updateToggleKeyMutation } =
     useModMutations();
 
@@ -109,13 +111,22 @@ export function ModGrid(_props: ModGridProps) {
 
   const handleToggle = useCallback(
     (mod: ModInfo, event?: React.MouseEvent) => {
+      if (isMergeMode) {
+        toggleMergeSelection(mod.path);
+        return;
+      }
       if (event && (event.ctrlKey || event.metaKey)) {
         exclusiveToggleModMutation.mutate(mod);
       } else {
         toggleModMutation.mutate(mod);
       }
     },
-    [toggleModMutation.mutate, exclusiveToggleModMutation.mutate],
+    [
+      isMergeMode,
+      toggleMergeSelection,
+      toggleModMutation.mutate,
+      exclusiveToggleModMutation.mutate,
+    ],
   );
 
   const handleToggleKeyUpdate = useCallback(

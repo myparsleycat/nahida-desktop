@@ -4,6 +4,13 @@ import type { NahidaDesktop } from "@main/index";
 import { rh } from "@main/ipc/helper";
 import { isGBDownloaderError } from "@main/lib/custom-downloader";
 import { readGameBananaModId } from "@main/lib/mod-download-metadata";
+import {
+    assertMergeRequestPaths,
+    assertOwnedModPaths,
+    collectManagedModRoots,
+    parseMergeModsRequest,
+    parseModPaths,
+} from "@main/services/mod-manager/merge/validate";
 import { toErrorMessage } from "@shared/utils";
 import { dialog } from "electron";
 
@@ -22,6 +29,29 @@ function isGameBananaDownloadProps(
         props.fileId > 0 &&
         (typeof props.modelName === "undefined" || typeof props.modelName === "string")
     );
+}
+
+async function validateMergeInput<T>(
+    desktop: NahidaDesktop,
+    channel: string,
+    context: Record<string, unknown>,
+    validator: () => Promise<T>,
+): Promise<T> {
+    try {
+        return await validator();
+    } catch (error) {
+        desktop.logger.error(error, channel);
+        desktop.logger.error(
+            {
+                channel,
+                stage: "validate-payload",
+                ...context,
+                error: toErrorMessage(error),
+            },
+            `${channel}:context`,
+        );
+        throw error;
+    }
 }
 
 export function registerModHandlers(desktop: NahidaDesktop) {
@@ -168,6 +198,40 @@ export function registerModHandlers(desktop: NahidaDesktop) {
 
     rh("mod:disableAll", async (groupPath: string) => {
         return await desktop.service.mod.fn.disableAll(groupPath);
+    });
+
+    rh("mod:classifyMergePacks", async (modPaths: string[]) => {
+        const ownedPaths = await validateMergeInput(
+            desktop,
+            "mod:classifyMergePacks",
+            { modPaths },
+            async () => {
+                const ownedPaths = parseModPaths(modPaths);
+                await assertOwnedModPaths(
+                    ownedPaths,
+                    collectManagedModRoots(await desktop.service.mod.get.games()),
+                );
+                return ownedPaths;
+            },
+        );
+        return await desktop.service.mod.get.classifyMergePacks(ownedPaths);
+    });
+
+    rh("mod:mergeMods", async (request) => {
+        const validRequest = await validateMergeInput(
+            desktop,
+            "mod:mergeMods",
+            { request },
+            async () => {
+                const validRequest = parseMergeModsRequest(request);
+                await assertMergeRequestPaths(
+                    validRequest,
+                    collectManagedModRoots(await desktop.service.mod.get.games()),
+                );
+                return validRequest;
+            },
+        );
+        return await desktop.service.mod.fn.mergeMods(validRequest);
     });
 
     rh("mod:downloadFromUrl", async (url: string, groupPath: string) => {

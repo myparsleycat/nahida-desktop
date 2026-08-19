@@ -2,6 +2,7 @@ import { DownloadConfirmationOverlay } from "@renderer/components/download-confi
 import { ContentHeader } from "@renderer/components/mod/content-header";
 import { CustomDownloadDialog } from "@renderer/components/mod/custom-download-dialog";
 import { DeleteGameDialog } from "@renderer/components/mod/delete-game-dialog";
+import { MergeModsDialog } from "@renderer/components/mod/merge-mods-dialog";
 import { ModFixRunnerDialogs } from "@renderer/components/mod/mod-fix-runner-dialogs";
 import { ModGrid } from "@renderer/components/mod/mod-grid";
 import { ModList } from "@renderer/components/mod/mod-list";
@@ -503,6 +504,7 @@ function ModRouteContent() {
         </AlertDialogContent>
       </AlertDialog>
       <ModFixRunnerDialogs runner={runner} />
+      <MergeModsDialog />
     </>
   );
 }

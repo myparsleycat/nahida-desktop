@@ -34,6 +34,18 @@ export function stripDisabledPrefix(name: string): string {
     return name.replace(DISABLED_PREFIX_REGEX, "").trim();
 }
 
+const MERGE_NAME_FORBIDDEN_RE = /[\0[\]=\r\n;"'$<>:/\\|?*]/;
+
+export function isSafeMergeName(name: string) {
+    const trimmed = name.trim();
+    return (
+        Boolean(trimmed) &&
+        trimmed !== "." &&
+        trimmed !== ".." &&
+        !MERGE_NAME_FORBIDDEN_RE.test(name)
+    );
+}
+
 export const DOWNLOAD_SOURCES = ["gamebanana", "nahidaLive", "hui", "drive"] as const;
 
 export type DownloadSource = (typeof DOWNLOAD_SOURCES)[number];

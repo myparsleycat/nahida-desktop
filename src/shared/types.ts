@@ -537,3 +537,63 @@ export interface Transfer {
 }
 
 export type TransferWithoutData = Omit<Transfer, "data">;
+
+export type MergePackFamily =
+    | "ordinary"
+    | "in_mod_toggle"
+    | "classic_merge"
+    | "namespace_merge"
+    | "support";
+
+export type MergeDialect = "gimi" | "srmi" | "zzmi" | "wwmi" | "efmi" | "unknown";
+
+export interface MergePackClassification {
+    path: string;
+    name: string;
+    family: MergePackFamily;
+    dialect: MergeDialect;
+    primaryIniPath: string | null;
+    hashes: string[];
+    objectGuid: string | null;
+    allowsClassic: boolean;
+    warnings: string[];
+}
+
+export interface ClassifyMergePacksResult {
+    packs: MergePackClassification[];
+    hashOverlap: boolean;
+    warnings: string[];
+}
+
+export type MergePlacement = "in_place" | "new_folder";
+
+export type MergeEngine = "classic" | "namespace";
+
+export type MergePlanLeaf = {
+    kind: "leaf";
+    path: string;
+};
+
+export type MergePlanGroup = {
+    kind: "group";
+    id: string;
+    engine: MergeEngine;
+    name: string;
+    forwardKey: string;
+    backKey: string;
+    includeVanilla: boolean;
+    children: MergePlanNode[];
+};
+
+export type MergePlanNode = MergePlanLeaf | MergePlanGroup;
+
+export interface MergeModsRequest {
+    groupPath: string;
+    placement: MergePlacement;
+    packName: string;
+    root: MergePlanNode;
+}
+
+export interface MergeModsResult {
+    outputPath: string;
+}
