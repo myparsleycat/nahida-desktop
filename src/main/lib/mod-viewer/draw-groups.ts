@@ -450,10 +450,16 @@ export async function attachWwmiDumpTextures(
                                 if (!resolved || !(await fse.pathExists(resolved))) {
                                     return null;
                                 }
+                                const hint = await inspectWwmiTextureHint(resolved).catch(
+                                    () => null,
+                                );
+                                if (!hint) {
+                                    return null;
+                                }
                                 return {
                                     file,
                                     order,
-                                    ...(await inspectWwmiTextureHint(resolved)),
+                                    ...hint,
                                 };
                             }),
                         )
