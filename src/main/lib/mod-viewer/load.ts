@@ -2,7 +2,12 @@ import path from "node:path";
 
 import type { ViewerStateValue, ViewerVariable, ModViewerPayload } from "@shared/mod-viewer/types";
 
-import { attachShapeSliders, buildDrawGroups, type DrawGroup } from "./draw-groups";
+import {
+    attachShapeSliders,
+    attachWwmiDumpTextures,
+    buildDrawGroups,
+    type DrawGroup,
+} from "./draw-groups";
 import {
     canonicalVarNames,
     discoverIniPaths,
@@ -64,6 +69,7 @@ export async function loadModViewerPayload(modPath: string): Promise<ModViewerPa
             seenLabels,
             scanGatingVars,
         );
+        await attachWwmiDumpTextures(iniGroups, resources, folderPath);
         attachShapeSliders(iniGroups, shapes);
         groups.push(...iniGroups);
         Object.assign(toggleKeys, toggles);

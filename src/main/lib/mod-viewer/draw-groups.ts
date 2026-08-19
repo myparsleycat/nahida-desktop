@@ -1,4 +1,8 @@
+import { open } from "node:fs/promises";
+import path from "node:path";
+
 import type { Dnf } from "@shared/mod-viewer/types";
+import fse from "fs-extra";
 
 import type { ShapeSlider } from "./shapes";
 
@@ -14,6 +18,7 @@ import {
 } from "./dnf";
 import {
     resourceLookup,
+    safeResourcePath,
     sectionLookup,
     stripComment,
     type IniLine,
@@ -38,6 +43,8 @@ const AUX_MAP_CHANNELS: Record<string, "normal_map" | "light_map" | "material_ma
     materialmap: "material_map",
 };
 const HASH_TEXTURE_SUFFIX = /(Diffuse|NormalMap|LightMap|MaterialMap)$/i;
+const WWMI_DUMP_TEX_RE = /(?:^|[/\\])Components-(\d+)\s+t=/i;
+const DDS_SRGB_DXGI = new Set([29, 72, 75, 78, 91, 93, 99]);
 
 export type TextureAssignment = { res: string; cond: Dnf };
 
@@ -384,6 +391,84 @@ export function buildDrawGroups(
     return groups;
 }
 
+export async function attachWwmiDumpTextures(
+    groups: DrawGroup[],
+    resources: Record<string, ResourceInfo>,
+    modDir: string,
+): Promise<void> {
+    const needed = new Set(
+        groups.flatMap((group) => {
+            const index = wwmiComponentIndex(group);
+            if (!index || group.draws.every((draw) => draw.textureDefaultFile)) {
+                return [];
+            }
+            return [index];
+        }),
+    );
+    if (needed.size === 0) {
+        return;
+    }
+
+    const filesByIndex = Object.values(resources).reduce((map, info) => {
+        const file = info.filename;
+        const index = file ? WWMI_DUMP_TEX_RE.exec(file.replaceAll("\\", "/"))?.[1] : undefined;
+        if (!file || !index || !needed.has(index)) {
+            return map;
+        }
+        return map.set(index, [...(map.get(index) ?? []), file]);
+    }, new Map<string, string[]>());
+
+    const pickedByIndex = new Map(
+        (
+            await Promise.all(
+                [...filesByIndex].map(async ([index, files]) => {
+                    const scored = (
+                        await Promise.all(
+                            files.map(async (file, order) => {
+                                const resolved = safeResourcePath(modDir, file);
+                                if (!resolved || !(await fse.pathExists(resolved))) {
+                                    return null;
+                                }
+                                return {
+                                    file,
+                                    order,
+                                    ...(await inspectWwmiTextureHint(resolved)),
+                                };
+                            }),
+                        )
+                    ).filter((entry): entry is NonNullable<typeof entry> => !!entry);
+                    const picked = pickWwmiDumpDiffuse(scored);
+                    return picked ? ([index, picked] as const) : null;
+                }),
+            )
+        ).filter((entry): entry is NonNullable<typeof entry> => !!entry),
+    );
+
+    for (const group of groups) {
+        const picked = pickedByIndex.get(wwmiComponentIndex(group) ?? "");
+        if (!picked) {
+            continue;
+        }
+        group.diffuseFile ??= picked;
+        for (const draw of group.draws) {
+            draw.textureDefaultFile ??= picked;
+        }
+    }
+}
+
+export function pickWwmiDumpDiffuse(
+    candidates: Array<{ file: string; srgb: boolean; area: number; bytes: number; order: number }>,
+): string | undefined {
+    const ranked = [...candidates].sort(
+        (left, right) =>
+            Number(right.srgb) - Number(left.srgb) ||
+            right.area - left.area ||
+            right.bytes - left.bytes ||
+            left.order - right.order,
+    );
+    return ranked[0]?.file;
+}
+
 export function attachShapeSliders(groups: DrawGroup[], shapeSliders: ShapeSlider[]): void {
     const pathKey = (file?: string) => file?.replaceAll("\\", "/").toLowerCase();
     for (const group of groups) {
@@ -400,6 +485,53 @@ export function attachShapeSliders(groups: DrawGroup[], shapeSliders: ShapeSlide
             group.shapeSliders = matches;
         }
     }
+}
+
+function wwmiComponentIndex(group: DrawGroup): string | undefined {
+    return (
+        /^Component(\d+)$/i.exec(group.displayName)?.[1] ??
+        /^Component(\d+)$/i.exec(group.name)?.[1]
+    );
+}
+
+async function inspectWwmiTextureHint(
+    filePath: string,
+): Promise<{ srgb: boolean; area: number; bytes: number }> {
+    const bytes = (await fse.stat(filePath)).size;
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === ".png") {
+        return { srgb: true, area: await readPngArea(filePath), bytes };
+    }
+    if (ext === ".jpg" || ext === ".jpeg") {
+        return { srgb: true, area: 0, bytes };
+    }
+    if (ext !== ".dds" || bytes < 128) {
+        return { srgb: false, area: 0, bytes };
+    }
+    const header = await readFilePrefix(filePath, Math.min(148, bytes));
+    if (header.length < 128) {
+        return { srgb: false, area: 0, bytes };
+    }
+    const area = header.readUInt32LE(16) * header.readUInt32LE(12);
+    if (header.toString("ascii", 84, 88) !== "DX10" || header.length < 132) {
+        return { srgb: false, area, bytes };
+    }
+    return { srgb: DDS_SRGB_DXGI.has(header.readUInt32LE(128)), area, bytes };
+}
+
+async function readPngArea(filePath: string): Promise<number> {
+    const header = await readFilePrefix(filePath, 24);
+    if (header.length < 24) {
+        return 0;
+    }
+    return header.readUInt32BE(16) * header.readUInt32BE(20);
+}
+
+async function readFilePrefix(filePath: string, length: number): Promise<Buffer> {
+    const handle = await open(filePath, "r");
+    const header = Buffer.alloc(length);
+    const read = await handle.read(header, 0, length, 0).finally(() => handle.close());
+    return header.subarray(0, read.bytesRead);
 }
 
 function scanSectionsForDraws(

@@ -6,13 +6,17 @@ import { applyVariableSelection, evaluateViewerState } from "@shared/mod-viewer/
 import fse from "fs-extra";
 import { afterEach, describe, it } from "vitest";
 
-import { buildDrawGroups } from "./draw-groups";
+import { buildDrawGroups, pickWwmiDumpDiffuse } from "./draw-groups";
 import { extractResources, parseIniFile } from "./ini";
 import { loadModViewerPayload } from "./load";
 
 const tempRoots: string[] = [];
 const PNG_1X1 = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+);
+const PNG_2X2 = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAE0lEQVR4AWP8z8DwnwEImBigAAAfFwICgH3ifwAAAABJRU5ErkJggg==",
     "base64",
 );
 
@@ -873,6 +877,178 @@ filename = light.png
         assert.ok(visibleTex(wombState, "BodyB").some((key) => key.includes("womb.png")));
         assert.ok(visibleTex(ultState, "BodyB").some((key) => key.includes("ult.png")));
         assert.ok(bodyB.every((mesh) => mesh.lightMapKey));
+    });
+
+    it("prefers sRGB then larger WWMI dump textures", () => {
+        assert.equal(
+            pickWwmiDumpDiffuse([
+                {
+                    file: "Textures/Components-3 t=79081b2b.dds",
+                    srgb: false,
+                    area: 8192 * 8192,
+                    bytes: 67_109_012,
+                    order: 0,
+                },
+                {
+                    file: "Textures/Components-3 t=f58624fb.dds",
+                    srgb: true,
+                    area: 8192 * 8192,
+                    bytes: 67_109_012,
+                    order: 1,
+                },
+                {
+                    file: "Textures/Components-3 t=1944212c.jpg",
+                    srgb: true,
+                    area: 0,
+                    bytes: 1_615_266,
+                    order: 2,
+                },
+            ]),
+            "Textures/Components-3 t=f58624fb.dds",
+        );
+    });
+
+    it("binds WWMI Components-N dump textures when hash overrides have no Diffuse name", async () => {
+        const root = await makeMod({
+            ini: `[TextureOverrideComponent2]
+hash = 8d8097bc
+ib = ResourceIndexBuffer
+vb0 = ResourcePositionBuffer
+vb1 = ResourceTexCoordBuffer
+drawindexed = 3, 0, 0
+[TextureOverrideComponent3]
+hash = 8d8097bc
+ib = ResourceIndexBuffer
+vb0 = ResourcePositionBuffer
+vb1 = ResourceTexCoordBuffer
+drawindexed = 3, 0, 0
+[ResourcePositionBuffer]
+filename = pos.buf
+stride = 40
+[ResourceTexCoordBuffer]
+filename = tc.buf
+stride = 20
+[ResourceIndexBuffer]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceTexture0]
+filename = Textures/Components-2 t=0454fc47.png
+[TextureOverrideTexture0]
+hash = fcc6992c
+this = ResourceTexture0
+[ResourceTexture1]
+filename = Textures/Components-3 t=1944212c.jpg
+[TextureOverrideTexture1]
+hash = 1944212c
+this = ResourceTexture1
+[ResourceTexture4]
+filename = Textures/Components-3 t=f58624fb.png
+[TextureOverrideTexture4]
+hash = 22932116
+this = ResourceTexture4
+`,
+            extra: async (dir) => {
+                await fse.ensureDir(path.join(dir, "Textures"));
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-2 t=0454fc47.png"),
+                    PNG_1X1,
+                );
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-3 t=1944212c.jpg"),
+                    PNG_1X1,
+                );
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-3 t=f58624fb.png"),
+                    PNG_2X2,
+                );
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        const component2 = payload.meshes.filter((mesh) => mesh.component === "Component2");
+        const component3 = payload.meshes.filter((mesh) => mesh.component === "Component3");
+        assert.ok(component2.length >= 1);
+        assert.ok(component3.length >= 1);
+        assert.ok(component2.every((mesh) => String(mesh.texKey).includes("Components-2")));
+        assert.ok(component3.every((mesh) => String(mesh.texKey).includes("f58624fb.png")));
+        assert.ok(component3.every((mesh) => !String(mesh.texKey).includes("1944212c")));
+    });
+
+    it("does not replace RabbitFX diffuse with a WWMI dump filename", async () => {
+        const root = await makeMod({
+            ini: `[TextureOverrideComponent3]
+hash = 8d8097bc
+ib = ResourceIndexBuffer
+vb0 = ResourcePositionBuffer
+vb1 = ResourceTexCoordBuffer
+Resource\\RabbitFX\\Diffuse = ref ResourceTextureKeep
+drawindexed = 3, 0, 0
+[ResourcePositionBuffer]
+filename = pos.buf
+stride = 40
+[ResourceTexCoordBuffer]
+filename = tc.buf
+stride = 20
+[ResourceIndexBuffer]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceTextureKeep]
+filename = keep.png
+[ResourceTexture0]
+filename = Textures/Components-3 t=f58624fb.png
+[TextureOverrideTexture0]
+hash = 22932116
+this = ResourceTexture0
+`,
+            extra: async (dir) => {
+                await fse.writeFile(path.join(dir, "keep.png"), PNG_1X1);
+                await fse.ensureDir(path.join(dir, "Textures"));
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-3 t=f58624fb.png"),
+                    PNG_2X2,
+                );
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        assert.ok(payload.meshes.length >= 1);
+        assert.ok(payload.meshes.every((mesh) => String(mesh.texKey).includes("keep.png")));
+    });
+
+    it("does not bind WWMI dump textures onto non-Component mesh sections", async () => {
+        const root = await makeMod({
+            ini: `[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceTexture0]
+filename = Textures/Components-3 t=f58624fb.png
+[TextureOverrideTexture0]
+hash = 22932116
+this = ResourceTexture0
+`,
+            extra: async (dir) => {
+                await fse.ensureDir(path.join(dir, "Textures"));
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-3 t=f58624fb.png"),
+                    PNG_2X2,
+                );
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        assert.equal(payload.meshes.length, 1);
+        assert.equal(payload.meshes[0].texKey, null);
     });
 });
 
