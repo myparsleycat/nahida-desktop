@@ -64,6 +64,7 @@ export type DrawRecord = {
     textureDefaultFile?: string;
     textureVariants?: Array<{ conditions: Dnf; file: string }>;
     textureAssignments?: Array<{ conditions: Dnf; file: string }>;
+    positionVariants?: Array<{ conditions: Dnf; file: string; stride: number }>;
     normalMapDefaultFile?: string;
     normalMapVariants?: Array<{ conditions: Dnf; file: string }>;
     lightMapDefaultFile?: string;
@@ -145,9 +146,10 @@ export function buildDrawGroups(
     source?: string,
     seen: Record<string, number> = {},
     gatingVars?: Set<string>,
+    animation?: { vars: Set<string>; domains: Record<string, string[]> },
 ): DrawGroup[] {
     const scanVars = gatingVars ?? new Set<string>();
-    const secInfo = scanSectionsForDraws(sections, varPrefix, scanVars);
+    const secInfo = scanSectionsForDraws(sections, varPrefix, scanVars, animation?.domains);
     const copySources = collectResourceCopySources(sections, resources);
     const resolved = resolveComponentBuffers(secInfo, resources, copySources);
     const drawSecs = selectDrawSections(secInfo, resolved.globalIb);
@@ -261,6 +263,23 @@ export function buildDrawGroups(
                     draw.texcoordStride =
                         resolveVertexInfo(texcoordRes, resources, copySources).stride ?? 20;
                 }
+            }
+            const positionAssignments = (
+                lookupCompValue(resolved.componentPositionVariants, drawComponent) ?? []
+            )
+                .map((assignment) => {
+                    const info = resolveVertexInfo(assignment.res, resources, copySources);
+                    return info.filename
+                        ? {
+                              conditions: assignment.cond,
+                              file: info.filename,
+                              stride: info.stride ?? POSITION_STRIDE,
+                          }
+                        : null;
+                })
+                .filter((entry): entry is NonNullable<typeof entry> => !!entry);
+            if (new Set(positionAssignments.map((entry) => entry.file)).size > 1) {
+                draw.positionVariants = positionAssignments;
             }
 
             const coveredDiffuse =
@@ -388,7 +407,7 @@ export function buildDrawGroups(
             draws,
         });
     }
-    return groups;
+    return collapseAnimationDraws(groups, animation?.vars);
 }
 
 export async function attachWwmiDumpTextures(
@@ -538,10 +557,14 @@ function scanSectionsForDraws(
     sections: IniSections,
     varPrefix: string | undefined,
     toggleVars: Set<string>,
+    animationDomains?: Record<string, string[]>,
 ): Record<string, SectionInfo> {
     const aliasMap = buildBoolAliasMap(sections);
     const toggleKeys = extractToggleKeys(sections);
-    const valueDomains = toggleValueDomainsFromKeys(toggleKeys);
+    const valueDomains = {
+        ...toggleValueDomainsFromKeys(toggleKeys),
+        ...animationDomains,
+    };
     const constants = extractVariableDefaults(sections);
     const trackedVars = new Set(toggleVars);
     for (const info of Object.values(toggleKeys)) {
@@ -1301,6 +1324,97 @@ function pickVariant(assignments: TextureAssignment[] | undefined, cond: Dnf): s
         .reverse()
         .find((assignment) => dnfCovers(cond, assignment.cond));
     return matched?.res ?? assignments[0].res;
+}
+
+function collapseAnimationDraws(groups: DrawGroup[], animationVars?: Set<string>): DrawGroup[] {
+    if (!animationVars?.size) {
+        return groups;
+    }
+    return groups.map((group) => {
+        const buckets = new Map<string, DrawRecord[]>();
+        const order: string[] = [];
+        for (const draw of group.draws) {
+            const key = animationMergeKey(draw, animationVars);
+            if (!buckets.has(key)) {
+                buckets.set(key, []);
+                order.push(key);
+            }
+            buckets.get(key)!.push(draw);
+        }
+        return {
+            ...group,
+            draws: order.map((key) => mergeAnimationDraws(buckets.get(key)!, group, animationVars)),
+        };
+    });
+}
+
+function animationMergeKey(draw: DrawRecord, animationVars: Set<string>): string {
+    return [
+        draw.ibFile ?? "",
+        draw.start,
+        draw.count,
+        draw.base,
+        draw.texcoordFile ?? "",
+        draw.textureDefaultFile ?? "",
+        jsonDnf(stripAnimationVars(draw.conditions, animationVars)),
+    ].join("|");
+}
+
+function mergeAnimationDraws(
+    draws: DrawRecord[],
+    group: DrawGroup,
+    animationVars: Set<string>,
+): DrawRecord {
+    const first = draws[0];
+    if (draws.length === 1) {
+        return first;
+    }
+    const variants = draws.flatMap((draw) => {
+        if (draw.positionVariants?.length) {
+            return draw.positionVariants;
+        }
+        return [
+            {
+                conditions: draw.conditions,
+                file: draw.positionFile ?? group.positionFile,
+                stride: draw.positionStride ?? group.positionStride,
+            },
+        ];
+    });
+    const unique: NonNullable<DrawRecord["positionVariants"]> = [];
+    for (const variant of variants) {
+        if (
+            unique.some(
+                (existing) =>
+                    existing.file === variant.file &&
+                    jsonDnf(existing.conditions) === jsonDnf(variant.conditions),
+            )
+        ) {
+            continue;
+        }
+        unique.push(variant);
+    }
+    return {
+        ...first,
+        conditions: stripAnimationVars(first.conditions, animationVars),
+        positionFile: first.positionFile,
+        positionVariants: unique.length > 1 ? unique : first.positionVariants,
+    };
+}
+
+function stripAnimationVars(dnf: Dnf, animationVars: Set<string>): Dnf {
+    const tracked = new Set([...animationVars].map((variable) => variable.toLowerCase()));
+    const out: Dnf = [];
+    for (const group of dnf) {
+        const kept = group.filter((clause) => !tracked.has(clause.var.toLowerCase()));
+        if (kept.length === 0) {
+            return [];
+        }
+        if (!out.some((existing) => jsonDnf([existing]) === jsonDnf([kept]))) {
+            out.push(kept);
+        }
+    }
+    return out;
 }
 
 function nonBlendVertexRes(

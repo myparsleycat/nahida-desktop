@@ -1050,6 +1050,120 @@ this = ResourceTexture0
         assert.equal(payload.meshes.length, 1);
         assert.equal(payload.meshes[0].texKey, null);
     });
+
+    it("plays Present time animations as position variants without a toggle", async () => {
+        const root = await makeMod({
+            ini: `[Constants]
+global $fps = 30
+global $frame = 0
+[Present]
+$frame = time * $fps
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+drawindexed = 3, 0, 0
+[TextureOverrideBodyPosition]
+handling = skip
+if $frame == 0
+    vb0 = ResourcePos
+elif $frame == 1
+    vb0 = ResourcePos1
+endif
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourcePos1]
+filename = pos1.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+`,
+            extra: async (dir) => {
+                const pos = Buffer.alloc(8 * 40);
+                for (let index = 0; index < 8; index++) {
+                    pos.writeFloatLE(100 + index, index * 40);
+                    pos.writeFloatLE(index, index * 40 + 4);
+                    pos.writeFloatLE(index, index * 40 + 8);
+                }
+                await fse.writeFile(path.join(dir, "pos1.buf"), pos);
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        assert.equal(payload.animations.length, 1);
+        assert.equal(payload.animations[0].id, "frame");
+        assert.equal(payload.animations[0].fps, 30);
+        assert.equal(
+            payload.variables.some((variable) => variable.id === "frame"),
+            false,
+        );
+        assert.equal(payload.meshes.length, 1);
+        assert.ok(payload.meshes[0].positionVariants.length >= 2);
+
+        const first = evaluateViewerState(payload, payload.animations[0].frames[0].values);
+        const second = evaluateViewerState(payload, payload.animations[0].frames[1].values);
+        assert.equal(first.meshes[0].visible, true);
+        assert.equal(second.meshes[0].visible, true);
+        assert.equal(first.meshes[0].positionVariantIndex, 0);
+        assert.equal(second.meshes[0].positionVariantIndex, 1);
+        assert.equal(payload.meshes[0].positions[0], 0);
+        assert.equal(payload.meshes[0].positionVariants[1].positions[0], 100);
+
+        const dialogSource = await fse.readFile(
+            new URL(
+                "../../../renderer/src/components/tools/model-viewer/model-viewer-dialog.tsx",
+                import.meta.url,
+            ),
+            "utf8",
+        );
+        assert.match(dialogSource, /transport\.animations/);
+        assert.match(dialogSource, /setAnimationFrame/);
+    });
+
+    it("collapses per-frame drawindexed animation into one mesh", async () => {
+        const root = await makeMod({
+            ini: `[Constants]
+global $fps = 15
+global $frame = 0
+[Present]
+post $frame = time * $fps
+[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+if $frame == 0
+drawindexed = 3, 0, 0
+elif $frame == 1
+drawindexed = 3, 0, 0
+endif
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+`,
+        });
+
+        const payload = await loadModViewerPayload(root);
+        assert.equal(payload.animations.length, 1);
+        assert.equal(payload.meshes.length, 1);
+        assert.ok(payload.meshes[0].positionVariants.length >= 2);
+        const first = evaluateViewerState(payload, { frame: 0 });
+        const second = evaluateViewerState(payload, { frame: 1 });
+        const missing = evaluateViewerState(payload, { frame: 2 });
+        assert.equal(first.meshes[0].visible, true);
+        assert.equal(second.meshes[0].visible, true);
+        assert.equal(missing.meshes[0].visible, false);
+    });
 });
 
 async function makeMod(options: {

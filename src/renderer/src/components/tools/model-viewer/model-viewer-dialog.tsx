@@ -16,7 +16,7 @@ import { cn } from "@renderer/lib/utils";
 import { applyVariableSelection, evaluateViewerState } from "@shared/mod-viewer/eval";
 import { toErrorMessage } from "@shared/utils";
 import { Loader2Icon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -71,6 +71,8 @@ export function ModelViewerDialog({
   const [activeAnimationId, setActiveAnimationId] = useState<string | null>(null);
   const [animationFrameIndex, setAnimationFrameIndex] = useState(0);
   const [animationPlaying, setAnimationPlaying] = useState(false);
+  const animationFrameIndexRef = useRef(0);
+  animationFrameIndexRef.current = animationFrameIndex;
   const [isResolving, setIsResolving] = useState(false);
   const [viewerUrls, setViewerUrls] = useState<[string, string]>(["", ""]);
   const [activeViewerIndex, setActiveViewerIndex] = useState<0 | 1>(0);
@@ -198,7 +200,7 @@ export function ModelViewerDialog({
       resetViewerSession({ resetOrientation: shouldResetOrientation });
       setActiveState(source.transport.defaultState);
       setManifest(null);
-      setActiveAnimationId(null);
+      setActiveAnimationId(source.transport.animations[0]?.id ?? null);
       setAnimationFrameIndex(0);
       setAnimationPlaying(false);
       setViewerUrl(0, "");
@@ -228,9 +230,19 @@ export function ModelViewerDialog({
     setViewerUrl(1, "");
   }, [source]);
 
+  const payloadTransport = source?.mode === "payload" ? source.transport : null;
+  const payloadAnimations = useMemo(
+    () =>
+      (payloadTransport?.animations ?? []).map((clip) => ({
+        ...clip,
+        frames: clip.frames.map((frame) => ({ ...frame, meshes: [] })),
+      })),
+    [payloadTransport],
+  );
+  const animationClips = manifest?.animations ?? payloadAnimations;
   const activeAnimation =
-    manifest?.animations?.find((animation) => animation.id === activeAnimationId) ??
-    manifest?.animations?.[0] ??
+    animationClips.find((animation) => animation.id === activeAnimationId) ??
+    animationClips[0] ??
     null;
   const activeAnimationFrame = activeAnimation?.frames[animationFrameIndex] ?? null;
   const animationVariableIds = new Set(activeAnimation?.variableIds ?? []);
@@ -244,6 +256,7 @@ export function ModelViewerDialog({
 
     setAnimationFrameIndex(0);
     setAnimationPlaying(activeAnimation.frames.length > 1);
+    viewerRefs.current[0]?.setAnimationFrame(0);
   }, [activeAnimation]);
 
   useEffect(() => {
@@ -253,13 +266,13 @@ export function ModelViewerDialog({
 
     const intervalMs = 1000 / Math.max(activeAnimation.fps, 1);
     const timer = window.setInterval(() => {
-      setAnimationFrameIndex((current) => {
-        const next = current + 1;
-        if (next < activeAnimation.frames.length) {
-          return next;
-        }
-        return activeAnimation.loop ? 0 : current;
-      });
+      const current = animationFrameIndexRef.current;
+      const next = current + 1;
+      const frameIndex =
+        next < activeAnimation.frames.length ? next : activeAnimation.loop ? 0 : current;
+      animationFrameIndexRef.current = frameIndex;
+      viewerRefs.current[0]?.setAnimationFrame(frameIndex);
+      setAnimationFrameIndex(frameIndex);
     }, intervalMs);
 
     return () => {
@@ -547,11 +560,12 @@ export function ModelViewerDialog({
   };
 
   const handleAnimationReset = () => {
+    animationFrameIndexRef.current = 0;
     setAnimationFrameIndex(0);
     setAnimationPlaying(false);
+    viewerRefs.current[0]?.setAnimationFrame(0);
   };
 
-  const payloadTransport = source?.mode === "payload" ? source.transport : null;
   const payloadEval = useMemo(
     () => (payloadTransport ? evaluateViewerState(payloadTransport, activeState) : null),
     [activeState, payloadTransport],
@@ -609,7 +623,7 @@ export function ModelViewerDialog({
     setIsViewerReady(false);
   }
 
-  const handleViewerLoad = (index: 0 | 1) => {
+  const handleViewerLoad = useCallback((index: 0 | 1) => {
     void (async () => {
       const viewer = viewerRefs.current[index];
       if (!viewer) {
@@ -653,12 +667,13 @@ export function ModelViewerDialog({
           setActiveViewerIndex(index);
           setLoadingViewerIndex(null);
           setIsViewerReady(true);
+          viewerRefs.current[index]?.setAnimationFrame(animationFrameIndexRef.current);
         });
       });
     })();
-  };
+  }, []);
 
-  const handleViewerError = (index: 0 | 1, error: unknown) => {
+  const handleViewerError = useCallback((index: 0 | 1, error: unknown) => {
     if (loadingViewerIndexRef.current !== index) {
       return;
     }
@@ -670,7 +685,32 @@ export function ModelViewerDialog({
     setLoadingViewerIndex(null);
     setIsViewerReady(false);
     console.error("Failed to load model viewer source", error);
-  };
+  }, []);
+
+  const viewerRefCallbacks = useMemo(
+    () =>
+      [
+        (viewer: ModelViewerHandle | null) => {
+          viewerRefs.current[0] = viewer;
+        },
+        (viewer: ModelViewerHandle | null) => {
+          viewerRefs.current[1] = viewer;
+        },
+      ] as const,
+    [],
+  );
+  const onViewerLoad = useMemo(
+    () => [() => handleViewerLoad(0), () => handleViewerLoad(1)] as const,
+    [handleViewerLoad],
+  );
+  const onViewerError = useMemo(
+    () =>
+      [
+        (error: unknown) => handleViewerError(0, error),
+        (error: unknown) => handleViewerError(1, error),
+      ] as const,
+    [handleViewerError],
+  );
 
   const captureAndSavePreview = async () => {
     if (!source?.modPath) {
@@ -766,9 +806,7 @@ export function ModelViewerDialog({
                   {([0, 1] as const).map((index) => (
                     <ThreeModelViewer
                       key={index}
-                      ref={(viewer) => {
-                        viewerRefs.current[index] = viewer;
-                      }}
+                      ref={viewerRefCallbacks[index]}
                       className={cn(
                         "absolute inset-0 h-full w-full transition-opacity duration-200",
                         activeViewerIndex === index
@@ -779,15 +817,15 @@ export function ModelViewerDialog({
                       payloadTransport={index === 0 ? (payloadTransport ?? undefined) : undefined}
                       payloadEval={index === 0 ? (payloadEval ?? undefined) : undefined}
                       orientation={modelOrientation}
-                      variantState={viewerVariantState}
+                      variantState={payloadTransport ? undefined : viewerVariantState}
                       shapeKeys={shapeKeys}
                       animationClip={activeAnimation ?? undefined}
-                      animationFrame={animationFrameIndex}
+                      animationFrame={payloadTransport ? undefined : animationFrameIndex}
                       threeToneMapping={threeToneMapping}
                       threeEnvironment={threeEnvironment}
                       threeExposure={threeExposure}
-                      onLoad={() => handleViewerLoad(index)}
-                      onError={(error) => handleViewerError(index, error)}
+                      onLoad={onViewerLoad[index]}
+                      onError={onViewerError[index]}
                     />
                   ))}
                   <div
@@ -932,8 +970,11 @@ export function ModelViewerDialog({
                   value={animationFrameIndex}
                   className="w-full accent-primary"
                   onChange={(event) => {
+                    const index = Number(event.currentTarget.value);
                     setAnimationPlaying(false);
-                    setAnimationFrameIndex(Number(event.currentTarget.value));
+                    animationFrameIndexRef.current = index;
+                    setAnimationFrameIndex(index);
+                    viewerRefs.current[0]?.setAnimationFrame(index);
                   }}
                 />
                 <span className="text-right text-xs text-muted-foreground tabular-nums">

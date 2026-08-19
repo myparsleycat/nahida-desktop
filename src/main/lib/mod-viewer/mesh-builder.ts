@@ -288,6 +288,39 @@ export async function buildMeshResult(
                 mode: shape.slider.mode,
                 lowPositions: shape.lowPositions,
             }));
+            const variantCache = new Map<string, Float32Array>();
+            variantCache.set(`${effectivePosPath}|${drawBuffers.posStride}`, positions);
+            const positionVariants: ViewerMesh["positionVariants"] = [];
+            for (const variant of draw.positionVariants ?? []) {
+                const variantPath = safeResourcePath(modDir, variant.file);
+                if (!variantPath || !(await fse.pathExists(variantPath))) {
+                    continue;
+                }
+                const stride = variant.stride ?? group.positionStride;
+                const cacheKey = `${variantPath}|${stride}`;
+                let variantPositions = variantCache.get(cacheKey);
+                if (!variantPositions) {
+                    if (!rawBufCache.has(variantPath)) {
+                        rawBufCache.set(variantPath, await readBuffer(variantPath));
+                    }
+                    const data = rawBufCache.get(variantPath)!;
+                    variantPositions = new Float32Array(used.length * 3);
+                    for (const [outIndex, vertex] of used.entries()) {
+                        const posOff = vertex * stride + POSITION_OFFSET;
+                        variantPositions[outIndex * 3] =
+                            posOff + 12 <= data.length ? data.readFloatLE(posOff) : 0;
+                        variantPositions[outIndex * 3 + 1] =
+                            posOff + 12 <= data.length ? data.readFloatLE(posOff + 4) : 0;
+                        variantPositions[outIndex * 3 + 2] =
+                            posOff + 12 <= data.length ? data.readFloatLE(posOff + 8) : 0;
+                    }
+                    variantCache.set(cacheKey, variantPositions);
+                }
+                positionVariants.push({
+                    conditions: variant.conditions,
+                    positions: variantPositions,
+                });
+            }
 
             const textureRules = draw.textureAssignments ?? draw.textureVariants ?? [];
             const textureVariants: TextureVariant[] = [];
@@ -341,6 +374,7 @@ export async function buildMeshResult(
                 materialMapKey: material.key,
                 materialMapVariants: material.variants,
                 shapeTargets,
+                positionVariants,
             });
         }
     }

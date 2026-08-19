@@ -26,6 +26,15 @@ type PayloadMeshUserData = {
         mode?: "midpoint_pair";
         lowPositions?: Float32Array;
     }>;
+    positionVariants: Float32Array[];
+    normalCache: Map<number, Float32Array>;
+    lastPositionVariantIndex?: number | null;
+    lastMaps?: {
+        texKey: string | null;
+        normalMapKey: string | null;
+        lightMapKey: string | null;
+        materialMapKey: string | null;
+    };
 };
 
 const textureLoader = new TextureLoader();
@@ -76,6 +85,11 @@ export async function buildPayloadModel(
                         : undefined,
                 })),
             ),
+            positionVariants: await Promise.all(
+                mesh.positionVariants.map((variant) => fetchFloat32(variant.positionsUrl)),
+            ),
+            normalCache: new Map(),
+            lastPositionVariantIndex: null,
         } satisfies PayloadMeshUserData;
         applyEvaluatedMesh(object, evaluated, textures);
         group.add(object);
@@ -107,25 +121,88 @@ function applyEvaluatedMesh(
         return;
     }
     object.visible = evaluated.visible;
+    if (!evaluated.visible) {
+        return;
+    }
+    const userData = object.userData as PayloadMeshUserData;
+    applyPositionVariant(object, userData, evaluated.positionVariantIndex);
     const material = object.material;
     if (material instanceof MeshStandardMaterial && textures) {
-        material.map = evaluated.texKey ? (textures.get(evaluated.texKey) ?? null) : null;
-        material.normalMap = evaluated.normalMapKey
-            ? (textures.get(evaluated.normalMapKey) ?? null)
-            : null;
-        if (material.normalMap) {
-            material.normalScale.y = -1;
-        }
-        material.aoMap = evaluated.lightMapKey
-            ? (textures.get(evaluated.lightMapKey) ?? null)
-            : null;
-        material.aoMapIntensity = material.aoMap ? 0.5 : 1;
-        if (material.aoMap && object.geometry.attributes.uv && !object.geometry.attributes.uv2) {
-            object.geometry.setAttribute("uv2", object.geometry.attributes.uv);
-        }
-        material.needsUpdate = true;
+        applyEvaluatedMaps(material, object, userData, evaluated, textures);
     }
-    applyShapeTargets(object, evaluated.shapeWeights);
+    if (evaluated.positionVariantIndex === null) {
+        applyShapeTargets(object, evaluated.shapeWeights);
+    }
+}
+
+function applyEvaluatedMaps(
+    material: MeshStandardMaterial,
+    object: Mesh,
+    userData: PayloadMeshUserData,
+    evaluated: EvaluatedViewerState["meshes"][number],
+    textures: Map<string, Texture>,
+): void {
+    const last = userData.lastMaps;
+    if (
+        last &&
+        last.texKey === evaluated.texKey &&
+        last.normalMapKey === evaluated.normalMapKey &&
+        last.lightMapKey === evaluated.lightMapKey &&
+        last.materialMapKey === evaluated.materialMapKey
+    ) {
+        return;
+    }
+    material.map = evaluated.texKey ? (textures.get(evaluated.texKey) ?? null) : null;
+    material.normalMap = evaluated.normalMapKey
+        ? (textures.get(evaluated.normalMapKey) ?? null)
+        : null;
+    if (material.normalMap) {
+        material.normalScale.y = -1;
+    }
+    material.aoMap = evaluated.lightMapKey ? (textures.get(evaluated.lightMapKey) ?? null) : null;
+    material.aoMapIntensity = material.aoMap ? 0.5 : 1;
+    if (material.aoMap && object.geometry.attributes.uv && !object.geometry.attributes.uv2) {
+        object.geometry.setAttribute("uv2", object.geometry.attributes.uv);
+    }
+    material.needsUpdate = true;
+    userData.lastMaps = {
+        texKey: evaluated.texKey,
+        normalMapKey: evaluated.normalMapKey,
+        lightMapKey: evaluated.lightMapKey,
+        materialMapKey: evaluated.materialMapKey,
+    };
+}
+
+function applyPositionVariant(
+    object: Mesh,
+    userData: PayloadMeshUserData,
+    variantIndex: number | null,
+): void {
+    if (userData.lastPositionVariantIndex === variantIndex) {
+        return;
+    }
+    const next =
+        variantIndex === null
+            ? userData.basePositions
+            : (userData.positionVariants[variantIndex] ?? userData.basePositions);
+    const position = object.geometry.attributes.position;
+    position.array.set(next);
+    position.needsUpdate = true;
+    userData.lastPositionVariantIndex = variantIndex;
+
+    const cacheKey = variantIndex ?? -1;
+    const cached = userData.normalCache.get(cacheKey);
+    const normal = object.geometry.attributes.normal;
+    if (cached && normal) {
+        normal.array.set(cached);
+        normal.needsUpdate = true;
+        return;
+    }
+    // Animation frames reuse these meshes; cache normals instead of recomputing every tick.
+    object.geometry.computeVertexNormals();
+    if (normal) {
+        userData.normalCache.set(cacheKey, new Float32Array(normal.array as Float32Array));
+    }
 }
 
 function applyShapeTargets(object: Mesh, weights: Record<string, number>): void {

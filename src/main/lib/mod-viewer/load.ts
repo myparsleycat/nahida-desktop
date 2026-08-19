@@ -2,6 +2,7 @@ import path from "node:path";
 
 import type { ViewerStateValue, ViewerVariable, ModViewerPayload } from "@shared/mod-viewer/types";
 
+import { animationFrameValues, extractPresentAnimations } from "./animations";
 import {
     attachShapeSliders,
     attachWwmiDumpTextures,
@@ -35,6 +36,7 @@ export async function loadModViewerPayload(modPath: string): Promise<ModViewerPa
     const defaults: Record<string, string> = {};
     const stateRules: ReturnType<typeof extractStateRules> = [];
     const shapeSliders: ReturnType<typeof extractShapeSliders> = [];
+    const animations: ReturnType<typeof extractPresentAnimations> = [];
     const seenLabels: Record<string, number> = {};
     const multi = iniPaths.length > 1;
 
@@ -48,12 +50,39 @@ export async function loadModViewerPayload(modPath: string): Promise<ModViewerPa
         const rules = extractStateRules(sections, prefix, canonicalVars);
         const shapes = extractShapeSliders(sections, resources, prefix, source, canonicalVars);
         const variableDefaults = extractVariableDefaults(sections, prefix, canonicalVars);
+        const manualVars = new Set(
+            [
+                ...Object.values(toggles).flatMap((info) => Object.keys(info.vars)),
+                ...Object.values(menu).map((info) => info.var),
+            ].map((variable) =>
+                prefix && variable.startsWith(prefix) ? variable.slice(prefix.length) : variable,
+            ),
+        );
+        const presentAnimations = extractPresentAnimations(
+            sections,
+            variableDefaults,
+            manualVars,
+            prefix,
+        );
+        const animationDomains = Object.fromEntries(
+            presentAnimations.flatMap((clip) => {
+                const values = animationFrameValues(clip);
+                return clip.variableIds.flatMap((variable) => {
+                    const raw =
+                        prefix && variable.startsWith(prefix)
+                            ? variable.slice(prefix.length)
+                            : variable;
+                    return [[raw, values] as const, [raw.toLowerCase(), values] as const];
+                });
+            }),
+        );
 
         const gatingVars = new Set<string>([
             ...Object.values(toggles).flatMap((info) => Object.keys(info.vars)),
             ...Object.values(menu).map((info) => info.var),
             ...Object.values(menu).flatMap((info) => info.effects.map((effect) => effect.var)),
             ...rules.map((rule) => rule.var),
+            ...presentAnimations.flatMap((clip) => clip.variableIds),
         ]);
         const scanPrefix = prefix ?? "";
         const scanGatingVars = new Set(
@@ -68,14 +97,23 @@ export async function loadModViewerPayload(modPath: string): Promise<ModViewerPa
             source,
             seenLabels,
             scanGatingVars,
+            {
+                vars: new Set(presentAnimations.flatMap((clip) => clip.variableIds)),
+                domains: animationDomains,
+            },
         );
         await attachWwmiDumpTextures(iniGroups, resources, folderPath);
         attachShapeSliders(iniGroups, shapes);
         groups.push(...iniGroups);
         Object.assign(toggleKeys, toggles);
         Object.assign(menuSlots, menu);
-        stateRules.push(...rules);
+        stateRules.push(
+            ...rules.filter(
+                (rule) => !presentAnimations.some((clip) => clip.variableIds.includes(rule.var)),
+            ),
+        );
         shapeSliders.push(...shapes);
+        animations.push(...presentAnimations);
         for (const [variable, value] of Object.entries(variableDefaults)) {
             defaults[variable] ??= value;
         }
@@ -99,16 +137,23 @@ export async function loadModViewerPayload(modPath: string): Promise<ModViewerPa
     for (const rule of stateRules) {
         defaultState[rule.var] ??= rule.value;
     }
+    for (const clip of animations) {
+        for (const variable of clip.variableIds) {
+            defaultState[variable] ??= String(clip.frameStart);
+        }
+    }
 
+    const animationVarIds = new Set(animations.flatMap((clip) => clip.variableIds));
     return {
         iniPath: iniPaths[0],
         modDir: folderPath,
         meshes: built.meshes,
         textures: built.textures,
-        variables,
+        variables: variables.filter((variable) => !animationVarIds.has(variable.id)),
         defaultState,
         stateRules,
         uiAssets: {},
+        animations,
     };
 }
 
@@ -118,6 +163,13 @@ function gatingVarsFromMeshes(meshes: ModViewerPayload["meshes"]): Set<string> {
         for (const group of mesh.conditions) {
             for (const clause of group) {
                 found.add(clause.var);
+            }
+        }
+        for (const variant of mesh.positionVariants) {
+            for (const group of variant.conditions) {
+                for (const clause of group) {
+                    found.add(clause.var);
+                }
             }
         }
         for (const field of [

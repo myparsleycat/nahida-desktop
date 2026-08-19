@@ -60,6 +60,22 @@ export function resolveTextureVariant(
     return fallback;
 }
 
+export function resolvePositionVariantIndex(
+    variants: Array<{ conditions: Dnf }> | undefined,
+    state: Record<string, ViewerStateValue>,
+): number | null {
+    if (!variants?.length) {
+        return null;
+    }
+
+    for (let index = variants.length - 1; index >= 0; index--) {
+        if (dnfSatisfied(variants[index].conditions, state)) {
+            return index;
+        }
+    }
+    return null;
+}
+
 export function applyVariableSelection(
     state: Record<string, ViewerStateValue>,
     variable: Pick<ViewerVariable, "id" | "effects">,
@@ -81,28 +97,41 @@ export function evaluateViewerState(
     const resolved = applyStateRules({ ...payload.defaultState, ...state }, payload.stateRules);
     return {
         state: resolved,
-        meshes: payload.meshes.map((mesh) => ({
-            id: mesh.id,
-            visible: dnfSatisfied(mesh.conditions, resolved),
-            texKey: resolveTextureVariant(mesh.textureVariants, mesh.texKey, resolved),
-            normalMapKey: resolveTextureVariant(
-                mesh.normalMapVariants,
-                mesh.normalMapKey,
+        meshes: payload.meshes.map((mesh) => {
+            const positionVariantIndex = resolvePositionVariantIndex(
+                mesh.positionVariants,
                 resolved,
-            ),
-            lightMapKey: resolveTextureVariant(mesh.lightMapVariants, mesh.lightMapKey, resolved),
-            materialMapKey: resolveTextureVariant(
-                mesh.materialMapVariants,
-                mesh.materialMapKey,
-                resolved,
-            ),
-            shapeWeights: Object.fromEntries(
-                mesh.shapeTargets.map((target) => [
-                    target.var,
-                    Number(lookupStateValue(resolved, target.var) ?? 0),
-                ]),
-            ),
-        })),
+            );
+            return {
+                id: mesh.id,
+                visible:
+                    dnfSatisfied(mesh.conditions, resolved) &&
+                    (!mesh.positionVariants?.length || positionVariantIndex !== null),
+                texKey: resolveTextureVariant(mesh.textureVariants, mesh.texKey, resolved),
+                normalMapKey: resolveTextureVariant(
+                    mesh.normalMapVariants,
+                    mesh.normalMapKey,
+                    resolved,
+                ),
+                lightMapKey: resolveTextureVariant(
+                    mesh.lightMapVariants,
+                    mesh.lightMapKey,
+                    resolved,
+                ),
+                materialMapKey: resolveTextureVariant(
+                    mesh.materialMapVariants,
+                    mesh.materialMapKey,
+                    resolved,
+                ),
+                shapeWeights: Object.fromEntries(
+                    mesh.shapeTargets.map((target) => [
+                        target.var,
+                        Number(lookupStateValue(resolved, target.var) ?? 0),
+                    ]),
+                ),
+                positionVariantIndex,
+            };
+        }),
     };
 }
 

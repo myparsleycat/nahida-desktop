@@ -75,6 +75,7 @@ export type ModelViewerHandle = {
     ) => void;
     updateFraming: () => Promise<void> | void;
     setDoubleSided: (doubleSided: boolean) => Promise<void> | void;
+    setAnimationFrame: (index: number) => void;
 };
 
 export type ModelViewerBodyShapeOverride = {

@@ -1,9 +1,11 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { cn } from "@renderer/lib/utils";
+import { evaluateViewerState } from "@shared/mod-viewer/eval";
 import {
   type ElementRef,
   forwardRef,
+  memo,
   type MutableRefObject,
   useEffect,
   useImperativeHandle,
@@ -87,8 +89,8 @@ type LoadedAnimationFrame = {
   }>;
 };
 
-export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurfaceProps>(
-  function ThreeModelViewer(
+export const ThreeModelViewer = memo(
+  forwardRef<ModelViewerHandle, ModelViewerSurfaceProps>(function ThreeModelViewer(
     {
       className,
       animationClip,
@@ -120,6 +122,7 @@ export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurface
           controllerRef.current?.restoreCameraState(state, options),
         setDoubleSided: (doubleSided) => controllerRef.current?.setDoubleSided(doubleSided),
         updateFraming: () => controllerRef.current?.updateFraming(),
+        setAnimationFrame: (index) => controllerRef.current?.setAnimationFrame(index),
       }),
       [],
     );
@@ -194,7 +197,7 @@ export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurface
         </Canvas>
       </div>
     );
-  },
+  }),
 );
 
 function ThreeModelScene({
@@ -228,6 +231,28 @@ function ThreeModelScene({
   const onErrorRef = useRef(onError);
   const payloadEvalRef = useRef(payloadEval);
   payloadEvalRef.current = payloadEval;
+  const payloadTransportRef = useRef(payloadTransport);
+  payloadTransportRef.current = payloadTransport;
+  const animationClipRef = useRef(animationClip);
+  animationClipRef.current = animationClip;
+  const animationValuesRef = useRef<Record<string, string | number>>({});
+  const modelRootRef = useRef<Object3D | null>(null);
+  modelRootRef.current = modelRoot;
+  const applyPayloadVisualsRef = useRef(() => {});
+  applyPayloadVisualsRef.current = () => {
+    const root = modelRootRef.current;
+    const transport = payloadTransportRef.current;
+    const toggleEval = payloadEvalRef.current;
+    if (!root || !transport || !toggleEval) {
+      return;
+    }
+    const animationValues = animationValuesRef.current;
+    const evalResult = Object.keys(animationValues).length
+      ? evaluateViewerState(transport, { ...toggleEval.state, ...animationValues })
+      : toggleEval;
+    applyPayloadEval(root, evalResult);
+    invalidate();
+  };
   const floatBufferCacheRef = useRef<Map<string, Promise<Float32Array>>>(new Map());
   const uint32BufferCacheRef = useRef<Map<string, Promise<Uint32Array>>>(new Map());
   const lastAppliedVariantSnapshotRef = useRef<Record<string, number | string> | null>(null);
@@ -382,9 +407,8 @@ function ThreeModelScene({
     if (!modelRoot || !payloadEval || !payloadTransport) {
       return;
     }
-    applyPayloadEval(modelRoot, payloadEval);
-    invalidate();
-  }, [invalidate, modelRoot, payloadEval, payloadTransport]);
+    applyPayloadVisualsRef.current();
+  }, [modelRoot, payloadEval, payloadTransport]);
 
   useLayoutEffect(() => {
     if (!modelRoot) {
@@ -462,6 +486,16 @@ function ThreeModelScene({
           material.needsUpdate = true;
         }
         invalidate();
+      },
+      setAnimationFrame: (index) => {
+        const clip = animationClipRef.current;
+        if (!clip?.frames.length) {
+          animationValuesRef.current = {};
+        } else {
+          const frame = clip.frames[Math.min(Math.max(index, 0), clip.frames.length - 1)];
+          animationValuesRef.current = frame?.values ?? {};
+        }
+        applyPayloadVisualsRef.current();
       },
       updateFraming: async () => {
         const center = await fitCameraToObject({
@@ -588,6 +622,7 @@ function ThreeModelScene({
 
   useEffect(() => {
     if (
+      payloadTransport ||
       !modelRoot ||
       hasBodyShapeOverrides ||
       !animationClip ||
@@ -630,7 +665,14 @@ function ThreeModelScene({
     return () => {
       cancelled = true;
     };
-  }, [animationClip, animationFrame, hasBodyShapeOverrides, invalidate, modelRoot]);
+  }, [
+    animationClip,
+    animationFrame,
+    hasBodyShapeOverrides,
+    invalidate,
+    modelRoot,
+    payloadTransport,
+  ]);
 
   useEffect(() => {
     if (!modelRoot || hasBodyShapeOverrides || !shapeKeys?.length) {

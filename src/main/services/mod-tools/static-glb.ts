@@ -304,6 +304,14 @@ export class StaticGlb {
                           )
                         : undefined,
                 })),
+                positionVariants: mesh.positionVariants.map((variant, index) => ({
+                    conditions: variant.conditions,
+                    positionsUrl: writeBuffer(
+                        `${mesh.id}.posvar.${index}`,
+                        typedArrayBuffer(variant.positions),
+                        "application/octet-stream",
+                    ),
+                })),
             }));
 
             this.viewerMemorySessions.set(memorySessionId, {
@@ -324,6 +332,7 @@ export class StaticGlb {
                 defaultState: payload.defaultState,
                 stateRules: payload.stateRules,
                 uiAssets: payload.uiAssets,
+                animations: payload.animations,
             };
         } catch (error) {
             cleanupModelViewerMemorySession(memorySessionId);

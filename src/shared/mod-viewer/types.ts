@@ -18,6 +18,10 @@ export type ViewerShapeTarget = {
     lowPositions?: Float32Array;
 };
 
+export type PositionVariant = {
+    conditions: Dnf;
+};
+
 export type ViewerMesh = {
     id: string;
     component: string;
@@ -34,6 +38,7 @@ export type ViewerMesh = {
     materialMapKey: string | null;
     materialMapVariants: TextureVariant[];
     shapeTargets: ViewerShapeTarget[];
+    positionVariants: Array<PositionVariant & { positions: Float32Array }>;
 };
 
 export type ViewerTextureRole = "diffuse" | "normal_map" | "light_map" | "material_map";
@@ -95,6 +100,23 @@ export type ViewerUiAssets = {
 
 export type ViewerStateValue = string | number;
 
+export type ViewerAnimationFrame = {
+    index: number;
+    time: number;
+    values: Record<string, ViewerStateValue>;
+};
+
+export type ViewerAnimationClip = {
+    id: string;
+    label: string;
+    variableIds: string[];
+    fps: number;
+    frameStart: number;
+    frameEnd: number;
+    loop: boolean;
+    frames: ViewerAnimationFrame[];
+};
+
 export type ModViewerPayload = {
     iniPath: string;
     modDir: string;
@@ -104,6 +126,7 @@ export type ModViewerPayload = {
     defaultState: Record<string, ViewerStateValue>;
     stateRules: ViewerStateRule[];
     uiAssets: ViewerUiAssets;
+    animations: ViewerAnimationClip[];
 };
 
 export type EvaluatedViewerMesh = {
@@ -114,6 +137,7 @@ export type EvaluatedViewerMesh = {
     lightMapKey: string | null;
     materialMapKey: string | null;
     shapeWeights: Record<string, number>;
+    positionVariantIndex: number | null;
 };
 
 export type EvaluatedViewerState = {
@@ -133,6 +157,7 @@ export type ViewerEvalMesh = {
     materialMapKey: string | null;
     materialMapVariants: TextureVariant[];
     shapeTargets: Array<{ var: string }>;
+    positionVariants: PositionVariant[];
 };
 
 export type ViewerEvalInput = {
@@ -141,7 +166,7 @@ export type ViewerEvalInput = {
     stateRules: ViewerStateRule[];
 };
 
-export type ViewerMeshTransport = Omit<ViewerEvalMesh, "shapeTargets"> & {
+export type ViewerMeshTransport = Omit<ViewerEvalMesh, "shapeTargets" | "positionVariants"> & {
     component: string;
     positionsUrl: string;
     uvsUrl?: string;
@@ -152,6 +177,7 @@ export type ViewerMeshTransport = Omit<ViewerEvalMesh, "shapeTargets"> & {
         mode?: "midpoint_pair";
         lowPositionsUrl?: string;
     }>;
+    positionVariants: Array<PositionVariant & { positionsUrl: string }>;
 };
 
 export type ModViewerTransport = {
@@ -165,4 +191,5 @@ export type ModViewerTransport = {
     defaultState: Record<string, ViewerStateValue>;
     stateRules: ViewerStateRule[];
     uiAssets: ViewerUiAssets;
+    animations: ViewerAnimationClip[];
 };
