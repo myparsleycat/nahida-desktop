@@ -1431,12 +1431,14 @@ format = DXGI_FORMAT_R32_UINT
     });
 
     it("bounds nested run recursion across the full traversal", () => {
-        const chain = Array.from({ length: 32 }, (_, index) => {
+        // 12 doubling levels exceed MAX_RUN_EXPANSIONS (4096) but still finish if that bound is removed.
+        const depth = 12;
+        const chain = Array.from({ length: depth }, (_, index) => {
             const next = `CommandListExp${index + 1}`;
             return `[CommandListExp${index}]\nrun = ${next}\nrun = ${next}\n`;
         }).join("");
         const sections = parseIniText(
-            `${chain}[CommandListExp32]
+            `${chain}[CommandListExp${depth}]
 drawindexed = 3, 0, 0
 [TextureOverrideBody]
 ib = ResourceBodyIB
@@ -1456,7 +1458,16 @@ format = DXGI_FORMAT_R32_UINT
             "mod.ini",
         );
         const groups = buildDrawGroups(sections, extractResources(sections));
-        assert.ok(Array.isArray(groups));
+        assert.equal(groups.length, 1);
+        assert.equal(groups[0]?.ibFile, "body.ib");
+        assert.equal(groups[0]?.positionFile, "pos.buf");
+        assert.equal(groups[0]?.texcoordFile, "tc.buf");
+        assert.equal(groups[0]?.draws.length, 1);
+        assert.equal(groups[0]?.draws[0]?.count, null);
+        assert.equal(groups[0]?.draws[0]?.start, 0);
+        assert.equal(groups[0]?.draws[0]?.base, 0);
+        assert.equal(groups[0]?.draws[0]?.ibFile, undefined);
+        assert.equal(isUnconstrained(groups[0]?.draws[0]?.conditions), true);
     });
 });
 
