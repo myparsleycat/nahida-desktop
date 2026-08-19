@@ -76,3 +76,46 @@ describe("ensureMergeBackup", () => {
         assert.equal(await fse.readFile(disabled, "utf8"), "user-disabled");
     });
 });
+
+describe("rollbackCreated", () => {
+    it("returns an empty failure list when all actions succeed", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-rollback-"));
+        tempRoots.push(root);
+        const file1 = path.join(root, "file1.txt");
+        const file2 = path.join(root, "file2.txt");
+        await fse.writeFile(file1, "original-1");
+        await fse.writeFile(file2, "created-2");
+
+        const failures = await rollbackCreated([
+            { kind: "restore", path: file1, contents: "restored-1" },
+            { kind: "remove", path: file2 },
+        ]);
+
+        assert.deepEqual(failures, []);
+        assert.equal(await fse.readFile(file1, "utf8"), "restored-1");
+        assert.equal(await fse.pathExists(file2), false);
+    });
+
+    it("isolates action errors, collects failures, and continues remaining actions", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-rollback-"));
+        tempRoots.push(root);
+        const file1 = path.join(root, "file1.txt");
+        const file2 = path.join(root, "file2.txt");
+        await fse.writeFile(file1, "file1-data");
+        await fse.writeFile(file2, "file2-data");
+
+        const invalidDir = path.join(root, "not-a-file");
+        await fse.mkdir(invalidDir);
+
+        const failures = await rollbackCreated([
+            { kind: "remove", path: file1 },
+            { kind: "restore", path: invalidDir, contents: "will-fail-directory-write" },
+            { kind: "remove", path: file2 },
+        ]);
+
+        assert.equal(await fse.pathExists(file2), false);
+        assert.equal(failures.length, 1);
+        assert.equal(failures[0].action.kind, "restore");
+        assert.equal(await fse.pathExists(file1), false);
+    });
+});

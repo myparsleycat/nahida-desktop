@@ -111,14 +111,13 @@ export async function writeClassicMerge(options: {
         .map((group) => buildCommandList(group))
         .join("\n");
 
-    const headerPaths = options.sources
-        .map((source) => {
-            const rel = path.relative(options.outputDir, source.iniPath);
-            return rel.startsWith(".") ? rel : `.\\${rel}`;
-        })
-        .join(", ");
+    const headerLines = options.sources.map((source) => {
+        const rel = path.relative(options.outputDir, source.iniPath);
+        const formatted = path.isAbsolute(rel) || rel.startsWith(".") ? rel : `.\\${rel}`;
+        return `; Merged Mod: ${formatted}`;
+    });
     const result = [
-        `; Merged Mod: ${headerPaths}`,
+        ...headerLines,
         "",
         constants,
         "; Overrides ---------------------------",

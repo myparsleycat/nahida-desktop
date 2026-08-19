@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { isSafeMergeName, stripDisabledPrefix } from "@shared/mod";
+import { DISABLED_PREFIX_REGEX, isSafeMergeName, stripDisabledPrefix } from "@shared/mod";
 import type {
     MergeModsRequest,
     MergeModsResult,
@@ -36,7 +36,7 @@ export class ModMergeService {
             const outputPath = await this.executeNode(request.root, request, created);
             return { outputPath };
         } catch (error) {
-            await rollbackCreated(created);
+            const rollbackFailures = await rollbackCreated(created);
             this.desktop.logger.error(
                 {
                     operation: "mod:mergeMods",
@@ -45,6 +45,13 @@ export class ModMergeService {
                     packName: request.packName,
                     stage: "execute",
                     created: created.map(describeRollbackAction),
+                    rollbackFailures: rollbackFailures.map((failure) => ({
+                        action: describeRollbackAction(failure.action),
+                        error:
+                            failure.error instanceof Error
+                                ? failure.error.message
+                                : String(failure.error),
+                    })),
                     error: error instanceof Error ? error.message : String(error),
                 },
                 "Mod:mergeMods:context",
@@ -372,7 +379,7 @@ function remapPackPath(pack: MergePackClassification, nextPath: string): MergePa
 
 async function disableOriginal(modPath: string, created: RollbackAction[]) {
     const currentName = path.basename(modPath);
-    if (/^disabled[\s_]/i.test(currentName)) return;
+    if (DISABLED_PREFIX_REGEX.test(currentName)) return;
     const dest = await allocateMergeDisabledPath(modPath);
     await fse.move(modPath, dest);
     created.push({ kind: "move", from: dest, to: modPath });

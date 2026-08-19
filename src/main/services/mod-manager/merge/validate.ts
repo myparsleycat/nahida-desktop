@@ -85,10 +85,16 @@ function parsePlanNode(input: unknown, depth: number, state: { count: number }):
     if (typeof node.name !== "string" || !isSafeMergeName(node.name)) {
         throw invalidMergeRequest();
     }
-    if (typeof node.forwardKey !== "string" || !node.forwardKey.trim()) {
+    if (
+        typeof node.forwardKey !== "string" ||
+        !node.forwardKey.trim() ||
+        /[\r\n]/.test(node.forwardKey)
+    ) {
         throw invalidMergeRequest();
     }
-    if (typeof node.backKey !== "string") throw invalidMergeRequest();
+    if (typeof node.backKey !== "string" || /[\r\n]/.test(node.backKey)) {
+        throw invalidMergeRequest();
+    }
     if (node.engine === "namespace" && !node.backKey.trim()) throw invalidMergeRequest();
     if (typeof node.includeVanilla !== "boolean") throw invalidMergeRequest();
     if (!Array.isArray(node.children) || node.children.length === 0) throw invalidMergeRequest();
@@ -147,8 +153,23 @@ async function assertWithinGroup(groupPath: string, paths: string[]) {
 
 async function resolveForCompare(targetPath: string) {
     const resolved = path.resolve(targetPath);
-    if (!(await fse.pathExists(resolved))) return resolved;
-    return await fse.realpath(resolved);
+    if (await fse.pathExists(resolved)) return await fse.realpath(resolved);
+
+    let current = resolved;
+    const trailingSegments: string[] = [];
+    while (!(await fse.pathExists(current))) {
+        const parent = path.dirname(current);
+        if (parent === current) break;
+        trailingSegments.unshift(path.basename(current));
+        current = parent;
+    }
+
+    if (await fse.pathExists(current)) {
+        const realAncestor = await fse.realpath(current);
+        return path.join(realAncestor, ...trailingSegments);
+    }
+
+    return resolved;
 }
 
 function isStrictChildPath(parentPath: string, targetPath: string) {

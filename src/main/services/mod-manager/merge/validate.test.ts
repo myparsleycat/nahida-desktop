@@ -142,6 +142,62 @@ describe("parseMergeModsRequest", () => {
             () =>
                 parseMergeModsRequest(
                     validRequest({
+                        root: validRoot({ forwardKey: "vk_right\n" }),
+                    }),
+                ),
+            /Invalid merge request payload/,
+        );
+        assert.throws(
+            () =>
+                parseMergeModsRequest(
+                    validRequest({
+                        root: validRoot({ forwardKey: "vk_right\r\n" }),
+                    }),
+                ),
+            /Invalid merge request payload/,
+        );
+        assert.throws(
+            () =>
+                parseMergeModsRequest(
+                    validRequest({
+                        root: validRoot({ backKey: "vk_left\n" }),
+                    }),
+                ),
+            /Invalid merge request payload/,
+        );
+        assert.throws(
+            () =>
+                parseMergeModsRequest(
+                    validRequest({
+                        root: validRoot({ backKey: "\r" }),
+                    }),
+                ),
+            /Invalid merge request payload/,
+        );
+        assert.doesNotThrow(() =>
+            parseMergeModsRequest(
+                validRequest({
+                    root: validRoot({
+                        forwardKey: "ctrl alt no_shift vk_up",
+                        backKey: "VK_OEM_4",
+                    }),
+                }),
+            ),
+        );
+        assert.doesNotThrow(() =>
+            parseMergeModsRequest(
+                validRequest({
+                    root: validRoot({
+                        forwardKey: "]",
+                        backKey: "[",
+                    }),
+                }),
+            ),
+        );
+        assert.throws(
+            () =>
+                parseMergeModsRequest(
+                    validRequest({
                         root: validRoot({ name: "..\\outside" }),
                     }),
                 ),
@@ -301,6 +357,83 @@ describe("merge path ownership", () => {
                 [root],
             ),
             /selected group/,
+        );
+    });
+
+    it("accepts non-existent output paths under symlinked or junction groups", async () => {
+        const realRoot = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-real-"));
+        const linkParent = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-link-"));
+        tempRoots.push(realRoot, linkParent);
+
+        const group = path.join(realRoot, "Klee");
+        const first = path.join(group, "A");
+        const second = path.join(group, "B");
+        await fse.ensureDir(first);
+        await fse.ensureDir(second);
+
+        const linkGroup = path.join(linkParent, "LinkedKlee");
+        await fse.symlink(group, linkGroup, "junction");
+
+        await assertMergeRequestPaths(
+            {
+                groupPath: linkGroup,
+                placement: "new_folder",
+                packName: "Merged",
+                root: {
+                    kind: "group",
+                    id: "root",
+                    engine: "classic",
+                    name: "Merged",
+                    forwardKey: "vk_right",
+                    backKey: "",
+                    includeVanilla: false,
+                    children: [
+                        { kind: "leaf", path: path.join(linkGroup, "A") },
+                        { kind: "leaf", path: path.join(linkGroup, "B") },
+                    ],
+                },
+            },
+            [realRoot],
+        );
+    });
+
+    it("rejects output paths when symlinked group points outside managed root", async () => {
+        const realRoot = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-real-"));
+        const outsideTarget = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-outside-"));
+        tempRoots.push(realRoot, outsideTarget);
+
+        const outsideGroup = path.join(outsideTarget, "OutsideKlee");
+        const first = path.join(outsideGroup, "A");
+        const second = path.join(outsideGroup, "B");
+        await fse.ensureDir(first);
+        await fse.ensureDir(second);
+
+        const linkInsideRoot = path.join(realRoot, "EscapeLink");
+        await fse.symlink(outsideGroup, linkInsideRoot, "junction");
+
+        await assert.rejects(
+            assertMergeRequestPaths(
+                {
+                    groupPath: linkInsideRoot,
+                    placement: "new_folder",
+                    packName: "Merged",
+                    root: {
+                        kind: "group",
+                        id: "root",
+                        engine: "classic",
+                        name: "Merged",
+                        forwardKey: "vk_right",
+                        backKey: "",
+                        includeVanilla: false,
+                        children: [
+                            { kind: "leaf", path: path.join(linkInsideRoot, "A") },
+                            { kind: "leaf", path: path.join(linkInsideRoot, "B") },
+                        ],
+                    },
+                },
+                [realRoot],
+            ),
+            /managed mod folder/,
         );
     });
 });

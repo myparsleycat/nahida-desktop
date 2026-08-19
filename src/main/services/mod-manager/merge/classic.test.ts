@@ -134,7 +134,7 @@ filename = Relative.buf
         });
 
         const text = await fse.readFile(output, "utf8");
-        assert.match(text, /filename = \.\\A\\Relative\.buf/);
+        assert.match(text, /filename = \.\\A[\\/]Relative\.buf/);
         assert.match(
             text,
             /\[TextureOverrideKleeVertexLimitRaise\]\nhash = fedcba98\noverride_vertex_count = 50000\noverride_byte_stride = 40/,
@@ -173,5 +173,45 @@ filename = A.buf
         const text = await fse.readFile(output, "utf8");
         assert.doesNotMatch(text, /if DRAW_TYPE = = 1/);
         assert.doesNotMatch(text, /if DRAW_TYPE\s*=/);
+    });
+
+    it("emits one Merged Mod line per source and preserves commas in directory names", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-classic-"));
+        tempRoots.push(root);
+        const aDir = path.join(root, "Klee, (Red Dress)");
+        const bDir = path.join(root, "Klee, (Blue Dress)");
+        await fse.ensureDir(aDir);
+        await fse.ensureDir(bDir);
+        const aIni = path.join(aDir, "Klee.ini");
+        const bIni = path.join(bDir, "Klee.ini");
+        await fse.writeFile(
+            aIni,
+            `[TextureOverrideKleePosition]
+hash = abcdef01
+vb0 = ResourcePosition
+`,
+        );
+        await fse.writeFile(
+            bIni,
+            `[TextureOverrideKleePosition]
+hash = abcdef01
+vb0 = ResourcePosition
+`,
+        );
+
+        const output = await writeClassicMerge({
+            outputDir: root,
+            sources: [
+                { iniPath: aIni, groupIndex: 0 },
+                { iniPath: bIni, groupIndex: 1 },
+            ],
+            forwardKey: "vk_right",
+        });
+
+        const text = await fse.readFile(output, "utf8");
+        const headerLines = text.split(/\r?\n/).filter((line) => line.startsWith("; Merged Mod:"));
+        assert.equal(headerLines.length, 2);
+        assert.ok(headerLines[0].includes("Klee, (Red Dress)"));
+        assert.ok(headerLines[1].includes("Klee, (Blue Dress)"));
     });
 });

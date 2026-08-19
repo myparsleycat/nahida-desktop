@@ -9,9 +9,11 @@ import {
     extractMergedModPaths,
     extractNamespace,
     extractPositionHash,
+    extractPositionSectionHash,
     hasMasterSwapRef,
     isBackupIniName,
     isFileDisabledIniName,
+    isHelperIniName,
     parseIniText,
     serializeIni,
 } from "./ini-text";
@@ -32,20 +34,31 @@ export async function writeNamespaceMerge(options: {
         options.sources.map(async (source) => {
             await ensureMergeBackup(source.iniPath, created);
             const text = await unwrapNamespace(await fse.readFile(source.iniPath, "utf8"));
+            const wrapped = wrapHashedSections(text, options.name, source.index);
             await recordFileWrite(source.iniPath, created);
-            await fse.writeFile(
-                source.iniPath,
-                wrapHashedSections(text, options.name, source.index),
-                "utf8",
-            );
-            return source.iniPath;
+            await fse.writeFile(source.iniPath, wrapped, "utf8");
+            return { iniPath: source.iniPath, text: wrapped };
         }),
     );
 
-    const firstHashSource = wrapSources[0];
-    const firstText = firstHashSource ? await fse.readFile(firstHashSource, "utf8") : "";
-    const positionHash = firstHashSource ? extractPositionHash(firstText) : null;
-    const dialect = firstText ? detectDialect(firstText) : "unknown";
+    const representative =
+        wrapSources.find(
+            (entry) =>
+                !isHelperIniName(path.basename(entry.iniPath)) &&
+                extractPositionSectionHash(entry.text) !== null,
+        ) ??
+        wrapSources.find(
+            (entry) =>
+                !isHelperIniName(path.basename(entry.iniPath)) &&
+                extractPositionHash(entry.text) !== null,
+        ) ??
+        wrapSources.find((entry) => !isHelperIniName(path.basename(entry.iniPath))) ??
+        wrapSources.find((entry) => extractPositionSectionHash(entry.text) !== null) ??
+        wrapSources[0];
+
+    const representativeText = representative?.text ?? "";
+    const positionHash = representative ? extractPositionHash(representativeText) : null;
+    const dialect = representativeText ? detectDialect(representativeText) : "unknown";
 
     const representativeSectionName =
         dialect === "wwmi"
@@ -54,18 +67,36 @@ export async function writeNamespaceMerge(options: {
               ? `TextureOverride${options.name}Component0`
               : `TextureOverride${options.name}Position`;
 
-    const swapCount = Math.max(...options.sources.map((source) => source.index), 0) + 1;
+    const extractedSwapIndices = wrapSources.flatMap((entry) =>
+        [...entry.text.matchAll(/\$\\[^\\\s]+\\Master\\swapvar\w*==(\d+)/gi)].map((m) =>
+            Number(m[1]),
+        ),
+    );
+    const maxSwapIndex = Math.max(
+        ...options.sources.map((source) => source.index),
+        ...extractedSwapIndices,
+        0,
+    );
+    const swapCount = maxSwapIndex + 1;
     const swapValues = Array.from({ length: swapCount }, (_, index) => String(index)).join(",");
-    const listed = [
-        ...(options.existingMasterPath
-            ? extractMergedModPaths(await fse.readFile(options.existingMasterPath, "utf8"))
-            : []),
-        ...wrapSources,
-    ];
-
-    const uniqueListed = [...new Set(listed)];
+    const existingDir = options.existingMasterPath
+        ? path.dirname(options.existingMasterPath)
+        : options.masterDir;
+    const existingListed = options.existingMasterPath
+        ? extractMergedModPaths(await fse.readFile(options.existingMasterPath, "utf8")).map(
+              (entry) => path.resolve(existingDir, entry),
+          )
+        : [];
+    const currentSources = wrapSources.map((entry) =>
+        path.resolve(options.masterDir, entry.iniPath),
+    );
+    const uniqueListed = [...new Set([...existingListed, ...currentSources])];
     const master = [
-        ...uniqueListed.map((entry) => `; Merged Mod: ${entry}`),
+        ...uniqueListed.map((entry) => {
+            const rel = path.relative(options.masterDir, entry);
+            const formatted = path.isAbsolute(rel) || rel.startsWith(".") ? rel : `.\\${rel}`;
+            return `; Merged Mod: ${formatted}`;
+        }),
         `namespace = ${options.name}\\Master`,
         "",
         "; Constants ---------------------------",
@@ -103,9 +134,16 @@ export async function collectNamespaceChildren(masterPath: string) {
     const masterDir = path.dirname(masterPath);
     const text = await fse.readFile(masterPath, "utf8");
     const namespace = extractNamespace(text);
-    const listed = extractMergedModPaths(text)
-        .map((entry) => path.resolve(masterDir, entry))
-        .filter((entry) => fse.pathExistsSync(entry));
+    const listed = (
+        await Promise.all(
+            extractMergedModPaths(text)
+                .map((entry) => path.resolve(masterDir, entry))
+                .map(async (entry) => {
+                    const content = await fse.readFile(entry, "utf8").catch(() => null);
+                    return content !== null ? entry : null;
+                }),
+        )
+    ).filter((entry): entry is string => entry !== null);
 
     const token = namespace?.replace(/\\Master$/i, "") ?? "";
     const pattern = token
@@ -117,14 +155,21 @@ export async function collectNamespaceChildren(masterPath: string) {
         onlyFiles: true,
         caseSensitiveMatch: false,
     });
-    const scanned = walk.filter((candidate) => {
-        if (path.resolve(candidate) === path.resolve(masterPath)) return false;
-        const fileName = path.basename(candidate);
-        if (isFileDisabledIniName(fileName) || isBackupIniName(fileName)) return false;
-        if (!fse.pathExistsSync(candidate)) return false;
-        const child = fse.readFileSync(candidate, "utf8");
-        return pattern.test(child) || hasMasterSwapRef(child);
-    });
+    const scanned = (
+        await Promise.all(
+            walk
+                .filter((candidate) => {
+                    if (path.resolve(candidate) === path.resolve(masterPath)) return false;
+                    const fileName = path.basename(candidate);
+                    return !isFileDisabledIniName(fileName) && !isBackupIniName(fileName);
+                })
+                .map(async (candidate) => {
+                    const child = await fse.readFile(candidate, "utf8").catch(() => null);
+                    if (child === null) return null;
+                    return pattern.test(child) || hasMasterSwapRef(child) ? candidate : null;
+                }),
+        )
+    ).filter((entry): entry is string => entry !== null);
 
     return [...new Set([...listed, ...scanned].map((entry) => path.resolve(entry)))];
 }
@@ -244,7 +289,7 @@ export function wrapHashedSections(text: string, name: string, index: number) {
         const block = pending;
         pending = [];
         wrapping = false;
-        output.push(...closeWrap(block));
+        output.push(...buildWrappedBlock(block, name, index));
     };
 
     for (const raw of lines) {
@@ -260,8 +305,6 @@ export function wrapHashedSections(text: string, name: string, index: number) {
 
         if (!wrapping && isHash) {
             output.push(raw);
-            output.push(`match_priority = ${index}`);
-            output.push(`if $\\${name}\\Master\\swapvar==${index}`);
             wrapping = true;
             continue;
         }
@@ -278,6 +321,53 @@ export function wrapHashedSections(text: string, name: string, index: number) {
     }
     flush();
     return `${output.join("\n").replace(/\n+$/, "")}\n`;
+}
+
+function buildWrappedBlock(block: string[], name: string, baseIndex: number) {
+    const vb0Indices = block.flatMap((line, idx) => {
+        const classified = classifyLine(line);
+        return classified.kind === "kv" && classified.key.toLowerCase() === "vb0" ? [idx] : [];
+    });
+
+    if (vb0Indices.length <= 1) {
+        const head = [
+            `match_priority = ${baseIndex}`,
+            `if $\\${name}\\Master\\swapvar==${baseIndex}`,
+        ];
+        return [...head, ...closeWrap(block)];
+    }
+
+    const preamble = block.slice(0, vb0Indices[0]);
+    const output = [...preamble, `match_priority = ${baseIndex}`];
+
+    for (let b = 0; b < vb0Indices.length; b += 1) {
+        const start = vb0Indices[b];
+        const end = b + 1 < vb0Indices.length ? vb0Indices[b + 1] : block.length;
+        const branchLines = block.slice(start, end);
+        const swapIndex = baseIndex + b;
+        const header =
+            b === 0
+                ? `if $\\${name}\\Master\\swapvar==${swapIndex}`
+                : `else if $\\${name}\\Master\\swapvar==${swapIndex}`;
+
+        output.push(header);
+        if (b === vb0Indices.length - 1) {
+            output.push(...closeWrap(branchLines));
+            continue;
+        }
+
+        output.push(
+            ...branchLines.map((line) => {
+                const trimmed = line.trim();
+                if (trimmed.startsWith(";") || trimmed === "" || trimmed.startsWith("[")) {
+                    return line;
+                }
+                return `\t${line.replace(/^\t/, "")}`;
+            }),
+        );
+    }
+
+    return output;
 }
 
 function closeWrap(block: string[]) {

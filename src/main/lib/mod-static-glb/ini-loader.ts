@@ -75,13 +75,15 @@ async function extractMergedIniRefs(text: string, baseDir: string) {
 }
 
 async function resolveMergedIniRef(entry: string, baseDir: string) {
-    if (path.isAbsolute(entry)) return null;
-
     const resolved = path.resolve(baseDir, entry);
     if (!isPathInside(baseDir, resolved) || !(await fse.pathExists(resolved))) return null;
 
     const realPath = await fse.realpath(resolved);
     if (!isPathInside(await fse.realpath(baseDir), realPath)) return null;
+
+    const stat = await fse.stat(realPath);
+    if (!stat.isFile()) return null;
+
     return realPath;
 }
 

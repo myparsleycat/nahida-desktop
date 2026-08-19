@@ -76,18 +76,29 @@ function isMergeBackupOf(fileName: string, originalName: string) {
     return prefix === "disabled_backup" || /^disabled_backup_\d+$/.test(prefix);
 }
 
-export async function rollbackCreated(created: RollbackAction[]) {
+export type RollbackFailure = {
+    action: RollbackAction;
+    error: unknown;
+};
+
+export async function rollbackCreated(created: RollbackAction[]): Promise<RollbackFailure[]> {
+    const failures: RollbackFailure[] = [];
     for (const entry of [...created].reverse()) {
-        if (entry.kind === "move") {
-            if (await fse.pathExists(entry.from)) {
-                await fse.move(entry.from, entry.to, { overwrite: true });
+        try {
+            if (entry.kind === "move") {
+                if (await fse.pathExists(entry.from)) {
+                    await fse.move(entry.from, entry.to, { overwrite: true });
+                }
+                continue;
             }
-            continue;
+            if (entry.kind === "restore") {
+                await fse.writeFile(entry.path, entry.contents, "utf8");
+                continue;
+            }
+            await fse.remove(entry.path);
+        } catch (error) {
+            failures.push({ action: entry, error });
         }
-        if (entry.kind === "restore") {
-            await fse.writeFile(entry.path, entry.contents, "utf8");
-            continue;
-        }
-        await fse.remove(entry.path);
     }
+    return failures;
 }

@@ -5,6 +5,7 @@ import path from "node:path";
 import fse from "fs-extra";
 import { afterEach, describe, it } from "vitest";
 
+import { writeNamespaceMerge } from "../../services/mod-manager/merge/namespace.ts";
 import { loadIniBundle } from "./ini-loader.ts";
 
 const tempRoots: string[] = [];
@@ -33,7 +34,7 @@ hash = abcdef01
         const mergedPath = path.join(root, "merged.ini");
         await fse.writeFile(
             mergedPath,
-            `; Merged Mods: .\\AmberMain\\Amber.ini
+            `; Merged Mods: ${path.join("AmberMain", "Amber.ini")}
 [TextureOverrideMergedPosition]
 hash = fedcba98
 `,
@@ -50,7 +51,38 @@ hash = fedcba98
         );
     });
 
-    it("rejects absolute, parent-directory, and missing merged references", async () => {
+    it("loads valid in-directory absolute merged references", async () => {
+        const root = await makeRoot();
+        const childDir = path.join(root, "AmberMain");
+        await fse.ensureDir(childDir);
+        const childIni = path.join(childDir, "Amber.ini");
+        await fse.writeFile(
+            childIni,
+            `[TextureOverrideAmberPosition]
+hash = abcdef01
+`,
+        );
+        const mergedPath = path.join(root, "merged.ini");
+        await fse.writeFile(
+            mergedPath,
+            `; Merged Mod: ${childIni}
+[TextureOverrideMergedPosition]
+hash = fedcba98
+`,
+        );
+
+        const bundle = await loadIniBundle(mergedPath);
+        assert.equal(bundle.sourcePaths.length, 2);
+        assert.ok(
+            bundle.sourcePaths.some((entry) => path.basename(path.dirname(entry)) === "AmberMain"),
+        );
+        assert.deepEqual(
+            bundle.sections.map((section) => section.name),
+            ["MergedPosition", "AmberPosition"],
+        );
+    });
+
+    it("rejects outside absolute, parent-directory, and missing merged references", async () => {
         const root = await makeRoot();
         const outside = await makeRoot();
         const outsideIni = path.join(outside, "secret.ini");
@@ -77,6 +109,26 @@ hash = fedcba98
         );
     });
 
+    it("rejects directory merged references", async () => {
+        const root = await makeRoot();
+        const childDir = path.join(root, "AmberMain");
+        await fse.ensureDir(childDir);
+        const mergedPath = path.join(root, "merged.ini");
+        await fse.writeFile(
+            mergedPath,
+            `; Merged Mods: AmberMain
+[TextureOverrideMergedPosition]
+hash = fedcba98
+`,
+        );
+        const bundle = await loadIniBundle(mergedPath);
+        assert.deepEqual(bundle.sourcePaths, [path.resolve(mergedPath)]);
+        assert.deepEqual(
+            bundle.sections.map((section) => section.name),
+            ["MergedPosition"],
+        );
+    });
+
     it("rejects a merged reference that escapes through a symlink", async () => {
         const root = await makeRoot();
         const outside = await makeRoot();
@@ -95,12 +147,78 @@ hash = 11111111
 hash = fedcba98
 `,
         );
-
         const bundle = await loadIniBundle(mergedPath);
         assert.deepEqual(bundle.sourcePaths, [path.resolve(mergedPath)]);
         assert.deepEqual(
             bundle.sections.map((section) => section.name),
             ["MergedPosition"],
+        );
+    });
+
+    it("loads child sections from a namespace merge master ini created by writeNamespaceMerge", async () => {
+        const root = await makeRoot();
+        const childDir = path.join(root, "AmberMain");
+        await fse.ensureDir(childDir);
+        const childIni = path.join(childDir, "Amber.ini");
+        await fse.writeFile(
+            childIni,
+            `[TextureOverrideAmberPosition]
+hash = abcdef01
+vb0 = ResourcePosition
+`,
+        );
+
+        const masterPath = await writeNamespaceMerge({
+            masterDir: root,
+            name: "Amber",
+            sources: [{ iniPath: childIni, index: 0 }],
+            forwardKey: "]",
+            backKey: "[",
+            includeVanilla: false,
+        });
+
+        const bundle = await loadIniBundle(masterPath);
+        assert.equal(bundle.sourcePaths.length, 2);
+        assert.ok(
+            bundle.sourcePaths.some((entry) => path.resolve(entry) === path.resolve(childIni)),
+        );
+        assert.ok(
+            bundle.sections.some(
+                (s) => s.header === "TextureOverride" && s.name === "AmberPosition",
+            ),
+        );
+        assert.ok(bundle.sections.some((s) => s.header === "Constants"));
+    });
+
+    it("loads child INI sections when source directory contains a comma", async () => {
+        const root = await makeRoot();
+        const childDir = path.join(root, "Amber, (Summer Outfit)");
+        await fse.ensureDir(childDir);
+        const childIni = path.join(childDir, "Amber.ini");
+        await fse.writeFile(
+            childIni,
+            `[TextureOverrideAmberPosition]
+hash = abcdef01
+vb0 = ResourcePosition
+`,
+        );
+        const mergedPath = path.join(root, "merged.ini");
+        await fse.writeFile(
+            mergedPath,
+            `; Merged Mod: .\\${path.join("Amber, (Summer Outfit)", "Amber.ini")}
+[TextureOverrideMergedPosition]
+hash = fedcba98
+`,
+        );
+
+        const bundle = await loadIniBundle(mergedPath);
+        assert.equal(bundle.sourcePaths.length, 2);
+        assert.ok(
+            bundle.sourcePaths.some((entry) => path.resolve(entry) === path.resolve(childIni)),
+        );
+        assert.deepEqual(
+            bundle.sections.map((section) => section.name),
+            ["MergedPosition", "AmberPosition"],
         );
     });
 });

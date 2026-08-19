@@ -130,7 +130,7 @@ export function extractMergedModPaths(text: string) {
         }
         if (rawMatch.includes(",")) {
             const parts = rawMatch
-                .split(",")
+                .split(/(?<=\.ini["']?)\s*,\s*/i)
                 .map((entry) => entry.trim().replace(/^["']|["']$/g, ""))
                 .filter(Boolean);
             if (parts.length > 1 && parts.every((entry) => /\.ini$/i.test(entry))) {
@@ -160,26 +160,29 @@ export function extractHashes(text: string) {
     ];
 }
 
-export function extractPositionHash(text: string) {
-    const parsed = parseIniText(text);
-    const candidatePatterns = [
-        /position$/i,
-        /markbonedatacb$/i,
-        /headblend$/i,
-        /hairblend$/i,
-        /textureoverride(?:_?)component0(?:_lod0)?$/i,
-        /textureoverride\w+ib$/i,
-    ];
+const POSITION_SECTION_PATTERNS = [
+    /position$/i,
+    /markbonedatacb$/i,
+    /headblend$/i,
+    /hairblend$/i,
+    /textureoverride(?:_?)component0(?:_lod0)?$/i,
+    /textureoverride\w+ib$/i,
+];
 
-    for (const pattern of candidatePatterns) {
+export function extractPositionSectionHash(text: string) {
+    const parsed = parseIniText(text);
+    for (const pattern of POSITION_SECTION_PATTERNS) {
         const found = parsed.sections.find((section) => pattern.test(section.name));
         if (found) {
             const hash = sectionValues(found).hash;
             if (hash) return hash.toLowerCase();
         }
     }
+    return null;
+}
 
-    return extractHashes(text)[0] ?? null;
+export function extractPositionHash(text: string) {
+    return extractPositionSectionHash(text) ?? extractHashes(text)[0] ?? null;
 }
 
 export function hasKeySection(text: string) {
@@ -246,6 +249,11 @@ export function isSupportIniName(fileName: string) {
             "qh.ini",
         ].includes(lower) || /^preset.+\.ini$/.test(lower)
     );
+}
+
+export function isHelperIniName(fileName: string) {
+    const lower = fileName.toLowerCase();
+    return isSupportIniName(lower) || lower.includes("orfix");
 }
 
 export function detectDialect(text: string) {

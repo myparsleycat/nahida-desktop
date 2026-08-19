@@ -369,6 +369,48 @@ describe("merge writers together", () => {
         assert.equal(await fse.pathExists(disabled), true);
     });
 
+    it("does not re-disable already disabled packs with repeated prefixes without separators", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-exec-"));
+        tempRoots.push(root);
+        const disabled = path.join(root, "disableddisabled PackA");
+        const extra = path.join(root, "Extra");
+        await fse.ensureDir(disabled);
+        await fse.ensureDir(extra);
+        await fse.writeFile(path.join(disabled, "Aino.ini"), ordinary());
+        await fse.writeFile(path.join(extra, "Aino.ini"), ordinary());
+
+        const service = new ModMergeService({
+            logger: { error() {} },
+            lib: {
+                fs: {
+                    getUniqueName: (name: string) => name,
+                },
+            },
+        } as never);
+
+        const result = await service.mergeMods({
+            groupPath: root,
+            placement: "new_folder",
+            packName: "AinoNudetoggle",
+            root: {
+                kind: "group",
+                id: "root",
+                engine: "namespace",
+                name: "AinoNudetoggle",
+                forwardKey: "]",
+                backKey: "[",
+                includeVanilla: false,
+                children: [
+                    { kind: "leaf", path: disabled },
+                    { kind: "leaf", path: extra },
+                ],
+            },
+        });
+
+        assert.equal(await fse.pathExists(path.join(result.outputPath, "PackA")), true);
+        assert.equal(await fse.pathExists(disabled), true);
+    });
+
     it("disables an original pack under a free name when DISABLED already exists", async () => {
         const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-exec-"));
         tempRoots.push(root);
@@ -803,5 +845,57 @@ hash = 7748c1d8
         assert.equal(await fse.pathExists(path.join(root, "PackA (2)")), false);
         assert.match(await fse.readFile(disabledIni, "utf8"), /hash = abcdef01/);
         assert.match(await fse.readFile(packAIni, "utf8"), /hash = abcdef02/);
+    });
+
+    it("logs the original merge error together with rollback failures and rethrows", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-exec-"));
+        tempRoots.push(root);
+        const empty = path.join(root, "Empty");
+        await fse.ensureDir(empty);
+
+        const loggedErrors: Array<{ context: unknown; tag: string }> = [];
+        const service = new ModMergeService({
+            logger: {
+                error(context: unknown, tag: string) {
+                    loggedErrors.push({ context, tag });
+                },
+            },
+            lib: {
+                fs: {
+                    getUniqueName: (name: string) => name,
+                },
+            },
+        } as never);
+
+        await assert.rejects(
+            () =>
+                service.mergeMods({
+                    groupPath: root,
+                    placement: "in_place",
+                    packName: "TestPack",
+                    root: {
+                        kind: "group",
+                        id: "root",
+                        engine: "namespace",
+                        name: "TestPack",
+                        forwardKey: "]",
+                        backKey: "[",
+                        includeVanilla: false,
+                        children: [{ kind: "leaf", path: empty }],
+                    },
+                }),
+            /NAMESPACE_MERGE_NEEDS_CHILD/,
+        );
+
+        assert.equal(loggedErrors.length, 1);
+        assert.equal(loggedErrors[0].tag, "Mod:mergeMods:context");
+        const ctx = loggedErrors[0].context as {
+            operation: string;
+            error: string;
+            rollbackFailures: unknown[];
+        };
+        assert.equal(ctx.operation, "mod:mergeMods");
+        assert.match(ctx.error, /NAMESPACE_MERGE_NEEDS_CHILD/);
+        assert.deepEqual(ctx.rollbackFailures, []);
     });
 });

@@ -113,6 +113,52 @@ ps-t0 = ResourceTexture
         assert.match(unwrapped, /ps-t0 = ResourceTexture/);
     });
 
+    it("preserves separate branch bodies for multiple vb0 assignments when wrapping", () => {
+        const input = `[TextureOverrideKleePosition]
+hash = abcdef01
+vb0 = ResourcePosition0
+vb0 = ResourcePosition1
+ps-t0 = ResourceTexture
+`;
+        const wrapped = wrapHashedSections(input, "Klee", 0);
+        assert.match(wrapped, /match_priority = 0/);
+        assert.match(wrapped, /if \$\\Klee\\Master\\swapvar==0\n\tvb0 = ResourcePosition0/);
+        assert.match(
+            wrapped,
+            /else if \$\\Klee\\Master\\swapvar==1\n\tvb0 = ResourcePosition1\n\tps-t0 = ResourceTexture\nendif/,
+        );
+    });
+
+    it("generates master INI with all swapvar indices when child contains multiple vb0 variants", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-ns-multi-vb0-"));
+        tempRoots.push(root);
+        const multiVb0Ini = `[TextureOverrideKleePosition]
+hash = abcdef01
+vb0 = ResourcePosition0
+vb0 = ResourcePosition1
+`;
+        const childPath = path.join(root, "Klee.ini");
+        await fse.writeFile(childPath, multiVb0Ini);
+
+        const masterPath = await writeNamespaceMerge({
+            masterDir: root,
+            name: "Klee",
+            sources: [{ iniPath: childPath, index: 0 }],
+            forwardKey: "]",
+            backKey: "[",
+            includeVanilla: false,
+        });
+
+        const master = await fse.readFile(masterPath, "utf8");
+        const child = await fse.readFile(childPath, "utf8");
+        assert.match(master, /\$swapvar = 0,1/);
+        assert.match(child, /if \$\\Klee\\Master\\swapvar==0\n\tvb0 = ResourcePosition0/);
+        assert.match(
+            child,
+            /else if \$\\Klee\\Master\\swapvar==1\n\tvb0 = ResourcePosition1\nendif/,
+        );
+    });
+
     it("extractMergedModPaths handles one path per line, JSON arrays, and legacy lists", () => {
         const multiLine = [
             "; Merged Mod: C:\\Mods\\Klee, (Red Dress)\\Klee.ini",
@@ -138,6 +184,13 @@ ps-t0 = ResourceTexture
 
         const legacyList = "; Merged Mod: a.ini, b.ini, c.ini";
         assert.deepEqual(extractMergedModPaths(legacyList), ["a.ini", "b.ini", "c.ini"]);
+
+        const commaInDirLegacyList =
+            "; Merged Mods: C:\\Mods\\Klee, (Red Dress)\\Klee.ini, D:\\Mods\\Klee, (Blue Dress)\\Klee.ini";
+        assert.deepEqual(extractMergedModPaths(commaInDirLegacyList), [
+            "C:\\Mods\\Klee, (Red Dress)\\Klee.ini",
+            "D:\\Mods\\Klee, (Blue Dress)\\Klee.ini",
+        ]);
     });
 
     it("round-trips merged paths containing commas and rediscovers them on subsequent merges", async () => {
@@ -171,8 +224,16 @@ ps-t0 = ResourceTexture
         });
 
         const masterContent = await fse.readFile(masterPath, "utf8");
-        assert.ok(masterContent.includes(`; Merged Mod: ${child1}`));
-        assert.ok(masterContent.includes(`; Merged Mod: ${child2}`));
+        const rel1 = path.relative(root, child1);
+        const rel2 = path.relative(root, child2);
+        assert.ok(
+            masterContent.includes(`; Merged Mod: .\\${rel1}`) ||
+                masterContent.includes(`; Merged Mod: ${rel1}`),
+        );
+        assert.ok(
+            masterContent.includes(`; Merged Mod: .\\${rel2}`) ||
+                masterContent.includes(`; Merged Mod: ${rel2}`),
+        );
 
         const discovered = await collectNamespaceChildren(masterPath);
         assert.deepEqual(
@@ -336,5 +397,76 @@ endif
             /if DRAW_TYPE == 1\n\tvb0 = ResourceBlackSwanHairPosition\n\tdraw = 5376, 0\nendif/,
         );
         assert.match(unwrapped, /elif DRAW_TYPE != 1\n\t\$_blend_ = 2\nendif/);
+    });
+
+    it("selects representative source with position hash and ignores helper files such as ORFix.ini", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-ns-rep-"));
+        tempRoots.push(root);
+        const orfixPath = path.join(root, "ORFix.ini");
+        const childPath = path.join(root, "Klee.ini");
+        await fse.writeFile(
+            orfixPath,
+            `[TextureOverrideORFix]
+hash = helper01
+run = CommandList\\global\\ORFix
+`,
+        );
+        await fse.writeFile(childPath, childIni);
+
+        const masterPath = await writeNamespaceMerge({
+            masterDir: root,
+            name: "Klee",
+            sources: [
+                { iniPath: orfixPath, index: 0 },
+                { iniPath: childPath, index: 0 },
+            ],
+            forwardKey: "]",
+            backKey: "[",
+            includeVanilla: false,
+        });
+
+        const master = await fse.readFile(masterPath, "utf8");
+        assert.match(master, /\[TextureOverrideKleePosition\]/);
+        assert.match(master, /hash = abcdef01/);
+        assert.doesNotMatch(master, /hash = helper01/);
+    });
+
+    it("selects representative WWMI source with MarkBoneDataCB hash over helper files", async () => {
+        const root = await fse.mkdtemp(path.join(os.tmpdir(), "nhd-ns-wwmi-rep-"));
+        tempRoots.push(root);
+        const orfixPath = path.join(root, "ORFix.ini");
+        const roverPath = path.join(root, "Rover.ini");
+        await fse.writeFile(
+            orfixPath,
+            `[TextureOverrideORFix]
+hash = helper01
+run = CommandList\\global\\ORFix
+`,
+        );
+        await fse.writeFile(
+            roverPath,
+            `; WWMI
+[TextureOverrideRoverMarkBoneDataCB]
+hash = 98765432
+vb0 = ResourceRoverPosition
+`,
+        );
+
+        const masterPath = await writeNamespaceMerge({
+            masterDir: root,
+            name: "Rover",
+            sources: [
+                { iniPath: orfixPath, index: 0 },
+                { iniPath: roverPath, index: 0 },
+            ],
+            forwardKey: "]",
+            backKey: "[",
+            includeVanilla: false,
+        });
+
+        const master = await fse.readFile(masterPath, "utf8");
+        assert.match(master, /\[TextureOverrideRoverMarkBoneDataCB\]/);
+        assert.match(master, /hash = 98765432/);
+        assert.doesNotMatch(master, /hash = helper01/);
     });
 });
