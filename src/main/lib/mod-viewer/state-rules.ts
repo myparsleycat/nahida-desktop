@@ -9,7 +9,6 @@ import {
     normalizeDnf,
     parseConditionDnf,
     possibleGroups,
-    sameDnf,
 } from "./dnf";
 import { canonicalVarNames, stripComment, type IniSections } from "./ini";
 
@@ -74,7 +73,7 @@ export function extractStateRules(
             combined = dnfAnd(combined, frame.cur);
         }
         const conditions = possibleGroups(normalizeDnf(combined, tracked, varPrefix));
-        if (!sameDnf(combined, DNF_TRUE) && conditions.length === 0) {
+        if (conditions.length === 0) {
             continue;
         }
         const variable = canon[assign[1].toLowerCase()] ?? assign[1];

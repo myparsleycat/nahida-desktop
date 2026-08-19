@@ -13,6 +13,7 @@ import fse from "fs-extra";
 import type { DrawGroup, DrawRecord } from "./draw-groups";
 import type { ShapeSlider } from "./shapes";
 
+import { DNF_TRUE, isUnconstrained } from "./dnf";
 import { safeResourcePath } from "./ini";
 
 const POSITION_STRIDE = 40;
@@ -410,9 +411,9 @@ function deduplicateDraws(group: DrawGroup): DrawRecord[] {
                 entry.sources.push(source);
             }
         }
-        const condGroups = draw.conditions ?? [];
-        if (condGroups.length === 0) {
-            if (!entry.alts.some((alt) => alt.conditions.length === 0)) {
+        const condGroups = draw.conditions ?? DNF_TRUE;
+        if (isUnconstrained(condGroups)) {
+            if (!entry.alts.some((alt) => isUnconstrained(alt.conditions))) {
                 entry.alts.push(draw);
             }
         } else {
@@ -422,10 +423,10 @@ function deduplicateDraws(group: DrawGroup): DrawRecord[] {
     return order.map((key) => {
         const entry = merged.get(key)!;
         const alternatives = entry.alts.flatMap((draw) =>
-            draw.conditions.length === 0 ? [[]] : draw.conditions,
+            isUnconstrained(draw.conditions) ? [[]] : draw.conditions,
         );
         entry.draw.conditions = alternatives.some((group) => group.length === 0)
-            ? []
+            ? DNF_TRUE
             : alternatives;
         entry.draw.sources = entry.sources;
         return entry.draw;

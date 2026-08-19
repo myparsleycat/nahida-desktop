@@ -11,16 +11,37 @@ const STRUCT_RE = /(\(|\)|&&|\|\||!(?!=))/;
 type IniSections = Record<string, Array<{ text: string } | string>>;
 
 export function dnfOr(left: Dnf, right: Dnf): Dnf {
+    if (sameDnf(left, DNF_TRUE) || sameDnf(right, DNF_TRUE)) {
+        return DNF_TRUE;
+    }
+    if (sameDnf(left, DNF_FALSE)) {
+        return right;
+    }
+    if (sameDnf(right, DNF_FALSE)) {
+        return left;
+    }
     const out = [...left];
     for (const group of right) {
         if (!out.some((existing) => sameGroup(existing, group))) {
             out.push(group);
         }
     }
+    if (out.some((group) => group.length === 0)) {
+        return DNF_TRUE;
+    }
     return out.length <= MAX_DNF_GROUPS ? out : DNF_TRUE;
 }
 
 export function dnfAnd(left: Dnf, right: Dnf): Dnf {
+    if (left.length === 0 || right.length === 0) {
+        return DNF_FALSE;
+    }
+    if (sameDnf(left, DNF_TRUE)) {
+        return right;
+    }
+    if (sameDnf(right, DNF_TRUE)) {
+        return left;
+    }
     if (left.length * right.length > MAX_DNF_GROUPS) {
         return DNF_TRUE;
     }
@@ -43,8 +64,17 @@ export function dnfAnd(left: Dnf, right: Dnf): Dnf {
 }
 
 export function dnfNot(dnf: Dnf): Dnf {
+    if (dnf.length === 0) {
+        return DNF_TRUE;
+    }
+    if (sameDnf(dnf, DNF_TRUE)) {
+        return DNF_FALSE;
+    }
     let result: Dnf = DNF_TRUE;
     for (const group of dnf) {
+        if (group.length === 0) {
+            return DNF_FALSE;
+        }
         result = dnfAnd(
             result,
             group.map((clause) => [
@@ -113,6 +143,12 @@ export function parseConditionDnf(
 }
 
 export function normalizeDnf(dnf: Dnf, toggleVars: Iterable<string>, varPrefix?: string): Dnf {
+    if (dnf.length === 0) {
+        return DNF_FALSE;
+    }
+    if (sameDnf(dnf, DNF_TRUE)) {
+        return DNF_TRUE;
+    }
     const tracked = new Map(
         [...toggleVars].map((variable) => [variable.toLowerCase(), variable] as const),
     );
@@ -126,7 +162,7 @@ export function normalizeDnf(dnf: Dnf, toggleVars: Iterable<string>, varPrefix?:
                 negate: clause.negate,
             }));
         if (kept.length === 0) {
-            return [];
+            return DNF_TRUE;
         }
         const prefixed = varPrefix
             ? kept.map((clause) => ({ ...clause, var: `${varPrefix}${clause.var}` }))
@@ -135,7 +171,7 @@ export function normalizeDnf(dnf: Dnf, toggleVars: Iterable<string>, varPrefix?:
             out.push(prefixed);
         }
     }
-    return out;
+    return out.length > 0 ? out : DNF_FALSE;
 }
 
 export function buildBoolAliasMap(sections: IniSections): Record<string, Dnf> {
@@ -221,8 +257,8 @@ export function dnfCovers(drawCond: Dnf, variantCond: Dnf): boolean {
     );
 }
 
-function isUnconstrained(dnf: Dnf): boolean {
-    return dnf.length === 0 || (dnf.length === 1 && dnf[0].length === 0);
+export function isUnconstrained(dnf: Dnf): boolean {
+    return dnf.length === 1 && dnf[0].length === 0;
 }
 
 function atomToDnf(
@@ -291,12 +327,7 @@ function expandComparison(
         return Number.isFinite(left) && compareOp(op, left, right);
     });
     if (matched.length === 0) {
-        return [
-            [
-                { var: variable, value: rhs, negate: false },
-                { var: variable, value: rhs, negate: true },
-            ],
-        ];
+        return DNF_FALSE;
     }
     return matched.map((value) => [{ var: variable, value, negate: false }]);
 }

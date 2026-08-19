@@ -6,6 +6,7 @@ import { applyVariableSelection, evaluateViewerState } from "@shared/mod-viewer/
 import fse from "fs-extra";
 import { afterEach, describe, it } from "vitest";
 
+import { DNF_FALSE, isUnconstrained, sameDnf } from "./dnf";
 import { buildDrawGroups, pickWwmiDumpDiffuse } from "./draw-groups";
 import { extractResources, parseIniFile } from "./ini";
 import { loadModViewerPayload } from "./load";
@@ -1197,6 +1198,43 @@ format = DXGI_FORMAT_R32_UINT
         assert.equal(first.meshes[0].visible, true);
         assert.equal(second.meshes[0].visible, true);
         assert.equal(missing.meshes[0].visible, false);
+    });
+
+    it("does not treat excluded else branch draws as visible", async () => {
+        const root = await makeMod({
+            ini: `[TextureOverrideBody]
+ib = ResourceBodyIB
+vb0 = ResourcePos
+vb1 = ResourceTc
+if 1
+    drawindexed = 3, 0, 0
+else
+    drawindexed = 3, 3, 0
+endif
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[ResourceBodyIB]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+`,
+            ib: Buffer.from(new Uint32Array([0, 1, 2, 3, 4, 5]).buffer),
+            vertexCount: 8,
+        });
+
+        const payload = await loadModViewerPayload(root);
+        assert.equal(payload.meshes.length, 2);
+        const included = payload.meshes.find((mesh) => isUnconstrained(mesh.conditions));
+        const excluded = payload.meshes.find((mesh) => sameDnf(mesh.conditions, DNF_FALSE));
+        assert.ok(included);
+        assert.ok(excluded);
+
+        const evaluated = evaluateViewerState(payload, {});
+        assert.equal(evaluated.meshes.find((mesh) => mesh.id === included.id)?.visible, true);
+        assert.equal(evaluated.meshes.find((mesh) => mesh.id === excluded.id)?.visible, false);
     });
 });
 

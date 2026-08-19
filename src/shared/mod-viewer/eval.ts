@@ -13,8 +13,11 @@ export function dnfSatisfied(
     condGroups: Dnf | undefined,
     state: Record<string, ViewerStateValue>,
 ): boolean {
-    if (!condGroups || condGroups.length === 0) {
+    if (!condGroups) {
         return true;
+    }
+    if (condGroups.length === 0) {
+        return false;
     }
 
     return condGroups.some((group) =>

@@ -8,11 +8,13 @@ import type { ShapeSlider } from "./shapes";
 
 import {
     DNF_TRUE,
+    DNF_FALSE,
     buildBoolAliasMap,
     dnfAnd,
     dnfCovers,
     dnfNot,
     dnfOr,
+    isUnconstrained,
     normalizeDnf,
     parseConditionDnf,
 } from "./dnf";
@@ -343,7 +345,7 @@ export function buildDrawGroups(
                         continue;
                     }
                     resolvedMaps.push({ conditions: assignment.cond, file });
-                    if (assignment.cond.length === 0) {
+                    if (isUnconstrained(assignment.cond)) {
                         defaultFile = file;
                     }
                 }
@@ -358,7 +360,7 @@ export function buildDrawGroups(
                 }
                 if (
                     resolvedMaps.length > 1 ||
-                    (resolvedMaps[0] && resolvedMaps[0].conditions.length > 0)
+                    (resolvedMaps[0] && !isUnconstrained(resolvedMaps[0].conditions))
                 ) {
                     if (channel === "normal_map") {
                         draw.normalMapVariants = resolvedMaps;
@@ -946,7 +948,7 @@ function resolveComponentBuffers(
             const component = base.slice(0, -"Texcoord".length);
             componentTexcoords[component] ??= info.vb1;
             componentTexcoordVariants[component] =
-                info.vb1History.length > 0 ? info.vb1History : [{ res: info.vb1, cond: [] as Dnf }];
+                info.vb1History.length > 0 ? info.vb1History : [{ res: info.vb1, cond: DNF_TRUE }];
         }
     }
     for (const [name, info] of Object.entries(secInfo)) {
@@ -970,7 +972,7 @@ function resolveComponentBuffers(
             const component = base.slice(0, -"Position".length);
             componentPositions[component] ??= info.vb0;
             componentPositionVariants[component] =
-                info.vb0History.length > 0 ? info.vb0History : [{ res: info.vb0, cond: [] as Dnf }];
+                info.vb0History.length > 0 ? info.vb0History : [{ res: info.vb0, cond: DNF_TRUE }];
         }
         const hash = extractHash(name);
         if (hash) {
@@ -1244,7 +1246,7 @@ function implicitDrawsFromIbHistory(info: SectionInfo): {
     auxDrawStates: SectionInfo["auxDrawStates"];
 } {
     const constrained = lastAssignmentByCond(
-        info.ibHistory.filter((entry) => entry.cond.length > 0),
+        info.ibHistory.filter((entry) => !isUnconstrained(entry.cond)),
     );
     if (constrained.length === 0) {
         return {
@@ -1253,7 +1255,7 @@ function implicitDrawsFromIbHistory(info: SectionInfo): {
                     count: null,
                     start: 0,
                     base: 0,
-                    conditions: [] as Dnf,
+                    conditions: DNF_TRUE,
                     source: info.src,
                     ib: undefined,
                     diffuseVariants: info.diffuseVariantsAtEnd,
@@ -1403,18 +1405,21 @@ function mergeAnimationDraws(
 }
 
 function stripAnimationVars(dnf: Dnf, animationVars: Set<string>): Dnf {
+    if (dnf.length === 0) {
+        return DNF_FALSE;
+    }
     const tracked = new Set([...animationVars].map((variable) => variable.toLowerCase()));
     const out: Dnf = [];
     for (const group of dnf) {
         const kept = group.filter((clause) => !tracked.has(clause.var.toLowerCase()));
         if (kept.length === 0) {
-            return [];
+            return DNF_TRUE;
         }
         if (!out.some((existing) => jsonDnf([existing]) === jsonDnf([kept]))) {
             out.push(kept);
         }
     }
-    return out;
+    return out.length > 0 ? out : DNF_FALSE;
 }
 
 function nonBlendVertexRes(
