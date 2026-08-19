@@ -280,7 +280,7 @@ function parseBranch(
             continue;
         }
         const incrMod = INCR_MOD_RE.exec(rhs);
-        if (incrMod && incrMod[1] === lhs) {
+        if (incrMod && incrMod[1].toLowerCase() === lhs.toLowerCase()) {
             const count = Number(incrMod[2]);
             if (count > 0) {
                 variable = lhs;
@@ -289,16 +289,24 @@ function parseBranch(
             continue;
         }
         const incr = INCR_RE.exec(rhs);
-        if (incr && incr[1] === lhs) {
+        if (incr && incr[1].toLowerCase() === lhs.toLowerCase()) {
             variable = lhs;
             values = ["0", "1"];
-            if (guard && guard.var === lhs && (guard.op === "<" || guard.op === "<=")) {
+            if (
+                guard &&
+                guard.var.toLowerCase() === lhs.toLowerCase() &&
+                (guard.op === "<" || guard.op === "<=")
+            ) {
                 wrap = { guard, depth: stack.length };
             }
             continue;
         }
         const mod = MOD_RE.exec(rhs);
-        if (mod && mod[1] === lhs && lhs === variable) {
+        if (
+            mod &&
+            mod[1].toLowerCase() === lhs.toLowerCase() &&
+            lhs.toLowerCase() === variable?.toLowerCase()
+        ) {
             const count = Number(mod[2]);
             if (count > 0) {
                 values = cycleValues(0, count - 1);
@@ -308,7 +316,12 @@ function parseBranch(
         if (!LITERAL_RE.test(rhs)) {
             continue;
         }
-        if (inWrapElse && lhs === variable && wrap?.guard.var === variable) {
+        if (
+            inWrapElse &&
+            variable &&
+            lhs.toLowerCase() === variable.toLowerCase() &&
+            wrap?.guard.var.toLowerCase() === variable.toLowerCase()
+        ) {
             const hi = Number(wrap.guard.value) + (wrap.guard.op === "<=" ? 1 : 0);
             const lo = Number(rhs);
             if (hi >= lo) {
@@ -318,8 +331,9 @@ function parseBranch(
         }
         if (
             guard &&
-            lhs === variable &&
-            guard.var === variable &&
+            variable &&
+            lhs.toLowerCase() === variable.toLowerCase() &&
+            guard.var.toLowerCase() === variable.toLowerCase() &&
             (guard.op === ">" || guard.op === ">=")
         ) {
             const hi = Number(guard.value) - (guard.op === ">=" ? 1 : 0);
