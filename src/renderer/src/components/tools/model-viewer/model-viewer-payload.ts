@@ -214,7 +214,16 @@ function applyShapeTargets(object: Mesh, weights: Record<string, number>): void 
     const attr = object.geometry.attributes.position;
     const base = userData.basePositions;
     attr.array.set(base);
-    const midpointTargets = targets.filter((target) => target.mode === "midpoint_pair");
+    const midpointTargets = targets.filter((target) => {
+        if (target.mode !== "midpoint_pair") {
+            return false;
+        }
+        const weight = Number(weights[target.var] ?? 0);
+        const endpoint =
+            weight <= 0.5 ? (target.lowPositions ?? target.positions) : target.positions;
+        return endpoint.length === base.length;
+    });
+    const divisor = midpointTargets.length || 1;
     for (const target of targets) {
         const weight = Number(weights[target.var] ?? 0);
         if (!Number.isFinite(weight)) {
@@ -227,7 +236,6 @@ function applyShapeTargets(object: Mesh, weights: Record<string, number>): void 
                 continue;
             }
             const factor = weight <= 0.5 ? 2 - weight * 4 : weight * 4 - 2;
-            const divisor = midpointTargets.length || 1;
             for (let index = 0; index < attr.array.length; index++) {
                 const shaped = base[index] + (endpoint[index] - base[index]) * factor;
                 attr.array[index] += (shaped - base[index]) / divisor;
