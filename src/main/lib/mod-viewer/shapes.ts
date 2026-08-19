@@ -385,8 +385,10 @@ export function extractShapeSliders(
             const buffer = /^cs-t(5[0-4])\s*=\s*copy\s+(\S+)$/i.exec(line);
             if (buffer) {
                 const slot = Number(buffer[1]) - 50;
-                if (slot === 0 && Object.keys(current).length === 5) {
-                    sectionSets.push(current);
+                if (slot === 0) {
+                    if (Object.keys(current).length === 5) {
+                        sectionSets.push(current);
+                    }
                     current = {};
                 }
                 current[slot] = buffer[2];
