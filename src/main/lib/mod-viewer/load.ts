@@ -4,7 +4,6 @@ import type { ViewerStateValue, ViewerVariable, ModViewerPayload } from "@shared
 
 import { animationFrameValues, extractPresentAnimations } from "./animations";
 import {
-    attachIbComponentDumpTextures,
     attachShapeSliders,
     attachWwmiDumpTextures,
     buildDrawGroups,
@@ -105,7 +104,6 @@ export async function loadModViewerPayload(modPath: string): Promise<ModViewerPa
             folderPath,
         );
         await attachWwmiDumpTextures(iniGroups, resources, folderPath);
-        attachIbComponentDumpTextures(iniGroups, resources);
         attachShapeSliders(iniGroups, shapes);
         groups.push(...iniGroups);
         Object.assign(toggleKeys, toggles);

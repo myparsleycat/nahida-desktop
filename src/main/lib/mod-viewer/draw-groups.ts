@@ -417,6 +417,7 @@ export function buildDrawGroups(
         });
     }
     const collapsed = collapseAnimationDraws(groups, animation?.vars);
+    attachIbComponentDumpTextures(collapsed, resources);
     bindHashImageTextures(collapsed, secInfo, resources, modDir);
     return collapsed;
 }

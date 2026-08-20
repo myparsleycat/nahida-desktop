@@ -1259,6 +1259,91 @@ filename = Texture/3b4647d4_2_aaaaaaa2_Hash_DiffuseMap.png
         assert.ok(component3.every((mesh) => !mesh.texKey));
     });
 
+    it("keeps per-component dump atlases when a hash-only this= leftover also exists", async () => {
+        const root = await makeMod({
+            ini: `[TextureOverride_VB_3b4647d4_Position]
+hash = 3b4647d4
+vb0 = ResourcePos
+[TextureOverride_VB_3b4647d4_Texcoord]
+hash = 3b4647d4
+vb1 = ResourceTc
+[TextureOverride_IB_3b4647d4_Component1]
+hash = 3b4647d4
+ib = Resource_3b4647d4_Component1
+drawindexed = 3, 0, 0
+[TextureOverride_IB_3b4647d4_Component2]
+hash = 3b4647d4
+ib = Resource_3b4647d4_Component2
+drawindexed = 3, 0, 0
+[TextureOverride_IB_3b4647d4_Component3]
+hash = 3b4647d4
+ib = Resource_3b4647d4_Component3
+drawindexed = 3, 0, 0
+[ResourcePos]
+filename = pos.buf
+stride = 40
+[ResourceTc]
+filename = tc.buf
+stride = 20
+[Resource_3b4647d4_Component1]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[Resource_3b4647d4_Component2]
+filename = bodyb.ib
+format = DXGI_FORMAT_R32_UINT
+[Resource_3b4647d4_Component3]
+filename = bodyc.ib
+format = DXGI_FORMAT_R32_UINT
+[Resource_Texture_aaaaaaa1]
+filename = Texture/3b4647d4_1_aaaaaaa1_Hash_DiffuseMap.png
+[Resource_Texture_aaaaaaa2]
+filename = Texture/3b4647d4_2_aaaaaaa2_Hash_DiffuseMap.png
+[TextureOverride_deadbeef]
+hash = deadbeef
+this = ResourceOther
+[ResourceOther]
+filename = other.png
+`,
+            extra: async (dir) => {
+                await fse.writeFile(
+                    path.join(dir, "bodyb.ib"),
+                    Buffer.from(new Uint32Array([0, 1, 2]).buffer),
+                );
+                await fse.writeFile(
+                    path.join(dir, "bodyc.ib"),
+                    Buffer.from(new Uint32Array([0, 1, 2]).buffer),
+                );
+                await fse.ensureDir(path.join(dir, "Texture"));
+                await fse.writeFile(
+                    path.join(dir, "Texture", "3b4647d4_1_aaaaaaa1_Hash_DiffuseMap.png"),
+                    PNG_1X1,
+                );
+                await fse.writeFile(
+                    path.join(dir, "Texture", "3b4647d4_2_aaaaaaa2_Hash_DiffuseMap.png"),
+                    PNG_2X2,
+                );
+                await fse.writeFile(path.join(dir, "other.png"), PNG_1X1);
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        const component1 = payload.meshes.filter(
+            (mesh) => mesh.component === "_IB_3b4647d4_Component1",
+        );
+        const component2 = payload.meshes.filter(
+            (mesh) => mesh.component === "_IB_3b4647d4_Component2",
+        );
+        const component3 = payload.meshes.filter(
+            (mesh) => mesh.component === "_IB_3b4647d4_Component3",
+        );
+        assert.ok(component1.length >= 1);
+        assert.ok(component2.length >= 1);
+        assert.ok(component3.length >= 1);
+        assert.ok(component1.every((mesh) => String(mesh.texKey).includes("aaaaaaa1")));
+        assert.ok(component2.every((mesh) => String(mesh.texKey).includes("aaaaaaa2")));
+        assert.ok(component3.every((mesh) => String(mesh.texKey).includes("other.png")));
+    });
+
     it("does not bind IB-Component dump textures onto BodyA sections", async () => {
         const root = await makeMod({
             ini: `[TextureOverrideBodyA]
