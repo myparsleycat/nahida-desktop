@@ -255,10 +255,12 @@ export async function uploadDriveFilesV2({
         if (packed.length >= PACK_MAX_FILES || packedBytes >= PACK_PAYLOAD_BUDGET) {
             flushPacked();
             await queue.onSizeLessThan(Math.max(1, queue.concurrency));
+            signal?.throwIfAborted();
         }
     }
     flushPacked();
     await queue.onIdle();
+    signal?.throwIfAborted();
 
     if (rejected.length > 0) {
         failures.push(

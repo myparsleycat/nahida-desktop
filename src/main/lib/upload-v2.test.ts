@@ -473,6 +473,70 @@ describe("uploadDriveFilesV2", () => {
         expect(progress.reduce((sum, event) => sum + event.bytes, 0)).toBe(10);
     });
 
+    it("propagates cancellation after the final pack flush", async () => {
+        const requestStarted = Promise.withResolvers<void>();
+        const requestFinished = Promise.withResolvers<Response>();
+        mocks.networkFetch.mockResolvedValue(
+            sseResponse([
+                {
+                    event: "complete",
+                    data: {
+                        requestId: "request-id",
+                        items: [
+                            { clientId: "first", status: "pending", intentId: "intent-a" },
+                            { clientId: "second", status: "pending", intentId: "intent-b" },
+                        ],
+                        uploads: [
+                            {
+                                intentId: "intent-a",
+                                url: "https://api.nahida.live/akasha/v2/uploads/intent-a",
+                                method: "POST",
+                                form: { token: "token-a", sha256: "a".repeat(64) },
+                            },
+                            {
+                                intentId: "intent-b",
+                                url: "https://api.nahida.live/akasha/v2/uploads/intent-b",
+                                method: "POST",
+                                form: { token: "token-b", sha256: "b".repeat(64) },
+                            },
+                        ],
+                    },
+                },
+            ]),
+        );
+        mocks.request.mockImplementation(() => {
+            requestStarted.resolve();
+            return requestFinished.promise;
+        });
+        const controller = new AbortController();
+        const upload = uploadDriveFilesV2({
+            desktop,
+            currentId: "current",
+            requestId: "request-id",
+            files: [
+                { ...file("first"), sha256: "a".repeat(64) },
+                { ...file("second"), sha256: "b".repeat(64) },
+            ],
+            queue: new PQueue({ concurrency: 1 }),
+            prepareDirectFile: async () => ({ data: Buffer.from("payload") }),
+            signal: controller.signal,
+        });
+        await requestStarted.promise;
+        controller.abort();
+        requestFinished.resolve(
+            new Response(
+                JSON.stringify({
+                    results: [
+                        { intentId: "intent-a", status: "completed", fileId: "file-a" },
+                        { intentId: "intent-b", status: "completed", fileId: "file-b" },
+                    ],
+                }),
+                { status: 200 },
+            ),
+        );
+        await expect(upload).rejects.toMatchObject({ name: "AbortError" });
+    });
+
     it("reports denied plan items as a failed upload", async () => {
         mocks.networkFetch.mockResolvedValue(
             sseResponse([
