@@ -75,6 +75,13 @@
           "dedup_lookup": "重複を確認中",
           "processing": "ファイルを処理中"
         },
+        "error": {
+          "invalid_nte_mod_file": "有効なNTE Modファイルではありません。",
+          "nte_client_upgrade_required": "NTE Modをアップロードするにはデスクトップアプリを更新してください。",
+          "nte_bundle_incomplete": "NTE Modに必要なファイルがすべてアップロードされていません。",
+          "bundle_cleanup_failed": "NTE Modの一時アップロードファイルを削除できませんでした。",
+          "upload_file_too_large": "1つのファイルは1 GiBを超えることができません。"
+        },
         "time_remaining": "残り {{time}}",
         "time_elapsed": "経過 {{time}}",
         "failed_files": "{{count}}個 失敗",

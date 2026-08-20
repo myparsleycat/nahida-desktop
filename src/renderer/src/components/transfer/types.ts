@@ -30,6 +30,7 @@ export interface TransferItemProps {
     processedFiles?: number;
     failedFiles?: number;
     error?: string;
+    errorCode?: string;
     planPhase?: PlanPhase;
     planProgress?: number | null;
 }

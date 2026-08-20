@@ -16,6 +16,7 @@ import Upload, {
     type UploadConflictStrategy,
     type UploadParams,
 } from "@main/lib/upload";
+import { uploadErrorCode } from "@main/lib/upload-v2";
 import type { LinkData } from "@main/server";
 import { BACKEND_URL } from "@shared/const";
 import type { DownloadSource } from "@shared/mod";
@@ -318,10 +319,12 @@ export class DriveService {
                 preparation,
                 abortController,
             }).catch((err) => {
+                if (abortController.signal.aborted) return;
                 this.desktop.logger.error(err, "Drive:Upload:Preprocessing");
                 void this.desktop.service.transfer.updateTransfer(pid, {
                     status: "error",
                     error: toErrorMessage(err),
+                    errorCode: uploadErrorCode(err),
                 });
             });
         },
@@ -1679,9 +1682,9 @@ export class DriveService {
             selectedPaths = dialogResult.filePaths;
         }
 
-        const isWritable = this.desktop.lib.fs.isPathWritable(selectedPaths[0]);
-        if (!isWritable) {
-            throw new Error("Path is not writable");
+        const isReadable = await this.desktop.lib.fs.isPathReadable(selectedPaths[0]);
+        if (!isReadable) {
+            throw new Error("Path is not readable");
         }
 
         return selectedPaths;
@@ -1745,6 +1748,7 @@ export class DriveService {
         pid,
         restartParams,
         preparation,
+        abortController,
     }: {
         currentId: string;
         pid: string;
@@ -1768,11 +1772,17 @@ export class DriveService {
             })),
         );
 
-        const hashedFiles = await this.upload.calculateHashes(dummyFiles, (count) => {
-            void this.desktop.service.transfer.updateTransfer(pid, {
-                transferedFiles: count,
-            });
-        });
+        const hashedFiles = await this.upload.calculateHashes(
+            dummyFiles,
+            (count) => {
+                if (abortController.signal.aborted) return;
+                void this.desktop.service.transfer.updateTransfer(pid, {
+                    transferedFiles: count,
+                });
+            },
+            abortController.signal,
+        );
+        abortController.signal.throwIfAborted();
         const fileHashes: Record<string, string> = {};
         hashedFiles.forEach((f) => {
             fileHashes[f.FID] = f.sha256;

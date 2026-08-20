@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 
 import sha256PiscinaWorker from "@main/worker/drive/sha256-piscina.worker?modulePath";
@@ -14,7 +14,7 @@ import Piscina from "piscina";
 
 import type { NahidaDesktop } from "..";
 
-import { uploadDriveFilesV2 } from "./upload-v2";
+import { uploadDriveFilesV2, uploadErrorCode } from "./upload-v2";
 
 const SYSTEM_FILE_PATTERNS = [
     /^\.DS_Store$/,
@@ -38,6 +38,19 @@ export function isSystemFile(name: string) {
 
 export function hasSystemFileSegment(path: string) {
     return path.split("/").some(isSystemFile);
+}
+
+export function assignStableUploadFileIds<T extends Omit<FilesComponent, "FID">>(files: T[]) {
+    const occurrences = new Map<string, number>();
+    return files.map((file) => {
+        const relativePath = file.path.replaceAll("\\", "/").toLowerCase();
+        const occurrence = occurrences.get(relativePath) ?? 0;
+        occurrences.set(relativePath, occurrence + 1);
+        return {
+            ...file,
+            FID: createHash("sha256").update(`${relativePath}\0${occurrence}`).digest("hex"),
+        };
+    });
 }
 
 export type FilesComponent = {
@@ -126,6 +139,9 @@ export class UploadLib {
             ".blend",
             ".pck",
             ".bin",
+            ".pak",
+            ".utoc",
+            ".ucas",
         ];
         const allowedExt = [...defaultAllowedExt, ...additionalExt].map((ext) =>
             ext.startsWith(".") ? ext.toLowerCase() : `.${ext.toLowerCase()}`,
@@ -183,15 +199,12 @@ export class UploadLib {
         const filteredDirectories = collected?.directories.filter(
             (dir) => !hasSystemFileSegment(dir.path),
         );
-        const files: FilesComponent[] = [...(filteredFiles ?? []), ...rootFiles].map((f) => ({
-            ...f,
-            FID: nanoid(),
-        }));
+        const files = assignStableUploadFileIds([...(filteredFiles ?? []), ...rootFiles]);
 
         return { files, directories: filteredDirectories ?? [] };
     }
 
-    private async isMediaByMagicNumbers(file: Buffer) {
+    private isMediaByMagicNumbers(file: Buffer) {
         const slicedBuffer = file.subarray(0, 8);
 
         const startsWith = (signature: number[]) => {
@@ -227,20 +240,11 @@ export class UploadLib {
 
         const fileSlice = file.subarray(0, 4100);
 
-        try {
-            const fileType = await fileTypeFromBuffer(fileSlice);
-            if (fileType) {
-                return fileType.mime.startsWith("image/") || fileType.mime.startsWith("video/");
-            }
-        } catch {}
-
-        if (await this.isMediaByMagicNumbers(fileSlice)) {
-            return true;
-        }
-
-        const fileType = await fileTypeFromBuffer(fileSlice);
-        const isByMimeType =
-            fileType && (fileType.mime.startsWith("image/") || fileType.mime.startsWith("video/"));
+        const fileType = await fileTypeFromBuffer(fileSlice).catch(() => undefined);
+        const isByMimeType = Boolean(
+            fileType && (fileType.mime.startsWith("image/") || fileType.mime.startsWith("video/")),
+        );
+        if (isByMimeType || this.isMediaByMagicNumbers(fileSlice)) return true;
 
         let isByName = false;
         if (name) {
@@ -249,7 +253,7 @@ export class UploadLib {
                 /\.(mp4|webm|ogg|mov|avi|flv|mkv)$/i.test(name);
         }
 
-        return isByMimeType || isByName;
+        return isByName;
     }
 
     public async calculateHashes(
@@ -270,6 +274,7 @@ export class UploadLib {
             return piscina
                 .run({ path: file.fullPath }, { signal })
                 .then((hash: string) => {
+                    signal?.throwIfAborted();
                     processedCount++;
                     const now = Date.now();
 
@@ -281,6 +286,7 @@ export class UploadLib {
                     return { ...file, sha256: hash };
                 })
                 .catch((err) => {
+                    if (signal?.aborted) throw signal.reason;
                     throw new Error(`Failed to hash ${file.name}: ${err}`);
                 });
         });
@@ -458,7 +464,12 @@ export class UploadLib {
                     return { ...f, sha256: hash };
                 });
             } else if (processedFiles && processedFiles.length === parentIdProcessedFiles.length) {
-                finalFiles = processedFiles;
+                const hashes = new Map(processedFiles.map((file) => [file.FID, file.sha256]));
+                finalFiles = parentIdProcessedFiles.map((file) => {
+                    const hash = hashes.get(file.FID);
+                    if (!hash) throw new Error(`Hash missing for file ${file.name}`);
+                    return { ...file, sha256: hash };
+                });
             } else {
                 finalFiles = await this.calculateHashes(
                     parentIdProcessedFiles,
@@ -512,6 +523,7 @@ export class UploadLib {
                     files: finalFiles,
                     totalSize,
                     onProgress: (progress: UploadProgress) => {
+                        if (abortController.signal.aborted) return;
                         if (progress.fileId) {
                             this.desktop.service.transfer.markFileCompleted(pid, progress.fileId);
                             currentUploadedCount++;
@@ -519,6 +531,7 @@ export class UploadLib {
                         currentUploadedBytes += progress.bytes;
                     },
                     onPlanProgress: (progress) => {
+                        if (abortController.signal.aborted) return;
                         void this.desktop.service.transfer.updateTransfer(pid, {
                             planPhase: progress.phase,
                             planProgress:
@@ -528,6 +541,7 @@ export class UploadLib {
                         });
                     },
                     onPlanComplete: () => {
+                        if (abortController.signal.aborted) return;
                         void this.desktop.service.transfer.updateTransfer(pid, {
                             status: "progress",
                             transferedSize: currentUploadedBytes,
@@ -563,6 +577,7 @@ export class UploadLib {
             void this.desktop.service.transfer.updateTransfer(pid, {
                 status: "error",
                 error: toErrorMessage(err),
+                errorCode: uploadErrorCode(err),
             });
             throw err;
         }

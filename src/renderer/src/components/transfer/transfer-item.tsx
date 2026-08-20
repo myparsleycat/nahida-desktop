@@ -35,6 +35,7 @@ const TransferItemActions = memo(
     onCancel,
     onRetry,
     failedFiles,
+    errorCode,
   }: Pick<
     TransferItemProps,
     | "id"
@@ -46,6 +47,7 @@ const TransferItemActions = memo(
     | "onCancel"
     | "onRetry"
     | "failedFiles"
+    | "errorCode"
   >) => {
     const { t } = useTranslation();
 
@@ -55,6 +57,9 @@ const TransferItemActions = memo(
     const isFailed = status === "failed";
     const isCompleted = status === "completed";
     const hasFailedFiles = (failedFiles || 0) > 0;
+    const canRetry = !["invalid_nte_mod_file", "nte_client_upgrade_required"].includes(
+      errorCode ?? "",
+    );
 
     return (
       <div className="flex shrink-0 items-center gap-1">
@@ -69,7 +74,7 @@ const TransferItemActions = memo(
           </Button>
         )}
 
-        {isFailed && (
+        {isFailed && canRetry && (
           <Button
             variant="ghost"
             size="icon"
@@ -111,12 +116,12 @@ const TransferItemActions = memo(
                 {t("page.transfer.item.dropdown_menu.cancel")}
               </DropdownMenuItem>
             )}
-            {isFailed && (
+            {isFailed && canRetry && (
               <DropdownMenuItem onClick={() => onRetry?.(id)}>
                 {t("page.transfer.item.dropdown_menu.retry")}
               </DropdownMenuItem>
             )}
-            {!isFailed && hasFailedFiles && (
+            {!isFailed && hasFailedFiles && canRetry && (
               <DropdownMenuItem onClick={() => onRetry?.(id)}>
                 {t("page.transfer.item.dropdown_menu.retry_failed_files")}
               </DropdownMenuItem>
@@ -160,6 +165,7 @@ export const TransferItem = memo((props: TransferItemProps) => {
     processedFiles,
     failedFiles,
     error,
+    errorCode,
     planPhase,
     planProgress,
   } = props;
@@ -170,6 +176,9 @@ export const TransferItem = memo((props: TransferItemProps) => {
   const isCompleted = status === "completed";
   const isFailed = status === "failed";
   const isPlanning = status === "uploading" && planPhase != null;
+  const translatedError = errorCode
+    ? t(`page.transfer.item.error.${errorCode}`, { defaultValue: error ?? errorCode })
+    : error;
 
   return (
     <div className="group grid w-full max-w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 overflow-hidden rounded-lg border bg-card p-4 transition-all hover:border-accent">
@@ -215,7 +224,7 @@ export const TransferItem = memo((props: TransferItemProps) => {
                       {t(`page.transfer.item.${status}`)}
                     </span>
                   </DialogTrigger>
-                  <DialogContent>{error}</DialogContent>
+                  <DialogContent>{translatedError}</DialogContent>
                 </Dialog>
               );
             } else {
@@ -281,6 +290,7 @@ export const TransferItem = memo((props: TransferItemProps) => {
         onCancel={onCancel}
         onRetry={onRetry}
         failedFiles={failedFiles}
+        errorCode={errorCode}
       />
     </div>
   );

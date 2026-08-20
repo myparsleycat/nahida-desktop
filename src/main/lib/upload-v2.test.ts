@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NahidaDesktop } from "..";
 import type { FinalFile, UploadProgress } from "./upload";
 
-import { uploadDriveFilesV2 } from "./upload-v2";
+import { MAX_UPLOAD_FILE_SIZE, paginateUploadFiles, uploadDriveFilesV2 } from "./upload-v2";
 
 const mocks = vi.hoisted(() => ({
     networkFetch: vi.fn(),
@@ -43,6 +43,14 @@ function file(id: string): FinalFile {
     };
 }
 
+function nteFile(id: string, extension: "pak" | "utoc" | "ucas"): FinalFile {
+    return {
+        ...file(id),
+        path: `mod.${extension}`,
+        name: `mod.${extension}`,
+    };
+}
+
 function sseResponse(events: Array<{ event: string; data: unknown }>): Response {
     const lines = events.flatMap((e) => {
         const dataStr = typeof e.data === "string" ? e.data : JSON.stringify(e.data);
@@ -71,6 +79,222 @@ function sseResponseText(events: Array<{ event: string; data: string }>): Respon
 describe("uploadDriveFilesV2", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+    });
+
+    it("keeps an NTE group together across 500-file plan pages", () => {
+        const ordinary = Array.from({ length: 499 }, (_, index) => file(`ordinary-${index}`));
+        const nte = [nteFile("pak", "pak"), nteFile("utoc", "utoc"), nteFile("ucas", "ucas")];
+
+        const pages = paginateUploadFiles([...ordinary, ...nte]);
+
+        expect(pages.map((page) => page.length)).toEqual([499, 3]);
+        expect(pages[1].map((entry) => entry.FID)).toEqual(["pak", "utoc", "ucas"]);
+    });
+
+    it("rejects an NTE group that cannot fit in one plan page", () => {
+        const files = Array.from({ length: 501 }, (_, index) => ({
+            ...nteFile(`ucas-${index}`, "ucas"),
+            name: index === 0 ? "mod.ucas" : `mod_s${index}.ucas`,
+        }));
+
+        expect(() => paginateUploadFiles(files)).toThrow("nte_bundle_too_large");
+    });
+
+    it("sends the NTE capability in every plan request", async () => {
+        mocks.networkFetch.mockResolvedValue(
+            sseResponse([
+                {
+                    event: "complete",
+                    data: {
+                        items: [{ clientId: "first", status: "created", itemId: "one" }],
+                        uploads: [],
+                        nteBundles: [],
+                    },
+                },
+            ]),
+        );
+
+        await uploadDriveFilesV2({
+            desktop,
+            currentId: "current",
+            requestId: "request-id",
+            files: [file("first")],
+            queue: new PQueue({ concurrency: 1 }),
+            prepareDirectFile: async () => ({ data: Buffer.from("unused") }),
+        });
+
+        expect(
+            JSON.parse(String(mocks.networkFetch.mock.calls[0][1]?.body)) as unknown,
+        ).toMatchObject({ capabilities: ["nte-bundle-v1"] });
+    });
+
+    it("accepts exactly 1 GiB and rejects one byte more without allocating the file", async () => {
+        const exact = { ...file("exact"), size: MAX_UPLOAD_FILE_SIZE };
+        mocks.networkFetch.mockResolvedValue(
+            sseResponse([
+                {
+                    event: "complete",
+                    data: {
+                        items: [{ clientId: "exact", status: "created", itemId: "one" }],
+                        uploads: [],
+                    },
+                },
+            ]),
+        );
+
+        await expect(
+            uploadDriveFilesV2({
+                desktop,
+                currentId: "current",
+                requestId: "request-id",
+                files: [exact],
+                queue: new PQueue({ concurrency: 1 }),
+                prepareDirectFile: async () => ({ data: Buffer.from("unused") }),
+            }),
+        ).resolves.toBeUndefined();
+        await expect(
+            uploadDriveFilesV2({
+                desktop,
+                currentId: "current",
+                requestId: "request-id",
+                files: [{ ...exact, size: MAX_UPLOAD_FILE_SIZE + 1 }],
+                queue: new PQueue({ concurrency: 1 }),
+                prepareDirectFile: async () => ({ data: Buffer.from("unused") }),
+            }),
+        ).rejects.toMatchObject({ code: "upload_file_too_large" });
+        expect(mocks.networkFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("stages NTE members and marks them complete only after bundle finalization", async () => {
+        const utoc = nteFile("utoc", "utoc");
+        const ucas = nteFile("ucas", "ucas");
+        mocks.networkFetch.mockResolvedValue(
+            sseResponse([
+                {
+                    event: "complete",
+                    data: {
+                        items: [
+                            {
+                                clientId: "utoc",
+                                status: "pending",
+                                intentId: "intent-utoc",
+                                bundleId: "bundle",
+                            },
+                            {
+                                clientId: "ucas",
+                                status: "pending",
+                                intentId: "intent-ucas",
+                                bundleId: "bundle",
+                            },
+                        ],
+                        uploads: [
+                            {
+                                intentId: "intent-utoc",
+                                url: "https://api.nahida.live/uploads/intent-utoc",
+                                method: "POST",
+                                form: { token: "upload-token", sha256: "a".repeat(64) },
+                            },
+                        ],
+                        nteBundles: [
+                            {
+                                id: "bundle",
+                                memberClientIds: ["utoc", "ucas"],
+                                completeUrl:
+                                    "https://api.nahida.live/upload-bundles/bundle/complete",
+                                abortUrl: "https://api.nahida.live/upload-bundles/bundle/abort",
+                                form: { token: "bundle-token" },
+                            },
+                        ],
+                    },
+                },
+            ]),
+        );
+        const order: string[] = [];
+        mocks.request.mockImplementation(async () => {
+            order.push("upload");
+            return new Response(JSON.stringify({ status: "completed" }), { status: 200 });
+        });
+        mocks.post.mockImplementation(async () => {
+            order.push("complete");
+            return new Response(JSON.stringify({ status: "completed" }), { status: 200 });
+        });
+
+        await uploadDriveFilesV2({
+            desktop,
+            currentId: "current",
+            requestId: "request-id",
+            files: [utoc, ucas],
+            queue: new PQueue({ concurrency: 2 }),
+            prepareDirectFile: async () => ({ data: Buffer.from("payload") }),
+            onProgress: (progress) => {
+                if (progress.fileId) order.push(`ready:${progress.fileId}`);
+            },
+        });
+
+        expect(order).toEqual(["upload", "complete", "ready:utoc", "ready:ucas"]);
+    });
+
+    it("aborts only the invalid NTE bundle and preserves the structured error code", async () => {
+        const utoc = nteFile("utoc", "utoc");
+        const ucas = nteFile("ucas", "ucas");
+        mocks.networkFetch.mockResolvedValue(
+            sseResponse([
+                {
+                    event: "complete",
+                    data: {
+                        items: [
+                            {
+                                clientId: "utoc",
+                                status: "pending",
+                                intentId: "dedup-utoc",
+                                bundleId: "bundle",
+                            },
+                            {
+                                clientId: "ucas",
+                                status: "pending",
+                                intentId: "dedup-ucas",
+                                bundleId: "bundle",
+                            },
+                        ],
+                        uploads: [],
+                        nteBundles: [
+                            {
+                                id: "bundle",
+                                memberClientIds: ["utoc", "ucas"],
+                                completeUrl:
+                                    "https://api.nahida.live/upload-bundles/bundle/complete",
+                                abortUrl: "https://api.nahida.live/upload-bundles/bundle/abort",
+                                form: { token: "bundle-token" },
+                            },
+                        ],
+                    },
+                },
+            ]),
+        );
+        mocks.post
+            .mockResolvedValueOnce(
+                new Response(JSON.stringify({ code: "invalid_nte_mod_file" }), { status: 400 }),
+            )
+            .mockResolvedValueOnce(
+                new Response(JSON.stringify({ status: "cancelled" }), { status: 200 }),
+            );
+        const progress: UploadProgress[] = [];
+
+        await expect(
+            uploadDriveFilesV2({
+                desktop,
+                currentId: "current",
+                requestId: "request-id",
+                files: [utoc, ucas],
+                queue: new PQueue({ concurrency: 2 }),
+                prepareDirectFile: async () => ({ data: Buffer.from("unused") }),
+                onProgress: (event) => progress.push(event),
+            }),
+        ).rejects.toMatchObject({ code: "invalid_nte_mod_file" });
+        expect(mocks.request).not.toHaveBeenCalled();
+        expect(mocks.post).toHaveBeenCalledTimes(2);
+        expect(progress.reduce((total, event) => total + event.bytes, 0)).toBe(0);
+        expect(progress.every((event) => event.fileId === undefined)).toBe(true);
     });
 
     it("marks files materialized by the plan as server-deduplicated", async () => {

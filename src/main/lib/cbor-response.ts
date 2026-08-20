@@ -51,8 +51,13 @@ export async function jsonResponseFromBody(
 function parseDecodedHttpResult(status: number, value: unknown) {
     if (typeof value === "string") return { status, reason: value };
     if (value && typeof value === "object") {
-        const payload = value as { status?: string; reason?: string; message?: string };
-        return { status, payload, reason: payload.reason ?? payload.message };
+        const payload = value as {
+            status?: string;
+            reason?: string;
+            message?: string;
+            code?: string;
+        };
+        return { status, payload, reason: payload.reason ?? payload.message ?? payload.code };
     }
     return { status };
 }

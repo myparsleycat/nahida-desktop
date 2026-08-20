@@ -20,6 +20,7 @@ export interface LocalTransfer extends Transfer {
     sessionStartBytes: number;
     speedSamples: Array<{ timestamp: number; bytes: number }>;
     error?: string;
+    errorCode?: string;
 }
 
 const MIB = 1024 * 1024;
@@ -379,6 +380,7 @@ export class TransferService {
 
         transfer.failedFiles = 0;
         transfer.error = undefined;
+        transfer.errorCode = undefined;
         this.emitUpdate();
         void this.processQueue();
     }
@@ -537,6 +539,7 @@ export class TransferService {
             transfer.transferedFiles = 0;
             transfer.failedFiles = 0;
             transfer.error = undefined;
+            transfer.errorCode = undefined;
             this.emitUpdate();
         }
     }

@@ -75,6 +75,13 @@
           "dedup_lookup": "중복 확인 중",
           "processing": "파일 처리 중"
         },
+        "error": {
+          "invalid_nte_mod_file": "유효한 NTE 모드 파일이 아닙니다.",
+          "nte_client_upgrade_required": "NTE 모드 업로드를 사용하려면 데스크톱 앱을 업데이트해야 합니다.",
+          "nte_bundle_incomplete": "NTE 모드에 필요한 파일이 모두 업로드되지 않았습니다.",
+          "bundle_cleanup_failed": "NTE 모드 임시 업로드 파일을 정리하지 못했습니다.",
+          "upload_file_too_large": "단일 파일은 1GiB를 초과할 수 없습니다."
+        },
         "time_remaining": "{{time}} 남음",
         "time_elapsed": "{{time}} 경과",
         "failed_files": "{{count}}개 실패",
