@@ -3,7 +3,7 @@ import { enUS, ko, zhCN } from "date-fns/locale";
 import { isNil } from "es-toolkit";
 import { type FilesizeOptions, filesize } from "filesize";
 
-import type { TextureUpscaleScale } from "./types";
+import type { TextureUpscaleEngine, TextureUpscaleScale } from "./types";
 
 export interface TextureResizeCandidate {
     width: number;
@@ -148,6 +148,9 @@ export const TEXTURE_UPSCALE_MODELS = [
     "realesr-animevideov3",
     "realesrgan-x4plus-anime",
     "realesrgan-x4plus",
+    "realcugan-pro",
+    "realcugan-se",
+    "realcugan-nose",
 ] as const;
 
 const UNSUPPORTED_UPSCALE_FORMAT_MARKERS = ["BC4", "BC5", "BC6H"] as const;
@@ -162,9 +165,21 @@ export function isUnsupportedTextureUpscaleFormat(format: string) {
     return UNSUPPORTED_UPSCALE_FORMAT_MARKERS.some((marker) => format.includes(marker));
 }
 
+export function getTextureUpscaleEngine(model: string): TextureUpscaleEngine {
+    return model.startsWith("realcugan") ? "realcugan" : "realesrgan";
+}
+
 export function getAvailableTextureUpscaleScales(model: string): readonly TextureUpscaleScale[] {
-    if (model === "realesr-animevideov3") {
+    if (model === "realesr-animevideov3" || model === "realcugan-se") {
         return TEXTURE_UPSCALE_SCALES;
+    }
+
+    if (model === "realcugan-pro") {
+        return [2, 3];
+    }
+
+    if (model === "realcugan-nose") {
+        return [2];
     }
 
     return [4];

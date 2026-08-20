@@ -9,7 +9,27 @@ vi.mock("@native/mod-tools", () => ({
 }));
 
 vi.mock("./realesrgan-runtime", () => ({
-    RealesrganRuntime: class {},
+    RealesrganRuntime: class {
+        getStatus = vi.fn(async () => ({
+            installed: false,
+            version: null,
+            binaryPath: null,
+            modelsPath: null,
+            needsInstall: true,
+        }));
+    },
+}));
+
+vi.mock("./realcugan-runtime", () => ({
+    RealcuganRuntime: class {
+        getStatus = vi.fn(async () => ({
+            installed: false,
+            version: null,
+            binaryPath: null,
+            modelsPath: null,
+            needsInstall: true,
+        }));
+    },
 }));
 
 import type { NahidaDesktop } from "@main/index";
@@ -76,6 +96,26 @@ function createResizer() {
 }
 
 describe("texture resizer settings", () => {
+    it("reports runtime status for both upscale engines", async () => {
+        const { resizer } = createResizer();
+        await expect(resizer.getUpscaleRuntimeStatus()).resolves.toEqual({
+            realesrgan: {
+                installed: false,
+                version: null,
+                binaryPath: null,
+                modelsPath: null,
+                needsInstall: true,
+            },
+            realcugan: {
+                installed: false,
+                version: null,
+                binaryPath: null,
+                modelsPath: null,
+                needsInstall: true,
+            },
+        });
+    });
+
     it("merges upscale settings and clamps x4plus models to 4x", () => {
         const merged = mergeTextureResizeSettings(
             {

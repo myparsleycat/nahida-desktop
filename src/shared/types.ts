@@ -117,10 +117,14 @@ export type TextureResizeOperation =
     | "upscale_and_convert";
 export type TextureColorSpace = "srgb" | "linear" | "unknown";
 export type TextureUpscaleScale = 2 | 3 | 4;
+export type TextureUpscaleEngine = "realesrgan" | "realcugan";
 export type TextureUpscaleModel =
     | "realesr-animevideov3"
     | "realesrgan-x4plus-anime"
-    | "realesrgan-x4plus";
+    | "realesrgan-x4plus"
+    | "realcugan-pro"
+    | "realcugan-se"
+    | "realcugan-nose";
 
 export interface TextureResizeSettings {
     mode: TextureResizeMode;
@@ -140,6 +144,11 @@ export interface TextureUpscaleRuntimeStatus {
     binaryPath: string | null;
     modelsPath: string | null;
     needsInstall: boolean;
+}
+
+export interface TextureUpscaleRuntimeStatuses {
+    realesrgan: TextureUpscaleRuntimeStatus;
+    realcugan: TextureUpscaleRuntimeStatus;
 }
 
 export interface TextureUpscaleProgressEvent {

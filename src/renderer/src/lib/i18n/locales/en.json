@@ -956,19 +956,25 @@
           "resize": "Only change the texture size. The DDS format stays the same.",
           "resize_and_convert": "Resize the texture and re-encode it to a different DDS format while preserving color space.",
           "convert": "Keep the original texture size and only change the DDS output format.",
-          "upscale": "Enlarge the texture with Real-ESRGAN. The DDS format stays the same.",
-          "upscale_and_convert": "Enlarge the texture with Real-ESRGAN and re-encode it to a different DDS format."
+          "upscale": "Enlarge the texture with an AI upscaler. The DDS format stays the same.",
+          "upscale_and_convert": "Enlarge the texture with an AI upscaler and re-encode it to a different DDS format."
         },
         "upscale_model": "Upscale model",
         "upscale_model_options": {
           "realesr-animevideov3": "Anime / game (default)",
           "realesrgan-x4plus-anime": "Anime x4+",
-          "realesrgan-x4plus": "Photo x4+"
+          "realesrgan-x4plus": "Photo x4+",
+          "realcugan-pro": "Real-CUGAN Pro",
+          "realcugan-se": "Real-CUGAN SE",
+          "realcugan-nose": "Real-CUGAN Nose"
         },
         "upscale_model_descriptions": {
           "realesr-animevideov3": "Best default for game and anime textures. Supports 2x, 3x, and 4x.",
           "realesrgan-x4plus-anime": "Higher-quality anime model. Fixed 4x scale.",
-          "realesrgan-x4plus": "Photo / realistic model. Fixed 4x scale."
+          "realesrgan-x4plus": "Photo / realistic model. Fixed 4x scale.",
+          "realcugan-pro": "High-quality anime model. Supports 2x and 3x.",
+          "realcugan-se": "Balanced anime model. Supports 2x, 3x, and 4x.",
+          "realcugan-nose": "Lightest and fastest model. Fixed 2x scale."
         },
         "upscale_scale": "Scale",
         "upscale_scale_option": "{{scale}}x",
