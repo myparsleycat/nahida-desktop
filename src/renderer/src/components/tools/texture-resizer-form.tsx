@@ -455,9 +455,8 @@ export function TextureResizerForm({
                 disabled={disabled}
                 onChange={(event) => {
                   const parsed = Number.parseInt(event.target.value, 10);
-                  if (!Number.isFinite(parsed)) return;
                   updateSettings({
-                    customWidth: parsed,
+                    customWidth: Number.isFinite(parsed) ? parsed : 0,
                     mode: "custom",
                   });
                 }}
@@ -481,9 +480,8 @@ export function TextureResizerForm({
                 disabled={disabled}
                 onChange={(event) => {
                   const parsed = Number.parseInt(event.target.value, 10);
-                  if (!Number.isFinite(parsed)) return;
                   updateSettings({
-                    customHeight: parsed,
+                    customHeight: Number.isFinite(parsed) ? parsed : 0,
                     mode: "custom",
                   });
                 }}

@@ -36,7 +36,7 @@ import {
 } from "@shared/utils";
 import { useForm } from "@tanstack/react-form";
 import { FolderOpenIcon, ImageIcon, Loader2Icon, RefreshCwIcon } from "lucide-react";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -80,6 +80,7 @@ export function TextureResizerWorkspace({
     Record<string, TextureResizeSettings>
   >({});
   const [upscaleProgress, setUpscaleProgress] = useState<TextureUpscaleProgressEvent | null>(null);
+  const batchRunningRef = useRef(false);
   const settingsForm = useForm({
     defaultValues: DEFAULT_SETTINGS,
     onSubmit: async () => {},
@@ -257,7 +258,7 @@ export function TextureResizerWorkspace({
   };
 
   const processSelectedTextures = async (dialogSettings: TextureResizeSettings) => {
-    if (batchProgress != null) {
+    if (batchRunningRef.current) {
       return;
     }
 
@@ -265,6 +266,8 @@ export function TextureResizerWorkspace({
     if (selected.length === 0) {
       return;
     }
+
+    batchRunningRef.current = true;
 
     const flushedPerTexture = activeDialogTexturePath
       ? {
@@ -279,8 +282,8 @@ export function TextureResizerWorkspace({
     let updated = 0;
     let failed = 0;
     let skipped = 0;
-    let lastSettings = dialogSettings;
     let lastFileResult: TextureResizeFileResult | undefined;
+    let errorMessage: string | undefined;
 
     for (const [index, texture] of selected.entries()) {
       setBatchProgress({ current: index + 1, total: selected.length });
@@ -288,7 +291,6 @@ export function TextureResizerWorkspace({
         bulkApply || selected.length === 1
           ? adaptSettingsForTexture(dialogSettings, texture)
           : (flushedPerTexture[texture.filePath] ?? dialogSettings);
-      lastSettings = nextSettings;
 
       if (!canRun(nextSettings, texture)) {
         skipped += 1;
@@ -297,7 +299,6 @@ export function TextureResizerWorkspace({
 
       setRunningFilePath(texture.filePath);
       setUpscaleProgress(null);
-      settingsForm.reset(nextSettings);
       try {
         const nextResult = await window.api.invoke("tools:resizeTextureFile", {
           filePath: texture.filePath,
@@ -314,14 +315,16 @@ export function TextureResizerWorkspace({
           continue;
         }
         skipped += 1;
-      } catch {
+      } catch (error) {
         failed += 1;
+        errorMessage ??= toErrorMessage(error);
       }
     }
 
     setRunningFilePath(null);
     setUpscaleProgress(null);
     setBatchProgress(null);
+    batchRunningRef.current = false;
     setDialogOpen(false);
     setSelectedPaths(new Set());
 
@@ -331,10 +334,11 @@ export function TextureResizerWorkspace({
       failed,
       skipped,
       lastFileResult,
+      errorMessage,
     });
 
     if (loadedTargetPath) {
-      await loadTextures(loadedTargetPath, lastSettings);
+      await loadTextures(loadedTargetPath, dialogSettings);
     }
   };
 
@@ -790,10 +794,7 @@ function adaptSettingsForTexture(
       ? settings.outputFormat
       : texture.outputFormatDefault;
 
-  if (
-    (settings.operation === "resize_and_convert" || settings.operation === "convert") &&
-    !texture.canConvertFormat
-  ) {
+  if (settings.operation === "resize_and_convert" && !texture.canConvertFormat) {
     return {
       ...settings,
       operation: "resize",
@@ -959,6 +960,7 @@ function showTextureResizeResultToast(
     failed: number;
     skipped: number;
     lastFileResult?: TextureResizeFileResult;
+    errorMessage?: string;
   },
 ) {
   const description = t("page.tools.texture_resizer.toast.completed_description", {
@@ -974,9 +976,16 @@ function showTextureResizeResultToast(
     return;
   }
 
+  if (result.selectedCount === 1 && result.failed > 0) {
+    toast.error(t("page.tools.texture_resizer.toast.failed"), {
+      description: result.errorMessage ?? description,
+    });
+    return;
+  }
+
   if (result.updated === 0 && result.failed > 0) {
     toast.error(t("page.tools.texture_resizer.toast.failed"), {
-      description,
+      description: result.errorMessage ? `${description}\n${result.errorMessage}` : description,
     });
     return;
   }
@@ -984,6 +993,13 @@ function showTextureResizeResultToast(
   if (result.updated === 0) {
     toast.warning(t("page.tools.texture_resizer.toast.none_processed"), {
       description,
+    });
+    return;
+  }
+
+  if (result.failed > 0) {
+    toast.warning(t("page.tools.texture_resizer.toast.completed"), {
+      description: result.errorMessage ? `${description}\n${result.errorMessage}` : description,
     });
     return;
   }
