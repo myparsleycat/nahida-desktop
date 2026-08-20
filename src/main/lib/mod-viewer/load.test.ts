@@ -36,6 +36,25 @@ function makeColorPng(width = 16, height = 16) {
     return PNG.sync.write(png);
 }
 
+function makePngIhdr(width: number, height: number) {
+    const header = Buffer.alloc(24);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(header);
+    header.writeUInt32BE(13, 8);
+    header.write("IHDR", 12);
+    header.writeUInt32BE(width, 16);
+    header.writeUInt32BE(height, 20);
+    return header;
+}
+
+function makeDdsHeader(width: number, height: number) {
+    const header = Buffer.alloc(128);
+    header.write("DDS ", 0);
+    header.writeUInt32LE(124, 4);
+    header.writeUInt32LE(height, 12);
+    header.writeUInt32LE(width, 16);
+    return header;
+}
+
 function makeFlatPng(width = 16, height = 16) {
     const png = new PNG({ width, height });
     for (let index = 0; index < width * height; index++) {
@@ -1956,6 +1975,90 @@ filename = Textures/Components-3 t=742c5c7b.png
         assert.ok(payload.meshes.length >= 2);
         assert.ok(payload.meshes.every((mesh) => String(mesh.texKey).includes("742c5c7b.png")));
         assert.ok(payload.meshes.every((mesh) => !String(mesh.texKey).includes("e02d9167")));
+    });
+
+    it("skips decoding oversized PNG candidates using IHDR area", async () => {
+        const root = await makeMod({
+            ini: `[TextureOverrideComponent3]
+hash = 8d8097bc
+ib = ResourceIndexBuffer
+vb0 = ResourcePositionBuffer
+vb1 = ResourceTexCoordBuffer
+ps-t0 = ResourceTexture35
+drawindexed = 3, 0, 0
+[ResourcePositionBuffer]
+filename = pos.buf
+stride = 40
+[ResourceTexCoordBuffer]
+filename = tc.buf
+stride = 20
+[ResourceIndexBuffer]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceTexture35]
+filename = Textures/Components-3 t=7d8d1ae0.png
+[ResourceTexture4]
+filename = Textures/Components-3 t=f58624fb.png
+`,
+            extra: async (dir) => {
+                await fse.ensureDir(path.join(dir, "Textures"));
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-3 t=7d8d1ae0.png"),
+                    makePngIhdr(8192, 8192),
+                );
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-3 t=f58624fb.png"),
+                    makeColorPng(),
+                );
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        assert.ok(payload.meshes.length >= 1);
+        assert.ok(payload.meshes.every((mesh) => String(mesh.texKey).includes("7d8d1ae0.png")));
+        assert.ok(payload.meshes.every((mesh) => !String(mesh.texKey).includes("f58624fb")));
+    });
+
+    it("skips decoding oversized DDS candidates using header area", async () => {
+        const root = await makeMod({
+            ini: `[TextureOverrideComponent3]
+hash = 8d8097bc
+ib = ResourceIndexBuffer
+vb0 = ResourcePositionBuffer
+vb1 = ResourceTexCoordBuffer
+ps-t0 = ResourceTexture35
+drawindexed = 3, 0, 0
+[ResourcePositionBuffer]
+filename = pos.buf
+stride = 40
+[ResourceTexCoordBuffer]
+filename = tc.buf
+stride = 20
+[ResourceIndexBuffer]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceTexture35]
+filename = Textures/Components-3 t=7d8d1ae0.dds
+[ResourceTexture4]
+filename = Textures/Components-3 t=f58624fb.png
+`,
+            extra: async (dir) => {
+                await fse.ensureDir(path.join(dir, "Textures"));
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-3 t=7d8d1ae0.dds"),
+                    makeDdsHeader(8192, 8192),
+                );
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-3 t=f58624fb.png"),
+                    makeColorPng(),
+                );
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        assert.ok(payload.meshes.length >= 1);
+        assert.equal(payload.meshes[0]?.texKey, null);
+        assert.ok(Object.keys(payload.textures).every((key) => !key.includes("f58624fb")));
     });
 
     it("replaces unnamed WWMI ps-t0 when it is a flat color map", async () => {

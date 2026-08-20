@@ -54,6 +54,7 @@ const HASH_TEXTURE_SUFFIX = /(Diffuse|NormalMap|LightMap|MaterialMap)$/i;
 const WWMI_DUMP_TEX_RE = /(?:^|[/\\])Components-(\d+(?:-\d+)*)\s+t=/i;
 const MAX_HINT_DECODE_BYTES = 32 * 1024 * 1024;
 const MAX_HINT_DECODE_AREA = 4096 * 4096;
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const IB_COMPONENT_DUMP_RE =
     /(?:^|[/\\])([0-9a-f]{8})_(\d+)_([0-9a-f]{8})_Hash_(DiffuseMap|LightMap|NormalMap|MaterialMap)\./i;
 const DDS_SRGB_DXGI = new Set([29, 72, 75, 78, 91, 93, 99]);
@@ -915,11 +916,12 @@ async function inspectWwmiTextureHint(filePath: string): Promise<WwmiTextureHint
     const bytes = (await fse.stat(filePath)).size;
     const ext = path.extname(filePath).toLowerCase();
     if (ext === ".png") {
-        if (bytes > MAX_HINT_DECODE_BYTES) {
+        const area = pngIhdrArea(await readFilePrefix(filePath, 24)) ?? 0;
+        if (bytes > MAX_HINT_DECODE_BYTES || area > MAX_HINT_DECODE_AREA) {
             return {
                 srgb: true,
                 colorSpace: "srgb",
-                area: 0,
+                area,
                 bytes,
                 isLikelyFlat: false,
                 isLikelyNormal: false,
@@ -975,7 +977,12 @@ async function inspectWwmiTextureHint(filePath: string): Promise<WwmiTextureHint
     const srgbState = parseDdsSrgbState(header);
     const colorSpace = srgbState === true ? "srgb" : srgbState === false ? "linear" : "unknown";
     const packedFormat = DDS_PACKED_FOURCC.has(fourcc) || DDS_PACKED_DXGI.has(dxgi);
-    if (colorSpace === "linear" || packedFormat || area > MAX_HINT_DECODE_AREA) {
+    if (
+        colorSpace === "linear" ||
+        packedFormat ||
+        area > MAX_HINT_DECODE_AREA ||
+        bytes > MAX_HINT_DECODE_BYTES
+    ) {
         return {
             srgb: colorSpace === "srgb",
             colorSpace,
@@ -993,6 +1000,22 @@ async function inspectWwmiTextureHint(filePath: string): Promise<WwmiTextureHint
         area,
         bytes,
     );
+}
+
+function pngIhdrArea(header: Buffer): number | undefined {
+    if (
+        header.length < 24 ||
+        !header.subarray(0, 8).equals(PNG_SIGNATURE) ||
+        header.toString("ascii", 12, 16) !== "IHDR"
+    ) {
+        return undefined;
+    }
+    const width = header.readUInt32BE(16);
+    const height = header.readUInt32BE(20);
+    if (width === 0 || height === 0) {
+        return undefined;
+    }
+    return width * height;
 }
 
 function hintFromAnalysis(
