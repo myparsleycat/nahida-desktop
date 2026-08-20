@@ -175,6 +175,7 @@ export async function getNteSubGroups(
             const nextPath = path.join(groupDir, groupName);
 
             if (await hasDirectPak(nextPath)) return null;
+            if (await isNtePakWrapper(nextPath)) return null;
 
             const preview = await findPreview(nextPath);
             const modCounts = await countDirectMods(nextPath);
@@ -201,19 +202,16 @@ export async function getNteMods(
 ): Promise<FolderGroup> {
     const relativePath = getNteRelativePath(roots, groupPath);
     const groupDir = path.join(roots.modRoot, relativePath);
-    const modNames = await listDirectoryNames(groupDir);
     const mods = (
         await Promise.all(
-            modNames.map(async (modName) => {
-                const modPath = path.join(groupDir, modName);
-                if (!(await hasDirectPak(modPath))) return null;
-
-                return await createNteModInfo(desktop, modPath, await isNteModEnabled(modPath));
-            }),
+            (await collectNteModEntries(groupDir)).map(async (entry) =>
+                createNteModInfo(desktop, entry.modPath, await isNteModEnabled(entry.modPath), {
+                    name: entry.name,
+                    previewFallbackDir: entry.previewFallbackDir,
+                }),
+            ),
         )
-    )
-        .filter((mod) => mod !== null)
-        .sort((a, b) => a.name.localeCompare(b.name));
+    ).sort((a, b) => a.name.localeCompare(b.name));
 
     const preview = await findPreview(groupDir);
     return {
@@ -310,6 +308,16 @@ export async function setNteModEnabled(
 
 export async function hasNteDirectPak(dirPath: string) {
     return await hasDirectPak(dirPath);
+}
+
+export async function listNteModPaths(groupDir: string) {
+    return (await collectNteModEntries(groupDir)).map((entry) => entry.modPath);
+}
+
+export async function getNteListingGroupPath(modPath: string) {
+    const parentPath = path.dirname(modPath);
+    if (await isNtePakWrapper(parentPath)) return path.dirname(parentPath);
+    return parentPath;
 }
 
 export function getNteGroupRelativePath(roots: NteGameRoots, groupPath: string) {
@@ -879,11 +887,68 @@ async function listDirectoryNames(dirPath: string) {
 async function hasNteSubGroups(groupDir: string) {
     return (
         await Promise.all(
-            (
-                await listDirectoryNames(groupDir)
-            ).map(async (name) => !(await hasDirectPak(path.join(groupDir, name)))),
+            (await listDirectoryNames(groupDir)).map(async (name) => {
+                const childPath = path.join(groupDir, name);
+                if (await hasDirectPak(childPath)) return false;
+                return !(await isNtePakWrapper(childPath));
+            }),
         )
     ).some(Boolean);
+}
+
+type NteModEntry = {
+    modPath: string;
+    name: string;
+    previewFallbackDir?: string;
+};
+
+async function collectNteModEntries(groupDir: string): Promise<NteModEntry[]> {
+    const entries = await Promise.all(
+        (await listDirectoryNames(groupDir)).map(async (name) => {
+            const childPath = path.join(groupDir, name);
+            if (await hasDirectPak(childPath)) {
+                return [{ modPath: childPath, name }];
+            }
+
+            if (!(await isNtePakWrapper(childPath))) return [];
+
+            return (
+                await Promise.all(
+                    (await listDirectoryNames(childPath)).map(async (innerName) => {
+                        const innerPath = path.join(childPath, innerName);
+                        if (!(await hasDirectPak(innerPath))) return null;
+                        return {
+                            modPath: innerPath,
+                            name: `${name} / ${innerName}`,
+                            previewFallbackDir: childPath,
+                        } satisfies NteModEntry;
+                    }),
+                )
+            ).filter((entry) => entry !== null);
+        }),
+    );
+
+    return entries.flat();
+}
+
+async function isNtePakWrapper(dirPath: string) {
+    if (await hasDirectPak(dirPath)) return false;
+
+    const childNames = await listDirectoryNames(dirPath);
+    if (childNames.length === 0) return false;
+
+    const childInfos = await Promise.all(
+        childNames.map(async (name) => {
+            const childPath = path.join(dirPath, name);
+            return {
+                hasPak: await hasDirectPak(childPath),
+                hasSubdirs: (await listDirectoryNames(childPath)).length > 0,
+            };
+        }),
+    );
+
+    if (!childInfos.some((child) => child.hasPak)) return false;
+    return childInfos.every((child) => child.hasPak || !child.hasSubdirs);
 }
 
 function isDisabledFile(fileName: string) {
@@ -907,17 +972,9 @@ async function hasDirectPak(dirPath: string) {
 }
 
 async function countDirectMods(groupDir: string) {
-    const mods = (
-        await Promise.all(
-            (
-                await listDirectoryNames(groupDir)
-            ).map(async (name) => {
-                const modPath = path.join(groupDir, name);
-                if (!(await hasDirectPak(modPath))) return null;
-                return await isNteModEnabled(modPath);
-            }),
-        )
-    ).filter((enabled): enabled is boolean => enabled !== null);
+    const mods = await Promise.all(
+        (await collectNteModEntries(groupDir)).map((entry) => isNteModEnabled(entry.modPath)),
+    );
 
     return {
         total: mods.length,
@@ -936,13 +993,20 @@ async function findPreview(dirPath: string) {
     return preview ? path.join(dirPath, preview) : undefined;
 }
 
-async function createNteModInfo(desktop: NahidaDesktop, modPath: string, isEnabled: boolean) {
+async function createNteModInfo(
+    desktop: NahidaDesktop,
+    modPath: string,
+    isEnabled: boolean,
+    options?: { name?: string; previewFallbackDir?: string },
+) {
     const stat = await fse.stat(modPath);
-    const preview = await findPreview(modPath);
+    const preview =
+        (await findPreview(modPath)) ??
+        (options?.previewFallbackDir ? await findPreview(options.previewFallbackDir) : undefined);
 
     return {
         id: modPath,
-        name: path.basename(modPath),
+        name: options?.name ?? path.basename(modPath),
         path: modPath,
         isEnabled,
         ...(preview ? { preview } : {}),
