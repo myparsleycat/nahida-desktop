@@ -17,16 +17,6 @@
 - `젠레스 존 제로`
 - `명조`
 
-::: info
-`명조`는 다른 게임에 비해 정상적으로 표시되지 않는 모드가 더 많습니다.
-:::
-
-## 에셋 경로 설정
-
-`원신`, `붕괴: 스타레일`, `젠레스 존 제로`처럼 HoYoverse 계열 게임의 모드를 모델 뷰어에서 열려면 에셋 경로를 먼저 설정해야 합니다.
-
-에셋 준비 및 경로 지정 방법은 [정적 GLB 변환기](/ko/features/mod-tools/static-glb-converter)의 [에셋](/ko/features/mod-tools/static-glb-converter.html#에셋) 항목을 참고하세요.
-
 ## 모델 뷰어 열기
 
 ![이미지](/features/mod-manager/model-viewer/1.png)

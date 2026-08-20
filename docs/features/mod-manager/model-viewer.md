@@ -17,16 +17,6 @@ The viewer currently supports mods for the following games:
 - `Zenless Zone Zero`
 - `Wuthering Waves`
 
-::: info
-`Wuthering Waves` currently has more mods that do not display correctly compared to the other supported games.
-:::
-
-## Set the Asset Path
-
-To open mods from HoYoverse games such as `Genshin Impact`, `Honkai: Star Rail`, and `Zenless Zone Zero` in Model Viewer, you must configure the asset path first.
-
-For how to prepare assets and set the path, see the [Assets](/features/mod-tools/static-glb-converter#assets) section of [Static GLB Converter](/features/mod-tools/static-glb-converter).
-
 ## Open Model Viewer
 
 ![Image](/features/mod-manager/model-viewer/1.png)

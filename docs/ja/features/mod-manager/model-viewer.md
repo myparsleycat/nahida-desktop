@@ -17,16 +17,6 @@
 - `ゼンレスゾーンゼロ`
 - `鳴潮`
 
-::: info
-`鳴潮` は、ほかのゲームと比べて正しく表示されない MOD がやや多めです。
-:::
-
-## アセットパスの設定
-
-`原神`、`崩壊：スターレイル`、`ゼンレスゾーンゼロ` のような HoYoverse 系ゲームの MOD をモデルビューアで開くには、先にアセットパスを設定する必要があります。
-
-アセットの準備方法とパスの設定方法については、[静的 GLB 変換](/ja/features/mod-tools/static-glb-converter) の [アセット](/ja/features/mod-tools/static-glb-converter#アセット) を参照してください。
-
 ## モデルビューアを開く
 
 ![画像](/features/mod-manager/model-viewer/1.png)

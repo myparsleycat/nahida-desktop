@@ -17,16 +17,6 @@
 - `绝区零`
 - `鸣潮`
 
-::: info
-与其他游戏相比，`鸣潮` 目前有更多模组可能无法正常显示。
-:::
-
-## 设置资源路径
-
-如果要在模型查看器中打开 `原神`、`崩坏：星穹铁道`、`绝区零` 等 HoYoverse 系列游戏的模组，需要先设置资源路径。
-
-关于资源准备和路径设置的方法，请参考 [静态 GLB 转换器](/zh-CN/features/mod-tools/static-glb-converter) 中的 [资源](/zh-CN/features/mod-tools/static-glb-converter#资源) 一节。
-
 ## 打开模型查看器
 
 ![图片](/features/mod-manager/model-viewer/1.png)
