@@ -964,6 +964,12 @@
         "ready": "可转换",
         "not_resizable": "已跳过",
         "process_single": "转换",
+        "select_all": "全选",
+        "selected_count": "已选择 {{count}} 个",
+        "bulk_apply": "批量应用",
+        "bulk_apply_description": "对所选纹理使用相同选项。",
+        "process_selected": "转换所选",
+        "batch_progress": "{{current}} / {{total}}",
         "run": "处理纹理",
         "running": "处理中",
         "result_title": "处理结果",
@@ -987,7 +993,8 @@
         },
         "dialog": {
           "title": "纹理处理选项",
-          "description_fallback": "选中的 DDS 文件"
+          "description_fallback": "选中的 DDS 文件",
+          "description_multiple": "{{count}} 个 DDS 文件"
         },
         "result": {
           "processed": "已处理",
@@ -999,7 +1006,8 @@
           "save_settings_failed": "保存纹理处理设置失败",
           "load_failed": "加载纹理列表失败",
           "completed": "纹理处理已完成",
-          "completed_description": "修改 {{updated}} 个，失败 {{failed}} 个",
+          "completed_description": "修改 {{updated}} 个，失败 {{failed}} 个，跳过 {{skipped}} 个",
+          "none_processed": "没有纹理被处理",
           "single_completed": "纹理处理已完成",
           "single_completed_fallback": "选中纹理处理完成",
           "failed": "纹理处理失败"

@@ -34,6 +34,7 @@ interface TextureResizerFormProps {
   currentFormat?: string;
   currentColorSpace?: TextureColorSpace;
   formatConversionMessage?: string | null;
+  sharedResize?: boolean;
   resizeSource?: {
     width: number;
     height: number;
@@ -52,6 +53,7 @@ export function TextureResizerForm({
   currentFormat,
   currentColorSpace = "unknown",
   formatConversionMessage,
+  sharedResize = false,
   resizeSource = null,
 }: TextureResizerFormProps) {
   const { t } = useTranslation();
@@ -66,6 +68,10 @@ export function TextureResizerForm({
   const colorSpaceOptions = [
     { value: "srgb", label: t("page.tools.texture_resizer.color_space.srgb") },
     { value: "linear", label: t("page.tools.texture_resizer.color_space.linear") },
+  ] as const;
+  const modeOptions = [
+    { value: "percent", label: t("page.tools.texture_resizer.mode_options.percent") },
+    { value: "custom", label: t("page.tools.texture_resizer.mode_options.custom") },
   ] as const;
   const operationOptions = [
     { value: "resize", label: t("page.tools.texture_resizer.operation_options.resize") },
@@ -255,7 +261,7 @@ export function TextureResizerForm({
                   });
                 }}
               >
-                <SelectTrigger disabled={disabled} className="w-64">
+                <SelectTrigger disabled={disabled} className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -294,7 +300,7 @@ export function TextureResizerForm({
                   });
                 }}
               >
-                <SelectTrigger disabled={disabled} className="w-32">
+                <SelectTrigger disabled={disabled} className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -321,9 +327,43 @@ export function TextureResizerForm({
       ) : showResizeInputs ? (
         <div className="grid gap-4 md:grid-cols-2">
           {operationField}
-          <div className="rounded-md border bg-background/40 p-3 text-xs text-muted-foreground">
-            {t("page.tools.texture_resizer.custom_hint")}
-          </div>
+          {sharedResize ? (
+            <div className="space-y-2">
+              <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+                {t("page.tools.texture_resizer.mode")}
+              </label>
+              <Select
+                value={settings.mode}
+                items={modeOptions}
+                onValueChange={(value) => {
+                  if (value === null) return;
+                  const nextMode = modeOptions.find((option) => option.value === value)?.value;
+                  if (!nextMode) return;
+                  updateSettings({ mode: nextMode });
+                }}
+              >
+                <SelectTrigger disabled={disabled} className="w-56">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {modeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {t(`page.tools.texture_resizer.mode_descriptions.${settings.mode}`)}
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-md border bg-background/40 p-3 text-xs text-muted-foreground">
+              {t("page.tools.texture_resizer.custom_hint")}
+            </div>
+          )}
         </div>
       ) : useHorizontalConvertLayout && showOutputFormat ? (
         <div className="grid gap-4 md:grid-cols-2">
@@ -372,7 +412,95 @@ export function TextureResizerForm({
         operationField
       )}
 
-      {showResizeInputs && (
+      {showResizeInputs && sharedResize && settings.mode === "percent" && (
+        <div className="space-y-3 rounded-md border bg-background/40 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium">{t("page.tools.texture_resizer.percent")}</div>
+              <div className="text-xs text-muted-foreground">
+                {t("page.tools.texture_resizer.mode_descriptions.percent")}
+              </div>
+            </div>
+            <div className="text-sm font-medium">{settings.percent}%</div>
+          </div>
+          <Slider
+            min={1}
+            max={99}
+            step={1}
+            value={settings.percent}
+            disabled={disabled}
+            onValueChange={(value) => {
+              const percent = Array.isArray(value) ? (value[0] ?? 1) : value;
+              updateSettings({
+                percent,
+                mode: "percent",
+              });
+            }}
+          />
+        </div>
+      )}
+
+      {showResizeInputs && sharedResize && settings.mode === "custom" && (
+        <div className="space-y-3 rounded-md border bg-background/40 p-3">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+                {t("page.tools.texture_resizer.custom_width")}
+              </label>
+              <Input
+                type="number"
+                min={1024}
+                step={1024}
+                value={settings.customWidth}
+                disabled={disabled}
+                onChange={(event) => {
+                  const parsed = Number.parseInt(event.target.value, 10);
+                  updateSettings({
+                    customWidth: Number.isFinite(parsed) ? parsed : 0,
+                    mode: "custom",
+                  });
+                }}
+                onBlur={() => {
+                  updateSettings({
+                    customWidth: snapDimension(settings.customWidth),
+                    mode: "custom",
+                  });
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
+                {t("page.tools.texture_resizer.custom_height")}
+              </label>
+              <Input
+                type="number"
+                min={1024}
+                step={1024}
+                value={settings.customHeight}
+                disabled={disabled}
+                onChange={(event) => {
+                  const parsed = Number.parseInt(event.target.value, 10);
+                  updateSettings({
+                    customHeight: Number.isFinite(parsed) ? parsed : 0,
+                    mode: "custom",
+                  });
+                }}
+                onBlur={() => {
+                  updateSettings({
+                    customHeight: snapDimension(settings.customHeight),
+                    mode: "custom",
+                  });
+                }}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t("page.tools.texture_resizer.custom_hint")}
+          </p>
+        </div>
+      )}
+
+      {showResizeInputs && !sharedResize && (
         <>
           {resizeSource && resizeCandidates.length > 0 && selectedResizeCandidate ? (
             <div className="space-y-3 rounded-md border bg-background/40 p-3">
@@ -497,6 +625,16 @@ export function TextureResizerForm({
       </div>
     </div>
   );
+}
+
+function snapDimension(value: number) {
+  const normalized = Math.max(1024, Math.round(value));
+  const remainder = normalized % 1024;
+  if (remainder === 0) {
+    return normalized;
+  }
+
+  return remainder < 512 ? normalized - remainder : normalized + (1024 - remainder);
 }
 
 function formatResizePercent(width: number, originalWidth: number): string {

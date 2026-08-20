@@ -4,6 +4,7 @@ import {
   formatTextureFormatLabel,
 } from "@renderer/components/tools/texture-resizer-form";
 import { Button } from "@renderer/components/ui/button";
+import { Checkbox } from "@renderer/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -15,7 +16,10 @@ import {
 import { Input } from "@renderer/components/ui/input";
 import { Progress } from "@renderer/components/ui/progress";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
+import { Switch } from "@renderer/components/ui/switch";
+import { cn } from "@renderer/lib/utils";
 import type {
+  TextureColorSpace,
   TextureResizeFileResult,
   TextureResizeListItem,
   TextureResizeSettings,
@@ -32,7 +36,7 @@ import {
 } from "@shared/utils";
 import { useForm } from "@tanstack/react-form";
 import { FolderOpenIcon, ImageIcon, Loader2Icon, RefreshCwIcon } from "lucide-react";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -62,11 +66,21 @@ export function TextureResizerWorkspace({
   const { t } = useTranslation();
   const [targetPath, setTargetPath] = useState(fixedTargetPath ?? "");
   const [textures, setTextures] = useState<TextureResizeListItem[]>([]);
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [isListing, setIsListing] = useState(false);
   const [runningFilePath, setRunningFilePath] = useState<string | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(
+    null,
+  );
   const [loadedTargetPath, setLoadedTargetPath] = useState("");
-  const [selectedTexture, setSelectedTexture] = useState<TextureResizeListItem | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [bulkApply, setBulkApply] = useState(true);
+  const [activeDialogTexturePath, setActiveDialogTexturePath] = useState<string | null>(null);
+  const [perTextureSettings, setPerTextureSettings] = useState<
+    Record<string, TextureResizeSettings>
+  >({});
   const [upscaleProgress, setUpscaleProgress] = useState<TextureUpscaleProgressEvent | null>(null);
+  const batchRunningRef = useRef(false);
   const settingsForm = useForm({
     defaultValues: DEFAULT_SETTINGS,
     onSubmit: async () => {},
@@ -75,6 +89,16 @@ export function TextureResizerWorkspace({
     defaultValues: DEFAULT_SETTINGS,
     onSubmit: async () => {},
   });
+
+  const isBusy = isListing || runningFilePath !== null || batchProgress !== null;
+  const processableTextures = textures.filter((texture) => texture.canProcess);
+  const dialogTextures = textures.filter((texture) => selectedPaths.has(texture.filePath));
+  const allProcessableSelected =
+    processableTextures.length > 0 &&
+    processableTextures.every((texture) => selectedPaths.has(texture.filePath));
+  const someProcessableSelected = processableTextures.some((texture) =>
+    selectedPaths.has(texture.filePath),
+  );
 
   useEffect(() => {
     setTargetPath(fixedTargetPath ?? "");
@@ -130,6 +154,12 @@ export function TextureResizerWorkspace({
           : await window.api.invoke("tools:listTextureFolder", normalizedTargetPath, nextSettings);
       setTextures(nextTextures);
       setLoadedTargetPath(normalizedTargetPath);
+      const available = new Set(
+        nextTextures.filter((texture) => texture.canProcess).map((texture) => texture.filePath),
+      );
+      setSelectedPaths(
+        (current) => new Set([...current].filter((filePath) => available.has(filePath))),
+      );
     } catch (error) {
       toast.error(t("page.tools.texture_resizer.toast.load_failed"), {
         description: toErrorMessage(error),
@@ -139,34 +169,177 @@ export function TextureResizerWorkspace({
     }
   };
 
-  const processTexture = async (filePath: string, nextSettings: TextureResizeSettings) => {
-    if (runningFilePath) {
+  const toggleTexture = (filePath: string, selected: boolean) => {
+    setSelectedPaths((current) => {
+      const next = new Set(current);
+      if (selected) {
+        next.add(filePath);
+        return next;
+      }
+      next.delete(filePath);
+      return next;
+    });
+  };
+
+  const toggleAllProcessable = (selected: boolean) => {
+    if (selected) {
+      setSelectedPaths(new Set(processableTextures.map((texture) => texture.filePath)));
+      return;
+    }
+    setSelectedPaths(new Set());
+  };
+
+  const openProcessDialog = () => {
+    const selected = textures.filter((texture) => selectedPaths.has(texture.filePath));
+    if (selected.length === 0) {
       return;
     }
 
-    setRunningFilePath(filePath);
+    const shared = settingsForm.state.values;
+    const useBulk = selected.length > 1;
+    setBulkApply(useBulk);
+    setActiveDialogTexturePath(selected[0].filePath);
+    setPerTextureSettings(
+      Object.fromEntries(
+        selected.map((texture) => [texture.filePath, buildDialogSettings(shared, texture)]),
+      ),
+    );
+    dialogSettingsForm.reset(
+      useBulk
+        ? buildSharedDialogSettings(shared, selected)
+        : buildDialogSettings(shared, selected[0]),
+    );
+    setDialogOpen(true);
+  };
+
+  const selectDialogTexture = (filePath: string) => {
+    if (filePath === activeDialogTexturePath) {
+      return;
+    }
+
+    const flushed = activeDialogTexturePath
+      ? {
+          ...perTextureSettings,
+          [activeDialogTexturePath]: dialogSettingsForm.state.values,
+        }
+      : perTextureSettings;
+    setPerTextureSettings(flushed);
+    const nextSettings = flushed[filePath];
+    if (nextSettings) {
+      dialogSettingsForm.reset(nextSettings);
+    }
+    setActiveDialogTexturePath(filePath);
+  };
+
+  const handleBulkApplyChange = (checked: boolean) => {
+    if (checked) {
+      setBulkApply(true);
+      return;
+    }
+
+    const shared = dialogSettingsForm.state.values;
+    const nextPerTexture = Object.fromEntries(
+      dialogTextures.map((texture) => [texture.filePath, buildDialogSettings(shared, texture)]),
+    );
+    setPerTextureSettings(nextPerTexture);
+    const first = dialogTextures[0];
+    if (first) {
+      dialogSettingsForm.reset(nextPerTexture[first.filePath]);
+      setActiveDialogTexturePath(first.filePath);
+    }
+    setBulkApply(false);
+  };
+
+  const closeDialog = () => {
+    if (batchProgress != null) {
+      return;
+    }
+    setDialogOpen(false);
+  };
+
+  const processSelectedTextures = async (dialogSettings: TextureResizeSettings) => {
+    if (batchRunningRef.current) {
+      return;
+    }
+
+    const selected = textures.filter((texture) => selectedPaths.has(texture.filePath));
+    if (selected.length === 0) {
+      return;
+    }
+
+    batchRunningRef.current = true;
+
+    const flushedPerTexture = activeDialogTexturePath
+      ? {
+          ...perTextureSettings,
+          [activeDialogTexturePath]: dialogSettings,
+        }
+      : perTextureSettings;
+
+    setBatchProgress({ current: 0, total: selected.length });
     setUpscaleProgress(null);
-    try {
-      settingsForm.reset(nextSettings);
-      const nextResult = await window.api.invoke("tools:resizeTextureFile", {
-        filePath,
-        settings: nextSettings,
-      });
-      const fileResult = nextResult.files[0];
-      toast.success(t("page.tools.texture_resizer.toast.single_completed"), {
-        description: describeFileResult(t, fileResult),
-      });
-      setSelectedTexture(null);
-      if (loadedTargetPath) {
-        await loadTextures(loadedTargetPath, nextSettings);
+
+    let updated = 0;
+    let failed = 0;
+    let skipped = 0;
+    let lastFileResult: TextureResizeFileResult | undefined;
+    let errorMessage: string | undefined;
+
+    for (const [index, texture] of selected.entries()) {
+      setBatchProgress({ current: index + 1, total: selected.length });
+      const nextSettings =
+        bulkApply || selected.length === 1
+          ? adaptSettingsForTexture(dialogSettings, texture)
+          : (flushedPerTexture[texture.filePath] ?? dialogSettings);
+
+      if (!canRun(nextSettings, texture)) {
+        skipped += 1;
+        continue;
       }
-    } catch (error) {
-      toast.error(t("page.tools.texture_resizer.toast.failed"), {
-        description: toErrorMessage(error),
-      });
-    } finally {
-      setRunningFilePath(null);
+
+      setRunningFilePath(texture.filePath);
       setUpscaleProgress(null);
+      try {
+        const nextResult = await window.api.invoke("tools:resizeTextureFile", {
+          filePath: texture.filePath,
+          settings: nextSettings,
+        });
+        const fileResult = nextResult.files[0];
+        lastFileResult = fileResult;
+        if (fileResult?.status === "updated") {
+          updated += 1;
+          continue;
+        }
+        if (fileResult?.status === "failed" || !fileResult) {
+          failed += 1;
+          errorMessage ??= fileResult?.message ?? undefined;
+          continue;
+        }
+        skipped += 1;
+      } catch (error) {
+        failed += 1;
+        errorMessage ??= toErrorMessage(error);
+      }
+    }
+
+    setRunningFilePath(null);
+    setUpscaleProgress(null);
+    setBatchProgress(null);
+    batchRunningRef.current = false;
+    setDialogOpen(false);
+    setSelectedPaths(new Set());
+
+    showTextureResizeResultToast(t, {
+      selectedCount: selected.length,
+      updated,
+      failed,
+      skipped,
+      lastFileResult,
+      errorMessage,
+    });
+
+    if (loadedTargetPath) {
+      await loadTextures(loadedTargetPath, dialogSettings);
     }
   };
 
@@ -180,14 +353,14 @@ export function TextureResizerWorkspace({
             value={targetPath}
             onChange={(event) => setTargetPath(event.target.value)}
             placeholder={t("page.tools.texture_resizer.target_folder_placeholder")}
-            disabled={isListing || runningFilePath !== null}
+            disabled={isBusy}
           />
           <Button
             type="button"
             variant="outline"
             className="shrink-0 gap-1"
             onClick={() => void browseTargetPath()}
-            disabled={isListing || runningFilePath !== null}
+            disabled={isBusy}
           >
             <FolderOpenIcon className="size-4" />
             {t("page.tools.texture_resizer.browse")}
@@ -199,7 +372,7 @@ export function TextureResizerWorkspace({
         {mode === "folder" && (
           <Button
             onClick={() => void loadTextures()}
-            disabled={!hasTarget || isListing || runningFilePath !== null}
+            disabled={!hasTarget || isBusy}
             className="gap-2"
           >
             {isListing ? (
@@ -216,9 +389,7 @@ export function TextureResizerWorkspace({
             onClick={() =>
               void loadTextures(mode === "mod" ? (fixedTargetPath ?? targetPath) : loadedTargetPath)
             }
-            disabled={
-              isListing || runningFilePath !== null || (!loadedTargetPath && mode !== "mod")
-            }
+            disabled={isBusy || (!loadedTargetPath && mode !== "mod")}
             className="gap-2"
           >
             {isListing ? (
@@ -228,6 +399,21 @@ export function TextureResizerWorkspace({
             )}
             {t("page.tools.texture_resizer.refresh")}
           </Button>
+        )}
+        {textures.length > 0 && (
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {t("page.tools.texture_resizer.selected_count", { count: selectedPaths.size })}
+            </span>
+            <Button
+              className="gap-2"
+              disabled={selectedPaths.size === 0 || isBusy}
+              onClick={openProcessDialog}
+            >
+              <ImageIcon className="size-4" />
+              {t("page.tools.texture_resizer.process_selected")}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -246,20 +432,32 @@ export function TextureResizerWorkspace({
           <div className="relative w-full">
             {textures.length > 0 ? (
               <table className="w-full table-auto border-collapse text-sm">
+                <thead>
+                  <tr>
+                    <td colSpan={4} />
+                    <td className="w-[1%] p-2 pr-6 text-right align-middle">
+                      <div className="flex justify-end">
+                        <Checkbox
+                          checked={allProcessableSelected}
+                          indeterminate={someProcessableSelected && !allProcessableSelected}
+                          disabled={isBusy || processableTextures.length === 0}
+                          aria-label={t("page.tools.texture_resizer.select_all")}
+                          onCheckedChange={(checked) => toggleAllProcessable(checked === true)}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                </thead>
                 <tbody>
                   {textures.map((texture, index) => (
                     <Fragment key={texture.filePath}>
                       <TextureItemRow
                         texture={texture}
                         t={t}
+                        selected={selectedPaths.has(texture.filePath)}
                         isRunning={runningFilePath === texture.filePath}
-                        disabled={isListing || runningFilePath !== null}
-                        onProcess={() => {
-                          setSelectedTexture(texture);
-                          dialogSettingsForm.reset(
-                            buildDialogSettings(settingsForm.state.values, texture),
-                          );
-                        }}
+                        disabled={isBusy}
+                        onToggle={(selected) => toggleTexture(texture.filePath, selected)}
                       />
                       {index < textures.length - 1 && (
                         <tr aria-hidden="true">
@@ -284,10 +482,10 @@ export function TextureResizerWorkspace({
       </div>
 
       <Dialog
-        open={selectedTexture != null}
+        open={dialogOpen}
         onOpenChange={(open) => {
-          if (!open && runningFilePath == null) {
-            setSelectedTexture(null);
+          if (!open) {
+            closeDialog();
           }
         }}
       >
@@ -295,8 +493,12 @@ export function TextureResizerWorkspace({
           <DialogHeader>
             <DialogTitle>{t("page.tools.texture_resizer.dialog.title")}</DialogTitle>
             <DialogDescription>
-              {selectedTexture?.fileName ??
-                t("page.tools.texture_resizer.dialog.description_fallback")}
+              {dialogTextures.length > 1 && bulkApply
+                ? t("page.tools.texture_resizer.dialog.description_multiple", {
+                    count: dialogTextures.length,
+                  })
+                : (dialogTextures.find((texture) => texture.filePath === activeDialogTexturePath)
+                    ?.fileName ?? t("page.tools.texture_resizer.dialog.description_fallback"))}
             </DialogDescription>
           </DialogHeader>
 
@@ -304,52 +506,106 @@ export function TextureResizerWorkspace({
             <dialogSettingsForm.Subscribe
               selector={(state) => state.values}
               children={(dialogSettings) => {
+                const activeTexture =
+                  dialogTextures.find((texture) => texture.filePath === activeDialogTexturePath) ??
+                  dialogTextures[0] ??
+                  null;
+                const formTexture = bulkApply ? null : activeTexture;
                 const selectedTexturePreview =
-                  selectedTexture != null
-                    ? resolveTexturePreview(selectedTexture, dialogSettings)
-                    : null;
+                  formTexture != null ? resolveTexturePreview(formTexture, dialogSettings) : null;
+                const sharedFormats = intersectOutputFormats(dialogTextures);
+                const sharedColor = sharedColorSpace(dialogTextures);
 
                 return (
                   <div className="space-y-3 pr-4">
-                    {selectedTexture && (
-                      <div className="space-y-1 text-xs text-muted-foreground">
-                        <div className="break-all">{selectedTexture.relativePath}</div>
+                    {dialogTextures.length > 1 && (
+                      <div className="flex items-center justify-between rounded-md border bg-background/40 p-3">
                         <div>
-                          {selectedTexture.originalWidth}x{selectedTexture.originalHeight} -&gt;{" "}
-                          {selectedTexturePreview?.width ?? selectedTexture.targetWidth}x
-                          {selectedTexturePreview?.height ?? selectedTexture.targetHeight}
+                          <div className="text-sm font-medium">
+                            {t("page.tools.texture_resizer.bulk_apply")}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {t("page.tools.texture_resizer.bulk_apply_description")}
+                          </div>
+                        </div>
+                        <Switch
+                          checked={bulkApply}
+                          onCheckedChange={handleBulkApplyChange}
+                          disabled={batchProgress != null}
+                        />
+                      </div>
+                    )}
+                    {!bulkApply && dialogTextures.length > 1 && (
+                      <div className="flex flex-wrap gap-1">
+                        {dialogTextures.map((texture) => (
+                          <Button
+                            key={texture.filePath}
+                            type="button"
+                            size="sm"
+                            variant={
+                              texture.filePath === activeDialogTexturePath ? "default" : "outline"
+                            }
+                            disabled={batchProgress != null}
+                            onClick={() => selectDialogTexture(texture.filePath)}
+                          >
+                            {texture.fileName}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
+                    {formTexture && (
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        <div className="break-all">{formTexture.relativePath}</div>
+                        <div>
+                          {formTexture.originalWidth}x{formTexture.originalHeight} -&gt;{" "}
+                          {selectedTexturePreview?.width ?? formTexture.targetWidth}x
+                          {selectedTexturePreview?.height ?? formTexture.targetHeight}
                         </div>
                         <div>
-                          {formatTextureFormatLabel(selectedTexture.format)} /{" "}
-                          {t(
-                            `page.tools.texture_resizer.color_space.${selectedTexture.colorSpace}`,
-                          )}
+                          {formatTextureFormatLabel(formTexture.format)} /{" "}
+                          {t(`page.tools.texture_resizer.color_space.${formTexture.colorSpace}`)}
                         </div>
                         <div>
                           {t("page.tools.texture_resizer.current_output_format")}:{" "}
                           {formatTextureFormatLabel(
-                            dialogSettings.outputFormat || selectedTexture.outputFormatDefault,
+                            dialogSettings.outputFormat || formTexture.outputFormatDefault,
                           )}
                         </div>
-                        {selectedTexture.formatConversionMessage && (
-                          <div>{selectedTexture.formatConversionMessage}</div>
+                        {formTexture.formatConversionMessage && (
+                          <div>{formTexture.formatConversionMessage}</div>
                         )}
-                        {selectedTexture.message &&
+                        {formTexture.message &&
                           isTextureUpscaleOperation(dialogSettings.operation) && (
-                            <div>{selectedTexture.message}</div>
+                            <div>{formTexture.message}</div>
                           )}
                       </div>
                     )}
-                    {runningFilePath === selectedTexture?.filePath && upscaleProgress && (
+                    {batchProgress && (
                       <div className="space-y-2 rounded-md border bg-background/40 p-3">
                         <div className="text-xs text-muted-foreground">
-                          {upscaleProgress.message ??
-                            t("page.tools.texture_resizer.upscale_progress.working")}
+                          {runningFilePath
+                            ? dialogTextures.find((texture) => texture.filePath === runningFilePath)
+                                ?.fileName
+                            : null}{" "}
+                          {t("page.tools.texture_resizer.batch_progress", {
+                            current: batchProgress.current,
+                            total: batchProgress.total,
+                          })}
                         </div>
-                        <Progress
-                          value={upscaleProgress.percent}
-                          className={upscaleProgress.percent == null ? "animate-pulse" : undefined}
-                        />
+                        {upscaleProgress && (
+                          <>
+                            <div className="text-xs text-muted-foreground">
+                              {upscaleProgress.message ??
+                                t("page.tools.texture_resizer.upscale_progress.working")}
+                            </div>
+                            <Progress
+                              value={upscaleProgress.percent}
+                              className={
+                                upscaleProgress.percent == null ? "animate-pulse" : undefined
+                              }
+                            />
+                          </>
+                        )}
                       </div>
                     )}
                     <TextureResizerForm
@@ -364,18 +620,41 @@ export function TextureResizerWorkspace({
                         dialogSettingsForm.setFieldValue("backup", nextSettings.backup);
                         dialogSettingsForm.setFieldValue("upscaleScale", nextSettings.upscaleScale);
                         dialogSettingsForm.setFieldValue("upscaleModel", nextSettings.upscaleModel);
+                        if (!bulkApply && activeDialogTexturePath) {
+                          setPerTextureSettings((current) => ({
+                            ...current,
+                            [activeDialogTexturePath]: nextSettings,
+                          }));
+                        }
                       }}
-                      disabled={runningFilePath != null}
+                      disabled={batchProgress != null}
                       showTargetPath={false}
-                      availableOutputFormats={selectedTexture?.availableOutputFormats}
-                      currentFormat={selectedTexture?.outputFormatDefault}
-                      currentColorSpace={selectedTexture?.colorSpace}
-                      formatConversionMessage={selectedTexture?.formatConversionMessage}
+                      sharedResize={bulkApply && dialogTextures.length > 1}
+                      availableOutputFormats={
+                        bulkApply && dialogTextures.length > 1
+                          ? sharedFormats
+                          : formTexture?.availableOutputFormats
+                      }
+                      currentFormat={
+                        bulkApply && dialogTextures.length > 1
+                          ? sharedFormats[0]
+                          : formTexture?.outputFormatDefault
+                      }
+                      currentColorSpace={
+                        bulkApply && dialogTextures.length > 1
+                          ? sharedColor
+                          : formTexture?.colorSpace
+                      }
+                      formatConversionMessage={
+                        bulkApply && dialogTextures.length > 1
+                          ? sharedFormatConversionMessage(dialogTextures)
+                          : formTexture?.formatConversionMessage
+                      }
                       resizeSource={
-                        selectedTexture
+                        formTexture
                           ? {
-                              width: selectedTexture.originalWidth,
-                              height: selectedTexture.originalHeight,
+                              width: formTexture.originalWidth,
+                              height: formTexture.originalHeight,
                             }
                           : null
                       }
@@ -388,39 +667,47 @@ export function TextureResizerWorkspace({
 
           <dialogSettingsForm.Subscribe
             selector={(state) => state.values}
-            children={(dialogSettings) => (
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setSelectedTexture(null)}
-                  disabled={runningFilePath != null}
-                >
-                  {t("g.cancel")}
-                </Button>
-                <Button
-                  type="button"
-                  className="gap-2"
-                  disabled={
-                    !selectedTexture ||
-                    runningFilePath != null ||
-                    !canRun(dialogSettings, selectedTexture)
-                  }
-                  onClick={() =>
-                    selectedTexture && void processTexture(selectedTexture.filePath, dialogSettings)
-                  }
-                >
-                  {runningFilePath === selectedTexture?.filePath ? (
-                    <Loader2Icon className="size-4 animate-spin" />
-                  ) : (
-                    <ImageIcon className="size-4" />
-                  )}
-                  {runningFilePath === selectedTexture?.filePath
-                    ? t("page.tools.texture_resizer.running")
-                    : t("page.tools.texture_resizer.process_single")}
-                </Button>
-              </DialogFooter>
-            )}
+            children={(dialogSettings) => {
+              const canProcessAny = dialogTextures.some((texture) => {
+                const nextSettings =
+                  bulkApply || dialogTextures.length === 1
+                    ? adaptSettingsForTexture(dialogSettings, texture)
+                    : (perTextureSettings[texture.filePath] ?? dialogSettings);
+                return canRun(nextSettings, texture);
+              });
+
+              return (
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={closeDialog}
+                    disabled={batchProgress != null}
+                  >
+                    {t("g.cancel")}
+                  </Button>
+                  <Button
+                    type="button"
+                    className="gap-2"
+                    disabled={
+                      dialogTextures.length === 0 || batchProgress != null || !canProcessAny
+                    }
+                    onClick={() => void processSelectedTextures(dialogSettings)}
+                  >
+                    {batchProgress != null ? (
+                      <Loader2Icon className="size-4 animate-spin" />
+                    ) : (
+                      <ImageIcon className="size-4" />
+                    )}
+                    {batchProgress != null
+                      ? t("page.tools.texture_resizer.running")
+                      : dialogTextures.length > 1
+                        ? t("page.tools.texture_resizer.process_selected")
+                        : t("page.tools.texture_resizer.process_single")}
+                  </Button>
+                </DialogFooter>
+              );
+            }}
           />
         </DialogContent>
       </Dialog>
@@ -431,27 +718,43 @@ export function TextureResizerWorkspace({
 function TextureItemRow({
   texture,
   t,
+  selected,
   isRunning,
   disabled,
-  onProcess,
+  onToggle,
 }: {
   texture: TextureResizeListItem;
   t: ReturnType<typeof useTranslation>["t"];
+  selected: boolean;
   isRunning: boolean;
   disabled: boolean;
-  onProcess: () => void;
+  onToggle: (selected: boolean) => void;
 }) {
   const formatValue = `${formatTextureFormatLabel(texture.format)} / ${t(
     `page.tools.texture_resizer.color_space.${texture.colorSpace}`,
   )}`;
+  const canSelect = texture.canProcess && !disabled;
 
   return (
-    <tr className="transition-colors hover:bg-card/50">
+    <tr
+      className={cn(
+        "transition-colors hover:bg-card/50",
+        selected && "bg-card/50",
+        canSelect && "cursor-pointer",
+      )}
+      onClick={() => {
+        if (!canSelect) {
+          return;
+        }
+        onToggle(!selected);
+      }}
+    >
       <td className="w-full max-w-0 p-2 pl-3 text-left align-middle whitespace-nowrap">
         <div
           className="block w-full cursor-pointer truncate text-sm font-medium"
           title={texture.fileName}
-          onClick={() => {
+          onClick={(event) => {
+            event.stopPropagation();
             void window.api.invoke("util:openExternal", texture.filePath);
           }}
         >
@@ -468,27 +771,22 @@ function TextureItemRow({
         {texture.originalWidth}x{texture.originalHeight}
       </td>
       <td className="w-[1%] p-2 pr-6 text-right align-middle whitespace-nowrap">
-        <Button
-          size="sm"
-          className="gap-2"
-          onClick={onProcess}
-          disabled={disabled || !texture.canProcess}
-        >
-          {isRunning ? (
-            <Loader2Icon className="size-4 animate-spin" />
-          ) : (
-            <ImageIcon className="size-4" />
-          )}
-          {isRunning
-            ? t("page.tools.texture_resizer.running")
-            : t("page.tools.texture_resizer.process_single")}
-        </Button>
+        <div className="flex items-center justify-end gap-2">
+          {isRunning && <Loader2Icon className="size-4 animate-spin" />}
+          <Checkbox
+            checked={selected}
+            disabled={disabled || !texture.canProcess}
+            aria-label={texture.fileName}
+            onClick={(event) => event.stopPropagation()}
+            onCheckedChange={(checked) => onToggle(checked === true)}
+          />
+        </div>
       </td>
     </tr>
   );
 }
 
-function buildDialogSettings(
+function adaptSettingsForTexture(
   settings: TextureResizeSettings,
   texture: TextureResizeListItem,
 ): TextureResizeSettings {
@@ -497,24 +795,103 @@ function buildDialogSettings(
       ? settings.outputFormat
       : texture.outputFormatDefault;
 
-  let operation = settings.operation;
-  if (
-    (operation === "resize_and_convert" || operation === "convert") &&
-    !texture.canConvertFormat
-  ) {
-    operation = "resize";
+  if (settings.operation === "resize_and_convert" && !texture.canConvertFormat) {
+    return {
+      ...settings,
+      operation: "resize",
+      outputFormat,
+    };
   }
-  if (operation === "upscale_and_convert" && !texture.canConvertFormat) {
-    operation = "upscale";
+
+  if (settings.operation === "upscale_and_convert" && !texture.canConvertFormat) {
+    return {
+      ...settings,
+      operation: "upscale",
+      outputFormat,
+    };
   }
 
   return {
     ...settings,
-    mode: "custom",
-    customWidth: texture.canResize ? texture.targetWidth : settings.customWidth,
-    customHeight: texture.canResize ? texture.targetHeight : settings.customHeight,
-    operation,
     outputFormat,
+  };
+}
+
+function buildDialogSettings(
+  settings: TextureResizeSettings,
+  texture: TextureResizeListItem,
+): TextureResizeSettings {
+  const adapted = adaptSettingsForTexture(settings, texture);
+  const preview = resolveTexturePreview(texture, adapted);
+
+  return {
+    ...adapted,
+    mode: "custom",
+    customWidth: preview?.width ?? adapted.customWidth,
+    customHeight: preview?.height ?? adapted.customHeight,
+  };
+}
+
+function buildSharedDialogSettings(
+  settings: TextureResizeSettings,
+  textures: TextureResizeListItem[],
+): TextureResizeSettings {
+  const availableOutputFormats = intersectOutputFormats(textures);
+  const outputFormat =
+    availableOutputFormats.includes(settings.outputFormat) && settings.outputFormat
+      ? settings.outputFormat
+      : (availableOutputFormats[0] ?? "");
+
+  return {
+    ...settings,
+    outputFormat,
+  };
+}
+
+function intersectOutputFormats(textures: TextureResizeListItem[]): string[] {
+  const first = textures[0];
+  if (!first) {
+    return [];
+  }
+
+  return first.availableOutputFormats.filter((format) =>
+    textures.every((texture) => texture.availableOutputFormats.includes(format)),
+  );
+}
+
+function sharedColorSpace(textures: TextureResizeListItem[]): TextureColorSpace {
+  if (textures.some((texture) => texture.colorSpace === "linear")) {
+    return "linear";
+  }
+
+  const first = textures[0]?.colorSpace;
+  if (!first) {
+    return "unknown";
+  }
+
+  return textures.every((texture) => texture.colorSpace === first) ? first : "unknown";
+}
+
+function sharedFormatConversionMessage(textures: TextureResizeListItem[]) {
+  const first = textures[0]?.formatConversionMessage ?? null;
+  if (!first) {
+    return null;
+  }
+
+  return textures.every((texture) => texture.formatConversionMessage === first) ? first : null;
+}
+
+function resolveResizeBounds(texture: TextureResizeListItem, settings: TextureResizeSettings) {
+  if (settings.mode === "percent") {
+    return {
+      width: Math.floor((texture.originalWidth * settings.percent) / 100),
+      height: Math.floor((texture.originalHeight * settings.percent) / 100),
+    };
+  }
+
+  return {
+    width: settings.customWidth,
+    height: settings.customHeight,
   };
 }
 
@@ -542,7 +919,8 @@ function resolveTexturePreview(
     return null;
   }
 
-  return pickTextureResizeCandidate(candidates, settings.customWidth, settings.customHeight);
+  const bounds = resolveResizeBounds(texture, settings);
+  return pickTextureResizeCandidate(candidates, bounds.width, bounds.height);
 }
 
 function canUpscaleWithSettings(texture: TextureResizeListItem, settings: TextureResizeSettings) {
@@ -573,6 +951,63 @@ function canRun(settings: TextureResizeSettings, texture: TextureResizeListItem)
   }
 
   return canResizeWithSettings && texture.canConvertFormat;
+}
+
+function showTextureResizeResultToast(
+  t: ReturnType<typeof useTranslation>["t"],
+  result: {
+    selectedCount: number;
+    updated: number;
+    failed: number;
+    skipped: number;
+    lastFileResult?: TextureResizeFileResult;
+    errorMessage?: string;
+  },
+) {
+  const description = t("page.tools.texture_resizer.toast.completed_description", {
+    updated: result.updated,
+    failed: result.failed,
+    skipped: result.skipped,
+  });
+
+  if (result.selectedCount === 1 && result.updated === 1) {
+    toast.success(t("page.tools.texture_resizer.toast.single_completed"), {
+      description: describeFileResult(t, result.lastFileResult),
+    });
+    return;
+  }
+
+  if (result.selectedCount === 1 && result.failed > 0) {
+    toast.error(t("page.tools.texture_resizer.toast.failed"), {
+      description: result.errorMessage ?? result.lastFileResult?.message ?? description,
+    });
+    return;
+  }
+
+  if (result.updated === 0 && result.failed > 0) {
+    toast.error(t("page.tools.texture_resizer.toast.failed"), {
+      description: result.errorMessage ? `${description}\n${result.errorMessage}` : description,
+    });
+    return;
+  }
+
+  if (result.updated === 0) {
+    toast.warning(t("page.tools.texture_resizer.toast.none_processed"), {
+      description,
+    });
+    return;
+  }
+
+  if (result.failed > 0) {
+    toast.warning(t("page.tools.texture_resizer.toast.completed"), {
+      description: result.errorMessage ? `${description}\n${result.errorMessage}` : description,
+    });
+    return;
+  }
+
+  toast.success(t("page.tools.texture_resizer.toast.completed"), {
+    description,
+  });
 }
 
 function describeFileResult(

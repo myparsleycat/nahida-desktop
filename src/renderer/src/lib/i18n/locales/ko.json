@@ -984,6 +984,12 @@
         "ready": "변환 가능",
         "not_resizable": "건너뜀",
         "process_single": "변환",
+        "select_all": "전체 선택",
+        "selected_count": "{{count}}개 선택",
+        "bulk_apply": "일괄 적용",
+        "bulk_apply_description": "선택한 모든 텍스처에 같은 옵션을 적용합니다.",
+        "process_selected": "선택 항목 변환",
+        "batch_progress": "{{current}} / {{total}}",
         "run": "텍스처 변환",
         "running": "변환 중",
         "result_title": "변환 결과",
@@ -1007,7 +1013,8 @@
         },
         "dialog": {
           "title": "텍스처 변환 옵션",
-          "description_fallback": "선택한 DDS 파일"
+          "description_fallback": "선택한 DDS 파일",
+          "description_multiple": "{{count}}개의 DDS 파일"
         },
         "result": {
           "processed": "처리",
@@ -1019,7 +1026,8 @@
           "save_settings_failed": "텍스처 변환 설정을 저장하지 못했습니다",
           "load_failed": "텍스처 목록을 불러오지 못했습니다",
           "completed": "텍스처 변환이 완료되었습니다",
-          "completed_description": "{{updated}}개 변경, {{failed}}개 실패",
+          "completed_description": "{{updated}}개 변경, {{failed}}개 실패, {{skipped}}개 건너뜀",
+          "none_processed": "변환된 텍스처가 없습니다",
           "single_completed": "텍스처 변환이 완료되었습니다",
           "single_completed_fallback": "선택한 텍스처 처리가 완료되었습니다",
           "failed": "텍스처 변환에 실패했습니다"
