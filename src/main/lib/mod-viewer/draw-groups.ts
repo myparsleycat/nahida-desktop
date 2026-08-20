@@ -2,8 +2,11 @@ import { closeSync, openSync, readSync } from "node:fs";
 import { open } from "node:fs/promises";
 import path from "node:path";
 
+import { decodeDdsToRgba8 } from "@native/mod-tools";
+import { analyzePng, parseDdsSrgbState } from "@native/static-glb";
 import type { Dnf } from "@shared/mod-viewer/types";
 import fse from "fs-extra";
+import { PNG } from "pngjs";
 
 import type { ShapeSlider } from "./shapes";
 
@@ -48,12 +51,17 @@ const AUX_MAP_CHANNELS: Record<string, "normal_map" | "light_map" | "material_ma
     materialmap: "material_map",
 };
 const HASH_TEXTURE_SUFFIX = /(Diffuse|NormalMap|LightMap|MaterialMap)$/i;
-const WWMI_DUMP_TEX_RE = /(?:^|[/\\])Components-(\d+)\s+t=/i;
+const WWMI_DUMP_TEX_RE = /(?:^|[/\\])Components-(\d+(?:-\d+)*)\s+t=/i;
+const MAX_HINT_DECODE_BYTES = 32 * 1024 * 1024;
+const MAX_HINT_DECODE_AREA = 4096 * 4096;
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const IB_COMPONENT_DUMP_RE =
     /(?:^|[/\\])([0-9a-f]{8})_(\d+)_([0-9a-f]{8})_Hash_(DiffuseMap|LightMap|NormalMap|MaterialMap)\./i;
 const DDS_SRGB_DXGI = new Set([29, 72, 75, 78, 91, 93, 99]);
+const DDS_PACKED_DXGI = new Set([80, 81, 83, 84]);
+const DDS_PACKED_FOURCC = new Set(["ATI1", "ATI2", "BC4U", "BC4S", "BC5U", "BC5S"]);
 
-export type TextureAssignment = { res: string; cond: Dnf };
+export type TextureAssignment = { res: string; cond: Dnf; authored?: boolean };
 
 export type DrawRecord = {
     label: string;
@@ -69,6 +77,7 @@ export type DrawRecord = {
     positionStride?: number;
     texcoordStride?: number;
     textureDefaultFile?: string;
+    textureAuthored?: boolean;
     textureVariants?: Array<{ conditions: Dnf; file: string }>;
     textureAssignments?: Array<{ conditions: Dnf; file: string }>;
     positionVariants?: Array<{ conditions: Dnf; file: string; stride: number }>;
@@ -92,6 +101,7 @@ export type DrawGroup = {
     ibFile: string;
     diffuseFile?: string;
     diffusePoolFiles: Array<{ res: string; file: string }>;
+    nonDiffuseTextureFiles: string[];
     indexSize: number;
     draws: DrawRecord[];
     shapeSliders?: ShapeSlider[];
@@ -127,6 +137,7 @@ type SectionInfo = {
     curDiffuseVariants: TextureAssignment[];
     diffuseChainKey?: string;
     diffuseLastCond?: Dnf;
+    nonDiffuseSlotPool: string[];
     diffuseHistory: TextureAssignment[];
     ibHistory: TextureAssignment[];
     vb0History: TextureAssignment[];
@@ -307,11 +318,13 @@ export function buildDrawGroups(
                 .filter((entry): entry is { conditions: Dnf; file: string } => !!entry);
             if (variants.length > 0) {
                 draw.textureDefaultFile = variants[0].file;
+                draw.textureAuthored = assignedDiffuse.some((entry) => entry.authored);
             } else {
                 const fallback = lookupRoleResource(snapshot.ib ?? ibRes, "Diffuse", resources);
                 const file = fallback ? resourceLookup(resources, fallback).filename : undefined;
                 if (file) {
                     draw.textureDefaultFile = file;
+                    draw.textureAuthored = true;
                 }
             }
             if (variants.length > 1) {
@@ -412,6 +425,14 @@ export function buildDrawGroups(
                 ? resourceLookup(resources, info.diffuse).filename
                 : undefined,
             diffusePoolFiles: poolFiles,
+            nonDiffuseTextureFiles: [
+                ...new Set(
+                    info.nonDiffuseSlotPool.flatMap((res) => {
+                        const file = resourceLookup(resources, res).filename;
+                        return file ? [file] : [];
+                    }),
+                ),
+            ],
             indexSize: ibIndexSize(ibRi.format),
             draws,
         });
@@ -427,26 +448,71 @@ export async function attachWwmiDumpTextures(
     resources: Record<string, ResourceInfo>,
     modDir: string,
 ): Promise<void> {
-    const needed = new Set(
-        groups.flatMap((group) => {
-            const index = wwmiComponentIndex(group);
-            if (!index || group.draws.every((draw) => draw.textureDefaultFile)) {
-                return [];
-            }
-            return [index];
-        }),
+    const targets = groups.filter(
+        (group) => wwmiComponentIndex(group) && group.draws.some((draw) => !draw.textureAuthored),
     );
-    if (needed.size === 0) {
+    if (targets.length === 0) {
         return;
     }
 
-    const filesByIndex = Object.values(resources).reduce((map, info) => {
-        const file = info.filename;
-        const index = file ? WWMI_DUMP_TEX_RE.exec(file.replaceAll("\\", "/"))?.[1] : undefined;
-        if (!file || !index || !needed.has(index)) {
+    const hintCache = new Map<string, Promise<WwmiTextureHint | null>>();
+    const inspect = (relative: string | undefined) => {
+        const resolved = safeResourcePath(modDir, relative);
+        if (!resolved) {
+            return Promise.resolve(null);
+        }
+        const cached = hintCache.get(resolved);
+        if (cached) {
+            return cached;
+        }
+        const pending = inspectWwmiTextureHint(resolved).catch(() => null);
+        hintCache.set(resolved, pending);
+        return pending;
+    };
+
+    const needsDump = new Set<string>();
+    for (const group of targets) {
+        const index = wwmiComponentIndex(group);
+        if (!index) {
+            continue;
+        }
+        for (const draw of group.draws) {
+            if (draw.textureAuthored) {
+                continue;
+            }
+            const hint = await inspect(draw.textureDefaultFile);
+            if (!hint || !isLikelyWwmiDiffuse(hint)) {
+                needsDump.add(index);
+            }
+        }
+    }
+
+    const excludedByIndex = targets.reduce((map, group) => {
+        const index = wwmiComponentIndex(group);
+        if (!index || !needsDump.has(index)) {
             return map;
         }
-        return map.set(index, [...(map.get(index) ?? []), file]);
+        return map.set(
+            index,
+            new Set([...(map.get(index) ?? []), ...group.nonDiffuseTextureFiles]),
+        );
+    }, new Map<string, Set<string>>());
+
+    const filesByIndex = Object.values(resources).reduce((map, info) => {
+        const file = info.filename;
+        const indices = file
+            ? WWMI_DUMP_TEX_RE.exec(file.replaceAll("\\", "/"))?.[1]?.split("-")
+            : undefined;
+        if (!file || !indices) {
+            return map;
+        }
+        for (const index of indices) {
+            if (!needsDump.has(index) || excludedByIndex.get(index)?.has(file)) {
+                continue;
+            }
+            map.set(index, [...(map.get(index) ?? []), file]);
+        }
+        return map;
     }, new Map<string, string[]>());
 
     const pickedByIndex = new Map(
@@ -456,20 +522,16 @@ export async function attachWwmiDumpTextures(
                     const scored = (
                         await Promise.all(
                             files.map(async (file, order) => {
-                                const resolved = safeResourcePath(modDir, file);
-                                if (!resolved || !(await fse.pathExists(resolved))) {
-                                    return null;
-                                }
-                                const hint = await inspectWwmiTextureHint(resolved).catch(
-                                    () => null,
-                                );
-                                if (!hint) {
+                                const hint = await inspect(file);
+                                if (!hint || !isLikelyWwmiDiffuse(hint)) {
                                     return null;
                                 }
                                 return {
                                     file,
                                     order,
-                                    ...hint,
+                                    srgb: hint.srgb,
+                                    area: hint.area,
+                                    bytes: hint.bytes,
                                 };
                             }),
                         )
@@ -481,14 +543,31 @@ export async function attachWwmiDumpTextures(
         ).filter((entry): entry is NonNullable<typeof entry> => !!entry),
     );
 
-    for (const group of groups) {
-        const picked = pickedByIndex.get(wwmiComponentIndex(group) ?? "");
-        if (!picked) {
-            continue;
-        }
-        group.diffuseFile ??= picked;
+    for (const group of targets) {
+        const dumpPick = pickedByIndex.get(wwmiComponentIndex(group) ?? "");
         for (const draw of group.draws) {
-            draw.textureDefaultFile ??= picked;
+            if (draw.textureAuthored) {
+                continue;
+            }
+            const currentHint = await inspect(draw.textureDefaultFile);
+            if (currentHint && isLikelyWwmiDiffuse(currentHint)) {
+                draw.textureVariants = await keepLikelyDiffuseVariants(
+                    draw.textureVariants,
+                    inspect,
+                );
+                draw.textureAssignments = await keepLikelyDiffuseVariants(
+                    draw.textureAssignments,
+                    inspect,
+                );
+                continue;
+            }
+            if (!dumpPick) {
+                continue;
+            }
+            draw.textureDefaultFile = dumpPick;
+            group.diffuseFile ??= dumpPick;
+            draw.textureVariants = undefined;
+            draw.textureAssignments = undefined;
         }
     }
 }
@@ -777,17 +856,202 @@ function ibDrawWeight(groups: DrawGroup[]): number {
     );
 }
 
+export type WwmiTextureHint = {
+    srgb: boolean;
+    colorSpace: "srgb" | "linear" | "unknown";
+    area: number;
+    bytes: number;
+    isLikelyFlat: boolean;
+    isLikelyNormal: boolean;
+    isLikelyPacked: boolean;
+};
+
+export function isLikelyWwmiDiffuse(hint: WwmiTextureHint): boolean {
+    if (hint.colorSpace === "linear") {
+        return false;
+    }
+    return !hint.isLikelyFlat && !hint.isLikelyNormal && !hint.isLikelyPacked;
+}
+
 export function pickWwmiDumpDiffuse(
     candidates: Array<{ file: string; srgb: boolean; area: number; bytes: number; order: number }>,
 ): string | undefined {
     const ranked = [...candidates].sort(
         (left, right) =>
+            wwmiDumpShareCount(left.file) - wwmiDumpShareCount(right.file) ||
             Number(right.srgb) - Number(left.srgb) ||
             right.area - left.area ||
             right.bytes - left.bytes ||
             left.order - right.order,
     );
     return ranked[0]?.file;
+}
+
+function wwmiDumpShareCount(file: string): number {
+    return WWMI_DUMP_TEX_RE.exec(file.replaceAll("\\", "/"))?.[1]?.split("-").length || 1;
+}
+
+async function keepLikelyDiffuseVariants(
+    variants: Array<{ conditions: Dnf; file: string }> | undefined,
+    inspect: (relative: string | undefined) => Promise<WwmiTextureHint | null>,
+) {
+    if (!variants?.length) {
+        return variants;
+    }
+    const kept = (
+        await Promise.all(
+            variants.map(async (variant) => {
+                const hint = await inspect(variant.file);
+                return hint && isLikelyWwmiDiffuse(hint) ? variant : null;
+            }),
+        )
+    ).filter((variant): variant is NonNullable<typeof variant> => !!variant);
+    return kept.length > 0 ? kept : undefined;
+}
+
+async function inspectWwmiTextureHint(filePath: string): Promise<WwmiTextureHint | null> {
+    if (!(await fse.pathExists(filePath))) {
+        return null;
+    }
+    const bytes = (await fse.stat(filePath)).size;
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === ".png") {
+        const area = pngIhdrArea(await readFilePrefix(filePath, 24)) ?? 0;
+        if (bytes > MAX_HINT_DECODE_BYTES || area > MAX_HINT_DECODE_AREA) {
+            return {
+                srgb: true,
+                colorSpace: "srgb",
+                area,
+                bytes,
+                isLikelyFlat: false,
+                isLikelyNormal: false,
+                isLikelyPacked: false,
+            };
+        }
+        const png = PNG.sync.read(await fse.readFile(filePath));
+        return hintFromAnalysis(
+            analyzePng(png.data, png.width, png.height),
+            "srgb",
+            png.width * png.height,
+            bytes,
+        );
+    }
+    if (ext === ".jpg" || ext === ".jpeg") {
+        return {
+            srgb: true,
+            colorSpace: "srgb",
+            area: 0,
+            bytes,
+            isLikelyFlat: false,
+            isLikelyNormal: false,
+            isLikelyPacked: false,
+        };
+    }
+    if (ext !== ".dds" || bytes < 128) {
+        return {
+            srgb: false,
+            colorSpace: "unknown",
+            area: 0,
+            bytes,
+            isLikelyFlat: false,
+            isLikelyNormal: false,
+            isLikelyPacked: false,
+        };
+    }
+
+    const header = await readFilePrefix(filePath, Math.min(148, bytes));
+    if (header.length < 128) {
+        return {
+            srgb: false,
+            colorSpace: "unknown",
+            area: 0,
+            bytes,
+            isLikelyFlat: false,
+            isLikelyNormal: false,
+            isLikelyPacked: false,
+        };
+    }
+    const area = header.readUInt32LE(16) * header.readUInt32LE(12);
+    const fourcc = header.toString("ascii", 84, 88);
+    const dxgi = fourcc === "DX10" && header.length >= 132 ? header.readUInt32LE(128) : -1;
+    const srgbState = parseDdsSrgbState(header);
+    const colorSpace = srgbState === true ? "srgb" : srgbState === false ? "linear" : "unknown";
+    const packedFormat = DDS_PACKED_FOURCC.has(fourcc) || DDS_PACKED_DXGI.has(dxgi);
+    if (
+        colorSpace === "linear" ||
+        packedFormat ||
+        area > MAX_HINT_DECODE_AREA ||
+        bytes > MAX_HINT_DECODE_BYTES
+    ) {
+        return {
+            srgb: colorSpace === "srgb",
+            colorSpace,
+            area,
+            bytes,
+            isLikelyFlat: false,
+            isLikelyNormal: packedFormat,
+            isLikelyPacked: packedFormat,
+        };
+    }
+    const decoded = await decodeDdsToRgba8(filePath);
+    return hintFromAnalysis(
+        analyzePng(decoded.data, decoded.width, decoded.height),
+        colorSpace,
+        area,
+        bytes,
+    );
+}
+
+function pngIhdrArea(header: Buffer): number | undefined {
+    if (
+        header.length < 24 ||
+        !header.subarray(0, 8).equals(PNG_SIGNATURE) ||
+        header.toString("ascii", 12, 16) !== "IHDR"
+    ) {
+        return undefined;
+    }
+    const width = header.readUInt32BE(16);
+    const height = header.readUInt32BE(20);
+    if (width === 0 || height === 0) {
+        return undefined;
+    }
+    return width * height;
+}
+
+function hintFromAnalysis(
+    analysis: {
+        channelRangeMax: number;
+        luminanceStdDev: number;
+        meanR: number;
+        meanG: number;
+        meanB: number;
+        blueDominance: number;
+    },
+    colorSpace: WwmiTextureHint["colorSpace"],
+    area: number,
+    bytes: number,
+): WwmiTextureHint {
+    const means = [analysis.meanR, analysis.meanG, analysis.meanB];
+    return {
+        srgb: colorSpace === "srgb",
+        colorSpace,
+        area,
+        bytes,
+        isLikelyFlat:
+            analysis.channelRangeMax <= 12 ||
+            (analysis.luminanceStdDev <= 0.035 && analysis.channelRangeMax <= 24) ||
+            analysis.luminanceStdDev <= 0.012,
+        isLikelyNormal:
+            analysis.meanB >= 0.7 &&
+            Math.abs(analysis.meanR - 0.5) <= 0.18 &&
+            Math.abs(analysis.meanG - 0.5) <= 0.18 &&
+            analysis.blueDominance >= 0.12 &&
+            analysis.channelRangeMax <= 72 &&
+            analysis.luminanceStdDev <= 0.12,
+        isLikelyPacked:
+            means.some((value) => value <= 0.04) &&
+            means.some((value) => Math.abs(value - 0.5) <= 0.15),
+    };
 }
 
 export function attachShapeSliders(groups: DrawGroup[], shapeSliders: ShapeSlider[]): void {
@@ -813,39 +1077,6 @@ function wwmiComponentIndex(group: DrawGroup): string | undefined {
         /^Component(\d+)$/i.exec(group.displayName)?.[1] ??
         /^Component(\d+)$/i.exec(group.name)?.[1]
     );
-}
-
-async function inspectWwmiTextureHint(
-    filePath: string,
-): Promise<{ srgb: boolean; area: number; bytes: number }> {
-    const bytes = (await fse.stat(filePath)).size;
-    const ext = path.extname(filePath).toLowerCase();
-    if (ext === ".png") {
-        return { srgb: true, area: await readPngArea(filePath), bytes };
-    }
-    if (ext === ".jpg" || ext === ".jpeg") {
-        return { srgb: true, area: 0, bytes };
-    }
-    if (ext !== ".dds" || bytes < 128) {
-        return { srgb: false, area: 0, bytes };
-    }
-    const header = await readFilePrefix(filePath, Math.min(148, bytes));
-    if (header.length < 128) {
-        return { srgb: false, area: 0, bytes };
-    }
-    const area = header.readUInt32LE(16) * header.readUInt32LE(12);
-    if (header.toString("ascii", 84, 88) !== "DX10" || header.length < 132) {
-        return { srgb: false, area, bytes };
-    }
-    return { srgb: DDS_SRGB_DXGI.has(header.readUInt32LE(128)), area, bytes };
-}
-
-async function readPngArea(filePath: string): Promise<number> {
-    const header = await readFilePrefix(filePath, 24);
-    if (header.length < 24) {
-        return 0;
-    }
-    return header.readUInt32BE(16) * header.readUInt32BE(20);
 }
 
 async function readFilePrefix(filePath: string, length: number): Promise<Buffer> {
@@ -1007,16 +1238,26 @@ function scanSectionsForDraws(
             }
 
             let diffuse = /^Resource\\[^\\]+\\Diffuse\s*=\s*(?:ref\s+)?(\S+)/i.exec(line);
+            let authoredDiffuse = Boolean(diffuse);
             if (!diffuse) {
-                const ps = /^ps-t\d+\s*=\s*(\S+)/i.exec(line);
-                if (ps && /Diffuse/i.test(ps[1])) {
-                    diffuse = ps;
+                const ps = /^ps-t(\d+)\s*=\s*(?:ref\s+)?(\S+)/i.exec(line);
+                if (ps && ps[1] !== "0" && !/Diffuse/i.test(ps[2])) {
+                    info.nonDiffuseSlotPool.push(ps[2]);
+                }
+                if (
+                    ps &&
+                    !/(NormalMap|LightMap|MaterialMap)/i.test(ps[2]) &&
+                    (ps[1] === "0" || /Diffuse/i.test(ps[2]))
+                ) {
+                    diffuse = [ps[0], ps[2]] as unknown as RegExpExecArray;
+                    authoredDiffuse = /Diffuse/i.test(ps[2]);
                 }
             }
             if (!diffuse) {
                 const self = /^this\s*=\s*(?:ref\s+)?(\S+)/i.exec(line);
                 if (self && (/Diffuse/i.test(self[1]) || /^Diffuse$/i.test(sectionRole ?? ""))) {
                     diffuse = self;
+                    authoredDiffuse = true;
                 }
             }
             if (diffuse) {
@@ -1044,9 +1285,9 @@ function scanSectionsForDraws(
                 ) {
                     info.curDiffuseVariants.pop();
                 }
-                info.curDiffuseVariants.push({ res, cond });
+                info.curDiffuseVariants.push({ res, cond, authored: authoredDiffuse });
                 info.diffuseLastCond = cond;
-                info.diffuseHistory.push({ res, cond });
+                info.diffuseHistory.push({ res, cond, authored: authoredDiffuse });
             }
 
             let aux =
@@ -1134,6 +1375,7 @@ function scanSectionsForDraws(
             auxMapsAtEnd: {},
             curDiffuseVariants: [],
             diffuseHistory: [],
+            nonDiffuseSlotPool: [],
             ibHistory: [],
             vb0History: [],
             vb1History: [],
