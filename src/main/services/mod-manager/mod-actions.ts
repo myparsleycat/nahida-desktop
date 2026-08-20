@@ -11,9 +11,10 @@ import type { ShaderFixesProcessedFile } from "./shader-fixes";
 import {
     findNteGameByPath,
     getNteGroupRelativePath,
+    getNteListingGroupPath,
     getNteRoots,
-    hasNteDirectPak,
     isNteModEnabled,
+    listNteModPaths,
     setNteModEnabled,
 } from "./nte";
 import {
@@ -300,13 +301,8 @@ export class ModActionsService {
 
     private async exclusiveToggleNte(modPath: string, game: GameConfig) {
         const roots = getNteRoots(game);
-
         if (!(await isNteModEnabled(modPath))) {
-            await this.setAllNte(
-                path.dirname(path.join(roots.modRoot, getNteGroupRelativePath(roots, modPath))),
-                game,
-                false,
-            );
+            await this.setAllNte(await getNteListingGroupPath(roots, modPath), game, false);
             return await setNteModEnabled(this.desktop, modPath, true);
         }
 
@@ -320,11 +316,8 @@ export class ModActionsService {
         if (!(await this.desktop.lib.fs.pathExists(groupDir))) return;
 
         await Promise.all(
-            (await this.desktop.lib.fs.listDirectories(groupDir)).map(async (folderName) => {
-                const modPath = path.join(groupDir, folderName);
+            (await listNteModPaths(roots, groupDir)).map(async (modPath) => {
                 try {
-                    if (!(await hasNteDirectPak(modPath))) return;
-
                     const currentlyEnabled = await isNteModEnabled(modPath);
                     if (currentlyEnabled === enabled) return;
 
