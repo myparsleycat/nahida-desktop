@@ -940,19 +940,25 @@
           "resize": "텍스처 크기만 변경합니다. DDS 포맷은 유지됩니다.",
           "resize_and_convert": "텍스처를 리사이즈한 뒤 색공간은 유지하면서 다른 DDS 포맷으로 다시 인코딩합니다.",
           "convert": "원본 크기는 유지하고 DDS 출력 포맷만 변경합니다.",
-          "upscale": "Real-ESRGAN으로 텍스처를 확대합니다. DDS 포맷은 유지됩니다.",
-          "upscale_and_convert": "Real-ESRGAN으로 확대한 뒤 다른 DDS 포맷으로 다시 인코딩합니다."
+          "upscale": "AI 업스케일러로 텍스처를 확대합니다. DDS 포맷은 유지됩니다.",
+          "upscale_and_convert": "AI 업스케일러로 확대한 뒤 다른 DDS 포맷으로 다시 인코딩합니다."
         },
         "upscale_model": "업스케일 모델",
         "upscale_model_options": {
           "realesr-animevideov3": "애니 / 게임 (기본)",
           "realesrgan-x4plus-anime": "애니 x4+",
-          "realesrgan-x4plus": "실사 x4+"
+          "realesrgan-x4plus": "실사 x4+",
+          "realcugan-pro": "Real-CUGAN Pro",
+          "realcugan-se": "Real-CUGAN SE",
+          "realcugan-nose": "Real-CUGAN Nose"
         },
         "upscale_model_descriptions": {
           "realesr-animevideov3": "게임·애니 텍스처에 가장 무난한 기본 모델입니다. 2x, 3x, 4x를 지원합니다.",
           "realesrgan-x4plus-anime": "품질이 더 높은 애니 모델입니다. 배율은 4x로 고정됩니다.",
-          "realesrgan-x4plus": "실사·사진용 모델입니다. 배율은 4x로 고정됩니다."
+          "realesrgan-x4plus": "실사·사진용 모델입니다. 배율은 4x로 고정됩니다.",
+          "realcugan-pro": "애니 특화 고품질 모델입니다. 2x, 3x를 지원합니다.",
+          "realcugan-se": "균형 잡힌 애니 모델입니다. 2x, 3x, 4x를 지원합니다.",
+          "realcugan-nose": "가장 가볍고 빠른 모델입니다. 배율은 2x로 고정됩니다."
         },
         "upscale_scale": "배율",
         "upscale_scale_option": "{{scale}}배",

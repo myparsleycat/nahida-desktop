@@ -14,12 +14,15 @@ import type {
     TextureResizeResult,
     TextureResizeRunInput,
     TextureResizeSettings,
+    TextureUpscaleEngine,
     TextureUpscaleModel,
     TextureUpscaleProgressEvent,
+    TextureUpscaleRuntimeStatuses,
     TextureUpscaleScale,
 } from "@shared/types";
 import {
     getTextureResizeCandidates,
+    getTextureUpscaleEngine,
     getTextureUpscaleTarget,
     isTextureUpscaleOperation,
     isUnsupportedTextureUpscaleFormat,
@@ -35,6 +38,7 @@ import { nanoid } from "nanoid";
 import pLimit from "p-limit";
 import sharp from "sharp";
 
+import { RealcuganRuntime } from "./realcugan-runtime";
 import { RealesrganRuntime } from "./realesrgan-runtime";
 
 const MODE_KEY = "texture_resize_mode";
@@ -77,7 +81,12 @@ const DDPF_FOURCC = 0x4;
 const DDPF_RGB = 0x40;
 const DDSCAPS2_CUBEMAP = 0x200;
 const DDSD_MIPMAPCOUNT = 0x00020000;
-const REALESRGAN_PROCESS_TIMEOUT_MS = 10 * 60 * 1000;
+const UPSCALE_PROCESS_TIMEOUT_MS = 10 * 60 * 1000;
+
+const UPSCALE_ENGINE_DISPLAY_NAMES: Record<TextureUpscaleEngine, string> = {
+    realesrgan: "Real-ESRGAN",
+    realcugan: "Real-CUGAN",
+};
 
 type TextureOutputFormat = (typeof ALL_OUTPUT_FORMATS)[number];
 
@@ -223,9 +232,11 @@ export class TextureResizer {
     private nextJobId = 0;
     private readonly inFlightJobs = new Map<number, TextureResizeProgressEvent>();
     private readonly realesrganRuntime: RealesrganRuntime;
+    private readonly realcuganRuntime: RealcuganRuntime;
 
     constructor(private readonly desktop: NahidaDesktop) {
         this.realesrganRuntime = new RealesrganRuntime(desktop);
+        this.realcuganRuntime = new RealcuganRuntime(desktop);
     }
 
     public getState(): TextureResizeProgressEvent {
@@ -349,8 +360,12 @@ export class TextureResizer {
         return merged;
     }
 
-    public async getUpscaleRuntimeStatus() {
-        return await this.realesrganRuntime.getStatus();
+    public async getUpscaleRuntimeStatus(): Promise<TextureUpscaleRuntimeStatuses> {
+        const [realesrgan, realcugan] = await Promise.all([
+            this.realesrganRuntime.getStatus(),
+            this.realcuganRuntime.getStatus(),
+        ]);
+        return { realesrgan, realcugan };
     }
 
     public async listFolderTextures(targetPath: string, settings?: Partial<TextureResizeSettings>) {
@@ -494,26 +509,30 @@ export class TextureResizer {
         const inputPngPath = path.join(workDir, `${nanoid(8)}-in.png`);
         const outputPngPath = path.join(workDir, `${nanoid(8)}-out.png`);
 
+        const engine = getTextureUpscaleEngine(settings.upscaleModel);
+        const engineDisplayName = UPSCALE_ENGINE_DISPLAY_NAMES[engine];
+        const runtime = engine === "realcugan" ? this.realcuganRuntime : this.realesrganRuntime;
+
         try {
             this.emitUpscaleProgress({
                 phase: "download",
                 percent: 0,
                 filePath,
-                message: "Preparing Real-ESRGAN runtime",
+                message: `Preparing ${engineDisplayName} runtime`,
             });
-            const runtime = await this.realesrganRuntime.ensureInstalled((phase, percent) => {
+            const installedRuntime = await runtime.ensureInstalled((phase, percent) => {
                 this.emitUpscaleProgress({
                     phase,
                     percent,
                     filePath,
                     message:
                         phase === "download"
-                            ? "Downloading Real-ESRGAN runtime"
-                            : "Extracting Real-ESRGAN runtime",
+                            ? `Downloading ${engineDisplayName} runtime`
+                            : `Extracting ${engineDisplayName} runtime`,
                 });
             });
-            if (!runtime.binaryPath || !runtime.modelsPath) {
-                throw new Error("Real-ESRGAN runtime is not installed.");
+            if (!installedRuntime.binaryPath || !installedRuntime.modelsPath) {
+                throw new Error(`${engineDisplayName} runtime is not installed.`);
             }
 
             this.emitUpscaleProgress({
@@ -579,11 +598,12 @@ export class TextureResizer {
                 phase: "upscale",
                 percent: null,
                 filePath,
-                message: "Running Real-ESRGAN",
+                message: `Running ${engineDisplayName}`,
             });
-            await runRealesrganProcess({
-                binaryPath: runtime.binaryPath,
-                modelsPath: runtime.modelsPath,
+            await runUpscaleProcess({
+                engine,
+                binaryPath: installedRuntime.binaryPath,
+                modelsPath: installedRuntime.modelsPath,
                 inputPath: inputPngPath,
                 outputPath: outputPngPath,
                 model: settings.upscaleModel,
@@ -603,7 +623,7 @@ export class TextureResizer {
             );
             if (expected && (outputWidth !== expected.width || outputHeight !== expected.height)) {
                 this.desktop.logger.warn(
-                    `Real-ESRGAN output size ${outputWidth}x${outputHeight} did not match expected ${expected.width}x${expected.height}`,
+                    `${engineDisplayName} output size ${outputWidth}x${outputHeight} did not match expected ${expected.width}x${expected.height}`,
                     "TextureResizer:upscale",
                 );
             }
@@ -1286,7 +1306,8 @@ function buildSkippedFileResult(
     };
 }
 
-function runRealesrganProcess({
+function runUpscaleProcess({
+    engine,
     binaryPath,
     modelsPath,
     inputPath,
@@ -1295,6 +1316,7 @@ function runRealesrganProcess({
     scale,
     logger,
 }: {
+    engine: TextureUpscaleEngine;
     binaryPath: string;
     modelsPath: string;
     inputPath: string;
@@ -1303,41 +1325,61 @@ function runRealesrganProcess({
     scale: TextureUpscaleScale;
     logger: (message: string) => void;
 }) {
+    const displayName = UPSCALE_ENGINE_DISPLAY_NAMES[engine];
+    const args =
+        engine === "realcugan"
+            ? [
+                  "-i",
+                  inputPath,
+                  "-o",
+                  outputPath,
+                  "-n",
+                  // realcugan-ncnn-vulkan maps 0 to up{scale}x-no-denoise; -1 is conservative.
+                  "0",
+                  "-s",
+                  String(scale),
+                  "-t",
+                  "0",
+                  "-c",
+                  "3",
+                  "-f",
+                  "png",
+                  "-m",
+                  path.join(modelsPath, resolveRealcuganModelDir(model)),
+              ]
+            : [
+                  "-i",
+                  inputPath,
+                  "-o",
+                  outputPath,
+                  "-n",
+                  model,
+                  "-s",
+                  String(scale),
+                  "-t",
+                  "0",
+                  "-f",
+                  "png",
+                  "-m",
+                  modelsPath,
+              ];
+
     return new Promise<void>((resolve, reject) => {
-        const child = spawn(
-            binaryPath,
-            [
-                "-i",
-                inputPath,
-                "-o",
-                outputPath,
-                "-n",
-                model,
-                "-s",
-                String(scale),
-                "-t",
-                "0",
-                "-f",
-                "png",
-                "-m",
-                modelsPath,
-            ],
-            {
-                windowsHide: true,
-                cwd: path.dirname(binaryPath),
-                shell: false,
-            },
-        );
+        const child = spawn(binaryPath, args, {
+            windowsHide: true,
+            cwd: path.dirname(binaryPath),
+            shell: false,
+        });
 
         let stderr = "";
         const timeout = setTimeout(() => {
             child.kill();
             reject(
                 new Error(
-                    `Real-ESRGAN timed out after ${REALESRGAN_PROCESS_TIMEOUT_MS}ms${stderr.trim() ? `: ${stderr.trim()}` : ""}`,
+                    `${displayName} timed out after ${UPSCALE_PROCESS_TIMEOUT_MS}ms${stderr.trim() ? `: ${stderr.trim()}` : ""}`,
                 ),
             );
-        }, REALESRGAN_PROCESS_TIMEOUT_MS);
+        }, UPSCALE_PROCESS_TIMEOUT_MS);
         child.stderr?.on("data", (chunk: Buffer) => {
             const text = chunk.toString();
             stderr += text;
@@ -1362,9 +1404,13 @@ function runRealesrganProcess({
 
             reject(
                 new Error(
-                    `Real-ESRGAN exited with code ${code ?? "unknown"}${stderr.trim() ? `: ${stderr.trim()}` : ""}`,
+                    `${displayName} exited with code ${code ?? "unknown"}${stderr.trim() ? `: ${stderr.trim()}` : ""}`,
                 ),
             );
         });
     });
+}
+
+function resolveRealcuganModelDir(model: TextureUpscaleModel) {
+    return `models-${model.slice("realcugan-".length)}`;
 }

@@ -921,19 +921,25 @@
           "resize": "テクスチャサイズのみ変更します。DDS 形式は維持されます。",
           "resize_and_convert": "色空間を維持したまま、リサイズして別の DDS 形式へ再エンコードします。",
           "convert": "元のサイズを維持し、DDS 出力形式のみ変更します。",
-          "upscale": "Real-ESRGAN でテクスチャを拡大します。DDS 形式は維持されます。",
-          "upscale_and_convert": "Real-ESRGAN で拡大したあと、別の DDS 形式へ再エンコードします。"
+          "upscale": "AI アップスケーラーでテクスチャを拡大します。DDS 形式は維持されます。",
+          "upscale_and_convert": "AI アップスケーラーで拡大したあと、別の DDS 形式へ再エンコードします。"
         },
         "upscale_model": "アップスケールモデル",
         "upscale_model_options": {
           "realesr-animevideov3": "アニメ / ゲーム（既定）",
           "realesrgan-x4plus-anime": "アニメ x4+",
-          "realesrgan-x4plus": "写真 x4+"
+          "realesrgan-x4plus": "写真 x4+",
+          "realcugan-pro": "Real-CUGAN Pro",
+          "realcugan-se": "Real-CUGAN SE",
+          "realcugan-nose": "Real-CUGAN Nose"
         },
         "upscale_model_descriptions": {
           "realesr-animevideov3": "ゲーム・アニメテクスチャ向けの標準モデルです。2x、3x、4x に対応します。",
           "realesrgan-x4plus-anime": "高品質なアニメ向けモデルです。倍率は 4x 固定です。",
-          "realesrgan-x4plus": "写真・実写向けモデルです。倍率は 4x 固定です。"
+          "realesrgan-x4plus": "写真・実写向けモデルです。倍率は 4x 固定です。",
+          "realcugan-pro": "アニメ向け高品質モデルです。2x、3x をサポートします。",
+          "realcugan-se": "バランスの良いアニメモデルです。2x、3x、4x をサポートします。",
+          "realcugan-nose": "最も軽量で高速なモデルです。倍率は 2x に固定されます。"
         },
         "upscale_scale": "倍率",
         "upscale_scale_option": "{{scale}}倍",
