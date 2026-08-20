@@ -75,6 +75,14 @@
           "dedup_lookup": "正在检查重复",
           "processing": "正在处理文件"
         },
+        "error": {
+          "invalid_nte_mod_file": "这不是有效的 NTE 模组文件。",
+          "nte_client_upgrade_required": "请更新桌面应用后再上传 NTE 模组。",
+          "nte_bundle_incomplete": "NTE 模组所需文件尚未全部上传。",
+          "bundle_cleanup_failed": "无法清理 NTE 模组的临时上传文件。",
+          "upload_file_too_large": "单个文件不能超过 1 GiB。",
+          "nte_bundle_too_large": "此 NTE 模组文件过多，无法作为一组上传。"
+        },
         "time_remaining": "剩余 {{time}}",
         "time_elapsed": "经过 {{time}}",
         "failed_files": "{{count}} 个失败",

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { FilesComponent } from "./upload";
 
-import { UploadLib, hasSystemFileSegment, isSystemFile } from "./upload";
+import { UploadLib, assignStableUploadFileIds, hasSystemFileSegment, isSystemFile } from "./upload";
 
 vi.mock("@native/fs", () => ({
     collectFiles: vi.fn(),
@@ -105,5 +105,52 @@ describe("UploadLib.collect", () => {
 
         expect(result.files.map((f) => f.path)).toEqual(["mods/real.png"]);
         expect(result.directories.map((d) => d.path)).toEqual(["mods"]);
+    });
+
+    it("passes case-insensitive NTE extensions to native collection", async () => {
+        vi.mocked(collectFiles).mockResolvedValue({
+            files: [file("mods/CHARACTER.UTOC", "CHARACTER.UTOC")],
+            directories: [{ path: "mods", name: "mods", parentPath: "" }],
+        });
+
+        const result = await new UploadLib({} as never).prepareUpload(["C:/folder"], []);
+
+        expect(collectFiles).toHaveBeenCalledWith(
+            ["C:/folder"],
+            expect.arrayContaining([".pak", ".utoc", ".ucas"]),
+        );
+        expect(result.files.map((entry) => entry.name)).toEqual(["CHARACTER.UTOC"]);
+    });
+
+    it("accepts an uppercase NTE extension for a directly selected file", async () => {
+        const result = await new UploadLib({} as never).prepareUpload(["C:/CHARACTER.PAK"], []);
+
+        expect(result.files).toHaveLength(1);
+        expect(result.files[0].name).toBe("CHARACTER.PAK");
+    });
+});
+
+describe("assignStableUploadFileIds", () => {
+    it("derives stable case-insensitive identities from relative paths", () => {
+        const first = assignStableUploadFileIds([
+            {
+                path: "Mods/Character.PAK",
+                name: "Character.PAK",
+                size: 10,
+                parentPath: "Mods",
+                fullPath: "C:/Mods/Character.PAK",
+            },
+        ])[0].FID;
+        const second = assignStableUploadFileIds([
+            {
+                path: "mods/character.pak",
+                name: "character.pak",
+                size: 10,
+                parentPath: "mods",
+                fullPath: "C:/mods/character.pak",
+            },
+        ])[0].FID;
+
+        expect(first).toBe(second);
     });
 });

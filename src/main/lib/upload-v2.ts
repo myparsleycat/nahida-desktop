@@ -6,8 +6,8 @@ import { parseHttpBody, readApiBody } from "@main/lib/cbor-response";
 import { BACKEND_URL } from "@shared/const";
 import type { PlanPhase } from "@shared/types";
 import { toErrorMessage } from "@shared/utils";
-import { chunk } from "es-toolkit";
 import ky from "ky";
+import pLimit from "p-limit";
 import type PQueue from "p-queue";
 import { parseServerSentEvents } from "parse-sse";
 
@@ -26,6 +26,8 @@ import {
 
 const PLAN_PAGE_SIZE = 500;
 const PART_SIZE = 25 * 1024 * 1024;
+export const MAX_UPLOAD_FILE_SIZE = 1024 ** 3;
+export const MAX_MULTIPART_CONCURRENCY = 4;
 const RETRY_LIMIT = 3;
 const COMPLETE_TIMEOUT_MS = 15 * 60 * 1000;
 const UPLOAD_STREAM_CHUNK_SIZE = 64 * 1024;
@@ -36,6 +38,7 @@ type UploadPlanItem = {
     reason?: string;
     itemId?: string;
     intentId?: string;
+    bundleId?: string;
 };
 
 type UploadPlanEntry = {
@@ -52,10 +55,18 @@ type IntentPackResult = {
     reason?: string;
 };
 
+type NteBundle = {
+    id: string;
+    memberClientIds: string[];
+    completeUrl: string;
+    abortUrl: string;
+    form: { token: string };
+};
+
 type HttpResult = {
     status: number;
     reason?: string;
-    payload?: { status?: string; results?: IntentPackResult[] };
+    payload?: { status?: string; results?: IntentPackResult[]; code?: string };
 };
 
 type PreparedUpload = {
@@ -66,6 +77,68 @@ type PreparedUpload = {
     payloadBytes: number;
     logicalSize: number;
 };
+
+export class UploadV2Error extends Error {
+    public readonly code: string;
+
+    public constructor(code: string, message = code) {
+        super(message);
+        this.name = "UploadV2Error";
+        this.code = code;
+    }
+}
+
+export function uploadErrorCode(error: unknown) {
+    if (typeof error !== "object" || error === null) return undefined;
+    const code = (error as { code?: unknown }).code;
+    return typeof code === "string" ? code : undefined;
+}
+
+export function paginateUploadFiles(files: FinalFile[], pageSize = PLAN_PAGE_SIZE) {
+    const grouped = new Map<string, FinalFile[]>();
+    const units: FinalFile[][] = [];
+
+    for (const file of files) {
+        const key = nteGroupKey(file);
+        if (!key) {
+            units.push([file]);
+            continue;
+        }
+        const group = grouped.get(key);
+        if (group) {
+            group.push(file);
+            continue;
+        }
+        const created = [file];
+        grouped.set(key, created);
+        units.push(created);
+    }
+
+    const pages: FinalFile[][] = [];
+    let page: FinalFile[] = [];
+    for (const unit of units) {
+        if (unit.length > pageSize) throw new UploadV2Error("nte_bundle_too_large");
+        if (page.length > 0 && page.length + unit.length > pageSize) {
+            pages.push(page);
+            page = [];
+        }
+        page.push(...unit);
+        if (page.length >= pageSize) {
+            pages.push(page);
+            page = [];
+        }
+    }
+    if (page.length > 0) pages.push(page);
+    return pages;
+}
+
+function nteGroupKey(file: FinalFile) {
+    const match = /^(.*)\.(pak|utoc|ucas)$/i.exec(file.name);
+    if (!match) return undefined;
+    const basename =
+        match[2].toLowerCase() === "ucas" ? match[1].replace(/_s[1-9]\d*$/i, "") : match[1];
+    return `${file.parentId}\0${basename.normalize("NFC").toLowerCase()}`;
+}
 
 export async function uploadDriveFilesV2({
     desktop,
@@ -90,12 +163,22 @@ export async function uploadDriveFilesV2({
     onPlanComplete?: () => void;
     signal?: AbortSignal;
 }) {
+    const oversized = files.find((file) => file.size > MAX_UPLOAD_FILE_SIZE);
+    if (oversized) {
+        throw new UploadV2Error(
+            "upload_file_too_large",
+            `${oversized.name}: upload_file_too_large`,
+        );
+    }
+
     const items: UploadPlanItem[] = [];
     const uploads = new Map<string, UploadPlanEntry>();
+    const nteBundles = new Map<string, NteBundle>();
 
     const url = `${BACKEND_URL}/akasha/v2/sse/drive/files:plan`;
-    const pages = chunk(files, PLAN_PAGE_SIZE);
-    for (const [pageIndex, page] of pages.entries()) {
+    const pages = paginateUploadFiles(files);
+    let plannedFiles = 0;
+    for (const page of pages) {
         signal?.throwIfAborted();
         const response = await networkFetch(url, {
             method: "POST",
@@ -106,6 +189,7 @@ export async function uploadDriveFilesV2({
             body: JSON.stringify({
                 requestId,
                 current: currentId,
+                capabilities: ["nte-bundle-v1"],
                 files: page.map((file) => ({
                     clientId: file.FID,
                     name: file.name,
@@ -119,7 +203,7 @@ export async function uploadDriveFilesV2({
         });
         if (!response.ok) {
             const body = await readApiBody(response).catch(() => response.statusText);
-            throw new Error(`[upload plan failed] ${toErrorMessage(body)}`);
+            throw apiError(body, `[upload plan failed] ${toErrorMessage(body)}`);
         }
         if (!response.body) {
             throw new Error("[upload plan failed] empty response stream");
@@ -127,7 +211,7 @@ export async function uploadDriveFilesV2({
 
         for await (const event of parseServerSentEvents(response)) {
             if (event.type === "error") {
-                throw new Error(`[upload plan failed] ${event.data}`);
+                throw apiError(parseEventData(event.data), `[upload plan failed] ${event.data}`);
             }
             if (event.type === "progress") {
                 const data = JSON.parse(event.data) as {
@@ -137,7 +221,7 @@ export async function uploadDriveFilesV2({
                 };
                 onPlanProgress?.({
                     phase: data.phase,
-                    processed: pageIndex * PLAN_PAGE_SIZE + data.processed,
+                    processed: plannedFiles + data.processed,
                     total: files.length,
                 });
             }
@@ -145,23 +229,51 @@ export async function uploadDriveFilesV2({
                 const data = JSON.parse(event.data) as {
                     items: UploadPlanItem[];
                     uploads: UploadPlanEntry[];
+                    nteBundles?: NteBundle[];
                 };
                 items.push(...data.items);
                 data.uploads.forEach((upload) => uploads.set(upload.intentId, upload));
+                data.nteBundles?.forEach((bundle) => nteBundles.set(bundle.id, bundle));
             }
         }
+        plannedFiles += page.length;
     }
 
     const filesById = new Map(files.map((file) => [file.FID, file]));
+    const bundleIdByClientId = new Map(
+        [...nteBundles.values()].flatMap((bundle) =>
+            bundle.memberClientIds.map((clientId) => [clientId, bundle.id] as const),
+        ),
+    );
+    items.forEach((item) => {
+        if (item.bundleId) bundleIdByClientId.set(item.clientId, item.bundleId);
+    });
     const pendingByIntent = new Map<string, FinalFile[]>();
     const rejected: UploadPlanItem[] = [];
     const returnedClientIds = new Set(items.map((item) => item.clientId));
+    const stagedClientIds = new Set<string>();
+    const bundleCreditedBytes = new Map<string, number>();
+    const reportFileBytes = (file: FinalFile, bytes: number, isServerDeduplicated: boolean) => {
+        const bundleId = bundleIdByClientId.get(file.FID);
+        if (bundleId) {
+            bundleCreditedBytes.set(bundleId, (bundleCreditedBytes.get(bundleId) ?? 0) + bytes);
+        }
+        onProgress?.({ bytes, isServerDeduplicated });
+    };
+    const markReady = (file: FinalFile, bytes: number, isServerDeduplicated: boolean) => {
+        if (bundleIdByClientId.has(file.FID)) {
+            stagedClientIds.add(file.FID);
+            reportFileBytes(file, bytes, isServerDeduplicated);
+            return;
+        }
+        onProgress?.({ bytes, fileId: file.FID, isServerDeduplicated });
+    };
 
     for (const item of items) {
         const file = filesById.get(item.clientId);
         if (!file) continue;
         if (item.status === "created" || item.status === "exists") {
-            onProgress?.({ bytes: file.size, fileId: file.FID, isServerDeduplicated: true });
+            markReady(file, file.size, true);
             continue;
         }
         if (item.status === "pending" && item.intentId) {
@@ -187,6 +299,76 @@ export async function uploadDriveFilesV2({
     onPlanComplete?.();
 
     const failures: Error[] = [];
+    const failedBundles = new Set<string>();
+    const bundleControllers = new Map(
+        [...nteBundles.keys()].map((bundleId) => [bundleId, new AbortController()]),
+    );
+    const abortRequests = new Map<string, Promise<void>>();
+    const abortBundle = (bundleId: string, reason: unknown) => {
+        const existing = abortRequests.get(bundleId);
+        if (existing) return existing;
+        bundleControllers.get(bundleId)?.abort(reason);
+        const bundle = nteBundles.get(bundleId);
+        if (!bundle) return Promise.resolve();
+        const request = sendJson(
+            desktop,
+            bundle.abortUrl,
+            { token: bundle.form.token },
+            AbortSignal.timeout(30_000),
+        ).then((result) => {
+            if (result.status < 200 || result.status >= 300) throw httpError(result);
+        });
+        abortRequests.set(bundleId, request);
+        return request;
+    };
+    const failTargets = (error: unknown, targets: FinalFile[], context: string) => {
+        const normalized = error instanceof Error ? error : new Error(String(error));
+        const bundleIds = new Set(
+            targets
+                .map((file) => bundleIdByClientId.get(file.FID))
+                .filter((bundleId): bundleId is string => bundleId !== undefined),
+        );
+        if (bundleIds.size === 0 || targets.some((file) => !bundleIdByClientId.has(file.FID))) {
+            failures.push(normalized);
+        }
+        for (const bundleId of bundleIds) {
+            if (failedBundles.has(bundleId)) continue;
+            failedBundles.add(bundleId);
+            failures.push(normalized);
+            void abortBundle(bundleId, normalized).catch((cleanupError) => {
+                desktop.logger.error(cleanupError, `UploadV2:bundle-abort:${bundleId}:${context}`);
+            });
+        }
+    };
+    const intentSignal = (targets: FinalFile[]) => {
+        const bundleIds = [
+            ...new Set(
+                targets
+                    .map((file) => bundleIdByClientId.get(file.FID))
+                    .filter((bundleId): bundleId is string => bundleId !== undefined),
+            ),
+        ];
+        if (bundleIds.length !== 1) return signal;
+        const bundleSignal = bundleControllers.get(bundleIds[0])?.signal;
+        if (!bundleSignal) return signal;
+        return signal ? AbortSignal.any([signal, bundleSignal]) : bundleSignal;
+    };
+    const markIntentReady = (source: FinalFile, copies: FinalFile[]) => {
+        markReady(source, 0, false);
+        copies.forEach((file) => markReady(file, file.size, true));
+    };
+    const multipartLimit = pLimit(MAX_MULTIPART_CONCURRENCY);
+    const rolledBackBundles = new Set<string>();
+    const rollbackFailedBundles = () => {
+        for (const bundleId of failedBundles) {
+            if (rolledBackBundles.has(bundleId)) continue;
+            rolledBackBundles.add(bundleId);
+            const credited = bundleCreditedBytes.get(bundleId) ?? 0;
+            if (credited > 0) {
+                onProgress?.({ bytes: -credited, isServerDeduplicated: false });
+            }
+        }
+    };
     const packed: PreparedUpload[] = [];
     const flushPacked = () => {
         const groups = partitionPackedUploads(packed.splice(0));
@@ -199,6 +381,7 @@ export async function uploadDriveFilesV2({
                             member: group.member,
                             signal,
                             onProgress,
+                            onIntentReady: markIntentReady,
                         });
                         return;
                     }
@@ -207,6 +390,7 @@ export async function uploadDriveFilesV2({
                         members: group.members,
                         signal,
                         onProgress,
+                        onIntentReady: markIntentReady,
                     });
                 } catch (error) {
                     if (!signal?.aborted) {
@@ -218,63 +402,204 @@ export async function uploadDriveFilesV2({
         }
     };
 
-    for (const [intentId, targets] of pendingByIntent.entries()) {
-        signal?.throwIfAborted();
-        const upload = uploads.get(intentId);
-        if (!upload) {
-            failures.push(new Error(`Upload intent missing for ${targets[0].name}`));
-            continue;
-        }
-        const source = targets[0];
-        if (source.size >= DIRECT_UPLOAD_THRESHOLD) {
-            void queue.add(async () => {
-                try {
-                    await uploadParts(desktop, upload, source, signal, (bytes) =>
-                        onProgress?.({ bytes, isServerDeduplicated: false }),
-                    );
-                    markIntentProgress(source, targets.slice(1), onProgress);
-                } catch (error) {
-                    if (!signal?.aborted) {
-                        desktop.logger.error(error, `UploadV2:intent:${intentId}`);
-                        failures.push(error instanceof Error ? error : new Error(String(error)));
-                    }
-                }
+    const abortAllBundles = () => {
+        nteBundles.forEach((bundle) => {
+            void abortBundle(bundle.id, signal?.reason).catch((cleanupError) => {
+                desktop.logger.error(cleanupError, `UploadV2:bundle-abort:${bundle.id}:cancel`);
             });
-            continue;
-        }
-        const prepared = await prepareDirectFile(source);
-        packed.push({
-            upload,
-            source,
-            copies: targets.slice(1),
-            prepared,
-            payloadBytes: prepared.data.byteLength,
-            logicalSize: source.size,
         });
-        const packedBytes = packed.reduce((sum, member) => sum + member.payloadBytes, 0);
-        if (packed.length >= PACK_MAX_FILES || packedBytes >= PACK_PAYLOAD_BUDGET) {
-            flushPacked();
-            await queue.onSizeLessThan(Math.max(1, queue.concurrency));
-            signal?.throwIfAborted();
-        }
-    }
-    flushPacked();
-    await queue.onIdle();
-    signal?.throwIfAborted();
-
-    if (rejected.length > 0) {
-        failures.push(
-            new Error(
-                rejected
-                    .map(
-                        (item) =>
-                            `${filesById.get(item.clientId)?.name ?? item.clientId}: ${item.reason ?? item.status}`,
-                    )
-                    .join(", "),
+    };
+    for (const item of rejected) {
+        const file = filesById.get(item.clientId);
+        if (!file || !bundleIdByClientId.has(file.FID)) continue;
+        failTargets(
+            new UploadV2Error(
+                item.reason ?? item.status,
+                `${file.name}: ${item.reason ?? item.status}`,
             ),
+            [file],
+            "plan",
         );
     }
-    if (failures.length > 0) throw new Error(failures.map((error) => error.message).join("\n"));
+    signal?.addEventListener("abort", abortAllBundles, { once: true });
+
+    try {
+        for (const [intentId, targets] of pendingByIntent.entries()) {
+            signal?.throwIfAborted();
+            const targetBundleIds = targets
+                .map((file) => bundleIdByClientId.get(file.FID))
+                .filter((bundleId): bundleId is string => bundleId !== undefined);
+            if (
+                targetBundleIds.length > 0 &&
+                targets.every((file) => bundleIdByClientId.has(file.FID)) &&
+                targetBundleIds.every((bundleId) => failedBundles.has(bundleId))
+            ) {
+                continue;
+            }
+            const upload = uploads.get(intentId);
+            if (!upload) {
+                if (targets.every((file) => bundleIdByClientId.has(file.FID))) {
+                    targets.forEach((file) => markReady(file, file.size, true));
+                    continue;
+                }
+                failures.push(new Error(`Upload intent missing for ${targets[0].name}`));
+                continue;
+            }
+            const source = targets[0];
+            const targetsSignal = intentSignal(targets);
+            if (source.size >= DIRECT_UPLOAD_THRESHOLD) {
+                void queue.add(async () => {
+                    try {
+                        await multipartLimit(() =>
+                            uploadParts(desktop, upload, source, targetsSignal, (bytes) =>
+                                reportFileBytes(source, bytes, false),
+                            ),
+                        );
+                        markIntentReady(source, targets.slice(1));
+                    } catch (error) {
+                        if (signal?.aborted) return;
+                        const targetBundleIds = targets
+                            .map((file) => bundleIdByClientId.get(file.FID))
+                            .filter((bundleId): bundleId is string => bundleId !== undefined);
+                        if (
+                            targetsSignal?.aborted &&
+                            targetBundleIds.every((id) => failedBundles.has(id))
+                        ) {
+                            return;
+                        }
+                        desktop.logger.error(error, `UploadV2:intent:${intentId}`);
+                        failTargets(error, targets, `intent:${intentId}`);
+                    }
+                });
+                continue;
+            }
+            let prepared: { data: Buffer; compAlg?: "zstd" };
+            try {
+                prepared = await prepareDirectFile(source);
+            } catch (error) {
+                failTargets(error, targets, `prepare:${intentId}`);
+                continue;
+            }
+            const member = {
+                upload,
+                source,
+                copies: targets.slice(1),
+                prepared,
+                payloadBytes: prepared.data.byteLength,
+                logicalSize: source.size,
+            };
+            if (targets.some((file) => bundleIdByClientId.has(file.FID))) {
+                void queue.add(async () => {
+                    try {
+                        await uploadPreparedIntent({
+                            desktop,
+                            member,
+                            signal: targetsSignal,
+                            onProgress: (progress) =>
+                                reportFileBytes(
+                                    source,
+                                    progress.bytes,
+                                    progress.isServerDeduplicated ?? false,
+                                ),
+                            onIntentReady: markIntentReady,
+                        });
+                    } catch (error) {
+                        if (signal?.aborted) return;
+                        const targetBundleIds = targets
+                            .map((file) => bundleIdByClientId.get(file.FID))
+                            .filter((bundleId): bundleId is string => bundleId !== undefined);
+                        if (
+                            targetsSignal?.aborted &&
+                            targetBundleIds.every((id) => failedBundles.has(id))
+                        ) {
+                            return;
+                        }
+                        desktop.logger.error(error, `UploadV2:intent:${intentId}`);
+                        failTargets(error, targets, `intent:${intentId}`);
+                    }
+                });
+                continue;
+            }
+            packed.push(member);
+            const packedBytes = packed.reduce((sum, entry) => sum + entry.payloadBytes, 0);
+            if (packed.length >= PACK_MAX_FILES || packedBytes >= PACK_PAYLOAD_BUDGET) {
+                flushPacked();
+                await queue.onSizeLessThan(Math.max(1, queue.concurrency));
+                signal?.throwIfAborted();
+            }
+        }
+        flushPacked();
+        await queue.onIdle();
+        signal?.throwIfAborted();
+        rollbackFailedBundles();
+
+        for (const bundle of nteBundles.values()) {
+            if (failedBundles.has(bundle.id)) continue;
+            const members = bundle.memberClientIds
+                .map((clientId) => filesById.get(clientId))
+                .filter((file): file is FinalFile => file !== undefined);
+            if (
+                members.length !== bundle.memberClientIds.length ||
+                members.some((file) => !stagedClientIds.has(file.FID))
+            ) {
+                const error = new UploadV2Error(
+                    "nte_bundle_incomplete",
+                    `${members[0]?.name ?? bundle.id}: nte_bundle_incomplete`,
+                );
+                failTargets(error, members, `complete:${bundle.id}`);
+                continue;
+            }
+            try {
+                await completeNteBundle(desktop, bundle, signal);
+                members.forEach((file) =>
+                    onProgress?.({ bytes: 0, fileId: file.FID, isServerDeduplicated: false }),
+                );
+            } catch (error) {
+                failTargets(error, members, `complete:${bundle.id}`);
+            }
+        }
+        rollbackFailedBundles();
+    } finally {
+        signal?.removeEventListener("abort", abortAllBundles);
+        if (signal?.aborted) {
+            abortAllBundles();
+            await Promise.allSettled(abortRequests.values());
+        }
+    }
+
+    if (rejected.length > 0) {
+        const message = rejected
+            .map(
+                (item) =>
+                    `${filesById.get(item.clientId)?.name ?? item.clientId}: ${item.reason ?? item.status}`,
+            )
+            .join(", ");
+        const code = rejected.find((item) => item.reason)?.reason;
+        failures.push(code ? new UploadV2Error(code, message) : new Error(message));
+    }
+    await Promise.allSettled(abortRequests.values());
+    if (failures.length > 0) {
+        const coded = failures.find((error) => uploadErrorCode(error));
+        if (coded) throw coded;
+        throw new Error(failures.map((error) => error.message).join("\n"));
+    }
+}
+
+async function completeNteBundle(desktop: NahidaDesktop, bundle: NteBundle, signal?: AbortSignal) {
+    const startedAt = Date.now();
+    for (let attempt = 0; Date.now() - startedAt < COMPLETE_TIMEOUT_MS; attempt++) {
+        signal?.throwIfAborted();
+        const result = await sendJson(
+            desktop,
+            bundle.completeUrl,
+            { token: bundle.form.token },
+            signal,
+        );
+        if (result.status >= 200 && result.status < 300 && result.status !== 202) return;
+        if (!isRetryable(result)) throw httpError(result);
+        await retryDelay(Math.min(attempt, 4), signal, 30_000);
+    }
+    throw new UploadV2Error("nte_bundle_incomplete");
 }
 
 async function uploadPreparedIntent({
@@ -282,17 +607,19 @@ async function uploadPreparedIntent({
     member,
     signal,
     onProgress,
+    onIntentReady,
 }: {
     desktop: NahidaDesktop;
     member: PreparedUpload;
     signal?: AbortSignal;
     onProgress?: (progress: UploadProgress) => void;
+    onIntentReady: (source: FinalFile, copies: FinalFile[]) => void;
 }) {
     signal?.throwIfAborted();
     await uploadDirect(desktop, member.upload, member.source, member.prepared, signal, (bytes) =>
         onProgress?.({ bytes, isServerDeduplicated: false }),
     );
-    markIntentProgress(member.source, member.copies, onProgress);
+    onIntentReady(member.source, member.copies);
 }
 
 async function uploadPack({
@@ -300,11 +627,13 @@ async function uploadPack({
     members,
     signal,
     onProgress,
+    onIntentReady,
 }: {
     desktop: NahidaDesktop;
     members: PreparedUpload[];
     signal?: AbortSignal;
     onProgress?: (progress: UploadProgress) => void;
+    onIntentReady: (source: FinalFile, copies: FinalFile[]) => void;
 }) {
     const pack = Buffer.concat(members.map((member) => member.prepared.data));
     const manifest = JSON.stringify({
@@ -355,7 +684,7 @@ async function uploadPack({
                             isServerDeduplicated: false,
                         });
                     }
-                    markIntentProgress(member.source, member.copies, onProgress);
+                    onIntentReady(member.source, member.copies);
                     return;
                 }
                 if (credited > 0) {
@@ -378,21 +707,6 @@ function packResultForIntent(results: IntentPackResult[], intentId: string) {
     const matches = results.filter((result) => result.intentId === intentId);
     if (matches.length !== 1) return undefined;
     return matches[0];
-}
-
-function markIntentProgress(
-    source: FinalFile,
-    copies: FinalFile[],
-    onProgress?: (progress: UploadProgress) => void,
-) {
-    onProgress?.({ bytes: 0, fileId: source.FID, isServerDeduplicated: false });
-    copies.forEach((file) =>
-        onProgress?.({
-            bytes: file.size,
-            fileId: file.FID,
-            isServerDeduplicated: true,
-        }),
-    );
 }
 
 async function uploadDirect(
@@ -449,6 +763,7 @@ async function uploadParts(
     signal?: AbortSignal,
     onProgress?: (bytes: number) => void,
 ) {
+    signal?.throwIfAborted();
     const totalParts = Math.ceil(file.size / PART_SIZE);
     let reportedBytes = 0;
     const reportProgress = (bytes: number) => {
@@ -462,6 +777,7 @@ async function uploadParts(
         const handle = await open(file.fullPath, "r");
         try {
             for (let index = 0; index < totalParts; index++) {
+                signal?.throwIfAborted();
                 const start = index * PART_SIZE;
                 const size = Math.min(PART_SIZE, file.size - start);
                 const buffer = Buffer.allocUnsafe(size);
@@ -705,7 +1021,31 @@ function isRetryable(result: HttpResult) {
 }
 
 function httpError(result: HttpResult) {
-    return new Error(result.reason ?? `http_${result.status}`);
+    const code = result.payload?.code ?? result.reason ?? `http_${result.status}`;
+    return new UploadV2Error(code);
+}
+
+function apiError(value: unknown, fallback: string) {
+    if (typeof value === "object" && value !== null) {
+        const body = value as Record<string, unknown>;
+        const code = [body.code, body.error, body.reason].find(
+            (candidate): candidate is string =>
+                typeof candidate === "string" && candidate.length > 0,
+        );
+        if (code) return new UploadV2Error(code, fallback);
+    }
+    if (typeof value === "string" && /^[a-z][a-z0-9_]+$/i.test(value)) {
+        return new UploadV2Error(value, fallback);
+    }
+    return new Error(fallback);
+}
+
+function parseEventData(value: string) {
+    try {
+        return JSON.parse(value) as unknown;
+    } catch {
+        return value;
+    }
 }
 
 function retryDelay(attempt: number, signal?: AbortSignal, cap = 8_000) {

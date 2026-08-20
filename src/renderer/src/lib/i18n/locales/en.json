@@ -75,6 +75,14 @@
           "dedup_lookup": "Checking duplicates",
           "processing": "Processing files"
         },
+        "error": {
+          "invalid_nte_mod_file": "This is not a valid NTE mod file.",
+          "nte_client_upgrade_required": "Update the desktop app to upload NTE mods.",
+          "nte_bundle_incomplete": "Not all required NTE mod files were uploaded.",
+          "bundle_cleanup_failed": "Failed to clean up temporary NTE mod uploads.",
+          "upload_file_too_large": "A single file cannot exceed 1 GiB.",
+          "nte_bundle_too_large": "This NTE mod has too many files to upload as one group."
+        },
         "time_remaining": "{{time}} remaining",
         "time_elapsed": "{{time}} elapsed",
         "failed_files": "{{count}} failed",

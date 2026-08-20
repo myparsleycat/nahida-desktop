@@ -532,6 +532,7 @@ export interface Transfer {
     failedFiles: number;
     path?: string;
     error?: string;
+    errorCode?: string;
     planPhase?: PlanPhase;
     planProgress?: number | null;
 }
