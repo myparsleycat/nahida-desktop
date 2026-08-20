@@ -45,7 +45,9 @@ export function partitionPackedUploads<T extends { payloadBytes: number }>(
 }
 
 export function packUploadUrl(intentUrl: string) {
-    return intentUrl.replace(/\/uploads\/[^/?#]+$/, "/uploads:pack");
+    const packed = intentUrl.replace(/\/uploads\/[^/?#]+(?=[?#]|$)/, "/uploads:pack");
+    if (packed === intentUrl) throw new Error("pack_url_unresolved");
+    return packed;
 }
 
 export function logicalBytesForPackProgress(

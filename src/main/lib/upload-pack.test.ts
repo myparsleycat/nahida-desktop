@@ -59,6 +59,18 @@ describe("packUploadUrl", () => {
             "https://api.nahida.live/akasha/v2/uploads:pack",
         );
     });
+
+    it("preserves a query string and fragment", () => {
+        expect(
+            packUploadUrl("https://api.nahida.live/akasha/v2/uploads/intent-1?sig=abc#frag"),
+        ).toBe("https://api.nahida.live/akasha/v2/uploads:pack?sig=abc#frag");
+    });
+
+    it("throws when the URL has no intent upload segment", () => {
+        expect(() => packUploadUrl("https://api.nahida.live/akasha/v2/other/intent-1?x=1")).toThrow(
+            "pack_url_unresolved",
+        );
+    });
 });
 
 describe("logicalBytesForPackProgress", () => {

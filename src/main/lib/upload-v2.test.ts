@@ -394,6 +394,7 @@ describe("uploadDriveFilesV2", () => {
             ),
         );
 
+        const progress: UploadProgress[] = [];
         await expect(
             uploadDriveFilesV2({
                 desktop,
@@ -405,8 +406,71 @@ describe("uploadDriveFilesV2", () => {
                 ],
                 queue: new PQueue({ concurrency: 1 }),
                 prepareDirectFile: async () => ({ data: Buffer.from("payload") }),
+                onProgress: (event) => progress.push(event),
             }),
         ).rejects.toThrow("second.txt: sha256_mismatch");
+        expect(progress.map((event) => event.fileId).filter(Boolean)).toEqual(["first"]);
+        expect(progress.reduce((sum, event) => sum + event.bytes, 0)).toBe(10);
+    });
+
+    it("attributes reversed pack results by intentId", async () => {
+        mocks.networkFetch.mockResolvedValue(
+            sseResponse([
+                {
+                    event: "complete",
+                    data: {
+                        requestId: "request-id",
+                        items: [
+                            { clientId: "first", status: "pending", intentId: "intent-a" },
+                            { clientId: "second", status: "pending", intentId: "intent-b" },
+                        ],
+                        uploads: [
+                            {
+                                intentId: "intent-a",
+                                url: "https://api.nahida.live/akasha/v2/uploads/intent-a",
+                                method: "POST",
+                                form: { token: "token-a", sha256: "a".repeat(64) },
+                            },
+                            {
+                                intentId: "intent-b",
+                                url: "https://api.nahida.live/akasha/v2/uploads/intent-b",
+                                method: "POST",
+                                form: { token: "token-b", sha256: "b".repeat(64) },
+                            },
+                        ],
+                    },
+                },
+            ]),
+        );
+        mocks.request.mockResolvedValue(
+            new Response(
+                JSON.stringify({
+                    results: [
+                        { intentId: "intent-b", status: "failed", reason: "sha256_mismatch" },
+                        { intentId: "intent-a", status: "completed", fileId: "file-a" },
+                    ],
+                }),
+                { status: 200 },
+            ),
+        );
+        const progress: UploadProgress[] = [];
+
+        await expect(
+            uploadDriveFilesV2({
+                desktop,
+                currentId: "current",
+                requestId: "request-id",
+                files: [
+                    { ...file("first"), sha256: "a".repeat(64) },
+                    { ...file("second"), sha256: "b".repeat(64) },
+                ],
+                queue: new PQueue({ concurrency: 1 }),
+                prepareDirectFile: async () => ({ data: Buffer.from("payload") }),
+                onProgress: (event) => progress.push(event),
+            }),
+        ).rejects.toThrow("second.txt: sha256_mismatch");
+        expect(progress.map((event) => event.fileId).filter(Boolean)).toEqual(["first"]);
+        expect(progress.reduce((sum, event) => sum + event.bytes, 0)).toBe(10);
     });
 
     it("reports denied plan items as a failed upload", async () => {

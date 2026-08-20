@@ -252,7 +252,10 @@ export async function uploadDriveFilesV2({
             logicalSize: source.size,
         });
         const packedBytes = packed.reduce((sum, member) => sum + member.payloadBytes, 0);
-        if (packed.length >= PACK_MAX_FILES || packedBytes >= PACK_PAYLOAD_BUDGET) flushPacked();
+        if (packed.length >= PACK_MAX_FILES || packedBytes >= PACK_PAYLOAD_BUDGET) {
+            flushPacked();
+            await queue.onSizeLessThan(Math.max(1, queue.concurrency));
+        }
     }
     flushPacked();
     await queue.onIdle();
@@ -335,15 +338,15 @@ async function uploadPack({
         if (result.status >= 200 && result.status < 300 && result.status !== 202) {
             const packResults = (result.payload as { results?: IntentPackResult[] } | undefined)
                 ?.results;
-            if (!packResults || packResults.length !== members.length) {
+            if (!packResults) {
                 onProgress?.({ bytes: -reportedBytes, isServerDeduplicated: false });
                 throw new Error(result.reason ?? "pack_result_missing");
             }
             const failures: string[] = [];
-            packResults.forEach((packResult, index) => {
-                const member = members[index];
+            members.forEach((member, index) => {
+                const packResult = packResultForIntent(packResults, member.upload.intentId);
                 const credited = creditedLogicalBytesForMember(members, index, uploadedPayload);
-                if (packResult.status === "completed") {
+                if (packResult?.status === "completed") {
                     if (credited < member.logicalSize) {
                         onProgress?.({
                             bytes: member.logicalSize - credited,
@@ -356,7 +359,9 @@ async function uploadPack({
                 if (credited > 0) {
                     onProgress?.({ bytes: -credited, isServerDeduplicated: false });
                 }
-                failures.push(`${member.source.name}: ${packResult.reason ?? packResult.status}`);
+                failures.push(
+                    `${member.source.name}: ${packResult?.reason ?? packResult?.status ?? "pack_result_missing"}`,
+                );
             });
             if (failures.length > 0) throw new Error(failures.join(", "));
             return;
@@ -365,6 +370,12 @@ async function uploadPack({
         if (!isRetryable(result) || attempt === RETRY_LIMIT) throw httpError(result);
         await retryDelay(attempt, signal);
     }
+}
+
+function packResultForIntent(results: IntentPackResult[], intentId: string) {
+    const matches = results.filter((result) => result.intentId === intentId);
+    if (matches.length !== 1) return undefined;
+    return matches[0];
 }
 
 function markIntentProgress(
