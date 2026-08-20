@@ -11,12 +11,10 @@
 
 この機能は DLL ビルド手順の多くを自動化しますが、DLL のビルドに必要なツール自体はユーザーが直接インストールする必要があります。
 
-1. [Visual Studio ダウンロードページ](https://visualstudio.microsoft.com/downloads/) にアクセスし、**Visual Studio Community** をダウンロードしてインストールします。
-2. Visual Studio Installer で **C++ によるデスクトップ開発** ワークロードを選択します。
-3. 個別コンポーネントに次の項目が含まれていることを確認してからインストールします。
-   - **x64/x86 用 MSVC ビルドツール（最新）**
-   - **Windows 11 SDK**
-   - **MSVC v143 - VS 2022 C++ x64/x86 ビルドツール (v14.44-17.14)**
+1. [Visual Studio Build Tools 2022](https://aka.ms/vs/17/release/vs_BuildTools.exe) をダウンロードして実行します。
+2. 個別コンポーネントで次の項目を選択してインストールします。
+   - **MSVC v143 - VS 2022 C++ x64/x86 ビルドツール (最新)**
+   - **Windows 11 SDK (10.0.22621.0)**
 
 ::: warning
 ビルドツールのインストールには 10GB 以上のディスク容量が必要になる場合があります。事前に十分な空き容量を確保してください。

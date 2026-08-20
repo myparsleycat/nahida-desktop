@@ -11,12 +11,10 @@ The `4001 Fixer` brings the available GIMI `4001` workarounds into one tool. It 
 
 This feature automates much of the DLL build process, but you still need to install the required build tools yourself.
 
-1. Visit the [Visual Studio download page](https://visualstudio.microsoft.com/downloads/), download **Visual Studio Community**, and install it.
-2. In Visual Studio Installer, select the **Desktop development with C++** workload.
-3. In individual components, verify that the following items are included, then complete the installation.
-   - **MSVC build tools for x64/x86 (latest)**
-   - **Windows 11 SDK**
-   - **MSVC v143 - VS 2022 C++ x64/x86 build tools (v14.44-17.14)**
+1. Download and run [Visual Studio Build Tools 2022](https://aka.ms/vs/17/release/vs_BuildTools.exe).
+2. Under Individual components, select the following items and install them:
+   - **MSVC v143 - VS 2022 C++ x64/x86 build tools (latest)**
+   - **Windows 11 SDK (10.0.22621.0)**
 
 ::: warning
 Installing the build tools may require more than 10 GB of disk space. Make sure you have enough free space before proceeding.

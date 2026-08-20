@@ -11,12 +11,10 @@
 
 此功能会自动处理 DLL 构建流程中的大部分步骤，但构建 DLL 所需的工具仍需由用户自行安装。
 
-1. 打开 [Visual Studio 下载页面](https://visualstudio.microsoft.com/downloads/)，下载并安装 **Visual Studio Community**。
-2. 在 Visual Studio Installer 中选择 **使用 C++ 的桌面开发** 工作负载。
-3. 在单独组件中确认包含以下项目后再继续安装。
-   - **适用于 x64/x86 的 MSVC 构建工具（最新）**
-   - **Windows 11 SDK**
-   - **MSVC v143 - VS 2022 C++ x64/x86 构建工具 (v14.44-17.14)**
+1. 下载并运行 [Visual Studio Build Tools 2022](https://aka.ms/vs/17/release/vs_BuildTools.exe)。
+2. 在单独组件中选择以下项目后进行安装：
+   - **MSVC v143 - VS 2022 C++ x64/x86 生成工具（最新）**
+   - **Windows 11 SDK (10.0.22621.0)**
 
 ::: warning
 安装这些构建工具可能需要超过 10 GB 的磁盘空间。开始安装前，请确认磁盘剩余空间充足。
