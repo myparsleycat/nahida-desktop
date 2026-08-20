@@ -62,6 +62,7 @@
       },
       "item": {
         "uploading": "Uploading",
+        "finalizing": "Finalizing",
         "downloading": "Downloading",
         "completed": "Completed",
         "failed": "Failed",

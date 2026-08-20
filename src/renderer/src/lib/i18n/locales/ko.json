@@ -62,6 +62,7 @@
       },
       "item": {
         "uploading": "업로드 중",
+        "finalizing": "마무리 중",
         "downloading": "다운로드 중",
         "completed": "완료",
         "failed": "실패",

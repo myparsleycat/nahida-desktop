@@ -179,6 +179,7 @@ export const TransferItem = memo((props: TransferItemProps) => {
   const isCompleted = status === "completed";
   const isFailed = status === "failed";
   const isPlanning = status === "uploading" && planPhase != null;
+  const isFinalizing = isActive && progress >= 100;
   const translatedError = errorCode
     ? t(`page.transfer.item.error.${errorCode}`, { defaultValue: error ?? errorCode })
     : error;
@@ -205,6 +206,12 @@ export const TransferItem = memo((props: TransferItemProps) => {
               return (
                 <span className={cn("shrink-0 text-xs font-medium", getStatusColor(status))}>
                   {t(`page.transfer.item.planning.${planPhase}`)}
+                </span>
+              );
+            } else if (isFinalizing) {
+              return (
+                <span className={cn("shrink-0 text-xs font-medium", getStatusColor(status))}>
+                  {t("page.transfer.item.finalizing")}
                 </span>
               );
             } else if (
@@ -251,10 +258,10 @@ export const TransferItem = memo((props: TransferItemProps) => {
                   {t(`page.transfer.item.planning.${planPhase}`)}
                 </span>
               )}
-              {!isPlanning && (isActive || isPaused) && speed && (
+              {!isPlanning && !isFinalizing && (isActive || isPaused) && speed && (
                 <span className="shrink-0 whitespace-nowrap">{speed}</span>
               )}
-              {!isPlanning && (isActive || isPaused) && timeRemaining && (
+              {!isPlanning && !isFinalizing && (isActive || isPaused) && timeRemaining && (
                 <span className="hidden truncate whitespace-nowrap sm:inline">
                   {t("page.transfer.item.time_remaining", { time: timeRemaining })}
                 </span>

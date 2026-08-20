@@ -103,7 +103,7 @@ function RouteComponent() {
   ).length;
 
   const totalUploadSpeed = transfers
-    .filter((t) => t.type === "upload" && t.status === "progress")
+    .filter((t) => t.type === "upload" && t.status === "progress" && t.progress < 100)
     .reduce((acc, curr) => acc + curr.speed, 0);
 
   const totalDownloadSpeed = transfers

@@ -62,6 +62,7 @@
       },
       "item": {
         "uploading": "上传中",
+        "finalizing": "收尾中",
         "downloading": "下载中",
         "completed": "已完成",
         "failed": "失败",
