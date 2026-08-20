@@ -80,7 +80,8 @@
           "nte_client_upgrade_required": "NTE Modをアップロードするにはデスクトップアプリを更新してください。",
           "nte_bundle_incomplete": "NTE Modに必要なファイルがすべてアップロードされていません。",
           "bundle_cleanup_failed": "NTE Modの一時アップロードファイルを削除できませんでした。",
-          "upload_file_too_large": "1つのファイルは1 GiBを超えることができません。"
+          "upload_file_too_large": "1つのファイルは1 GiBを超えることができません。",
+          "nte_bundle_too_large": "このNTE Modはファイル数が多すぎて1つのグループとしてアップロードできません。"
         },
         "time_remaining": "残り {{time}}",
         "time_elapsed": "経過 {{time}}",

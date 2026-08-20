@@ -57,9 +57,12 @@ const TransferItemActions = memo(
     const isFailed = status === "failed";
     const isCompleted = status === "completed";
     const hasFailedFiles = (failedFiles || 0) > 0;
-    const canRetry = !["invalid_nte_mod_file", "nte_client_upgrade_required"].includes(
-      errorCode ?? "",
-    );
+    const canRetry = ![
+      "invalid_nte_mod_file",
+      "nte_client_upgrade_required",
+      "upload_file_too_large",
+      "nte_bundle_too_large",
+    ].includes(errorCode ?? "");
 
     return (
       <div className="flex shrink-0 items-center gap-1">
