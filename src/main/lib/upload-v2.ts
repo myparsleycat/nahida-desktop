@@ -14,8 +14,17 @@ import { parseServerSentEvents } from "parse-sse";
 import type { NahidaDesktop } from "..";
 import type { FinalFile, UploadProgress } from "./upload";
 
+import {
+    creditedLogicalBytesForMember,
+    DIRECT_UPLOAD_THRESHOLD,
+    logicalBytesForPackProgress,
+    PACK_MAX_FILES,
+    PACK_PAYLOAD_BUDGET,
+    packUploadUrl,
+    partitionPackedUploads,
+} from "./upload-pack";
+
 const PLAN_PAGE_SIZE = 500;
-const DIRECT_UPLOAD_THRESHOLD = 80 * 1024 * 1024;
 const PART_SIZE = 25 * 1024 * 1024;
 const RETRY_LIMIT = 3;
 const COMPLETE_TIMEOUT_MS = 15 * 60 * 1000;
@@ -36,10 +45,26 @@ type UploadPlanEntry = {
     form: { token: string; sha256: string };
 };
 
+type IntentPackResult = {
+    intentId: string;
+    status: "completed" | "failed" | "pending";
+    fileId?: string;
+    reason?: string;
+};
+
 type HttpResult = {
     status: number;
     reason?: string;
-    payload?: { status?: string };
+    payload?: { status?: string; results?: IntentPackResult[] };
+};
+
+type PreparedUpload = {
+    upload: UploadPlanEntry;
+    source: FinalFile;
+    copies: FinalFile[];
+    prepared: { data: Buffer; compAlg?: "zstd" };
+    payloadBytes: number;
+    logicalSize: number;
 };
 
 export async function uploadDriveFilesV2({
@@ -162,40 +187,80 @@ export async function uploadDriveFilesV2({
     onPlanComplete?.();
 
     const failures: Error[] = [];
-    [...pendingByIntent.entries()].forEach(([intentId, targets]) => {
-        void queue.add(async () => {
-            const upload = uploads.get(intentId);
-            if (!upload) {
-                failures.push(new Error(`Upload intent missing for ${targets[0].name}`));
-                return;
-            }
-            try {
-                const source = targets[0];
-                await uploadIntent({
-                    desktop,
-                    upload,
-                    file: source,
-                    prepareDirectFile,
-                    signal,
-                    onProgress: (bytes) => onProgress?.({ bytes, isServerDeduplicated: false }),
-                });
-                onProgress?.({ bytes: 0, fileId: source.FID, isServerDeduplicated: false });
-                targets.slice(1).forEach((file) =>
-                    onProgress?.({
-                        bytes: file.size,
-                        fileId: file.FID,
-                        isServerDeduplicated: true,
-                    }),
-                );
-            } catch (error) {
-                if (!signal?.aborted) {
-                    desktop.logger.error(error, `UploadV2:intent:${intentId}`);
-                    failures.push(error instanceof Error ? error : new Error(String(error)));
+    const packed: PreparedUpload[] = [];
+    const flushPacked = () => {
+        const groups = partitionPackedUploads(packed.splice(0));
+        for (const group of groups) {
+            void queue.add(async () => {
+                try {
+                    if (group.kind === "single") {
+                        await uploadPreparedIntent({
+                            desktop,
+                            member: group.member,
+                            signal,
+                            onProgress,
+                        });
+                        return;
+                    }
+                    await uploadPack({
+                        desktop,
+                        members: group.members,
+                        signal,
+                        onProgress,
+                    });
+                } catch (error) {
+                    if (!signal?.aborted) {
+                        desktop.logger.error(error, "UploadV2:pack");
+                        failures.push(error instanceof Error ? error : new Error(String(error)));
+                    }
                 }
-            }
+            });
+        }
+    };
+
+    for (const [intentId, targets] of pendingByIntent.entries()) {
+        signal?.throwIfAborted();
+        const upload = uploads.get(intentId);
+        if (!upload) {
+            failures.push(new Error(`Upload intent missing for ${targets[0].name}`));
+            continue;
+        }
+        const source = targets[0];
+        if (source.size >= DIRECT_UPLOAD_THRESHOLD) {
+            void queue.add(async () => {
+                try {
+                    await uploadParts(desktop, upload, source, signal, (bytes) =>
+                        onProgress?.({ bytes, isServerDeduplicated: false }),
+                    );
+                    markIntentProgress(source, targets.slice(1), onProgress);
+                } catch (error) {
+                    if (!signal?.aborted) {
+                        desktop.logger.error(error, `UploadV2:intent:${intentId}`);
+                        failures.push(error instanceof Error ? error : new Error(String(error)));
+                    }
+                }
+            });
+            continue;
+        }
+        const prepared = await prepareDirectFile(source);
+        packed.push({
+            upload,
+            source,
+            copies: targets.slice(1),
+            prepared,
+            payloadBytes: prepared.data.byteLength,
+            logicalSize: source.size,
         });
-    });
+        const packedBytes = packed.reduce((sum, member) => sum + member.payloadBytes, 0);
+        if (packed.length >= PACK_MAX_FILES || packedBytes >= PACK_PAYLOAD_BUDGET) {
+            flushPacked();
+            await queue.onSizeLessThan(Math.max(1, queue.concurrency));
+            signal?.throwIfAborted();
+        }
+    }
+    flushPacked();
     await queue.onIdle();
+    signal?.throwIfAborted();
 
     if (rejected.length > 0) {
         failures.push(
@@ -212,28 +277,122 @@ export async function uploadDriveFilesV2({
     if (failures.length > 0) throw new Error(failures.map((error) => error.message).join("\n"));
 }
 
-async function uploadIntent({
+async function uploadPreparedIntent({
     desktop,
-    upload,
-    file,
-    prepareDirectFile,
+    member,
     signal,
     onProgress,
 }: {
     desktop: NahidaDesktop;
-    upload: UploadPlanEntry;
-    file: FinalFile;
-    prepareDirectFile: (file: FinalFile) => Promise<{ data: Buffer; compAlg?: "zstd" }>;
+    member: PreparedUpload;
     signal?: AbortSignal;
-    onProgress?: (bytes: number) => void;
+    onProgress?: (progress: UploadProgress) => void;
 }) {
     signal?.throwIfAborted();
-    if (file.size < DIRECT_UPLOAD_THRESHOLD) {
-        const prepared = await prepareDirectFile(file);
-        await uploadDirect(desktop, upload, file, prepared, signal, onProgress);
-        return;
+    await uploadDirect(desktop, member.upload, member.source, member.prepared, signal, (bytes) =>
+        onProgress?.({ bytes, isServerDeduplicated: false }),
+    );
+    markIntentProgress(member.source, member.copies, onProgress);
+}
+
+async function uploadPack({
+    desktop,
+    members,
+    signal,
+    onProgress,
+}: {
+    desktop: NahidaDesktop;
+    members: PreparedUpload[];
+    signal?: AbortSignal;
+    onProgress?: (progress: UploadProgress) => void;
+}) {
+    const pack = Buffer.concat(members.map((member) => member.prepared.data));
+    const manifest = JSON.stringify({
+        entries: members.map((member) => ({
+            intentId: member.upload.intentId,
+            token: member.upload.form.token,
+            sha256: member.upload.form.sha256,
+            payloadBytes: member.payloadBytes,
+            ...(member.prepared.compAlg ? { compAlg: member.prepared.compAlg } : {}),
+        })),
+    });
+
+    for (let attempt = 0; attempt <= RETRY_LIMIT; attempt++) {
+        signal?.throwIfAborted();
+        let reportedBytes = 0;
+        let uploadedPayload = 0;
+        const result = await sendMultipart({
+            desktop,
+            url: packUploadUrl(members[0].upload.url),
+            method: "POST",
+            fields: [["manifest", manifest]],
+            file: pack,
+            filename: "pack.bin",
+            fileFieldName: "pack",
+            signal,
+            onProgress: (bytes) => {
+                uploadedPayload += bytes;
+                const next = logicalBytesForPackProgress(members, uploadedPayload);
+                onProgress?.({ bytes: next - reportedBytes, isServerDeduplicated: false });
+                reportedBytes = next;
+            },
+        });
+        if (result.status >= 200 && result.status < 300 && result.status !== 202) {
+            const packResults = (result.payload as { results?: IntentPackResult[] } | undefined)
+                ?.results;
+            if (!packResults) {
+                onProgress?.({ bytes: -reportedBytes, isServerDeduplicated: false });
+                throw new Error(result.reason ?? "pack_result_missing");
+            }
+            const failures: string[] = [];
+            members.forEach((member, index) => {
+                const packResult = packResultForIntent(packResults, member.upload.intentId);
+                const credited = creditedLogicalBytesForMember(members, index, uploadedPayload);
+                if (packResult?.status === "completed") {
+                    if (credited < member.logicalSize) {
+                        onProgress?.({
+                            bytes: member.logicalSize - credited,
+                            isServerDeduplicated: false,
+                        });
+                    }
+                    markIntentProgress(member.source, member.copies, onProgress);
+                    return;
+                }
+                if (credited > 0) {
+                    onProgress?.({ bytes: -credited, isServerDeduplicated: false });
+                }
+                failures.push(
+                    `${member.source.name}: ${packResult?.reason ?? packResult?.status ?? "pack_result_missing"}`,
+                );
+            });
+            if (failures.length > 0) throw new Error(failures.join(", "));
+            return;
+        }
+        if (reportedBytes > 0) onProgress?.({ bytes: -reportedBytes, isServerDeduplicated: false });
+        if (!isRetryable(result) || attempt === RETRY_LIMIT) throw httpError(result);
+        await retryDelay(attempt, signal);
     }
-    await uploadParts(desktop, upload, file, signal, onProgress);
+}
+
+function packResultForIntent(results: IntentPackResult[], intentId: string) {
+    const matches = results.filter((result) => result.intentId === intentId);
+    if (matches.length !== 1) return undefined;
+    return matches[0];
+}
+
+function markIntentProgress(
+    source: FinalFile,
+    copies: FinalFile[],
+    onProgress?: (progress: UploadProgress) => void,
+) {
+    onProgress?.({ bytes: 0, fileId: source.FID, isServerDeduplicated: false });
+    copies.forEach((file) =>
+        onProgress?.({
+            bytes: file.size,
+            fileId: file.FID,
+            isServerDeduplicated: true,
+        }),
+    );
 }
 
 async function uploadDirect(
@@ -399,6 +558,7 @@ async function sendMultipart({
     fields,
     file,
     filename,
+    fileFieldName = "file",
     signal,
     onProgress,
 }: {
@@ -408,11 +568,19 @@ async function sendMultipart({
     fields: Array<[string, string]>;
     file: Uint8Array;
     filename: string;
+    fileFieldName?: string;
     signal?: AbortSignal;
     onProgress?: (bytes: number) => void;
 }) {
     const boundary = `----nahida-desktop-${randomUUID()}`;
-    const multipart = createMultipartBody(boundary, fields, file, filename, onProgress);
+    const multipart = createMultipartBody(
+        boundary,
+        fields,
+        file,
+        filename,
+        fileFieldName,
+        onProgress,
+    );
     try {
         const response = await ky(url, {
             method,
@@ -466,6 +634,7 @@ function createMultipartBody(
     fields: Array<[string, string]>,
     file: Uint8Array,
     filename: string,
+    fileFieldName: string,
     onProgress?: (bytes: number) => void,
 ) {
     const encoder = new TextEncoder();
@@ -481,7 +650,7 @@ function createMultipartBody(
         ),
     );
     const header = encoder.encode(
-        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${escape(filename)}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+        `--${boundary}\r\nContent-Disposition: form-data; name="${escape(fileFieldName)}"; filename="${escape(filename)}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
     );
     const footer = encoder.encode(`\r\n--${boundary}--\r\n`);
     let fieldIndex = 0;
