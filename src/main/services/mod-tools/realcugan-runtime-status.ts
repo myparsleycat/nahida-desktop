@@ -4,7 +4,7 @@ import fse from "fs-extra";
 
 export const REALCUGAN_BINARY_NAME = "realcugan-ncnn-vulkan.exe";
 
-// Model files the app can use with the fixed no-denoise (-n -1) setting,
+// Model files the app can use with the fixed no-denoise (-n 0) setting,
 // relative to the runtime root. models-pro has no up4x and models-nose only
 // ships up2x-no-denoise, so the exposed scale options are limited accordingly.
 export const REQUIRED_REALCUGAN_MODEL_FILES = [

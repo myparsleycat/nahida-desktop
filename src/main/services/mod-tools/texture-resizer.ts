@@ -1334,7 +1334,8 @@ function runUpscaleProcess({
                   "-o",
                   outputPath,
                   "-n",
-                  "-1",
+                  // realcugan-ncnn-vulkan maps 0 to up{scale}x-no-denoise; -1 is conservative.
+                  "0",
                   "-s",
                   String(scale),
                   "-t",
