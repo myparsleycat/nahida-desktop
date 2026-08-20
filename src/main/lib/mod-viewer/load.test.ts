@@ -1910,6 +1910,54 @@ filename = Textures/Components-2 t=742c5c7b.png
         assert.ok(payload.meshes.every((mesh) => !String(mesh.texKey).includes("e02d9167")));
     });
 
+    it("unions WWMI non-diffuse dump exclusions across shared component indexes", async () => {
+        const root = await makeMod({
+            ini: `[TextureOverrideComponent3]
+hash = 8d8097bc
+ib = ResourceIndexBuffer
+vb0 = ResourcePositionBuffer
+vb1 = ResourceTexCoordBuffer
+ps-t1 = ResourceTexture31
+drawindexed = 3, 0, 0
+[TextureOverridecomponent3]
+hash = 8d8097bd
+ib = ResourceIndexBuffer
+vb0 = ResourcePositionBuffer
+vb1 = ResourceTexCoordBuffer
+drawindexed = 3, 0, 0
+[ResourcePositionBuffer]
+filename = pos.buf
+stride = 40
+[ResourceTexCoordBuffer]
+filename = tc.buf
+stride = 20
+[ResourceIndexBuffer]
+filename = body.ib
+format = DXGI_FORMAT_R32_UINT
+[ResourceTexture31]
+filename = Textures/Components-3 t=e02d9167.png
+[ResourceTextureOther]
+filename = Textures/Components-3 t=742c5c7b.png
+`,
+            extra: async (dir) => {
+                await fse.ensureDir(path.join(dir, "Textures"));
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-3 t=e02d9167.png"),
+                    makeColorPng(32, 32),
+                );
+                await fse.writeFile(
+                    path.join(dir, "Textures", "Components-3 t=742c5c7b.png"),
+                    makeColorPng(),
+                );
+            },
+        });
+
+        const payload = await loadModViewerPayload(root);
+        assert.ok(payload.meshes.length >= 2);
+        assert.ok(payload.meshes.every((mesh) => String(mesh.texKey).includes("742c5c7b.png")));
+        assert.ok(payload.meshes.every((mesh) => !String(mesh.texKey).includes("e02d9167")));
+    });
+
     it("replaces unnamed WWMI ps-t0 when it is a flat color map", async () => {
         const root = await makeMod({
             ini: `[TextureOverrideComponent3]

@@ -64,6 +64,17 @@ describe("buildMeshResult", () => {
         assert.equal(result.textures["diffuse::alt.jpg"]?.mimeType, "image/jpeg");
         assert.deepEqual(result.textures["diffuse::alt.jpg"]?.bytes, jpeg);
     });
+
+    it("omits unsupported textures from mesh results", async () => {
+        const root = await makeMeshDir();
+        await fse.writeFile(path.join(root, "diffuse.txt"), Buffer.from("not an image"));
+        const result = await buildMeshResult(
+            [makeGroup([makeDraw({ textureDefaultFile: "diffuse.txt" })])],
+            root,
+        );
+        assert.equal(result.meshes[0]?.texKey, null);
+        assert.deepEqual(result.textures, {});
+    });
 });
 
 async function makeMeshDir() {

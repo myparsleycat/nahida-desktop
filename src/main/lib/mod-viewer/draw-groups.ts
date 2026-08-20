@@ -52,6 +52,8 @@ const AUX_MAP_CHANNELS: Record<string, "normal_map" | "light_map" | "material_ma
 };
 const HASH_TEXTURE_SUFFIX = /(Diffuse|NormalMap|LightMap|MaterialMap)$/i;
 const WWMI_DUMP_TEX_RE = /(?:^|[/\\])Components-(\d+(?:-\d+)*)\s+t=/i;
+const MAX_HINT_DECODE_BYTES = 32 * 1024 * 1024;
+const MAX_HINT_DECODE_AREA = 4096 * 4096;
 const IB_COMPONENT_DUMP_RE =
     /(?:^|[/\\])([0-9a-f]{8})_(\d+)_([0-9a-f]{8})_Hash_(DiffuseMap|LightMap|NormalMap|MaterialMap)\./i;
 const DDS_SRGB_DXGI = new Set([29, 72, 75, 78, 91, 93, 99]);
@@ -484,15 +486,16 @@ export async function attachWwmiDumpTextures(
         }
     }
 
-    const excludedByIndex = new Map(
-        targets.flatMap((group) => {
-            const index = wwmiComponentIndex(group);
-            if (!index || !needsDump.has(index)) {
-                return [];
-            }
-            return [[index, new Set(group.nonDiffuseTextureFiles)] as const];
-        }),
-    );
+    const excludedByIndex = targets.reduce((map, group) => {
+        const index = wwmiComponentIndex(group);
+        if (!index || !needsDump.has(index)) {
+            return map;
+        }
+        return map.set(
+            index,
+            new Set([...(map.get(index) ?? []), ...group.nonDiffuseTextureFiles]),
+        );
+    }, new Map<string, Set<string>>());
 
     const filesByIndex = Object.values(resources).reduce((map, info) => {
         const file = info.filename;
@@ -912,6 +915,17 @@ async function inspectWwmiTextureHint(filePath: string): Promise<WwmiTextureHint
     const bytes = (await fse.stat(filePath)).size;
     const ext = path.extname(filePath).toLowerCase();
     if (ext === ".png") {
+        if (bytes > MAX_HINT_DECODE_BYTES) {
+            return {
+                srgb: true,
+                colorSpace: "srgb",
+                area: 0,
+                bytes,
+                isLikelyFlat: false,
+                isLikelyNormal: false,
+                isLikelyPacked: false,
+            };
+        }
         const png = PNG.sync.read(await fse.readFile(filePath));
         return hintFromAnalysis(
             analyzePng(png.data, png.width, png.height),
@@ -961,7 +975,7 @@ async function inspectWwmiTextureHint(filePath: string): Promise<WwmiTextureHint
     const srgbState = parseDdsSrgbState(header);
     const colorSpace = srgbState === true ? "srgb" : srgbState === false ? "linear" : "unknown";
     const packedFormat = DDS_PACKED_FOURCC.has(fourcc) || DDS_PACKED_DXGI.has(dxgi);
-    if (colorSpace === "linear" || packedFormat) {
+    if (colorSpace === "linear" || packedFormat || area > MAX_HINT_DECODE_AREA) {
         return {
             srgb: colorSpace === "srgb",
             colorSpace,
