@@ -55,7 +55,11 @@ async function cleanupModelViewerSource(source: ModelViewerDialogSource | null) 
   try {
     await window.api.invoke(
       "tools:cleanupStaticGlbViewerFile",
-      source.mode === "variant-set" ? source.artifactRoot : source.glbPath,
+      source.mode === "payload"
+        ? source.memorySessionId
+        : source.mode === "variant-set"
+          ? source.artifactRoot
+          : source.glbPath,
       source.memorySessionId,
     );
   } catch (error) {
@@ -187,30 +191,17 @@ export function useModActions(selectedGroupPath?: string): ModActionApi {
 
     setConvertingModelPath(mod.path);
     try {
-      const result = await window.api.invoke("tools:convertStaticGlbForViewer", mod.path);
+      const result = await window.api.invoke("tools:loadModViewer", mod.path);
       setModelViewerState({
         mod,
         groupPath: selectedGroupPath,
-        source:
-          result.mode === "variant-set"
-            ? {
-                mode: "variant-set",
-                artifactRoot: result.artifactRoot,
-                manifestPath: result.manifestPath,
-                modPath: mod.path,
-                manifest: result.manifest,
-                memorySessionId: result.memorySessionId,
-                defaultGlbPath: result.defaultGlbPath,
-                activeGlbPath: result.activeGlbPath,
-                name: result.name,
-              }
-            : {
-                mode: "single",
-                glbPath: result.glbPath,
-                memorySessionId: result.memorySessionId,
-                modPath: mod.path,
-                name: result.name,
-              },
+        source: {
+          mode: "payload",
+          transport: result,
+          memorySessionId: result.memorySessionId,
+          modPath: mod.path,
+          name: result.name,
+        },
       });
       setShowModelViewer(true);
     } catch (error) {

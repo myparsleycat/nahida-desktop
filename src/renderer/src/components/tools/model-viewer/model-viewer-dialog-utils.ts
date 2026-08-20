@@ -8,6 +8,7 @@ import type {
     ModelViewerVariantManifest,
     VariableStateValue,
 } from "./model-viewer-dialog-types";
+
 import {
     DEFAULT_THREE_EXPOSURE,
     MAX_THREE_EXPOSURE,
@@ -29,6 +30,10 @@ export function createStateKey(state: Record<string, VariableStateValue>): strin
 export function getSourceSessionKey(source: ModelViewerDialogSource | null): string | null {
     if (!source) {
         return null;
+    }
+
+    if (source.mode === "payload") {
+        return `payload:${source.memorySessionId}`;
     }
 
     if (source.mode === "single") {

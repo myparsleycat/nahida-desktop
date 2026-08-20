@@ -1,3 +1,5 @@
+import type { EvaluatedViewerState, ModViewerTransport } from "@shared/mod-viewer/types";
+
 export type ModelViewerThreeToneMapping = "neutral" | "aces" | "none";
 export type ModelViewerThreeEnvironment = "studio" | "soft" | "none";
 export type ModelViewerVariantStateValue = number | string;
@@ -73,6 +75,7 @@ export type ModelViewerHandle = {
     ) => void;
     updateFraming: () => Promise<void> | void;
     setDoubleSided: (doubleSided: boolean) => Promise<void> | void;
+    setAnimationFrame: (index: number) => void;
 };
 
 export type ModelViewerBodyShapeOverride = {
@@ -92,6 +95,8 @@ export type ModelViewerSurfaceProps = {
     className?: string;
     orientation: string;
     src: string;
+    payloadTransport?: ModViewerTransport;
+    payloadEval?: EvaluatedViewerState;
     variantState?: Record<string, ModelViewerVariantStateValue>;
     shapeKeys?: ModelViewerRealtimeShapeKey[];
     animationClip?: ModelViewerAnimationClip;

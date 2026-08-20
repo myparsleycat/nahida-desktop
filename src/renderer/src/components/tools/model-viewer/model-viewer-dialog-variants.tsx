@@ -1,6 +1,8 @@
 import { cn } from "@renderer/lib/utils";
 import { useEffect, useRef, useState } from "react";
+
 import type { ModelViewerVariantManifest, VariableStateValue } from "./model-viewer-dialog-types";
+
 import { modelViewerSourceToUrl } from "./model-viewer-session";
 
 export function formatSliderValue(value: number): string {
@@ -136,7 +138,7 @@ export function VariantSlider({
           ) : null}
           <div className="text-sm font-medium">{variable.label}</div>
         </div>
-        <div className="text-xs tabular-nums text-muted-foreground">
+        <div className="text-xs text-muted-foreground tabular-nums">
           {formatSliderValue(draftValue)}
         </div>
       </div>
@@ -160,7 +162,7 @@ export function VariantSlider({
           }
         }}
       />
-      <div className="mt-2 flex items-center justify-between text-[11px] tabular-nums text-muted-foreground">
+      <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground tabular-nums">
         <span>{formatSliderValue(slider.min)}</span>
         <span>{formatSliderValue(slider.max)}</span>
       </div>

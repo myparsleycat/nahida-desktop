@@ -13,11 +13,13 @@ import {
     type VariableStateMap,
 } from "@main/lib/mod-static-glb";
 import { createStateKey } from "@main/lib/mod-static-glb/shared";
+import { loadModViewerPayload } from "@main/lib/mod-viewer";
 import {
     cleanupModelViewerMemorySession,
     createModelViewerMemorySession,
     writeModelViewerMemoryBuffer,
 } from "@main/services/protocol/model-viewer-memory";
+import type { ModViewerTransport } from "@shared/mod-viewer/types";
 import { toErrorMessage } from "@shared/utils";
 import { app } from "electron";
 import fse from "fs-extra";
@@ -238,6 +240,109 @@ export class StaticGlb {
             glbPath: result.outputPath,
             name: path.basename(result.outputPath, ".glb"),
         };
+    }
+
+    public async loadForViewer(modPath: string): Promise<ModViewerTransport> {
+        const startedAt = Date.now();
+        this.desktop.logger.info("Starting model viewer load", "StaticGlb.loadForViewer");
+        const memorySessionId = createModelViewerMemorySession();
+        try {
+            const payload = await loadModViewerPayload(modPath);
+            const writeBuffer = (bufferId: string, buffer: Buffer, contentType?: string) =>
+                writeModelViewerMemoryBuffer(memorySessionId, bufferId, buffer, contentType);
+
+            const textures: ModViewerTransport["textures"] = {};
+            for (const [key, texture] of Object.entries(payload.textures)) {
+                textures[key] = {
+                    url: writeBuffer(`tex:${key}`, texture.bytes, texture.mimeType),
+                    role: texture.role,
+                };
+            }
+
+            const meshes: ModViewerTransport["meshes"] = payload.meshes.map((mesh) => ({
+                id: mesh.id,
+                component: mesh.component,
+                positionsUrl: writeBuffer(
+                    `${mesh.id}.pos`,
+                    typedArrayBuffer(mesh.positions),
+                    "application/octet-stream",
+                ),
+                uvsUrl: mesh.uvs
+                    ? writeBuffer(
+                          `${mesh.id}.uv`,
+                          typedArrayBuffer(mesh.uvs),
+                          "application/octet-stream",
+                      )
+                    : undefined,
+                indicesUrl: writeBuffer(
+                    `${mesh.id}.idx`,
+                    typedArrayBuffer(mesh.indices),
+                    "application/octet-stream",
+                ),
+                conditions: mesh.conditions,
+                texKey: mesh.texKey,
+                textureVariants: mesh.textureVariants,
+                normalMapKey: mesh.normalMapKey,
+                normalMapVariants: mesh.normalMapVariants,
+                lightMapKey: mesh.lightMapKey,
+                lightMapVariants: mesh.lightMapVariants,
+                materialMapKey: mesh.materialMapKey,
+                materialMapVariants: mesh.materialMapVariants,
+                shapeTargets: mesh.shapeTargets.map((target, index) => ({
+                    var: target.var,
+                    positionsUrl: writeBuffer(
+                        `${mesh.id}.shape.${index}`,
+                        typedArrayBuffer(target.positions),
+                        "application/octet-stream",
+                    ),
+                    mode: target.mode,
+                    lowPositionsUrl: target.lowPositions
+                        ? writeBuffer(
+                              `${mesh.id}.shape.${index}.low`,
+                              typedArrayBuffer(target.lowPositions),
+                              "application/octet-stream",
+                          )
+                        : undefined,
+                })),
+                positionVariants: mesh.positionVariants.map((variant, index) => ({
+                    conditions: variant.conditions,
+                    positionsUrl: writeBuffer(
+                        `${mesh.id}.posvar.${index}`,
+                        typedArrayBuffer(variant.positions),
+                        "application/octet-stream",
+                    ),
+                })),
+            }));
+
+            this.viewerMemorySessions.set(memorySessionId, {
+                modPath,
+            });
+            this.desktop.logger.info(
+                `Completed model viewer load in ${Date.now() - startedAt}ms (meshes=${meshes.length})`,
+                "StaticGlb.loadForViewer",
+            );
+            return {
+                memorySessionId,
+                iniPath: payload.iniPath,
+                modPath,
+                name: path.basename(modPath.replace(/[\\/]+$/, "")),
+                meshes,
+                textures,
+                variables: payload.variables,
+                defaultState: payload.defaultState,
+                stateRules: payload.stateRules,
+                uiAssets: payload.uiAssets,
+                animations: payload.animations,
+            };
+        } catch (error) {
+            cleanupModelViewerMemorySession(memorySessionId);
+            this.viewerMemorySessions.delete(memorySessionId);
+            this.desktop.logger.error(
+                `Model viewer load failed after ${Date.now() - startedAt}ms for ${modPath}: ${toErrorMessage(error)}`,
+                "StaticGlb.loadForViewer",
+            );
+            throw error;
+        }
     }
 
     public async convertForViewer(input: StaticGlbViewerInput): Promise<StaticGlbPreviewResult> {
@@ -577,4 +682,8 @@ function normalizeJpegQuality(value?: string | number | null): number {
     }
 
     return Math.max(1, Math.min(100, Math.round(parsed)));
+}
+
+function typedArrayBuffer(values: Float32Array | Uint32Array): Buffer {
+    return Buffer.from(values.buffer, values.byteOffset, values.byteLength);
 }

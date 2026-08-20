@@ -1,9 +1,11 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { cn } from "@renderer/lib/utils";
+import { evaluateViewerState } from "@shared/mod-viewer/eval";
 import {
   type ElementRef,
   forwardRef,
+  memo,
   type MutableRefObject,
   useEffect,
   useImperativeHandle,
@@ -49,6 +51,7 @@ import type {
 } from "./model-viewer-contract";
 
 import { parseOrientation } from "./model-viewer-contract";
+import { applyPayloadEval, buildPayloadModel } from "./model-viewer-payload";
 import { modelViewerSourceToUrl } from "./model-viewer-session";
 
 type BodyShapeBaseline = {
@@ -86,8 +89,8 @@ type LoadedAnimationFrame = {
   }>;
 };
 
-export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurfaceProps>(
-  function ThreeModelViewer(
+export const ThreeModelViewer = memo(
+  forwardRef<ModelViewerHandle, ModelViewerSurfaceProps>(function ThreeModelViewer(
     {
       className,
       animationClip,
@@ -96,6 +99,8 @@ export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurface
       onError,
       onLoad,
       orientation,
+      payloadEval,
+      payloadTransport,
       shapeKeys,
       src,
       threeEnvironment = "studio",
@@ -117,6 +122,7 @@ export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurface
           controllerRef.current?.restoreCameraState(state, options),
         setDoubleSided: (doubleSided) => controllerRef.current?.setDoubleSided(doubleSided),
         updateFraming: () => controllerRef.current?.updateFraming(),
+        setAnimationFrame: (index) => controllerRef.current?.setAnimationFrame(index),
       }),
       [],
     );
@@ -184,12 +190,14 @@ export const ThreeModelViewer = forwardRef<ModelViewerHandle, ModelViewerSurface
             threeToneMapping={threeToneMapping}
             onError={onError}
             onLoad={onLoad}
+            payloadEval={payloadEval}
+            payloadTransport={payloadTransport}
             variantState={variantState}
           />
         </Canvas>
       </div>
     );
-  },
+  }),
 );
 
 function ThreeModelScene({
@@ -200,6 +208,8 @@ function ThreeModelScene({
   onError,
   onLoad,
   orientation,
+  payloadEval,
+  payloadTransport,
   shapeKeys,
   src,
   threeEnvironment = "studio",
@@ -219,6 +229,30 @@ function ThreeModelScene({
   const pendingLoadIdRef = useRef(0);
   const onLoadRef = useRef(onLoad);
   const onErrorRef = useRef(onError);
+  const payloadEvalRef = useRef(payloadEval);
+  payloadEvalRef.current = payloadEval;
+  const payloadTransportRef = useRef(payloadTransport);
+  payloadTransportRef.current = payloadTransport;
+  const animationClipRef = useRef(animationClip);
+  animationClipRef.current = animationClip;
+  const animationValuesRef = useRef<Record<string, string | number>>({});
+  const modelRootRef = useRef<Object3D | null>(null);
+  modelRootRef.current = modelRoot;
+  const applyPayloadVisualsRef = useRef(() => {});
+  applyPayloadVisualsRef.current = () => {
+    const root = modelRootRef.current;
+    const transport = payloadTransportRef.current;
+    const toggleEval = payloadEvalRef.current;
+    if (!root || !transport || !toggleEval) {
+      return;
+    }
+    const animationValues = animationValuesRef.current;
+    const evalResult = Object.keys(animationValues).length
+      ? evaluateViewerState(transport, { ...toggleEval.state, ...animationValues })
+      : toggleEval;
+    applyPayloadEval(root, evalResult);
+    invalidate();
+  };
   const floatBufferCacheRef = useRef<Map<string, Promise<Float32Array>>>(new Map());
   const uint32BufferCacheRef = useRef<Map<string, Promise<Uint32Array>>>(new Map());
   const lastAppliedVariantSnapshotRef = useRef<Record<string, number | string> | null>(null);
@@ -290,7 +324,7 @@ function ThreeModelScene({
     const loader = new GLTFLoader();
     let disposed = false;
 
-    if (!src) {
+    if (!src && !payloadTransport) {
       if (activeObjectRef.current) {
         disposeObjectTree(activeObjectRef.current);
       }
@@ -310,6 +344,34 @@ function ThreeModelScene({
       orientedCenterRef.current = null;
       return null;
     });
+
+    if (payloadTransport) {
+      void buildPayloadModel(
+        payloadTransport,
+        payloadEvalRef.current ?? { state: {}, meshes: [] },
+        true,
+      )
+        .then((nextRoot) => {
+          if (disposed || pendingLoadIdRef.current !== loadId) {
+            disposeObjectTree(nextRoot);
+            return;
+          }
+          materialRef.current = collectStandardMaterials(nextRoot);
+          activeObjectRef.current = nextRoot;
+          setModelRoot(nextRoot);
+        })
+        .catch((error) => {
+          if (disposed || pendingLoadIdRef.current !== loadId) {
+            return;
+          }
+          activeObjectRef.current = null;
+          materialRef.current = [];
+          onErrorRef.current?.(error);
+        });
+      return () => {
+        disposed = true;
+      };
+    }
 
     loader.load(
       src,
@@ -339,7 +401,14 @@ function ThreeModelScene({
     return () => {
       disposed = true;
     };
-  }, [src]);
+  }, [payloadTransport, src]);
+
+  useEffect(() => {
+    if (!modelRoot || !payloadEval || !payloadTransport) {
+      return;
+    }
+    applyPayloadVisualsRef.current();
+  }, [modelRoot, payloadEval, payloadTransport]);
 
   useLayoutEffect(() => {
     if (!modelRoot) {
@@ -417,6 +486,16 @@ function ThreeModelScene({
           material.needsUpdate = true;
         }
         invalidate();
+      },
+      setAnimationFrame: (index) => {
+        const clip = animationClipRef.current;
+        if (!clip?.frames.length) {
+          animationValuesRef.current = {};
+        } else {
+          const frame = clip.frames[Math.min(Math.max(index, 0), clip.frames.length - 1)];
+          animationValuesRef.current = frame?.values ?? {};
+        }
+        applyPayloadVisualsRef.current();
       },
       updateFraming: async () => {
         const center = await fitCameraToObject({
@@ -543,6 +622,7 @@ function ThreeModelScene({
 
   useEffect(() => {
     if (
+      payloadTransport ||
       !modelRoot ||
       hasBodyShapeOverrides ||
       !animationClip ||
@@ -585,7 +665,14 @@ function ThreeModelScene({
     return () => {
       cancelled = true;
     };
-  }, [animationClip, animationFrame, hasBodyShapeOverrides, invalidate, modelRoot]);
+  }, [
+    animationClip,
+    animationFrame,
+    hasBodyShapeOverrides,
+    invalidate,
+    modelRoot,
+    payloadTransport,
+  ]);
 
   useEffect(() => {
     if (!modelRoot || hasBodyShapeOverrides || !shapeKeys?.length) {
