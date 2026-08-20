@@ -312,6 +312,7 @@ export function TextureResizerWorkspace({
         }
         if (fileResult?.status === "failed" || !fileResult) {
           failed += 1;
+          errorMessage ??= fileResult?.message ?? undefined;
           continue;
         }
         skipped += 1;
@@ -978,7 +979,7 @@ function showTextureResizeResultToast(
 
   if (result.selectedCount === 1 && result.failed > 0) {
     toast.error(t("page.tools.texture_resizer.toast.failed"), {
-      description: result.errorMessage ?? description,
+      description: result.errorMessage ?? result.lastFileResult?.message ?? description,
     });
     return;
   }
