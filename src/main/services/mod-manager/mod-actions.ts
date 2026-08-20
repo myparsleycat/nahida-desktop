@@ -300,8 +300,9 @@ export class ModActionsService {
     }
 
     private async exclusiveToggleNte(modPath: string, game: GameConfig) {
+        const roots = getNteRoots(game);
         if (!(await isNteModEnabled(modPath))) {
-            await this.setAllNte(await getNteListingGroupPath(modPath), game, false);
+            await this.setAllNte(await getNteListingGroupPath(roots, modPath), game, false);
             return await setNteModEnabled(this.desktop, modPath, true);
         }
 
@@ -315,7 +316,7 @@ export class ModActionsService {
         if (!(await this.desktop.lib.fs.pathExists(groupDir))) return;
 
         await Promise.all(
-            (await listNteModPaths(groupDir)).map(async (modPath) => {
+            (await listNteModPaths(roots, groupDir)).map(async (modPath) => {
                 try {
                     const currentlyEnabled = await isNteModEnabled(modPath);
                     if (currentlyEnabled === enabled) return;

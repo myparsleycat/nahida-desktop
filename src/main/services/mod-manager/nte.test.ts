@@ -67,9 +67,9 @@ describe("NTE wrapped pak folders", () => {
             group.mods.find((mod) => mod.name === "Shinku Natsu Sparkle 1.3 / shinku")?.preview,
             path.join(sparkle, "preview.png"),
         );
-        assert.deepEqual(await listNteModPaths(shinku), [disabledShinku, inner, burst]);
-        assert.equal(await getNteListingGroupPath(inner), shinku);
-        assert.equal(await getNteListingGroupPath(disabledShinku), shinku);
+        assert.deepEqual(await listNteModPaths(roots, shinku), [disabledShinku, inner, burst]);
+        assert.equal(await getNteListingGroupPath(roots, inner), shinku);
+        assert.equal(await getNteListingGroupPath(roots, disabledShinku), shinku);
     });
 
     it("does not list a pak wrapper as a subgroup", async () => {
@@ -118,10 +118,15 @@ describe("NTE wrapped pak folders", () => {
         const npc = path.join(modRoot, "NPC");
         const shopGirl = path.join(npc, "NPC_Shop Girl");
         await writePak(shopGirl, "NPC_023_NSFW_P.pak");
+        await writePak(
+            path.join(modRoot, "Character", "Shinku", "DISABLED Shinku"),
+            "mod_P.pak.disabled",
+        );
 
         const roots = { modRoot, linkedRoot: null };
         const group = await getNteMods(desktopStub(), roots, npc);
         const npcGroups = await getNteSubGroups(desktopStub(), roots, npc);
+        const rootGroups = await getNteSubGroups(desktopStub(), roots, modRoot);
 
         assert.deepEqual(
             group.mods.map((mod) => ({ name: mod.name, isEnabled: mod.isEnabled })),
@@ -131,6 +136,33 @@ describe("NTE wrapped pak folders", () => {
             npcGroups.map((entry) => entry.name),
             [],
         );
+        assert.deepEqual(
+            rootGroups.map((entry) => entry.name),
+            ["Character", "NPC"],
+        );
+        assert.equal(await getNteListingGroupPath(roots, shopGirl), npc);
+    });
+
+    it("keeps a character folder as a group when every child is a direct pak mod", async () => {
+        const modRoot = await makeModRoot();
+        const character = path.join(modRoot, "Character");
+        const shinku = path.join(character, "Shinku");
+        await writePak(path.join(shinku, "DISABLED Shinku"), "mod_P.pak.disabled");
+        await writePak(path.join(shinku, "DISABLED ShinkuSwim"), "mod_P.pak.disabled");
+
+        const roots = { modRoot, linkedRoot: null };
+        const characterMods = await getNteMods(desktopStub(), roots, character);
+        const characterGroups = await getNteSubGroups(desktopStub(), roots, character);
+
+        assert.deepEqual(
+            characterMods.mods.map((mod) => mod.name),
+            [],
+        );
+        assert.deepEqual(
+            characterGroups.map((group) => group.name),
+            ["Shinku"],
+        );
+        assert.equal(characterGroups[0]?.modCount, 2);
     });
 
     it("flattens variant wrappers like longhairdaff without collapsing them into one toggle", async () => {

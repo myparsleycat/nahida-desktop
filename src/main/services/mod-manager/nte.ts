@@ -175,10 +175,10 @@ export async function getNteSubGroups(
             const nextPath = path.join(groupDir, groupName);
 
             if (await hasDirectPak(nextPath)) return null;
-            if (await isNtePakWrapper(nextPath)) return null;
+            if (await isNtePakWrapper(roots, nextPath)) return null;
 
             const preview = await findPreview(nextPath);
-            const modCounts = await countDirectMods(nextPath);
+            const modCounts = await countDirectMods(roots, nextPath);
             return {
                 name: groupName,
                 path: nextPath,
@@ -186,7 +186,7 @@ export async function getNteSubGroups(
                 ...(preview ? { preview } : {}),
                 modCount: modCounts.total,
                 enabledModCount: modCounts.enabled,
-                hasSubGroups: await hasNteSubGroups(nextPath),
+                hasSubGroups: await hasNteSubGroups(roots, nextPath),
                 hasManualSubGroups: false,
             } satisfies FolderGroup;
         }),
@@ -204,7 +204,7 @@ export async function getNteMods(
     const groupDir = path.join(roots.modRoot, relativePath);
     const mods = (
         await Promise.all(
-            (await collectNteModEntries(groupDir)).map(async (entry) =>
+            (await collectNteModEntries(roots, groupDir)).map(async (entry) =>
                 createNteModInfo(desktop, entry.modPath, await isNteModEnabled(entry.modPath), {
                     name: entry.name,
                     previewFallbackDir: entry.previewFallbackDir,
@@ -310,13 +310,13 @@ export async function hasNteDirectPak(dirPath: string) {
     return await hasDirectPak(dirPath);
 }
 
-export async function listNteModPaths(groupDir: string) {
-    return (await collectNteModEntries(groupDir)).map((entry) => entry.modPath);
+export async function listNteModPaths(roots: NteGameRoots, groupDir: string) {
+    return (await collectNteModEntries(roots, groupDir)).map((entry) => entry.modPath);
 }
 
-export async function getNteListingGroupPath(modPath: string) {
+export async function getNteListingGroupPath(roots: NteGameRoots, modPath: string) {
     const parentPath = path.dirname(modPath);
-    if (await isNtePakWrapper(parentPath)) return path.dirname(parentPath);
+    if (await isNtePakWrapper(roots, parentPath)) return path.dirname(parentPath);
     return parentPath;
 }
 
@@ -884,13 +884,13 @@ async function listDirectoryNames(dirPath: string) {
         .sort((a, b) => a.localeCompare(b));
 }
 
-async function hasNteSubGroups(groupDir: string) {
+async function hasNteSubGroups(roots: NteGameRoots, groupDir: string) {
     return (
         await Promise.all(
             (await listDirectoryNames(groupDir)).map(async (name) => {
                 const childPath = path.join(groupDir, name);
                 if (await hasDirectPak(childPath)) return false;
-                return !(await isNtePakWrapper(childPath));
+                return !(await isNtePakWrapper(roots, childPath));
             }),
         )
     ).some(Boolean);
@@ -902,7 +902,7 @@ type NteModEntry = {
     previewFallbackDir?: string;
 };
 
-async function collectNteModEntries(groupDir: string): Promise<NteModEntry[]> {
+async function collectNteModEntries(roots: NteGameRoots, groupDir: string): Promise<NteModEntry[]> {
     const entries = await Promise.all(
         (await listDirectoryNames(groupDir)).map(async (name) => {
             const childPath = path.join(groupDir, name);
@@ -910,7 +910,7 @@ async function collectNteModEntries(groupDir: string): Promise<NteModEntry[]> {
                 return [{ modPath: childPath, name }];
             }
 
-            if (!(await isNtePakWrapper(childPath))) return [];
+            if (!(await isNtePakWrapper(roots, childPath))) return [];
 
             return (
                 await Promise.all(
@@ -931,7 +931,18 @@ async function collectNteModEntries(groupDir: string): Promise<NteModEntry[]> {
     return entries.flat();
 }
 
-async function isNtePakWrapper(dirPath: string) {
+function isNteNavigableGroup(roots: NteGameRoots, dirPath: string) {
+    const relativePath = getNteRelativePath(roots, dirPath);
+    if (!relativePath) return false;
+
+    const segments = relativePath.split(path.sep).filter((segment) => segment.length > 0);
+    if (segments.length === 1) return true;
+    if (segments.length !== 2) return false;
+    return segments[0].toLowerCase() === "character";
+}
+
+async function isNtePakWrapper(roots: NteGameRoots, dirPath: string) {
+    if (isNteNavigableGroup(roots, dirPath)) return false;
     if (await hasDirectPak(dirPath)) return false;
 
     const childNames = await listDirectoryNames(dirPath);
@@ -971,9 +982,11 @@ async function hasDirectPak(dirPath: string) {
     );
 }
 
-async function countDirectMods(groupDir: string) {
+async function countDirectMods(roots: NteGameRoots, groupDir: string) {
     const mods = await Promise.all(
-        (await collectNteModEntries(groupDir)).map((entry) => isNteModEnabled(entry.modPath)),
+        (await collectNteModEntries(roots, groupDir)).map((entry) =>
+            isNteModEnabled(entry.modPath),
+        ),
     );
 
     return {
