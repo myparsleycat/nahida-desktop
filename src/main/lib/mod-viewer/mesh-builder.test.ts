@@ -138,6 +138,17 @@ describe("buildMeshResult", () => {
         assert.equal(metadata.width, 2048);
         assert.equal(metadata.height, 2048);
     });
+
+    it("omits unsupported textures from mesh results", async () => {
+        const root = await makeMeshDir();
+        await fse.writeFile(path.join(root, "diffuse.txt"), Buffer.from("not an image"));
+        const result = await buildMeshResult(
+            [makeGroup([makeDraw({ textureDefaultFile: "diffuse.txt" })])],
+            root,
+        );
+        assert.equal(result.meshes[0]?.texKey, null);
+        assert.deepEqual(result.textures, {});
+    });
 });
 
 describe("viewerPreviewTextureSize", () => {
@@ -176,6 +187,7 @@ function makeGroup(draws: DrawRecord[]): DrawGroup {
         texcoordUvOff: 4,
         ibFile: "body.ib",
         diffusePoolFiles: [],
+        nonDiffuseTextureFiles: [],
         indexSize: 4,
         draws,
     };
